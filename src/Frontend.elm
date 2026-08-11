@@ -493,6 +493,7 @@ loadedInitHelper startupData loginData loading =
             , textInputFocus = Nothing
             , previousTextInputFocus = Nothing
             , messageHover = NoMessageHover
+            , markedAsUnread = Nothing
             , showEmojiSelector = EmojiSelectorHidden
             , editMessage = SeqDict.empty
             , replyTo = SeqDict.empty
@@ -1877,6 +1878,33 @@ updateLoaded msg model =
                         model.time
                         (Just (Local_DeleteMessage guildOrDmId messageIndex))
                         (MessageMenu.close model loggedIn)
+                        Command.none
+                )
+                model
+
+        MessageMenu_PressedMarkAsUnread guildOrDmId threadRoute ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetLastViewed
+                            guildOrDmId
+                            (case threadRoute of
+                                ViewThreadWithMessage threadMessageId messageId ->
+                                    ViewThreadWithMessage threadMessageId (messageBefore messageId)
+
+                                NoThreadWithMessage messageId ->
+                                    NoThreadWithMessage (messageBefore messageId)
+                            )
+                            |> Just
+                        )
+                        (MessageMenu.close
+                            model
+                            { loggedIn
+                                | markedAsUnread =
+                                    Just ( guildOrDmId, Id.threadRouteWithoutMessage threadRoute )
+                            }
+                        )
                         Command.none
                 )
                 model
@@ -6131,31 +6159,25 @@ setLastViewedToLatestMessage model loggedIn =
         local =
             Local.model loggedIn.localState
     in
-    FrontendExtra.handleLocalChange
-        model.time
-        (case Route.toGuildOrDmId local.localUser.session.userId model.route of
-            Just ( guildOrDmId, threadRoute ) ->
-                case LocalState.guildOrDmIdToMessagesCount guildOrDmId threadRoute local of
-                    Just messages ->
-                        Local_SetLastViewed
-                            guildOrDmId
-                            (case threadRoute of
-                                ViewThread threadMessageId ->
-                                    ViewThreadWithMessage threadMessageId (messages - 1 |> Id.fromInt)
+    case Route.toGuildOrDmId local.localUser.session.userId model.route of
+        Just ( guildOrDmId, threadRoute ) ->
+            let
+                ( localChange, loggedIn2 ) =
+                    FrontendExtra.markConversationAsRead guildOrDmId threadRoute local loggedIn
+            in
+            FrontendExtra.handleLocalChange model.time localChange loggedIn2 Command.none
 
-                                NoThread ->
-                                    NoThreadWithMessage (messages - 1 |> Id.fromInt)
-                            )
-                            |> Just
+        Nothing ->
+            ( loggedIn, Command.none )
 
-                    Nothing ->
-                        Nothing
 
-            Nothing ->
-                Nothing
-        )
-        loggedIn
-        Command.none
+{-| The message ahead of the given one. Marking a message as unread means the last message
+that was read is the one before it, and -1 stands for nothing having been read at all, the
+same value a conversation that was never opened falls back to.
+-}
+messageBefore : Id messageId -> Id messageId
+messageBefore messageId =
+    Id.toInt messageId - 1 |> Id.fromInt
 
 
 handleEditable :

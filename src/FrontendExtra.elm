@@ -22,6 +22,7 @@ module FrontendExtra exposing
     , isPressMsg
     , layout
     , logout
+    , markConversationAsRead
     , pingUserNameSoFar
     , playNotificationSound
     , playNotificationSoundForDiscordMessage
@@ -2105,6 +2106,9 @@ isPressMsg msg =
             True
 
         MessageMenu_PressedDeleteMessage _ _ ->
+            True
+
+        MessageMenu_PressedMarkAsUnread _ _ ->
             True
 
         MessageMenu_PressedAddCustomEmojisToUser _ ->
@@ -6111,6 +6115,35 @@ handleRedo model =
         model
 
 
+{-| The change that marks everything in a conversation as read, which is what leaving it or
+pressing escape does. A message the user marked as unread would be undone by that right away,
+so the conversation it happened in gets skipped once and then forgotten about.
+-}
+markConversationAsRead : AnyGuildOrDmId -> ThreadRoute -> LocalState -> LoggedIn2 -> ( Maybe LocalChange, LoggedIn2 )
+markConversationAsRead guildOrDmId threadRoute local loggedIn =
+    if loggedIn.markedAsUnread == Just ( guildOrDmId, threadRoute ) then
+        ( Nothing, { loggedIn | markedAsUnread = Nothing } )
+
+    else
+        ( case LocalState.guildOrDmIdToMessagesCount guildOrDmId threadRoute local of
+            Just messages ->
+                Local_SetLastViewed
+                    guildOrDmId
+                    (case threadRoute of
+                        ViewThread threadMessageId ->
+                            ViewThreadWithMessage threadMessageId (messages - 1 |> Id.fromInt)
+
+                        NoThread ->
+                            NoThreadWithMessage (messages - 1 |> Id.fromInt)
+                    )
+                    |> Just
+
+            Nothing ->
+                Nothing
+        , loggedIn
+        )
+
+
 handleEscapeKey : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 handleEscapeKey model =
     case model.imageViewer of
@@ -6183,46 +6216,27 @@ handleEscapeKeyHelper model loggedIn =
                     in
                     case Route.toGuildOrDmId local.localUser.session.userId model.route of
                         Just ( guildOrDmId, threadRoute ) ->
+                            let
+                                ( localChange, loggedIn3 ) =
+                                    markConversationAsRead guildOrDmId threadRoute local loggedIn2
+                            in
                             handleLocalChange
                                 model.time
-                                (case
-                                    LocalState.guildOrDmIdToMessagesCount
-                                        guildOrDmId
-                                        threadRoute
-                                        local
-                                 of
-                                    Just messages ->
-                                        Local_SetLastViewed
-                                            guildOrDmId
-                                            (case threadRoute of
-                                                ViewThread threadId ->
-                                                    ViewThreadWithMessage
-                                                        threadId
-                                                        (messages - 1 |> Id.fromInt)
-
-                                                NoThread ->
-                                                    NoThreadWithMessage
-                                                        (messages - 1 |> Id.fromInt)
-                                            )
-                                            |> Just
-
-                                    Nothing ->
-                                        Nothing
-                                )
+                                localChange
                                 (if
-                                    SeqDict.member ( guildOrDmId, threadRoute ) loggedIn2.editMessage
-                                        || SeqDict.member ( guildOrDmId, NoThread ) loggedIn2.editMessage
+                                    SeqDict.member ( guildOrDmId, threadRoute ) loggedIn3.editMessage
+                                        || SeqDict.member ( guildOrDmId, NoThread ) loggedIn3.editMessage
                                  then
-                                    { loggedIn2
+                                    { loggedIn3
                                         | editMessage =
-                                            SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn2.editMessage
+                                            SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn3.editMessage
                                                 |> SeqDict.remove ( guildOrDmId, NoThread )
                                     }
 
                                  else
-                                    { loggedIn2
+                                    { loggedIn3
                                         | replyTo =
-                                            SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn2.replyTo
+                                            SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn3.replyTo
                                     }
                                 )
                                 (setFocus model Pages.Guild.channelTextInputId)

@@ -721,6 +721,13 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
                 Nothing ->
                     NoItem
+            , button
+                isMobile
+                (Dom.id "messageMenu_markAsUnread")
+                Icons.closedEye
+                "Mark as unread"
+                (MessageMenu_PressedMarkAsUnread guildOrDmId threadRoute)
+                |> ButtonItem
             , case newCustomEmojiIds of
                 Just newCustomEmojiIds2 ->
                     button

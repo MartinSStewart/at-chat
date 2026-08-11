@@ -10,6 +10,7 @@ module E2EMisc exposing
     , inactiveThreadsAreHiddenTest
     , inviteUserAndDmChat
     , largePasteBecomesAttachment
+    , markMessageAsUnreadTest
     , mentionSuggestionTest
     , noTimestampSuggestionTest
     , profileImageOpensDm
@@ -573,6 +574,106 @@ checkDmRouteWithUser otherUserId model =
                     Err "Expected to be viewing a DM channel"
 
                 ( Types.NotLoggedIn _, _ ) ->
+                    Err "Expected the frontend to be logged in"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
+
+
+{-| The message menu marks a message and everything after it as unread. Leaving a channel is
+what normally marks it as read, so the mark has to survive that, and hovering the messages it
+puts in the unread overview restarts their animations the way hovering does in a channel.
+-}
+markMessageAsUnreadTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+markMessageAsUnreadTest config =
+    E2EHelper.startTest
+        "Mark a message as unread"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                let
+                    -- "Two" and "Three" are unread, the message announcing that the user
+                    -- joined and "One" are not
+                    twoUnread : Test.Html.Selector.Selector
+                    twoUnread =
+                        Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "2")
+                in
+                [ E2EHelper.writeMessage admin 100 "One"
+                , E2EHelper.writeMessage admin 100 "Two"
+                , E2EHelper.writeMessage admin 100 "Three"
+
+                -- Leaving the channel marks everything in it as read
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+                , user.checkView 100 (Test.Html.Query.hasNot [ twoUnread ])
+
+                -- Marking the second of the three messages as unread leaves it and the
+                -- message after it unread
+                , user.click 100 (Dom.id "guild_openGuild_1")
+                , markAsUnread user (Id.fromInt 2)
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , user.checkView 100 (Test.Html.Query.has [ twoUnread ])
+                , E2EHelper.hasExactText user [ "Two", "Three" ]
+                , E2EHelper.hasNotExactText user [ "One" ]
+
+                -- Hovering a message in the overview restarts the animations inside it,
+                -- which the mini menu of a channel message stays out of
+                , user.mouseEnter 100 (Dom.id "guild_message_2") ( 10, 10 ) []
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_showFullMenu" ])
+                , user.checkModel 100 (checkMessageIsHovered (Id.fromInt 2))
+
+                -- Reading the channel for real puts the unread count away again
+                , user.click 100 (Dom.id "guild_openGuild_1")
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+                , user.checkView 100 (Test.Html.Query.hasNot [ twoUnread ])
+                ]
+            )
+        ]
+
+
+markAsUnread :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> Id.Id Id.ChannelMessageId
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+markAsUnread user messageId =
+    T.group
+        [ user.mouseEnter 100 (Dom.id ("guild_message_" ++ Id.toString messageId)) ( 10, 10 ) []
+        , user.custom
+            100
+            (Dom.id "miniView_showFullMenu")
+            "click"
+            (Json.Encode.object
+                [ ( "clientX", Json.Encode.int 500 )
+                , ( "clientY", Json.Encode.int 300 )
+                ]
+            )
+        , user.click 100 (Dom.id "messageMenu_markAsUnread")
+        ]
+
+
+checkMessageIsHovered : Id.Id Id.ChannelMessageId -> FrontendModel -> Result String ()
+checkMessageIsHovered messageId model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    if
+                        loggedIn.messageHover
+                            == Types.MessageHover
+                                (Id.GuildOrDmId (Id.GuildOrDmId_Guild (Id.fromInt 1) (Id.fromInt 0)))
+                                (Id.NoThreadWithMessage messageId)
+                    then
+                        Ok ()
+
+                    else
+                        Err "Expected the message in the unread overview to be hovered"
+
+                Types.NotLoggedIn _ ->
                     Err "Expected the frontend to be logged in"
 
         Types.Loading _ ->

@@ -543,7 +543,11 @@ unreadOverviewNotMobile local loggedIn model =
                                                     False
                                                     revealedSpoilers
                                                     NoHighlight
-                                                    IsNotHovered
+                                                    (unreadOverviewMessageHover
+                                                        unread.guildOrDmId
+                                                        (NoThreadWithMessage messageId)
+                                                        loggedIn
+                                                    )
                                                     False
                                                     local.localUser.session.userId
                                                     allUsers
@@ -572,7 +576,11 @@ unreadOverviewNotMobile local loggedIn model =
                                                     containerWidth
                                                     revealedSpoilers
                                                     NoHighlight
-                                                    IsNotHovered
+                                                    (unreadOverviewMessageHover
+                                                        unread.guildOrDmId
+                                                        (ViewThreadWithMessage threadId messageId)
+                                                        loggedIn
+                                                    )
                                                     False
                                                     allUsers
                                                     local.localUser.session.userId
@@ -601,7 +609,11 @@ unreadOverviewNotMobile local loggedIn model =
                                                     False
                                                     revealedSpoilers
                                                     NoHighlight
-                                                    IsNotHovered
+                                                    (unreadOverviewMessageHover
+                                                        unread.guildOrDmId
+                                                        (NoThreadWithMessage messageId)
+                                                        loggedIn
+                                                    )
                                                     currentDiscordUserId
                                                     allDiscordUsers
                                                     local.localUser
@@ -629,7 +641,11 @@ unreadOverviewNotMobile local loggedIn model =
                                                     containerWidth
                                                     revealedSpoilers
                                                     NoHighlight
-                                                    IsNotHovered
+                                                    (unreadOverviewMessageHover
+                                                        unread.guildOrDmId
+                                                        (ViewThreadWithMessage threadId messageId)
+                                                        loggedIn
+                                                    )
                                                     allDiscordUsers
                                                     currentDiscordUserId
                                                     local.localUser
@@ -3053,6 +3069,24 @@ messageHover guildOrDmId threadRoute loggedIn model =
 
         _ ->
             notHoveredWhileSelectingAnchor loggedIn model
+
+
+{-| Hovering a message in the unread overview restarts the animated emojis, stickers and
+embeds inside it, the same as it does in a channel. The mini menu stays away though, since
+editing, replying and reacting all belong to the channel the message came from.
+-}
+unreadOverviewMessageHover : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoggedIn2 -> IsHovered
+unreadOverviewMessageHover guildOrDmId threadRoute loggedIn =
+    case loggedIn.messageHover of
+        MessageHover hoveredGuildOrDmId hoveredThreadRoute ->
+            if guildOrDmId == hoveredGuildOrDmId && threadRoute == hoveredThreadRoute then
+                IsHoveredButNoMenu
+
+            else
+                IsNotHovered
+
+        _ ->
+            IsNotHovered
 
 
 {-| A message the pointer isn't hovering over. Fingers can't hover, so on mobile
