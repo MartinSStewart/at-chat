@@ -1890,9 +1890,12 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 :: cmds
                             )
 
-                        Discord.UserOutMsg_OpenHandle ->
+                        Discord.UserOutMsg_OpenHandle maybeResumeGatewayUrl ->
                             ( model2
-                            , websocketCreateHandle "OpenHandle" (WebsocketCreatedHandleForUser discordUserId) Discord.websocketGatewayUrl
+                            , websocketCreateHandle
+                                "OpenHandle"
+                                (WebsocketCreatedHandleForUser discordUserId)
+                                (Maybe.withDefault Discord.websocketGatewayUrl maybeResumeGatewayUrl)
                                 :: cmds
                             )
 

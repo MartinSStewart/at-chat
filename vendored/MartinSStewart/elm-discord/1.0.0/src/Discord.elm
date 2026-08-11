@@ -6399,7 +6399,7 @@ encodeUserGatewayCommand gatewayCommand =
 
 type OutMsg connection
     = CloseAndReopenHandle connection String
-    | OpenHandle
+    | OpenHandle (Maybe String)
     | AuthenticationIsNoLongerValid
     | SendWebsocketData connection String
     | SendWebsocketDataWithDelay connection Duration String
@@ -6418,7 +6418,7 @@ type OutMsg connection
 
 type UserOutMsg connection
     = UserOutMsg_CloseAndReopenHandle connection String
-    | UserOutMsg_OpenHandle
+    | UserOutMsg_OpenHandle (Maybe String)
     | UserOutMsg_AuthenticationIsNoLongerValid
     | UserOutMsg_SendWebsocketData connection String
     | UserOutMsg_SendWebsocketDataWithDelay connection Duration String
@@ -6525,7 +6525,17 @@ update authToken intents msg model =
                 ( { model | websocketHandle = Nothing }, [ AuthenticationIsNoLongerValid ] )
 
             else
-                ( { model | websocketHandle = Nothing }, [ OpenHandle ] )
+                ( model
+                , [ OpenHandle
+                        (case model.gatewayState of
+                            Just gatewayState ->
+                                Just (gatewayState.resumeGatewayUrl ++ "/?v=9&encoding=json")
+
+                            Nothing ->
+                                Nothing
+                        )
+                  ]
+                )
 
 
 userUpdate : UserAuth -> Intents -> Msg -> Model connection -> ( Model connection, List (UserOutMsg connection) )
@@ -6543,7 +6553,17 @@ userUpdate authToken intents msg model =
                 ( { model | websocketHandle = Nothing }, [ UserOutMsg_AuthenticationIsNoLongerValid ] )
 
             else
-                ( { model | websocketHandle = Nothing }, [ UserOutMsg_OpenHandle ] )
+                ( model
+                , [ UserOutMsg_OpenHandle
+                        (case model.gatewayState of
+                            Just gatewayState ->
+                                Just (gatewayState.resumeGatewayUrl ++ "/?v=9&encoding=json")
+
+                            Nothing ->
+                                Nothing
+                        )
+                  ]
+                )
 
 
 handleGateway : Authentication -> Intents -> String -> Model connection -> ( Model connection, List (OutMsg connection) )
