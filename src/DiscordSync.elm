@@ -1882,10 +1882,10 @@ discordUserWebsocketMsg discordUserId discordMsg model =
             List.foldl
                 (\outMsg ( model2, cmds ) ->
                     case outMsg of
-                        Discord.UserOutMsg_CloseAndReopenHandle connection ->
+                        Discord.UserOutMsg_CloseAndReopenHandle connection reconnectTo ->
                             ( model2
                             , Task.perform
-                                (WebsocketClosedByBackendForUser discordUserId True)
+                                (WebsocketClosedByBackendForUser discordUserId (Just reconnectTo))
                                 (websocketClose (WebsocketClosed_CloseAndReopenForUser discordUserId) connection)
                                 :: cmds
                             )

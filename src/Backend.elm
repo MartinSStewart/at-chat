@@ -86,6 +86,7 @@ import TwoFactorAuthentication
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
+import Url
 import User exposing (BackendUser, LastDmViewed(..))
 import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
@@ -1017,7 +1018,7 @@ update msg model =
                     , case data.connection.websocketHandle of
                         Just connection2 ->
                             DiscordSync.websocketClose (WebsocketClosed_ClosedByBackendForUser discordUserId) connection2
-                                |> Task.perform (WebsocketClosedByBackendForUser discordUserId False)
+                                |> Task.perform (WebsocketClosedByBackendForUser discordUserId Nothing)
 
                         Nothing ->
                             Command.none
@@ -1028,14 +1029,15 @@ update msg model =
 
         WebsocketClosedByBackendForUser discordUserId reopen websocketEvent ->
             ( recordWebsocketCloseEvent websocketEvent model
-            , if reopen then
-                DiscordSync.websocketCreateHandle
-                    "WebsocketClosedByBackendForUser"
-                    (WebsocketCreatedHandleForUser discordUserId)
-                    Discord.websocketGatewayUrl
+            , case reopen of
+                Just reconnectUrl ->
+                    DiscordSync.websocketCreateHandle
+                        "WebsocketClosedByBackendForUser"
+                        (WebsocketCreatedHandleForUser discordUserId)
+                        (Url.toString reconnectUrl)
 
-              else
-                Command.none
+                Nothing ->
+                    Command.none
             )
 
         WebsocketSentDataForUser discordUserId result ->
@@ -5122,7 +5124,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             , case maybeConnection of
                                                 Just connection ->
                                                     Task.perform
-                                                        (WebsocketClosedByBackendForUser discordUserId False)
+                                                        (WebsocketClosedByBackendForUser discordUserId Nothing)
                                                         (DiscordSync.websocketClose
                                                             (WebsocketClosed_UnlinkDiscordUser discordUserId)
                                                             connection

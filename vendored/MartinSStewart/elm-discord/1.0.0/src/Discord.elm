@@ -4957,7 +4957,7 @@ type alias ReadyData =
     --, consents : OptionalData Consents
     --, tutorial : Maybe (Maybe Tutorial)
     , shard : OptionalData ( Int, Int )
-    , resumeGatewayUrl : String
+    , resumeGatewayUrl : Url
     , apiCodeVersion : OptionalData Int
 
     --, experiments : OptionalData (List UserExperiment)
@@ -5013,10 +5013,23 @@ decodeReadyEvent =
         |> JD.andMap (decodeOptionalData "country_code" JD.string)
         |> JD.andMap (JD.field "geo_ordered_rtc_regions" (JD.list JD.string))
         |> JD.andMap (decodeOptionalData "shard" decodeShard)
-        |> JD.andMap (JD.field "resume_gateway_url" JD.string)
+        |> JD.andMap (JD.field "resume_gateway_url" decodeUrl)
         |> JD.andMap (decodeOptionalData "api_code_version" JD.int)
         |> JD.andMap (JD.field "explicit_content_scan_version" JD.int)
         |> JD.andMap (decodeOptionalData "av_sf_protocol_floor" JD.int)
+
+
+decodeUrl =
+    JD.andThen
+        (\text ->
+            case Url.fromString text of
+                Just url ->
+                    JD.succeed url
+
+                Nothing ->
+                    JD.fail ("Invalid URL: " ++ text)
+        )
+        JD.string
 
 
 decodeSessionType : JD.Decoder SessionType
@@ -5116,7 +5129,13 @@ decodeDispatchEvent : String -> JD.Decoder OpDispatchBotEvent
 decodeDispatchEvent eventName =
     case eventName of
         "READY" ->
-            JD.field "d" (JD.map DispatchBot_ReadyEvent decodeSessionId)
+            JD.field
+                "d"
+                (JD.map2
+                    DispatchBot_ReadyEvent
+                    (JD.field "session_id" decodeSessionId)
+                    (JD.field "resume_gateway_url" decodeUrl)
+                )
 
         "RESUMED" ->
             JD.field "d" (JD.succeed DispatchBot_ResumedEvent)
@@ -5655,7 +5674,7 @@ type GatewayEvent event
 
 
 type OpDispatchBotEvent
-    = DispatchBot_ReadyEvent SessionId
+    = DispatchBot_ReadyEvent SessionId Url
     | DispatchBot_ResumedEvent
     | DispatchBot_MessageCreateEvent ChannelType Message
     | DispatchBot_MessageUpdateEvent MessageUpdate
@@ -6411,7 +6430,7 @@ type OutMsg connection
 
 
 type UserOutMsg connection
-    = UserOutMsg_CloseAndReopenHandle connection
+    = UserOutMsg_CloseAndReopenHandle connection Url
     | UserOutMsg_OpenHandle
     | UserOutMsg_AuthenticationIsNoLongerValid
     | UserOutMsg_SendWebsocketData connection String
@@ -6466,7 +6485,7 @@ decodePresence =
 
 type alias Model connection =
     { websocketHandle : Maybe connection
-    , gatewayState : Maybe ( SessionId, SequenceCounter )
+    , gatewayState : Maybe { sessionId : SessionId, sequenceCounter : SequenceCounter, resumeGatewayUrl : Url }
     , heartbeatInterval : Maybe Duration
     }
 
@@ -6555,8 +6574,8 @@ handleGateway authToken intents response model =
                     let
                         command =
                             (case model.gatewayState of
-                                Just ( discordSessionId, sequenceCounter ) ->
-                                    OpResume authToken discordSessionId sequenceCounter
+                                Just gatewayState ->
+                                    OpResume authToken gatewayState.sessionId gatewayState.sequenceCounter
 
                                 Nothing ->
                                     OpIdentify authToken intents
@@ -6583,71 +6602,89 @@ handleGateway authToken intents response model =
                     )
 
                 OpDispatch sequenceCounter opDispatchEvent ->
+                    let
+                        updateCounter model2 =
+                            case model2.gatewayState of
+                                Just gatewayState ->
+                                    { model2 | gatewayState = Just { gatewayState | sequenceCounter = sequenceCounter } }
+
+                                Nothing ->
+                                    model2
+                    in
                     case opDispatchEvent of
-                        DispatchBot_ReadyEvent discordSessionId ->
-                            ( { model | gatewayState = Just ( discordSessionId, sequenceCounter ) }, [] )
+                        DispatchBot_ReadyEvent discordSessionId resumeGatewayUrl ->
+                            ( { model
+                                | gatewayState =
+                                    Just
+                                        { sessionId = discordSessionId
+                                        , sequenceCounter = sequenceCounter
+                                        , resumeGatewayUrl = resumeGatewayUrl
+                                        }
+                              }
+                            , []
+                            )
 
                         DispatchBot_ResumedEvent ->
-                            ( model, [] )
+                            ( updateCounter model, [] )
 
                         DispatchBot_MessageCreateEvent channelType message ->
-                            ( model, [ UserCreatedMessage channelType message ] )
+                            ( updateCounter model, [ UserCreatedMessage channelType message ] )
 
                         DispatchBot_MessageUpdateEvent messageUpdate ->
-                            ( model, [ UserEditedMessage messageUpdate ] )
+                            ( updateCounter model, [ UserEditedMessage messageUpdate ] )
 
                         DispatchBot_MessageDeleteEvent messageId channelId maybeGuildId ->
                             case maybeGuildId of
                                 Included guildId ->
-                                    ( model
+                                    ( updateCounter model
                                     , [ UserDeletedMessage guildId channelId messageId ]
                                     )
 
                                 Missing ->
-                                    ( model
+                                    ( updateCounter model
                                     , []
                                     )
 
                         DispatchBot_MessageDeleteBulkEvent messageIds channelId maybeGuildId ->
                             case maybeGuildId of
                                 Included guildId ->
-                                    ( model
+                                    ( updateCounter model
                                     , List.map
                                         (UserDeletedMessage guildId channelId)
                                         messageIds
                                     )
 
                                 Missing ->
-                                    ( model, [] )
+                                    ( updateCounter model, [] )
 
                         DispatchBot_GuildMemberAddEvent guildId guildMember ->
-                            ( model
+                            ( updateCounter model
                             , []
                             )
 
                         DispatchBot_GuildMemberRemoveEvent guildId userId ->
-                            ( model, [ GuildMemberRemoved guildId userId ] )
+                            ( updateCounter model, [ GuildMemberRemoved guildId userId ] )
 
                         DispatchBot_GuildMemberUpdateEvent _ ->
-                            ( model, [] )
+                            ( updateCounter model, [] )
 
                         DispatchBot_ThreadCreatedOrUserAddedToThreadEvent channel ->
-                            ( model, [ ThreadCreatedOrUserAddedToThread channel ] )
+                            ( updateCounter model, [ ThreadCreatedOrUserAddedToThread channel ] )
 
                         DispatchBot_MessageReactionAdd reactionAdd ->
-                            ( model, [ UserAddedReaction reactionAdd ] )
+                            ( updateCounter model, [ UserAddedReaction reactionAdd ] )
 
                         DispatchBot_MessageReactionRemove reactionRemove ->
-                            ( model, [ UserRemovedReaction reactionRemove ] )
+                            ( updateCounter model, [ UserRemovedReaction reactionRemove ] )
 
                         DispatchBot_MessageReactionRemoveAll reactionRemoveAll ->
-                            ( model, [ AllReactionsRemoved reactionRemoveAll ] )
+                            ( updateCounter model, [ AllReactionsRemoved reactionRemoveAll ] )
 
                         DispatchBot_MessageReactionRemoveEmoji reactionRemoveEmoji ->
-                            ( model, [ ReactionsRemoveForEmoji reactionRemoveEmoji ] )
+                            ( updateCounter model, [ ReactionsRemoveForEmoji reactionRemoveEmoji ] )
 
                         DispatchBot_TypingStart typingStart ->
-                            ( model, [ TypingStarted typingStart ] )
+                            ( updateCounter model, [ TypingStarted typingStart ] )
 
                 OpReconnect ->
                     ( model, [ CloseAndReopenHandle connection ] )
@@ -6677,8 +6714,8 @@ handleUserGateway authToken intents response model =
                     let
                         command =
                             (case model.gatewayState of
-                                Just ( discordSessionId, sequenceCounter ) ->
-                                    GatewayUser_OpResume authToken discordSessionId sequenceCounter
+                                Just gatewayState ->
+                                    GatewayUser_OpResume authToken gatewayState.sessionId gatewayState.sequenceCounter
 
                                 Nothing ->
                                     GatewayUser_OpIdentify authToken intents
@@ -6707,7 +6744,14 @@ handleUserGateway authToken intents response model =
                 OpDispatch sequenceCounter opDispatchEvent ->
                     case opDispatchEvent of
                         DispatchUser_ReadyEvent readyEvent ->
-                            ( { model | gatewayState = Just ( readyEvent.sessionId, sequenceCounter ) }
+                            ( { model
+                                | gatewayState =
+                                    Just
+                                        { sessionId = readyEvent.sessionId
+                                        , sequenceCounter = sequenceCounter
+                                        , resumeGatewayUrl = readyEvent.resumeGatewayUrl
+                                        }
+                              }
                             , [ UserOutMsg_ReadyData readyEvent ]
                             )
 
@@ -6881,10 +6925,22 @@ handleUserGateway authToken intents response model =
                             ( model, [ UserOutMsg_GuildScheduledEventUserRemove eventUserData ] )
 
                 OpReconnect ->
-                    ( model, [ UserOutMsg_CloseAndReopenHandle connection ] )
+                    case model.gatewayState of
+                        Just gatewayState ->
+                            ( model, [ UserOutMsg_CloseAndReopenHandle connection gatewayState.resumeGatewayUrl ] )
+
+                        Nothing ->
+                            ( model, [] )
 
                 OpInvalidSession ->
-                    ( { model | gatewayState = Nothing }, [ UserOutMsg_CloseAndReopenHandle connection ] )
+                    case model.gatewayState of
+                        Just gatewayState ->
+                            ( { model | gatewayState = Nothing }
+                            , [ UserOutMsg_CloseAndReopenHandle connection gatewayState.resumeGatewayUrl ]
+                            )
+
+                        Nothing ->
+                            ( model, [] )
 
         ( _, Err error ) ->
             ( model, [ UserOutMsg_FailedToParseWebsocketMessage error ] )
