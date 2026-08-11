@@ -1094,7 +1094,7 @@ getVoiceChatData clientId session model =
                     NonemptyDict.foldl
                         (\otherClientId data dict2 ->
                             case ( data.call, otherClientId == clientId ) of
-                                ( ConnectedToCall roomId _, False ) ->
+                                ( ConnectedToCall roomId, False ) ->
                                     getVoiceChatDataHelper roomId session otherSession otherClientId data.remoteCallData dict2
 
                                 ( ConnectingToCall roomId, False ) ->
@@ -1339,10 +1339,6 @@ adminData model lastLogPageViewed =
     , privateVapidKey = model.privateVapidKey
     , slackClientSecret = model.slackClientSecret
     , openRouterKey = model.openRouterKey
-    , cloudflareRealtimeApiToken = model.cloudflareRealtimeApiToken
-    , cloudflareRealtimeAppId = model.cloudflareRealtimeAppId
-    , cloudflareAccountId = model.cloudflareAccountId
-    , cloudflareAnalyticsApiToken = model.cloudflareAnalyticsApiToken
     , postmarkApiKey = model.postmarkApiKey
     , dmChannels =
         SeqDict.map

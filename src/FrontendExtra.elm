@@ -255,18 +255,6 @@ pendingChangesText localChange =
                 Call.Local_Leave _ ->
                     "Left voice chat"
 
-                Call.Local_PublishTracks _ _ _ ->
-                    "Publish tracks"
-
-                Call.Local_PublishConnected ->
-                    "Publish connected"
-
-                Call.Local_PullTracks _ _ _ _ ->
-                    "Pull tracks"
-
-                Call.Local_RenegotiateAnswer _ _ ->
-                    "Renegotiate"
-
                 Call.Local_SetRemoteCallData _ ->
                     "Set audio/video input enabled"
 
@@ -3637,34 +3625,6 @@ changeUpdate localMsg local =
                         Call.Local_Leave time ->
                             leaveCall time local
 
-                        Call.Local_PublishTracks _ _ _ ->
-                            local
-
-                        Call.Local_PublishConnected ->
-                            local
-
-                        Call.Local_PullTracks _ _ _ (FilledInByBackend result) ->
-                            case result of
-                                Ok _ ->
-                                    local
-
-                                Err _ ->
-                                    { local | calls = { calls | error = Just Call.FailedToPullTracks } }
-
-                        Call.Local_PullTracks _ _ _ EmptyPlaceholder ->
-                            local
-
-                        Call.Local_RenegotiateAnswer _ (FilledInByBackend result) ->
-                            case result of
-                                Ok () ->
-                                    local
-
-                                Err () ->
-                                    { local | calls = { calls | error = Just Call.FailedToRenegotiate } }
-
-                        Call.Local_RenegotiateAnswer _ EmptyPlaceholder ->
-                            local
-
                         Call.Local_SetRemoteCallData _ ->
                             local
 
@@ -4892,7 +4852,7 @@ changeUpdate localMsg local =
                             local.calls
                     in
                     case voiceChatChange of
-                        Call.Server_Joined time { roomId, otherClientId } _ _ ->
+                        Call.Server_Joined time { roomId, otherClientId } ->
                             { local
                                 | calls =
                                     { calls
@@ -5449,10 +5409,6 @@ initAdminData adminData =
     , privateVapidKey = adminData.privateVapidKey
     , slackClientSecret = adminData.slackClientSecret
     , openRouterKey = adminData.openRouterKey
-    , cloudflareRealtimeApiToken = adminData.cloudflareRealtimeApiToken
-    , cloudflareRealtimeAppId = adminData.cloudflareRealtimeAppId
-    , cloudflareAccountId = adminData.cloudflareAccountId
-    , cloudflareAnalyticsApiToken = adminData.cloudflareAnalyticsApiToken
     , postmarkKey = adminData.postmarkApiKey
     , dmChannels = adminData.dmChannels
     , discordDmChannels = adminData.discordDmChannels

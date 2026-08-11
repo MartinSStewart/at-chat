@@ -3957,34 +3957,6 @@ updateLoaded msg model =
                     case result of
                         Ok event ->
                             case event of
-                                Call.FromJs_PublishOffer sdp mids ->
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (Call.Local_PublishTracks sdp mids EmptyPlaceholder |> Local_VoiceChatChange |> Just)
-                                        loggedIn
-                                        Command.none
-
-                                Call.FromJs_PublishConnected ->
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (Call.Local_PublishConnected |> Local_VoiceChatChange |> Just)
-                                        loggedIn
-                                        Command.none
-
-                                Call.FromJs_PullAnswer _ sdp ->
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (Call.Local_RenegotiateAnswer sdp EmptyPlaceholder |> Local_VoiceChatChange |> Just)
-                                        loggedIn
-                                        Command.none
-
-                                Call.FromJs_RequestPullTracks connectionId sessionId trackNames ->
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (Call.Local_PullTracks connectionId sessionId trackNames EmptyPlaceholder |> Local_VoiceChatChange |> Just)
-                                        loggedIn
-                                        Command.none
-
                                 Call.FromJs_GotUserMediaDevices mediaDevices defaultDevices ->
                                     ( { loggedIn | voiceChat = Call.gotUserMediaDevices mediaDevices defaultDevices loggedIn.voiceChat }
                                     , Command.none
@@ -6926,31 +6898,6 @@ updateLoadedFromBackend msg model =
                                     Command.none
 
                                 Call.Local_Leave _ ->
-                                    Command.none
-
-                                Call.Local_PublishTracks _ _ (FilledInByBackend publishResult) ->
-                                    Call.toJs (Call.ToJs_PublishAnswer { answerSdp = publishResult.answerSdp })
-
-                                Call.Local_PublishTracks _ _ EmptyPlaceholder ->
-                                    Command.none
-
-                                Call.Local_PublishConnected ->
-                                    Command.none
-
-                                Call.Local_PullTracks connectionId _ _ (FilledInByBackend result) ->
-                                    case result of
-                                        Ok pullTracks ->
-                                            { connectionId = connectionId, offerSdp = pullTracks.offerSdp }
-                                                |> Call.ToJs_AcceptPullOffer
-                                                |> Call.toJs
-
-                                        Err () ->
-                                            Command.none
-
-                                Call.Local_PullTracks _ _ _ EmptyPlaceholder ->
-                                    Command.none
-
-                                Call.Local_RenegotiateAnswer _ _ ->
                                     Command.none
 
                                 Call.Local_SetRemoteCallData _ ->

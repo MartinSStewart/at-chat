@@ -1,6 +1,5 @@
 module Pages.Admin exposing
     ( AdminChange(..)
-    , CloudflareEgressStatus(..)
     , EditedBackendUser
     , EditingCell
     , ExportProgress(..)
@@ -11,7 +10,6 @@ module Pages.Admin exposing
     , Model
     , Msg(..)
     , OutMsg(..)
-    , RealtimeSessionInfoStatus(..)
     , ToBackend(..)
     , ToFrontend(..)
     , UserColumn(..)
@@ -37,7 +35,6 @@ import Array exposing (Array)
 import Array.Extra
 import Bytes exposing (Bytes)
 import ChannelName
-import Cloudflare
 import Codec
 import CustomEmoji
 import Discord
@@ -71,13 +68,11 @@ import MembersAndOwner
 import Message exposing (Message)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import OneOrGreater exposing (OneOrGreater)
 import Pagination exposing (ItemId, PageId, Pagination)
 import PersonName
 import Ports
 import Postmark
 import Quantity
-import Round
 import Route
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -135,10 +130,6 @@ type Msg
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
-    | CloudflareRealtimeApiTokenEditableMsg (Editable.Msg (Maybe Cloudflare.RealtimeApiToken))
-    | CloudflareRealtimeAppIdEditableMsg (Editable.Msg (Maybe Cloudflare.AppId))
-    | CloudflareAccountIdEditableMsg (Editable.Msg (Maybe Cloudflare.AccountId))
-    | CloudflareAnalyticsApiTokenEditableMsg (Editable.Msg (Maybe Cloudflare.AnalyticsApiToken))
     | PostmarkKeyEditableMsg (Editable.Msg Postmark.ApiKey)
     | PressedHomepageLink
     | PressedReloadDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
@@ -163,9 +154,6 @@ type Msg
     | PressedRegenerateServerSecret
     | PressedDeleteCall
     | PressedWebsocketCloseEventsPage Int
-    | PressedLoadRealtimeSessionData Cloudflare.RealtimeSessionId
-    | GotRealtimeSessionInfo Cloudflare.RealtimeSessionId (Result Http.Error Cloudflare.SessionStateResponse)
-    | PressedLoadCloudflareEgress
     | PressedStartWebCodecsTest
     | PressedStopWebCodecsTest
 
@@ -173,7 +161,6 @@ type Msg
 type ToBackend
     = ExportBackendRequest ExportSubset
     | ImportBackendRequest Bytes
-    | LoadCloudflareEgressRequest
 
 
 type ExportSubset
@@ -190,7 +177,6 @@ type alias ExportSubsetSelection =
 type ToFrontend
     = ImportBackendResponse (Result () ())
     | ExportBackendProgress ExportSubset ExportProgress
-    | CloudflareEgressResponse (Result Http.Error Int)
 
 
 type ExportProgress
@@ -211,18 +197,12 @@ type alias Model =
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
-    , cloudflareRealtimeApiToken : Editable.Model
-    , cloudflareRealtimeAppId : Editable.Model
-    , cloudflareAccountId : Editable.Model
-    , cloudflareAnalyticsApiToken : Editable.Model
     , postmarkKey : Editable.Model
     , importBackendStatus : ImportBackendStatus
     , showHiddenLogs : Bool
     , exportProgress : Maybe ExportProgress
     , exportSubsetSelection : Maybe ExportSubsetSelection
     , websocketCloseEventsPage : Int
-    , realtimeSessionData : SeqDict Cloudflare.RealtimeSessionId RealtimeSessionInfoStatus
-    , cloudflareEgress : CloudflareEgressStatus
     }
 
 
@@ -258,10 +238,6 @@ type alias InitAdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
-    , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
-    , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
-    , cloudflareAccountId : Maybe Cloudflare.AccountId
-    , cloudflareAnalyticsApiToken : Maybe Cloudflare.AnalyticsApiToken
     , postmarkApiKey : Postmark.ApiKey
     , dmChannels : SeqDict DmChannelId AdminData_DmChannel
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) AdminData_DiscordDmChannel
@@ -302,10 +278,6 @@ type AdminChange
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
     | SetOpenRouterKey (Maybe String)
-    | SetCloudflareRealtimeApiToken (Maybe Cloudflare.RealtimeApiToken)
-    | SetCloudflareRealtimeAppId (Maybe Cloudflare.AppId)
-    | SetCloudflareAccountId (Maybe Cloudflare.AccountId)
-    | SetCloudflareAnalyticsApiToken (Maybe Cloudflare.AnalyticsApiToken)
     | SetPostmarkKey Postmark.ApiKey
     | DeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
     | DeleteDiscordGuild (Discord.Id Discord.GuildId)
@@ -359,18 +331,12 @@ initForUser =
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
-    , cloudflareRealtimeApiToken = Editable.init
-    , cloudflareRealtimeAppId = Editable.init
-    , cloudflareAccountId = Editable.init
-    , cloudflareAnalyticsApiToken = Editable.init
     , postmarkKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
-    , realtimeSessionData = SeqDict.empty
-    , cloudflareEgress = EgressNotRequested
     }
 
 
@@ -390,18 +356,12 @@ initForAdmin { highlightLog } =
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
-    , cloudflareRealtimeApiToken = Editable.init
-    , cloudflareRealtimeAppId = Editable.init
-    , cloudflareAccountId = Editable.init
-    , cloudflareAnalyticsApiToken = Editable.init
     , postmarkKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
-    , realtimeSessionData = SeqDict.empty
-    , cloudflareEgress = EgressNotRequested
     }
 
 
@@ -481,18 +441,6 @@ updateAdmin changedBy change adminData local =
 
         SetOpenRouterKey openRouterKey ->
             { local | adminData = IsAdmin { adminData | openRouterKey = openRouterKey } }
-
-        SetCloudflareRealtimeApiToken cloudflareRealtimeApiToken ->
-            { local | adminData = IsAdmin { adminData | cloudflareRealtimeApiToken = cloudflareRealtimeApiToken } }
-
-        SetCloudflareRealtimeAppId cloudflareRealtimeAppId ->
-            { local | adminData = IsAdmin { adminData | cloudflareRealtimeAppId = cloudflareRealtimeAppId } }
-
-        SetCloudflareAccountId cloudflareAccountId ->
-            { local | adminData = IsAdmin { adminData | cloudflareAccountId = cloudflareAccountId } }
-
-        SetCloudflareAnalyticsApiToken cloudflareAnalyticsApiToken ->
-            { local | adminData = IsAdmin { adminData | cloudflareAnalyticsApiToken = cloudflareAnalyticsApiToken } }
 
         SetPostmarkKey postmarkKey ->
             { local | adminData = IsAdmin { adminData | postmarkKey = postmarkKey } }
@@ -1220,38 +1168,6 @@ update navigationKey time adminData localState msg model =
                 Editable.PressedAcceptEdit value ->
                     ( model, Command.none, SetOpenRouterKey value |> AdminChange )
 
-        CloudflareRealtimeApiTokenEditableMsg editableMsg ->
-            case editableMsg of
-                Editable.Edit editable ->
-                    ( { model | cloudflareRealtimeApiToken = editable }, Command.none, NoOutMsg )
-
-                Editable.PressedAcceptEdit value ->
-                    ( model, Command.none, SetCloudflareRealtimeApiToken value |> AdminChange )
-
-        CloudflareRealtimeAppIdEditableMsg editableMsg ->
-            case editableMsg of
-                Editable.Edit editable ->
-                    ( { model | cloudflareRealtimeAppId = editable }, Command.none, NoOutMsg )
-
-                Editable.PressedAcceptEdit value ->
-                    ( model, Command.none, SetCloudflareRealtimeAppId value |> AdminChange )
-
-        CloudflareAccountIdEditableMsg editableMsg ->
-            case editableMsg of
-                Editable.Edit editable ->
-                    ( { model | cloudflareAccountId = editable }, Command.none, NoOutMsg )
-
-                Editable.PressedAcceptEdit value ->
-                    ( model, Command.none, SetCloudflareAccountId value |> AdminChange )
-
-        CloudflareAnalyticsApiTokenEditableMsg editableMsg ->
-            case editableMsg of
-                Editable.Edit editable ->
-                    ( { model | cloudflareAnalyticsApiToken = editable }, Command.none, NoOutMsg )
-
-                Editable.PressedAcceptEdit value ->
-                    ( model, Command.none, SetCloudflareAnalyticsApiToken value |> AdminChange )
-
         PostmarkKeyEditableMsg editableMsg ->
             case editableMsg of
                 Editable.Edit editable ->
@@ -1367,71 +1283,6 @@ update navigationKey time adminData localState msg model =
 
         PressedWebsocketCloseEventsPage page ->
             ( { model | websocketCloseEventsPage = page }, Command.none, NoOutMsg )
-
-        PressedLoadRealtimeSessionData realtimeSessionId ->
-            case ( SeqDict.get realtimeSessionId model.realtimeSessionData, adminData.cloudflareRealtimeApiToken, adminData.cloudflareRealtimeAppId ) of
-                ( Just LoadingRealtimeSessionInfo, _, _ ) ->
-                    ( model, Command.none, NoOutMsg )
-
-                ( _, Just apiToken, Just appId ) ->
-                    ( { model | realtimeSessionData = SeqDict.insert realtimeSessionId LoadingRealtimeSessionInfo model.realtimeSessionData }
-                    , Cloudflare.sessionInfo appId apiToken realtimeSessionId |> Task.attempt (GotRealtimeSessionInfo realtimeSessionId)
-                    , NoOutMsg
-                    )
-
-                _ ->
-                    ( model, Command.none, NoOutMsg )
-
-        GotRealtimeSessionInfo realtimeSessionId result ->
-            case result of
-                Ok ok ->
-                    ( { model
-                        | realtimeSessionData =
-                            SeqDict.insert realtimeSessionId (LoadedRealtimeSessionInfo ok) model.realtimeSessionData
-                      }
-                    , Command.none
-                    , NoOutMsg
-                    )
-
-                Err error ->
-                    ( { model
-                        | realtimeSessionData =
-                            SeqDict.insert
-                                realtimeSessionId
-                                (FailedToLoadRealtimeSessionInfo error)
-                                model.realtimeSessionData
-                      }
-                    , Command.none
-                    , NoOutMsg
-                    )
-
-        PressedLoadCloudflareEgress ->
-            case model.cloudflareEgress of
-                LoadingEgress ->
-                    ( model, Command.none, NoOutMsg )
-
-                _ ->
-                    -- The request is made on the backend; calling Cloudflare directly from the
-                    -- browser is blocked by CORS.
-                    ( { model | cloudflareEgress = LoadingEgress }
-                    , Lamdera.sendToBackend LoadCloudflareEgressRequest
-                    , NoOutMsg
-                    )
-
-
-{-| OpaqueVariants
--}
-type RealtimeSessionInfoStatus
-    = LoadingRealtimeSessionInfo
-    | LoadedRealtimeSessionInfo Cloudflare.SessionStateResponse
-    | FailedToLoadRealtimeSessionInfo Http.Error
-
-
-type CloudflareEgressStatus
-    = EgressNotRequested
-    | LoadingEgress
-    | LoadedEgress Int
-    | FailedToLoadEgress Http.Error
 
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable
@@ -1603,19 +1454,6 @@ updateFromBackend toFrontend model =
                 Err () ->
                     ( { model | importBackendStatus = ImportBackendFailed }, Command.none )
 
-        CloudflareEgressResponse result ->
-            ( { model
-                | cloudflareEgress =
-                    case result of
-                        Ok egressBytes ->
-                            LoadedEgress egressBytes
-
-                        Err error ->
-                            FailedToLoadEgress error
-              }
-            , Command.none
-            )
-
 
 logSectionId : HtmlId
 logSectionId =
@@ -1694,18 +1532,6 @@ pendingChangesText change =
 
         SetOpenRouterKey _ ->
             "Set OpenRouter key"
-
-        SetCloudflareRealtimeApiToken _ ->
-            "Set Cloudflare Realtime API token"
-
-        SetCloudflareRealtimeAppId _ ->
-            "Set Cloudflare Realtime App ID"
-
-        SetCloudflareAccountId _ ->
-            "Set Cloudflare account ID"
-
-        SetCloudflareAnalyticsApiToken _ ->
-            "Set Cloudflare analytics API token"
 
         SetPostmarkKey _ ->
             "Set Postmark key"
@@ -1798,7 +1624,6 @@ view isMobile2 version time local adminData user model =
             , connectionsSection isMobile2 local.localUser.timezone user adminData
             , sessionsSection isMobile2 local.localUser.timezone user adminData
             , websocketCloseEventsSection isMobile2 time local.localUser.timezone user adminData model
-            , voiceChatSection isMobile2 adminData model user
             , webCodecsTestSection isMobile2 user
             , wordSpellingGameSwedishSection isMobile2 user adminData
             , filesSection isMobile2 user adminData
@@ -2450,162 +2275,6 @@ webCodecsTestSection isMobile user =
         ]
 
 
-voiceChatSection : Bool -> AdminData -> Model -> BackendUser -> Element Msg
-voiceChatSection isMobile adminData model user =
-    let
-        usersInCalls : SeqDict Cloudflare.RealtimeSessionId OneOrGreater
-        usersInCalls =
-            SeqDict.foldl
-                (\_ connection count ->
-                    NonemptyDict.foldl
-                        (\_ connection2 count2 ->
-                            case connection2.call of
-                                ConnectedToCall _ call ->
-                                    SeqDictHelper.increment call.sessionId count2
-
-                                ConnectingToCall _ ->
-                                    count2
-
-                                NotInCall ->
-                                    count2
-                        )
-                        count
-                        connection
-                )
-                SeqDict.empty
-                adminData.connections
-    in
-    section
-        isMobile
-        user.expandedSections
-        VoiceChatSection
-        [ Ui.column
-            [ Ui.spacing 8 ]
-            (List.map
-                (\( realtimeSessionId, count ) ->
-                    let
-                        shortId : Cloudflare.RealtimeSessionId -> String
-                        shortId id =
-                            let
-                                id2 : String
-                                id2 =
-                                    Cloudflare.sessionIdToString id
-                            in
-                            String.left 4 id2 ++ "..." ++ String.right 4 id2
-                    in
-                    Ui.column
-                        [ Ui.spacing 4 ]
-                        [ Ui.row
-                            [ Ui.spacing 4 ]
-                            [ Ui.text (shortId realtimeSessionId ++ ": " ++ OneOrGreater.toString count)
-                            , Ui.el
-                                [ Ui.alignRight ]
-                                (MyUi.secondaryButton
-                                    (Dom.id "admin_loadRealtimeSessionData")
-                                    (PressedLoadRealtimeSessionData realtimeSessionId)
-                                    "Load data"
-                                )
-                            ]
-                        , case SeqDict.get realtimeSessionId model.realtimeSessionData of
-                            Just LoadingRealtimeSessionInfo ->
-                                Ui.text "Loading..."
-
-                            Just (LoadedRealtimeSessionInfo info) ->
-                                Ui.column
-                                    [ Ui.spacing 4 ]
-                                    (List.map
-                                        (\track ->
-                                            "Track name: "
-                                                ++ track.trackName
-                                                ++ ", mid: "
-                                                ++ track.mid
-                                                ++ ", location: "
-                                                ++ (case track.location of
-                                                        Cloudflare.Location_Local ->
-                                                            "local"
-
-                                                        Cloudflare.Location_Remote ->
-                                                            "remote"
-                                                   )
-                                                ++ ", status: "
-                                                ++ (case track.status of
-                                                        Cloudflare.TrackActive ->
-                                                            "active"
-
-                                                        Cloudflare.TrackInactive ->
-                                                            "inactive"
-
-                                                        Cloudflare.TrackWaiting ->
-                                                            "waiting"
-                                                   )
-                                                ++ (case track.sessionId of
-                                                        Just sessionId ->
-                                                            ", owner: " ++ shortId sessionId
-
-                                                        Nothing ->
-                                                            ""
-                                                   )
-                                                |> Ui.text
-                                        )
-                                        info.tracks
-                                    )
-
-                            Just (FailedToLoadRealtimeSessionInfo error) ->
-                                Ui.text (Log.httpErrorToString error)
-
-                            Nothing ->
-                                Ui.none
-                        ]
-                )
-                (SeqDict.toList usersInCalls)
-            )
-        , MyUi.rowButton
-            (Dom.id "admin_deleteCall")
-            PressedDeleteCall
-            [ Ui.background MyUi.deleteButtonBackground
-            , Ui.border 1
-            , Ui.borderColor MyUi.deleteButtonBorder
-            , Ui.Font.color MyUi.deleteButtonFont
-            , Ui.paddingXY 16 8
-            , Ui.rounded 4
-            , Ui.width Ui.shrink
-            , Ui.Shadow.shadows [ { x = 0, y = 1, size = 0, blur = 2, color = Ui.rgba 0 0 0 0.1 } ]
-            ]
-            [ Ui.text "End all calls" ]
-        , Ui.column
-            [ Ui.spacing 4 ]
-            [ Ui.row
-                [ Ui.spacing 8 ]
-                [ Ui.text "Realtime egress this month"
-                , Ui.el
-                    [ Ui.alignRight ]
-                    (MyUi.secondaryButton
-                        (Dom.id "admin_loadCloudflareEgress")
-                        PressedLoadCloudflareEgress
-                        "Load egress"
-                    )
-                ]
-            , case model.cloudflareEgress of
-                EgressNotRequested ->
-                    Ui.none
-
-                LoadingEgress ->
-                    Ui.text "Loading..."
-
-                LoadedEgress egressBytes ->
-                    Ui.text
-                        (Round.round 2 (toFloat egressBytes / 1.0e9)
-                            ++ " GB used (estimated $"
-                            ++ Round.round 2 (Cloudflare.estimatedMonthlyCostUsd egressBytes)
-                            ++ " this month)"
-                        )
-
-                FailedToLoadEgress error ->
-                    Ui.text (Log.httpErrorToString error)
-            ]
-        ]
-
-
 stickersAndEmojisSection : Bool -> LocalState -> BackendUser -> Element Msg
 stickersAndEmojisSection isMobile local user =
     let
@@ -3117,102 +2786,6 @@ apiKeysSection isMobile local user adminData2 model =
                     ""
             )
             model.openRouterKey
-        , Editable.view
-            (Dom.id "userOptions_cloudflareRealtimeApiToken")
-            True
-            "Cloudflare Realtime API token"
-            (\text ->
-                let
-                    text2 =
-                        String.trim text
-                in
-                if text2 == "" then
-                    Ok Nothing
-
-                else
-                    Just (Cloudflare.realtimeApiToken text2) |> Ok
-            )
-            CloudflareRealtimeApiTokenEditableMsg
-            (case adminData2.cloudflareRealtimeApiToken of
-                Just key ->
-                    Cloudflare.realtimeApiTokenToString key
-
-                Nothing ->
-                    ""
-            )
-            model.cloudflareRealtimeApiToken
-        , Editable.view
-            (Dom.id "userOptions_cloudflareRealtimeAppId")
-            True
-            "Cloudflare Realtime App ID"
-            (\text ->
-                let
-                    text2 =
-                        String.trim text
-                in
-                if text2 == "" then
-                    Ok Nothing
-
-                else
-                    Just (Cloudflare.appId text2) |> Ok
-            )
-            CloudflareRealtimeAppIdEditableMsg
-            (case adminData2.cloudflareRealtimeAppId of
-                Just key ->
-                    Cloudflare.appIdToString key
-
-                Nothing ->
-                    ""
-            )
-            model.cloudflareRealtimeAppId
-        , Editable.view
-            (Dom.id "userOptions_cloudflareAccountId")
-            True
-            "Cloudflare account ID"
-            (\text ->
-                let
-                    text2 =
-                        String.trim text
-                in
-                if text2 == "" then
-                    Ok Nothing
-
-                else
-                    Just (Cloudflare.accountId text2) |> Ok
-            )
-            CloudflareAccountIdEditableMsg
-            (case adminData2.cloudflareAccountId of
-                Just key ->
-                    Cloudflare.accountIdToString key
-
-                Nothing ->
-                    ""
-            )
-            model.cloudflareAccountId
-        , Editable.view
-            (Dom.id "userOptions_cloudflareAnalyticsApiToken")
-            True
-            "Cloudflare analytics API token"
-            (\text ->
-                let
-                    text2 =
-                        String.trim text
-                in
-                if text2 == "" then
-                    Ok Nothing
-
-                else
-                    Just (Cloudflare.analyticsApiToken text2) |> Ok
-            )
-            CloudflareAnalyticsApiTokenEditableMsg
-            (case adminData2.cloudflareAnalyticsApiToken of
-                Just key ->
-                    Cloudflare.analyticsApiTokenToString key
-
-                Nothing ->
-                    ""
-            )
-            model.cloudflareAnalyticsApiToken
         , Editable.view
             (Dom.id "userOptions_postmarkKey")
             True

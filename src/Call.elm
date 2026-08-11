@@ -15,7 +15,6 @@ port module Call exposing
     , MediaDevicesStatus(..)
     , Model
     , Msg(..)
-    , PublishResult
     , Recording
     , RemoteCallData
     , ServerChange(..)
@@ -46,7 +45,6 @@ port module Call exposing
     )
 
 import Bytes exposing (Bytes)
-import Cloudflare
 import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -81,15 +79,11 @@ import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend)
 type LocalChange
     = Local_Join Time.Posix CallId (ToBeFilledInByBackend (Result () (List ExistingPeer)))
     | Local_Leave Time.Posix
-    | Local_PublishTracks Cloudflare.Sdp (List String) (ToBeFilledInByBackend PublishResult)
-    | Local_PublishConnected
-    | Local_PullTracks ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName) (ToBeFilledInByBackend (Result () Cloudflare.PullTracksResult))
-    | Local_RenegotiateAnswer Cloudflare.Sdp (ToBeFilledInByBackend (Result () ()))
     | Local_SetRemoteCallData RemoteCallData
 
 
 type ServerChange
-    = Server_Joined Time.Posix ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName)
+    = Server_Joined Time.Posix ConnectionId
     | Server_Joining Time.Posix ConnectionId
     | Server_Left Time.Posix ConnectionId
     | Server_SetRemoteCallData ConnectionId RemoteCallData
@@ -97,15 +91,6 @@ type ServerChange
 
 type alias ExistingPeer =
     { connectionId : ConnectionId
-    , sessionId : Cloudflare.RealtimeSessionId
-    , trackNames : List Cloudflare.TrackName
-    }
-
-
-type alias PublishResult =
-    { answerSdp : Cloudflare.Sdp
-    , sessionId : Cloudflare.RealtimeSessionId
-    , trackNames : List Cloudflare.TrackName
     }
 
 
@@ -113,8 +98,6 @@ existingPeerCodec : Codec ExistingPeer
 existingPeerCodec =
     Codec.object ExistingPeer
         |> Codec.field "connectionId" .connectionId connectionIdCodec
-        |> Codec.field "sessionId" .sessionId Cloudflare.sessionIdCodec
-        |> Codec.field "trackNames" .trackNames (Codec.list Cloudflare.trackNameCodec)
         |> Codec.buildObject
 
 
@@ -1237,15 +1220,13 @@ leaveVoiceChatCmds model =
 serverChangeCmd : ServerChange -> ClientId -> Id UserId -> Local -> Model -> Command FrontendOnly toBackend msg
 serverChangeCmd change _ _ local _ =
     case change of
-        Server_Joined _ connectionId sessionId trackNames ->
+        Server_Joined _ connectionId ->
             case local.currentRoom of
                 Just roomId ->
                     if roomId == connectionId.roomId then
                         toJs
                             (ToJs_PeerJoined
                                 { connectionId = connectionId
-                                , sessionId = sessionId
-                                , trackNames = trackNames
                                 }
                             )
 
@@ -1274,10 +1255,8 @@ port voice_chat_from_js : (Json.Decode.Value -> msg) -> Sub msg
 type ToJs
     = ToJs_StartCall StartCallData
     | ToJs_LeaveCall
-    | ToJs_PublishAnswer { answerSdp : Cloudflare.Sdp }
-    | ToJs_PeerJoined { connectionId : ConnectionId, sessionId : Cloudflare.RealtimeSessionId, trackNames : List Cloudflare.TrackName }
+    | ToJs_PeerJoined { connectionId : ConnectionId }
     | ToJs_PeerLeft ConnectionId
-    | ToJs_AcceptPullOffer { connectionId : ConnectionId, offerSdp : Cloudflare.Sdp }
     | ToJs_SetAudioInputEnabled Bool
     | ToJs_SetInput Bool (IdString MediaDeviceId)
     | ToJs_SetVideoInputEnabled Bool
@@ -1338,27 +1317,10 @@ startCallDataCodec =
         |> Codec.buildObject
 
 
-publishAnswerArgsCodec : Codec { answerSdp : Cloudflare.Sdp }
-publishAnswerArgsCodec =
-    Codec.object (\sdp -> { answerSdp = sdp })
-        |> Codec.field "answerSdp" .answerSdp Cloudflare.sdpCodec
-        |> Codec.buildObject
-
-
-peerJoinedArgsCodec : Codec { connectionId : ConnectionId, sessionId : Cloudflare.RealtimeSessionId, trackNames : List Cloudflare.TrackName }
+peerJoinedArgsCodec : Codec { connectionId : ConnectionId }
 peerJoinedArgsCodec =
-    Codec.object (\c s t -> { connectionId = c, sessionId = s, trackNames = t })
+    Codec.object (\c -> { connectionId = c })
         |> Codec.field "connectionId" .connectionId connectionIdCodec
-        |> Codec.field "sessionId" .sessionId Cloudflare.sessionIdCodec
-        |> Codec.field "trackNames" .trackNames (Codec.list Cloudflare.trackNameCodec)
-        |> Codec.buildObject
-
-
-pullOfferArgsCodec : Codec { connectionId : ConnectionId, offerSdp : Cloudflare.Sdp }
-pullOfferArgsCodec =
-    Codec.object (\c s -> { connectionId = c, offerSdp = s })
-        |> Codec.field "connectionId" .connectionId connectionIdCodec
-        |> Codec.field "offerSdp" .offerSdp Cloudflare.sdpCodec
         |> Codec.buildObject
 
 
@@ -1378,7 +1340,7 @@ pullOfferArgsCodec =
 voiceChatToJsCodec : Codec ToJs
 voiceChatToJsCodec =
     Codec.custom
-        (\eStartCall eLeaveCall ePublishAnswer ePeerJoined ePeerLeft eAcceptPullOffer eSetMuted eSetAudioInput eSetVideoPaused eGetMediaDevices eStartLocalStream eStopLocalStream eSetVolume value ->
+        (\eStartCall eLeaveCall ePeerJoined ePeerLeft eSetMuted eSetAudioInput eSetVideoPaused eGetMediaDevices eStartLocalStream eStopLocalStream eSetVolume value ->
             case value of
                 ToJs_StartCall a ->
                     eStartCall a
@@ -1386,17 +1348,11 @@ voiceChatToJsCodec =
                 ToJs_LeaveCall ->
                     eLeaveCall
 
-                ToJs_PublishAnswer a ->
-                    ePublishAnswer a
-
                 ToJs_PeerJoined a ->
                     ePeerJoined a
 
                 ToJs_PeerLeft a ->
                     ePeerLeft a
-
-                ToJs_AcceptPullOffer a ->
-                    eAcceptPullOffer a
 
                 ToJs_SetAudioInputEnabled a ->
                     eSetMuted a
@@ -1421,10 +1377,8 @@ voiceChatToJsCodec =
         )
         |> Codec.variant1 "start-call" ToJs_StartCall startCallDataCodec
         |> Codec.variant0 "leave-call" ToJs_LeaveCall
-        |> Codec.variant1 "publish-answer" ToJs_PublishAnswer publishAnswerArgsCodec
         |> Codec.variant1 "peer-joined" ToJs_PeerJoined peerJoinedArgsCodec
         |> Codec.variant1 "peer-left" ToJs_PeerLeft connectionIdCodec
-        |> Codec.variant1 "accept-pull-offer" ToJs_AcceptPullOffer pullOfferArgsCodec
         |> Codec.variant1 "set-audio-input-enabled" ToJs_SetAudioInputEnabled Codec.bool
         |> Codec.variant2 "set-input" ToJs_SetInput Codec.bool IdString.codec
         |> Codec.variant1 "set-video-input-enabled" ToJs_SetVideoInputEnabled Codec.bool
@@ -1461,11 +1415,7 @@ type MediaDeviceId
 
 
 type FromJs
-    = FromJs_PublishOffer Cloudflare.Sdp (List String)
-    | FromJs_PublishConnected
-    | FromJs_PullAnswer ConnectionId Cloudflare.Sdp
-    | FromJs_RequestPullTracks ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName)
-    | FromJs_GotUserMediaDevices (List MediaDevice) (List (IdString MediaDeviceId))
+    = FromJs_GotUserMediaDevices (List MediaDevice) (List (IdString MediaDeviceId))
     | FromJs_GotUserMediaDevicesError String
     | FromJs_SpeakingChanged LocalOrConnection Bool
     | FromJs_StartConnectionError String
@@ -1495,20 +1445,8 @@ localOrConnectionCodec =
 voiceChatFromJsCodec : Codec FromJs
 voiceChatFromJsCodec =
     Codec.custom
-        (\ePublishOffer ePublishConnected ePullAnswer eRequestPull cEncoder dEncoder eEncoder fEncoder value ->
+        (\cEncoder dEncoder eEncoder fEncoder value ->
             case value of
-                FromJs_PublishOffer sdp mids ->
-                    ePublishOffer sdp mids
-
-                FromJs_PublishConnected ->
-                    ePublishConnected
-
-                FromJs_PullAnswer connId sdp ->
-                    ePullAnswer connId sdp
-
-                FromJs_RequestPullTracks connId sessId trackNames ->
-                    eRequestPull connId sessId trackNames
-
                 FromJs_GotUserMediaDevices a b ->
                     cEncoder a b
 
@@ -1521,10 +1459,6 @@ voiceChatFromJsCodec =
                 FromJs_StartConnectionError string ->
                     fEncoder string
         )
-        |> Codec.variant2 "publish-offer" FromJs_PublishOffer Cloudflare.sdpCodec (Codec.list Codec.string)
-        |> Codec.variant0 "publish-connected" FromJs_PublishConnected
-        |> Codec.variant2 "pull-answer" FromJs_PullAnswer connectionIdCodec Cloudflare.sdpCodec
-        |> Codec.variant3 "request-pull-tracks" FromJs_RequestPullTracks connectionIdCodec Cloudflare.sessionIdCodec (Codec.list Cloudflare.trackNameCodec)
         |> Codec.variant2 "got-media-devices" FromJs_GotUserMediaDevices (Codec.list mediaDevicesCodec) (Codec.list IdString.codec)
         |> Codec.variant1 "got-media-devices-error" FromJs_GotUserMediaDevicesError Codec.string
         |> Codec.variant2 "is-speaking-changed" FromJs_SpeakingChanged localOrConnectionCodec Codec.bool
