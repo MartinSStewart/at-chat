@@ -2559,7 +2559,7 @@ changeUpdate localMsg local =
                                                     (case threadRouteWithRepliedTo of
                                                         ViewThreadWithMaybeMessage threadId _ ->
                                                             { user
-                                                                | lastViewedThreads =
+                                                                | lastViewedThreadMessage =
                                                                     SeqDict.insert
                                                                         ( GuildOrDmId guildOrDmId, threadId )
                                                                         (SeqDict.get threadId channel.threads
@@ -2568,16 +2568,16 @@ changeUpdate localMsg local =
                                                                             |> MessageArray.length
                                                                             |> Id.fromInt
                                                                         )
-                                                                        user.lastViewedThreads
+                                                                        user.lastViewedThreadMessage
                                                             }
 
                                                         NoThreadWithMaybeMessage _ ->
                                                             { user
-                                                                | lastViewed =
+                                                                | lastViewedMessage =
                                                                     SeqDict.insert
                                                                         (GuildOrDmId guildOrDmId)
                                                                         (MessageArray.length channel.messages |> Id.fromInt)
-                                                                        user.lastViewed
+                                                                        user.lastViewedMessage
                                                             }
                                                     )
                                                         |> User.addRecentlyUsedEmojis emojis
@@ -2634,23 +2634,23 @@ changeUpdate localMsg local =
                                             (case threadRouteWithRepliedTo of
                                                 ViewThreadWithMaybeMessage threadId _ ->
                                                     { user
-                                                        | lastViewedThreads =
+                                                        | lastViewedThreadMessage =
                                                             SeqDict.insert
                                                                 ( GuildOrDmId guildOrDmId, threadId )
                                                                 (SeqDict.get threadId dmChannel2.threads
                                                                     |> Maybe.withDefault Thread.frontendInit
                                                                     |> DmChannel.latestFrontendThreadMessageId
                                                                 )
-                                                                user.lastViewedThreads
+                                                                user.lastViewedThreadMessage
                                                     }
 
                                                 NoThreadWithMaybeMessage _ ->
                                                     { user
-                                                        | lastViewed =
+                                                        | lastViewedMessage =
                                                             SeqDict.insert
                                                                 (GuildOrDmId guildOrDmId)
                                                                 (DmChannel.latestFrontendMessageId dmChannel2)
-                                                                user.lastViewed
+                                                                user.lastViewedMessage
                                                     }
                                             )
                                                 |> User.addRecentlyUsedEmojis emojis
@@ -2688,7 +2688,7 @@ changeUpdate localMsg local =
                                                     case threadRouteWithRepliedTo of
                                                         ViewThreadWithMaybeMessage threadId _ ->
                                                             { user
-                                                                | lastViewedThreads =
+                                                                | lastViewedThreadMessage =
                                                                     SeqDict.insert
                                                                         ( DiscordGuildOrDmId guildOrDmId, threadId )
                                                                         (SeqDict.get threadId channel.threads
@@ -2697,16 +2697,16 @@ changeUpdate localMsg local =
                                                                             |> MessageArray.length
                                                                             |> Id.fromInt
                                                                         )
-                                                                        user.lastViewedThreads
+                                                                        user.lastViewedThreadMessage
                                                             }
 
                                                         NoThreadWithMaybeMessage _ ->
                                                             { user
-                                                                | lastViewed =
+                                                                | lastViewedMessage =
                                                                     SeqDict.insert
                                                                         (DiscordGuildOrDmId guildOrDmId)
                                                                         (MessageArray.length channel.messages |> Id.fromInt)
-                                                                        user.lastViewed
+                                                                        user.lastViewedMessage
                                                             }
                                             }
                                     }
@@ -2753,11 +2753,11 @@ changeUpdate localMsg local =
                                             { localUser
                                                 | user =
                                                     { user
-                                                        | lastViewed =
+                                                        | lastViewedMessage =
                                                             SeqDict.insert
                                                                 (DiscordGuildOrDmId guildOrDmId)
                                                                 (MessageArray.length dmChannel.messages |> Id.fromInt)
-                                                                user.lastViewed
+                                                                user.lastViewedMessage
                                                     }
                                             }
                                     }
@@ -2934,8 +2934,8 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             { user
-                                                | lastViewedThreads =
-                                                    SeqDict.insert ( guildOrDmId, threadMessageId ) messageId user.lastViewedThreads
+                                                | lastViewedThreadMessage =
+                                                    SeqDict.insert ( guildOrDmId, threadMessageId ) messageId user.lastViewedThreadMessage
                                             }
                                     }
                             }
@@ -2946,8 +2946,8 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             { user
-                                                | lastViewed =
-                                                    SeqDict.insert guildOrDmId messageId user.lastViewed
+                                                | lastViewedMessage =
+                                                    SeqDict.insert guildOrDmId messageId user.lastViewedMessage
                                             }
                                     }
                             }
@@ -3621,7 +3621,7 @@ changeUpdate localMsg local =
                                                         case threadRouteWithRepliedTo of
                                                             ViewThreadWithMaybeMessage threadId _ ->
                                                                 { user
-                                                                    | lastViewedThreads =
+                                                                    | lastViewedThreadMessage =
                                                                         SeqDict.insert
                                                                             ( GuildOrDmId guildOrDmId, threadId )
                                                                             (SeqDict.get threadId channel.threads
@@ -3630,16 +3630,16 @@ changeUpdate localMsg local =
                                                                                 |> MessageArray.length
                                                                                 |> Id.fromInt
                                                                             )
-                                                                            user.lastViewedThreads
+                                                                            user.lastViewedThreadMessage
                                                                 }
 
                                                             NoThreadWithMaybeMessage _ ->
                                                                 { user
-                                                                    | lastViewed =
+                                                                    | lastViewedMessage =
                                                                         SeqDict.insert
                                                                             (GuildOrDmId guildOrDmId)
                                                                             (MessageArray.length channel.messages |> Id.fromInt)
-                                                                            user.lastViewed
+                                                                            user.lastViewedMessage
                                                                 }
 
                                                     else if
@@ -3722,23 +3722,23 @@ changeUpdate localMsg local =
                                                 case threadRouteWithRepliedTo of
                                                     ViewThreadWithMaybeMessage threadId _ ->
                                                         { user
-                                                            | lastViewedThreads =
+                                                            | lastViewedThreadMessage =
                                                                 SeqDict.insert
                                                                     ( GuildOrDmId guildOrDmId, threadId )
                                                                     (SeqDict.get threadId dmChannel2.threads
                                                                         |> Maybe.withDefault Thread.frontendInit
                                                                         |> DmChannel.latestFrontendThreadMessageId
                                                                     )
-                                                                    user.lastViewedThreads
+                                                                    user.lastViewedThreadMessage
                                                         }
 
                                                     NoThreadWithMaybeMessage _ ->
                                                         { user
-                                                            | lastViewed =
+                                                            | lastViewedMessage =
                                                                 SeqDict.insert
                                                                     (GuildOrDmId guildOrDmId)
                                                                     (DmChannel.latestFrontendMessageId dmChannel2)
-                                                                    user.lastViewed
+                                                                    user.lastViewedMessage
                                                         }
 
                                             else
@@ -3796,7 +3796,7 @@ changeUpdate localMsg local =
                                                         case threadRouteWithRepliedTo of
                                                             ViewThreadWithMaybeMessage threadId _ ->
                                                                 { user
-                                                                    | lastViewedThreads =
+                                                                    | lastViewedThreadMessage =
                                                                         SeqDict.insert
                                                                             ( DiscordGuildOrDmId guildOrDmId, threadId )
                                                                             (SeqDict.get threadId channel.threads
@@ -3805,16 +3805,16 @@ changeUpdate localMsg local =
                                                                                 |> MessageArray.length
                                                                                 |> Id.fromInt
                                                                             )
-                                                                            user.lastViewedThreads
+                                                                            user.lastViewedThreadMessage
                                                                 }
 
                                                             NoThreadWithMaybeMessage _ ->
                                                                 { user
-                                                                    | lastViewed =
+                                                                    | lastViewedMessage =
                                                                         SeqDict.insert
                                                                             (DiscordGuildOrDmId guildOrDmId)
                                                                             (MessageArray.length channel.messages |> Id.fromInt)
-                                                                            user.lastViewed
+                                                                            user.lastViewedMessage
                                                                 }
 
                                                     else if
@@ -3894,11 +3894,11 @@ changeUpdate localMsg local =
                                                 | user =
                                                     if LinkedAndOtherDiscordUsers.isLinkedUser data.currentUserId localUser.discordUsers then
                                                         { user
-                                                            | lastViewed =
+                                                            | lastViewedMessage =
                                                                 SeqDict.insert
                                                                     (DiscordGuildOrDmId guildOrDmId)
                                                                     (DmChannel.latestFrontendMessageId dmChannel2)
-                                                                    user.lastViewed
+                                                                    user.lastViewedMessage
                                                         }
 
                                                     else
@@ -4005,7 +4005,7 @@ changeUpdate localMsg local =
                                                 localUser.otherUsers
                                                 |> SeqDict.union ok.members
                                         , user =
-                                            LocalState.markAllChannelsAsViewed
+                                            LocalState.markAllChannelsAndThreadsAsViewed
                                                 ok.guildId
                                                 DmChannel.latestFrontendMessageId
                                                 ok.guild
@@ -6119,29 +6119,23 @@ handleRedo model =
 pressing escape does. A message the user marked as unread would be undone by that right away,
 so the conversation it happened in gets skipped once and then forgotten about.
 -}
-markConversationAsRead : AnyGuildOrDmId -> ThreadRoute -> LocalState -> LoggedIn2 -> ( Maybe LocalChange, LoggedIn2 )
-markConversationAsRead guildOrDmId threadRoute local loggedIn =
-    if loggedIn.markedAsUnread == Just ( guildOrDmId, threadRoute ) then
-        ( Nothing, { loggedIn | markedAsUnread = Nothing } )
+markConversationAsRead : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe LocalChange
+markConversationAsRead guildOrDmId threadRoute local =
+    case LocalState.guildOrDmIdToMessagesCount guildOrDmId threadRoute local of
+        Just messages ->
+            Local_SetLastViewed
+                guildOrDmId
+                (case threadRoute of
+                    ViewThread threadMessageId ->
+                        ViewThreadWithMessage threadMessageId (messages - 1 |> Id.fromInt)
 
-    else
-        ( case LocalState.guildOrDmIdToMessagesCount guildOrDmId threadRoute local of
-            Just messages ->
-                Local_SetLastViewed
-                    guildOrDmId
-                    (case threadRoute of
-                        ViewThread threadMessageId ->
-                            ViewThreadWithMessage threadMessageId (messages - 1 |> Id.fromInt)
+                    NoThread ->
+                        NoThreadWithMessage (messages - 1 |> Id.fromInt)
+                )
+                |> Just
 
-                        NoThread ->
-                            NoThreadWithMessage (messages - 1 |> Id.fromInt)
-                    )
-                    |> Just
-
-            Nothing ->
-                Nothing
-        , loggedIn
-        )
+        Nothing ->
+            Nothing
 
 
 handleEscapeKey : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
@@ -6217,26 +6211,26 @@ handleEscapeKeyHelper model loggedIn =
                     case Route.toGuildOrDmId local.localUser.session.userId model.route of
                         Just ( guildOrDmId, threadRoute ) ->
                             let
-                                ( localChange, loggedIn3 ) =
-                                    markConversationAsRead guildOrDmId threadRoute local loggedIn2
+                                localChange =
+                                    markConversationAsRead guildOrDmId threadRoute local
                             in
                             handleLocalChange
                                 model.time
                                 localChange
                                 (if
-                                    SeqDict.member ( guildOrDmId, threadRoute ) loggedIn3.editMessage
-                                        || SeqDict.member ( guildOrDmId, NoThread ) loggedIn3.editMessage
+                                    SeqDict.member ( guildOrDmId, threadRoute ) loggedIn2.editMessage
+                                        || SeqDict.member ( guildOrDmId, NoThread ) loggedIn2.editMessage
                                  then
-                                    { loggedIn3
+                                    { loggedIn2
                                         | editMessage =
-                                            SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn3.editMessage
+                                            SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn2.editMessage
                                                 |> SeqDict.remove ( guildOrDmId, NoThread )
                                     }
 
                                  else
-                                    { loggedIn3
+                                    { loggedIn2
                                         | replyTo =
-                                            SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn3.replyTo
+                                            SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn2.replyTo
                                     }
                                 )
                                 (setFocus model Pages.Guild.channelTextInputId)

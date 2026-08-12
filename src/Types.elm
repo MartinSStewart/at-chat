@@ -238,11 +238,6 @@ type alias LoggedIn2 =
     , -- Lasts until mouseUp
       previousTextInputFocus : Maybe TextInputFocus
     , messageHover : MessageHover
-    , {- Leaving a conversation marks it as read, which would immediately undo a message the
-         user marked as unread. The conversation they did that in waits here so that the next
-         time it would be marked as read it gets skipped instead.
-      -}
-      markedAsUnread : Maybe ( AnyGuildOrDmId, ThreadRoute )
     , showEmojiSelector : EmojiSelector
     , editMessage : SeqDict ( AnyGuildOrDmId, ThreadRoute ) EditMessage
     , replyTo : SeqDict ( AnyGuildOrDmId, ThreadRoute ) (Id ChannelMessageId)

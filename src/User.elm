@@ -89,8 +89,8 @@ type alias BackendUser =
     , createdAt : Time.Posix
     , emailNotifications : EmailNotifications
     , lastEmailNotification : Time.Posix
-    , lastViewed : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
-    , lastViewedThreads : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+    , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+    , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
     , lastDmViewed : LastDmViewed
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
     , lastDiscordChannelViewed : SeqDict (Discord.Id Discord.GuildId) ( Discord.Id Discord.ChannelId, ThreadRoute )
@@ -234,8 +234,8 @@ init createdAt name email userIsAdmin =
     , createdAt = createdAt
     , emailNotifications = NeverNotifyMe
     , lastEmailNotification = createdAt
-    , lastViewed = SeqDict.empty
-    , lastViewedThreads = SeqDict.empty
+    , lastViewedMessage = SeqDict.empty
+    , lastViewedThreadMessage = SeqDict.empty
     , lastDmViewed = NoLastDmViewed
     , lastChannelViewed = SeqDict.empty
     , lastDiscordChannelViewed = SeqDict.empty
@@ -622,8 +622,8 @@ backendToFrontendCurrent user =
     , createdAt = user.createdAt
     , emailNotifications = user.emailNotifications
     , lastEmailNotification = user.lastEmailNotification
-    , lastViewed = user.lastViewed
-    , lastViewedThreads = user.lastViewedThreads
+    , lastViewedMessage = user.lastViewedMessage
+    , lastViewedThreadMessage = user.lastViewedThreadMessage
     , lastDmViewed = user.lastDmViewed
     , lastChannelViewed = user.lastChannelViewed
     , lastDiscordChannelViewed = user.lastDiscordChannelViewed

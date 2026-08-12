@@ -538,7 +538,7 @@ checkDmThreadIsRead otherUserId threadMessageIndex model =
                     if
                         SeqDict.get
                             ( Id.GuildOrDmId (Id.GuildOrDmId_Dm otherUserId), threadMessageIndex )
-                            local.localUser.user.lastViewedThreads
+                            local.localUser.user.lastViewedThreadMessage
                             == newestMessageId
                     then
                         Ok ()

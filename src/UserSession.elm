@@ -3,6 +3,7 @@ module UserSession exposing
     , DiscordFrontendUser
     , FrontendUserSession
     , NotificationMode(..)
+    , PreviouslyLastViewedMessage(..)
     , PushSubscription(..)
     , SetViewing(..)
     , ToBeFilledInByBackend(..)
@@ -10,6 +11,13 @@ module UserSession exposing
     , UserSession
     , ViewDiscordGuildData
     , Viewing(..)
+    , Viewing_ChannelData
+    , Viewing_ChannelThreadData
+    , Viewing_DiscordChannelData
+    , Viewing_DiscordChannelThreadData
+    , Viewing_DiscordDmData
+    , Viewing_DmData
+    , Viewing_DmThreadData
     , init
     , isViewing
     , isViewingGame
@@ -70,27 +78,86 @@ type NotificationMode
 
 
 type SetViewing
-    = ViewDm (Id UserId) (Maybe ChannelHeaderTab) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
-    | ViewDmThread (Id UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
-    | ViewDiscordDm (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
-    | ViewChannel (Id GuildId) (Id ChannelId) (Maybe ChannelHeaderTab) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
-    | ViewChannelThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
-    | ViewDiscordChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (ToBeFilledInByBackend (ViewDiscordGuildData ChannelMessageId))
-    | ViewDiscordChannelThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (ViewDiscordGuildData ThreadMessageId))
+    = ViewDm Viewing_DmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
+    | ViewDmThread Viewing_DmThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
+    | ViewDiscordDm Viewing_DiscordDmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
+    | ViewChannel Viewing_ChannelData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
+    | ViewChannelThread Viewing_ChannelThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
+    | ViewDiscordChannel Viewing_DiscordChannelData (ToBeFilledInByBackend (ViewDiscordGuildData ChannelMessageId))
+    | ViewDiscordChannelThread Viewing_DiscordChannelThreadData (ToBeFilledInByBackend (ViewDiscordGuildData ThreadMessageId))
     | StopViewingChannel
     | ViewOverview (ToBeFilledInByBackend UnreadOverviewData)
 
 
 type Viewing
-    = Viewing_Dm (Id UserId) (Maybe ChannelHeaderTab)
-    | Viewing_DmThread (Id UserId) (Id ChannelMessageId)
-    | Viewing_DiscordDm (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
-    | Viewing_Channel (Id GuildId) (Id ChannelId) (Maybe ChannelHeaderTab)
-    | Viewing_ChannelThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId)
-    | Viewing_DiscordChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId)
-    | Viewing_DiscordChannelThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (Id ChannelMessageId)
+    = Viewing_Dm Viewing_DmData
+    | Viewing_DmThread Viewing_DmThreadData
+    | Viewing_DiscordDm Viewing_DiscordDmData
+    | Viewing_Channel Viewing_ChannelData
+    | Viewing_ChannelThread Viewing_ChannelThreadData
+    | Viewing_DiscordChannel Viewing_DiscordChannelData
+    | Viewing_DiscordChannelThread Viewing_DiscordChannelThreadData
     | Viewing_None
     | Viewing_Overview
+
+
+type PreviouslyLastViewedMessage messageId
+    = DontCare
+    | PreviouslyLastViewedMessage (Id messageId)
+
+
+type alias Viewing_DmData =
+    { otherUserId : Id UserId
+    , channelHeaderTab : Maybe ChannelHeaderTab
+    , previouslyLastViewedMessage : PreviouslyLastViewedMessage ChannelMessageId
+    }
+
+
+type alias Viewing_DmThreadData =
+    { otherUserId : Id UserId
+    , threadId : Id ChannelMessageId
+    , previouslyLastViewedMessage : PreviouslyLastViewedMessage ThreadMessageId
+    }
+
+
+type alias Viewing_DiscordDmData =
+    { currentUserId : Discord.Id Discord.UserId
+    , channelId : Discord.Id Discord.PrivateChannelId
+    , previouslyLastViewedMessage : PreviouslyLastViewedMessage ThreadMessageId
+    }
+
+
+type alias Viewing_ChannelData =
+    { guildId : Id GuildId
+    , channelId : Id ChannelId
+    , channelHeaderTab : Maybe ChannelHeaderTab
+    , previouslyLastViewedMessage : PreviouslyLastViewedMessage ChannelMessageId
+    }
+
+
+type alias Viewing_ChannelThreadData =
+    { guildId : Id GuildId
+    , channelId : Id ChannelId
+    , threadId : Id ChannelMessageId
+    , previouslyLastViewedMessage : PreviouslyLastViewedMessage ThreadMessageId
+    }
+
+
+type alias Viewing_DiscordChannelData =
+    { guildId : Discord.Id Discord.GuildId
+    , channelId : Discord.Id Discord.ChannelId
+    , currentUserId : Discord.Id Discord.UserId
+    , previouslyLastViewedMessage : PreviouslyLastViewedMessage ChannelMessageId
+    }
+
+
+type alias Viewing_DiscordChannelThreadData =
+    { guildId : Discord.Id Discord.GuildId
+    , channelId : Discord.Id Discord.ChannelId
+    , currentUserId : Discord.Id Discord.UserId
+    , threadId : Id ChannelMessageId
+    , previouslyLastViewedMessage : PreviouslyLastViewedMessage ThreadMessageId
+    }
 
 
 {-| How many of a channel's unread messages the unread overview shows. A channel that has
@@ -161,26 +228,26 @@ type alias DiscordFrontendUser =
 setViewingToCurrentlyViewing : SetViewing -> Viewing
 setViewingToCurrentlyViewing viewing =
     case viewing of
-        ViewDm otherUserId tab _ ->
-            Viewing_Dm otherUserId tab
+        ViewDm data _ ->
+            Viewing_Dm data
 
-        ViewDmThread otherUserId threadId _ ->
-            Viewing_DmThread otherUserId threadId
+        ViewDmThread data _ ->
+            Viewing_DmThread data
 
-        ViewDiscordDm currentUserId channelId _ ->
-            Viewing_DiscordDm currentUserId channelId
+        ViewDiscordDm data _ ->
+            Viewing_DiscordDm data
 
-        ViewChannel guildId channelId tab _ ->
-            Viewing_Channel guildId channelId tab
+        ViewChannel data _ ->
+            Viewing_Channel data
 
-        ViewChannelThread guildId channelId threadId _ ->
-            Viewing_ChannelThread guildId channelId threadId
+        ViewChannelThread data _ ->
+            Viewing_ChannelThread data
 
-        ViewDiscordChannel guildId channelId discordUserId _ ->
-            Viewing_DiscordChannel guildId channelId discordUserId
+        ViewDiscordChannel data _ ->
+            Viewing_DiscordChannel data
 
-        ViewDiscordChannelThread guildId channelId discordUserId threadId _ ->
-            Viewing_DiscordChannelThread guildId channelId discordUserId threadId
+        ViewDiscordChannelThread data _ ->
+            Viewing_DiscordChannelThread data
 
         StopViewingChannel ->
             Viewing_None
@@ -192,26 +259,26 @@ setViewingToCurrentlyViewing viewing =
 isViewing : AnyGuildOrDmId -> ThreadRoute -> Viewing -> Bool
 isViewing guildOrDmId threadRoute viewing =
     case ( viewing, threadRoute ) of
-        ( Viewing_Dm viewingUserId _, NoThread ) ->
-            guildOrDmId == GuildOrDmId (GuildOrDmId_Dm viewingUserId)
+        ( Viewing_Dm data, NoThread ) ->
+            guildOrDmId == GuildOrDmId (GuildOrDmId_Dm data.otherUserId)
 
-        ( Viewing_DmThread viewingUserId viewingThreadId, ViewThread threadId ) ->
-            guildOrDmId == GuildOrDmId (GuildOrDmId_Dm viewingUserId) && viewingThreadId == threadId
+        ( Viewing_DmThread data, ViewThread threadId ) ->
+            guildOrDmId == GuildOrDmId (GuildOrDmId_Dm data.otherUserId) && data.threadId == threadId
 
-        ( Viewing_DiscordDm currentUserId channelId, NoThread ) ->
-            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId })
+        ( Viewing_DiscordDm data, NoThread ) ->
+            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = data.currentUserId, channelId = data.channelId })
 
-        ( Viewing_Channel guildId channelId _, NoThread ) ->
-            guildOrDmId == GuildOrDmId (GuildOrDmId_Guild guildId channelId)
+        ( Viewing_Channel data, NoThread ) ->
+            guildOrDmId == GuildOrDmId (GuildOrDmId_Guild data.guildId data.channelId)
 
-        ( Viewing_ChannelThread guildId channelId viewingThreadId, ViewThread threadId ) ->
-            guildOrDmId == GuildOrDmId (GuildOrDmId_Guild guildId channelId) && viewingThreadId == threadId
+        ( Viewing_ChannelThread data, ViewThread threadId ) ->
+            guildOrDmId == GuildOrDmId (GuildOrDmId_Guild data.guildId data.channelId) && data.threadId == threadId
 
-        ( Viewing_DiscordChannel guildId channelId discordUserId, NoThread ) ->
-            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Guild discordUserId guildId channelId)
+        ( Viewing_DiscordChannel data, NoThread ) ->
+            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Guild data.currentUserId data.guildId data.channelId)
 
-        ( Viewing_DiscordChannelThread guildId channelId discordUserId viewingThreadId, ViewThread threadId ) ->
-            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Guild discordUserId guildId channelId) && viewingThreadId == threadId
+        ( Viewing_DiscordChannelThread data, ViewThread threadId ) ->
+            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Guild data.currentUserId data.guildId data.channelId) && data.threadId == threadId
 
         _ ->
             False
@@ -223,31 +290,35 @@ isViewingGame guildOrDmId matchId viewing =
         Viewing_None ->
             False
 
-        Viewing_Dm _ (Just (ChannelHeaderTab_Games (Just viewingMatchId))) ->
-            isViewing (GuildOrDmId guildOrDmId) NoThread viewing && (matchId == viewingMatchId)
+        Viewing_Dm data ->
+            case data.channelHeaderTab of
+                Just (ChannelHeaderTab_Games (Just viewingMatchId)) ->
+                    isViewing (GuildOrDmId guildOrDmId) NoThread viewing && (matchId == viewingMatchId)
 
-        Viewing_Dm _ _ ->
+                _ ->
+                    False
+
+        Viewing_DmThread _ ->
             False
 
-        Viewing_DmThread _ _ ->
+        Viewing_DiscordDm _ ->
             False
 
-        Viewing_DiscordDm _ _ ->
+        Viewing_Channel data ->
+            case data.channelHeaderTab of
+                Just (ChannelHeaderTab_Games (Just viewingMatchId)) ->
+                    isViewing (GuildOrDmId guildOrDmId) NoThread viewing && (matchId == viewingMatchId)
+
+                _ ->
+                    False
+
+        Viewing_ChannelThread _ ->
             False
 
-        Viewing_Channel _ _ (Just (ChannelHeaderTab_Games (Just viewingMatchId))) ->
-            isViewing (GuildOrDmId guildOrDmId) NoThread viewing && (matchId == viewingMatchId)
-
-        Viewing_Channel _ _ _ ->
+        Viewing_DiscordChannel _ ->
             False
 
-        Viewing_ChannelThread _ _ _ ->
-            False
-
-        Viewing_DiscordChannel _ _ _ ->
-            False
-
-        Viewing_DiscordChannelThread _ _ _ _ ->
+        Viewing_DiscordChannelThread _ ->
             False
 
         Viewing_Overview ->

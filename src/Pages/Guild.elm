@@ -690,7 +690,7 @@ unreadOverviewChannels local allDiscordUsers =
                     in
                     (case MuteSettings.isChannelMuted currentUser.muteSettings guildId channelId NoThread of
                         IsNotMuted ->
-                            unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewed) channel
+                            unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) channel
                                 |> Maybe.map
                                     (\unread ->
                                         [ { source = channelSource guild.name channel.name
@@ -716,7 +716,7 @@ unreadOverviewChannels local allDiscordUsers =
                                 case MuteSettings.isChannelMuted currentUser.muteSettings guildId channelId (ViewThread threadId) of
                                     IsNotMuted ->
                                         unreadMessages
-                                            (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreads)
+                                            (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
                                             thread
                                             |> Maybe.map
                                                 (\unread ->
@@ -759,7 +759,7 @@ unreadOverviewChannels local allDiscordUsers =
                 in
                 (case MuteSettings.isDmMuted currentUser.muteSettings otherUserId NoThread of
                     IsNotMuted ->
-                        unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewed) dmChannel
+                        unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) dmChannel
                             |> Maybe.map
                                 (\unread ->
                                     [ { source = dmSource otherUserId local.localUser
@@ -787,7 +787,7 @@ unreadOverviewChannels local allDiscordUsers =
                             case MuteSettings.isDmMuted currentUser.muteSettings otherUserId (ViewThread threadId) of
                                 IsNotMuted ->
                                     unreadMessages
-                                        (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreads)
+                                        (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
                                         thread
                                         |> Maybe.map
                                             (\unread ->
@@ -830,7 +830,7 @@ unreadOverviewChannels local allDiscordUsers =
                                 in
                                 (case MuteSettings.isDiscordChannelMuted currentUser.muteSettings guildId channelId NoThread of
                                     IsNotMuted ->
-                                        unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewed) channel
+                                        unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) channel
                                             |> Maybe.map
                                                 (\unread ->
                                                     [ { source = channelSource guild.name channel.name
@@ -863,7 +863,7 @@ unreadOverviewChannels local allDiscordUsers =
                                             case MuteSettings.isDiscordChannelMuted currentUser.muteSettings guildId channelId (ViewThread threadId) of
                                                 IsNotMuted ->
                                                     unreadMessages
-                                                        (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreads)
+                                                        (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
                                                         thread
                                                         |> Maybe.map
                                                             (\unread ->
@@ -922,7 +922,7 @@ unreadOverviewChannels local allDiscordUsers =
                                         { currentUserId = currentDiscordUserId, channelId = channelId }
                                     )
                         in
-                        unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewed) dmChannel
+                        unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewedMessage) dmChannel
                             |> Maybe.map
                                 (\unread ->
                                     { source = discordDmSource currentDiscordUserId allDiscordUsers dmChannel
@@ -1255,7 +1255,7 @@ dmChannelView dmRoute loggedIn local model =
                                 |> threadConversationView
                                     (SeqDict.get
                                         ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadMessageIndex )
-                                        local.localUser.user.lastViewedThreads
+                                        local.localUser.user.lastViewedThreadMessage
                                         |> Maybe.withDefault (Id.fromInt -1)
                                         |> Id.changeType
                                     )
@@ -1277,7 +1277,7 @@ dmChannelView dmRoute loggedIn local model =
                             conversationView
                                 (SeqDict.get
                                     (GuildOrDmId (GuildOrDmId_Dm otherUserId))
-                                    local.localUser.user.lastViewed
+                                    local.localUser.user.lastViewedMessage
                                     |> Maybe.withDefault (Id.fromInt -1)
                                 )
                                 (GuildOrDmId_Dm otherUserId)
@@ -1314,7 +1314,7 @@ discordDmChannelView routeData loggedIn local model =
                             { currentUserId = routeData.currentDiscordUserId, channelId = routeData.channelId }
                         )
                     )
-                    local.localUser.user.lastViewed
+                    local.localUser.user.lastViewedMessage
                     |> Maybe.withDefault (Id.fromInt -1)
                 )
                 routeData.currentDiscordUserId
@@ -2483,7 +2483,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                 |> threadConversationView
                                     (SeqDict.get
                                         ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadMessageIndex )
-                                        local.localUser.user.lastViewedThreads
+                                        local.localUser.user.lastViewedThreadMessage
                                         |> Maybe.withDefault (Id.fromInt -1)
                                         |> Id.changeType
                                     )
@@ -2505,7 +2505,7 @@ channelView channelRoute guildId guild loggedIn local model =
                             conversationView
                                 (SeqDict.get
                                     (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
-                                    local.localUser.user.lastViewed
+                                    local.localUser.user.lastViewedMessage
                                     |> Maybe.withDefault (Id.fromInt -1)
                                 )
                                 (GuildOrDmId_Guild guildId channelId)
@@ -2551,7 +2551,7 @@ discordChannelView routeData guild loggedIn local model =
                                             (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)
                                         , threadMessageIndex
                                         )
-                                        local.localUser.user.lastViewedThreads
+                                        local.localUser.user.lastViewedThreadMessage
                                         |> Maybe.withDefault (Id.fromInt -1)
                                         |> Id.changeType
                                     )
@@ -2577,7 +2577,7 @@ discordChannelView routeData guild loggedIn local model =
                             discordConversationView
                                 (SeqDict.get
                                     (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId))
-                                    local.localUser.user.lastViewed
+                                    local.localUser.user.lastViewedMessage
                                     |> Maybe.withDefault (Id.fromInt -1)
                                 )
                                 routeData.currentDiscordUserId
@@ -8649,7 +8649,7 @@ channelColumn isMobile time localUser guildId guild channelRoute canScroll2 chan
                                     (SeqSet.member guildId localUser.user.notifyOnAllMessages)
                                     channelId
                                     NoThread
-                                    (SeqDict.get (GuildOrDmId (GuildOrDmId_Guild guildId channelId)) localUser.user.lastViewed)
+                                    (SeqDict.get (GuildOrDmId (GuildOrDmId_Guild guildId channelId)) localUser.user.lastViewedMessage)
                                     channel
                         in
                         ( channelSortName hasNotifications channel
@@ -8894,7 +8894,7 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
                                     (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
                                     channelId
                                     NoThread
-                                    (SeqDict.get (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)) localUser.user.lastViewed)
+                                    (SeqDict.get (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)) localUser.user.lastViewedMessage)
                                     channel
                         in
                         ( channelSortName hasNotifications channel
@@ -8985,7 +8985,7 @@ dmColumnThreads isMobile now threadRoute localUser otherUserId channel threads =
                                         GuildColumn.newMessageCount
                                             (SeqDict.get
                                                 ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadMessageIndex )
-                                                localUser.user.lastViewedThreads
+                                                localUser.user.lastViewedThreadMessage
                                             )
                                             thread
                                             |> OneOrGreater.fromInt
@@ -9078,7 +9078,7 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
                                 (ViewThread threadMessageIndex)
                                 (SeqDict.get
                                     ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadMessageIndex )
-                                    localUser.user.lastViewedThreads
+                                    localUser.user.lastViewedThreadMessage
                                 )
                                 thread
                     in
@@ -9221,7 +9221,7 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
                                     ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)
                                     , threadMessageIndex
                                     )
-                                    localUser.user.lastViewedThreads
+                                    localUser.user.lastViewedThreadMessage
                                 )
                                 thread
                     in

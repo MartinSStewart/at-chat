@@ -379,7 +379,7 @@ unreadOverviewData userId user model =
                                                 { channels =
                                                     case
                                                         unreadMessages
-                                                            (SeqDict.get guildOrDmId user.lastViewed)
+                                                            (SeqDict.get guildOrDmId user.lastViewedMessage)
                                                             channel
                                                     of
                                                         Just messages ->
@@ -392,7 +392,7 @@ unreadOverviewData userId user model =
                                                         (\threadId thread dict3 ->
                                                             case
                                                                 unreadMessages
-                                                                    (SeqDict.get ( guildOrDmId, threadId ) user.lastViewedThreads)
+                                                                    (SeqDict.get ( guildOrDmId, threadId ) user.lastViewedThreadMessage)
                                                                     thread
                                                             of
                                                                 Just messages ->
@@ -440,7 +440,7 @@ unreadOverviewData userId user model =
                                 unreadMessages
                                     (SeqDict.get
                                         (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
-                                        user.lastViewed
+                                        user.lastViewedMessage
                                     )
                                     dmChannel
                             of
@@ -484,7 +484,7 @@ unreadOverviewData userId user model =
                                     case channel.status of
                                         ChannelActive ->
                                             { channels =
-                                                case unreadMessages (SeqDict.get guildOrDmId user.lastViewed) channel of
+                                                case unreadMessages (SeqDict.get guildOrDmId user.lastViewedMessage) channel of
                                                     Just messages ->
                                                         SeqDict.insert ( guildId, channelId ) messages dict2.channels
 
@@ -495,7 +495,7 @@ unreadOverviewData userId user model =
                                                     (\threadId thread dict3 ->
                                                         case
                                                             unreadMessages
-                                                                (SeqDict.get ( guildOrDmId, threadId ) user.lastViewedThreads)
+                                                                (SeqDict.get ( guildOrDmId, threadId ) user.lastViewedThreadMessage)
                                                                 thread
                                                         of
                                                             Just messages ->
@@ -535,7 +535,7 @@ unreadOverviewData userId user model =
                                     GuildOrDmId (GuildOrDmId_Dm otherUserId)
                             in
                             { channels =
-                                case unreadMessages (SeqDict.get guildOrDmId user.lastViewed) dmChannel of
+                                case unreadMessages (SeqDict.get guildOrDmId user.lastViewedMessage) dmChannel of
                                     Just messages ->
                                         SeqDict.insert otherUserId messages dict.channels
 
@@ -546,7 +546,7 @@ unreadOverviewData userId user model =
                                     (\threadId thread dict2 ->
                                         case
                                             unreadMessages
-                                                (SeqDict.get ( guildOrDmId, threadId ) user.lastViewedThreads)
+                                                (SeqDict.get ( guildOrDmId, threadId ) user.lastViewedThreadMessage)
                                                 thread
                                         of
                                             Just messages ->
@@ -1691,23 +1691,23 @@ sendGuildMessage model time timezone clientId changeId guildId channelId threadR
                         ((case threadRouteWithMaybeReplyTo of
                             ViewThreadWithMaybeMessage threadMessageIndex _ ->
                                 { user
-                                    | lastViewedThreads =
+                                    | lastViewedThreadMessage =
                                         SeqDict.insert
                                             ( GuildOrDmId guildOrDmId, threadMessageIndex )
                                             (SeqDict.get threadMessageIndex channel2.threads
                                                 |> Maybe.withDefault Thread.backendInit
                                                 |> DmChannel.latestThreadMessageId
                                             )
-                                            user.lastViewedThreads
+                                            user.lastViewedThreadMessage
                                 }
 
                             NoThreadWithMaybeMessage _ ->
                                 { user
-                                    | lastViewed =
+                                    | lastViewedMessage =
                                         SeqDict.insert
                                             (GuildOrDmId guildOrDmId)
                                             (DmChannel.latestMessageId channel2)
-                                            user.lastViewed
+                                            user.lastViewedMessage
                                 }
                          )
                             |> User.addRecentlyUsedEmojis emojis
@@ -1810,11 +1810,11 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
                     NonemptyDict.insert
                         session.userId
                         ({ user
-                            | lastViewedThreads =
+                            | lastViewedThreadMessage =
                                 SeqDict.insert
                                     ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadId )
                                     messageId
-                                    user.lastViewedThreads
+                                    user.lastViewedThreadMessage
                          }
                             |> User.addRecentlyUsedEmojis emojis
                         )
@@ -1866,8 +1866,8 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
                     NonemptyDict.insert
                         session.userId
                         ({ user
-                            | lastViewed =
-                                SeqDict.insert (GuildOrDmId (GuildOrDmId_Dm otherUserId)) messageId user.lastViewed
+                            | lastViewedMessage =
+                                SeqDict.insert (GuildOrDmId (GuildOrDmId_Dm otherUserId)) messageId user.lastViewedMessage
                          }
                             |> User.addRecentlyUsedEmojis emojis
                         )

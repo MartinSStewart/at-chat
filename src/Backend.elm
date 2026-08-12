@@ -4060,6 +4060,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_SetLastViewed guildOrDmId threadRoute ->
                     let
+                        helper : UserSession -> BackendUser -> ( BackendModel, Command BackendOnly ToFrontend msg )
                         helper session user =
                             ( { model
                                 | users =
@@ -4068,16 +4069,16 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         (case threadRoute of
                                             ViewThreadWithMessage threadMessageId messageId ->
                                                 { user
-                                                    | lastViewedThreads =
+                                                    | lastViewedThreadMessage =
                                                         SeqDict.insert
                                                             ( guildOrDmId, threadMessageId )
                                                             messageId
-                                                            user.lastViewedThreads
+                                                            user.lastViewedThreadMessage
                                                 }
 
                                             NoThreadWithMessage messageId ->
                                                 { user
-                                                    | lastViewed = SeqDict.insert guildOrDmId messageId user.lastViewed
+                                                    | lastViewedMessage = SeqDict.insert guildOrDmId messageId user.lastViewedMessage
                                                 }
                                         )
                                         model.users
@@ -7222,7 +7223,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model session use
                                 , users =
                                     NonemptyDict.insert
                                         session.userId
-                                        (LocalState.markAllChannelsAsViewed guildId DmChannel.latestMessageId guild2 user)
+                                        (LocalState.markAllChannelsAndThreadsAsViewed guildId DmChannel.latestMessageId guild2 user)
                                         model.users
                             }
                     in

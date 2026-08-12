@@ -399,7 +399,7 @@ discordDmHasNotifications localUser channelId dmChannel =
             newMessageCount
                 (SeqDict.get
                     (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
-                    localUser.user.lastViewed
+                    localUser.user.lastViewedMessage
                 )
                 dmChannel
                 |> OneOrGreater.fromInt
@@ -510,11 +510,11 @@ channelNewMessageCount guildOrDmId currentUser channel =
     SeqDict.foldl
         (\threadId thread count ->
             newMessageCount
-                (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreads)
+                (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
                 thread
                 + count
         )
-        (newMessageCount (SeqDict.get guildOrDmId currentUser.lastViewed) channel)
+        (newMessageCount (SeqDict.get guildOrDmId currentUser.lastViewedMessage) channel)
         channel.threads
 
 
@@ -539,7 +539,7 @@ guildNewMessageCount currentUser guildId guild =
                         IsNotMuted ->
                             count2
                                 + newMessageCount
-                                    (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreads)
+                                    (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
                                     thread
                 )
                 (case MuteSettings.isChannelMuted currentUser.muteSettings guildId channelId NoThread of
@@ -547,7 +547,7 @@ guildNewMessageCount currentUser guildId guild =
                         count
 
                     IsNotMuted ->
-                        count + newMessageCount (SeqDict.get guildOrDmId currentUser.lastViewed) channel
+                        count + newMessageCount (SeqDict.get guildOrDmId currentUser.lastViewedMessage) channel
                 )
                 channel.threads
         )
@@ -578,7 +578,7 @@ discordGuildNewMessageCount currentDiscordUserId currentUser guildId guild =
                         IsNotMuted ->
                             count2
                                 + newMessageCount
-                                    (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreads)
+                                    (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreadMessage)
                                     thread
                 )
                 (case MuteSettings.isDiscordChannelMuted currentUser.muteSettings guildId channelId NoThread of
@@ -586,7 +586,7 @@ discordGuildNewMessageCount currentDiscordUserId currentUser guildId guild =
                         count
 
                     IsNotMuted ->
-                        count + newMessageCount (SeqDict.get guildOrDmId currentUser.lastViewed) channel
+                        count + newMessageCount (SeqDict.get guildOrDmId currentUser.lastViewedMessage) channel
                 )
                 channel.threads
         )
