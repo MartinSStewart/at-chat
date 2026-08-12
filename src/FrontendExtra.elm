@@ -4783,6 +4783,16 @@ changeUpdate localMsg local =
                     case voiceChatChange of
                         Call.Server_Joined time { roomId, otherClientId } ->
                             let
+                                {- Whether the call was already going before this peer
+                                   joined. Read before calls2 replaces it, because a
+                                   call that was already going has a CallStarted
+                                   message in the channel already.
+                                -}
+                                alreadyInCall : Bool
+                                alreadyInCall =
+                                    (calls.currentRoom == Just roomId)
+                                        || SeqDict.member roomId calls.voiceChats
+
                                 calls2 =
                                     { calls
                                         | voiceChats =
@@ -4793,57 +4803,88 @@ changeUpdate localMsg local =
                                                 calls.voiceChats
                                     }
                             in
-                            { local
-                                | calls = calls2
-                                , dmChannels =
-                                    case roomId of
-                                        DmRoomId otherUserId ->
-                                            case ( calls.currentRoom == Just roomId, SeqDict.member roomId calls.voiceChats ) of
-                                                ( False, False ) ->
-                                                    SeqDict.update
-                                                        otherUserId
-                                                        (\maybe ->
-                                                            Maybe.withDefault DmChannel.frontendInit maybe
-                                                                |> LocalState.createChannelMessageFrontend
-                                                                    (CallStarted
-                                                                        { startedAt = time
-                                                                        , endedAt = Nothing
-                                                                        , startedBy = Tuple.first otherClientId
-                                                                        , reactions = SeqDict.empty
-                                                                        , timestampDrawings = Drawing.emptyDrawing
-                                                                        , cardDrawings = Drawing.emptyDrawing
-                                                                        }
-                                                                    )
-                                                                |> Just
-                                                        )
-                                                        local.dmChannels
+                            case roomId of
+                                DmRoomId otherUserId ->
+                                    { local
+                                        | calls = calls2
+                                        , dmChannels =
+                                            if alreadyInCall then
+                                                local.dmChannels
 
-                                                _ ->
+                                            else
+                                                SeqDict.update
+                                                    otherUserId
+                                                    (\maybe ->
+                                                        Maybe.withDefault DmChannel.frontendInit maybe
+                                                            |> LocalState.createChannelMessageFrontend
+                                                                (CallStarted
+                                                                    { startedAt = time
+                                                                    , endedAt = Nothing
+                                                                    , startedBy = Tuple.first otherClientId
+                                                                    , reactions = SeqDict.empty
+                                                                    , timestampDrawings = Drawing.emptyDrawing
+                                                                    , cardDrawings = Drawing.emptyDrawing
+                                                                    }
+                                                                )
+                                                            |> Just
+                                                    )
                                                     local.dmChannels
+                                    }
 
-                                        GuildRoomId guildId channelId ->
-                                            Debug.todo ""
-                            }
+                                GuildRoomId guildId channelId ->
+                                    { local
+                                        | calls = calls2
+                                        , guilds =
+                                            if alreadyInCall then
+                                                local.guilds
+
+                                            else
+                                                SeqDict.updateIfExists
+                                                    guildId
+                                                    (LocalState.updateChannel
+                                                        (LocalState.createChannelMessageFrontend
+                                                            (CallStarted
+                                                                { startedAt = time
+                                                                , endedAt = Nothing
+                                                                , startedBy = Tuple.first otherClientId
+                                                                , reactions = SeqDict.empty
+                                                                , timestampDrawings = Drawing.emptyDrawing
+                                                                , cardDrawings = Drawing.emptyDrawing
+                                                                }
+                                                            )
+                                                        )
+                                                        channelId
+                                                    )
+                                                    local.guilds
+                                    }
 
                         Call.Server_Left time connectionId ->
                             otherUserLeaveCall time connectionId local
 
                         Call.Server_Joining time connectionId ->
+                            let
+                                alreadyInCall : Bool
+                                alreadyInCall =
+                                    (calls.currentRoom == Just connectionId.roomId)
+                                        || SeqDict.member connectionId.roomId calls.voiceChats
+
+                                calls3 =
+                                    { calls
+                                        | voiceChats =
+                                            SeqDictHelper.addToDict
+                                                connectionId.roomId
+                                                connectionId.otherClientId
+                                                Call.defaultRemoteCallData
+                                                calls.voiceChats
+                                        , error = Nothing
+                                    }
+                            in
                             case connectionId.roomId of
                                 DmRoomId otherUserId ->
                                     { local
-                                        | calls =
-                                            { calls
-                                                | voiceChats =
-                                                    SeqDictHelper.addToDict
-                                                        connectionId.roomId
-                                                        connectionId.otherClientId
-                                                        Call.defaultRemoteCallData
-                                                        calls.voiceChats
-                                                , error = Nothing
-                                            }
+                                        | calls = calls3
                                         , dmChannels =
-                                            if (calls.currentRoom == Just connectionId.roomId) || SeqDict.member connectionId.roomId calls.voiceChats then
+                                            if alreadyInCall then
                                                 local.dmChannels
 
                                             else
@@ -4864,6 +4905,33 @@ changeUpdate localMsg local =
                                                             |> Just
                                                     )
                                                     local.dmChannels
+                                    }
+
+                                GuildRoomId guildId channelId ->
+                                    { local
+                                        | calls = calls3
+                                        , guilds =
+                                            if alreadyInCall then
+                                                local.guilds
+
+                                            else
+                                                SeqDict.updateIfExists
+                                                    guildId
+                                                    (LocalState.updateChannel
+                                                        (LocalState.createChannelMessageFrontend
+                                                            (CallStarted
+                                                                { startedAt = time
+                                                                , endedAt = Nothing
+                                                                , startedBy = local.localUser.session.userId
+                                                                , reactions = SeqDict.empty
+                                                                , timestampDrawings = Drawing.emptyDrawing
+                                                                , cardDrawings = Drawing.emptyDrawing
+                                                                }
+                                                            )
+                                                        )
+                                                        channelId
+                                                    )
+                                                    local.guilds
                                     }
 
                         Call.Server_SetRemoteCallData connectionId remoteCallData ->
@@ -5197,11 +5265,11 @@ otherUserLeaveCall time { roomId, otherClientId } local =
                         (\_ -> NonemptyDict.remove otherClientId dmVoiceChat |> NonemptyDict.fromSeqDict)
                         calls.voiceChats
             in
-            { local
-                | calls = { calls | voiceChats = voiceChats }
-                , dmChannels =
-                    case roomId of
-                        DmRoomId otherUserId ->
+            case roomId of
+                DmRoomId otherUserId ->
+                    { local
+                        | calls = { calls | voiceChats = voiceChats }
+                        , dmChannels =
                             case ( calls.currentRoom == Just roomId, SeqDict.member roomId voiceChats ) of
                                 ( False, False ) ->
                                     SeqDict.updateIfExists
@@ -5211,7 +5279,25 @@ otherUserLeaveCall time { roomId, otherClientId } local =
 
                                 _ ->
                                     local.dmChannels
-            }
+                    }
+
+                GuildRoomId guildId channelId ->
+                    { local
+                        | calls = { calls | voiceChats = voiceChats }
+                        , guilds =
+                            case ( calls.currentRoom == Just roomId, SeqDict.member roomId voiceChats ) of
+                                ( False, False ) ->
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel
+                                            (LocalState.markCallMessageAsEndedFrontend time)
+                                            channelId
+                                        )
+                                        local.guilds
+
+                                _ ->
+                                    local.guilds
+                    }
 
         Nothing ->
             local
@@ -5238,6 +5324,23 @@ leaveCall time local =
                                     otherUserId
                                     (LocalState.markCallMessageAsEndedFrontend time)
                                     local.dmChannels
+                    }
+
+                GuildRoomId guildId channelId ->
+                    { local
+                        | calls = { calls | currentRoom = Nothing }
+                        , guilds =
+                            if SeqDict.member roomId calls.voiceChats then
+                                local.guilds
+
+                            else
+                                SeqDict.updateIfExists
+                                    guildId
+                                    (LocalState.updateChannel
+                                        (LocalState.markCallMessageAsEndedFrontend time)
+                                        channelId
+                                    )
+                                    local.guilds
                     }
 
         Nothing ->

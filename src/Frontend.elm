@@ -4345,6 +4345,18 @@ updateLoaded msg model =
                                             }
                                         )
 
+                                Call.ShowLocalVideoAndCallThumbnail (Call.GuildRoomId guildId channelId) ->
+                                    FrontendExtra.routePush
+                                        model
+                                        (GuildRoute
+                                            guildId
+                                            (ChannelRoute
+                                                channelId
+                                                (NoThreadWithFriends Nothing HideMembersTab)
+                                                (Just ChannelHeaderTab_VoiceChat)
+                                            )
+                                        )
+
                         NotLoggedIn _ ->
                             ( model, Command.none )
 
