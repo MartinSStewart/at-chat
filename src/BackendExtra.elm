@@ -2217,7 +2217,7 @@ toBackendLog toBackend =
                 Local_DeleteMessage _ _ ->
                     ToBackendLog_Local_DeleteMessage
 
-                Local_CurrentlyViewing _ ->
+                Local_CurrentlyViewing _ _ ->
                     ToBackendLog_Local_CurrentlyViewing
 
                 Local_SetName _ ->

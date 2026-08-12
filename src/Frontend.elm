@@ -423,6 +423,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , toFrontendLogs = Nothing
             , popSound = loading.popSound
             , startupData = startupData
+            , routeRequestCausedByPressingLink = False
             }
 
         ( model2, cmdA ) =
@@ -897,31 +898,7 @@ updateLoaded msg model =
             ( { model | elmUiState = Ui.Anim.update ElmUiMsg elmUiMsg model.elmUiState }, Command.none )
 
         PressedLink route ->
-            let
-                ( model2, cmd ) =
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            let
-                                local =
-                                    Local.model loggedIn.localState
-                            in
-                            case Route.toGuildOrDmId local.localUser.session.userId route of
-                                Just ( guildOrDmId, threadRoute ) ->
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (FrontendExtra.markConversationAsRead guildOrDmId threadRoute local)
-                                        loggedIn
-                                        Command.none
-
-                                Nothing ->
-                                    ( loggedIn, Command.none )
-                        )
-                        model
-
-                ( model3, routeCmd ) =
-                    FrontendExtra.routePush model2 route
-            in
-            ( model3, Command.batch [ cmd, routeCmd ] )
+            FrontendExtra.routePush { model | routeRequestCausedByPressingLink = True } route
 
         DebouncedTyping ->
             FrontendExtra.updateLoggedIn
@@ -3016,10 +2993,16 @@ updateLoaded msg model =
                             FrontendExtra.handleLocalChange
                                 model.time
                                 (if hasFocus then
-                                    Local_CurrentlyViewing (LocalState.routeToViewing model.route (Local.model loggedIn.localState)) |> Just
+                                    Local_CurrentlyViewing
+                                        { routeRequestCausedByPressingLink = False }
+                                        (LocalState.routeToViewing model.route (Local.model loggedIn.localState))
+                                        |> Just
 
                                  else
-                                    Local_CurrentlyViewing StopViewingChannel |> Just
+                                    Local_CurrentlyViewing
+                                        { routeRequestCausedByPressingLink = False }
+                                        StopViewingChannel
+                                        |> Just
                                 )
                                 loggedIn
                                 (if hasFocus then
@@ -6968,7 +6951,7 @@ updateLoadedFromBackend msg model =
                                 Nothing ->
                                     Command.none
 
-                        Local_CurrentlyViewing viewing ->
+                        Local_CurrentlyViewing _ viewing ->
                             case viewing of
                                 ViewChannel data _ ->
                                     case Route.toGuildOrDmId userId model.route of

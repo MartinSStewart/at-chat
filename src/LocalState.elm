@@ -178,8 +178,8 @@ import ToBackendLog exposing (ToBackendLogData)
 import UInt64
 import Unsafe
 import Url exposing (Url)
-import User exposing (BackendUser, FrontendUser, LocalUser)
-import UserSession exposing (FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import User exposing (BackendUser, FrontendCurrentUser, FrontendUser, LocalUser)
+import UserSession exposing (FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), SetViewing_ToBeFilledInByBackend(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -2073,28 +2073,7 @@ removeReactionEmojiFrontendHelper emoji userId messageId channel =
     }
 
 
-markAllChannelsAndThreadsAsViewedBackend :
-    Id GuildId
-    ->
-        { a
-            | channels :
-                SeqDict
-                    (Id ChannelId)
-                    { channel
-                        | messages : IdArray ChannelMessageId channelMessage
-                        , threads : SeqDict (Id ChannelMessageId) { thread | messages : IdArray ThreadMessageId threadMessage }
-                    }
-        }
-    ->
-        { d
-            | lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
-            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
-        }
-    ->
-        { d
-            | lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
-            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
-        }
+markAllChannelsAndThreadsAsViewedBackend : Id GuildId -> BackendGuild -> BackendUser -> BackendUser
 markAllChannelsAndThreadsAsViewedBackend guildId guild user =
     { user
         | lastViewedMessage =
@@ -2125,28 +2104,7 @@ markAllChannelsAndThreadsAsViewedBackend guildId guild user =
     }
 
 
-markAllChannelsAndThreadsAsViewedFrontend :
-    Id GuildId
-    ->
-        { a
-            | channels :
-                SeqDict
-                    (Id ChannelId)
-                    { channel
-                        | messages : MessageArray ChannelMessageId channelMessage
-                        , threads : SeqDict (Id ChannelMessageId) { thread | messages : MessageArray ThreadMessageId threadMessage }
-                    }
-        }
-    ->
-        { d
-            | lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
-            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
-        }
-    ->
-        { d
-            | lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
-            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
-        }
+markAllChannelsAndThreadsAsViewedFrontend : Id GuildId -> FrontendGuild -> FrontendCurrentUser -> FrontendCurrentUser
 markAllChannelsAndThreadsAsViewedFrontend guildId guild user =
     { user
         | lastViewedMessage =
@@ -2741,7 +2699,7 @@ routeToViewing route local =
     case route of
         HomePageRoute ->
             -- The home page shows the unread overview when no DM is selected
-            ViewOverview EmptyPlaceholder
+            ViewOverview SetViewing_EmptyPlaceholder
 
         AdminRoute _ ->
             StopViewingChannel
@@ -2764,7 +2722,7 @@ routeToViewing route local =
                                             (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
                                             local
                                     }
-                                    EmptyPlaceholder
+                                    SetViewing_EmptyPlaceholder
 
                             ViewThreadWithFriends threadId _ _ ->
                                 ViewChannelThread
@@ -2777,7 +2735,7 @@ routeToViewing route local =
                                             threadId
                                             local
                                     }
-                                    EmptyPlaceholder
+                                    SetViewing_EmptyPlaceholder
 
                     NewChannelRoute ->
                         StopViewingChannel
@@ -2808,7 +2766,7 @@ routeToViewing route local =
                                             )
                                             local
                                     }
-                                    EmptyPlaceholder
+                                    SetViewing_EmptyPlaceholder
 
                             ViewThreadWithFriends threadId _ _ ->
                                 ViewDiscordChannelThread
@@ -2824,7 +2782,7 @@ routeToViewing route local =
                                             threadId
                                             local
                                     }
-                                    EmptyPlaceholder
+                                    SetViewing_EmptyPlaceholder
 
                     DiscordChannel_NewChannelRoute ->
                         StopViewingChannel
@@ -2849,7 +2807,7 @@ routeToViewing route local =
                                             (GuildOrDmId (GuildOrDmId_Dm otherUserId))
                                             local
                                     }
-                                    EmptyPlaceholder
+                                    SetViewing_EmptyPlaceholder
 
                             ViewThreadWithFriends threadId _ _ ->
                                 ViewDmThread
@@ -2861,7 +2819,7 @@ routeToViewing route local =
                                             threadId
                                             local
                                     }
-                                    EmptyPlaceholder
+                                    SetViewing_EmptyPlaceholder
 
                     else
                         StopViewingChannel
@@ -2883,7 +2841,7 @@ routeToViewing route local =
                             )
                             local
                     }
-                    EmptyPlaceholder
+                    SetViewing_EmptyPlaceholder
 
             else
                 StopViewingChannel

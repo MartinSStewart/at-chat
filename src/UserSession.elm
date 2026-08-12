@@ -6,6 +6,7 @@ module UserSession exposing
     , PreviouslyLastViewedMessage(..)
     , PushSubscription(..)
     , SetViewing(..)
+    , SetViewing_ToBeFilledInByBackend(..)
     , ToBeFilledInByBackend(..)
     , UnreadOverviewData
     , UserSession
@@ -77,16 +78,22 @@ type NotificationMode
     | PushNotifications
 
 
+type SetViewing_ToBeFilledInByBackend a
+    = SetViewing_EmptyPlaceholder
+    | SetViewing_FilledInByBackend a
+    | SetViewing_NothingToFillIn
+
+
 type SetViewing
-    = ViewDm Viewing_DmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
-    | ViewDmThread Viewing_DmThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
-    | ViewDiscordDm Viewing_DiscordDmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
-    | ViewChannel Viewing_ChannelData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
-    | ViewChannelThread Viewing_ChannelThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
-    | ViewDiscordChannel Viewing_DiscordChannelData (ToBeFilledInByBackend (ViewDiscordGuildData ChannelMessageId))
-    | ViewDiscordChannelThread Viewing_DiscordChannelThreadData (ToBeFilledInByBackend (ViewDiscordGuildData ThreadMessageId))
+    = ViewDm Viewing_DmData (SetViewing_ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
+    | ViewDmThread Viewing_DmThreadData (SetViewing_ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
+    | ViewDiscordDm Viewing_DiscordDmData (SetViewing_ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
+    | ViewChannel Viewing_ChannelData (SetViewing_ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
+    | ViewChannelThread Viewing_ChannelThreadData (SetViewing_ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
+    | ViewDiscordChannel Viewing_DiscordChannelData (SetViewing_ToBeFilledInByBackend (ViewDiscordGuildData ChannelMessageId))
+    | ViewDiscordChannelThread Viewing_DiscordChannelThreadData (SetViewing_ToBeFilledInByBackend (ViewDiscordGuildData ThreadMessageId))
     | StopViewingChannel
-    | ViewOverview (ToBeFilledInByBackend UnreadOverviewData)
+    | ViewOverview (SetViewing_ToBeFilledInByBackend UnreadOverviewData)
 
 
 type Viewing

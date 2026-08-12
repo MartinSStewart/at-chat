@@ -112,7 +112,7 @@ import Ui.Input
 import Ui.Prose
 import Url exposing (Url)
 import User exposing (FrontendCurrentUser, FrontendUser, LastDmViewed(..), LocalUser, NotificationLevel(..))
-import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), SetViewing_ToBeFilledInByBackend(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 import WordSpellingGame
 
@@ -184,7 +184,7 @@ pendingChangesText localChange =
         Local_DeleteMessage _ _ ->
             "Delete message"
 
-        Local_CurrentlyViewing _ ->
+        Local_CurrentlyViewing _ _ ->
             "Change view"
 
         Local_SetName _ ->
@@ -1282,8 +1282,8 @@ handleLocalChange time maybeLocalChange loggedIn cmds =
             ( loggedIn, cmds )
 
 
-routeViewingLocalChange : LocalState -> Route -> Maybe LocalChange
-routeViewingLocalChange local route =
+routeViewingLocalChange : Bool -> LocalState -> Route -> Maybe LocalChange
+routeViewingLocalChange routeRequestCausedByPressingLink local route =
     let
         localChange : SetViewing
         localChange =
@@ -1293,7 +1293,7 @@ routeViewingLocalChange local route =
         Nothing
 
     else
-        Just (Local_CurrentlyViewing localChange)
+        Just (Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink } localChange)
 
 
 clearRevealedSpoilers : LoadedFrontend -> LoadedFrontend
@@ -1402,7 +1402,7 @@ routeRequest previousRoute newRoute model =
                 (\loggedIn ->
                     handleLocalChange
                         model.time
-                        (routeViewingLocalChange (Local.model loggedIn.localState) newRoute)
+                        (routeViewingLocalChange model.routeRequestCausedByPressingLink (Local.model loggedIn.localState) newRoute)
                         { loggedIn
                             | drawingMode =
                                 -- Closing the draw tab (or navigating elsewhere) also
@@ -1412,13 +1412,11 @@ routeRequest previousRoute newRoute model =
 
                                 else
                                     Drawing.init
-                            , -- The new message warning belongs to the conversation that was
-                              -- left behind, and opening another one starts at the bottom
-                              newMessagesWhileNotScrolledToBottom = 0
+                            , newMessagesWhileNotScrolledToBottom = 0
                         }
                         Command.none
                 )
-                { model | route = newRoute }
+                { model | route = newRoute, routeRequestCausedByPressingLink = False }
     in
     (case newRoute of
         HomePageRoute ->
@@ -2921,41 +2919,21 @@ changeUpdate localMsg local =
 
                 Local_SetLastViewed guildOrDmId threadRoute ->
                     let
-                        user =
-                            local.localUser.user
-
+                        localUser : LocalUser
                         localUser =
                             local.localUser
                     in
-                    case threadRoute of
-                        ViewThreadWithMessage threadMessageId messageId ->
-                            { local
-                                | localUser =
-                                    { localUser
-                                        | user =
-                                            { user
-                                                | lastViewedThreadMessage =
-                                                    SeqDict.insert ( guildOrDmId, threadMessageId ) messageId user.lastViewedThreadMessage
-                                            }
-                                    }
+                    { local
+                        | localUser =
+                            { localUser
+                                | user = User.setLastViewedMessage guildOrDmId threadRoute local.localUser.user
                             }
-
-                        NoThreadWithMessage messageId ->
-                            { local
-                                | localUser =
-                                    { localUser
-                                        | user =
-                                            { user
-                                                | lastViewedMessage =
-                                                    SeqDict.insert guildOrDmId messageId user.lastViewedMessage
-                                            }
-                                    }
-                            }
+                    }
 
                 Local_DeleteMessage guildOrDmId threadRoute ->
                     deleteMessage guildOrDmId threadRoute local
 
-                Local_CurrentlyViewing viewing ->
+                Local_CurrentlyViewing { routeRequestCausedByPressingLink } viewing ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -2966,7 +2944,11 @@ changeUpdate localMsg local =
                             { local
                                 | localUser =
                                     { localUser
-                                        | user = User.setLastDmViewed (DmChannelLastViewed data.otherUserId NoThread) localUser.user
+                                        | user =
+                                            User.setLastDmViewed
+                                                routeRequestCausedByPressingLink
+                                                (DmChannelLastViewed data.otherUserId NoThread)
+                                                localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
                                 , dmChannels =
@@ -2981,7 +2963,10 @@ changeUpdate localMsg local =
                                 | localUser =
                                     { localUser
                                         | user =
-                                            User.setLastDmViewed (DmChannelLastViewed data.otherUserId (ViewThread data.threadId)) localUser.user
+                                            User.setLastDmViewed
+                                                routeRequestCausedByPressingLink
+                                                (DmChannelLastViewed data.otherUserId (ViewThread data.threadId))
+                                                localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
                                 , dmChannels =
@@ -3003,7 +2988,11 @@ changeUpdate localMsg local =
                             { local
                                 | localUser =
                                     { localUser
-                                        | user = User.setLastDmViewed (DiscordDmChannelLastViewed data.channelId) localUser.user
+                                        | user =
+                                            User.setLastDmViewed
+                                                routeRequestCausedByPressingLink
+                                                (DiscordDmChannelLastViewed data.channelId)
+                                                localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
                                 , discordDmChannels =
@@ -3017,7 +3006,13 @@ changeUpdate localMsg local =
                             { local
                                 | localUser =
                                     { localUser
-                                        | user = User.setLastChannelViewed data.guildId data.channelId NoThread localUser.user
+                                        | user =
+                                            User.setLastChannelViewed
+                                                routeRequestCausedByPressingLink
+                                                data.guildId
+                                                data.channelId
+                                                NoThread
+                                                localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
                                 , guilds =
@@ -3032,7 +3027,12 @@ changeUpdate localMsg local =
                                 | localUser =
                                     { localUser
                                         | user =
-                                            User.setLastChannelViewed data.guildId data.channelId (ViewThread data.threadId) localUser.user
+                                            User.setLastChannelViewed
+                                                routeRequestCausedByPressingLink
+                                                data.guildId
+                                                data.channelId
+                                                (ViewThread data.threadId)
+                                                localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
                                 , guilds =
@@ -3062,6 +3062,7 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastDiscordChannelViewed
+                                                routeRequestCausedByPressingLink
                                                 data.guildId
                                                 data.channelId
                                                 NoThread
@@ -3069,27 +3070,33 @@ changeUpdate localMsg local =
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                         , discordUsers =
                                             case backendData of
-                                                FilledInByBackend backendData2 ->
+                                                SetViewing_FilledInByBackend backendData2 ->
                                                     SeqDict.foldl
                                                         LinkedAndOtherDiscordUsers.addOtherUser
                                                         localUser.discordUsers
                                                         backendData2.newUsers
 
-                                                EmptyPlaceholder ->
+                                                SetViewing_EmptyPlaceholder ->
+                                                    localUser.discordUsers
+
+                                                SetViewing_NothingToFillIn ->
                                                     localUser.discordUsers
                                     }
                                 , discordGuilds =
                                     case backendData of
-                                        FilledInByBackend backendData2 ->
+                                        SetViewing_FilledInByBackend backendData2 ->
                                             SeqDict.updateIfExists
                                                 data.guildId
                                                 (LocalState.updateChannel
-                                                    (DmChannel.loadMessages (FilledInByBackend backendData2.messages))
+                                                    (DmChannel.loadMessages (SetViewing_FilledInByBackend backendData2.messages))
                                                     data.channelId
                                                 )
                                                 local.discordGuilds
 
-                                        EmptyPlaceholder ->
+                                        SetViewing_EmptyPlaceholder ->
+                                            local.discordGuilds
+
+                                        SetViewing_NothingToFillIn ->
                                             local.discordGuilds
                             }
 
@@ -3099,6 +3106,7 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastDiscordChannelViewed
+                                                routeRequestCausedByPressingLink
                                                 data.guildId
                                                 data.channelId
                                                 (ViewThread data.threadId)
@@ -3106,18 +3114,21 @@ changeUpdate localMsg local =
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                         , discordUsers =
                                             case backendData of
-                                                FilledInByBackend backendData2 ->
+                                                SetViewing_FilledInByBackend backendData2 ->
                                                     SeqDict.foldl
                                                         LinkedAndOtherDiscordUsers.addOtherUser
                                                         localUser.discordUsers
                                                         backendData2.newUsers
 
-                                                EmptyPlaceholder ->
+                                                SetViewing_EmptyPlaceholder ->
+                                                    localUser.discordUsers
+
+                                                SetViewing_NothingToFillIn ->
                                                     localUser.discordUsers
                                     }
                                 , discordGuilds =
                                     case backendData of
-                                        FilledInByBackend backendData2 ->
+                                        SetViewing_FilledInByBackend backendData2 ->
                                             SeqDict.updateIfExists
                                                 data.guildId
                                                 (LocalState.updateChannel
@@ -3127,7 +3138,7 @@ changeUpdate localMsg local =
                                                                 SeqDict.updateIfExists
                                                                     data.threadId
                                                                     (DmChannel.loadMessages
-                                                                        (FilledInByBackend backendData2.messages)
+                                                                        (SetViewing_FilledInByBackend backendData2.messages)
                                                                     )
                                                                     channel.threads
                                                         }
@@ -3136,7 +3147,10 @@ changeUpdate localMsg local =
                                                 )
                                                 local.discordGuilds
 
-                                        EmptyPlaceholder ->
+                                        SetViewing_EmptyPlaceholder ->
+                                            local.discordGuilds
+
+                                        SetViewing_NothingToFillIn ->
                                             local.discordGuilds
                             }
 
@@ -3147,7 +3161,7 @@ changeUpdate localMsg local =
                                     { localUser | currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing }
                             in
                             case overviewData of
-                                FilledInByBackend overviewData2 ->
+                                SetViewing_FilledInByBackend overviewData2 ->
                                     let
                                         guilds : SeqDict (Id GuildId) FrontendGuild
                                         guilds =
@@ -3266,7 +3280,10 @@ changeUpdate localMsg local =
                                                 overviewData2.discordDmChannels
                                     }
 
-                                EmptyPlaceholder ->
+                                SetViewing_EmptyPlaceholder ->
+                                    { local | localUser = localUser2 }
+
+                                SetViewing_NothingToFillIn ->
                                     { local | localUser = localUser2 }
 
                 Local_SetName name ->

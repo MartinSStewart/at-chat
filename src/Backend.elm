@@ -85,7 +85,7 @@ import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, Expo
 import Unsafe
 import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
-import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), SetViewing_ToBeFilledInByBackend(..), ToBeFilledInByBackend(..), UserSession, Viewing(..))
 import VisibleMessages
 import WireHelper
 import WordSpellingGame exposing (Language(..), WordList(..))
@@ -4066,21 +4066,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 | users =
                                     NonemptyDict.insert
                                         session.userId
-                                        (case threadRoute of
-                                            ViewThreadWithMessage threadMessageId messageId ->
-                                                { user
-                                                    | lastViewedThreadMessage =
-                                                        SeqDict.insert
-                                                            ( guildOrDmId, threadMessageId )
-                                                            messageId
-                                                            user.lastViewedThreadMessage
-                                                }
-
-                                            NoThreadWithMessage messageId ->
-                                                { user
-                                                    | lastViewedMessage = SeqDict.insert guildOrDmId messageId user.lastViewedMessage
-                                                }
-                                        )
+                                        (User.setLastViewedMessage guildOrDmId threadRoute user)
                                         model.users
                               }
                             , Command.batch
@@ -4291,7 +4277,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             ( model, Command.none )
                                 )
 
-                Local_CurrentlyViewing viewing ->
+                Local_CurrentlyViewing { routeRequestCausedByPressingLink } viewing ->
                     let
                         currentlyViewing : UserSession.Viewing
                         currentlyViewing =
@@ -4346,6 +4332,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
                                 SeqDict.empty
                                 (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+
+                        previouslyViewing : Viewing
+                        previouslyViewing =
+                            case SeqDict.get sessionId model.connections of
+                                Just connections ->
+                                    case NonemptyDict.get clientId connections of
+                                        Just connection ->
+                                            connection.currentlyViewing
+
+                                        Nothing ->
+                                            Viewing_None
+
+                                Nothing ->
+                                    Viewing_None
                     in
                     case viewing of
                         ViewDm data _ ->
@@ -4358,7 +4358,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
-                                                (User.setLastDmViewed (DmChannelLastViewed data.otherUserId NoThread) user)
+                                                (User.setLastDmViewed routeRequestCausedByPressingLink (DmChannelLastViewed data.otherUserId NoThread) user)
                                                 model.users
                                         , connections =
                                             SeqDict.updateIfExists
@@ -4370,8 +4370,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 model.connections
                                       }
                                     , Command.batch
-                                        [ ViewDm data (loadMessagesHelper dmChannel |> FilledInByBackend)
-                                            |> Local_CurrentlyViewing
+                                        [ ViewDm
+                                            data
+                                            (case previouslyViewing of
+                                                Viewing_Dm previousData ->
+                                                    if previousData.otherUserId == data.otherUserId then
+                                                        SetViewing_NothingToFillIn
+
+                                                    else
+                                                        loadMessagesHelper dmChannel |> SetViewing_FilledInByBackend
+
+                                                _ ->
+                                                    loadMessagesHelper dmChannel |> SetViewing_FilledInByBackend
+                                            )
+                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4389,7 +4401,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
-                                                (User.setLastDmViewed (DmChannelLastViewed data.otherUserId (ViewThread data.threadId)) user)
+                                                (User.setLastDmViewed routeRequestCausedByPressingLink (DmChannelLastViewed data.otherUserId (ViewThread data.threadId)) user)
                                                 model.users
                                         , connections =
                                             SeqDict.updateIfExists
@@ -4403,12 +4415,24 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , Command.batch
                                         [ ViewDmThread
                                             data
-                                            (SeqDict.get data.threadId dmChannel.threads
-                                                |> Maybe.withDefault Thread.backendInit
-                                                |> loadMessagesHelper
-                                                |> FilledInByBackend
+                                            (case previouslyViewing of
+                                                Viewing_DmThread previousData ->
+                                                    if previousData.otherUserId == data.otherUserId && previousData.threadId == data.threadId then
+                                                        SetViewing_NothingToFillIn
+
+                                                    else
+                                                        SeqDict.get data.threadId dmChannel.threads
+                                                            |> Maybe.withDefault Thread.backendInit
+                                                            |> loadMessagesHelper
+                                                            |> SetViewing_FilledInByBackend
+
+                                                _ ->
+                                                    SeqDict.get data.threadId dmChannel.threads
+                                                        |> Maybe.withDefault Thread.backendInit
+                                                        |> loadMessagesHelper
+                                                        |> SetViewing_FilledInByBackend
                                             )
-                                            |> Local_CurrentlyViewing
+                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4426,7 +4450,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
-                                                (User.setLastDmViewed (DiscordDmChannelLastViewed data.channelId) user)
+                                                (User.setLastDmViewed routeRequestCausedByPressingLink (DiscordDmChannelLastViewed data.channelId) user)
                                                 model.users
                                         , connections =
                                             SeqDict.updateIfExists
@@ -4440,8 +4464,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , Command.batch
                                         [ ViewDiscordDm
                                             data
-                                            (loadMessagesHelper dmChannel |> FilledInByBackend)
-                                            |> Local_CurrentlyViewing
+                                            (case previouslyViewing of
+                                                Viewing_DiscordDm previousData ->
+                                                    if previousData.currentUserId == data.currentUserId && previousData.channelId == data.channelId then
+                                                        SetViewing_NothingToFillIn
+
+                                                    else
+                                                        loadMessagesHelper dmChannel |> SetViewing_FilledInByBackend
+
+                                                _ ->
+                                                    loadMessagesHelper dmChannel |> SetViewing_FilledInByBackend
+                                            )
+                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4461,7 +4495,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 | users =
                                                     NonemptyDict.insert
                                                         session.userId
-                                                        (User.setLastChannelViewed data.guildId data.channelId NoThread user)
+                                                        (User.setLastChannelViewed
+                                                            routeRequestCausedByPressingLink
+                                                            data.guildId
+                                                            data.channelId
+                                                            NoThread
+                                                            user
+                                                        )
                                                         model.users
                                                 , connections =
                                                     SeqDict.updateIfExists
@@ -4475,8 +4515,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             , Command.batch
                                                 [ ViewChannel
                                                     data
-                                                    (loadMessagesHelper channel |> FilledInByBackend)
-                                                    |> Local_CurrentlyViewing
+                                                    (case previouslyViewing of
+                                                        Viewing_Channel previousData ->
+                                                            if previousData.guildId == data.guildId && previousData.channelId == data.channelId then
+                                                                SetViewing_NothingToFillIn
+
+                                                            else
+                                                                loadMessagesHelper channel |> SetViewing_FilledInByBackend
+
+                                                        _ ->
+                                                            loadMessagesHelper channel |> SetViewing_FilledInByBackend
+                                                    )
+                                                    |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
                                                     |> LocalChangeResponse changeId
                                                     |> Lamdera.sendToFrontend clientId
                                                 , broadcastCmd session
@@ -4520,12 +4570,24 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             , Command.batch
                                                 [ ViewChannelThread
                                                     data
-                                                    (SeqDict.get data.threadId channel.threads
-                                                        |> Maybe.withDefault Thread.backendInit
-                                                        |> loadMessagesHelper
-                                                        |> FilledInByBackend
+                                                    (case previouslyViewing of
+                                                        Viewing_ChannelThread previousData ->
+                                                            if previousData.guildId == data.guildId && previousData.channelId == data.channelId && previousData.threadId == data.threadId then
+                                                                SetViewing_NothingToFillIn
+
+                                                            else
+                                                                SeqDict.get data.threadId channel.threads
+                                                                    |> Maybe.withDefault Thread.backendInit
+                                                                    |> loadMessagesHelper
+                                                                    |> SetViewing_FilledInByBackend
+
+                                                        _ ->
+                                                            SeqDict.get data.threadId channel.threads
+                                                                |> Maybe.withDefault Thread.backendInit
+                                                                |> loadMessagesHelper
+                                                                |> SetViewing_FilledInByBackend
                                                     )
-                                                    |> Local_CurrentlyViewing
+                                                    |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
                                                     |> LocalChangeResponse changeId
                                                     |> Lamdera.sendToFrontend clientId
                                                 , broadcastCmd session
@@ -4576,7 +4638,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
-                                                (User.setLastDiscordChannelViewed data.guildId data.channelId NoThread user)
+                                                (User.setLastDiscordChannelViewed
+                                                    data.currentUserId
+                                                    data.guildId
+                                                    data.channelId
+                                                    NoThread
+                                                    user
+                                                )
                                                 model.users
                                         , connections =
                                             SeqDict.updateIfExists
@@ -4590,12 +4658,24 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , Command.batch
                                         [ ViewDiscordChannel
                                             data
-                                            ({ messages = loadMessagesHelper channel
-                                             , newUsers = getNewUsers connectionData data.guildId guild
-                                             }
-                                                |> FilledInByBackend
+                                            (case previouslyViewing of
+                                                Viewing_DiscordChannel previousData ->
+                                                    if previousData.currentUserId == data.currentUserId && previousData.channelId == data.channelId then
+                                                        SetViewing_NothingToFillIn
+
+                                                    else
+                                                        SetViewing_FilledInByBackend
+                                                            { messages = loadMessagesHelper channel
+                                                            , newUsers = getNewUsers connectionData data.guildId guild
+                                                            }
+
+                                                _ ->
+                                                    SetViewing_FilledInByBackend
+                                                        { messages = loadMessagesHelper channel
+                                                        , newUsers = getNewUsers connectionData data.guildId guild
+                                                        }
                                             )
-                                            |> Local_CurrentlyViewing
+                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4617,6 +4697,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             NonemptyDict.insert
                                                 session.userId
                                                 (User.setLastDiscordChannelViewed
+                                                    routeRequestCausedByPressingLink
                                                     data.guildId
                                                     data.channelId
                                                     (ViewThread data.threadId)
@@ -4635,15 +4716,30 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , Command.batch
                                         [ ViewDiscordChannelThread
                                             data
-                                            ({ messages =
-                                                SeqDict.get data.threadId channel.threads
-                                                    |> Maybe.withDefault Thread.discordBackendInit
-                                                    |> loadMessagesHelper
-                                             , newUsers = getNewUsers connectionData data.guildId guild
-                                             }
-                                                |> FilledInByBackend
+                                            (case previouslyViewing of
+                                                Viewing_DiscordChannelThread previousData ->
+                                                    if previousData.currentUserId == data.currentUserId && previousData.channelId == data.channelId && previousData.threadId == data.threadId then
+                                                        SetViewing_NothingToFillIn
+
+                                                    else
+                                                        SetViewing_FilledInByBackend
+                                                            { messages =
+                                                                SeqDict.get data.threadId channel.threads
+                                                                    |> Maybe.withDefault Thread.discordBackendInit
+                                                                    |> loadMessagesHelper
+                                                            , newUsers = getNewUsers connectionData data.guildId guild
+                                                            }
+
+                                                _ ->
+                                                    SetViewing_FilledInByBackend
+                                                        { messages =
+                                                            SeqDict.get data.threadId channel.threads
+                                                                |> Maybe.withDefault Thread.discordBackendInit
+                                                                |> loadMessagesHelper
+                                                        , newUsers = getNewUsers connectionData data.guildId guild
+                                                        }
                                             )
-                                            |> Local_CurrentlyViewing
+                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4668,10 +4764,15 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                       }
                                     , Command.batch
                                         [ ViewOverview
-                                            (BackendExtra.unreadOverviewData session.userId user model
-                                                |> FilledInByBackend
+                                            (case previouslyViewing of
+                                                Viewing_Overview ->
+                                                    SetViewing_NothingToFillIn
+
+                                                _ ->
+                                                    BackendExtra.unreadOverviewData session.userId user model
+                                                        |> SetViewing_FilledInByBackend
                                             )
-                                            |> Local_CurrentlyViewing
+                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
