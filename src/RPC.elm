@@ -9,6 +9,7 @@ import DmChannelId
 import Effect.Lamdera exposing (ClientId)
 import FileStatus
 import Http
+import Id
 import Json.Encode as Json
 import Lamdera exposing (SessionId)
 import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
@@ -105,14 +106,35 @@ checkCall : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Erro
 checkCall _ model headers text =
     case ( fromRustServer model headers, Codec.decodeString checkCallRequestCodec text ) of
         ( True, Ok request ) ->
-            case
-                ( SeqDict.get request.sessionId model.sessions
-                , DmChannelId.fromString request.roomId
-                )
-            of
-                ( Just session, Ok dmChannelId ) ->
-                    case DmChannelId.otherUserId session.userId dmChannelId of
-                        Just otherUserId ->
+            case SeqDict.get (Debug.log "request" request).sessionId model.sessions of
+                Just session ->
+                    let
+                        maybeRoomId : Maybe Call.CallId
+                        maybeRoomId =
+                            case String.split "-" request.roomId |> Debug.log "asdf" of
+                                [ "guild", guildId, channelId ] ->
+                                    case ( Id.fromString guildId, Id.fromString channelId ) of
+                                        ( Just guildId2, Just channelId2 ) ->
+                                            Just (Call.GuildRoomId guildId2 channelId2)
+
+                                        _ ->
+                                            Nothing
+
+                                _ ->
+                                    case DmChannelId.fromString text of
+                                        Ok dmChannelId ->
+                                            case DmChannelId.otherUserId session.userId dmChannelId of
+                                                Just otherUserId ->
+                                                    Just (Call.DmRoomId otherUserId)
+
+                                                Nothing ->
+                                                    Nothing
+
+                                        Err _ ->
+                                            Nothing
+                    in
+                    case Debug.log "maybeRoomId" maybeRoomId of
+                        Just (Call.DmRoomId otherUserId) ->
                             BackendExtra.asDmUserRpc
                                 model
                                 request.sessionId
@@ -128,6 +150,27 @@ checkCall _ model headers text =
                                                 request.clientId
                                                 session.userId
                                                 (Call.DmRoomId otherUserId)
+                                        )
+                                        Time.now
+                                    )
+                                )
+
+                        Just (Call.GuildRoomId guildId channelId) ->
+                            BackendExtra.asGuildMemberRpc
+                                model
+                                request.sessionId
+                                guildId
+                                (\_ _ _ ->
+                                    ( Ok "valid"
+                                    , model
+                                    , Task.perform
+                                        (\time ->
+                                            Rpc_UserJoinedCall
+                                                time
+                                                request.sessionId
+                                                request.clientId
+                                                session.userId
+                                                (Call.GuildRoomId guildId channelId)
                                         )
                                         Time.now
                                     )

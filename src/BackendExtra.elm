@@ -12,6 +12,7 @@ module BackendExtra exposing
     , asDmUser
     , asDmUserRpc
     , asGuildMember
+    , asGuildMemberRpc
     , asGuildOwner
     , asUser
     , discordDmChannelToFrontend
@@ -2326,6 +2327,39 @@ asGuildMember model sessionId guildId func =
             ( model, Command.none )
 
 
+asGuildMemberRpc :
+    BackendModel
+    -> SessionId
+    -> Id GuildId
+    -> (UserSession -> BackendUser -> BackendGuild -> ( Result Http.Error String, BackendModel, Cmd BackendMsg ))
+    -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
+asGuildMemberRpc model sessionId guildId func =
+    case SeqDict.get sessionId model.sessions of
+        Just session ->
+            case ( NonemptyDict.get session.userId model.users, SeqDict.get guildId model.guilds ) of
+                ( Just user, Just guild ) ->
+                    case MembersAndOwner.isMember session.userId guild.membersAndOwner of
+                        IsNotMember ->
+                            rpcInvalidRequest model
+
+                        IsMember ->
+                            func session user guild
+
+                        IsOwner ->
+                            func session user guild
+
+                _ ->
+                    rpcInvalidRequest model
+
+        Nothing ->
+            rpcInvalidRequest model
+
+
+rpcInvalidRequest : BackendModel -> ( Result Http.Error value, BackendModel, Cmd BackendMsg )
+rpcInvalidRequest model =
+    ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+
 asDiscordGuildChannelMember :
     BackendModel
     -> SessionId
@@ -2653,13 +2687,13 @@ asDmUserRpc model sessionId { otherUserId } func =
                         func session user otherUser dmChannelId DmChannel.backendInit
 
                     else
-                        ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+                        rpcInvalidRequest model
 
                 _ ->
-                    ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+                    rpcInvalidRequest model
 
         Nothing ->
-            ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+            rpcInvalidRequest model
 
 
 usersHaveSharedGuilds : Id UserId -> Id UserId -> BackendModel -> Bool
