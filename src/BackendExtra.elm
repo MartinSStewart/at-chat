@@ -1086,6 +1086,19 @@ getVoiceChatDataHelper roomId session otherSession otherClientId remoteCallData 
                 Nothing ->
                     dict2
 
+        GuildRoomId guildId channelId ->
+            SeqDict.update
+                (GuildRoomId guildId channelId)
+                (\maybe ->
+                    case maybe of
+                        Just nonempty ->
+                            NonemptyDict.insert ( otherSession.userId, otherClientId ) remoteCallData nonempty |> Just
+
+                        Nothing ->
+                            NonemptyDict.singleton ( otherSession.userId, otherClientId ) remoteCallData |> Just
+                )
+                dict2
+
 
 getVoiceChatData : ClientId -> UserSession -> BackendModel -> SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) Call.RemoteCallData)
 getVoiceChatData clientId session model =

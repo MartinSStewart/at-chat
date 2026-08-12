@@ -1856,6 +1856,9 @@ update msg model =
                 Call.DmRoomId otherUserId ->
                     joinDmVoiceChat sessionId clientId time otherUserId model userId
 
+                Call.GuildRoomId guildId channelId ->
+                    Debug.todo ""
+
 
 gotDiscordStickers :
     List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )
@@ -6681,25 +6684,39 @@ leaveVoiceHelper :
     -> Call.CallId
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 leaveVoiceHelper sessionId clientId time maybeChangeId model userId roomId =
-    ( { model
-        | connections =
+    let
+        connections =
             SeqDict.updateIfExists
                 sessionId
                 (NonemptyDict.updateIfExists clientId (\connection -> { connection | call = NotInCall }))
                 model.connections
-        , dmChannels =
-            case roomId of
-                Call.DmRoomId otherUserId ->
-                    let
-                        dmChannelId =
-                            DmChannelId.fromUserIds userId otherUserId
-                    in
+    in
+    ( case roomId of
+        Call.DmRoomId otherUserId ->
+            let
+                dmChannelId =
+                    DmChannelId.fromUserIds userId otherUserId
+            in
+            { model
+                | connections = connections
+                , dmChannels =
                     if voiceChatRoomHasOtherMembers dmChannelId clientId model then
                         model.dmChannels
 
                     else
                         SeqDict.updateIfExists dmChannelId (LocalState.markCallMessageAsEndedBackend time) model.dmChannels
-      }
+            }
+
+        Call.GuildRoomId guildId channelId ->
+            { model
+                | connections = connections
+                , guilds =
+                    if voiceChatRoomHasOtherMembers dmChannelId clientId model then
+                        model.dmChannels
+
+                    else
+                        SeqDict.updateIfExists dmChannelId (LocalState.markCallMessageAsEndedBackend time) model.dmChannels
+            }
     , Command.batch
         [ case maybeChangeId of
             Just changeId ->
@@ -6773,7 +6790,7 @@ joinDmVoiceChat sessionId clientId time otherUserId model userId =
                                         (Maybe.map
                                             (NonemptyDict.insert
                                                 clientId
-                                                { connection | call = ConnectingToCall voiceChatId }
+                                                { connection | call = ConnectedToCall voiceChatId }
                                             )
                                         )
                                         model2.connections

@@ -59,7 +59,7 @@ import Html.Attributes
 import Html.Events
 import Html.Keyed
 import Icons
-import Id exposing (Id, UserId, VideoNodeId)
+import Id exposing (ChannelId, GuildId, Id, UserId, VideoNodeId)
 import IdString exposing (IdString)
 import Json.Decode
 import Json.Encode
@@ -287,6 +287,7 @@ type alias ConnectionId =
 
 type CallId
     = DmRoomId (Id UserId)
+    | GuildRoomId (Id GuildId) (Id ChannelId)
 
 
 type DisplayMode
@@ -1431,6 +1432,9 @@ startCallCmd roomId userId clientId model =
         case roomId of
             DmRoomId otherUserId ->
                 DmChannelId.fromUserIds userId otherUserId |> DmChannelId.toString
+
+            GuildRoomId guildId channelId ->
+                "guild-" ++ Id.toString guildId ++ "-" ++ Id.toString channelId
     , selfId = ( userId, clientId )
     , audioInput = model.selectedAudioInputDevice
     , videoInput = model.selectedVideoInputDevice
@@ -1560,6 +1564,9 @@ connectionIdToString { roomId, otherClientId } =
     (case roomId of
         DmRoomId otherUserId ->
             Id.toString otherUserId
+
+        GuildRoomId guildId channelId ->
+            "guild-" ++ Id.toString guildId ++ "-" ++ Id.toString channelId
     )
         ++ " "
         ++ otherUserIdToString otherClientId
@@ -1599,17 +1606,30 @@ roomIdCodec : Codec CallId
 roomIdCodec =
     Codec.andThen
         (\text ->
-            case Id.fromString text of
-                Just id ->
-                    Codec.succeed (DmRoomId id)
+            case String.split "-" text of
+                [ "guild", guildId, channelId ] ->
+                    case ( Id.fromString guildId, Id.fromString channelId ) of
+                        ( Just guildId2, Just channelId2 ) ->
+                            Codec.succeed (GuildRoomId guildId2 channelId2)
 
-                Nothing ->
-                    Codec.fail ("Invalid roomId: " ++ text)
+                        _ ->
+                            Codec.fail ("Invalid roomId: " ++ text)
+
+                _ ->
+                    case Id.fromString text of
+                        Just id ->
+                            Codec.succeed (DmRoomId id)
+
+                        Nothing ->
+                            Codec.fail ("Invalid roomId: " ++ text)
         )
         (\roomId ->
             case roomId of
                 DmRoomId otherUserId ->
                     Id.toString otherUserId
+
+                GuildRoomId guildId channelId ->
+                    "guild-" ++ Id.toString guildId ++ "-" ++ Id.toString channelId
         )
         Codec.string
 

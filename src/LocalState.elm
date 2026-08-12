@@ -656,7 +656,6 @@ type alias ConnectionData =
 
 type CallStatus
     = NotInCall
-    | ConnectingToCall Call.CallId
     | ConnectedToCall Call.CallId
 
 
