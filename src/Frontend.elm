@@ -4195,7 +4195,15 @@ updateLoaded msg model =
 
                 Call.PressedJoinCall roomId ->
                     FrontendExtra.updateLoggedIn
-                        (\loggedIn -> ( loggedIn, Call.startCallCmd roomId loggedIn.voiceChat ))
+                        (\loggedIn ->
+                            ( loggedIn
+                            , Call.startCallCmd
+                                roomId
+                                (Local.model loggedIn.localState).localUser.session.userId
+                                model.clientId
+                                loggedIn.voiceChat
+                            )
+                        )
                         model
 
                 Call.PressedLeaveCall ->

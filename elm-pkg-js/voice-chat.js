@@ -1,46 +1,200 @@
+// port voice_chat_to_js : Json.Encode.Value -> Cmd msg
+// port voice_chat_from_js : (Json.Decode.Value -> msg) -> Sub msg
+//
+// Voice and video chat over the rust server's room WebSocket, in place of the
+// WebRTC peer connections this used to open against Cloudflare Realtime. Media
+// is encoded with WebCodecs, sent as binary messages, and relayed to everyone
+// else in the room; there is no SFU, no signalling and no ICE.
+//
+// The techniques here are the ones proven out by webcodecs-test.js against the
+// echo endpoint: frames come off the camera with requestVideoFrameCallback and
+// off the mic with an AudioWorklet, rather than with MediaStreamTrackProcessor,
+// which reads better but Firefox has never implemented. Everything used works in
+// Chrome 94+, Firefox 132+ and Safari 26+.
+//
+// The room only relays bytes, so the sender's name travels inside each message
+// and is not checked by anyone. A DM room holds one other person, who the
+// backend already vouched for when it let them in, so the worst this allows is
+// somebody labelling their own media as their own other tab. If rooms ever hold
+// more than two people, the server should tag messages with the sender it
+// authenticated instead of trusting this field.
+
+const AUDIO_SAMPLE_RATE = 48000;
+const AUDIO_BLOCK_FRAMES = 960; // 20ms, which is the frame size opus wants.
+
+// Loud enough to count as speaking, on the 0..1 scale of decoded samples. The
+// old implementation read this off an AnalyserNode's 0..255 byte spectrum and
+// compared against 20; peers now arrive as decoded samples with no analyser in
+// between, so the same judgement is made directly on their amplitude.
+const SPEAKING_THRESHOLD = 0.02;
+
+// A peer that has sent nothing for this long is treated as silent. Without it a
+// peer that stops sending mid-word stays outlined as speaking forever.
+const SPEAKING_TIMEOUT_MS = 400;
+
+// Batches the mic into 20ms blocks on the audio thread. Doing it here rather
+// than on the main thread keeps this to one message per block instead of one
+// per 128 samples.
+const captureWorklet = `
+class CaptureProcessor extends AudioWorkletProcessor {
+    constructor() {
+        super();
+        this.block = new Float32Array(${AUDIO_BLOCK_FRAMES});
+        this.filled = 0;
+    }
+
+    process(inputs) {
+        const channel = inputs[0] && inputs[0][0];
+        if (!channel) return true;
+
+        let offset = 0;
+        while (offset < channel.length) {
+            const take = Math.min(channel.length - offset, this.block.length - this.filled);
+            this.block.set(channel.subarray(offset, offset + take), this.filled);
+            this.filled += take;
+            offset += take;
+            if (this.filled === this.block.length) {
+                this.port.postMessage(this.block.slice());
+                this.filled = 0;
+            }
+        }
+        return true;
+    }
+}
+registerProcessor("capture-processor", CaptureProcessor);
+`;
+
 exports.init = async function init(app) {
-    // Single SFU connection. Cloudflare Realtime uses one RTCPeerConnection
-    // per client; we publish our own tracks and subscribe to other
-    // participants' tracks through transceivers on that one PC.
-    let sfu = null;
+    // The call we are in, or null. Shape:
+    //   socket, stream, captureVideo, audioContext
+    //   selfId          "<userId> <clientId>", the label on everything we send
+    //   roomId          the Call.CallId string, for building peer node ids
+    //   peers           Map<senderKey, peer>, see addPeer
+    //   encoders        video and audio encoders, closed on stop
+    let call = null;
     let localStreamPreview = null;
 
-    // SFU state shape:
-    //   pc: RTCPeerConnection
-    //   localStream: MediaStream from getUserMedia
-    //   audioMid / videoMid: transceiver MIDs we published
-    //   pendingExistingPeers: peers from ToJs_StartCall, drained once publish completes
-    //   peerSubs: Map<connectionIdKey, {
-    //       connectionId,
-    //       trackNames: string[],
-    //       transceivers: RTCRtpTransceiver[],
-    //       videoNode,
-    //   }>
-    //   pendingPullsByTrack: Map<trackName, connectionIdKey>  // for matching incoming tracks
-    //   waitingForPublishAnswer: bool
-
-    // The ConnectionId codec (Call.connectionIdCodec) encodes both fields as
-    // strings: roomId = "<dmOtherUserId>" and otherClientId =
-    // "<peerUserId> <peerClientId>". (They are NOT arrays.)
-    function connectionKey(connectionId) {
-        return connectionId.roomId + "|" + connectionId.otherClientId;
+    // Same rule as FileStatus.domain: production talks to the deployed server,
+    // development talks to the one npm run rust-server starts.
+    function websocketUrl(roomId, clientId) {
+        const host = location.hostname === "localhost" || location.hostname === "127.0.0.1"
+            ? "ws://localhost:3000"
+            : (location.protocol === "https:" ? "wss://" : "ws://") + location.host;
+        return host + "/file/websocket/" + encodeURIComponent(roomId)
+            + "?clientId=" + encodeURIComponent(clientId);
     }
 
-    // Must match Call.connectionIdToString, which the <video> element's id is
-    // built from: "<dmOtherUserId> <peerUserId> <peerClientId>".
-    function peerVideoNodeId(connectionId) {
-        return connectionId.roomId + " " + connectionId.otherClientId;
+    // Must match Call.connectionIdToString, which the peer's <canvas> id is
+    // built from: "<dmOtherUserId> <peerUserId> <peerClientId>". `senderKey` is
+    // already "<peerUserId> <peerClientId>", the Call.otherUserIdToString half.
+    function peerNodeId(roomId, senderKey) {
+        return roomId + " " + senderKey;
     }
+
+    // Rebuilds the ConnectionId record Call.connectionIdCodec decodes, so Elm
+    // can be told which peer started or stopped speaking.
+    function connectionId(roomId, senderKey) {
+        return { roomId: roomId, otherClientId: senderKey };
+    }
+
+    // Every chunk is one binary message:
+    //   byte 0        length of the sender label in bytes
+    //   bytes 1..n    the sender label, "<userId> <clientId>"
+    //   next byte     kind, 0 = video and 1 = audio
+    //   next byte     1 when this is a key frame
+    //   next byte     which video codec encoded it, ignored for audio
+    //   next 8 bytes  the chunk's own timestamp, which the decoder needs back
+    //   rest          the encoded frame
+    //
+    // The codec byte is what lets two browsers that chose differently still
+    // understand each other. Nothing else announces it, and a decoder set up for
+    // the wrong one produces no picture and no error worth acting on.
+    const VIDEO = 0;
+    const AUDIO = 1;
+
+    const CODECS = ["avc1.42001E", "vp8"];
+    const HEADER_AFTER_SENDER = 11;
+
+    const textEncoder = new TextEncoder();
+    const textDecoder = new TextDecoder();
+
+    function packet(senderBytes, kind, codec, chunk) {
+        const data = new Uint8Array(chunk.byteLength);
+        chunk.copyTo(data);
+
+        const headerBytes = 1 + senderBytes.byteLength + HEADER_AFTER_SENDER;
+        const message = new Uint8Array(headerBytes + data.byteLength);
+        const header = new DataView(message.buffer);
+        header.setUint8(0, senderBytes.byteLength);
+        message.set(senderBytes, 1);
+        header.setUint8(1 + senderBytes.byteLength, kind);
+        header.setUint8(2 + senderBytes.byteLength, chunk.type === "key" ? 1 : 0);
+        header.setUint8(3 + senderBytes.byteLength, codec);
+        header.setFloat64(4 + senderBytes.byteLength, chunk.timestamp);
+        message.set(data, headerBytes);
+        return message;
+    }
+
+    function unpack(buffer) {
+        const header = new DataView(buffer);
+        const senderLength = header.getUint8(0);
+        // A message too short to hold its own header is not one of ours.
+        if (buffer.byteLength < 1 + senderLength + HEADER_AFTER_SENDER) return null;
+        return {
+            sender: textDecoder.decode(new Uint8Array(buffer, 1, senderLength)),
+            kind: header.getUint8(1 + senderLength),
+            type: header.getUint8(2 + senderLength) === 1 ? "key" : "delta",
+            codec: header.getUint8(3 + senderLength),
+            timestamp: header.getFloat64(4 + senderLength),
+            data: new Uint8Array(buffer, 1 + senderLength + HEADER_AFTER_SENDER),
+        };
+    }
+
+    // H.264 in annexb and VP8 both decode without a codec description, which
+    // saves having to ship the encoder's metadata over the wire. Safari only has
+    // the first, Chrome has both.
+    async function pickVideoCodec(width, height) {
+        const candidates = [
+            { codec: CODECS[0], avc: { format: "annexb" } },
+            { codec: CODECS[1] },
+        ];
+        for (let index = 0; index < candidates.length; index++) {
+            const config = Object.assign({
+                width,
+                height,
+                bitrate: 1_000_000,
+                framerate: 30,
+            }, candidates[index]);
+            try {
+                const support = await VideoEncoder.isConfigSupported(config);
+                if (support.supported) return { config, index };
+            } catch (e) {
+                // Unsupported codec strings can throw rather than report false.
+            }
+        }
+        return null;
+    }
+
+    function fail(message) {
+        app.ports.voice_chat_from_js.send({ tag: "start-connection-error", args: [String(message)] });
+    }
+
+    // --- the call ---
 
     async function startCall(args) {
         await stopCall();
 
-        let localStream;
+        if (typeof VideoEncoder === "undefined" || typeof AudioEncoder === "undefined") {
+            fail("This browser is missing WebCodecs. Needs Chrome 94+, Firefox 132+ or Safari 26+.");
+            return;
+        }
+
+        let stream;
         try {
-            localStream = await getUserMedia(args);
+            stream = await getUserMedia(args);
             const devices = await navigator.mediaDevices.enumerateDevices();
             const defaultDevices = [];
-            localStream.getTracks().forEach(function (track) {
+            stream.getTracks().forEach(function (track) {
                 defaultDevices.push(track.getSettings().deviceId);
             });
             app.ports.voice_chat_from_js.send({ tag: "got-media-devices", args: [devices, defaultDevices] });
@@ -49,328 +203,572 @@ exports.init = async function init(app) {
             return;
         }
 
-        const pc = new RTCPeerConnection({ bundlePolicy: "max-bundle" });
+        // Pinned to opus's sample rate so the encoder never has to resample, and
+        // shared with playback so every peer mixes into the same context.
+        const audioContext = new AudioContext({ sampleRate: AUDIO_SAMPLE_RATE });
+        audioContext.resume().catch(function () {});
 
-        const audioTrack = localStream.getAudioTracks()[0];
-        const videoTrack = localStream.getVideoTracks()[0];
-
-        // Always create both transceivers (sendonly) so the SFU answer
-        // includes m-lines for both, even if the user has no camera.
-        const audioTransceiver = pc.addTransceiver(audioTrack || "audio", { direction: "sendonly" });
-        const videoTransceiver = pc.addTransceiver(videoTrack || "video", { direction: "sendonly" });
-
-        sfu = {
-            pc,
-            localStream,
-            audioTransceiver,
-            videoTransceiver,
-            audioMid: null,
-            videoMid: null,
-            pendingExistingPeers: args.existingPeers || [],
-            peerSubs: new Map(),
-            // Maps a transceiver mid -> peer connectionKey. Populated when we
-            // apply a pull offer: the new recvonly transceivers in that offer
-            // belong to the peer we're pulling. ontrack then routes each track
-            // to the right peer by its transceiver mid (the "first unattached"
-            // heuristic mis-routes once there's more than one remote track).
-            midToPeer: new Map(),
-            waitingForPublishAnswer: true,
-            publishConnectedSent: false,
+        const state = {
+            socket: null,
+            stream,
+            // Capture reads frames off a video element, and the one Elm renders
+            // is only in the page while the call is on screen. Collapsing the
+            // sidebar would otherwise stop the camera feeding the encoder, so
+            // capture gets an element of its own that never enters the document.
+            captureVideo: document.createElement("video"),
+            audioContext,
+            selfId: args.selfId,
+            senderBytes: textEncoder.encode(args.selfId),
+            roomId: args.roomId,
+            peers: new Map(),
+            // Which of CODECS our video encoder settled on, stamped onto
+            // everything we send. Stays 0 when there is no camera, where it is
+            // never read because no video is sent.
+            videoCodec: 0,
+            forceKeyFrame: false,
+            encoders: [],
+            audioNodes: [],
+            framesCaptured: 0,
+            stopped: false,
         };
+        call = state;
 
-        pc.oniceconnectionstatechange = function () {
-            console.log("SFU iceConnectionState:", pc.iceConnectionState);
-            maybeSignalPublishConnected();
-        };
-        pc.onconnectionstatechange = function () {
-            console.log("SFU connectionState:", pc.connectionState);
-            maybeSignalPublishConnected();
-        };
-
-        pc.ontrack = function (event) {
-            const mid = event.transceiver ? event.transceiver.mid : null;
-            console.log("SFU ontrack", event.track.kind, event.track.id, mid);
-            attachTrackToPeer(event, mid != null ? sfu.midToPeer.get(mid) : undefined);
-        };
-
-        pc.onicecandidateerror = function (event) {
-            console.log("SFU onicecandidateerror", {
-                url: event.url,
-                errorCode: event.errorCode,
-                errorText: event.errorText,
-            });
-        };
-
+        state.captureVideo.muted = true;
+        state.captureVideo.playsInline = true;
+        state.captureVideo.srcObject = stream;
         try {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            sfu.audioMid = audioTransceiver.mid;
-            sfu.videoMid = videoTransceiver.mid;
-            const mids = [audioTransceiver.mid, videoTransceiver.mid].filter((m) => m !== null);
-            app.ports.voice_chat_from_js.send({
-                tag: "publish-offer",
-                args: [offer.sdp, mids],
-            });
+            await state.captureVideo.play();
         } catch (e) {
-            console.error("SFU createOffer failed", e);
-            app.ports.voice_chat_from_js.send({ tag: "start-connection-error", args: [e.toString()] });
+            // Autoplay of a muted element is allowed everywhere this runs, so a
+            // rejection here means the tracks are gone rather than blocked.
+            fail("could not start capture: " + e);
+            await stopCall();
+            return;
         }
-    }
+        if (state.stopped) return;
 
-    async function applyPublishAnswer(answerSdp) {
-        if (!sfu) return;
-        try {
-            await sfu.pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
-            sfu.waitingForPublishAnswer = false;
-            // We do NOT pull peers here. Cloudflare rejects pulls until the
-            // publisher's PC is connected and sending packets, so we wait for
-            // the connection to come up (maybeSignalPublishConnected) and let
-            // the backend drive pulls in both directions via Server_Joined.
-            maybeSignalPublishConnected();
-        } catch (e) {
-            console.error("SFU setRemoteDescription(publish answer) failed", e);
-        }
-    }
+        await stopLocalStream();
+        localStreamPreview = stream;
+        showLocalPreview(stream);
+        handleAudioStream(stream, "local-video");
 
-    // Notify Elm once, when our publishing PeerConnection has actually
-    // connected to Cloudflare. Only then are our tracks pullable by others
-    // (and only then is it safe for us to pull others). The backend gates
-    // all track-pull signalling on this.
-    function maybeSignalPublishConnected() {
-        if (!sfu || sfu.publishConnectedSent || sfu.waitingForPublishAnswer) return;
-        const connected =
-            sfu.pc.connectionState === "connected" ||
-            sfu.pc.iceConnectionState === "connected" ||
-            sfu.pc.iceConnectionState === "completed";
-        if (connected) {
-            sfu.publishConnectedSent = true;
-            app.ports.voice_chat_from_js.send({ tag: "publish-connected", args: [] });
-        }
-    }
+        const socket = new WebSocket(websocketUrl(args.websocketRoomId, clientIdOf(args.selfId)));
+        socket.binaryType = "arraybuffer";
+        state.socket = socket;
 
-    function handlePeerJoined(args) {
-        if (!sfu) return;
-        // A new peer joined while we're in the call. Pull their tracks.
-        app.ports.voice_chat_from_js.send({
-            tag: "request-pull-tracks",
-            args: [args.connectionId, args.sessionId, args.trackNames],
+        await new Promise(function (resolve) {
+            socket.onopen = resolve;
+            socket.onerror = resolve;
+            socket.onclose = resolve;
         });
-    }
-
-    async function applyPullOffer(args) {
-        if (!sfu) return;
-        const key = connectionKey(args.connectionId);
-
-        // Register this peer's video element so ontrack can attach streams.
-        if (!sfu.peerSubs.has(key)) {
-            sfu.peerSubs.set(key, {
-                connectionId: args.connectionId,
-                videoNode: document.getElementById(peerVideoNodeId(args.connectionId)),
-                stream: new MediaStream(),
-            });
-        }
-
-        try {
-            // The pull offer adds new recvonly transceivers for this peer's
-            // tracks. We must record which mids belong to this peer BEFORE
-            // applying the offer, because ontrack fires *during*
-            // setRemoteDescription — if we waited until after, the mapping
-            // wouldn't exist yet and tracks would be dropped ("no peer for
-            // transceiver"). The mids are listed as `a=mid:<x>` in the SDP;
-            // the ones we don't already know about are this peer's.
-            const midsBefore = new Set(
-                sfu.pc.getTransceivers().map((t) => t.mid).filter((m) => m != null)
-            );
-            const offerMids = (args.offerSdp.match(/a=mid:[^\r\n]+/g) || []).map((line) =>
-                line.slice("a=mid:".length).trim()
-            );
-            for (const mid of offerMids) {
-                if (!midsBefore.has(mid)) {
-                    sfu.midToPeer.set(mid, key);
-                }
-            }
-            await sfu.pc.setRemoteDescription({ type: "offer", sdp: args.offerSdp });
-            // Backstop: also tag any newly-created transceivers we missed.
-            for (const t of sfu.pc.getTransceivers()) {
-                if (t.mid != null && !midsBefore.has(t.mid) && !sfu.midToPeer.has(t.mid)) {
-                    sfu.midToPeer.set(t.mid, key);
-                }
-            }
-            const answer = await sfu.pc.createAnswer();
-            await sfu.pc.setLocalDescription(answer);
-            app.ports.voice_chat_from_js.send({
-                tag: "pull-answer",
-                args: [args.connectionId, answer.sdp],
-            });
-        } catch (e) {
-            console.error("SFU pull renegotiation failed", e);
-        }
-    }
-
-    function attachTrackToPeer(event, key) {
-        // Route the incoming track to the peer that owns the transceiver it
-        // arrived on (recorded in applyPullOffer). Without this the audio and
-        // video of different peers get mixed onto the wrong video elements.
-        if (!sfu) return;
-
-        const sub = key ? sfu.peerSubs.get(key) : undefined;
-        if (!sub) {
-            console.warn("SFU ontrack: no peer for transceiver", event.transceiver && event.transceiver.mid);
+        if (state.stopped) return;
+        if (socket.readyState !== WebSocket.OPEN) {
+            // The rust server answers the handshake with 403 when the backend
+            // says this session does not belong in the room, which arrives here
+            // as a socket that closed instead of opening.
+            fail("could not join the call");
+            await stopCall();
             return;
         }
 
-        sub.stream.addTrack(event.track);
-        // The Elm-rendered <video> may not have existed when we subscribed;
-        // re-resolve it here (and keep the stream so it binds once it appears).
-        if (!sub.videoNode || !sub.videoNode.isConnected) {
-            sub.videoNode = document.getElementById(peerVideoNodeId(sub.connectionId));
+        socket.onclose = function (event) {
+            if (!state.stopped) fail("call connection closed (code " + event.code + ")");
+        };
+        socket.onerror = function () {
+            if (!state.stopped) fail("call connection error");
+        };
+        socket.onmessage = function (event) {
+            if (!state.stopped) receive(state, event.data);
+        };
+
+        await startEncoding(state, args);
+    }
+
+    // The client id is the second half of "<userId> <clientId>". Splitting on
+    // the first space keeps client ids containing spaces intact.
+    function clientIdOf(selfId) {
+        const space = selfId.indexOf(" ");
+        return space === -1 ? selfId : selfId.slice(space + 1);
+    }
+
+    async function startEncoding(state, args) {
+        const videoTrack = state.stream.getVideoTracks()[0];
+        const settings = videoTrack ? videoTrack.getSettings() : {};
+        const videoConfig = await pickVideoCodec(settings.width || 640, settings.height || 480);
+        if (state.stopped) return;
+
+        if (videoTrack && !videoConfig) {
+            fail("No supported video codec found (tried H.264 and VP8).");
+        } else if (videoTrack) {
+            const videoEncoder = new VideoEncoder({
+                output: function (chunk) {
+                    send(state, VIDEO, chunk);
+                },
+                error: function (e) {
+                    fail("video encoder: " + e);
+                },
+            });
+            videoEncoder.configure(videoConfig.config);
+            state.encoders.push(videoEncoder);
+            state.videoCodec = videoConfig.index;
+
+            // A decoder can do nothing with delta frames until it has seen a
+            // key frame, so one goes out every 2s to bound how long recovering
+            // from a loss takes, and immediately when somebody joins rather than
+            // making them wait out the interval staring at nothing.
+            let frameCount = 0;
+            pumpVideo(state, function (frame) {
+                const forced = state.forceKeyFrame;
+                state.forceKeyFrame = false;
+                videoEncoder.encode(frame, { keyFrame: forced || frameCount % 60 === 0 });
+                frameCount += 1;
+            });
         }
-        if (sub.videoNode) {
-            sub.videoNode.srcObject = sub.stream;
-            const playPromise = sub.videoNode.play();
-            if (playPromise && typeof playPromise.catch === "function") {
-                playPromise.catch(function (err) {
-                    console.error("SFU peer video play() rejected", err);
+
+        if (state.stream.getAudioTracks().length > 0) {
+            // Mono, because that is what voice chat needs and it keeps the
+            // AudioData the worklet produces to a single plane.
+            const audioEncoder = new AudioEncoder({
+                output: function (chunk) {
+                    send(state, AUDIO, chunk);
+                },
+                error: function (e) {
+                    fail("audio encoder: " + e);
+                },
+            });
+            audioEncoder.configure({
+                codec: "opus",
+                sampleRate: AUDIO_SAMPLE_RATE,
+                numberOfChannels: 1,
+                bitrate: 64000,
+            });
+            state.encoders.push(audioEncoder);
+
+            await pumpAudio(state, function (audioData) {
+                audioEncoder.encode(audioData);
+            });
+        }
+
+        setAudioInputEnabled(args.audioInputEnabled);
+        setVideoInputEnabled(args.videoInputEnabled);
+    }
+
+    function readyToSend(state) {
+        return !state.stopped && state.socket && state.socket.readyState === WebSocket.OPEN;
+    }
+
+    function send(state, kind, chunk) {
+        if (!readyToSend(state)) return;
+        state.socket.send(packet(state.senderBytes, kind, state.videoCodec, chunk));
+    }
+
+    // Takes each new camera frame off the capture element. The frame has to be
+    // closed again immediately: WebCodecs frames hold real memory and the
+    // pipeline stalls within a second or two if they pile up.
+    function pumpVideo(state, encode) {
+        const videoElement = state.captureVideo;
+        if (typeof videoElement.requestVideoFrameCallback !== "function") {
+            fail("requestVideoFrameCallback is missing, needs Firefox 132+");
+            return;
+        }
+
+        function onFrame(now, metadata) {
+            if (state.stopped) return;
+
+            try {
+                const frame = new VideoFrame(videoElement, {
+                    timestamp: Math.round((metadata.mediaTime || now / 1000) * 1e6),
                 });
+                if (readyToSend(state)) encode(frame);
+                frame.close();
+            } catch (e) {
+                fail("capture: " + e);
             }
+
+            videoElement.requestVideoFrameCallback(onFrame);
         }
-        if (event.track.kind === "audio" && !audioStreams.has(key)) {
-            handleAudioStream(sub.stream, key);
+
+        videoElement.requestVideoFrameCallback(onFrame);
+    }
+
+    // Rebuilds AudioData from the raw samples the worklet batches up, since
+    // there is no portable way to get it off the track directly.
+    async function pumpAudio(state, encode) {
+        const context = state.audioContext;
+        const moduleUrl = URL.createObjectURL(new Blob([captureWorklet], { type: "application/javascript" }));
+        try {
+            await context.audioWorklet.addModule(moduleUrl);
+        } finally {
+            URL.revokeObjectURL(moduleUrl);
+        }
+        if (state.stopped) return;
+
+        const source = context.createMediaStreamSource(state.stream);
+        const capture = new AudioWorkletNode(context, "capture-processor", {
+            channelCount: 1,
+            channelCountMode: "explicit",
+        });
+
+        capture.port.onmessage = function (event) {
+            if (!readyToSend(state)) return;
+            const samples = event.data;
+            const audioData = new AudioData({
+                format: "f32-planar",
+                sampleRate: AUDIO_SAMPLE_RATE,
+                numberOfFrames: samples.length,
+                numberOfChannels: 1,
+                timestamp: Math.round((state.framesCaptured / AUDIO_SAMPLE_RATE) * 1e6),
+                data: samples,
+            });
+            state.framesCaptured += samples.length;
+            encode(audioData);
+            audioData.close();
+        };
+
+        // The worklet only runs while its output goes somewhere, so it feeds a
+        // silent gain node. Routing it to the speakers directly would play the
+        // mic back on top of the decoded audio.
+        const silence = context.createGain();
+        silence.gain.value = 0;
+        source.connect(capture);
+        capture.connect(silence);
+        silence.connect(context.destination);
+        state.audioNodes = [source, capture, silence];
+    }
+
+    // --- receiving peers ---
+
+    function receive(state, buffer) {
+        const message = unpack(buffer);
+        // Our own messages never come back: the room relays to everyone else.
+        if (!message || message.sender === state.selfId) return;
+
+        const peer = state.peers.get(message.sender) || addPeer(state, message.sender);
+        if (!peer) return;
+
+        if (message.kind === VIDEO) {
+            if (peer.videoCodec !== message.codec) {
+                configurePeerVideo(state, peer, message.codec);
+            }
+            if (!peer.videoDecoder) return;
+            // A decoder that starts mid-stream has to wait for a key frame.
+            if (!peer.videoReady && message.type !== "key") return;
+            peer.videoReady = true;
+            try {
+                peer.videoDecoder.decode(new EncodedVideoChunk({
+                    type: message.type,
+                    timestamp: message.timestamp,
+                    data: message.data,
+                }));
+            } catch (e) {
+                // The decoder died between the error callback firing and now.
+                dropPeerVideo(peer);
+            }
+        } else {
+            try {
+                peer.audioDecoder.decode(new EncodedAudioChunk({
+                    type: message.type,
+                    timestamp: message.timestamp,
+                    data: message.data,
+                }));
+            } catch (e) {
+                // Same, for audio. Nothing to rebuild from, so this peer is
+                // silent until they leave and rejoin.
+            }
         }
     }
 
-    function peerLeft(connectionId) {
-        if (!sfu) return;
-        const key = connectionKey(connectionId);
-        const sub = sfu.peerSubs.get(key);
-        if (sub) {
-            if (sub.videoNode) {
-                sub.videoNode.srcObject = null;
-            }
-            sub.stream.getTracks().forEach((t) => t.stop());
-            sfu.peerSubs.delete(key);
-            removeAudioStream(key);
+    function addPeer(state, senderKey) {
+        const context = state.audioContext;
+
+        // Volume rides on a gain node per peer, because a canvas has no volume
+        // of its own the way the <video> elements this replaced did.
+        const gain = context.createGain();
+        gain.gain.value = 1;
+        gain.connect(context.destination);
+
+        const peer = {
+            senderKey,
+            canvas: null,
+            gain,
+            playheadSeconds: 0,
+            videoReady: false,
+            videoCodec: null,
+            isSpeaking: false,
+            speakingTimeout: null,
+            videoDecoder: null,
+            audioDecoder: null,
+        };
+
+        peer.audioDecoder = new AudioDecoder({
+            output: function (audioData) {
+                playAudio(state, peer, audioData);
+                audioData.close();
+            },
+            error: function () {},
+        });
+        peer.audioDecoder.configure({
+            codec: "opus",
+            sampleRate: AUDIO_SAMPLE_RATE,
+            numberOfChannels: 1,
+        });
+
+        state.peers.set(senderKey, peer);
+        return peer;
+    }
+
+    // A decoder that errors is closed for good, so recovering from one means
+    // building another. That makes this the one path for both the first chunk a
+    // peer sends and every rebuild after, and it remembers which codec it was
+    // last asked for so an unsupported one is not retried on every frame.
+    function configurePeerVideo(state, peer, codec) {
+        dropPeerVideo(peer);
+        peer.videoCodec = codec;
+
+        const name = CODECS[codec];
+        if (!name) return;
+
+        try {
+            const decoder = new VideoDecoder({
+                output: function (frame) {
+                    drawFrame(state, peer, frame);
+                    frame.close();
+                },
+                // Asking for the codec again is what rebuilds this decoder, so
+                // forgetting it is what lets the next chunk do that.
+                error: function () {
+                    dropPeerVideo(peer);
+                },
+            });
+            decoder.configure({ codec: name });
+            peer.videoDecoder = decoder;
+        } catch (e) {
+            // This browser cannot decode what the peer encoded with. Their audio
+            // still works, so the call carries on without their picture.
         }
-        // Drop any mid->peer mappings for this peer.
-        for (const [mid, peerKey] of [...sfu.midToPeer.entries()]) {
-            if (peerKey === key) sfu.midToPeer.delete(mid);
+    }
+
+    function dropPeerVideo(peer) {
+        if (peer.videoDecoder && peer.videoDecoder.state !== "closed") {
+            peer.videoDecoder.close();
         }
+        peer.videoDecoder = null;
+        peer.videoCodec = null;
+        peer.videoReady = false;
+    }
+
+    function drawFrame(state, peer, frame) {
+        // Elm renders the peer's canvas only once it knows the peer is in the
+        // call, which can be after their first frame arrives, so it is looked up
+        // again until it appears.
+        if (!peer.canvas || !peer.canvas.isConnected) {
+            peer.canvas = document.getElementById(peerNodeId(state.roomId, peer.senderKey));
+        }
+        if (!peer.canvas) return;
+
+        const context = peer.canvas.getContext("2d");
+        if (!context) return;
+        if (peer.canvas.width !== frame.displayWidth || peer.canvas.height !== frame.displayHeight) {
+            peer.canvas.width = frame.displayWidth;
+            peer.canvas.height = frame.displayHeight;
+        }
+        context.drawImage(frame, 0, 0);
+    }
+
+    // Queues decoded audio back to back. Each buffer is scheduled after the
+    // previous one so the samples play continuously rather than on top of each
+    // other; if the playhead falls behind, it resets with a small cushion.
+    function playAudio(state, peer, audioData) {
+        const context = state.audioContext;
+
+        const channels = audioData.numberOfChannels;
+        const buffer = context.createBuffer(channels, audioData.numberOfFrames, audioData.sampleRate);
+        let loudest = 0;
+        for (let channel = 0; channel < channels; channel++) {
+            const samples = new Float32Array(audioData.numberOfFrames);
+            audioData.copyTo(samples, { planeIndex: channel, format: "f32-planar" });
+            buffer.copyToChannel(samples, channel);
+            loudest = Math.max(loudest, meanAmplitude(samples));
+        }
+
+        const source = context.createBufferSource();
+        source.buffer = buffer;
+        source.connect(peer.gain);
+
+        if (peer.playheadSeconds < context.currentTime) {
+            peer.playheadSeconds = context.currentTime + 0.05;
+        }
+        source.start(peer.playheadSeconds);
+        peer.playheadSeconds += buffer.duration;
+
+        setPeerSpeaking(state, peer, loudest > SPEAKING_THRESHOLD);
+    }
+
+    function meanAmplitude(samples) {
+        let total = 0;
+        for (let i = 0; i < samples.length; i++) {
+            total += Math.abs(samples[i]);
+        }
+        return samples.length === 0 ? 0 : total / samples.length;
+    }
+
+    function setPeerSpeaking(state, peer, isSpeaking) {
+        clearTimeout(peer.speakingTimeout);
+        if (isSpeaking) {
+            // Nothing arriving at all is silence too, and no decoded block will
+            // ever say so, so falling quiet is driven by this timer.
+            peer.speakingTimeout = setTimeout(function () {
+                setPeerSpeaking(state, peer, false);
+            }, SPEAKING_TIMEOUT_MS);
+        }
+        if (isSpeaking === peer.isSpeaking) return;
+        peer.isSpeaking = isSpeaking;
+        app.ports.voice_chat_from_js.send({
+            tag: "is-speaking-changed",
+            args: [
+                { tag: "is-connection", args: [connectionId(state.roomId, peer.senderKey)] },
+                isSpeaking,
+            ],
+        });
+    }
+
+    function peerLeft(connectionId2) {
+        if (!call) return;
+        removePeer(call, connectionId2.otherClientId);
+    }
+
+    function removePeer(state, senderKey) {
+        const peer = state.peers.get(senderKey);
+        if (!peer) return;
+        setPeerSpeaking(state, peer, false);
+        clearTimeout(peer.speakingTimeout);
+        [peer.videoDecoder, peer.audioDecoder].forEach(function (decoder) {
+            if (decoder && decoder.state !== "closed") decoder.close();
+        });
+        try { peer.gain.disconnect(); } catch (e) {}
+        if (peer.canvas) {
+            const context = peer.canvas.getContext("2d");
+            if (context) context.clearRect(0, 0, peer.canvas.width, peer.canvas.height);
+        }
+        state.peers.delete(senderKey);
     }
 
     async function stopCall() {
-        if (!sfu) return;
-        try {
-            sfu.pc.getSenders().forEach((s) => {
-                if (s.track) s.track.stop();
+        const state = call;
+        call = null;
+        if (!state) return;
+        state.stopped = true;
+
+        for (const senderKey of [...state.peers.keys()]) {
+            removePeer(state, senderKey);
+        }
+        state.audioNodes.forEach(function (node) {
+            try { node.disconnect(); } catch (e) {}
+        });
+        state.encoders.forEach(function (encoder) {
+            if (encoder.state !== "closed") encoder.close();
+        });
+        if (state.socket) state.socket.close();
+        state.captureVideo.srcObject = null;
+        // The preview shares these tracks, so it has to let go of them too.
+        if (localStreamPreview === state.stream) {
+            await stopLocalStream();
+        }
+        state.stream.getTracks().forEach(function (track) { track.stop(); });
+        if (state.audioContext) state.audioContext.close().catch(function () {});
+    }
+
+    // --- local preview and devices ---
+
+    function showLocalPreview(stream) {
+        const videoNode = document.getElementById("local-video");
+        if (!videoNode) return;
+        // iOS Safari ignores HTMLMediaElement.volume so use muted + only feed
+        // the video tracks into the preview element so the mic doesn't echo.
+        videoNode.muted = true;
+        const previewStream = new MediaStream();
+        stream.getVideoTracks().forEach(function (track) {
+            previewStream.addTrack(track);
+        });
+        videoNode.srcObject = previewStream;
+
+        const playPromise = videoNode.play();
+        if (playPromise && typeof playPromise.catch === "function") {
+            playPromise.catch(function (err) {
+                console.error("local-video: play() rejected", err);
             });
-            sfu.pc.close();
-        } catch (e) {
-            console.error("SFU stop failed", e);
         }
-        for (const [key, sub] of sfu.peerSubs.entries()) {
-            if (sub.videoNode) sub.videoNode.srcObject = null;
-            sub.stream.getTracks().forEach((t) => t.stop());
-            removeAudioStream(key);
-        }
-        if (sfu.localStream) {
-            sfu.localStream.getTracks().forEach((t) => t.stop());
-        }
-        sfu = null;
     }
 
     function setAudioInputEnabled(enabled) {
-        if (sfu && sfu.localStream) {
-            sfu.localStream.getAudioTracks().forEach((t) => {
-                t.enabled = enabled;
-            });
+        if (call) {
+            call.stream.getAudioTracks().forEach(function (t) { t.enabled = enabled; });
         }
         if (localStreamPreview) {
-            localStreamPreview.getAudioTracks().forEach((t) => {
-                t.enabled = enabled;
-            });
+            localStreamPreview.getAudioTracks().forEach(function (t) { t.enabled = enabled; });
         }
     }
 
     function setVideoInputEnabled(enabled) {
-        if (sfu && sfu.localStream) {
-            sfu.localStream.getVideoTracks().forEach((t) => {
-                t.enabled = enabled;
-            });
+        if (call) {
+            call.stream.getVideoTracks().forEach(function (t) { t.enabled = enabled; });
         }
         if (localStreamPreview) {
-            localStreamPreview.getVideoTracks().forEach((t) => {
-                t.enabled = enabled;
-            });
+            localStreamPreview.getVideoTracks().forEach(function (t) { t.enabled = enabled; });
         }
     }
 
+    // Swapping a device swaps the track inside the stream the encoders read
+    // from, so capture carries on against the new one without restarting.
+    // Swaps one device's track inside the stream everything else already reads
+    // from, so capture, the preview and the call carry on against the new one
+    // without any of them being torn down.
     async function setInput(isAudioInput, deviceId) {
+        const live = call ? call.stream : localStreamPreview;
+        if (!live) return;
+
         const config = isAudioInput
             ? { audio: { deviceId: { exact: deviceId } } }
             : { video: { deviceId: { exact: deviceId } } };
         const stream = await navigator.mediaDevices.getUserMedia(config);
-        const tracks = isAudioInput ? stream.getAudioTracks() : stream.getVideoTracks();
-        const track = tracks[0];
-        if (sfu) {
-            const transceiver = isAudioInput ? sfu.audioTransceiver : sfu.videoTransceiver;
-            const sender = transceiver && transceiver.sender;
-            if (sender) {
-                const oldTrack = sender.track;
-                if (oldTrack) {
-                    track.enabled = oldTrack.enabled;
-                    oldTrack.stop();
-                }
-                await sender.replaceTrack(track);
+        const track = (isAudioInput ? stream.getAudioTracks() : stream.getVideoTracks())[0];
+        if (!track) return;
+
+        const replaced = isAudioInput ? live.getAudioTracks() : live.getVideoTracks();
+        replaced.forEach(function (oldTrack) {
+            // Muted stays muted across a device change.
+            track.enabled = oldTrack.enabled;
+            live.removeTrack(oldTrack);
+            oldTrack.stop();
+        });
+        live.addTrack(track);
+
+        if (isAudioInput) {
+            // Both of these read the mic through a source node bound to the
+            // track that just went away, so both need building again.
+            rebindCapture(live);
+            handleAudioStream(live, "local-video");
+        } else {
+            // requestVideoFrameCallback follows the element and the element
+            // follows the stream, so capture picks the new track up on its own.
+            if (call) {
+                call.captureVideo.srcObject = live;
+                call.captureVideo.play().catch(function () {});
             }
+            showLocalPreview(live);
         }
     }
 
-    app.ports.voice_chat_to_js.subscribe(async function (msg) {
-        if (msg.tag === "start-call") {
-            const args = msg.args[0];
-            await startCall(args);
-            setAudioInputEnabled(args.audioInputEnabled);
-            setVideoInputEnabled(args.videoInputEnabled);
-        } else if (msg.tag === "leave-call") {
-            await stopCall();
-        } else if (msg.tag === "publish-answer") {
-            await applyPublishAnswer(msg.args[0].answerSdp);
-        } else if (msg.tag === "peer-joined") {
-            handlePeerJoined(msg.args[0]);
-        } else if (msg.tag === "peer-left") {
-            peerLeft(msg.args[0]);
-        } else if (msg.tag === "accept-pull-offer") {
-            await applyPullOffer(msg.args[0]);
-        } else if (msg.tag === "set-audio-input-enabled") {
-            setAudioInputEnabled(msg.args[0]);
-        } else if (msg.tag === "set-input") {
-            await setInput(msg.args[0], msg.args[1]);
-        } else if (msg.tag === "set-video-input-enabled") {
-            setVideoInputEnabled(msg.args[0]);
-        } else if (msg.tag === "set-volume") {
-            const sub = sfu && sfu.peerSubs.get(connectionKey(msg.args[0]));
-            if (sub && sub.videoNode) {
-                sub.videoNode.volume = msg.args[1];
-            }
-        } else if (msg.tag === "get-media-devices") {
-            try {
-                const stream = await getDevices();
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const defaultDevices = [];
-                stream.getTracks().forEach((track) => {
-                    defaultDevices.push(track.getSettings().deviceId);
-                    track.stop();
-                });
-                app.ports.voice_chat_from_js.send({ tag: "got-media-devices", args: [devices, defaultDevices] });
-            } catch (e) {
-                app.ports.voice_chat_from_js.send({ tag: "got-media-devices-error", args: [e.toString()] });
-            }
-        } else if (msg.tag === "start-local-stream") {
-            await startLocalStream(msg.args[0]);
-        } else if (msg.tag === "stop-local-stream") {
-            await stopLocalStream();
-        }
-    });
+    // Points the capture worklet at the stream's current mic track. The worklet
+    // and its silent sink are kept; only the source in front of them changes.
+    function rebindCapture(stream) {
+        if (!call || call.audioNodes.length !== 3) return;
+        const [oldSource, capture] = call.audioNodes;
+        try { oldSource.disconnect(); } catch (e) {}
+        const source = call.audioContext.createMediaStreamSource(stream);
+        source.connect(capture);
+        call.audioNodes[0] = source;
+    }
 
     async function getDevices() {
         const devices = await navigator.mediaDevices.enumerateDevices();
@@ -398,13 +796,12 @@ exports.init = async function init(app) {
 
     async function stopLocalStream() {
         const videoNode = document.getElementById("local-video");
-        if (localStreamPreview) {
+        // While a call is running the preview shares the call's tracks, and
+        // stopping them here would end the call's capture as well.
+        if (localStreamPreview && (!call || call.stream !== localStreamPreview)) {
             localStreamPreview.getTracks().forEach((s) => s.stop());
         }
         if (videoNode) {
-            if (videoNode.srcObject) {
-                videoNode.srcObject.getTracks().forEach((s) => s.stop());
-            }
             videoNode.srcObject = null;
         }
         localStreamPreview = null;
@@ -429,30 +826,56 @@ exports.init = async function init(app) {
             return;
         }
 
-        const videoNode = document.getElementById("local-video");
-        // iOS Safari ignores HTMLMediaElement.volume so use muted + only feed
-        // the video tracks into the preview element so the mic doesn't echo.
-        videoNode.muted = true;
-        const previewStream = new MediaStream();
-        localStreamPreview.getVideoTracks().forEach((track) => {
-            previewStream.addTrack(track);
-        });
-        videoNode.srcObject = previewStream;
-
+        showLocalPreview(localStreamPreview);
         setAudioInputEnabled(args.audioInputEnabled);
         setVideoInputEnabled(args.videoInputEnabled);
-
-        const playPromise = videoNode.play();
-        if (playPromise && typeof playPromise.catch === "function") {
-            playPromise.catch((err) => {
-                console.error("local-video: play() rejected", err);
-            });
-        }
         handleAudioStream(localStreamPreview, "local-video");
     }
 
+    app.ports.voice_chat_to_js.subscribe(async function (msg) {
+        if (msg.tag === "start-call") {
+            await startCall(msg.args[0]);
+        } else if (msg.tag === "leave-call") {
+            await stopCall();
+        } else if (msg.tag === "peer-joined") {
+            // Their decoder has nothing to show until a key frame reaches it.
+            // Building their side of the connection waits for their first chunk,
+            // which is the only moment we know what codec they are sending.
+            if (call) call.forceKeyFrame = true;
+        } else if (msg.tag === "peer-left") {
+            peerLeft(msg.args[0]);
+        } else if (msg.tag === "set-audio-input-enabled") {
+            setAudioInputEnabled(msg.args[0]);
+        } else if (msg.tag === "set-input") {
+            await setInput(msg.args[0], msg.args[1]);
+        } else if (msg.tag === "set-video-input-enabled") {
+            setVideoInputEnabled(msg.args[0]);
+        } else if (msg.tag === "set-volume") {
+            const peer = call && call.peers.get(msg.args[0].otherClientId);
+            if (peer) peer.gain.gain.value = msg.args[1];
+        } else if (msg.tag === "get-media-devices") {
+            try {
+                const stream = await getDevices();
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const defaultDevices = [];
+                stream.getTracks().forEach((track) => {
+                    defaultDevices.push(track.getSettings().deviceId);
+                    track.stop();
+                });
+                app.ports.voice_chat_from_js.send({ tag: "got-media-devices", args: [devices, defaultDevices] });
+            } catch (e) {
+                app.ports.voice_chat_from_js.send({ tag: "got-media-devices-error", args: [e.toString()] });
+            }
+        } else if (msg.tag === "start-local-stream") {
+            await startLocalStream(msg.args[0]);
+        } else if (msg.tag === "stop-local-stream") {
+            await stopLocalStream();
+        }
+    });
+
     // ------------------------------------------------------------------
-    // Active speaker detection (unchanged from the P2P implementation).
+    // Active speaker detection for our own mic, which is still a MediaStream.
+    // Peers are judged from their decoded samples instead, in playAudio.
     // Original technique: https://www.linkedin.com/pulse/webrtc-active-speaker-detection-nilesh-gawande
     // ------------------------------------------------------------------
     const VOLUME_THRESHOLD = 20;
@@ -460,6 +883,9 @@ exports.init = async function init(app) {
     const audioStreams = new Map();
 
     function handleAudioStream(stream, key) {
+        removeAudioStream(key);
+        if (stream.getAudioTracks().length === 0) return;
+
         const audioContext = new AudioContext();
         const mediaStreamSource = audioContext.createMediaStreamSource(stream);
 
@@ -487,26 +913,15 @@ exports.init = async function init(app) {
             const isSpeaking = averageVolume > VOLUME_THRESHOLD;
             if (isSpeaking !== entry.isSpeaking) {
                 entry.isSpeaking = isSpeaking;
-                const speakerArg =
-                    key === "local-video"
-                        ? { tag: "local-video", args: [] }
-                        : { tag: "is-connection", args: [connectionIdFromKey(key)] };
                 app.ports.voice_chat_from_js.send({
                     tag: "is-speaking-changed",
-                    args: [speakerArg, isSpeaking],
+                    args: [{ tag: "local-video", args: [] }, isSpeaking],
                 });
             }
             requestAnimationFrame(processAudio);
         }
 
         processAudio();
-    }
-
-    function connectionIdFromKey(key) {
-        // peerSubs key → ConnectionId structure. Best-effort lookup.
-        if (!sfu) return null;
-        const sub = sfu.peerSubs.get(key);
-        return sub ? sub.connectionId : null;
     }
 
     function removeAudioStream(key) {
@@ -518,13 +933,9 @@ exports.init = async function init(app) {
             try { streamData.audioContext.close(); } catch (e) {}
             audioStreams.delete(key);
             if (streamData.isSpeaking) {
-                const speakerArg =
-                    key === "local-video"
-                        ? { tag: "local-video", args: [] }
-                        : { tag: "is-connection", args: [connectionIdFromKey(key)] };
                 app.ports.voice_chat_from_js.send({
                     tag: "is-speaking-changed",
-                    args: [speakerArg, false],
+                    args: [{ tag: "local-video", args: [] }, false],
                 });
             }
         }

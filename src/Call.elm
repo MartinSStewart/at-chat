@@ -412,6 +412,15 @@ localVideoNodeId =
     "local-video"
 
 
+speakingOutline : Bool -> String
+speakingOutline isSpeaking =
+    if isSpeaking then
+        "4px solid rgb(131, 147, 167)"
+
+    else
+        "0 solid rgb(131, 147, 167)"
+
+
 type VideoNodeState
     = VideoNodeHidden
     | VideoNodeThumbnail
@@ -888,26 +897,38 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, width ) 
             , Html.Attributes.style "pointer-events" "none"
             ]
             [ User.profileImageHtml userId (User.getUser userId localUser |> Maybe.andThen .icon) ]
-        , Html.video
-            [ Html.Attributes.id idString
-            , Html.Attributes.style "background-color" "rgba(0,0,0)"
-            , Html.Attributes.style "width" (String.fromInt width ++ "px")
-            , Html.Attributes.style "height" (String.fromFloat height ++ "px")
-            , Html.Attributes.style
-                "outline"
-                (if isSpeaking then
-                    "4px solid rgb(131, 147, 167)"
+        , -- Our own camera is a live MediaStream, so it plays in a <video>. A peer
+          -- arrives as encoded frames over the room socket, and a decoded
+          -- VideoFrame can only be drawn, so peers get a <canvas> instead.
+          case id of
+            IsLocal ->
+                Html.video
+                    [ Html.Attributes.id idString
+                    , Html.Attributes.style "background-color" "rgba(0,0,0)"
+                    , Html.Attributes.style "width" (String.fromInt width ++ "px")
+                    , Html.Attributes.style "height" (String.fromFloat height ++ "px")
+                    , Html.Attributes.style "outline" (speakingOutline isSpeaking)
+                    , Html.Attributes.style "transition" "outline-width 50ms ease-out"
+                    , Html.Attributes.style "border-radius" "8px"
+                    , Html.Attributes.style "pointer-events" "none"
+                    , Html.Attributes.attribute "playsinline" ""
+                    , Html.Attributes.attribute "webkit-playsinline" ""
+                    ]
+                    []
 
-                 else
-                    "0 solid rgb(131, 147, 167)"
-                )
-            , Html.Attributes.style "transition" "outline-width 50ms ease-out"
-            , Html.Attributes.style "border-radius" "8px"
-            , Html.Attributes.style "pointer-events" "none"
-            , Html.Attributes.attribute "playsinline" ""
-            , Html.Attributes.attribute "webkit-playsinline" ""
-            ]
-            []
+            IsConnection _ ->
+                Html.canvas
+                    [ Html.Attributes.id idString
+                    , Html.Attributes.style "background-color" "rgba(0,0,0)"
+                    , Html.Attributes.style "width" (String.fromInt width ++ "px")
+                    , Html.Attributes.style "height" (String.fromFloat height ++ "px")
+                    , Html.Attributes.style "outline" (speakingOutline isSpeaking)
+                    , Html.Attributes.style "transition" "outline-width 50ms ease-out"
+                    , Html.Attributes.style "border-radius" "8px"
+                    , Html.Attributes.style "pointer-events" "none"
+                    , Html.Attributes.style "object-fit" "cover"
+                    ]
+                    []
         , case ( id, videoNodeState ) of
             ( IsConnection connectionId, VideoNodeFullSize ) ->
                 let
@@ -1296,6 +1317,8 @@ startLocalStreamDataCodec =
 
 type alias StartCallData =
     { roomId : CallId
+    , websocketRoomId : String
+    , selfId : ( Id UserId, ClientId )
     , audioInput : Maybe (IdString MediaDeviceId)
     , videoInput : Maybe (IdString MediaDeviceId)
     , audioInputEnabled : Bool
@@ -1307,6 +1330,8 @@ startCallDataCodec : Codec StartCallData
 startCallDataCodec =
     Codec.object StartCallData
         |> Codec.field "roomId" .roomId roomIdCodec
+        |> Codec.field "websocketRoomId" .websocketRoomId Codec.string
+        |> Codec.field "selfId" .selfId otherClientIdCodec
         |> Codec.field "audioInput" .audioInput (Codec.nullable IdString.codec)
         |> Codec.field "videoInput" .videoInput (Codec.nullable IdString.codec)
         |> Codec.field "audioInputEnabled" .audioInputEnabled Codec.bool
@@ -1394,9 +1419,19 @@ toJs msg =
         (Codec.encoder voiceChatToJsCodec msg)
 
 
-startCallCmd : CallId -> Model -> Command FrontendOnly toMsg msg
-startCallCmd roomId model =
+{-| The room both ends of a DM connect to has to be named the same way by both of
+them, so it is the `DmChannelId`, which is derived from the pair of user ids and
+doesn't depend on who is asking. `CallId` names the _other_ person, so it would
+have named a different room at each end.
+-}
+startCallCmd : CallId -> Id UserId -> ClientId -> Model -> Command FrontendOnly toMsg msg
+startCallCmd roomId userId clientId model =
     { roomId = roomId
+    , websocketRoomId =
+        case roomId of
+            DmRoomId otherUserId ->
+                DmChannelId.fromUserIds userId otherUserId |> DmChannelId.toString
+    , selfId = ( userId, clientId )
     , audioInput = model.selectedAudioInputDevice
     , videoInput = model.selectedVideoInputDevice
     , audioInputEnabled = model.remoteCallData.audioInputEnabled
