@@ -2234,25 +2234,25 @@ attackerShouldNotGetThisToFrontend toFrontend =
 
                 Local_CurrentlyViewing setViewing ->
                     case setViewing of
-                        ViewDm _ _ _ ->
+                        ViewDm _ _ ->
                             False
 
-                        ViewDmThread _ _ _ ->
+                        ViewDmThread _ _ ->
                             False
 
-                        ViewDiscordDm _ _ _ ->
+                        ViewDiscordDm _ _ ->
                             True
 
-                        ViewChannel guildId _ _ _ ->
-                            guildId == legitGuildId
+                        ViewChannel data _ ->
+                            data.guildId == legitGuildId
 
-                        ViewChannelThread _ _ _ _ ->
+                        ViewChannelThread _ _ ->
                             True
 
-                        ViewDiscordChannel _ _ _ _ ->
+                        ViewDiscordChannel _ _ ->
                             True
 
-                        ViewDiscordChannelThread _ _ _ _ _ ->
+                        ViewDiscordChannelThread _ _ ->
                             True
 
                         StopViewingChannel ->

@@ -2548,9 +2548,11 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 (ChangeId 900)
                                 (Local_CurrentlyViewing
                                     (ViewDiscordChannel
-                                        E2EHelper.botTestGuild
-                                        E2EHelper.privateDiscordChannelId
-                                        E2EHelper.secondDiscordUserId
+                                        { guildId = E2EHelper.botTestGuild
+                                        , channelId = E2EHelper.privateDiscordChannelId
+                                        , currentUserId = E2EHelper.secondDiscordUserId
+                                        , previouslyLastViewedMessage = UserSession.DontCare
+                                        }
                                         EmptyPlaceholder
                                     )
                                 )

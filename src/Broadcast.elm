@@ -533,11 +533,11 @@ messageNotification usersMentioned time sender guildId channelId threadRoute mes
                         List.any
                             (\connection ->
                                 case ( connection.currentlyViewing, threadRoute ) of
-                                    ( UserSession.Viewing_Channel viewingGuildId viewingChannelId _, NoThread ) ->
-                                        viewingGuildId == guildId && viewingChannelId == channelId
+                                    ( UserSession.Viewing_Channel data, NoThread ) ->
+                                        data.guildId == guildId && data.channelId == channelId
 
-                                    ( UserSession.Viewing_ChannelThread viewingGuildId viewingChannelId viewingThreadId, ViewThread threadId ) ->
-                                        viewingGuildId == guildId && viewingChannelId == channelId && viewingThreadId == threadId
+                                    ( UserSession.Viewing_ChannelThread data, ViewThread threadId ) ->
+                                        data.guildId == guildId && data.channelId == channelId && data.threadId == threadId
 
                                     _ ->
                                         False
@@ -633,11 +633,11 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                 List.any
                                     (\connection ->
                                         case ( connection.currentlyViewing, threadRoute ) of
-                                            ( UserSession.Viewing_DiscordChannel viewingGuildId viewingChannelId _, NoThread ) ->
-                                                viewingGuildId == guildId && viewingChannelId == channelId
+                                            ( UserSession.Viewing_DiscordChannel data, NoThread ) ->
+                                                data.guildId == guildId && data.channelId == channelId
 
-                                            ( UserSession.Viewing_DiscordChannelThread viewingGuildId viewingChannelId _ viewingThreadId, ViewThread threadId ) ->
-                                                viewingGuildId == guildId && viewingChannelId == channelId && viewingThreadId == threadId
+                                            ( UserSession.Viewing_DiscordChannelThread data, ViewThread threadId ) ->
+                                                data.guildId == guildId && data.channelId == channelId && data.threadId == threadId
 
                                             _ ->
                                                 False
@@ -1001,8 +1001,8 @@ isViewingDiscordDm channelId userId2 model =
     List.any
         (\connection ->
             case connection.currentlyViewing of
-                UserSession.Viewing_DiscordDm _ channelIdB ->
-                    channelIdB == channelId
+                UserSession.Viewing_DiscordDm data ->
+                    data.channelId == channelId
 
                 _ ->
                     False
@@ -1289,11 +1289,11 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
             List.any
                 (\connection ->
                     case ( connection.currentlyViewing, threadRouteWithReplyTo ) of
-                        ( UserSession.Viewing_Dm viewingUserId _, NoThreadWithMaybeMessage _ ) ->
-                            viewingUserId == userId
+                        ( UserSession.Viewing_Dm data, NoThreadWithMaybeMessage _ ) ->
+                            data.otherUserId == userId
 
-                        ( UserSession.Viewing_DmThread viewingUserId threadIdA, ViewThreadWithMaybeMessage threadIdB _ ) ->
-                            viewingUserId == userId && threadIdA == threadIdB
+                        ( UserSession.Viewing_DmThread data, ViewThreadWithMaybeMessage threadIdB _ ) ->
+                            data.otherUserId == userId && data.threadId == threadIdB
 
                         _ ->
                             False
@@ -1386,8 +1386,8 @@ gameStartedDmNotification time senderId otherUserId gameType model =
             List.any
                 (\connection ->
                     case connection.currentlyViewing of
-                        UserSession.Viewing_Dm viewingUserId _ ->
-                            viewingUserId == senderId
+                        UserSession.Viewing_Dm data ->
+                            data.otherUserId == senderId
 
                         _ ->
                             False
@@ -1480,8 +1480,8 @@ gameStartedGuildNotification time sender guildId channelId gameType members mode
                         List.any
                             (\connection ->
                                 case connection.currentlyViewing of
-                                    UserSession.Viewing_Channel viewingGuildId viewingChannelId _ ->
-                                        viewingGuildId == guildId && viewingChannelId == channelId
+                                    UserSession.Viewing_Channel data ->
+                                        data.guildId == guildId && data.channelId == channelId
 
                                     _ ->
                                         False

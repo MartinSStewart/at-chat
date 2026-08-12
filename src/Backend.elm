@@ -4313,15 +4313,15 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
                         getNewUsers connection guildId guild =
                             case connection.currentlyViewing of
-                                UserSession.Viewing_DiscordChannel previousGuildId _ _ ->
-                                    if guildId == previousGuildId then
+                                UserSession.Viewing_DiscordChannel data ->
+                                    if guildId == data.guildId then
                                         SeqDict.empty
 
                                     else
                                         getNewUsersHelper guild
 
-                                UserSession.Viewing_DiscordChannelThread previousGuildId _ _ _ ->
-                                    if guildId == previousGuildId then
+                                UserSession.Viewing_DiscordChannelThread data ->
+                                    if guildId == data.guildId then
                                         SeqDict.empty
 
                                     else
@@ -4348,17 +4348,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                     in
                     case viewing of
-                        ViewDm otherUserId tab _ ->
+                        ViewDm data _ ->
                             BackendExtra.asDmUser
                                 model
                                 sessionId
-                                { otherUserId = otherUserId }
+                                { otherUserId = data.otherUserId }
                                 (\session user _ _ dmChannel ->
                                     ( { model
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
-                                                (User.setLastDmViewed (DmChannelLastViewed otherUserId NoThread) user)
+                                                (User.setLastDmViewed (DmChannelLastViewed data.otherUserId NoThread) user)
                                                 model.users
                                         , connections =
                                             SeqDict.updateIfExists
@@ -4370,7 +4370,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 model.connections
                                       }
                                     , Command.batch
-                                        [ ViewDm otherUserId tab (loadMessagesHelper dmChannel |> FilledInByBackend)
+                                        [ ViewDm data (loadMessagesHelper dmChannel |> FilledInByBackend)
                                             |> Local_CurrentlyViewing
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
@@ -4379,17 +4379,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        ViewDmThread otherUserId threadId _ ->
+                        ViewDmThread data _ ->
                             BackendExtra.asDmUser
                                 model
                                 sessionId
-                                { otherUserId = otherUserId }
+                                { otherUserId = data.otherUserId }
                                 (\session user _ _ dmChannel ->
                                     ( { model
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
-                                                (User.setLastDmViewed (DmChannelLastViewed otherUserId (ViewThread threadId)) user)
+                                                (User.setLastDmViewed (DmChannelLastViewed data.otherUserId (ViewThread data.threadId)) user)
                                                 model.users
                                         , connections =
                                             SeqDict.updateIfExists
@@ -4402,9 +4402,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                       }
                                     , Command.batch
                                         [ ViewDmThread
-                                            otherUserId
-                                            threadId
-                                            (SeqDict.get threadId dmChannel.threads
+                                            data
+                                            (SeqDict.get data.threadId dmChannel.threads
                                                 |> Maybe.withDefault Thread.backendInit
                                                 |> loadMessagesHelper
                                                 |> FilledInByBackend
@@ -4417,17 +4416,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        ViewDiscordDm currentUserId dmChannelId _ ->
+                        ViewDiscordDm data _ ->
                             BackendExtra.asDiscordDmUser_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
-                                { currentUserId = currentUserId, channelId = dmChannelId }
+                                { currentUserId = data.currentUserId, channelId = data.channelId }
                                 (\session _ user dmChannel ->
                                     ( { model
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
-                                                (User.setLastDmViewed (DiscordDmChannelLastViewed dmChannelId) user)
+                                                (User.setLastDmViewed (DiscordDmChannelLastViewed data.channelId) user)
                                                 model.users
                                         , connections =
                                             SeqDict.updateIfExists
@@ -4440,8 +4439,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                       }
                                     , Command.batch
                                         [ ViewDiscordDm
-                                            currentUserId
-                                            dmChannelId
+                                            data
                                             (loadMessagesHelper dmChannel |> FilledInByBackend)
                                             |> Local_CurrentlyViewing
                                             |> LocalChangeResponse changeId
@@ -4451,19 +4449,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        ViewChannel guildId channelId tab _ ->
+                        ViewChannel data _ ->
                             BackendExtra.asGuildMember
                                 model
                                 sessionId
-                                guildId
+                                data.guildId
                                 (\session user guild ->
-                                    case SeqDict.get channelId guild.channels of
+                                    case SeqDict.get data.channelId guild.channels of
                                         Just channel ->
                                             ( { model
                                                 | users =
                                                     NonemptyDict.insert
                                                         session.userId
-                                                        (User.setLastChannelViewed guildId channelId NoThread user)
+                                                        (User.setLastChannelViewed data.guildId data.channelId NoThread user)
                                                         model.users
                                                 , connections =
                                                     SeqDict.updateIfExists
@@ -4476,9 +4474,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                               }
                                             , Command.batch
                                                 [ ViewChannel
-                                                    guildId
-                                                    channelId
-                                                    tab
+                                                    data
                                                     (loadMessagesHelper channel |> FilledInByBackend)
                                                     |> Local_CurrentlyViewing
                                                     |> LocalChangeResponse changeId
@@ -4493,22 +4489,22 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                 )
 
-                        ViewChannelThread guildId channelId threadId _ ->
+                        ViewChannelThread data _ ->
                             BackendExtra.asGuildMember
                                 model
                                 sessionId
-                                guildId
+                                data.guildId
                                 (\session user guild ->
-                                    case SeqDict.get channelId guild.channels of
+                                    case SeqDict.get data.channelId guild.channels of
                                         Just channel ->
                                             ( { model
                                                 | users =
                                                     NonemptyDict.insert
                                                         session.userId
                                                         (User.setLastChannelViewed
-                                                            guildId
-                                                            channelId
-                                                            (ViewThread threadId)
+                                                            data.guildId
+                                                            data.channelId
+                                                            (ViewThread data.threadId)
                                                             user
                                                         )
                                                         model.users
@@ -4523,10 +4519,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                               }
                                             , Command.batch
                                                 [ ViewChannelThread
-                                                    guildId
-                                                    channelId
-                                                    threadId
-                                                    (SeqDict.get threadId channel.threads
+                                                    data
+                                                    (SeqDict.get data.threadId channel.threads
                                                         |> Maybe.withDefault Thread.backendInit
                                                         |> loadMessagesHelper
                                                         |> FilledInByBackend
@@ -4569,20 +4563,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        ViewDiscordChannel guildId channelId currentDiscordUserId _ ->
+                        ViewDiscordChannel data _ ->
                             BackendExtra.asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
                                 clientId
-                                guildId
-                                channelId
-                                currentDiscordUserId
+                                data.guildId
+                                data.channelId
+                                data.currentUserId
                                 (\session connectionData _ user guild channel ->
                                     ( { model
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
-                                                (User.setLastDiscordChannelViewed guildId channelId NoThread user)
+                                                (User.setLastDiscordChannelViewed data.guildId data.channelId NoThread user)
                                                 model.users
                                         , connections =
                                             SeqDict.updateIfExists
@@ -4595,11 +4589,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                       }
                                     , Command.batch
                                         [ ViewDiscordChannel
-                                            guildId
-                                            channelId
-                                            currentDiscordUserId
+                                            data
                                             ({ messages = loadMessagesHelper channel
-                                             , newUsers = getNewUsers connectionData guildId guild
+                                             , newUsers = getNewUsers connectionData data.guildId guild
                                              }
                                                 |> FilledInByBackend
                                             )
@@ -4611,23 +4603,23 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        ViewDiscordChannelThread guildId channelId currentDiscordUserId threadId _ ->
+                        ViewDiscordChannelThread data _ ->
                             BackendExtra.asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
                                 clientId
-                                guildId
-                                channelId
-                                currentDiscordUserId
+                                data.guildId
+                                data.channelId
+                                data.currentUserId
                                 (\session connectionData _ user guild channel ->
                                     ( { model
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
                                                 (User.setLastDiscordChannelViewed
-                                                    guildId
-                                                    channelId
-                                                    (ViewThread threadId)
+                                                    data.guildId
+                                                    data.channelId
+                                                    (ViewThread data.threadId)
                                                     user
                                                 )
                                                 model.users
@@ -4642,15 +4634,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                       }
                                     , Command.batch
                                         [ ViewDiscordChannelThread
-                                            guildId
-                                            channelId
-                                            currentDiscordUserId
-                                            threadId
+                                            data
                                             ({ messages =
-                                                SeqDict.get threadId channel.threads
+                                                SeqDict.get data.threadId channel.threads
                                                     |> Maybe.withDefault Thread.discordBackendInit
                                                     |> loadMessagesHelper
-                                             , newUsers = getNewUsers connectionData guildId guild
+                                             , newUsers = getNewUsers connectionData data.guildId guild
                                              }
                                                 |> FilledInByBackend
                                             )
@@ -7223,7 +7212,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model session use
                                 , users =
                                     NonemptyDict.insert
                                         session.userId
-                                        (LocalState.markAllChannelsAndThreadsAsViewed guildId DmChannel.latestMessageId guild2 user)
+                                        (LocalState.markAllChannelsAndThreadsAsViewedBackend guildId guild2 user)
                                         model.users
                             }
                     in

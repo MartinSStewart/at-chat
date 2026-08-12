@@ -277,13 +277,28 @@ requestedForToGuildOrDmId userId requestMessagesFor =
         InitialLoadRequested_DiscordGuild discordUserId guildId channelId threadRoute ->
             case threadRoute of
                 NoThread ->
-                    UserSession.Viewing_DiscordChannel guildId channelId discordUserId
+                    UserSession.Viewing_DiscordChannel
+                        { guildId = guildId
+                        , channelId = channelId
+                        , currentUserId = discordUserId
+                        , previouslyLastViewedMessage = UserSession.DontCare
+                        }
 
                 ViewThread threadId ->
-                    UserSession.Viewing_DiscordChannelThread guildId channelId discordUserId threadId
+                    UserSession.Viewing_DiscordChannelThread
+                        { guildId = guildId
+                        , channelId = channelId
+                        , currentUserId = discordUserId
+                        , threadId = threadId
+                        , previouslyLastViewedMessage = UserSession.DontCare
+                        }
 
         InitialLoadRequested_DiscordDm discordUserId channelId ->
-            UserSession.Viewing_DiscordDm discordUserId channelId
+            UserSession.Viewing_DiscordDm
+                { currentUserId = discordUserId
+                , channelId = channelId
+                , previouslyLastViewedMessage = UserSession.DontCare
+                }
 
         InitialLoadRequested_Admin _ ->
             UserSession.Viewing_None
@@ -291,20 +306,38 @@ requestedForToGuildOrDmId userId requestMessagesFor =
         InitialLoadRequested_Guild guildId channelId threadRoute tab ->
             case threadRoute of
                 NoThread ->
-                    UserSession.Viewing_Channel guildId channelId tab
+                    UserSession.Viewing_Channel
+                        { guildId = guildId
+                        , channelId = channelId
+                        , channelHeaderTab = tab
+                        , previouslyLastViewedMessage = UserSession.DontCare
+                        }
 
                 ViewThread threadId ->
-                    UserSession.Viewing_ChannelThread guildId channelId threadId
+                    UserSession.Viewing_ChannelThread
+                        { guildId = guildId
+                        , channelId = channelId
+                        , threadId = threadId
+                        , previouslyLastViewedMessage = UserSession.DontCare
+                        }
 
         InitialLoadRequested_Dm dmChannelId threadRoute tab ->
             case DmChannelId.otherUserId userId dmChannelId of
                 Just otherUserId ->
                     case threadRoute of
                         NoThread ->
-                            UserSession.Viewing_Dm otherUserId tab
+                            UserSession.Viewing_Dm
+                                { otherUserId = otherUserId
+                                , channelHeaderTab = tab
+                                , previouslyLastViewedMessage = UserSession.DontCare
+                                }
 
                         ViewThread threadId ->
-                            UserSession.Viewing_DmThread otherUserId threadId
+                            UserSession.Viewing_DmThread
+                                { otherUserId = otherUserId
+                                , threadId = threadId
+                                , previouslyLastViewedMessage = UserSession.DontCare
+                                }
 
                 Nothing ->
                     UserSession.Viewing_None
@@ -1309,25 +1342,25 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
     in
     LinkedAndOtherDiscordUsers.init
         (case currentlyViewing of
-            UserSession.Viewing_Dm _ _ ->
+            UserSession.Viewing_Dm _ ->
                 visibleDmUsers
 
-            UserSession.Viewing_Channel _ _ _ ->
+            UserSession.Viewing_Channel _ ->
                 visibleDmUsers
 
-            UserSession.Viewing_DmThread _ _ ->
+            UserSession.Viewing_DmThread _ ->
                 visibleDmUsers
 
-            UserSession.Viewing_ChannelThread _ _ _ ->
+            UserSession.Viewing_ChannelThread _ ->
                 visibleDmUsers
 
-            UserSession.Viewing_DiscordChannel guildId _ _ ->
-                getDiscordGuild guildId
+            UserSession.Viewing_DiscordChannel data ->
+                getDiscordGuild data.guildId
 
-            UserSession.Viewing_DiscordChannelThread guildId _ _ _ ->
-                getDiscordGuild guildId
+            UserSession.Viewing_DiscordChannelThread data ->
+                getDiscordGuild data.guildId
 
-            UserSession.Viewing_DiscordDm _ _ ->
+            UserSession.Viewing_DiscordDm _ ->
                 visibleDmUsers
 
             UserSession.Viewing_None ->

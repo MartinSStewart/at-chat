@@ -123,7 +123,7 @@ type alias Viewing_DmThreadData =
 type alias Viewing_DiscordDmData =
     { currentUserId : Discord.Id Discord.UserId
     , channelId : Discord.Id Discord.PrivateChannelId
-    , previouslyLastViewedMessage : PreviouslyLastViewedMessage ThreadMessageId
+    , previouslyLastViewedMessage : PreviouslyLastViewedMessage ChannelMessageId
     }
 
 

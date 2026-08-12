@@ -2962,36 +2962,36 @@ changeUpdate localMsg local =
                             local.localUser
                     in
                     case viewing of
-                        ViewDm otherUserId _ messagesLoaded ->
+                        ViewDm data messagesLoaded ->
                             { local
                                 | localUser =
                                     { localUser
-                                        | user = User.setLastDmViewed (DmChannelLastViewed otherUserId NoThread) localUser.user
+                                        | user = User.setLastDmViewed (DmChannelLastViewed data.otherUserId NoThread) localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
                                 , dmChannels =
                                     SeqDict.updateIfExists
-                                        otherUserId
+                                        data.otherUserId
                                         (DmChannel.loadMessages messagesLoaded)
                                         local.dmChannels
                             }
 
-                        ViewDmThread otherUserId threadId messagesLoaded ->
+                        ViewDmThread data messagesLoaded ->
                             { local
                                 | localUser =
                                     { localUser
                                         | user =
-                                            User.setLastDmViewed (DmChannelLastViewed otherUserId (ViewThread threadId)) localUser.user
+                                            User.setLastDmViewed (DmChannelLastViewed data.otherUserId (ViewThread data.threadId)) localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
                                 , dmChannels =
                                     SeqDict.updateIfExists
-                                        otherUserId
+                                        data.otherUserId
                                         (\dmChannel ->
                                             { dmChannel
                                                 | threads =
                                                     SeqDict.updateIfExists
-                                                        threadId
+                                                        data.threadId
                                                         (DmChannel.loadMessages messagesLoaded)
                                                         dmChannel.threads
                                             }
@@ -2999,56 +2999,56 @@ changeUpdate localMsg local =
                                         local.dmChannels
                             }
 
-                        ViewDiscordDm _ channelId messagesLoaded ->
+                        ViewDiscordDm data messagesLoaded ->
                             { local
                                 | localUser =
                                     { localUser
-                                        | user = User.setLastDmViewed (DiscordDmChannelLastViewed channelId) localUser.user
+                                        | user = User.setLastDmViewed (DiscordDmChannelLastViewed data.channelId) localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
                                 , discordDmChannels =
                                     SeqDict.updateIfExists
-                                        channelId
+                                        data.channelId
                                         (DmChannel.loadMessages messagesLoaded)
                                         local.discordDmChannels
                             }
 
-                        ViewChannel guildId channelId _ messagesLoaded ->
+                        ViewChannel data messagesLoaded ->
                             { local
                                 | localUser =
                                     { localUser
-                                        | user = User.setLastChannelViewed guildId channelId NoThread localUser.user
+                                        | user = User.setLastChannelViewed data.guildId data.channelId NoThread localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
                                 , guilds =
                                     SeqDict.updateIfExists
-                                        guildId
-                                        (LocalState.updateChannel (DmChannel.loadMessages messagesLoaded) channelId)
+                                        data.guildId
+                                        (LocalState.updateChannel (DmChannel.loadMessages messagesLoaded) data.channelId)
                                         local.guilds
                             }
 
-                        ViewChannelThread guildId channelId threadId messagesLoaded ->
+                        ViewChannelThread data messagesLoaded ->
                             { local
                                 | localUser =
                                     { localUser
                                         | user =
-                                            User.setLastChannelViewed guildId channelId (ViewThread threadId) localUser.user
+                                            User.setLastChannelViewed data.guildId data.channelId (ViewThread data.threadId) localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
                                 , guilds =
                                     SeqDict.updateIfExists
-                                        guildId
+                                        data.guildId
                                         (LocalState.updateChannel
                                             (\channel ->
                                                 { channel
                                                     | threads =
                                                         SeqDict.updateIfExists
-                                                            threadId
+                                                            data.threadId
                                                             (DmChannel.loadMessages messagesLoaded)
                                                             channel.threads
                                                 }
                                             )
-                                            channelId
+                                            data.channelId
                                         )
                                         local.guilds
                             }
@@ -3056,14 +3056,14 @@ changeUpdate localMsg local =
                         StopViewingChannel ->
                             { local | localUser = { localUser | currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing } }
 
-                        ViewDiscordChannel guildId channelId _ backendData ->
+                        ViewDiscordChannel data backendData ->
                             { local
                                 | localUser =
                                     { localUser
                                         | user =
                                             User.setLastDiscordChannelViewed
-                                                guildId
-                                                channelId
+                                                data.guildId
+                                                data.channelId
                                                 NoThread
                                                 localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
@@ -3082,10 +3082,10 @@ changeUpdate localMsg local =
                                     case backendData of
                                         FilledInByBackend backendData2 ->
                                             SeqDict.updateIfExists
-                                                guildId
+                                                data.guildId
                                                 (LocalState.updateChannel
                                                     (DmChannel.loadMessages (FilledInByBackend backendData2.messages))
-                                                    channelId
+                                                    data.channelId
                                                 )
                                                 local.discordGuilds
 
@@ -3093,15 +3093,15 @@ changeUpdate localMsg local =
                                             local.discordGuilds
                             }
 
-                        ViewDiscordChannelThread guildId channelId _ threadId backendData ->
+                        ViewDiscordChannelThread data backendData ->
                             { local
                                 | localUser =
                                     { localUser
                                         | user =
                                             User.setLastDiscordChannelViewed
-                                                guildId
-                                                channelId
-                                                (ViewThread threadId)
+                                                data.guildId
+                                                data.channelId
+                                                (ViewThread data.threadId)
                                                 localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                         , discordUsers =
@@ -3119,20 +3119,20 @@ changeUpdate localMsg local =
                                     case backendData of
                                         FilledInByBackend backendData2 ->
                                             SeqDict.updateIfExists
-                                                guildId
+                                                data.guildId
                                                 (LocalState.updateChannel
                                                     (\channel ->
                                                         { channel
                                                             | threads =
                                                                 SeqDict.updateIfExists
-                                                                    threadId
+                                                                    data.threadId
                                                                     (DmChannel.loadMessages
                                                                         (FilledInByBackend backendData2.messages)
                                                                     )
                                                                     channel.threads
                                                         }
                                                     )
-                                                    channelId
+                                                    data.channelId
                                                 )
                                                 local.discordGuilds
 
@@ -4005,9 +4005,8 @@ changeUpdate localMsg local =
                                                 localUser.otherUsers
                                                 |> SeqDict.union ok.members
                                         , user =
-                                            LocalState.markAllChannelsAndThreadsAsViewed
+                                            LocalState.markAllChannelsAndThreadsAsViewedFrontend
                                                 ok.guildId
-                                                DmChannel.latestFrontendMessageId
                                                 ok.guild
                                                 localUser.user
                                     }

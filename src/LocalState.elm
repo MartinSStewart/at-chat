@@ -99,7 +99,8 @@ module LocalState exposing
     , isDiscordDmChannelReloading
     , isDiscordGuildChannelReloading
     , loadingDiscordChannelMap
-    , markAllChannelsAndThreadsAsViewed
+    , markAllChannelsAndThreadsAsViewedBackend
+    , markAllChannelsAndThreadsAsViewedFrontend
     , markCallMessageAsEndedBackend
     , markCallMessageAsEndedFrontend
     , memberIsEditTypingBackend
@@ -2072,7 +2073,7 @@ removeReactionEmojiFrontendHelper emoji userId messageId channel =
     }
 
 
-markAllChannelsAndThreadsAsViewed :
+markAllChannelsAndThreadsAsViewedBackend :
     Id GuildId
     ->
         { a
@@ -2080,8 +2081,8 @@ markAllChannelsAndThreadsAsViewed :
                 SeqDict
                     (Id ChannelId)
                     { channel
-                        | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId))
-                        , threads : SeqDict (Id ChannelMessageId) { thread | messages : MessageArray ThreadMessageId (Message ThreadMessageId userId) }
+                        | messages : IdArray ChannelMessageId channelMessage
+                        , threads : SeqDict (Id ChannelMessageId) { thread | messages : IdArray ThreadMessageId threadMessage }
                     }
         }
     ->
@@ -2094,20 +2095,85 @@ markAllChannelsAndThreadsAsViewed :
             | lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
             , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
         }
-markAllChannelsAndThreadsAsViewed guildId guild user =
+markAllChannelsAndThreadsAsViewedBackend guildId guild user =
     { user
         | lastViewedMessage =
             SeqDict.foldl
                 (\channelId channel state ->
                     SeqDict.insert
                         (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
-                        (latestMessageId channel)
+                        (DmChannel.latestMessageId channel)
                         state
                 )
                 user.lastViewedMessage
                 guild.channels
         , lastViewedThreadMessage =
-            Debug.todo ""
+            SeqDict.foldl
+                (\channelId channel state ->
+                    SeqDict.foldl
+                        (\threadId thread state2 ->
+                            SeqDict.insert
+                                ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadId )
+                                (DmChannel.latestThreadMessageId thread)
+                                state2
+                        )
+                        state
+                        channel.threads
+                )
+                user.lastViewedThreadMessage
+                guild.channels
+    }
+
+
+markAllChannelsAndThreadsAsViewedFrontend :
+    Id GuildId
+    ->
+        { a
+            | channels :
+                SeqDict
+                    (Id ChannelId)
+                    { channel
+                        | messages : MessageArray ChannelMessageId channelMessage
+                        , threads : SeqDict (Id ChannelMessageId) { thread | messages : MessageArray ThreadMessageId threadMessage }
+                    }
+        }
+    ->
+        { d
+            | lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+        }
+    ->
+        { d
+            | lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+        }
+markAllChannelsAndThreadsAsViewedFrontend guildId guild user =
+    { user
+        | lastViewedMessage =
+            SeqDict.foldl
+                (\channelId channel state ->
+                    SeqDict.insert
+                        (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
+                        (DmChannel.latestFrontendMessageId channel)
+                        state
+                )
+                user.lastViewedMessage
+                guild.channels
+        , lastViewedThreadMessage =
+            SeqDict.foldl
+                (\channelId channel state ->
+                    SeqDict.foldl
+                        (\threadId thread state2 ->
+                            SeqDict.insert
+                                ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadId )
+                                (DmChannel.latestFrontendThreadMessageId thread)
+                                state2
+                        )
+                        state
+                        channel.threads
+                )
+                user.lastViewedThreadMessage
+                guild.channels
     }
 
 
@@ -2642,6 +2708,34 @@ sentEnoughDiscordDmMessages currentUserId channel =
             False
 
 
+{-| Where the last viewed message of a channel sat before the user opened it. Entering a
+channel marks it as read, so this is what keeps its unread messages visible while the user is
+still looking at them.
+-}
+previouslyLastViewedMessage : AnyGuildOrDmId -> LocalState -> PreviouslyLastViewedMessage ChannelMessageId
+previouslyLastViewedMessage guildOrDmId local =
+    case SeqDict.get guildOrDmId local.localUser.user.lastViewedMessage of
+        Just lastViewed ->
+            PreviouslyLastViewedMessage lastViewed
+
+        Nothing ->
+            DontCare
+
+
+previouslyLastViewedThreadMessage :
+    AnyGuildOrDmId
+    -> Id ChannelMessageId
+    -> LocalState
+    -> PreviouslyLastViewedMessage ThreadMessageId
+previouslyLastViewedThreadMessage guildOrDmId threadId local =
+    case SeqDict.get ( guildOrDmId, threadId ) local.localUser.user.lastViewedThreadMessage of
+        Just lastViewed ->
+            PreviouslyLastViewedMessage lastViewed
+
+        Nothing ->
+            DontCare
+
+
 routeToViewing : Route -> LocalState -> SetViewing
 routeToViewing route local =
     case route of
@@ -2666,17 +2760,24 @@ routeToViewing route local =
                                     , channelId = channelId
                                     , channelHeaderTab = tab
                                     , previouslyLastViewedMessage =
-                                        case SeqDict.get (GuildOrDmId (GuildOrDmId_Guild guildId channelId)) local.localUser.user.lastViewedMessage of
-                                            Just lastViewed ->
-                                                PreviouslyLastViewedMessage lastViewed
-
-                                            Nothing ->
-                                                DontCare
+                                        previouslyLastViewedMessage
+                                            (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
+                                            local
                                     }
                                     EmptyPlaceholder
 
                             ViewThreadWithFriends threadId _ _ ->
-                                ViewChannelThread guildId channelId threadId EmptyPlaceholder
+                                ViewChannelThread
+                                    { guildId = guildId
+                                    , channelId = channelId
+                                    , threadId = threadId
+                                    , previouslyLastViewedMessage =
+                                        previouslyLastViewedThreadMessage
+                                            (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
+                                            threadId
+                                            local
+                                    }
+                                    EmptyPlaceholder
 
                     NewChannelRoute ->
                         StopViewingChannel
@@ -2696,10 +2797,34 @@ routeToViewing route local =
                     DiscordChannel_ChannelRoute channelId threadRoute _ ->
                         case threadRoute of
                             NoThreadWithFriends _ _ ->
-                                ViewDiscordChannel guildId channelId currentDiscordUserId EmptyPlaceholder
+                                ViewDiscordChannel
+                                    { guildId = guildId
+                                    , channelId = channelId
+                                    , currentUserId = currentDiscordUserId
+                                    , previouslyLastViewedMessage =
+                                        previouslyLastViewedMessage
+                                            (DiscordGuildOrDmId
+                                                (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId)
+                                            )
+                                            local
+                                    }
+                                    EmptyPlaceholder
 
                             ViewThreadWithFriends threadId _ _ ->
-                                ViewDiscordChannelThread guildId channelId currentDiscordUserId threadId EmptyPlaceholder
+                                ViewDiscordChannelThread
+                                    { guildId = guildId
+                                    , channelId = channelId
+                                    , currentUserId = currentDiscordUserId
+                                    , threadId = threadId
+                                    , previouslyLastViewedMessage =
+                                        previouslyLastViewedThreadMessage
+                                            (DiscordGuildOrDmId
+                                                (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId)
+                                            )
+                                            threadId
+                                            local
+                                    }
+                                    EmptyPlaceholder
 
                     DiscordChannel_NewChannelRoute ->
                         StopViewingChannel
@@ -2716,10 +2841,27 @@ routeToViewing route local =
                     if SeqDict.member otherUserId local.dmChannels then
                         case threadRoute of
                             NoThreadWithFriends _ _ ->
-                                ViewDm otherUserId tab EmptyPlaceholder
+                                ViewDm
+                                    { otherUserId = otherUserId
+                                    , channelHeaderTab = tab
+                                    , previouslyLastViewedMessage =
+                                        previouslyLastViewedMessage
+                                            (GuildOrDmId (GuildOrDmId_Dm otherUserId))
+                                            local
+                                    }
+                                    EmptyPlaceholder
 
                             ViewThreadWithFriends threadId _ _ ->
-                                ViewDmThread otherUserId threadId EmptyPlaceholder
+                                ViewDmThread
+                                    { otherUserId = otherUserId
+                                    , threadId = threadId
+                                    , previouslyLastViewedMessage =
+                                        previouslyLastViewedThreadMessage
+                                            (GuildOrDmId (GuildOrDmId_Dm otherUserId))
+                                            threadId
+                                            local
+                                    }
+                                    EmptyPlaceholder
 
                     else
                         StopViewingChannel
@@ -2729,7 +2871,19 @@ routeToViewing route local =
 
         DiscordDmRoute data ->
             if SeqDict.member data.channelId local.discordDmChannels then
-                ViewDiscordDm data.currentDiscordUserId data.channelId EmptyPlaceholder
+                ViewDiscordDm
+                    { currentUserId = data.currentDiscordUserId
+                    , channelId = data.channelId
+                    , previouslyLastViewedMessage =
+                        previouslyLastViewedMessage
+                            (DiscordGuildOrDmId
+                                (DiscordGuildOrDmId_Dm
+                                    { currentUserId = data.currentDiscordUserId, channelId = data.channelId }
+                                )
+                            )
+                            local
+                    }
+                    EmptyPlaceholder
 
             else
                 StopViewingChannel

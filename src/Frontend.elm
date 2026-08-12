@@ -6970,10 +6970,10 @@ updateLoadedFromBackend msg model =
 
                         Local_CurrentlyViewing viewing ->
                             case viewing of
-                                ViewChannel guildId channelId _ _ ->
+                                ViewChannel data _ ->
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), NoThread ) ->
-                                            if guildId == guildIdRoute && channelId == channelIdRoute then
+                                            if data.guildId == guildIdRoute && data.channelId == channelIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
@@ -6982,10 +6982,10 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewDm otherUserId _ _ ->
+                                ViewDm data _ ->
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), NoThread ) ->
-                                            if otherUserId == otherUserIdRoute then
+                                            if data.otherUserId == otherUserIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
@@ -6994,10 +6994,10 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewChannelThread guildId channelId threadId _ ->
+                                ViewChannelThread data _ ->
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
-                                            if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
+                                            if data.guildId == guildIdRoute && data.channelId == channelIdRoute && data.threadId == threadIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
@@ -7006,10 +7006,10 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewDmThread otherUserId threadId _ ->
+                                ViewDmThread data _ ->
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), ViewThread threadIdRoute ) ->
-                                            if otherUserId == otherUserIdRoute && threadId == threadIdRoute then
+                                            if data.otherUserId == otherUserIdRoute && data.threadId == threadIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
@@ -7021,10 +7021,10 @@ updateLoadedFromBackend msg model =
                                 StopViewingChannel ->
                                     Command.none
 
-                                ViewDiscordChannel guildId channelId discordUserId _ ->
+                                ViewDiscordChannel data _ ->
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), NoThread ) ->
-                                            if discordUserId == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute then
+                                            if data.currentUserId == currentDiscordUserId && data.guildId == guildIdRoute && data.channelId == channelIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
@@ -7033,10 +7033,10 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewDiscordChannelThread guildId channelId discordUserId threadId _ ->
+                                ViewDiscordChannelThread data _ ->
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
-                                            if discordUserId == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
+                                            if data.currentUserId == currentDiscordUserId && data.guildId == guildIdRoute && data.channelId == channelIdRoute && data.threadId == threadIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
@@ -7045,10 +7045,10 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewDiscordDm _ channelId _ ->
+                                ViewDiscordDm data _ ->
                                     case Route.toGuildOrDmId userId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), NoThread ) ->
-                                            if channelId == data.channelId then
+                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm dmRoute), NoThread ) ->
+                                            if data.channelId == dmRoute.channelId then
                                                 Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
