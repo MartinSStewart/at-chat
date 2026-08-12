@@ -2323,7 +2323,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 ( LoginWithRecoveryPassword, Just user ) ->
                     if Sha256.sha256 password == recoveryPasswordHash then
                         let
-                            currentlyViewing : UserSession.Viewing
+                            currentlyViewing : Viewing
                             currentlyViewing =
                                 BackendExtra.requestedForToGuildOrDmId Broadcast.adminUserId requestMessagesFor
 
@@ -2389,7 +2389,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             userId =
                                 Id.nextId (NonemptyDict.toSeqDict model.users)
 
-                            currentlyViewing : UserSession.Viewing
+                            currentlyViewing : Viewing
                             currentlyViewing =
                                 BackendExtra.requestedForToGuildOrDmId session.userId requestMessagesFor
 
@@ -2453,7 +2453,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             ( Just user, Just { secret } ) ->
                                 if TwoFactorAuthentication.isValidCode time loginCode secret then
                                     let
-                                        currentlyViewing : UserSession.Viewing
+                                        currentlyViewing : Viewing
                                         currentlyViewing =
                                             BackendExtra.requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor
 
@@ -4279,7 +4279,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_CurrentlyViewing { routeRequestCausedByPressingLink } viewing ->
                     let
-                        currentlyViewing : UserSession.Viewing
+                        currentlyViewing : Viewing
                         currentlyViewing =
                             UserSession.setViewingToCurrentlyViewing viewing
 
@@ -4358,7 +4358,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
-                                                (User.setLastDmViewed routeRequestCausedByPressingLink (DmChannelLastViewed data.otherUserId NoThread) user)
+                                                (User.setLastDmViewed (DmChannelLastViewed data.otherUserId NoThread) user)
                                                 model.users
                                         , connections =
                                             SeqDict.updateIfExists
@@ -4401,7 +4401,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
-                                                (User.setLastDmViewed routeRequestCausedByPressingLink (DmChannelLastViewed data.otherUserId (ViewThread data.threadId)) user)
+                                                (User.setLastDmViewed (DmChannelLastViewed data.otherUserId (ViewThread data.threadId)) user)
                                                 model.users
                                         , connections =
                                             SeqDict.updateIfExists
@@ -4450,7 +4450,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
-                                                (User.setLastDmViewed routeRequestCausedByPressingLink (DiscordDmChannelLastViewed data.channelId) user)
+                                                (User.setLastDmViewed (DiscordDmChannelLastViewed data.channelId) user)
                                                 model.users
                                         , connections =
                                             SeqDict.updateIfExists
@@ -4496,10 +4496,16 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     NonemptyDict.insert
                                                         session.userId
                                                         (User.setLastChannelViewed
-                                                            routeRequestCausedByPressingLink
                                                             data.guildId
                                                             data.channelId
-                                                            NoThread
+                                                            (NoThreadWithMaybeMessage
+                                                                (if routeRequestCausedByPressingLink then
+                                                                    DmChannel.latestMessageId channel |> Just
+
+                                                                 else
+                                                                    Nothing
+                                                                )
+                                                            )
                                                             user
                                                         )
                                                         model.users
@@ -4554,7 +4560,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         (User.setLastChannelViewed
                                                             data.guildId
                                                             data.channelId
-                                                            (ViewThread data.threadId)
+                                                            (ViewThreadWithMaybeMessage
+                                                                data.threadId
+                                                                (if routeRequestCausedByPressingLink then
+                                                                    SeqDict.get data.threadId channel.threads
+                                                                        |> Maybe.withDefault Thread.backendInit
+                                                                        |> DmChannel.latestThreadMessageId
+                                                                        |> Just
+
+                                                                 else
+                                                                    Nothing
+                                                                )
+                                                            )
                                                             user
                                                         )
                                                         model.users
@@ -4642,7 +4659,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     data.currentUserId
                                                     data.guildId
                                                     data.channelId
-                                                    NoThread
+                                                    (NoThreadWithMaybeMessage
+                                                        (if routeRequestCausedByPressingLink then
+                                                            DmChannel.latestMessageId channel |> Just
+
+                                                         else
+                                                            Nothing
+                                                        )
+                                                    )
                                                     user
                                                 )
                                                 model.users
@@ -4697,10 +4721,21 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             NonemptyDict.insert
                                                 session.userId
                                                 (User.setLastDiscordChannelViewed
-                                                    routeRequestCausedByPressingLink
+                                                    data.currentUserId
                                                     data.guildId
                                                     data.channelId
-                                                    (ViewThread data.threadId)
+                                                    (ViewThreadWithMaybeMessage
+                                                        data.threadId
+                                                        (if routeRequestCausedByPressingLink then
+                                                            SeqDict.get data.threadId channel.threads
+                                                                |> Maybe.withDefault Thread.discordBackendInit
+                                                                |> DmChannel.latestThreadMessageId
+                                                                |> Just
+
+                                                         else
+                                                            Nothing
+                                                        )
+                                                    )
                                                     user
                                                 )
                                                 model.users

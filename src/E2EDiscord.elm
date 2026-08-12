@@ -47,7 +47,7 @@ import Time
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
 import Unsafe
 import User
-import UserSession exposing (SetViewing(..), ToBeFilledInByBackend(..))
+import UserSession exposing (SetViewing(..))
 
 
 {-| Runs the given function against the admin frontend's LocalState, surfacing a
@@ -2547,13 +2547,14 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             (LocalModelChangeRequest
                                 (ChangeId 900)
                                 (Local_CurrentlyViewing
+                                    { routeRequestCausedByPressingLink = False }
                                     (ViewDiscordChannel
                                         { guildId = E2EHelper.botTestGuild
                                         , channelId = E2EHelper.privateDiscordChannelId
                                         , currentUserId = E2EHelper.secondDiscordUserId
                                         , previouslyLastViewedMessage = UserSession.DontCare
                                         }
-                                        EmptyPlaceholder
+                                        UserSession.SetViewing_EmptyPlaceholder
                                     )
                                 )
                             )

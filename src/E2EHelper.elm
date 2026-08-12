@@ -2232,7 +2232,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_DeleteMessage _ _ ->
                     True
 
-                Local_CurrentlyViewing setViewing ->
+                Local_CurrentlyViewing _ setViewing ->
                     case setViewing of
                         ViewDm _ _ ->
                             False
@@ -2715,7 +2715,7 @@ allAttackerLocalChanges =
     [ Local_AddReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
     , Local_AddReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
     , Local_Admin (Pages.Admin.SetSignupsEnabled True)
-    , Local_CurrentlyViewing StopViewingChannel
+    , Local_CurrentlyViewing { routeRequestCausedByPressingLink = False } StopViewingChannel
     , Local_DeleteChannel legitGuildId channelId
     , Local_DeleteGuild legitGuildId
     , Local_DeleteMessage guildOrDmId_dm threadRouteWithMessage

@@ -22,7 +22,6 @@ module FrontendExtra exposing
     , isPressMsg
     , layout
     , logout
-    , markConversationAsRead
     , pingUserNameSoFar
     , playNotificationSound
     , playNotificationSoundForDiscordMessage
@@ -2946,7 +2945,6 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastDmViewed
-                                                routeRequestCausedByPressingLink
                                                 (DmChannelLastViewed data.otherUserId NoThread)
                                                 localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
@@ -2964,7 +2962,6 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastDmViewed
-                                                routeRequestCausedByPressingLink
                                                 (DmChannelLastViewed data.otherUserId (ViewThread data.threadId))
                                                 localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
@@ -2990,7 +2987,6 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastDmViewed
-                                                routeRequestCausedByPressingLink
                                                 (DiscordDmChannelLastViewed data.channelId)
                                                 localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
@@ -3008,10 +3004,17 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastChannelViewed
-                                                routeRequestCausedByPressingLink
                                                 data.guildId
                                                 data.channelId
-                                                NoThread
+                                                (NoThreadWithMaybeMessage
+                                                    (if routeRequestCausedByPressingLink then
+                                                        LocalState.getGuildAndChannel data.guildId data.channelId local
+                                                            |> Maybe.map (\( _, channel ) -> DmChannel.latestFrontendMessageId channel)
+
+                                                     else
+                                                        Nothing
+                                                    )
+                                                )
                                                 localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
@@ -3028,10 +3031,20 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastChannelViewed
-                                                routeRequestCausedByPressingLink
                                                 data.guildId
                                                 data.channelId
-                                                (ViewThread data.threadId)
+                                                (ViewThreadWithMaybeMessage
+                                                    data.threadId
+                                                    (if routeRequestCausedByPressingLink then
+                                                        LocalState.getGuildAndChannel data.guildId data.channelId local
+                                                            |> Maybe.andThen
+                                                                (\( _, channel ) -> SeqDict.get data.threadId channel.threads)
+                                                            |> Maybe.map DmChannel.latestFrontendThreadMessageId
+
+                                                     else
+                                                        Nothing
+                                                    )
+                                                )
                                                 localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
@@ -3062,10 +3075,18 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastDiscordChannelViewed
-                                                routeRequestCausedByPressingLink
+                                                data.currentUserId
                                                 data.guildId
                                                 data.channelId
-                                                NoThread
+                                                (NoThreadWithMaybeMessage
+                                                    (if routeRequestCausedByPressingLink then
+                                                        LocalState.getDiscordGuildAndChannel data.guildId data.channelId local
+                                                            |> Maybe.map (\( _, channel ) -> DmChannel.latestFrontendMessageId channel)
+
+                                                     else
+                                                        Nothing
+                                                    )
+                                                )
                                                 localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                         , discordUsers =
@@ -3106,10 +3127,21 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastDiscordChannelViewed
-                                                routeRequestCausedByPressingLink
+                                                data.currentUserId
                                                 data.guildId
                                                 data.channelId
-                                                (ViewThread data.threadId)
+                                                (ViewThreadWithMaybeMessage
+                                                    data.threadId
+                                                    (if routeRequestCausedByPressingLink then
+                                                        LocalState.getDiscordGuildAndChannel data.guildId data.channelId local
+                                                            |> Maybe.andThen
+                                                                (\( _, channel ) -> SeqDict.get data.threadId channel.threads)
+                                                            |> Maybe.map DmChannel.latestFrontendThreadMessageId
+
+                                                     else
+                                                        Nothing
+                                                    )
+                                                )
                                                 localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                         , discordUsers =

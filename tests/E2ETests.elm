@@ -838,7 +838,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (LocalModelChangeRequest (ChangeId 100) (Local_SetGuildNotificationLevel guildId NotifyOnEveryMessage))
                 , user.sendToBackend
                     100
-                    (LocalModelChangeRequest (ChangeId 101) (Local_CurrentlyViewing StopViewingChannel))
+                    (LocalModelChangeRequest (ChangeId 101) (Local_CurrentlyViewing { routeRequestCausedByPressingLink = False } StopViewingChannel))
 
                 -- Email notifications are off by default, so this message must not send an email.
                 , admin.click 100 (Dom.id "channel_textinput")
@@ -863,7 +863,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 -- Closing the user options returns the user to the channel, so stop viewing again.
                 , user.sendToBackend
                     100
-                    (LocalModelChangeRequest (ChangeId 102) (Local_CurrentlyViewing StopViewingChannel))
+                    (LocalModelChangeRequest (ChangeId 102) (Local_CurrentlyViewing { routeRequestCausedByPressingLink = False } StopViewingChannel))
 
                 -- Now a new message should trigger an email notification to the user.
                 , admin.click 100 (Dom.id "channel_textinput")
