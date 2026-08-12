@@ -356,8 +356,38 @@ displayMode currentUserId route local =
         NewGuildRoute ->
             thumbnailOrNoVideo
 
-        GuildRoute _ _ ->
-            thumbnailOrNoVideo
+        GuildRoute guildId channelRoute ->
+            case channelRoute of
+                Route.ChannelRoute channelId _ tab ->
+                    let
+                        roomId =
+                            GuildRoomId guildId channelId
+
+                        isTabExpanded =
+                            tab == Just ChannelHeaderTab_VoiceChat
+                    in
+                    if Just roomId == local.currentRoom && isTabExpanded then
+                        case SeqDict.get roomId local.voiceChats of
+                            Just _ ->
+                                ShowLocalVideoAndCall roomId
+
+                            Nothing ->
+                                ShowLocalVideo
+
+                    else if isTabExpanded then
+                        ShowLocalVideo
+
+                    else
+                        thumbnailOrNoVideo
+
+                Route.NewChannelRoute ->
+                    thumbnailOrNoVideo
+
+                Route.GuildSettingsRoute ->
+                    thumbnailOrNoVideo
+
+                Route.JoinRoute secretId ->
+                    thumbnailOrNoVideo
 
         DiscordGuildRoute _ ->
             thumbnailOrNoVideo

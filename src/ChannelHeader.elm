@@ -59,7 +59,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                 else
                     privateChatWith isMobile model.route currentChannelHeaderTab otherUserId local name
 
-            GuildOrDmId_Guild _ _ ->
+            GuildOrDmId_Guild guildId channelId ->
                 Ui.row
                     [ Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill ]
                     [ channelHeaderTabRow
@@ -72,7 +72,13 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                         ]
                     , Ui.row
                         [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-                        [ Ui.Lazy.lazy2 gameButton isMobile currentChannelHeaderTab
+                        [ voiceChatButton
+                            isMobile
+                            (Route.toChannelHeaderTab model.route)
+                            (GuildRoomId guildId channelId)
+                            local.localUser
+                            local.calls
+                        , Ui.Lazy.lazy2 gameButton isMobile currentChannelHeaderTab
                         , drawingTab isMobile currentChannelHeaderTab
                         , showFilesButton
                         , channelSettingsTab isMobile (Route.toShowMembersTab model.route |> Just)
@@ -508,7 +514,7 @@ dmHeaderButtons : Bool -> Route -> Maybe ChannelHeaderTab -> Id UserId -> LocalS
 dmHeaderButtons isMobile route currentTab otherUserId local =
     Ui.row
         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-        [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
+        [ voiceChatButton isMobile currentTab (DmRoomId otherUserId) local.localUser local.calls
         , Ui.Lazy.lazy2 gameButton isMobile currentTab
         , drawingTab isMobile currentTab
         , channelSettingsTab isMobile (Route.toShowMembersTab route |> Just)
@@ -525,12 +531,12 @@ gameButton isMobile currentTab =
         (Ui.el [ MyUi.hoverText "Games" ] (Ui.html Icons.go))
 
 
-voiceChatButton : Bool -> Maybe ChannelHeaderTab -> Id UserId -> LocalUser -> Call.Local -> Element FrontendMsg_
-voiceChatButton isMobile currentTab otherUserId localUser calls =
+voiceChatButton : Bool -> Maybe ChannelHeaderTab -> CallId -> LocalUser -> Call.Local -> Element FrontendMsg_
+voiceChatButton isMobile currentTab roomId localUser calls =
     let
         joinedUsers : SeqDict (Id UserId) OneOrGreater
         joinedUsers =
-            case SeqDict.get (DmRoomId otherUserId) calls.voiceChats of
+            case SeqDict.get roomId calls.voiceChats of
                 Just voiceChat ->
                     NonemptyDict.foldl
                         (\( userId, _ ) _ dict -> SeqDictHelper.increment userId dict)
@@ -541,7 +547,7 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
                     SeqDict.empty
 
         joinedUsers2 =
-            if calls.currentRoom == Just (DmRoomId otherUserId) then
+            if calls.currentRoom == Just roomId then
                 SeqDictHelper.increment localUser.session.userId joinedUsers
 
             else
@@ -629,7 +635,9 @@ tabBodyView isMobile local loggedIn model =
                                     Nothing
 
                         ChannelHeaderTab_VoiceChat ->
-                            Nothing
+                            Call.view model.windowSize (GuildRoomId guildId channelId) local.calls loggedIn.voiceChat
+                                |> Ui.map VoiceChatMsg
+                                |> Just
 
                         ChannelHeaderTab_Games maybeMatchId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
