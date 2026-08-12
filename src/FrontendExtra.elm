@@ -4782,12 +4782,19 @@ changeUpdate localMsg local =
                     in
                     case voiceChatChange of
                         Call.Server_Joined time { roomId, otherClientId } ->
-                            { local
-                                | calls =
+                            let
+                                calls2 =
                                     { calls
                                         | voiceChats =
-                                            SeqDictHelper.addToDict roomId otherClientId Call.defaultRemoteCallData calls.voiceChats
+                                            SeqDictHelper.addToDict
+                                                roomId
+                                                otherClientId
+                                                Call.defaultRemoteCallData
+                                                calls.voiceChats
                                     }
+                            in
+                            { local
+                                | calls = calls2
                                 , dmChannels =
                                     case roomId of
                                         DmRoomId otherUserId ->
@@ -4813,6 +4820,9 @@ changeUpdate localMsg local =
 
                                                 _ ->
                                                     local.dmChannels
+
+                                        GuildRoomId guildId channelId ->
+                                            Debug.todo ""
                             }
 
                         Call.Server_Left time connectionId ->

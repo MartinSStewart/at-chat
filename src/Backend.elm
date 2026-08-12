@@ -1857,7 +1857,7 @@ update msg model =
                     joinDmVoiceChat sessionId clientId time otherUserId model userId
 
                 Call.GuildRoomId guildId channelId ->
-                    Debug.todo ""
+                    joinGuildVoiceChat sessionId clientId time guildId channelId model userId
 
 
 gotDiscordStickers :
@@ -2079,31 +2079,47 @@ disconnectClient time sessionId clientId model =
     case ( Pages.Admin.disconnectClient sessionId clientId model.connections, SeqDict.get sessionId model.sessions ) of
         ( Ok ( removedConnection, connections ), Just session ) ->
             let
-                helper otherUserId =
-                    let
-                        dmChannelId =
-                            DmChannelId.fromUserIds session.userId otherUserId
-                    in
-                    if voiceChatRoomHasOtherMembers dmChannelId clientId model then
-                        model.dmChannels
-
-                    else
-                        SeqDict.updateIfExists dmChannelId (LocalState.markCallMessageAsEndedBackend time) model.dmChannels
-
                 model2 =
-                    { model
-                        | connections = connections
-                        , dmChannels =
-                            case removedConnection.call of
-                                ConnectingToCall (Call.DmRoomId otherUserId) ->
-                                    helper otherUserId
+                    case removedConnection.call of
+                        ConnectedToCall (Call.DmRoomId otherUserId) ->
+                            let
+                                dmChannelId =
+                                    DmChannelId.fromUserIds session.userId otherUserId
+                            in
+                            { model
+                                | connections = connections
+                                , dmChannels =
+                                    if dmVoiceChatRoomHasOtherMembers dmChannelId clientId model then
+                                        model.dmChannels
 
-                                ConnectedToCall (Call.DmRoomId otherUserId) ->
-                                    helper otherUserId
+                                    else
+                                        SeqDict.updateIfExists dmChannelId (LocalState.markCallMessageAsEndedBackend time) model.dmChannels
+                            }
 
-                                NotInCall ->
-                                    model.dmChannels
-                    }
+                        ConnectedToCall (Call.GuildRoomId guildId channelId) ->
+                            { model
+                                | connections = connections
+                                , guilds =
+                                    if guildVoiceChatRoomHasOtherMembers guildId channelId clientId model then
+                                        model.guilds
+
+                                    else
+                                        SeqDict.updateIfExists
+                                            guildId
+                                            (\guild ->
+                                                { guild
+                                                    | channels =
+                                                        SeqDict.updateIfExists
+                                                            channelId
+                                                            (LocalState.markCallMessageAsEndedBackend time)
+                                                            guild.channels
+                                                }
+                                            )
+                                            model.guilds
+                            }
+
+                        NotInCall ->
+                            model
             in
             ( model2
             , Command.batch
@@ -2114,7 +2130,7 @@ disconnectClient time sessionId clientId model =
                     (Server_ClientDisconnected session.sessionIdHash clientId |> ServerChange)
                     model2
                 , case removedConnection.call of
-                    ConnectingToCall (Call.DmRoomId otherUserId) ->
+                    ConnectedToCall (Call.DmRoomId otherUserId) ->
                         Broadcast.toDmChannel
                             session.userId
                             otherUserId
@@ -2128,17 +2144,16 @@ disconnectClient time sessionId clientId model =
                             )
                             model2
 
-                    ConnectedToCall (Call.DmRoomId otherUserId) ->
-                        Broadcast.toDmChannel
-                            session.userId
-                            otherUserId
-                            (\otherUserId2 ->
-                                Call.Server_Left
-                                    time
-                                    { roomId = Call.DmRoomId otherUserId2
-                                    , otherClientId = ( session.userId, clientId )
-                                    }
-                                    |> Server_VoiceChatChange
+                    ConnectedToCall (Call.GuildRoomId guildId channelId) ->
+                        Broadcast.toGuild
+                            guildId
+                            (Call.Server_Left
+                                time
+                                { roomId = Call.GuildRoomId guildId channelId
+                                , otherClientId = ( session.userId, clientId )
+                                }
+                                |> Server_VoiceChatChange
+                                |> ServerChange
                             )
                             model2
 
@@ -6590,9 +6605,6 @@ handleSetInputEnabled sessionId clientId changeId remoteCallData model session _
                         NotInCall ->
                             Nothing
 
-                        ConnectingToCall roomId ->
-                            Just roomId
-
                         ConnectedToCall roomId ->
                             Just roomId
             in
@@ -6625,6 +6637,20 @@ handleSetInputEnabled sessionId clientId changeId remoteCallData model session _
                             )
                             model
 
+                    Just (Call.GuildRoomId guildId channelId) ->
+                        Broadcast.toGuildExcludingOne
+                            clientId
+                            guildId
+                            (Call.Server_SetRemoteCallData
+                                { roomId = Call.GuildRoomId guildId channelId
+                                , otherClientId = ( session.userId, clientId )
+                                }
+                                remoteCallData
+                                |> Server_VoiceChatChange
+                                |> ServerChange
+                            )
+                            model
+
                     Nothing ->
                         Command.none
                 ]
@@ -6653,9 +6679,6 @@ leaveVoice sessionId clientId time changeId model userId =
                             case connection.call of
                                 NotInCall ->
                                     Nothing
-
-                                ConnectingToCall roomId ->
-                                    Just roomId
 
                                 ConnectedToCall roomId ->
                                     Just roomId
@@ -6700,7 +6723,7 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model userId roomId =
             { model
                 | connections = connections
                 , dmChannels =
-                    if voiceChatRoomHasOtherMembers dmChannelId clientId model then
+                    if dmVoiceChatRoomHasOtherMembers dmChannelId clientId model then
                         model.dmChannels
 
                     else
@@ -6711,11 +6734,22 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model userId roomId =
             { model
                 | connections = connections
                 , guilds =
-                    if voiceChatRoomHasOtherMembers dmChannelId clientId model then
-                        model.dmChannels
+                    if guildVoiceChatRoomHasOtherMembers guildId channelId clientId model then
+                        model.guilds
 
                     else
-                        SeqDict.updateIfExists dmChannelId (LocalState.markCallMessageAsEndedBackend time) model.dmChannels
+                        SeqDict.updateIfExists
+                            guildId
+                            (\guild ->
+                                { guild
+                                    | channels =
+                                        SeqDict.updateIfExists
+                                            channelId
+                                            (LocalState.markCallMessageAsEndedBackend time)
+                                            guild.channels
+                                }
+                            )
+                            model.guilds
             }
     , Command.batch
         [ case maybeChangeId of
@@ -6738,6 +6772,20 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model userId roomId =
                             , otherClientId = ( userId, clientId )
                             }
                             |> Server_VoiceChatChange
+                    )
+                    model
+
+            Call.GuildRoomId guildId channelId ->
+                Broadcast.toGuildExcludingOne
+                    clientId
+                    guildId
+                    (Call.Server_Left
+                        time
+                        { roomId = Call.GuildRoomId guildId channelId
+                        , otherClientId = ( userId, clientId )
+                        }
+                        |> Server_VoiceChatChange
+                        |> ServerChange
                     )
                     model
         ]
@@ -6767,19 +6815,12 @@ joinDmVoiceChat sessionId clientId time otherUserId model userId =
                                 NotInCall ->
                                     ( model, Command.none )
 
-                                ConnectingToCall oldVoiceChatId ->
-                                    leaveVoiceHelper sessionId clientId time Nothing model userId oldVoiceChatId
-
                                 ConnectedToCall oldVoiceChatId ->
                                     leaveVoiceHelper sessionId clientId time Nothing model userId oldVoiceChatId
 
                         voiceChatId : Call.CallId
                         voiceChatId =
                             Call.DmRoomId otherUserId
-
-                        existingPeers : List Call.ExistingPeer
-                        existingPeers =
-                            collectExistingPeers voiceChatId userId clientId model2
 
                         model3 : BackendModel
                         model3 =
@@ -6795,9 +6836,7 @@ joinDmVoiceChat sessionId clientId time otherUserId model userId =
                                         )
                                         model2.connections
                                 , dmChannels =
-                                    -- Only the person who starts the call adds a "started a call"
-                                    -- message. Anyone joining an already ongoing call doesn't.
-                                    if isAnyoneElseInCall voiceChatId userId clientId model2 then
+                                    if dmVoiceChatRoomHasOtherMembers dmChannelId clientId model then
                                         model2.dmChannels
 
                                     else
@@ -6845,128 +6884,102 @@ joinDmVoiceChat sessionId clientId time otherUserId model userId =
             ( model, Command.none )
 
 
-collectExistingPeers : Call.CallId -> Id UserId -> ClientId -> BackendModel -> List Call.ExistingPeer
-collectExistingPeers roomId currentUserId currentClientId model =
-    SeqDict.foldl
-        (\sessionId2 connections acc ->
-            case SeqDict.get sessionId2 model.sessions of
-                Just session ->
-                    NonemptyDict.toList connections
-                        |> List.filterMap
-                            (\( clientId2, connection ) ->
-                                case connection.call of
-                                    -- Only list peers whose RTCPeerConnection has
-                                    -- connected to Cloudflare; their tracks aren't
-                                    -- pullable before that.
-                                    ConnectedToCall otherRoomId ->
-                                        if
-                                            isPeerInSameCall roomId currentUserId session.userId otherRoomId
-                                                && (clientId2 /= currentClientId)
-                                        then
-                                            Just
-                                                { connectionId =
-                                                    { roomId = roomId
-                                                    , otherClientId = ( session.userId, clientId2 )
-                                                    }
-                                                }
+joinGuildVoiceChat :
+    SessionId
+    -> ClientId
+    -> Time.Posix
+    -> Id GuildId
+    -> Id ChannelId
+    -> BackendModel
+    -> Id UserId
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+joinGuildVoiceChat sessionId clientId time guildId channelId model userId =
+    case ( SeqDict.get sessionId model.connections, SeqDict.get guildId model.guilds ) of
+        ( Just connections, Just guild ) ->
+            case ( NonemptyDict.get clientId connections, SeqDict.get channelId guild.channels ) of
+                ( Just connection, Just channel ) ->
+                    let
+                        ( model2, leaveCmd ) =
+                            case connection.call of
+                                NotInCall ->
+                                    ( model, Command.none )
 
-                                        else
-                                            Nothing
+                                ConnectedToCall oldVoiceChatId ->
+                                    leaveVoiceHelper sessionId clientId time Nothing model userId oldVoiceChatId
 
-                                    ConnectingToCall _ ->
-                                        Nothing
+                        voiceChatId : Call.CallId
+                        voiceChatId =
+                            Call.GuildRoomId guildId channelId
 
-                                    NotInCall ->
-                                        Nothing
+                        model3 : BackendModel
+                        model3 =
+                            { model2
+                                | connections =
+                                    SeqDict.update
+                                        sessionId
+                                        (Maybe.map
+                                            (NonemptyDict.insert
+                                                clientId
+                                                { connection | call = ConnectedToCall voiceChatId }
+                                            )
+                                        )
+                                        model2.connections
+                                , guilds =
+                                    if guildVoiceChatRoomHasOtherMembers guildId channelId clientId model then
+                                        model2.guilds
+
+                                    else
+                                        SeqDict.insert
+                                            guildId
+                                            { guild
+                                                | channels =
+                                                    SeqDict.insert
+                                                        channelId
+                                                        (LocalState.createChannelMessageBackend
+                                                            (CallStarted
+                                                                { startedAt = time
+                                                                , endedAt = Nothing
+                                                                , startedBy = userId
+                                                                , reactions = SeqDict.empty
+                                                                , timestampDrawings = Drawing.emptyDrawing
+                                                                , cardDrawings = Drawing.emptyDrawing
+                                                                }
+                                                            )
+                                                            channel
+                                                            |> Tuple.second
+                                                        )
+                                                        guild.channels
+                                            }
+                                            model2.guilds
+                            }
+                    in
+                    ( model3
+                    , Command.batch
+                        [ Broadcast.toGuildExcludingOne
+                            clientId
+                            guildId
+                            (Call.Server_Joining
+                                time
+                                { roomId = Call.GuildRoomId guildId channelId
+                                , otherClientId = ( userId, clientId )
+                                }
+                                |> Server_VoiceChatChange
+                                |> ServerChange
                             )
-                        |> (\l -> l ++ acc)
+                            model3
+                        , leaveCmd
+                        ]
+                    )
 
-                Nothing ->
-                    acc
-        )
-        []
-        model.connections
+                _ ->
+                    ( model, Command.none )
 
-
-{-| Is anyone other than the joining client already in (or connecting to) this
-call? Used to decide whether a join is starting a brand new call (and so should
-add a "started a call" message) or just joining an ongoing one.
--}
-isAnyoneElseInCall : Call.CallId -> Id UserId -> ClientId -> BackendModel -> Bool
-isAnyoneElseInCall roomId currentUserId currentClientId model =
-    SeqDict.toList model.connections
-        |> List.any
-            (\( sessionId2, connections ) ->
-                case SeqDict.get sessionId2 model.sessions of
-                    Just session ->
-                        NonemptyDict.toList connections
-                            |> List.any
-                                (\( clientId2, connection ) ->
-                                    (clientId2 /= currentClientId)
-                                        && (case connection.call of
-                                                ConnectedToCall otherRoomId ->
-                                                    isPeerInSameCall roomId currentUserId session.userId otherRoomId
-
-                                                ConnectingToCall otherRoomId ->
-                                                    isPeerInSameCall roomId currentUserId session.userId otherRoomId
-
-                                                NotInCall ->
-                                                    False
-                                           )
-                                )
-
-                    Nothing ->
-                        False
-            )
+        _ ->
+            ( model, Command.none )
 
 
-{-| Given the joining user's room and the peer's call state, decide whether
-the two are in the same logical call. For DMs, each side encodes the OTHER
-user in `DmRoomId`, so equality won't work directly — we compare DM channel
-ids instead.
--}
-isPeerInSameCall : Call.CallId -> Id UserId -> Id UserId -> Call.CallId -> Bool
-isPeerInSameCall myRoomId myUserId peerUserId peerCall =
-    let
-        (Call.DmRoomId myOther) =
-            myRoomId
-
-        (Call.DmRoomId peerOther) =
-            peerCall
-    in
-    DmChannelId.fromUserIds myUserId myOther == DmChannelId.fromUserIds peerUserId peerOther
-
-
-clientIdCurrentCallId : SessionId -> ClientId -> BackendModel -> CallStatus
-clientIdCurrentCallId sessionId clientId model =
-    case SeqDict.get sessionId model.connections of
-        Just connections2 ->
-            case NonemptyDict.get clientId connections2 of
-                Just connection ->
-                    connection.call
-
-                Nothing ->
-                    NotInCall
-
-        Nothing ->
-            NotInCall
-
-
-peerRoomId : Call.CallId -> Id UserId -> Id UserId -> Call.CallId
-peerRoomId roomId peerUserId joiningUserId =
-    case roomId of
-        Call.DmRoomId joinerOther ->
-            if peerUserId == joiningUserId then
-                -- Peer is another tab of the joiner: same DM other as joiner.
-                Call.DmRoomId joinerOther
-
-            else
-                -- Peer is the other DM party: from their view, the joiner is the other.
-                Call.DmRoomId joiningUserId
-
-
-voiceChatRoomHasOtherMembers : DmChannelId -> ClientId -> BackendModel -> Bool
-voiceChatRoomHasOtherMembers dmChannelId clientId model =
+dmVoiceChatRoomHasOtherMembers : DmChannelId -> ClientId -> BackendModel -> Bool
+dmVoiceChatRoomHasOtherMembers dmChannelId clientId model =
     SeqDict.filter
         (\sessionId2 connections ->
             case SeqDict.get sessionId2 model.sessions of
@@ -6978,17 +6991,33 @@ voiceChatRoomHasOtherMembers dmChannelId clientId model =
                                     (DmChannelId.fromUserIds otherUserId2 otherSession.userId == dmChannelId)
                                         && (clientId /= otherClientId)
 
-                                ConnectingToCall (Call.DmRoomId otherUserId2) ->
-                                    (DmChannelId.fromUserIds otherUserId2 otherSession.userId == dmChannelId)
-                                        && (clientId /= otherClientId)
-
-                                NotInCall ->
+                                _ ->
                                     False
                         )
                         connections
 
                 Nothing ->
                     False
+        )
+        model.connections
+        |> SeqDict.isEmpty
+        |> not
+
+
+guildVoiceChatRoomHasOtherMembers : Id GuildId -> Id ChannelId -> ClientId -> BackendModel -> Bool
+guildVoiceChatRoomHasOtherMembers guildId channelId clientId model =
+    SeqDict.filter
+        (\_ connections ->
+            NonemptyDict.any
+                (\otherClientId connection ->
+                    case connection.call of
+                        ConnectedToCall (Call.GuildRoomId otherGuildId otherChannelId) ->
+                            otherGuildId == guildId && otherChannelId == channelId && clientId /= otherClientId
+
+                        _ ->
+                            False
+                )
+                connections
         )
         model.connections
         |> SeqDict.isEmpty

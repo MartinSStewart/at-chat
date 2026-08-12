@@ -1112,9 +1112,6 @@ getVoiceChatData clientId session model =
                                 ( ConnectedToCall roomId, False ) ->
                                     getVoiceChatDataHelper roomId session otherSession otherClientId data.remoteCallData dict2
 
-                                ( ConnectingToCall roomId, False ) ->
-                                    getVoiceChatDataHelper roomId session otherSession otherClientId data.remoteCallData dict2
-
                                 _ ->
                                     dict2
                         )
