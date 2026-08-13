@@ -759,6 +759,7 @@ type alias LocalUser =
     , devicePixelRatio : Float
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+    , emojiData : Maybe Emoji.CachedEmojiData
     }
 
 

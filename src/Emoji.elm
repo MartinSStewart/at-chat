@@ -14,6 +14,7 @@ module Emoji exposing
     , emojiButtonId
     , emojiWithSkinTone
     , emojisInText
+    , firstShortName
     , fromString
     , heart
     , isPressed
@@ -76,6 +77,16 @@ toString emoji =
 fromString : String -> UnicodeEmoji
 fromString =
     UnicodeEmoji
+
+
+{-| The name people type between colons to write this emoji. Emoji have several
+of these and the first is the one the emoji picker leads with, so it's the one
+worth showing when there's only room for a single name.
+-}
+firstShortName : CachedEmojiData -> UnicodeEmoji -> Maybe String
+firstShortName emojiData emoji =
+    SeqDict.get emoji emojiData.emojis
+        |> Maybe.andThen (\data -> List.head data.shortNames)
 
 
 view : UnicodeEmoji -> Element msg

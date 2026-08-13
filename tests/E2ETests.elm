@@ -297,6 +297,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.exportDmChannelTest normalConfig
     , E2EMisc.largePasteBecomesAttachment nonImageUploadConfig
     , E2EMisc.profileImageOpensDm normalConfig
+    , E2EMisc.reactionPopupNamesEmojiTest normalConfig
     , E2EMisc.timeOfDaySuggestionTest normalConfig
     , E2EMisc.timeOffsetSuggestionTest normalConfig
     , E2EMisc.noTimestampSuggestionTest normalConfig

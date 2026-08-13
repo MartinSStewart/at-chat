@@ -29,7 +29,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
-import Emoji exposing (EmojiOrCustomEmoji(..), EmojiOrSticker(..))
+import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji(..), EmojiOrSticker(..))
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
 import Game
@@ -158,6 +158,39 @@ setDevicePixelRatio devicePixelRatio model =
                                         in
                                         { local
                                             | localUser = { localUser | devicePixelRatio = devicePixelRatio }
+                                        }
+                                    )
+                                    loggedIn.localState
+                        }
+
+                NotLoggedIn _ ->
+                    model.loginStatus
+    }
+
+
+{-| LocalUser keeps a copy of the emoji data so that a reaction can name the emoji it
+shows without messageView needing another parameter. It arrives once, after the rest of
+the page has loaded, so both copies are filled in when it does.
+-}
+setEmojiData : CachedEmojiData -> LoadedFrontend -> LoadedFrontend
+setEmojiData emojiData model =
+    { model
+        | emojiData = Just emojiData
+        , loginStatus =
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    LoggedIn
+                        { loggedIn
+                            | localState =
+                                Local.mapModel
+                                    (\local ->
+                                        let
+                                            localUser : User.LocalUser
+                                            localUser =
+                                                local.localUser
+                                        in
+                                        { local
+                                            | localUser = { localUser | emojiData = Just emojiData }
                                         }
                                     )
                                     loggedIn.localState
@@ -384,7 +417,9 @@ initLoadedFrontend loading clientId time startupData loginResult =
         ( loginStatus, cmdB ) =
             case loginResult of
                 Ok loginData ->
-                    loadedInitHelper startupData loginData loading |> Tuple.mapFirst LoggedIn
+                    -- The emoji data is requested as part of this same load, so it's
+                    -- always still on its way at this point.
+                    loadedInitHelper startupData Nothing loginData loading |> Tuple.mapFirst LoggedIn
 
                 Err () ->
                     ( NotLoggedIn
@@ -449,14 +484,15 @@ initLoadedFrontend loading clientId time startupData loginResult =
 
 loadedInitHelper :
     Ports.StartupData
+    -> Maybe CachedEmojiData
     -> LoginData
     -> { a | windowSize : Coord CssPixels, navigationKey : Key, route : Route }
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-loadedInitHelper startupData loginData loading =
+loadedInitHelper startupData emojiData loginData loading =
     let
         local : LocalState
         local =
-            loginDataToLocalState startupData loginData
+            loginDataToLocalState startupData emojiData loginData
 
         loggedIn : LoggedIn2
         loggedIn =
@@ -552,8 +588,8 @@ loadedInitHelper startupData loginData loading =
     )
 
 
-loginDataToLocalState : Ports.StartupData -> LoginData -> LocalState
-loginDataToLocalState startupData loginData =
+loginDataToLocalState : Ports.StartupData -> Maybe CachedEmojiData -> LoginData -> LocalState
+loginDataToLocalState startupData emojiData loginData =
     { adminData =
         case loginData.adminData of
             IsAdminLoginData adminData ->
@@ -580,6 +616,7 @@ loginDataToLocalState startupData loginData =
         , devicePixelRatio = startupData.devicePixelRatio
         , stickers = loginData.stickers
         , customEmojis = loginData.customEmojis
+        , emojiData = emojiData
         }
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
@@ -3977,7 +4014,7 @@ updateLoaded msg model =
         GotEmojiData result ->
             case result of
                 Ok emojiData ->
-                    ( { model | emojiData = Just emojiData }, Command.none )
+                    ( setEmojiData emojiData model, Command.none )
 
                 Err error ->
                     let
@@ -6755,7 +6792,7 @@ updateLoadedFromBackend msg model =
                         LoginSuccess loginData ->
                             let
                                 ( loggedIn, cmdA ) =
-                                    loadedInitHelper model.startupData loginData model
+                                    loadedInitHelper model.startupData model.emojiData loginData model
 
                                 ( model2, cmdB ) =
                                     FrontendExtra.routeRequest
@@ -7452,7 +7489,7 @@ updateLoadedFromBackend msg model =
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
-                                | localState = loginDataToLocalState model.startupData loginData |> Local.init
+                                | localState = loginDataToLocalState model.startupData model.emojiData loginData |> Local.init
                                 , isReloading = False
                               }
                             , Command.none
