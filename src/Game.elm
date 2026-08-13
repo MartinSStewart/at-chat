@@ -237,13 +237,18 @@ wordSpellingScrollPosition matchId model =
 
 routeRequest :
     Time.Posix
-    -> Id UserId
+    -> LocalUser
     -> GuildOrDmId
     -> Id ChannelMessageId
     -> SeqDict (Id ChannelMessageId) MatchData
     -> SeqDict GuildOrDmId Model
     -> SeqDict GuildOrDmId Model
-routeRequest time currentUserId guildOrDmId matchId matchData models =
+routeRequest time localUser guildOrDmId matchId matchData models =
+    let
+        currentUserId : Id UserId
+        currentUserId =
+            localUser.session.userId
+    in
     case SeqDict.get matchId matchData of
         Just (MatchData matchData2) ->
             SeqDict.update
@@ -299,7 +304,7 @@ routeRequest time currentUserId guildOrDmId matchId matchData models =
                                                     maybeGame
 
                                                 Nothing ->
-                                                    SheepGame.initGame currentUserId setup shared
+                                                    SheepGame.initGame localUser setup shared
                                                         |> SheepGame_Game
                                                         |> Just
                                         )
@@ -371,14 +376,19 @@ type OutMsg
 update :
     Time.Posix
     -> Coord CssPixels
-    -> Id UserId
+    -> LocalUser
     -> GuildOrDmId
     -> Msg
     -> Id ChannelMessageId
     -> Maybe ( Id ChannelMessageId, MatchData )
     -> Model
     -> ( Model, List OutMsg )
-update time windowSize currentUserId guildOrDmId msg newMatchId maybeMatch model =
+update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
+    let
+        currentUserId : Id UserId
+        currentUserId =
+            localUser.session.userId
+    in
     case msg of
         PressedShareMatch matchId ->
             ( model, [ OutLocalChange (CreatePublicLink matchId EmptyPlaceholder) ] )
@@ -549,7 +559,7 @@ update time windowSize currentUserId guildOrDmId msg newMatchId maybeMatch model
                         ( FrontendGameData_SheepGame setup _ cache, Just (SheepGame_Game game) ) ->
                             let
                                 ( game2, maybeAction ) =
-                                    SheepGame.updateGame setup cache sheepMsg game
+                                    SheepGame.updateGame localUser setup cache sheepMsg game
                             in
                             ( { model | startedGames = SeqDict.insert matchId (SheepGame_Game game2) model.startedGames }
                             , case maybeAction of
@@ -575,7 +585,7 @@ update time windowSize currentUserId guildOrDmId msg newMatchId maybeMatch model
             let
                 ( gameOrSetup, maybeSetup ) =
                     SheepGame.updateSetup
-                        currentUserId
+                        localUser
                         sheepMsg
                         (case model.setup of
                             SheepGame_Setup setup ->
@@ -803,7 +813,7 @@ view currentTime windowSize showMemberTab maybeDragging lastCopied localUser gui
                         FrontendGameData_SheepGame setup _ cache ->
                             case game of
                                 SheepGame_Game game2 ->
-                                    SheepGame.gameView windowSize localUser setup cache game2
+                                    SheepGame.gameView currentTime windowSize localUser setup cache game2
                                         |> Ui.map SheepGameMsg
 
                                 _ ->
@@ -1110,9 +1120,13 @@ pressedKey matchId key (MatchData matchData) maybeGameModel =
         |> Just
 
 
-gameChangeFromServer : Time.Posix -> Id UserId -> LocalChange -> Maybe Model -> Maybe Model
-gameChangeFromServer time currentUserId gameChange maybeModel =
+gameChangeFromServer : Time.Posix -> LocalUser -> LocalChange -> Maybe Model -> Maybe Model
+gameChangeFromServer time localUser gameChange maybeModel =
     let
+        currentUserId : Id UserId
+        currentUserId =
+            localUser.session.userId
+
         model : Model
         model =
             Maybe.withDefault initModel maybeModel
@@ -1224,7 +1238,7 @@ gameChangeFromServer time currentUserId gameChange maybeModel =
                         | startedGames =
                             SeqDict.insert
                                 matchId
-                                (SheepGame_Game (SheepGame.initGame currentUserId setup SheepGame.initShared))
+                                (SheepGame_Game (SheepGame.initGame localUser setup SheepGame.initShared))
                                 model.startedGames
                     }
 

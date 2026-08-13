@@ -2160,7 +2160,7 @@ updateLoaded msg model =
                                     Game.update
                                         model.time
                                         model.windowSize
-                                        local.localUser.session.userId
+                                        local.localUser
                                         gamesTab.guildOrDmId
                                         gameMsg
                                         gamesTab.newMatchId
@@ -7412,7 +7412,7 @@ updateLoadedFromBackend msg model =
                                         updatedGameModel =
                                             Game.gameChangeFromServer
                                                 model.time
-                                                local.localUser.session.userId
+                                                local.localUser
                                                 gameChange
                                                 (SeqDict.get guildOrDmId loggedIn2.games)
                                     in

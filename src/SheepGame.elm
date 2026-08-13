@@ -1,6 +1,7 @@
 module SheepGame exposing
     ( Action(..)
     , ActionWithTime
+    , Content
     , GameData
     , GameMsg(..)
     , LocalChange(..)
@@ -38,21 +39,31 @@ import Dict exposing (Dict)
 import Effect.Browser.Dom as Dom
 import Effect.Time as Time
 import Go
+import Html
 import Id exposing (Id, UserId)
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MyUi
+import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
-import String.Nonempty exposing (NonemptyString)
+import SeqSet
+import String.Nonempty
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
 import Ui.Prose
-import User exposing (LocalUser)
+import User exposing (FrontendUser, LocalUser)
+
+
+{-| A question or an answer. The same shape a message's text has, so questions and
+answers get the formatting, mentions and emoji that everything else here does.
+-}
+type alias Content =
+    Nonempty (RichText (Id UserId))
 
 
 type alias ValidatedSetup =
-    { questions : Nonempty NonemptyString
+    { questions : Nonempty Content
     , createdBy : Id UserId
     }
 
@@ -75,7 +86,7 @@ no amount of string comparison is going to work that out.
 -}
 type alias Shared =
     { phase : Phase
-    , answers : SeqDict (Id UserId) (Array String)
+    , answers : SeqDict (Id UserId) (Array (Maybe Content))
     , groups : SeqDict ( Id UserId, Int ) String
     , notes : Dict Int String
     , questionsRevealed : Int
@@ -117,10 +128,11 @@ type GameMsg
     | PressedRevealScores
     | PressedShowNextQuestion
     | PressedHidePreviousQuestion
+    | NoOp
 
 
 type Action
-    = SubmittedAnswers (Array String)
+    = SubmittedAnswers (Array (Maybe Content))
     | LockedAnswers
     | ChangedGroup (Id UserId) Int String
     | ChangedNotes Int String
@@ -144,18 +156,55 @@ initSetup =
 
 {-| Someone opening a match they've already answered gets their own answers back in the
 boxes, so that reloading the page and pressing the button again doesn't replace them with
-a screen full of blanks.
+a screen full of blanks. They come back as the text that was typed to produce them, which
+is what the boxes take.
 -}
-initGame : Id UserId -> ValidatedSetup -> Shared -> GameData
-initGame currentUserId setup shared =
+initGame : LocalUser -> ValidatedSetup -> Shared -> GameData
+initGame localUser setup shared =
     { answerDrafts =
-        case SeqDict.get currentUserId shared.answers of
+        case SeqDict.get localUser.session.userId shared.answers of
             Just answers ->
-                answers
+                Array.map
+                    (\answer ->
+                        case answer of
+                            Just answer2 ->
+                                toSourceText localUser answer2
+
+                            Nothing ->
+                                ""
+                    )
+                    answers
 
             Nothing ->
                 Array.repeat (List.Nonempty.length setup.questions) ""
     }
+
+
+{-| Everyone whose name a mention could be written with.
+-}
+allUsers : LocalUser -> SeqDict (Id UserId) FrontendUser
+allUsers localUser =
+    SeqDict.insert
+        localUser.session.userId
+        (User.backendToFrontendForUser localUser.user)
+        localUser.otherUsers
+
+
+{-| Turn typed text into a question or answer. Blank text isn't either of those.
+-}
+parseContent : Time.Zone -> SeqDict (Id UserId) FrontendUser -> String -> Maybe Content
+parseContent timezone users text =
+    String.trim text
+        |> String.Nonempty.fromString
+        |> Maybe.map (RichText.fromNonemptyString timezone users)
+
+
+{-| The text someone would have typed to write this, so that an answer can be put back in
+the box it came from.
+-}
+toSourceText : LocalUser -> Content -> String
+toSourceText localUser content =
+    RichText.toString localUser.timezone False (allUsers localUser) content
 
 
 initShared : Shared
@@ -185,11 +234,11 @@ maxAnswerLength =
 
 {-| The host's questions, or a reason they can't be used yet.
 -}
-validateSetup : Id UserId -> SetupModel -> Result String ValidatedSetup
-validateSetup createdBy model =
+validateSetup : Time.Zone -> SeqDict (Id UserId) FrontendUser -> Id UserId -> SetupModel -> Result String ValidatedSetup
+validateSetup timezone users createdBy model =
     case
         Array.toList model.questions
-            |> List.filterMap (\question -> String.trim question |> String.Nonempty.fromString)
+            |> List.filterMap (parseContent timezone users)
             |> List.Nonempty.fromList
     of
         Just questions ->
@@ -199,8 +248,8 @@ validateSetup createdBy model =
             Err "Write at least one question before starting"
 
 
-updateSetup : Id UserId -> SetupMsg -> SetupModel -> ( SetupOrGame, Maybe ValidatedSetup )
-updateSetup createdBy msg model =
+updateSetup : LocalUser -> SetupMsg -> SetupModel -> ( SetupOrGame, Maybe ValidatedSetup )
+updateSetup localUser msg model =
     case msg of
         TypedQuestion index text ->
             ( Setup
@@ -238,9 +287,9 @@ updateSetup createdBy msg model =
             )
 
         PressedStartGame ->
-            case validateSetup createdBy model of
+            case validateSetup localUser.timezone (allUsers localUser) localUser.session.userId model of
                 Ok setup ->
-                    ( Game (initGame createdBy setup initShared), Just setup )
+                    ( Game (initGame localUser setup initShared), Just setup )
 
                 Err error ->
                     ( Setup { model | error = Just error }, Nothing )
@@ -250,12 +299,13 @@ updateSetup createdBy msg model =
 
 
 updateGame :
-    ValidatedSetup
+    LocalUser
+    -> ValidatedSetup
     -> Shared
     -> GameMsg
     -> GameData
     -> ( GameData, Maybe Action )
-updateGame setup shared msg model =
+updateGame localUser setup shared msg model =
     case msg of
         TypedAnswer index text ->
             ( { model | answerDrafts = Array.set index (String.left maxAnswerLength text) model.answerDrafts }
@@ -263,7 +313,13 @@ updateGame setup shared msg model =
             )
 
         PressedSubmitAnswers ->
-            ( model, Just (SubmittedAnswers model.answerDrafts) )
+            ( model
+            , Array.map
+                (parseContent localUser.timezone (allUsers localUser))
+                model.answerDrafts
+                |> SubmittedAnswers
+                |> Just
+            )
 
         PressedLockAnswers ->
             ( model, Just LockedAnswers )
@@ -288,6 +344,9 @@ updateGame setup shared msg model =
             ( model
             , max 0 (shared.questionsRevealed - 1) |> ChangedQuestionsRevealed |> Just
             )
+
+        NoOp ->
+            ( model, Nothing )
 
 
 {-| Everything the host is allowed to do and nobody else is. The backend replays the same
@@ -362,20 +421,28 @@ updateAction setup action shared =
 {-| Answers arrive from a client that might disagree with us about how many questions
 there are, so they're trimmed or padded to fit rather than trusted.
 -}
-padAnswers : Int -> Array String -> Array String
+padAnswers : Int -> Array (Maybe Content) -> Array (Maybe Content)
 padAnswers questionCount answers =
     List.range 0 (questionCount - 1)
-        |> List.map
-            (\index ->
-                Array.get index answers |> Maybe.withDefault "" |> String.trim |> String.left maxAnswerLength
-            )
+        |> List.map (\index -> Array.get index answers |> Maybe.withDefault Nothing)
         |> Array.fromList
+
+
+{-| What two answers have to share to count as the same answer. Rendering the text with
+no timezone and nobody's name keeps this identical everywhere it's worked out, which is
+what matters when the backend and every client have to reach the same grouping.
+-}
+answerKey : Content -> String
+answerKey content =
+    RichText.toString Time.utc False SeqDict.empty content
+        |> String.trim
+        |> String.toLower
 
 
 {-| The host's starting point for grouping: answers that already match once case and
 surrounding whitespace are ignored get the same label.
 -}
-autoGroup : ValidatedSetup -> SeqDict (Id UserId) (Array String) -> SeqDict ( Id UserId, Int ) String
+autoGroup : ValidatedSetup -> SeqDict (Id UserId) (Array (Maybe Content)) -> SeqDict ( Id UserId, Int ) String
 autoGroup setup answers =
     List.range 0 (List.Nonempty.length setup.questions - 1)
         |> List.concatMap
@@ -383,13 +450,9 @@ autoGroup setup answers =
                 SeqDict.toList answers
                     |> List.filterMap
                         (\( userId, userAnswers ) ->
-                            case Array.get questionIndex userAnswers of
+                            case Array.get questionIndex userAnswers |> Maybe.withDefault Nothing of
                                 Just answer ->
-                                    if String.trim answer == "" then
-                                        Nothing
-
-                                    else
-                                        Just ( userId, String.toLower (String.trim answer) )
+                                    Just ( userId, answerKey answer )
 
                                 Nothing ->
                                     Nothing
@@ -419,7 +482,7 @@ players shared =
     SeqDict.toList shared.answers
         |> List.filterMap
             (\( userId, answers ) ->
-                if List.any (\answer -> String.trim answer /= "") (Array.toList answers) then
+                if List.any (\answer -> answer /= Nothing) (Array.toList answers) then
                     Just userId
 
                 else
@@ -476,18 +539,11 @@ groupsForQuestion questionIndex shared =
             (\( ( group, userId ), rest ) -> ( group, userId :: List.map Tuple.second rest ))
 
 
-answerFor : Id UserId -> Int -> Shared -> Maybe String
+answerFor : Id UserId -> Int -> Shared -> Maybe Content
 answerFor userId questionIndex shared =
-    case SeqDict.get userId shared.answers |> Maybe.andThen (Array.get questionIndex) of
-        Just answer ->
-            if String.trim answer == "" then
-                Nothing
-
-            else
-                Just answer
-
-        Nothing ->
-            Nothing
+    SeqDict.get userId shared.answers
+        |> Maybe.andThen (Array.get questionIndex)
+        |> Maybe.withDefault Nothing
 
 
 setupView : Coord CssPixels -> SetupModel -> Element SetupMsg
@@ -570,16 +626,12 @@ questionInput isMobile index question =
         ]
 
 
-gameView : Coord CssPixels -> LocalUser -> ValidatedSetup -> Shared -> GameData -> Element GameMsg
-gameView windowSize localUser setup shared model =
+gameView : Time.Posix -> Coord CssPixels -> LocalUser -> ValidatedSetup -> Shared -> GameData -> Element GameMsg
+gameView time windowSize localUser setup shared model =
     let
         isMobile : Bool
         isMobile =
             MyUi.isMobileAlt windowSize
-
-        currentUserId : Id UserId
-        currentUserId =
-            localUser.session.userId
     in
     Ui.column
         [ Ui.spacing 16
@@ -594,18 +646,43 @@ gameView windowSize localUser setup shared model =
         ]
         (case shared.phase of
             Answering ->
-                answeringView currentUserId setup shared model
+                answeringView time localUser setup shared model
 
             Grouping ->
-                groupingView localUser setup shared
+                groupingView time localUser setup shared
 
             Revealing ->
-                revealingView localUser setup shared
+                revealingView time localUser setup shared
         )
 
 
-answeringView : Id UserId -> ValidatedSetup -> Shared -> GameData -> List (Element GameMsg)
-answeringView currentUserId setup shared model =
+{-| Questions and answers are drawn the same way a message is, minus the parts a game has
+no use for: nothing here has attachments and there's nothing to reveal a spoiler with.
+-}
+contentView : Time.Posix -> LocalUser -> Content -> Element GameMsg
+contentView time localUser content =
+    RichText.preview
+        (\_ -> NoOp)
+        { revealedSpoilers = SeqSet.empty
+        , users = allUsers localUser
+        , attachedFiles = SeqDict.empty
+        , customEmojis = localUser.customEmojis
+        , domainWhitelist = localUser.user.domainWhitelist
+        , timezone = localUser.timezone
+        , time = time
+        }
+        content
+        |> Html.span []
+        |> Ui.html
+
+
+answeringView : Time.Posix -> LocalUser -> ValidatedSetup -> Shared -> GameData -> List (Element GameMsg)
+answeringView time localUser setup shared model =
+    let
+        currentUserId : Id UserId
+        currentUserId =
+            localUser.session.userId
+    in
     [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Answer like everyone else")
     , Ui.Prose.paragraph
         [ Ui.Font.color MyUi.font3 ]
@@ -620,12 +697,13 @@ answeringView currentUserId setup shared model =
                         label =
                             MyUi.label
                                 (Dom.id ("sheepGame_answer_" ++ String.fromInt index))
-                                [ Ui.Font.weight 600 ]
-                                (Ui.text (String.Nonempty.toString question))
+                                [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
+                                (Ui.text "Your answer")
                     in
                     Ui.column
                         [ Ui.spacing 4 ]
-                        [ label.element
+                        [ Ui.el [ Ui.Font.weight 600 ] (contentView time localUser question)
+                        , label.element
                         , Ui.Input.text
                             [ Ui.border 1
                             , Ui.borderColor MyUi.inputBorder
@@ -680,8 +758,8 @@ answeredCountText count =
 
 {-| The host decides which answers count as the same thing. Everyone else waits.
 -}
-groupingView : LocalUser -> ValidatedSetup -> Shared -> List (Element GameMsg)
-groupingView localUser setup shared =
+groupingView : Time.Posix -> LocalUser -> ValidatedSetup -> Shared -> List (Element GameMsg)
+groupingView time localUser setup shared =
     if isHost localUser.session.userId setup then
         [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Group the answers")
         , Ui.Prose.paragraph
@@ -690,7 +768,7 @@ groupingView localUser setup shared =
         , Ui.column
             [ Ui.spacing 16 ]
             (List.Nonempty.toList setup.questions
-                |> List.indexedMap (groupingQuestionView localUser shared)
+                |> List.indexedMap (groupingQuestionView time localUser shared)
             )
         , MyUi.simpleButton
             (Dom.id "sheepGame_revealScores")
@@ -706,8 +784,8 @@ groupingView localUser setup shared =
         ]
 
 
-groupingQuestionView : LocalUser -> Shared -> Int -> NonemptyString -> Element GameMsg
-groupingQuestionView localUser shared questionIndex question =
+groupingQuestionView : Time.Posix -> LocalUser -> Shared -> Int -> Content -> Element GameMsg
+groupingQuestionView time localUser shared questionIndex question =
     let
         notesLabel : { element : Element GameMsg, id : Ui.Input.Label }
         notesLabel =
@@ -718,14 +796,14 @@ groupingQuestionView localUser shared questionIndex question =
     in
     Ui.column
         [ Ui.spacing 8 ]
-        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text (String.Nonempty.toString question))
+        [ Ui.el [ Ui.Font.weight 600 ] (contentView time localUser question)
         , Ui.column
             [ Ui.spacing 4 ]
             (players shared
                 |> List.filterMap
                     (\userId ->
                         Maybe.map
-                            (groupingAnswerView localUser questionIndex userId shared)
+                            (groupingAnswerView time localUser questionIndex userId shared)
                             (answerFor userId questionIndex shared)
                     )
             )
@@ -748,8 +826,8 @@ groupingQuestionView localUser shared questionIndex question =
         ]
 
 
-groupingAnswerView : LocalUser -> Int -> Id UserId -> Shared -> String -> Element GameMsg
-groupingAnswerView localUser questionIndex userId shared answer =
+groupingAnswerView : Time.Posix -> LocalUser -> Int -> Id UserId -> Shared -> Content -> Element GameMsg
+groupingAnswerView time localUser questionIndex userId shared answer =
     let
         groupLabel2 : { element : Element GameMsg, id : Ui.Input.Label }
         groupLabel2 =
@@ -777,12 +855,12 @@ groupingAnswerView localUser questionIndex userId shared answer =
                 }
             )
         , Ui.el [ Ui.Font.weight 600 ] (Ui.text (User.toStringAlt userId localUser))
-        , Ui.text answer
+        , contentView time localUser answer
         ]
 
 
-revealingView : LocalUser -> ValidatedSetup -> Shared -> List (Element GameMsg)
-revealingView localUser setup shared =
+revealingView : Time.Posix -> LocalUser -> ValidatedSetup -> Shared -> List (Element GameMsg)
+revealingView time localUser setup shared =
     let
         questionCount : Int
         questionCount =
@@ -826,7 +904,7 @@ revealingView localUser setup shared =
         [ Ui.spacing 16 ]
         (List.Nonempty.toList setup.questions
             |> List.take shared.questionsRevealed
-            |> List.indexedMap (revealedQuestionView localUser shared)
+            |> List.indexedMap (revealedQuestionView time localUser shared)
             |> List.reverse
         )
     ]
@@ -849,11 +927,11 @@ scoreboardView localUser scores =
         )
 
 
-revealedQuestionView : LocalUser -> Shared -> Int -> NonemptyString -> Element msg
-revealedQuestionView localUser shared questionIndex question =
+revealedQuestionView : Time.Posix -> LocalUser -> Shared -> Int -> Content -> Element GameMsg
+revealedQuestionView time localUser shared questionIndex question =
     Ui.column
         [ Ui.spacing 4 ]
-        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text (String.Nonempty.toString question))
+        [ Ui.el [ Ui.Font.weight 600 ] (contentView time localUser question)
         , Ui.column
             [ Ui.spacing 2 ]
             (groupsForQuestion questionIndex shared
@@ -865,15 +943,22 @@ revealedQuestionView localUser shared questionIndex question =
                             [ Ui.el
                                 [ Ui.width (Ui.px 40), Ui.Font.bold ]
                                 (Ui.text ("+" ++ String.fromInt (List.length group)))
-                            , Ui.text
+                            , Ui.column
+                                [ Ui.spacing 2 ]
                                 (List.map
                                     (\userId ->
-                                        User.toStringAlt userId localUser
-                                            ++ ": "
-                                            ++ (answerFor userId questionIndex shared |> Maybe.withDefault "")
+                                        Ui.row
+                                            [ Ui.spacing 4 ]
+                                            [ Ui.text (User.toStringAlt userId localUser ++ ":")
+                                            , case answerFor userId questionIndex shared of
+                                                Just answer ->
+                                                    contentView time localUser answer
+
+                                                Nothing ->
+                                                    Ui.none
+                                            ]
                                     )
                                     group
-                                    |> String.join ", "
                                 )
                             ]
                     )
