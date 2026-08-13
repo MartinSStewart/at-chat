@@ -7344,7 +7344,6 @@ updateLoadedFromBackend msg model =
                                     ( loggedIn2
                                     , Call.serverChangeCmd
                                         voiceChatChange
-                                        model.clientId
                                         local.localUser.session.userId
                                         local.calls
                                         loggedIn2.voiceChat

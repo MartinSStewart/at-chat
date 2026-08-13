@@ -6860,11 +6860,19 @@ joinDmVoiceChat sessionId clientId time otherUserId model userId =
                     in
                     ( model3
                     , Command.batch
-                        [ Broadcast.toDmChannel
+                        [ Lamdera.sendToFrontend
+                            clientId
+                            (Call.Server_YouJoined time (Call.DmRoomId otherUserId)
+                                |> Server_VoiceChatChange
+                                |> ServerChange
+                                |> ChangeBroadcast
+                            )
+                        , Broadcast.toDmChannelExcludingOne
+                            clientId
                             userId
                             otherUserId
                             (\otherUserId2 ->
-                                Call.Server_Joined
+                                Call.Server_OtherJoined
                                     time
                                     { roomId = Call.DmRoomId otherUserId2
                                     , otherClientId = ( otherUserId2, clientId )
@@ -6954,9 +6962,17 @@ joinGuildVoiceChat sessionId clientId time guildId channelId model userId =
                     in
                     ( model3
                     , Command.batch
-                        [ Broadcast.toGuild
+                        [ Lamdera.sendToFrontend
+                            clientId
+                            (Call.Server_YouJoined time (Call.GuildRoomId guildId channelId)
+                                |> Server_VoiceChatChange
+                                |> ServerChange
+                                |> ChangeBroadcast
+                            )
+                        , Broadcast.toGuildExcludingOne
+                            clientId
                             guildId
-                            (Call.Server_Joined
+                            (Call.Server_OtherJoined
                                 time
                                 { roomId = Call.GuildRoomId guildId channelId
                                 , otherClientId = ( userId, clientId )

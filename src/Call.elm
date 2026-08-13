@@ -82,7 +82,8 @@ type LocalChange
 
 
 type ServerChange
-    = Server_Joined Time.Posix ConnectionId
+    = Server_YouJoined Time.Posix CallId
+    | Server_OtherJoined Time.Posix ConnectionId
     | Server_Left Time.Posix ConnectionId
     | Server_SetRemoteCallData ConnectionId RemoteCallData
 
@@ -1267,12 +1268,15 @@ leaveVoiceChatCmds model =
             Command.none
 
 
-serverChangeCmd : ServerChange -> ClientId -> Id UserId -> Local -> Model -> Command FrontendOnly toBackend msg
-serverChangeCmd change clientId _ local _ =
+serverChangeCmd : ServerChange -> Id UserId -> Local -> Model -> Command FrontendOnly toBackend msg
+serverChangeCmd change _ local _ =
     case change of
-        Server_Joined _ connectionId ->
-            case ( local.currentRoom, Tuple.second connectionId.otherClientId == clientId ) of
-                ( Just roomId, False ) ->
+        Server_YouJoined _ _ ->
+            Command.none
+
+        Server_OtherJoined _ connectionId ->
+            case local.currentRoom of
+                Just roomId ->
                     if roomId == connectionId.roomId then
                         toJs
                             (ToJs_PeerJoined
