@@ -422,19 +422,6 @@ layout model attributes child =
             :: Ui.id "elm-ui-root-id"
             :: Ui.height Ui.fill
             :: Ui.behindContent (Ui.html MyUi.css)
-            --:: Ui.behindContent
-            --    (Ui.html
-            --        (Html.node
-            --            "style"
-            --            []
-            --            [ Html.text
-            --                ("body { height: "
-            --                    ++ String.fromInt (Coord.yRaw model.windowSize)
-            --                    ++ "px !important; }"
-            --                )
-            --            ]
-            --        )
-            --    )
             :: Ui.behindContent
                 (Ui.html
                     (Html.node
@@ -682,7 +669,7 @@ fileDragOverlay loggedIn model =
                     MyUi.font1
 
                 else
-                    MyUi.errorColor
+                    MyUi.deleteButtonBackground
         in
         Ui.el
             [ Ui.height Ui.fill
@@ -703,7 +690,7 @@ fileDragOverlay loggedIn model =
                 Ui.text "Drop files anywhere to upload"
 
              else
-                Ui.text "Nowhere to put this file here"
+                Ui.text "You can't drop the file here"
             )
 
 

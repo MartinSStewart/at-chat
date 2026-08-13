@@ -7631,43 +7631,18 @@ view _ model =
                 in
                 case loaded.route of
                     HomePageRoute ->
-                        FrontendExtra.layout
-                            loaded
-                            [ Ui.background MyUi.background3
-                            , case loaded.loginStatus of
-                                LoggedIn loggedIn ->
-                                    let
-                                        local =
-                                            Local.model loggedIn.localState
-                                    in
-                                    case loggedIn.userOptions of
-                                        Just userOptions ->
-                                            UserOptions.view
-                                                (MyUi.isMobile loaded)
-                                                loggedIn.textInputFocus
-                                                loaded.time
-                                                local
-                                                loggedIn
-                                                loaded
-                                                userOptions
-                                                |> Ui.inFront
+                        case loaded.loginStatus of
+                            LoggedIn _ ->
+                                requiresLogin
+                                    (\loggedIn local ->
+                                        Pages.Guild.homePageLoggedInView NoDmChannelSelected loaded loggedIn local
+                                    )
 
-                                        Nothing ->
-                                            Ui.noAttr
-
-                                NotLoggedIn _ ->
-                                    Ui.noAttr
-                            ]
-                            (case loaded.loginStatus of
-                                LoggedIn loggedIn ->
-                                    Pages.Guild.homePageLoggedInView
-                                        NoDmChannelSelected
-                                        loaded
-                                        loggedIn
-                                        (Local.model loggedIn.localState)
-
-                                NotLoggedIn notLoggedIn ->
-                                    Ui.el
+                            NotLoggedIn notLoggedIn ->
+                                FrontendExtra.layout
+                                    loaded
+                                    [ Ui.background MyUi.background3 ]
+                                    (Ui.el
                                         [ Ui.inFront (Pages.Home.header isMobile loaded.route loaded.loginStatus)
                                         , Ui.height Ui.fill
                                         ]
@@ -7683,7 +7658,7 @@ view _ model =
                                             Nothing ->
                                                 Ui.Lazy.lazy Pages.Home.view windowWidth
                                         )
-                            )
+                                    )
 
                     AdminRoute _ ->
                         case ( loaded.loginStatus, loaded.loginType ) of
