@@ -17,9 +17,7 @@ import Bytes.Encode
 import Call exposing (RemoteCallData)
 import ChannelDescription
 import ChannelExport
-import Cloudflare
 import CustomEmoji exposing (CustomEmojiData)
-import Date exposing (Date)
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
@@ -252,10 +250,6 @@ init =
                 PrivateVapidKey "tmWabWMceLrqTcFCKWCX2Ifj-0L5vRjGz_ZwSyJUnLQ"
       , slackClientSecret = Nothing
       , openRouterKey = Nothing
-      , cloudflareRealtimeApiToken = Nothing
-      , cloudflareRealtimeAppId = Nothing
-      , cloudflareAccountId = Nothing
-      , cloudflareAnalyticsApiToken = Nothing
       , textEditor = TextEditor.initLocalState
       , discordUsers = SeqDict.empty
       , pendingDiscordCreateMessages = SeqDict.empty
@@ -283,55 +277,6 @@ init =
       }
     , Command.none
     )
-
-
-{-| Alert when estimated Cloudflare costs exceed this many US dollars per month.
--}
-cloudflareCostThresholdUsd : Float
-cloudflareCostThresholdUsd =
-    1
-
-
-{-| Query Cloudflare for this month's Realtime egress so we can alert if it's costing us money.
-Disabled (no-op) unless both the account id and analytics token have been configured by an admin.
--}
-checkCloudflareCost : Time.Posix -> BackendModel -> Command BackendOnly ToFrontend BackendMsg
-checkCloudflareCost time model =
-    case ( model.cloudflareAccountId, model.cloudflareAnalyticsApiToken ) of
-        ( Just accountId, Just analyticsToken ) ->
-            let
-                today : Date
-                today =
-                    Date.fromPosix Time.utc time
-            in
-            Cloudflare.monthlyEgressBytes
-                { accountId = accountId
-                , analyticsToken = analyticsToken
-                , startDate = Date.floor Date.Month today |> Date.toIsoString
-                , endDate = Date.toIsoString today
-                }
-                |> Task.attempt (GotCloudflareUsage time)
-
-        _ ->
-            Command.none
-
-
-{-| To avoid re-logging (and re-emailing about) the same overage every hour, only alert once per
-calendar month. We derive this from the existing log history rather than tracking extra state.
--}
-cloudflareCostAlreadyLoggedThisMonth : Time.Posix -> BackendModel -> Bool
-cloudflareCostAlreadyLoggedThisMonth time model =
-    Array.slice (Array.length model.logs - 1000) (Array.length model.logs) model.logs
-        |> Array.Extra.any
-            (\entry ->
-                case entry.log of
-                    Log.CloudflareCostExceeded _ _ ->
-                        (Time.toYear Time.utc entry.time == Time.toYear Time.utc time)
-                            && (Time.toMonth Time.utc entry.time == Time.toMonth Time.utc time)
-
-                    _ ->
-                        False
-            )
 
 
 subscriptions : BackendModel -> Subscription BackendOnly BackendMsg
@@ -716,60 +661,6 @@ update msg model =
 
                 Err _ ->
                     ( model, Command.none )
-
-        GotCloudflareSessionCreated sessionId clientId changeId time roomId offerSdp transceiverMids result ->
-            let
-                cmd : Command BackendOnly ToFrontend BackendMsg
-                cmd =
-                    Call.Local_Leave time
-                        |> Local_VoiceChatChange
-                        |> LocalChangeResponse changeId
-                        |> Lamdera.sendToFrontend clientId
-            in
-            case result of
-                Err error ->
-                    BackendExtra.addLogWithCmd time (Log.FailedCloudflareSessionCreate error) model cmd
-
-                Ok realtimeSessionId ->
-                    case ( model.cloudflareRealtimeApiToken, model.cloudflareRealtimeAppId ) of
-                        ( Just apiToken, Just cloudflareAppId ) ->
-                            ( model
-                            , Cloudflare.pushLocalTracks cloudflareAppId
-                                apiToken
-                                realtimeSessionId
-                                { offerSdp = offerSdp, transceiverMids = transceiverMids }
-                                |> Task.attempt (GotCloudflareSession sessionId clientId changeId time roomId realtimeSessionId)
-                            )
-
-                        _ ->
-                            ( model, cmd )
-
-        GotCloudflareSession sessionId clientId changeId time roomId realtimeSessionId result ->
-            handleGotCloudflareSession sessionId clientId changeId time roomId realtimeSessionId result model
-
-        GotCloudflarePullOffer time clientId changeId connectionId remoteSessionId trackNames result ->
-            let
-                cmd =
-                    FilledInByBackend (Result.mapError (\_ -> ()) result)
-                        |> Call.Local_PullTracks connectionId remoteSessionId trackNames
-                        |> Local_VoiceChatChange
-                        |> LocalChangeResponse changeId
-                        |> Lamdera.sendToFrontend clientId
-            in
-            case result of
-                Ok _ ->
-                    ( model, cmd )
-
-                Err error ->
-                    BackendExtra.addLogWithCmd time (Log.FailedCloudflarePullOffer error) model cmd
-
-        GotCloudflareRenegotiateAck clientId changeId sdp result ->
-            ( model
-            , Call.Local_RenegotiateAnswer sdp (FilledInByBackend (Result.mapError (\_ -> ()) result))
-                |> Local_VoiceChatChange
-                |> LocalChangeResponse changeId
-                |> Lamdera.sendToFrontend clientId
-            )
 
         LinkDiscordUserStep1 linkedAt clientId userId auth result ->
             case result of
@@ -1804,36 +1695,9 @@ update msg model =
                     , connections = List.foldl SeqDict.remove model.connections expiredSessions
                     , sessions = List.foldl SeqDict.remove model.sessions expiredSessions
                 }
-            , Command.batch
-                [ Discord.getStickerPacksPayload
-                    |> DiscordSync.http model.serverSecret
-                    |> Task.attempt (GotDiscordStandardStickerPacks time)
-                , checkCloudflareCost time model
-                ]
-            )
-
-        GotCloudflareUsage time result ->
-            case result of
-                Ok egressBytes ->
-                    let
-                        cost : Float
-                        cost =
-                            Cloudflare.estimatedMonthlyCostUsd egressBytes
-                    in
-                    if cost > cloudflareCostThresholdUsd && not (cloudflareCostAlreadyLoggedThisMonth time model) then
-                        BackendExtra.addLog time (Log.CloudflareCostExceeded cost egressBytes) model
-
-                    else
-                        ( model, Command.none )
-
-                Err _ ->
-                    ( model, Command.none )
-
-        GotCloudflareEgressForAdmin clientId result ->
-            ( model
-            , Pages.Admin.CloudflareEgressResponse result
-                |> AdminToFrontend
-                |> Lamdera.sendToFrontend clientId
+            , Discord.getStickerPacksPayload
+                |> DiscordSync.http model.serverSecret
+                |> Task.attempt (GotDiscordStandardStickerPacks time)
             )
 
         GotDiscordStandardStickerPacks time result ->
@@ -1942,7 +1806,7 @@ update msg model =
                 Err error ->
                     BackendExtra.addLogWithCmd time (Log.FailedToReloadDiscordGuild guildId error) model responseCmd
 
-        GotRustServerFileUpload fileHash fileSize2 maybeImageSize ->
+        Rpc_GotFileUpload fileHash fileSize2 maybeImageSize ->
             ( { model
                 | files =
                     SeqDict.insert
@@ -1978,6 +1842,14 @@ update msg model =
               }
             , Command.none
             )
+
+        Rpc_UserJoinedCall time sessionId clientId userId callId ->
+            case callId of
+                Call.DmRoomId otherUserId ->
+                    joinDmVoiceChat sessionId clientId time otherUserId model userId
+
+                Call.GuildRoomId guildId channelId ->
+                    joinGuildVoiceChat sessionId clientId time guildId channelId model userId
 
 
 gotDiscordStickers :
@@ -2199,31 +2071,47 @@ disconnectClient time sessionId clientId model =
     case ( Pages.Admin.disconnectClient sessionId clientId model.connections, SeqDict.get sessionId model.sessions ) of
         ( Ok ( removedConnection, connections ), Just session ) ->
             let
-                helper otherUserId =
-                    let
-                        dmChannelId =
-                            DmChannelId.fromUserIds session.userId otherUserId
-                    in
-                    if voiceChatRoomHasOtherMembers dmChannelId clientId model then
-                        model.dmChannels
-
-                    else
-                        SeqDict.updateIfExists dmChannelId (LocalState.markCallMessageAsEndedBackend time) model.dmChannels
-
                 model2 =
-                    { model
-                        | connections = connections
-                        , dmChannels =
-                            case removedConnection.call of
-                                ConnectingToCall (Call.DmRoomId otherUserId) ->
-                                    helper otherUserId
+                    case removedConnection.call of
+                        ConnectedToCall (Call.DmRoomId otherUserId) ->
+                            let
+                                dmChannelId =
+                                    DmChannelId.fromUserIds session.userId otherUserId
+                            in
+                            { model
+                                | connections = connections
+                                , dmChannels =
+                                    if dmVoiceChatRoomHasOtherMembers dmChannelId clientId model then
+                                        model.dmChannels
 
-                                ConnectedToCall (Call.DmRoomId otherUserId) _ ->
-                                    helper otherUserId
+                                    else
+                                        SeqDict.updateIfExists dmChannelId (LocalState.markCallMessageAsEndedBackend time) model.dmChannels
+                            }
 
-                                NotInCall ->
-                                    model.dmChannels
-                    }
+                        ConnectedToCall (Call.GuildRoomId guildId channelId) ->
+                            { model
+                                | connections = connections
+                                , guilds =
+                                    if guildVoiceChatRoomHasOtherMembers guildId channelId clientId model then
+                                        model.guilds
+
+                                    else
+                                        SeqDict.updateIfExists
+                                            guildId
+                                            (\guild ->
+                                                { guild
+                                                    | channels =
+                                                        SeqDict.updateIfExists
+                                                            channelId
+                                                            (LocalState.markCallMessageAsEndedBackend time)
+                                                            guild.channels
+                                                }
+                                            )
+                                            model.guilds
+                            }
+
+                        NotInCall ->
+                            model
             in
             ( model2
             , Command.batch
@@ -2234,7 +2122,7 @@ disconnectClient time sessionId clientId model =
                     (Server_ClientDisconnected session.sessionIdHash clientId |> ServerChange)
                     model2
                 , case removedConnection.call of
-                    ConnectingToCall (Call.DmRoomId otherUserId) ->
+                    ConnectedToCall (Call.DmRoomId otherUserId) ->
                         Broadcast.toDmChannel
                             session.userId
                             otherUserId
@@ -2248,17 +2136,16 @@ disconnectClient time sessionId clientId model =
                             )
                             model2
 
-                    ConnectedToCall (Call.DmRoomId otherUserId) _ ->
-                        Broadcast.toDmChannel
-                            session.userId
-                            otherUserId
-                            (\otherUserId2 ->
-                                Call.Server_Left
-                                    time
-                                    { roomId = Call.DmRoomId otherUserId2
-                                    , otherClientId = ( session.userId, clientId )
-                                    }
-                                    |> Server_VoiceChatChange
+                    ConnectedToCall (Call.GuildRoomId guildId channelId) ->
+                        Broadcast.toGuild
+                            guildId
+                            (Call.Server_Left
+                                time
+                                { roomId = Call.GuildRoomId guildId channelId
+                                , otherClientId = ( session.userId, clientId )
+                                }
+                                |> Server_VoiceChatChange
+                                |> ServerChange
                             )
                             model2
 
@@ -6677,29 +6564,11 @@ handleVoiceChatChange :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
     case voiceMsg of
-        Call.Local_Join _ voiceChatId _ ->
-            case voiceChatId of
-                Call.DmRoomId otherUserId ->
-                    BackendExtra.asDmUser
-                        model
-                        sessionId
-                        { otherUserId = otherUserId }
-                        (joinDmVoiceChat sessionId clientId time changeId otherUserId model)
-
         Call.Local_Leave _ ->
-            BackendExtra.asUser model sessionId (leaveVoice sessionId clientId time changeId model)
-
-        Call.Local_PublishTracks offerSdp mids _ ->
-            BackendExtra.asUser model sessionId (handlePublishTracks sessionId clientId changeId time offerSdp mids model)
-
-        Call.Local_PublishConnected ->
-            BackendExtra.asUser model sessionId (handlePublishConnected time sessionId clientId changeId model)
-
-        Call.Local_PullTracks connectionId remoteSessionId trackNames _ ->
-            BackendExtra.asUser model sessionId (handlePullTracks time sessionId clientId changeId connectionId remoteSessionId trackNames model)
-
-        Call.Local_RenegotiateAnswer answerSdp _ ->
-            BackendExtra.asUser model sessionId (handleRenegotiateAnswer sessionId clientId changeId answerSdp model)
+            BackendExtra.asUser
+                model
+                sessionId
+                (\session _ -> leaveVoice sessionId clientId time changeId model session.userId)
 
         Call.Local_SetRemoteCallData remoteCallData ->
             BackendExtra.asUser model sessionId (handleSetInputEnabled sessionId clientId changeId remoteCallData model)
@@ -6728,10 +6597,7 @@ handleSetInputEnabled sessionId clientId changeId remoteCallData model session _
                         NotInCall ->
                             Nothing
 
-                        ConnectingToCall roomId ->
-                            Just roomId
-
-                        ConnectedToCall roomId _ ->
+                        ConnectedToCall roomId ->
                             Just roomId
             in
             ( { model
@@ -6763,6 +6629,20 @@ handleSetInputEnabled sessionId clientId changeId remoteCallData model session _
                             )
                             model
 
+                    Just (Call.GuildRoomId guildId channelId) ->
+                        Broadcast.toGuildExcludingOne
+                            clientId
+                            guildId
+                            (Call.Server_SetRemoteCallData
+                                { roomId = Call.GuildRoomId guildId channelId
+                                , otherClientId = ( session.userId, clientId )
+                                }
+                                remoteCallData
+                                |> Server_VoiceChatChange
+                                |> ServerChange
+                            )
+                            model
+
                     Nothing ->
                         Command.none
                 ]
@@ -6778,10 +6658,9 @@ leaveVoice :
     -> Time.Posix
     -> ChangeId
     -> BackendModel
-    -> UserSession
-    -> BackendUser
+    -> Id UserId
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-leaveVoice sessionId clientId time changeId model session _ =
+leaveVoice sessionId clientId time changeId model userId =
     let
         maybeRoomId : Maybe Call.CallId
         maybeRoomId =
@@ -6793,10 +6672,7 @@ leaveVoice sessionId clientId time changeId model session _ =
                                 NotInCall ->
                                     Nothing
 
-                                ConnectingToCall roomId ->
-                                    Just roomId
-
-                                ConnectedToCall roomId _ ->
+                                ConnectedToCall roomId ->
                                     Just roomId
 
                         Nothing ->
@@ -6807,7 +6683,7 @@ leaveVoice sessionId clientId time changeId model session _ =
     in
     case maybeRoomId of
         Just roomId ->
-            leaveVoiceHelper sessionId clientId time (Just changeId) model session roomId
+            leaveVoiceHelper sessionId clientId time (Just changeId) model userId roomId
 
         Nothing ->
             ( model, BackendExtra.invalidChangeResponse changeId clientId )
@@ -6819,29 +6695,54 @@ leaveVoiceHelper :
     -> Time.Posix
     -> Maybe ChangeId
     -> BackendModel
-    -> UserSession
+    -> Id UserId
     -> Call.CallId
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-leaveVoiceHelper sessionId clientId time maybeChangeId model session roomId =
-    ( { model
-        | connections =
+leaveVoiceHelper sessionId clientId time maybeChangeId model userId roomId =
+    let
+        connections =
             SeqDict.updateIfExists
                 sessionId
                 (NonemptyDict.updateIfExists clientId (\connection -> { connection | call = NotInCall }))
                 model.connections
-        , dmChannels =
-            case roomId of
-                Call.DmRoomId otherUserId ->
-                    let
-                        dmChannelId =
-                            DmChannelId.fromUserIds session.userId otherUserId
-                    in
-                    if voiceChatRoomHasOtherMembers dmChannelId clientId model then
+    in
+    ( case roomId of
+        Call.DmRoomId otherUserId ->
+            let
+                dmChannelId =
+                    DmChannelId.fromUserIds userId otherUserId
+            in
+            { model
+                | connections = connections
+                , dmChannels =
+                    if dmVoiceChatRoomHasOtherMembers dmChannelId clientId model then
                         model.dmChannels
 
                     else
                         SeqDict.updateIfExists dmChannelId (LocalState.markCallMessageAsEndedBackend time) model.dmChannels
-      }
+            }
+
+        Call.GuildRoomId guildId channelId ->
+            { model
+                | connections = connections
+                , guilds =
+                    if guildVoiceChatRoomHasOtherMembers guildId channelId clientId model then
+                        model.guilds
+
+                    else
+                        SeqDict.updateIfExists
+                            guildId
+                            (\guild ->
+                                { guild
+                                    | channels =
+                                        SeqDict.updateIfExists
+                                            channelId
+                                            (LocalState.markCallMessageAsEndedBackend time)
+                                            guild.channels
+                                }
+                            )
+                            model.guilds
+            }
     , Command.batch
         [ case maybeChangeId of
             Just changeId ->
@@ -6854,15 +6755,29 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model session roomId =
             Call.DmRoomId otherUserId ->
                 Broadcast.toDmChannelExcludingOne
                     clientId
-                    session.userId
+                    userId
                     otherUserId
                     (\otherUserId2 ->
                         Call.Server_Left
                             time
                             { roomId = Call.DmRoomId otherUserId2
-                            , otherClientId = ( session.userId, clientId )
+                            , otherClientId = ( userId, clientId )
                             }
                             |> Server_VoiceChatChange
+                    )
+                    model
+
+            Call.GuildRoomId guildId channelId ->
+                Broadcast.toGuildExcludingOne
+                    clientId
+                    guildId
+                    (Call.Server_Left
+                        time
+                        { roomId = Call.GuildRoomId guildId channelId
+                        , otherClientId = ( userId, clientId )
+                        }
+                        |> Server_VoiceChatChange
+                        |> ServerChange
                     )
                     model
         ]
@@ -6873,16 +6788,20 @@ joinDmVoiceChat :
     SessionId
     -> ClientId
     -> Time.Posix
-    -> ChangeId
     -> Id UserId
     -> BackendModel
-    -> UserSession
-    -> BackendUser
-    -> BackendUser
-    -> DmChannelId
-    -> DmChannel
+    -> Id UserId
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ dmChannelId dmChannel =
+joinDmVoiceChat sessionId clientId time otherUserId model userId =
+    let
+        dmChannelId : DmChannelId
+        dmChannelId =
+            DmChannelId.fromUserIds userId otherUserId
+
+        dmChannel : DmChannel
+        dmChannel =
+            SeqDict.get dmChannelId model.dmChannels |> Maybe.withDefault DmChannel.backendInit
+    in
     case SeqDict.get sessionId model.connections of
         Just connections ->
             case NonemptyDict.get clientId connections of
@@ -6893,547 +6812,185 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                 NotInCall ->
                                     ( model, Command.none )
 
-                                ConnectingToCall oldVoiceChatId ->
-                                    leaveVoiceHelper sessionId clientId time Nothing model session oldVoiceChatId
-
-                                ConnectedToCall oldVoiceChatId _ ->
-                                    leaveVoiceHelper sessionId clientId time Nothing model session oldVoiceChatId
+                                ConnectedToCall oldVoiceChatId ->
+                                    leaveVoiceHelper sessionId clientId time Nothing model userId oldVoiceChatId
 
                         voiceChatId : Call.CallId
                         voiceChatId =
                             Call.DmRoomId otherUserId
-                    in
-                    case ( model2.cloudflareRealtimeApiToken, model2.cloudflareRealtimeAppId ) of
-                        ( Just _, Just _ ) ->
-                            let
-                                existingPeers : List Call.ExistingPeer
-                                existingPeers =
-                                    collectExistingPeers voiceChatId session.userId clientId model2
 
-                                model3 : BackendModel
-                                model3 =
-                                    { model2
-                                        | connections =
-                                            SeqDict.update
-                                                sessionId
-                                                (Maybe.map
-                                                    (NonemptyDict.insert
-                                                        clientId
-                                                        { connection | call = ConnectingToCall voiceChatId }
-                                                    )
-                                                )
-                                                model2.connections
-                                        , dmChannels =
-                                            -- Only the person who starts the call adds a "started a call"
-                                            -- message. Anyone joining an already ongoing call doesn't.
-                                            if isAnyoneElseInCall voiceChatId session.userId clientId model2 then
-                                                model2.dmChannels
-
-                                            else
-                                                SeqDict.insert
-                                                    dmChannelId
-                                                    (LocalState.createChannelMessageBackend
-                                                        (CallStarted
-                                                            { startedAt = time
-                                                            , endedAt = Nothing
-                                                            , startedBy = session.userId
-                                                            , reactions = SeqDict.empty
-                                                            , timestampDrawings = Drawing.emptyDrawing
-                                                            , cardDrawings = Drawing.emptyDrawing
-                                                            }
-                                                        )
-                                                        dmChannel
-                                                        |> Tuple.second
-                                                    )
-                                                    model2.dmChannels
-                                    }
-                            in
-                            ( model3
-                            , Command.batch
-                                [ FilledInByBackend (Ok existingPeers)
-                                    |> Call.Local_Join time voiceChatId
-                                    |> Local_VoiceChatChange
-                                    |> LocalChangeResponse changeId
-                                    |> Lamdera.sendToFrontend clientId
-                                , Broadcast.toDmChannelExcludingOne
-                                    clientId
-                                    session.userId
-                                    otherUserId
-                                    (\otherUserId2 ->
-                                        Call.Server_Joining
-                                            time
-                                            { roomId = Call.DmRoomId otherUserId2
-                                            , otherClientId = ( otherUserId2, clientId )
-                                            }
-                                            |> Server_VoiceChatChange
-                                    )
-                                    model3
-                                , leaveCmd
-                                ]
-                            )
-
-                        _ ->
-                            ( model2
-                            , Command.batch
-                                [ FilledInByBackend (Err ())
-                                    |> Call.Local_Join time voiceChatId
-                                    |> Local_VoiceChatChange
-                                    |> LocalChangeResponse changeId
-                                    |> Lamdera.sendToFrontend clientId
-                                , leaveCmd
-                                ]
-                            )
-
-                Nothing ->
-                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-        Nothing ->
-            ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-
-collectExistingPeers : Call.CallId -> Id UserId -> ClientId -> BackendModel -> List Call.ExistingPeer
-collectExistingPeers roomId currentUserId currentClientId model =
-    SeqDict.foldl
-        (\sessionId2 connections acc ->
-            case SeqDict.get sessionId2 model.sessions of
-                Just session ->
-                    NonemptyDict.toList connections
-                        |> List.filterMap
-                            (\( clientId2, connection ) ->
-                                case connection.call of
-                                    -- Only list peers whose RTCPeerConnection has
-                                    -- connected to Cloudflare; their tracks aren't
-                                    -- pullable before that.
-                                    ConnectedToCall otherRoomId sfu ->
-                                        if
-                                            isPeerInSameCall roomId currentUserId session.userId otherRoomId
-                                                && (clientId2 /= currentClientId)
-                                                && sfu.pullTracksReady
-                                        then
-                                            Just
-                                                { connectionId =
-                                                    { roomId = roomId
-                                                    , otherClientId = ( session.userId, clientId2 )
-                                                    }
-                                                , sessionId = sfu.sessionId
-                                                , trackNames = sfu.trackNames
-                                                }
-
-                                        else
-                                            Nothing
-
-                                    ConnectingToCall _ ->
-                                        Nothing
-
-                                    NotInCall ->
-                                        Nothing
-                            )
-                        |> (\l -> l ++ acc)
-
-                Nothing ->
-                    acc
-        )
-        []
-        model.connections
-
-
-{-| Is anyone other than the joining client already in (or connecting to) this
-call? Used to decide whether a join is starting a brand new call (and so should
-add a "started a call" message) or just joining an ongoing one.
--}
-isAnyoneElseInCall : Call.CallId -> Id UserId -> ClientId -> BackendModel -> Bool
-isAnyoneElseInCall roomId currentUserId currentClientId model =
-    SeqDict.toList model.connections
-        |> List.any
-            (\( sessionId2, connections ) ->
-                case SeqDict.get sessionId2 model.sessions of
-                    Just session ->
-                        NonemptyDict.toList connections
-                            |> List.any
-                                (\( clientId2, connection ) ->
-                                    (clientId2 /= currentClientId)
-                                        && (case connection.call of
-                                                ConnectedToCall otherRoomId _ ->
-                                                    isPeerInSameCall roomId currentUserId session.userId otherRoomId
-
-                                                ConnectingToCall otherRoomId ->
-                                                    isPeerInSameCall roomId currentUserId session.userId otherRoomId
-
-                                                NotInCall ->
-                                                    False
-                                           )
-                                )
-
-                    Nothing ->
-                        False
-            )
-
-
-{-| Given the joining user's room and the peer's call state, decide whether
-the two are in the same logical call. For DMs, each side encodes the OTHER
-user in `DmRoomId`, so equality won't work directly — we compare DM channel
-ids instead.
--}
-isPeerInSameCall : Call.CallId -> Id UserId -> Id UserId -> Call.CallId -> Bool
-isPeerInSameCall myRoomId myUserId peerUserId peerCall =
-    let
-        (Call.DmRoomId myOther) =
-            myRoomId
-
-        (Call.DmRoomId peerOther) =
-            peerCall
-    in
-    DmChannelId.fromUserIds myUserId myOther == DmChannelId.fromUserIds peerUserId peerOther
-
-
-handlePublishTracks :
-    SessionId
-    -> ClientId
-    -> ChangeId
-    -> Time.Posix
-    -> Cloudflare.Sdp
-    -> List String
-    -> BackendModel
-    -> UserSession
-    -> BackendUser
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handlePublishTracks sessionId clientId changeId time offerSdp transceiverMids model _ _ =
-    case ( model.cloudflareRealtimeApiToken, model.cloudflareRealtimeAppId ) of
-        ( Just apiToken, Just cloudflareAppId ) ->
-            case clientIdCurrentCallId sessionId clientId model of
-                ConnectingToCall roomId ->
-                    ( model
-                    , Cloudflare.createSession cloudflareAppId apiToken
-                        |> Task.attempt (GotCloudflareSessionCreated sessionId clientId changeId time roomId offerSdp transceiverMids)
-                    )
-
-                ConnectedToCall _ _ ->
-                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-                NotInCall ->
-                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-        _ ->
-            ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-
-clientIdCurrentCallId : SessionId -> ClientId -> BackendModel -> CallStatus
-clientIdCurrentCallId sessionId clientId model =
-    case SeqDict.get sessionId model.connections of
-        Just connections2 ->
-            case NonemptyDict.get clientId connections2 of
-                Just connection ->
-                    connection.call
-
-                Nothing ->
-                    NotInCall
-
-        Nothing ->
-            NotInCall
-
-
-handleGotCloudflareSession :
-    SessionId
-    -> ClientId
-    -> ChangeId
-    -> Time.Posix
-    -> Call.CallId
-    -> Cloudflare.RealtimeSessionId
-    -> Result Http.Error Cloudflare.PushTracksResult
-    -> BackendModel
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleGotCloudflareSession sessionId clientId changeId time _ cfSessionId result model =
-    case result of
-        Err error ->
-            BackendExtra.addLogWithCmd
-                time
-                (Log.FailedCloudflarePushLocalTracks error)
-                model
-                (Call.Local_Leave time
-                    |> Local_VoiceChatChange
-                    |> LocalChangeResponse changeId
-                    |> Lamdera.sendToFrontend clientId
-                )
-
-        Ok push ->
-            case clientIdCurrentCallId sessionId clientId model of
-                ConnectedToCall _ _ ->
-                    ( model, Command.none )
-
-                ConnectingToCall callId ->
-                    let
-                        model2 : BackendModel
-                        model2 =
-                            { model
+                        model3 : BackendModel
+                        model3 =
+                            { model2
                                 | connections =
                                     SeqDict.update
                                         sessionId
                                         (Maybe.map
-                                            (NonemptyDict.updateIfExists
+                                            (NonemptyDict.insert
                                                 clientId
-                                                (\connection ->
-                                                    { connection
-                                                        | call =
-                                                            ConnectedToCall
-                                                                callId
-                                                                { sessionId = cfSessionId
-                                                                , trackNames = push.trackNames
-
-                                                                -- Not connected to Cloudflare yet. We must NOT
-                                                                -- advertise these tracks for pulling until the
-                                                                -- publisher's RTCPeerConnection actually connects
-                                                                -- and starts sending packets, otherwise pulls fail
-                                                                -- with not_found_track_error. The publisher signals
-                                                                -- readiness via Local_PublishConnected.
-                                                                , pullTracksReady = False
-                                                                }
-                                                    }
-                                                )
+                                                { connection | call = ConnectedToCall voiceChatId }
                                             )
                                         )
-                                        model.connections
+                                        model2.connections
+                                , dmChannels =
+                                    if dmVoiceChatRoomHasOtherMembers dmChannelId clientId model2 then
+                                        model2.dmChannels
+
+                                    else
+                                        SeqDict.insert
+                                            dmChannelId
+                                            (LocalState.createChannelMessageBackend
+                                                (CallStarted
+                                                    { startedAt = time
+                                                    , endedAt = Nothing
+                                                    , startedBy = userId
+                                                    , reactions = SeqDict.empty
+                                                    , timestampDrawings = Drawing.emptyDrawing
+                                                    , cardDrawings = Drawing.emptyDrawing
+                                                    }
+                                                )
+                                                dmChannel
+                                                |> Tuple.second
+                                            )
+                                            model2.dmChannels
                             }
                     in
-                    ( model2
-                    , Call.Local_PublishTracks push.answerSdp
-                        []
-                        (FilledInByBackend
-                            { answerSdp = push.answerSdp
-                            , sessionId = cfSessionId
-                            , trackNames = push.trackNames
-                            }
-                        )
-                        |> Local_VoiceChatChange
-                        |> LocalChangeResponse changeId
-                        |> Lamdera.sendToFrontend clientId
+                    ( model3
+                    , Command.batch
+                        [ Lamdera.sendToFrontend
+                            clientId
+                            (Call.Server_YouJoined time (Call.DmRoomId otherUserId)
+                                |> Server_VoiceChatChange
+                                |> ServerChange
+                                |> ChangeBroadcast
+                            )
+                        , Broadcast.toDmChannelExcludingOne
+                            clientId
+                            userId
+                            otherUserId
+                            (\otherUserId2 ->
+                                Call.Server_OtherJoined
+                                    time
+                                    { roomId = Call.DmRoomId otherUserId2
+                                    , otherClientId = ( otherUserId2, clientId )
+                                    }
+                                    |> Server_VoiceChatChange
+                            )
+                            model3
+                        , leaveCmd
+                        ]
                     )
 
-                NotInCall ->
+                Nothing ->
                     ( model, Command.none )
 
-
-{-| The publisher's RTCPeerConnection has connected to Cloudflare and is now
-sending media. Only now is it safe for other participants to pull this peer's
-tracks (and for this peer to pull others). We mark the connection ready and
-exchange Server\_Joined messages in both directions with every other already-
-connected peer in the same call.
--}
-handlePublishConnected :
-    Time.Posix
-    -> SessionId
-    -> ClientId
-    -> ChangeId
-    -> BackendModel
-    -> UserSession
-    -> BackendUser
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handlePublishConnected time sessionId clientId changeId model session _ =
-    case clientIdCurrentCallId sessionId clientId model of
-        ConnectedToCall roomId sfu ->
-            let
-                userId : Id UserId
-                userId =
-                    session.userId
-
-                model2 : BackendModel
-                model2 =
-                    { model
-                        | connections =
-                            SeqDict.updateIfExists
-                                sessionId
-                                (NonemptyDict.updateIfExists
-                                    clientId
-                                    (\connection ->
-                                        { connection | call = ConnectedToCall roomId { sfu | pullTracksReady = True } }
-                                    )
-                                )
-                                model.connections
-                    }
-
-                -- Every other connected peer already in this call.
-                peers :
-                    List
-                        { peerUserId : Id UserId
-                        , peerClientId : ClientId
-                        , realtimeSessionId : Cloudflare.RealtimeSessionId
-                        , trackNames : List Cloudflare.TrackName
-                        }
-                peers =
-                    List.concatMap
-                        (\( sid, conns ) ->
-                            case SeqDict.get sid model2.sessions of
-                                Just s ->
-                                    List.filterMap
-                                        (\( cId, c ) ->
-                                            case c.call of
-                                                ConnectedToCall callId peerSfu ->
-                                                    if
-                                                        (cId /= clientId)
-                                                            && isPeerInSameCall roomId userId s.userId callId
-                                                            && peerSfu.pullTracksReady
-                                                    then
-                                                        Just
-                                                            { peerUserId = s.userId
-                                                            , peerClientId = cId
-                                                            , realtimeSessionId = peerSfu.sessionId
-                                                            , trackNames = peerSfu.trackNames
-                                                            }
-
-                                                    else
-                                                        Nothing
-
-                                                ConnectingToCall _ ->
-                                                    Nothing
-
-                                                NotInCall ->
-                                                    Nothing
-                                        )
-                                        (NonemptyDict.toList conns)
-
-                                Nothing ->
-                                    []
-                        )
-                        (SeqDict.toList model2.connections)
-
-                cmds : List (Command BackendOnly ToFrontend BackendMsg)
-                cmds =
-                    List.concatMap
-                        (\peer ->
-                            [ -- Tell the peer to pull this newly-connected publisher.
-                              Call.Server_Joined
-                                time
-                                { roomId = peerRoomId roomId peer.peerUserId userId
-                                , otherClientId = ( userId, clientId )
-                                }
-                                sfu.sessionId
-                                sfu.trackNames
-                                |> Server_VoiceChatChange
-                                |> ServerChange
-                                |> ChangeBroadcast
-                                |> Lamdera.sendToFrontend peer.peerClientId
-                            , -- Tell this publisher to pull the (already connected) peer.
-                              Call.Server_Joined
-                                time
-                                { roomId = roomId
-                                , otherClientId = ( peer.peerUserId, peer.peerClientId )
-                                }
-                                peer.realtimeSessionId
-                                peer.trackNames
-                                |> Server_VoiceChatChange
-                                |> ServerChange
-                                |> ChangeBroadcast
-                                |> Lamdera.sendToFrontend clientId
-                            ]
-                        )
-                        peers
-            in
-            ( model2
-            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId (Local_VoiceChatChange Call.Local_PublishConnected))
-                :: cmds
-                |> Command.batch
-            )
-
         _ ->
-            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+            ( model, Command.none )
 
 
-peerRoomId : Call.CallId -> Id UserId -> Id UserId -> Call.CallId
-peerRoomId roomId peerUserId joiningUserId =
-    case roomId of
-        Call.DmRoomId joinerOther ->
-            if peerUserId == joiningUserId then
-                -- Peer is another tab of the joiner: same DM other as joiner.
-                Call.DmRoomId joinerOther
-
-            else
-                -- Peer is the other DM party: from their view, the joiner is the other.
-                Call.DmRoomId joiningUserId
-
-
-handlePullTracks :
-    Time.Posix
-    -> SessionId
-    -> ClientId
-    -> ChangeId
-    -> Call.ConnectionId
-    -> Cloudflare.RealtimeSessionId
-    -> List Cloudflare.TrackName
-    -> BackendModel
-    -> UserSession
-    -> BackendUser
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handlePullTracks time sessionId clientId changeId connectionId remoteSessionId trackNames model session _ =
-    case
-        ( model.cloudflareRealtimeApiToken
-        , model.cloudflareRealtimeAppId
-        , SeqDict.get sessionId model.connections |> Maybe.andThen (NonemptyDict.get clientId)
-        )
-    of
-        ( Just apiToken, Just appId, Just connection ) ->
-            case connection.call of
-                ConnectedToCall roomId sfu ->
-                    if
-                        collectExistingPeers roomId session.userId clientId model
-                            |> List.any (\peer -> peer.sessionId == remoteSessionId)
-                    then
-                        ( model
-                        , Cloudflare.pullRemoteTracks
-                            appId
-                            apiToken
-                            sfu.sessionId
-                            { remoteSessionId = remoteSessionId, trackNames = trackNames }
-                            |> Task.attempt (GotCloudflarePullOffer time clientId changeId connectionId remoteSessionId trackNames)
-                        )
-
-                    else
-                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-                ConnectingToCall _ ->
-                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-                NotInCall ->
-                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-        _ ->
-            ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-
-handleRenegotiateAnswer :
+joinGuildVoiceChat :
     SessionId
     -> ClientId
-    -> ChangeId
-    -> Cloudflare.Sdp
+    -> Time.Posix
+    -> Id GuildId
+    -> Id ChannelId
     -> BackendModel
-    -> UserSession
-    -> BackendUser
+    -> Id UserId
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleRenegotiateAnswer sessionId clientId changeId answerSdp model _ _ =
-    case
-        ( model.cloudflareRealtimeApiToken
-        , model.cloudflareRealtimeAppId
-        , SeqDict.get sessionId model.connections |> Maybe.andThen (NonemptyDict.get clientId)
-        )
-    of
-        ( Just apiToken, Just appId, Just connection ) ->
-            case connection.call of
-                ConnectedToCall _ sfu ->
-                    ( model
-                    , Cloudflare.renegotiate appId apiToken sfu.sessionId { answerSdp = answerSdp }
-                        |> Task.attempt (GotCloudflareRenegotiateAck clientId changeId answerSdp)
+joinGuildVoiceChat sessionId clientId time guildId channelId model userId =
+    case ( SeqDict.get sessionId model.connections, SeqDict.get guildId model.guilds ) of
+        ( Just connections, Just guild ) ->
+            case ( NonemptyDict.get clientId connections, SeqDict.get channelId guild.channels ) of
+                ( Just connection, Just channel ) ->
+                    let
+                        ( model2, leaveCmd ) =
+                            case connection.call of
+                                NotInCall ->
+                                    ( model, Command.none )
+
+                                ConnectedToCall oldVoiceChatId ->
+                                    leaveVoiceHelper sessionId clientId time Nothing model userId oldVoiceChatId
+
+                        voiceChatId : Call.CallId
+                        voiceChatId =
+                            Call.GuildRoomId guildId channelId
+
+                        model3 : BackendModel
+                        model3 =
+                            { model2
+                                | connections =
+                                    SeqDict.update
+                                        sessionId
+                                        (Maybe.map
+                                            (NonemptyDict.insert
+                                                clientId
+                                                { connection | call = ConnectedToCall voiceChatId }
+                                            )
+                                        )
+                                        model2.connections
+                                , guilds =
+                                    if guildVoiceChatRoomHasOtherMembers guildId channelId clientId model2 then
+                                        model2.guilds
+
+                                    else
+                                        SeqDict.insert
+                                            guildId
+                                            { guild
+                                                | channels =
+                                                    SeqDict.insert
+                                                        channelId
+                                                        (LocalState.createChannelMessageBackend
+                                                            (CallStarted
+                                                                { startedAt = time
+                                                                , endedAt = Nothing
+                                                                , startedBy = userId
+                                                                , reactions = SeqDict.empty
+                                                                , timestampDrawings = Drawing.emptyDrawing
+                                                                , cardDrawings = Drawing.emptyDrawing
+                                                                }
+                                                            )
+                                                            channel
+                                                            |> Tuple.second
+                                                        )
+                                                        guild.channels
+                                            }
+                                            model2.guilds
+                            }
+                    in
+                    ( model3
+                    , Command.batch
+                        [ Lamdera.sendToFrontend
+                            clientId
+                            (Call.Server_YouJoined time (Call.GuildRoomId guildId channelId)
+                                |> Server_VoiceChatChange
+                                |> ServerChange
+                                |> ChangeBroadcast
+                            )
+                        , Broadcast.toGuildExcludingOne
+                            clientId
+                            guildId
+                            (Call.Server_OtherJoined
+                                time
+                                { roomId = Call.GuildRoomId guildId channelId
+                                , otherClientId = ( userId, clientId )
+                                }
+                                |> Server_VoiceChatChange
+                                |> ServerChange
+                            )
+                            model3
+                        , leaveCmd
+                        ]
                     )
 
-                ConnectingToCall _ ->
-                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-                NotInCall ->
-                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                _ ->
+                    ( model, Command.none )
 
         _ ->
-            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+            ( model, Command.none )
 
 
-voiceChatRoomHasOtherMembers : DmChannelId -> ClientId -> BackendModel -> Bool
-voiceChatRoomHasOtherMembers dmChannelId clientId model =
+dmVoiceChatRoomHasOtherMembers : DmChannelId -> ClientId -> BackendModel -> Bool
+dmVoiceChatRoomHasOtherMembers dmChannelId clientId model =
     SeqDict.filter
         (\sessionId2 connections ->
             case SeqDict.get sessionId2 model.sessions of
@@ -7441,21 +6998,37 @@ voiceChatRoomHasOtherMembers dmChannelId clientId model =
                     NonemptyDict.any
                         (\otherClientId connection ->
                             case connection.call of
-                                ConnectedToCall (Call.DmRoomId otherUserId2) _ ->
+                                ConnectedToCall (Call.DmRoomId otherUserId2) ->
                                     (DmChannelId.fromUserIds otherUserId2 otherSession.userId == dmChannelId)
                                         && (clientId /= otherClientId)
 
-                                ConnectingToCall (Call.DmRoomId otherUserId2) ->
-                                    (DmChannelId.fromUserIds otherUserId2 otherSession.userId == dmChannelId)
-                                        && (clientId /= otherClientId)
-
-                                NotInCall ->
+                                _ ->
                                     False
                         )
                         connections
 
                 Nothing ->
                     False
+        )
+        model.connections
+        |> SeqDict.isEmpty
+        |> not
+
+
+guildVoiceChatRoomHasOtherMembers : Id GuildId -> Id ChannelId -> ClientId -> BackendModel -> Bool
+guildVoiceChatRoomHasOtherMembers guildId channelId clientId model =
+    SeqDict.filter
+        (\_ connections ->
+            NonemptyDict.any
+                (\otherClientId connection ->
+                    case connection.call of
+                        ConnectedToCall (Call.GuildRoomId otherGuildId otherChannelId) ->
+                            otherGuildId == guildId && otherChannelId == channelId && clientId /= otherClientId
+
+                        _ ->
+                            False
+                )
+                connections
         )
         model.connections
         |> SeqDict.isEmpty
@@ -7978,26 +7551,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
-        Pages.Admin.SetCloudflareRealtimeApiToken cloudflareRealtimeApiToken ->
-            ( { model | cloudflareRealtimeApiToken = cloudflareRealtimeApiToken }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
-        Pages.Admin.SetCloudflareRealtimeAppId maybeAppId ->
-            ( { model | cloudflareRealtimeAppId = maybeAppId }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
-        Pages.Admin.SetCloudflareAccountId maybeAccountId ->
-            ( { model | cloudflareAccountId = maybeAccountId }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
-        Pages.Admin.SetCloudflareAnalyticsApiToken maybeToken ->
-            ( { model | cloudflareAnalyticsApiToken = maybeToken }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
         Pages.Admin.SetPostmarkKey postmarkKey ->
             ( { model | postmarkApiKey = postmarkKey }
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
@@ -8282,11 +7835,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 |> Task.attempt (RegeneratedServerSecret time changeId clientId)
             )
 
-        Pages.Admin.EndAllCalls ->
-            ( Pages.Admin.endAllCalls model
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
 
 updateFromFrontendAdmin :
     ClientId
@@ -8295,37 +7843,6 @@ updateFromFrontendAdmin :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 updateFromFrontendAdmin clientId toBackend model =
     case toBackend of
-        Pages.Admin.LoadCloudflareEgressRequest ->
-            case ( model.cloudflareAccountId, model.cloudflareAnalyticsApiToken ) of
-                ( Just accountId, Just analyticsToken ) ->
-                    ( model
-                    , Time.now
-                        |> Task.andThen
-                            (\time ->
-                                let
-                                    today : Date
-                                    today =
-                                        Date.fromPosix Time.utc time
-                                in
-                                Cloudflare.monthlyEgressBytes
-                                    { accountId = accountId
-                                    , analyticsToken = analyticsToken
-                                    , startDate = Date.floor Date.Month today |> Date.toIsoString
-                                    , endDate = Date.toIsoString today
-                                    }
-                            )
-                        |> Task.attempt (GotCloudflareEgressForAdmin clientId)
-                    )
-
-                _ ->
-                    ( model
-                    , Http.BadBody "Cloudflare account id and analytics token must be configured first"
-                        |> Err
-                        |> Pages.Admin.CloudflareEgressResponse
-                        |> AdminToFrontend
-                        |> Lamdera.sendToFrontend clientId
-                    )
-
         Pages.Admin.ExportBackendRequest isPartial ->
             let
                 baseModel : BackendModel

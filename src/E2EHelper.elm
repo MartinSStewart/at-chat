@@ -1,8 +1,6 @@
 module E2EHelper exposing
     ( BackendModel2(..)
     , CustomRequest
-    , addCloudflareAnalyticsApiKeys
-    , addCloudflareRealtimeApiKeys
     , adminEmail
     , allAttackerLocalChanges
     , allAttackerToBackendChanges
@@ -18,6 +16,7 @@ module E2EHelper exposing
     , checkNoErrorLogs
     , checkNoNotification
     , checkNotification
+    , checkVoiceChatFromJsEvents
     , chromeDesktop
     , clickSpoiler
     , connectFourUsersAndJoinNewGuild
@@ -27,7 +26,6 @@ module E2EHelper exposing
     , decodeCustomRequest
     , desktopWindow
     , discordUserAuth
-    , dmCallTest
     , domain
     , drawWideZigzagStroke
     , drawZigzagStroke
@@ -41,6 +39,8 @@ module E2EHelper exposing
     , findImageMessage
     , firefoxDesktop
     , focusEvent
+    , fromJsAfterAdminOpensVoiceChat
+    , fromJsAfterUserOpensVoiceChat
     , handleInternalRequests
     , handleLogin
     , handleLoginFromLoginPage
@@ -109,7 +109,6 @@ import Backend
 import Broadcast
 import Call
 import ChannelDescription
-import Cloudflare
 import Codec
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -655,13 +654,10 @@ mockCloudflareSfu path { currentRequest, data } =
                         |> List.filter
                             (\( _, c ) ->
                                 case c.call of
-                                    ConnectedToCall _ _ ->
+                                    ConnectedToCall _ ->
                                         True
 
                                     NotInCall ->
-                                        False
-
-                                    ConnectingToCall _ ->
                                         False
                             )
                         |> List.length
@@ -720,46 +716,18 @@ mockVoiceChatPorts request =
         Ok ok ->
             case ok of
                 Call.ToJs_StartCall _ ->
-                    -- JS would: getUserMedia + addTransceiver(audio,video) + createOffer
-                    -- + setLocalDescription, then send the offer SDP back.
-                    -- The mids match what RTCPeerConnection auto-assigns ("0", "2").
-                    fromJsEvent
-                        (Call.FromJs_PublishOffer
-                            (Cloudflare.sdpFromString "fake-publish-offer-sdp")
-                            [ "0", "2" ]
-                        )
-
-                Call.ToJs_LeaveCall ->
-                    -- JS closes the PC and stops local media. No response.
                     Nothing
 
-                Call.ToJs_PublishAnswer _ ->
-                    -- JS sets the SDP answer as the remote description and waits
-                    -- for the PeerConnection to actually connect to Cloudflare.
-                    -- Once connected it tells the backend (FromJs_PublishConnected),
-                    -- which then drives the bidirectional track pulls via
-                    -- Server_Joined → ToJs_PeerJoined. We simulate "connected"
-                    -- firing immediately.
-                    fromJsEvent Call.FromJs_PublishConnected
+                Call.ToJs_LeaveCall ->
+                    Nothing
 
-                Call.ToJs_PeerJoined { connectionId, sessionId, trackNames } ->
-                    -- A peer joined while we're in the call. JS reacts by asking
-                    -- Elm to pull that peer's tracks.
-                    fromJsEvent (Call.FromJs_RequestPullTracks connectionId sessionId trackNames)
+                Call.ToJs_PeerJoined _ ->
+                    Nothing
 
                 Call.ToJs_PeerLeft _ ->
                     -- JS removes the peer's video element and stops their tracks.
                     -- No response.
                     Nothing
-
-                Call.ToJs_AcceptPullOffer args ->
-                    -- JS setRemoteDescription(offer) + createAnswer + setLocalDescription,
-                    -- then sends the answer back so Elm can call /renegotiate.
-                    fromJsEvent
-                        (Call.FromJs_PullAnswer
-                            args.connectionId
-                            (Cloudflare.sdpFromString "fake-pull-answer-sdp")
-                        )
 
                 Call.ToJs_SetAudioInputEnabled _ ->
                     -- JS flips track.enabled in place. No response.
@@ -771,6 +739,10 @@ mockVoiceChatPorts request =
 
                 Call.ToJs_SetVideoInputEnabled _ ->
                     -- Same as SetAudioInputEnabled. No response.
+                    Nothing
+
+                Call.ToJs_SetPeerVideoInputEnabled _ _ ->
+                    -- JS clears that peer's canvas. No response.
                     Nothing
 
                 Call.ToJs_GetMediaDevices ->
@@ -861,40 +833,10 @@ fromJs_GotMediaDevices =
     "{\"tag\":\"got-media-devices\",\"args\":[[{\"deviceId\":\"microphoneDeviceId\",\"groupId\":\"microphoneGroupId\",\"kind\":\"audioinput\",\"label\":\"Default microphone\"},{\"deviceId\":\"webcameraDeviceId\",\"groupId\":\"webcameraGroupId\",\"kind\":\"videoinput\",\"label\":\"Default webcamera\"},{\"deviceId\":\"speakersDeviceId\",\"groupId\":\"speakersGroupId\",\"kind\":\"audiooutput\",\"label\":\"Default speakers\"}],[\"microphoneDeviceId\",\"webcameraDeviceId\",\"speakersDeviceId\"]]}"
 
 
-fromJs_PublishOffer : String
-fromJs_PublishOffer =
-    "{\"tag\":\"publish-offer\",\"args\":[\"fake-publish-offer-sdp\",[\"0\",\"2\"]]}"
-
-
-fromJs_PublishConnected : String
-fromJs_PublishConnected =
-    "{\"tag\":\"publish-connected\",\"args\":[]}"
-
-
-fromJs_RequestPullTracksSession1 : String
-fromJs_RequestPullTracksSession1 =
-    "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"2\",\"otherClientId\":\"2 clientId 2\"},\"sfu-session-1\",[\"0\",\"2\"]]}"
-
-
-fromJs_RequestPullTracksSession0 : String
-fromJs_RequestPullTracksSession0 =
-    "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"0\",\"otherClientId\":\"0 clientId 1\"},\"sfu-session-0\",[\"0\",\"2\"]]}"
-
-
-fromJs_PullAnswerSession1 : String
-fromJs_PullAnswerSession1 =
-    "{\"tag\":\"pull-answer\",\"args\":[{\"roomId\":\"2\",\"otherClientId\":\"2 clientId 2\"},\"fake-pull-answer-sdp\"]}"
-
-
-fromJs_PullAnswerSession0 : String
-fromJs_PullAnswerSession0 =
-    "{\"tag\":\"pull-answer\",\"args\":[{\"roomId\":\"0\",\"otherClientId\":\"0 clientId 1\"},\"fake-pull-answer-sdp\"]}"
-
-
-{-| Cumulative `voice_chat_from_js` payloads expected at each handshake
-checkpoint. Each value extends the previous one with the events that step is
-supposed to add, so the checks pin down _when_ each event fires, not just that
-it eventually does.
+{-| Cumulative `voice_chat_from_js` payloads expected once each person has the
+voice chat tab open. Each value extends the previous one with the events that
+step is supposed to add, so the checks pin down _when_ each event fires, not just
+that it eventually does.
 -}
 fromJsAfterAdminOpensVoiceChat : List String
 fromJsAfterAdminOpensVoiceChat =
@@ -906,29 +848,9 @@ fromJsAfterUserOpensVoiceChat =
     fromJsAfterAdminOpensVoiceChat ++ [ fromJs_GotMediaDevices ]
 
 
-fromJsAfterAdminPublishes : List String
-fromJsAfterAdminPublishes =
-    fromJsAfterUserOpensVoiceChat ++ [ fromJs_PublishOffer, fromJs_PublishConnected ]
-
-
-fromJsAfterUserPublishes : List String
-fromJsAfterUserPublishes =
-    fromJsAfterAdminPublishes
-        ++ [ fromJs_PublishOffer
-           , fromJs_PublishConnected
-           , fromJs_RequestPullTracksSession1
-           , fromJs_RequestPullTracksSession0
-           ]
-
-
-fromJsAfterPullsComplete : List String
-fromJsAfterPullsComplete =
-    fromJsAfterUserPublishes ++ [ fromJs_PullAnswerSession1, fromJs_PullAnswerSession0 ]
-
-
-{-| Assert the exact ordered list of `voice_chat_from_js` payloads that have
-been produced so far equals `expected`. Placed at each handshake checkpoint so
-the prefix is pinned down step by step.
+{-| Assert the exact ordered list of `voice_chat_from_js` payloads produced so
+far equals `expected`. Placed at each step so the prefix is pinned down as it
+grows rather than only at the end.
 -}
 checkVoiceChatFromJsEvents : List String -> T.Data FrontendModel BackendModel2 -> Result String ()
 checkVoiceChatFromJsEvents expected data =
@@ -966,341 +888,6 @@ voiceChatFromJsPayloads data =
                 else
                     Nothing
             )
-
-
-addCloudflareRealtimeApiKeys :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-addCloudflareRealtimeApiKeys admin =
-    T.collapsableGroup
-        "Add Cloudflare Realtime API keys"
-        [ admin.click 100 (Dom.id "guild_showUserOptions")
-        , admin.click 100 (Dom.id "userOptions_gotoAdmin")
-        , admin.click 100 (Dom.id "admin_expandSectionButton_API keys")
-        , admin.input 100 (Dom.id "userOptions_cloudflareRealtimeAppId_label") "test-app-id"
-        , admin.click 100 (Dom.id "userOptions_cloudflareRealtimeAppId_acceptEdit")
-        , admin.input 100 (Dom.id "userOptions_cloudflareRealtimeApiToken_label") "test-api-token"
-        , admin.click 100 (Dom.id "userOptions_cloudflareRealtimeApiToken_acceptEdit")
-        , admin.navigateBack 100
-        , T.checkBackend 100
-            (\m ->
-                case ( (unwrapBackend m).cloudflareRealtimeAppId, (unwrapBackend m).cloudflareRealtimeApiToken ) of
-                    ( Just _, Just _ ) ->
-                        Ok ()
-
-                    _ ->
-                        Err "Cloudflare keys did not land on the backend"
-            )
-        ]
-
-
-{-| Configure the Cloudflare account id and analytics API token (used for the monthly cost check)
-through the admin page.
--}
-addCloudflareAnalyticsApiKeys :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-addCloudflareAnalyticsApiKeys admin =
-    T.collapsableGroup
-        "Add Cloudflare analytics API keys"
-        [ admin.click 100 (Dom.id "guild_showUserOptions")
-        , admin.click 100 (Dom.id "userOptions_gotoAdmin")
-        , admin.click 100 (Dom.id "admin_expandSectionButton_API keys")
-        , admin.input 100 (Dom.id "userOptions_cloudflareAccountId_label") "test-account-id"
-        , admin.click 100 (Dom.id "userOptions_cloudflareAccountId_acceptEdit")
-        , admin.input 100 (Dom.id "userOptions_cloudflareAnalyticsApiToken_label") "test-analytics-token"
-        , admin.click 100 (Dom.id "userOptions_cloudflareAnalyticsApiToken_acceptEdit")
-        , admin.navigateBack 100
-        , T.checkBackend 100
-            (\m ->
-                case ( (unwrapBackend m).cloudflareAccountId, (unwrapBackend m).cloudflareAnalyticsApiToken ) of
-                    ( Just _, Just _ ) ->
-                        Ok ()
-
-                    _ ->
-                        Err "Cloudflare analytics keys did not land on the backend"
-            )
-        ]
-
-
-dmCallTest :
-    Bool
-    -> T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-dmCallTest isMobile normalConfig =
-    let
-        -- A narrow window renders the mobile layout (touch events), a wide one
-        -- the desktop layout (pointer events). See MyUi.isMobile.
-        window : { width : Int, height : Int }
-        window =
-            if isMobile then
-                iphone14Window
-
-            else
-                desktopWindow
-    in
-    startTest
-        ("DM voice chat with another user, both on "
-            ++ (if isMobile then
-                    "mobile"
-
-                else
-                    "desktop"
-               )
-        )
-        startTime
-        normalConfig
-        [ connectTwoUsersAndJoinNewGuild
-            window
-            (\admin user ->
-                let
-                    -- Used to drag the call thumbnail.
-                    touchEvent : ( Float, Float ) -> Json.Encode.Value
-                    touchEvent ( x, y ) =
-                        if isMobile then
-                            Json.Encode.object
-                                [ ( "timeStamp", Json.Encode.float 0 )
-                                , ( "touches"
-                                  , Json.Encode.object
-                                        [ ( "length", Json.Encode.int 1 )
-                                        , ( String.fromInt 0
-                                          , Json.Encode.object
-                                                [ ( "identifier", Json.Encode.int 0 )
-                                                , ( "clientX", Json.Encode.float x )
-                                                , ( "clientY", Json.Encode.float y )
-                                                , ( "target"
-                                                  , Json.Encode.object [ ( "id", Json.Encode.string "elm-ui-root-id" ) ]
-                                                  )
-                                                ]
-                                          )
-                                        ]
-                                  )
-                                ]
-
-                        else
-                            Json.Encode.object
-                                [ ( "timeStamp", Json.Encode.float 0 )
-                                , ( "pointerId", Json.Encode.int 0 )
-                                , ( "clientX", Json.Encode.float x )
-                                , ( "clientY", Json.Encode.float y )
-                                ]
-
-                    -- Mobile listens for touch events, desktop for pointer events.
-                    ( startEventName, moveEventName, endEventName ) =
-                        if isMobile then
-                            ( "touchstart", "touchmove", "touchend" )
-
-                        else
-                            ( "pointerdown", "pointermove", "pointerup" )
-
-                    touchEndEvent : Json.Encode.Value
-                    touchEndEvent =
-                        Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
-
-                    -- The minimized call thumbnail starts in the top-right corner
-                    -- (normalized position (1, 0.1)). It can travel across
-                    -- windowWidth - thumbnailWidth pixels horizontally, so a drag of
-                    -- dragDistanceX pixels to the left moves the normalized x by
-                    -- -dragDistanceX / (windowWidth - thumbnailWidth).
-                    thumbnailWidth : Float
-                    thumbnailWidth =
-                        if isMobile then
-                            200
-
-                        else
-                            300
-
-                    availableWidth : Float
-                    availableWidth =
-                        toFloat window.width - thumbnailWidth
-
-                    dragDistanceX : Float
-                    dragDistanceX =
-                        150
-
-                    -- Start the drag inside the thumbnail (its right portion) and
-                    -- move dragDistanceX pixels to the left.
-                    dragStart : ( Float, Float )
-                    dragStart =
-                        ( toFloat window.width - 150, 100 )
-
-                    dragEnd : ( Float, Float )
-                    dragEnd =
-                        ( toFloat window.width - 150 - dragDistanceX, 100 )
-
-                    expectedThumbnailX : Float
-                    expectedThumbnailX =
-                        clamp 0 1 (1 - dragDistanceX / availableWidth)
-                in
-                [ T.collapsableGroup
-                    "Voice chat"
-                    [ addCloudflareRealtimeApiKeys admin
-                    , openDm admin 100 "2"
-                    , openDm user 100 "0"
-                    , admin.click 100 (Dom.id "guild_voiceChat")
-                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminOpensVoiceChat)
-                    , user.click 100 (Dom.id "guild_voiceChat")
-                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterUserOpensVoiceChat)
-                    , admin.click 100 (Dom.id "guild_startVoiceChat")
-                    , tallSnapshot admin 100 { name = "Started a DM call" }
-                    , T.checkBackend 200
-                        (\m ->
-                            case
-                                List.concatMap
-                                    (\( _, conns ) ->
-                                        List.filter
-                                            (\( _, c ) ->
-                                                case c.call of
-                                                    ConnectedToCall _ _ ->
-                                                        True
-
-                                                    NotInCall ->
-                                                        False
-
-                                                    ConnectingToCall _ ->
-                                                        False
-                                            )
-                                            (NonemptyDict.toList conns)
-                                    )
-                                    (SeqDict.toList (unwrapBackend m).connections)
-                            of
-                                [ _ ] ->
-                                    Ok ()
-
-                                other ->
-                                    Err
-                                        ("Expected exactly one ConnectedToCall after admin publishes, got "
-                                            ++ String.fromInt (List.length other)
-                                        )
-                        )
-                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminPublishes)
-                    , user.click 100 (Dom.id "guild_startVoiceChat")
-                    , admin.checkView
-                        50
-                        (\html ->
-                            Test.Html.Query.findAll [ Test.Html.Selector.exactText "started a call" ] html
-                                |> Test.Html.Query.count (Expect.equal 1)
-                        )
-                    , T.checkBackend 150
-                        (\m ->
-                            case
-                                List.concatMap
-                                    (\( _, conns ) ->
-                                        List.filter
-                                            (\( _, c ) ->
-                                                case c.call of
-                                                    ConnectedToCall _ _ ->
-                                                        True
-
-                                                    NotInCall ->
-                                                        False
-
-                                                    ConnectingToCall _ ->
-                                                        False
-                                            )
-                                            (NonemptyDict.toList conns)
-                                    )
-                                    (SeqDict.toList (unwrapBackend m).connections)
-                            of
-                                [ _, _ ] ->
-                                    Ok ()
-
-                                other ->
-                                    Err
-                                        ("Expected two connections with callSfu after bob publishes, got "
-                                            ++ String.fromInt (List.length other)
-                                        )
-                        )
-                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterUserPublishes)
-                    , tallSnapshot user 100 { name = "Joined a DM call" }
-                    , T.checkBackend 500
-                        (\m ->
-                            case
-                                List.concatMap
-                                    (\( _, conns ) ->
-                                        List.filter
-                                            (\( _, c ) ->
-                                                case c.call of
-                                                    ConnectedToCall _ _ ->
-                                                        True
-
-                                                    NotInCall ->
-                                                        False
-
-                                                    ConnectingToCall _ ->
-                                                        False
-                                            )
-                                            (NonemptyDict.toList conns)
-                                    )
-                                    (SeqDict.toList (unwrapBackend m).connections)
-                            of
-                                [ _, _ ] ->
-                                    Ok ()
-
-                                other ->
-                                    Err
-                                        ("Expected two connections with callSfu at end, got "
-                                            ++ String.fromInt (List.length other)
-                                        )
-                        )
-                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterPullsComplete)
-                    , user.click 100 (Dom.id "guild_voiceChat")
-                    , tallSnapshot user 100 { name = "Voice chat with tab closed" }
-
-                    -- The minimized call thumbnail can be dragged by touch
-                    -- (mobile) or pointer (desktop). Grab it in the top-right
-                    -- corner and drag it to the left; the normalized x should
-                    -- shift accordingly while y stays at 0.1.
-                    , user.custom 100 (Dom.id "elm-ui-root-id") startEventName (touchEvent dragStart)
-                    , user.custom 100 (Dom.id "elm-ui-root-id") moveEventName (touchEvent dragEnd)
-                    , user.custom 100 (Dom.id "elm-ui-root-id") endEventName touchEndEvent
-                    , T.checkState
-                        100
-                        (\data ->
-                            case SeqDict.get user.clientId data.frontends |> Maybe.map Audio.userModel of
-                                Just (Types.Loaded loaded) ->
-                                    case loaded.loginStatus of
-                                        Types.LoggedIn loggedIn ->
-                                            let
-                                                ( x, y ) =
-                                                    loggedIn.voiceChat.thumbnailPosition
-                                            in
-                                            if (abs (x - expectedThumbnailX) < 0.001) && (abs (y - 0.1) < 0.001) then
-                                                Ok ()
-
-                                            else
-                                                Err
-                                                    ("Dragging the call thumbnail should have moved it to ("
-                                                        ++ String.fromFloat expectedThumbnailX
-                                                        ++ ", 0.1) but got ("
-                                                        ++ String.fromFloat x
-                                                        ++ ", "
-                                                        ++ String.fromFloat y
-                                                        ++ ")"
-                                                    )
-
-                                        Types.NotLoggedIn _ ->
-                                            Err "Expected user to be logged in"
-
-                                _ ->
-                                    Err "Expected user frontend to be loaded"
-                        )
-                    , admin.click 100 (Dom.id "guild_leaveVoiceChat")
-                    , tallSnapshot admin 100 { name = "Left a DM call admin perspective" }
-                    , tallSnapshot user 100 { name = "Left a DM call user perspective" }
-                    , user.custom 100 (Dom.id "call_videoThumbnail") "dblclick" (Json.Encode.object [])
-                    , user.click 100 (Dom.id "guild_leaveVoiceChat")
-                    , admin.checkView
-                        50
-                        (\html ->
-                            Test.Html.Query.findAll [ Test.Html.Selector.exactText "started a call, lasted 1\u{00A0}minute" ] html
-                                |> Test.Html.Query.count (Expect.equal 1)
-                        )
-                    , tallSnapshot user 100 { name = "Call ended" }
-                    ]
-                ]
-            )
-        ]
 
 
 checkNoNotification : String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
@@ -1907,7 +1494,7 @@ uploadImageAttachment user =
         [ user.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
         , T.backendUpdate
             100
-            (Types.GotRustServerFileUpload (FileStatus.fileHash "123123123") 1234 (Just (Coord.xy 128 128)))
+            (Types.Rpc_GotFileUpload (FileStatus.fileHash "123123123") 1234 (Just (Coord.xy 128 128)))
         ]
 
 
@@ -1922,7 +1509,7 @@ uploadNonImageAttachment user =
         [ user.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
         , T.backendUpdate
             100
-            (Types.GotRustServerFileUpload (FileStatus.fileHash "123123123") 1234 Nothing)
+            (Types.Rpc_GotFileUpload (FileStatus.fileHash "123123123") 1234 Nothing)
         ]
 
 
@@ -3187,10 +2774,7 @@ allAttackerLocalChanges =
     , Local_SetEmojiSkinTone Nothing
     , Local_SetEmojiSkinTone (Just SkinTone5)
     , Local_AddCustomEmojisToUser (NonemptySet.fromNonemptyList (Nonempty (Id.fromInt 0) []))
-    , Local_VoiceChatChange (Call.Local_Join startTime (Call.DmRoomId normalUserId) EmptyPlaceholder)
     , Local_VoiceChatChange (Call.Local_Leave startTime)
-    , Local_VoiceChatChange (Call.Local_RenegotiateAnswer (Cloudflare.sdpFromString "") EmptyPlaceholder)
-    , Local_VoiceChatChange Call.Local_PublishConnected
     , Local_Game
         (GuildOrDmId_Dm Broadcast.adminUserId)
         (Game.LocalChange_Go

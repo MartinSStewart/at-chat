@@ -132,7 +132,6 @@ import Array exposing (Array)
 import Call
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
-import Cloudflare
 import Date exposing (Date)
 import Discord exposing (OptionalData)
 import DiscordUserData exposing (DiscordUserLoadingData)
@@ -604,10 +603,6 @@ type alias AdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
-    , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
-    , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
-    , cloudflareAccountId : Maybe Cloudflare.AccountId
-    , cloudflareAnalyticsApiToken : Maybe Cloudflare.AnalyticsApiToken
     , postmarkKey : Postmark.ApiKey
     , dmChannels : SeqDict DmChannelId AdminData_DmChannel
     , discordDmChannels :
@@ -661,13 +656,7 @@ type alias ConnectionData =
 
 type CallStatus
     = NotInCall
-    | ConnectingToCall Call.CallId
-    | ConnectedToCall
-        Call.CallId
-        { sessionId : Cloudflare.RealtimeSessionId
-        , trackNames : List Cloudflare.TrackName
-        , pullTracksReady : Bool
-        }
+    | ConnectedToCall Call.CallId
 
 
 type ServerSecretStatus

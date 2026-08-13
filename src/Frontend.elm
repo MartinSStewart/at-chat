@@ -2694,8 +2694,31 @@ updateLoaded msg model =
                         NewGuildRoute ->
                             ( model, Command.none )
 
-                        GuildRoute _ _ ->
-                            ( model, Command.none )
+                        GuildRoute guildId channelRoute ->
+                            case channelRoute of
+                                ChannelRoute channelId (NoThreadWithFriends a b) _ ->
+                                    FrontendExtra.routePush
+                                        model
+                                        (GuildRoute
+                                            guildId
+                                            (ChannelRoute
+                                                channelId
+                                                (NoThreadWithFriends a b)
+                                                (Just ChannelHeaderTab_VoiceChat)
+                                            )
+                                        )
+
+                                ChannelRoute _ (ViewThreadWithFriends _ _ _) _ ->
+                                    ( model, Command.none )
+
+                                NewChannelRoute ->
+                                    ( model, Command.none )
+
+                                GuildSettingsRoute ->
+                                    ( model, Command.none )
+
+                                JoinRoute _ ->
+                                    ( model, Command.none )
 
                         DiscordGuildRoute _ ->
                             ( model, Command.none )
@@ -3957,34 +3980,6 @@ updateLoaded msg model =
                     case result of
                         Ok event ->
                             case event of
-                                Call.FromJs_PublishOffer sdp mids ->
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (Call.Local_PublishTracks sdp mids EmptyPlaceholder |> Local_VoiceChatChange |> Just)
-                                        loggedIn
-                                        Command.none
-
-                                Call.FromJs_PublishConnected ->
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (Call.Local_PublishConnected |> Local_VoiceChatChange |> Just)
-                                        loggedIn
-                                        Command.none
-
-                                Call.FromJs_PullAnswer _ sdp ->
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (Call.Local_RenegotiateAnswer sdp EmptyPlaceholder |> Local_VoiceChatChange |> Just)
-                                        loggedIn
-                                        Command.none
-
-                                Call.FromJs_RequestPullTracks connectionId sessionId trackNames ->
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (Call.Local_PullTracks connectionId sessionId trackNames EmptyPlaceholder |> Local_VoiceChatChange |> Just)
-                                        loggedIn
-                                        Command.none
-
                                 Call.FromJs_GotUserMediaDevices mediaDevices defaultDevices ->
                                     ( { loggedIn | voiceChat = Call.gotUserMediaDevices mediaDevices defaultDevices loggedIn.voiceChat }
                                     , Command.none
@@ -4224,11 +4219,13 @@ updateLoaded msg model =
                 Call.PressedJoinCall roomId ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (Call.Local_Join model.time roomId EmptyPlaceholder |> Local_VoiceChatChange |> Just)
-                                loggedIn
-                                Command.none
+                            ( loggedIn
+                            , Call.startCallCmd
+                                roomId
+                                (Local.model loggedIn.localState).localUser.session.userId
+                                model.clientId
+                                loggedIn.voiceChat
+                            )
                         )
                         model
 
@@ -4369,6 +4366,18 @@ updateLoaded msg model =
                                             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
                                             , tab = Just ChannelHeaderTab_VoiceChat
                                             }
+                                        )
+
+                                Call.ShowLocalVideoAndCallThumbnail (Call.GuildRoomId guildId channelId) ->
+                                    FrontendExtra.routePush
+                                        model
+                                        (GuildRoute
+                                            guildId
+                                            (ChannelRoute
+                                                channelId
+                                                (NoThreadWithFriends Nothing HideMembersTab)
+                                                (Just ChannelHeaderTab_VoiceChat)
+                                            )
                                         )
 
                         NotLoggedIn _ ->
@@ -6914,43 +6923,7 @@ updateLoadedFromBackend msg model =
                     , case localChange of
                         Local_VoiceChatChange callChange ->
                             case callChange of
-                                Call.Local_Join _ roomId (FilledInByBackend existingPeers) ->
-                                    case existingPeers of
-                                        Ok existingPeers2 ->
-                                            Call.startCallCmd roomId existingPeers2 loggedIn.voiceChat
-
-                                        Err () ->
-                                            Command.none
-
-                                Call.Local_Join _ _ EmptyPlaceholder ->
-                                    Command.none
-
                                 Call.Local_Leave _ ->
-                                    Command.none
-
-                                Call.Local_PublishTracks _ _ (FilledInByBackend publishResult) ->
-                                    Call.toJs (Call.ToJs_PublishAnswer { answerSdp = publishResult.answerSdp })
-
-                                Call.Local_PublishTracks _ _ EmptyPlaceholder ->
-                                    Command.none
-
-                                Call.Local_PublishConnected ->
-                                    Command.none
-
-                                Call.Local_PullTracks connectionId _ _ (FilledInByBackend result) ->
-                                    case result of
-                                        Ok pullTracks ->
-                                            { connectionId = connectionId, offerSdp = pullTracks.offerSdp }
-                                                |> Call.ToJs_AcceptPullOffer
-                                                |> Call.toJs
-
-                                        Err () ->
-                                            Command.none
-
-                                Call.Local_PullTracks _ _ _ EmptyPlaceholder ->
-                                    Command.none
-
-                                Call.Local_RenegotiateAnswer _ _ ->
                                     Command.none
 
                                 Call.Local_SetRemoteCallData _ ->
@@ -7394,7 +7367,6 @@ updateLoadedFromBackend msg model =
                                     ( loggedIn2
                                     , Call.serverChangeCmd
                                         voiceChatChange
-                                        model.clientId
                                         local.localUser.session.userId
                                         local.calls
                                         loggedIn2.voiceChat
@@ -7659,43 +7631,18 @@ view _ model =
                 in
                 case loaded.route of
                     HomePageRoute ->
-                        FrontendExtra.layout
-                            loaded
-                            [ Ui.background MyUi.background3
-                            , case loaded.loginStatus of
-                                LoggedIn loggedIn ->
-                                    let
-                                        local =
-                                            Local.model loggedIn.localState
-                                    in
-                                    case loggedIn.userOptions of
-                                        Just userOptions ->
-                                            UserOptions.view
-                                                (MyUi.isMobile loaded)
-                                                loggedIn.textInputFocus
-                                                loaded.time
-                                                local
-                                                loggedIn
-                                                loaded
-                                                userOptions
-                                                |> Ui.inFront
+                        case loaded.loginStatus of
+                            LoggedIn _ ->
+                                requiresLogin
+                                    (\loggedIn local ->
+                                        Pages.Guild.homePageLoggedInView NoDmChannelSelected loaded loggedIn local
+                                    )
 
-                                        Nothing ->
-                                            Ui.noAttr
-
-                                NotLoggedIn _ ->
-                                    Ui.noAttr
-                            ]
-                            (case loaded.loginStatus of
-                                LoggedIn loggedIn ->
-                                    Pages.Guild.homePageLoggedInView
-                                        NoDmChannelSelected
-                                        loaded
-                                        loggedIn
-                                        (Local.model loggedIn.localState)
-
-                                NotLoggedIn notLoggedIn ->
-                                    Ui.el
+                            NotLoggedIn notLoggedIn ->
+                                FrontendExtra.layout
+                                    loaded
+                                    [ Ui.background MyUi.background3 ]
+                                    (Ui.el
                                         [ Ui.inFront (Pages.Home.header isMobile loaded.route loaded.loginStatus)
                                         , Ui.height Ui.fill
                                         ]
@@ -7711,7 +7658,7 @@ view _ model =
                                             Nothing ->
                                                 Ui.Lazy.lazy Pages.Home.view windowWidth
                                         )
-                            )
+                                    )
 
                     AdminRoute _ ->
                         case ( loaded.loginStatus, loaded.loginType ) of

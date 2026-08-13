@@ -1,11 +1,9 @@
 port module Call exposing
-    ( CallError(..)
-    , CallId(..)
+    ( CallId(..)
     , ChannelSidebarMode(..)
     , ConnectionId
     , DeviceKind(..)
     , DisplayMode(..)
-    , ExistingPeer
     , FromJs(..)
     , Local
     , LocalChange(..)
@@ -15,7 +13,6 @@ port module Call exposing
     , MediaDevicesStatus(..)
     , Model
     , Msg(..)
-    , PublishResult
     , Recording
     , RemoteCallData
     , ServerChange(..)
@@ -46,7 +43,6 @@ port module Call exposing
     )
 
 import Bytes exposing (Bytes)
-import Cloudflare
 import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -56,12 +52,13 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
+import FileStatus
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Html.Keyed
 import Icons
-import Id exposing (Id, UserId, VideoNodeId)
+import Id exposing (ChannelId, GuildId, Id, UserId, VideoNodeId)
 import IdString exposing (IdString)
 import Json.Decode
 import Json.Encode
@@ -74,48 +71,21 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 import Ui.Font
+import Url
 import User exposing (LocalUser)
-import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend)
+import UserSession exposing (ChannelHeaderTab(..))
 
 
 type LocalChange
-    = Local_Join Time.Posix CallId (ToBeFilledInByBackend (Result () (List ExistingPeer)))
-    | Local_Leave Time.Posix
-    | Local_PublishTracks Cloudflare.Sdp (List String) (ToBeFilledInByBackend PublishResult)
-    | Local_PublishConnected
-    | Local_PullTracks ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName) (ToBeFilledInByBackend (Result () Cloudflare.PullTracksResult))
-    | Local_RenegotiateAnswer Cloudflare.Sdp (ToBeFilledInByBackend (Result () ()))
+    = Local_Leave Time.Posix
     | Local_SetRemoteCallData RemoteCallData
 
 
 type ServerChange
-    = Server_Joined Time.Posix ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName)
-    | Server_Joining Time.Posix ConnectionId
+    = Server_YouJoined Time.Posix CallId
+    | Server_OtherJoined Time.Posix ConnectionId
     | Server_Left Time.Posix ConnectionId
     | Server_SetRemoteCallData ConnectionId RemoteCallData
-
-
-type alias ExistingPeer =
-    { connectionId : ConnectionId
-    , sessionId : Cloudflare.RealtimeSessionId
-    , trackNames : List Cloudflare.TrackName
-    }
-
-
-type alias PublishResult =
-    { answerSdp : Cloudflare.Sdp
-    , sessionId : Cloudflare.RealtimeSessionId
-    , trackNames : List Cloudflare.TrackName
-    }
-
-
-existingPeerCodec : Codec ExistingPeer
-existingPeerCodec =
-    Codec.object ExistingPeer
-        |> Codec.field "connectionId" .connectionId connectionIdCodec
-        |> Codec.field "sessionId" .sessionId Cloudflare.sessionIdCodec
-        |> Codec.field "trackNames" .trackNames (Codec.list Cloudflare.trackNameCodec)
-        |> Codec.buildObject
 
 
 type Msg
@@ -136,7 +106,6 @@ type Msg
 type alias Local =
     { currentRoom : Maybe CallId
     , voiceChats : SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
-    , error : Maybe CallError
     }
 
 
@@ -147,12 +116,6 @@ type alias RemoteCallData =
 defaultRemoteCallData : RemoteCallData
 defaultRemoteCallData =
     { audioInputEnabled = True, videoInputEnabled = True }
-
-
-type CallError
-    = MissingApiKeys
-    | FailedToPullTracks
-    | FailedToRenegotiate
 
 
 type alias Model =
@@ -198,7 +161,6 @@ init : SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData) -> L
 init voiceChats =
     { currentRoom = Nothing
     , voiceChats = voiceChats
-    , error = Nothing
     }
 
 
@@ -305,6 +267,7 @@ type alias ConnectionId =
 
 type CallId
     = DmRoomId (Id UserId)
+    | GuildRoomId (Id GuildId) (Id ChannelId)
 
 
 type DisplayMode
@@ -373,8 +336,38 @@ displayMode currentUserId route local =
         NewGuildRoute ->
             thumbnailOrNoVideo
 
-        GuildRoute _ _ ->
-            thumbnailOrNoVideo
+        GuildRoute guildId channelRoute ->
+            case channelRoute of
+                Route.ChannelRoute channelId _ tab ->
+                    let
+                        roomId =
+                            GuildRoomId guildId channelId
+
+                        isTabExpanded =
+                            tab == Just ChannelHeaderTab_VoiceChat
+                    in
+                    if Just roomId == local.currentRoom && isTabExpanded then
+                        case SeqDict.get roomId local.voiceChats of
+                            Just _ ->
+                                ShowLocalVideoAndCall roomId
+
+                            Nothing ->
+                                ShowLocalVideo
+
+                    else if isTabExpanded then
+                        ShowLocalVideo
+
+                    else
+                        thumbnailOrNoVideo
+
+                Route.NewChannelRoute ->
+                    thumbnailOrNoVideo
+
+                Route.GuildSettingsRoute ->
+                    thumbnailOrNoVideo
+
+                Route.JoinRoute _ ->
+                    thumbnailOrNoVideo
 
         DiscordGuildRoute _ ->
             thumbnailOrNoVideo
@@ -428,6 +421,15 @@ displayMode currentUserId route local =
 localVideoNodeId : String
 localVideoNodeId =
     "local-video"
+
+
+speakingOutline : Bool -> String
+speakingOutline isSpeaking =
+    if isSpeaking then
+        "4px solid rgb(131, 147, 167)"
+
+    else
+        "0 solid rgb(131, 147, 167)"
 
 
 type VideoNodeState
@@ -906,26 +908,38 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, width ) 
             , Html.Attributes.style "pointer-events" "none"
             ]
             [ User.profileImageHtml userId (User.getUser userId localUser |> Maybe.andThen .icon) ]
-        , Html.video
-            [ Html.Attributes.id idString
-            , Html.Attributes.style "background-color" "rgba(0,0,0)"
-            , Html.Attributes.style "width" (String.fromInt width ++ "px")
-            , Html.Attributes.style "height" (String.fromFloat height ++ "px")
-            , Html.Attributes.style
-                "outline"
-                (if isSpeaking then
-                    "4px solid rgb(131, 147, 167)"
+        , -- Our own camera is a live MediaStream, so it plays in a <video>. A peer
+          -- arrives as encoded frames over the room socket, and a decoded
+          -- VideoFrame can only be drawn, so peers get a <canvas> instead.
+          case id of
+            IsLocal ->
+                Html.video
+                    [ Html.Attributes.id idString
+                    , Html.Attributes.style "background-color" "rgba(0,0,0)"
+                    , Html.Attributes.style "width" (String.fromInt width ++ "px")
+                    , Html.Attributes.style "height" (String.fromFloat height ++ "px")
+                    , Html.Attributes.style "outline" (speakingOutline isSpeaking)
+                    , Html.Attributes.style "transition" "outline-width 50ms ease-out"
+                    , Html.Attributes.style "border-radius" "8px"
+                    , Html.Attributes.style "pointer-events" "none"
+                    , Html.Attributes.attribute "playsinline" ""
+                    , Html.Attributes.attribute "webkit-playsinline" ""
+                    ]
+                    []
 
-                 else
-                    "0 solid rgb(131, 147, 167)"
-                )
-            , Html.Attributes.style "transition" "outline-width 50ms ease-out"
-            , Html.Attributes.style "border-radius" "8px"
-            , Html.Attributes.style "pointer-events" "none"
-            , Html.Attributes.attribute "playsinline" ""
-            , Html.Attributes.attribute "webkit-playsinline" ""
-            ]
-            []
+            IsConnection _ ->
+                Html.canvas
+                    [ Html.Attributes.id idString
+                    , Html.Attributes.style "background-color" "rgba(0,0,0)"
+                    , Html.Attributes.style "width" (String.fromInt width ++ "px")
+                    , Html.Attributes.style "height" (String.fromFloat height ++ "px")
+                    , Html.Attributes.style "outline" (speakingOutline isSpeaking)
+                    , Html.Attributes.style "transition" "outline-width 50ms ease-out"
+                    , Html.Attributes.style "border-radius" "8px"
+                    , Html.Attributes.style "pointer-events" "none"
+                    , Html.Attributes.style "object-fit" "cover"
+                    ]
+                    []
         , case ( id, videoNodeState ) of
             ( IsConnection connectionId, VideoNodeFullSize ) ->
                 let
@@ -1062,30 +1076,12 @@ view windowSize roomId calls model =
         , Ui.inFront
             (Ui.column
                 [ Ui.alignBottom ]
-                [ case calls.error of
-                    Just callError ->
-                        MyUi.errorBox
-                            (Dom.id "voiceChat_errorBox")
-                            PressedCopyError
-                            (case callError of
-                                MissingApiKeys ->
-                                    "Call API keys missing. Admin needs to add them."
-
-                                FailedToPullTracks ->
-                                    "Failed to pull remote audio/video tracks."
-
-                                FailedToRenegotiate ->
-                                    "Failed to renegotiate connection."
-                            )
-                            |> Ui.el [ Ui.paddingXY 16 0 ]
+                [ case model.startConnectionError of
+                    Just error ->
+                        MyUi.errorBox (Dom.id "voiceChat_errorBox") PressedCopyError error |> Ui.el [ Ui.paddingXY 16 0 ]
 
                     Nothing ->
-                        case model.startConnectionError of
-                            Just error ->
-                                MyUi.errorBox (Dom.id "voiceChat_errorBox") PressedCopyError error |> Ui.el [ Ui.paddingXY 16 0 ]
-
-                            Nothing ->
-                                Ui.none
+                        Ui.none
                 , (if isMobile then
                     Ui.column
 
@@ -1234,35 +1230,38 @@ leaveVoiceChatCmds model =
             Command.none
 
 
-serverChangeCmd : ServerChange -> ClientId -> Id UserId -> Local -> Model -> Command FrontendOnly toBackend msg
-serverChangeCmd change _ _ local _ =
+serverChangeCmd : ServerChange -> Id UserId -> Local -> Model -> Command FrontendOnly toBackend msg
+serverChangeCmd change _ local _ =
     case change of
-        Server_Joined _ connectionId sessionId trackNames ->
+        Server_YouJoined _ _ ->
+            Command.none
+
+        Server_OtherJoined _ connectionId ->
             case local.currentRoom of
                 Just roomId ->
                     if roomId == connectionId.roomId then
                         toJs
                             (ToJs_PeerJoined
                                 { connectionId = connectionId
-                                , sessionId = sessionId
-                                , trackNames = trackNames
                                 }
                             )
 
                     else
                         Command.none
 
-                Nothing ->
+                _ ->
                     Command.none
-
-        Server_Joining _ _ ->
-            Command.none
 
         Server_Left _ connectionId ->
             toJs (ToJs_PeerLeft connectionId)
 
-        Server_SetRemoteCallData _ _ ->
-            Command.none
+        {- Nothing arrives from somebody whose camera is off, so their canvas would
+           otherwise sit there showing the last frame that did. JS is told rather
+           than left to guess from the silence, which it could only do on a timer
+           that a slow connection would trip.
+        -}
+        Server_SetRemoteCallData connectionId remoteCallData ->
+            toJs (ToJs_SetPeerVideoInputEnabled connectionId remoteCallData.videoInputEnabled)
 
 
 port voice_chat_to_js : Json.Encode.Value -> Cmd msg
@@ -1274,13 +1273,12 @@ port voice_chat_from_js : (Json.Decode.Value -> msg) -> Sub msg
 type ToJs
     = ToJs_StartCall StartCallData
     | ToJs_LeaveCall
-    | ToJs_PublishAnswer { answerSdp : Cloudflare.Sdp }
-    | ToJs_PeerJoined { connectionId : ConnectionId, sessionId : Cloudflare.RealtimeSessionId, trackNames : List Cloudflare.TrackName }
+    | ToJs_PeerJoined { connectionId : ConnectionId }
     | ToJs_PeerLeft ConnectionId
-    | ToJs_AcceptPullOffer { connectionId : ConnectionId, offerSdp : Cloudflare.Sdp }
     | ToJs_SetAudioInputEnabled Bool
     | ToJs_SetInput Bool (IdString MediaDeviceId)
     | ToJs_SetVideoInputEnabled Bool
+    | ToJs_SetPeerVideoInputEnabled ConnectionId Bool
     | ToJs_GetMediaDevices
     | ToJs_StartLocalStream StartLocalStreamData
     | ToJs_StopLocalStream
@@ -1318,11 +1316,12 @@ startLocalStreamDataCodec =
 
 type alias StartCallData =
     { roomId : CallId
+    , websocketUrl : String
+    , selfId : ( Id UserId, ClientId )
     , audioInput : Maybe (IdString MediaDeviceId)
     , videoInput : Maybe (IdString MediaDeviceId)
     , audioInputEnabled : Bool
     , videoInputEnabled : Bool
-    , existingPeers : List ExistingPeer
     }
 
 
@@ -1330,35 +1329,19 @@ startCallDataCodec : Codec StartCallData
 startCallDataCodec =
     Codec.object StartCallData
         |> Codec.field "roomId" .roomId roomIdCodec
+        |> Codec.field "websocketUrl" .websocketUrl Codec.string
+        |> Codec.field "selfId" .selfId otherClientIdCodec
         |> Codec.field "audioInput" .audioInput (Codec.nullable IdString.codec)
         |> Codec.field "videoInput" .videoInput (Codec.nullable IdString.codec)
         |> Codec.field "audioInputEnabled" .audioInputEnabled Codec.bool
         |> Codec.field "videoInputEnabled" .videoInputEnabled Codec.bool
-        |> Codec.field "existingPeers" .existingPeers (Codec.list existingPeerCodec)
         |> Codec.buildObject
 
 
-publishAnswerArgsCodec : Codec { answerSdp : Cloudflare.Sdp }
-publishAnswerArgsCodec =
-    Codec.object (\sdp -> { answerSdp = sdp })
-        |> Codec.field "answerSdp" .answerSdp Cloudflare.sdpCodec
-        |> Codec.buildObject
-
-
-peerJoinedArgsCodec : Codec { connectionId : ConnectionId, sessionId : Cloudflare.RealtimeSessionId, trackNames : List Cloudflare.TrackName }
+peerJoinedArgsCodec : Codec { connectionId : ConnectionId }
 peerJoinedArgsCodec =
-    Codec.object (\c s t -> { connectionId = c, sessionId = s, trackNames = t })
+    Codec.object (\c -> { connectionId = c })
         |> Codec.field "connectionId" .connectionId connectionIdCodec
-        |> Codec.field "sessionId" .sessionId Cloudflare.sessionIdCodec
-        |> Codec.field "trackNames" .trackNames (Codec.list Cloudflare.trackNameCodec)
-        |> Codec.buildObject
-
-
-pullOfferArgsCodec : Codec { connectionId : ConnectionId, offerSdp : Cloudflare.Sdp }
-pullOfferArgsCodec =
-    Codec.object (\c s -> { connectionId = c, offerSdp = s })
-        |> Codec.field "connectionId" .connectionId connectionIdCodec
-        |> Codec.field "offerSdp" .offerSdp Cloudflare.sdpCodec
         |> Codec.buildObject
 
 
@@ -1378,7 +1361,7 @@ pullOfferArgsCodec =
 voiceChatToJsCodec : Codec ToJs
 voiceChatToJsCodec =
     Codec.custom
-        (\eStartCall eLeaveCall ePublishAnswer ePeerJoined ePeerLeft eAcceptPullOffer eSetMuted eSetAudioInput eSetVideoPaused eGetMediaDevices eStartLocalStream eStopLocalStream eSetVolume value ->
+        (\eStartCall eLeaveCall ePeerJoined ePeerLeft eSetMuted eSetAudioInput eSetVideoPaused eSetPeerVideoPaused eGetMediaDevices eStartLocalStream eStopLocalStream eSetVolume value ->
             case value of
                 ToJs_StartCall a ->
                     eStartCall a
@@ -1386,17 +1369,11 @@ voiceChatToJsCodec =
                 ToJs_LeaveCall ->
                     eLeaveCall
 
-                ToJs_PublishAnswer a ->
-                    ePublishAnswer a
-
                 ToJs_PeerJoined a ->
                     ePeerJoined a
 
                 ToJs_PeerLeft a ->
                     ePeerLeft a
-
-                ToJs_AcceptPullOffer a ->
-                    eAcceptPullOffer a
 
                 ToJs_SetAudioInputEnabled a ->
                     eSetMuted a
@@ -1406,6 +1383,9 @@ voiceChatToJsCodec =
 
                 ToJs_SetVideoInputEnabled a ->
                     eSetVideoPaused a
+
+                ToJs_SetPeerVideoInputEnabled a b ->
+                    eSetPeerVideoPaused a b
 
                 ToJs_GetMediaDevices ->
                     eGetMediaDevices
@@ -1421,13 +1401,12 @@ voiceChatToJsCodec =
         )
         |> Codec.variant1 "start-call" ToJs_StartCall startCallDataCodec
         |> Codec.variant0 "leave-call" ToJs_LeaveCall
-        |> Codec.variant1 "publish-answer" ToJs_PublishAnswer publishAnswerArgsCodec
         |> Codec.variant1 "peer-joined" ToJs_PeerJoined peerJoinedArgsCodec
         |> Codec.variant1 "peer-left" ToJs_PeerLeft connectionIdCodec
-        |> Codec.variant1 "accept-pull-offer" ToJs_AcceptPullOffer pullOfferArgsCodec
         |> Codec.variant1 "set-audio-input-enabled" ToJs_SetAudioInputEnabled Codec.bool
         |> Codec.variant2 "set-input" ToJs_SetInput Codec.bool IdString.codec
         |> Codec.variant1 "set-video-input-enabled" ToJs_SetVideoInputEnabled Codec.bool
+        |> Codec.variant2 "set-peer-video-input-enabled" ToJs_SetPeerVideoInputEnabled connectionIdCodec Codec.bool
         |> Codec.variant0 "get-media-devices" ToJs_GetMediaDevices
         |> Codec.variant1 "start-local-stream" ToJs_StartLocalStream startLocalStreamDataCodec
         |> Codec.variant0 "stop-local-stream" ToJs_StopLocalStream
@@ -1443,14 +1422,32 @@ toJs msg =
         (Codec.encoder voiceChatToJsCodec msg)
 
 
-startCallCmd : CallId -> List ExistingPeer -> Model -> Command FrontendOnly toMsg msg
-startCallCmd roomId existingPeers model =
+{-| The room both ends of a DM connect to has to be named the same way by both of
+them, so it is the `DmChannelId`, which is derived from the pair of user ids and
+doesn't depend on who is asking. `CallId` names the _other_ person, so it would
+have named a different room at each end.
+-}
+startCallCmd : CallId -> Id UserId -> ClientId -> Model -> Command FrontendOnly toMsg msg
+startCallCmd roomId userId clientId model =
     { roomId = roomId
+    , websocketUrl =
+        FileStatus.websocketDomain
+            ++ "/file/websocket/"
+            ++ Url.percentEncode
+                (case roomId of
+                    DmRoomId otherUserId ->
+                        DmChannelId.fromUserIds userId otherUserId |> DmChannelId.toString
+
+                    GuildRoomId guildId channelId ->
+                        "guild-" ++ Id.toString guildId ++ "-" ++ Id.toString channelId
+                )
+            ++ "?clientId="
+            ++ Url.percentEncode (Lamdera.clientIdToString clientId)
+    , selfId = ( userId, clientId )
     , audioInput = model.selectedAudioInputDevice
     , videoInput = model.selectedVideoInputDevice
     , audioInputEnabled = model.remoteCallData.audioInputEnabled
     , videoInputEnabled = model.remoteCallData.videoInputEnabled
-    , existingPeers = existingPeers
     }
         |> ToJs_StartCall
         |> toJs
@@ -1461,11 +1458,7 @@ type MediaDeviceId
 
 
 type FromJs
-    = FromJs_PublishOffer Cloudflare.Sdp (List String)
-    | FromJs_PublishConnected
-    | FromJs_PullAnswer ConnectionId Cloudflare.Sdp
-    | FromJs_RequestPullTracks ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName)
-    | FromJs_GotUserMediaDevices (List MediaDevice) (List (IdString MediaDeviceId))
+    = FromJs_GotUserMediaDevices (List MediaDevice) (List (IdString MediaDeviceId))
     | FromJs_GotUserMediaDevicesError String
     | FromJs_SpeakingChanged LocalOrConnection Bool
     | FromJs_StartConnectionError String
@@ -1495,20 +1488,8 @@ localOrConnectionCodec =
 voiceChatFromJsCodec : Codec FromJs
 voiceChatFromJsCodec =
     Codec.custom
-        (\ePublishOffer ePublishConnected ePullAnswer eRequestPull cEncoder dEncoder eEncoder fEncoder value ->
+        (\cEncoder dEncoder eEncoder fEncoder value ->
             case value of
-                FromJs_PublishOffer sdp mids ->
-                    ePublishOffer sdp mids
-
-                FromJs_PublishConnected ->
-                    ePublishConnected
-
-                FromJs_PullAnswer connId sdp ->
-                    ePullAnswer connId sdp
-
-                FromJs_RequestPullTracks connId sessId trackNames ->
-                    eRequestPull connId sessId trackNames
-
                 FromJs_GotUserMediaDevices a b ->
                     cEncoder a b
 
@@ -1521,10 +1502,6 @@ voiceChatFromJsCodec =
                 FromJs_StartConnectionError string ->
                     fEncoder string
         )
-        |> Codec.variant2 "publish-offer" FromJs_PublishOffer Cloudflare.sdpCodec (Codec.list Codec.string)
-        |> Codec.variant0 "publish-connected" FromJs_PublishConnected
-        |> Codec.variant2 "pull-answer" FromJs_PullAnswer connectionIdCodec Cloudflare.sdpCodec
-        |> Codec.variant3 "request-pull-tracks" FromJs_RequestPullTracks connectionIdCodec Cloudflare.sessionIdCodec (Codec.list Cloudflare.trackNameCodec)
         |> Codec.variant2 "got-media-devices" FromJs_GotUserMediaDevices (Codec.list mediaDevicesCodec) (Codec.list IdString.codec)
         |> Codec.variant1 "got-media-devices-error" FromJs_GotUserMediaDevicesError Codec.string
         |> Codec.variant2 "is-speaking-changed" FromJs_SpeakingChanged localOrConnectionCodec Codec.bool
@@ -1595,6 +1572,9 @@ connectionIdToString { roomId, otherClientId } =
     (case roomId of
         DmRoomId otherUserId ->
             Id.toString otherUserId
+
+        GuildRoomId guildId channelId ->
+            "guild-" ++ Id.toString guildId ++ "-" ++ Id.toString channelId
     )
         ++ " "
         ++ otherUserIdToString otherClientId
@@ -1634,17 +1614,30 @@ roomIdCodec : Codec CallId
 roomIdCodec =
     Codec.andThen
         (\text ->
-            case Id.fromString text of
-                Just id ->
-                    Codec.succeed (DmRoomId id)
+            case String.split "-" text of
+                [ "guild", guildId, channelId ] ->
+                    case ( Id.fromString guildId, Id.fromString channelId ) of
+                        ( Just guildId2, Just channelId2 ) ->
+                            Codec.succeed (GuildRoomId guildId2 channelId2)
 
-                Nothing ->
-                    Codec.fail ("Invalid roomId: " ++ text)
+                        _ ->
+                            Codec.fail ("Invalid roomId: " ++ text)
+
+                _ ->
+                    case Id.fromString text of
+                        Just id ->
+                            Codec.succeed (DmRoomId id)
+
+                        Nothing ->
+                            Codec.fail ("Invalid roomId: " ++ text)
         )
         (\roomId ->
             case roomId of
                 DmRoomId otherUserId ->
                     Id.toString otherUserId
+
+                GuildRoomId guildId channelId ->
+                    "guild-" ++ Id.toString guildId ++ "-" ++ Id.toString channelId
         )
         Codec.string
 

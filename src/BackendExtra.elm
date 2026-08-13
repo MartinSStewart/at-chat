@@ -10,7 +10,9 @@ module BackendExtra exposing
     , asDiscordGuildMember
     , asDiscordUser
     , asDmUser
+    , asDmUserRpc
     , asGuildMember
+    , asGuildMemberRpc
     , asGuildOwner
     , asUser
     , discordDmChannelToFrontend
@@ -59,6 +61,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
+import Http
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import IdArray exposing (IdArray)
 import Lamdera.Wire3
@@ -1084,6 +1087,19 @@ getVoiceChatDataHelper roomId session otherSession otherClientId remoteCallData 
                 Nothing ->
                     dict2
 
+        GuildRoomId guildId channelId ->
+            SeqDict.update
+                (GuildRoomId guildId channelId)
+                (\maybe ->
+                    case maybe of
+                        Just nonempty ->
+                            NonemptyDict.insert ( otherSession.userId, otherClientId ) remoteCallData nonempty |> Just
+
+                        Nothing ->
+                            NonemptyDict.singleton ( otherSession.userId, otherClientId ) remoteCallData |> Just
+                )
+                dict2
+
 
 getVoiceChatData : ClientId -> UserSession -> BackendModel -> SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) Call.RemoteCallData)
 getVoiceChatData clientId session model =
@@ -1094,10 +1110,7 @@ getVoiceChatData clientId session model =
                     NonemptyDict.foldl
                         (\otherClientId data dict2 ->
                             case ( data.call, otherClientId == clientId ) of
-                                ( ConnectedToCall roomId _, False ) ->
-                                    getVoiceChatDataHelper roomId session otherSession otherClientId data.remoteCallData dict2
-
-                                ( ConnectingToCall roomId, False ) ->
+                                ( ConnectedToCall roomId, False ) ->
                                     getVoiceChatDataHelper roomId session otherSession otherClientId data.remoteCallData dict2
 
                                 _ ->
@@ -1339,10 +1352,6 @@ adminData model lastLogPageViewed =
     , privateVapidKey = model.privateVapidKey
     , slackClientSecret = model.slackClientSecret
     , openRouterKey = model.openRouterKey
-    , cloudflareRealtimeApiToken = model.cloudflareRealtimeApiToken
-    , cloudflareRealtimeAppId = model.cloudflareRealtimeAppId
-    , cloudflareAccountId = model.cloudflareAccountId
-    , cloudflareAnalyticsApiToken = model.cloudflareAnalyticsApiToken
     , postmarkApiKey = model.postmarkApiKey
     , dmChannels =
         SeqDict.map
@@ -2318,6 +2327,44 @@ asGuildMember model sessionId guildId func =
             ( model, Command.none )
 
 
+asGuildMemberRpc :
+    BackendModel
+    -> SessionId
+    -> ClientId
+    -> Id GuildId
+    -> (UserSession -> BackendUser -> BackendGuild -> ( Result Http.Error String, BackendModel, Cmd BackendMsg ))
+    -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
+asGuildMemberRpc model sessionId clientId guildId func =
+    case ( SeqDict.get sessionId model.sessions, SeqDict.get sessionId model.connections ) of
+        ( Just session, Just connections ) ->
+            if NonemptyDict.member clientId connections then
+                case ( NonemptyDict.get session.userId model.users, SeqDict.get guildId model.guilds ) of
+                    ( Just user, Just guild ) ->
+                        case MembersAndOwner.isMember session.userId guild.membersAndOwner of
+                            IsNotMember ->
+                                rpcInvalidRequest model
+
+                            IsMember ->
+                                func session user guild
+
+                            IsOwner ->
+                                func session user guild
+
+                    _ ->
+                        rpcInvalidRequest model
+
+            else
+                rpcInvalidRequest model
+
+        _ ->
+            rpcInvalidRequest model
+
+
+rpcInvalidRequest : BackendModel -> ( Result Http.Error value, BackendModel, Cmd BackendMsg )
+rpcInvalidRequest model =
+    ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+
 asDiscordGuildChannelMember :
     BackendModel
     -> SessionId
@@ -2616,6 +2663,47 @@ asDmUser model sessionId { otherUserId } func =
 
         Nothing ->
             ( model, Command.none )
+
+
+asDmUserRpc :
+    BackendModel
+    -> SessionId
+    -> ClientId
+    -> { otherUserId : Id UserId }
+    -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> DmChannel -> ( Result Http.Error String, BackendModel, Cmd BackendMsg ))
+    -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
+asDmUserRpc model sessionId clientId { otherUserId } func =
+    case ( SeqDict.get sessionId model.sessions, SeqDict.get sessionId model.connections ) of
+        ( Just session, Just connections ) ->
+            if NonemptyDict.member clientId connections then
+                let
+                    dmChannelId =
+                        DmChannelId.fromUserIds session.userId otherUserId
+                in
+                case
+                    ( NonemptyDict.get session.userId model.users
+                    , NonemptyDict.get otherUserId model.users
+                    , SeqDict.get dmChannelId model.dmChannels
+                    )
+                of
+                    ( Just user, Just otherUser, Just dmChannel ) ->
+                        func session user otherUser dmChannelId dmChannel
+
+                    ( Just user, Just otherUser, Nothing ) ->
+                        if usersHaveSharedGuilds session.userId otherUserId model then
+                            func session user otherUser dmChannelId DmChannel.backendInit
+
+                        else
+                            rpcInvalidRequest model
+
+                    _ ->
+                        rpcInvalidRequest model
+
+            else
+                rpcInvalidRequest model
+
+        _ ->
+            rpcInvalidRequest model
 
 
 usersHaveSharedGuilds : Id UserId -> Id UserId -> BackendModel -> Bool

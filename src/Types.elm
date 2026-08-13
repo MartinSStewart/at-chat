@@ -54,7 +54,6 @@ import Bytes exposing (Bytes)
 import Call exposing (CallId, ChannelSidebarMode, FromJs)
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
-import Cloudflare
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
@@ -385,10 +384,6 @@ type alias BackendModel =
     , publicVapidKey : String
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
-    , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
-    , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
-    , cloudflareAccountId : Maybe Cloudflare.AccountId
-    , cloudflareAnalyticsApiToken : Maybe Cloudflare.AnalyticsApiToken
     , textEditor : TextEditor.LocalState
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id Discord.UserId, Discord.Id Discord.ChannelId ) ( ClientId, ChangeId, Time.Zone )
@@ -707,10 +702,6 @@ type BackendMsg
             }
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
-    | GotCloudflareSessionCreated SessionId ClientId ChangeId Time.Posix CallId Cloudflare.Sdp (List String) (Result Http.Error Cloudflare.RealtimeSessionId)
-    | GotCloudflareSession SessionId ClientId ChangeId Time.Posix CallId Cloudflare.RealtimeSessionId (Result Http.Error Cloudflare.PushTracksResult)
-    | GotCloudflarePullOffer Time.Posix ClientId ChangeId Call.ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName) (Result Http.Error Cloudflare.PullTracksResult)
-    | GotCloudflareRenegotiateAck ClientId ChangeId Cloudflare.Sdp (Result Http.Error ())
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
@@ -771,11 +762,10 @@ type BackendMsg
     | RegeneratedServerSecret Time.Posix ChangeId ClientId (Result Http.Error (SecretId ServerSecret))
     | ReloadedDiscordGuildForAdmin Time.Posix ChangeId ClientId (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Result Discord.HttpError ( Discord.Guild, List Discord.Channel2 ))
     | GotTimeForWebsocketListenClose (Discord.Id Discord.UserId) Websocket.CloseEventCode String Time.Posix
-    | GotCloudflareUsage Time.Posix (Result Http.Error Int)
-    | GotCloudflareEgressForAdmin ClientId (Result Http.Error Int)
-    | GotRustServerFileUpload FileHash Int (Maybe (Coord CssPixels))
+    | Rpc_GotFileUpload FileHash Int (Maybe (Coord CssPixels))
     | GotEnglishWordList (Result Http.Error String)
     | GotSwedishWordList (Result Http.Error String)
+    | Rpc_UserJoinedCall Time.Posix SessionId ClientId (Id UserId) CallId
 
 
 type MessageFromGuildOrDm
