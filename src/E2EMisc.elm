@@ -14,6 +14,7 @@ module E2EMisc exposing
     , mentionSuggestionTest
     , noTimestampSuggestionTest
     , profileImageOpensDm
+    , reactionPopupNamesEmojiTest
     , startingACallOrGameStaysReadTest
     , staysReadWhileViewingTest
     , timeOfDaySuggestionTest
@@ -113,6 +114,43 @@ largePasteBecomesAttachment config =
                 , admin.checkView
                     100
                     (Test.Html.Query.has [ Test.Html.Selector.text "message.txt" ])
+                ]
+            )
+        ]
+
+
+{-| Hovering a message shows a popup above each of its reactions naming who reacted.
+For a standard unicode emoji the popup also names the emoji itself, which it can only
+do once the emoji data has been fetched and copied into LocalUser.
+-}
+reactionPopupNamesEmojiTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+reactionPopupNamesEmojiTest config =
+    E2EHelper.startTest
+        "Hovering a reaction names the emoji it was made with"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.writeMessage admin 1000 "Hello everyone"
+
+                -- The first of the buttons that appear when hovering a message reacts
+                -- with ❤️, the emoji `User.commonlyUsedEmojis` leads with.
+                , admin.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
+                , admin.click 100 (Dom.id "miniView_emojiReact_0")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.id "guild_removeReactionEmoji_0" ])
+                , admin.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.class "emoji-popup"
+                        , Test.Html.Selector.text ":heart:"
+                        ]
+                    )
                 ]
             )
         ]

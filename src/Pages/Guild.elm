@@ -36,7 +36,7 @@ import DmChannelId
 import Drawing exposing (Drawing)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..))
+import Emoji exposing (CachedEmojiData, EmojiConfig, EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileHash, FileId, FileMetadata(..), FileStatus)
 import GuildColumn
@@ -5983,7 +5983,8 @@ reactionPopupArrowWidth =
 
 
 reactionEmojiView :
-    IsHovered
+    Maybe CachedEmojiData
+    -> IsHovered
     -> userId
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
@@ -5991,7 +5992,7 @@ reactionEmojiView :
     -> Int
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> Maybe (Element MessageViewMsg)
-reactionEmojiView isHovered currentUserId customEmojis allUsers animationMode containerWidth reactions =
+reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers animationMode containerWidth reactions =
     if SeqDict.isEmpty reactions then
         Nothing
 
@@ -6063,7 +6064,7 @@ reactionEmojiView isHovered currentUserId customEmojis allUsers animationMode co
                             , Ui.Font.weight 500
                             , case isHovered of
                                 IsHovered ->
-                                    reactionPopup customEmojis allUsers placement emoji users |> Ui.above
+                                    reactionPopup emojiData customEmojis allUsers placement emoji users |> Ui.above
 
                                 IsNotHovered ->
                                     Ui.noAttr
@@ -6152,13 +6153,14 @@ reactionPopupArrowFromRight arrowFromRight =
 
 
 reactionPopup :
-    SeqDict (Id CustomEmojiId) CustomEmojiData
+    Maybe CachedEmojiData
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> ReactionPopupPlacement
     -> EmojiOrCustomEmoji
     -> NonemptySet userId
     -> Element MessageViewMsg
-reactionPopup customEmojis allUsers placement emoji users =
+reactionPopup emojiData customEmojis allUsers placement emoji users =
     let
         names : Nonempty (Element msg)
         names =
@@ -6181,12 +6183,13 @@ reactionPopup customEmojis allUsers placement emoji users =
         maybeEmojiName : Maybe String
         maybeEmojiName =
             case emoji of
-                EmojiOrCustomEmoji_Emoji _ ->
-                    Nothing
+                EmojiOrCustomEmoji_Emoji emoji2 ->
+                    Maybe.andThen (\cached -> Emoji.firstShortName cached emoji2) emojiData
+                        |> Maybe.map (\name -> ":" ++ name ++ ":")
 
                 EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
                     SeqDict.get customEmojiId customEmojis
-                        |> Maybe.map (\emojiData -> ":" ++ CustomEmoji.emojiNameToString emojiData.name ++ ":")
+                        |> Maybe.map (\customEmoji -> ":" ++ CustomEmoji.emojiNameToString customEmoji.name ++ ":")
 
         namesParagraph : Element msg
         namesParagraph =
@@ -6290,7 +6293,7 @@ messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessa
             let
                 maybeReactions : Maybe (Element MessageViewMsg)
                 maybeReactions =
-                    reactionEmojiView IsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth data.reactions
+                    reactionEmojiView local.localUser.emojiData IsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth data.reactions
 
                 ( guildOrDmIdNoThread, threadRoute ) =
                     guildOrDmId
@@ -6437,7 +6440,7 @@ threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messa
         UserTextMessage data ->
             let
                 maybeReactions =
-                    reactionEmojiView IsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth data.reactions
+                    reactionEmojiView local.localUser.emojiData IsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth data.reactions
 
                 ( guildOrDmIdNoThread, _ ) =
                     guildOrDmId
@@ -6778,6 +6781,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 localUser.timezone
                 time
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 (case highlight of
                     NoHighlight ->
@@ -6819,6 +6823,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 localUser.timezone
                 time
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 highlight
                 messageId
@@ -6849,6 +6854,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 localUser.timezone
                 time
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 highlight
                 messageId
@@ -6873,6 +6879,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 localUser.timezone
                 time
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 highlight
                 messageId
@@ -6911,6 +6918,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 localUser.timezone
                 time
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 highlight
                 messageId
@@ -6967,6 +6975,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 localUser.timezone
                 time
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 (case highlight of
                     NoHighlight ->
@@ -7007,6 +7016,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 localUser.timezone
                 time
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 highlight
                 messageId
@@ -7037,6 +7047,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 localUser.timezone
                 time
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 highlight
                 messageId
@@ -7061,6 +7072,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 localUser.timezone
                 time
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 highlight
                 messageId
@@ -7099,6 +7111,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 localUser.timezone
                 time
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 highlight
                 messageId
@@ -7167,6 +7180,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 localUser.user
                 message2.reactions
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 isHovered
                 (userTextMessageContent
@@ -7194,6 +7208,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 localUser.user
                 reactions
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 isHovered
                 (Ui.row
@@ -7219,6 +7234,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 localUser.user
                 SeqDict.empty
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 isHovered
                 (deletedMessageContent
@@ -7239,6 +7255,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 localUser.user
                 callStartedData.reactions
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 isHovered
                 (Ui.row
@@ -7272,6 +7289,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 localUser.user
                 gameStarted.reactions
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 isHovered
                 (Ui.row
@@ -7331,6 +7349,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 localUser.user
                 message2.reactions
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 isHovered
                 (discordUserTextMessageContent
@@ -7357,6 +7376,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 localUser.user
                 reactions
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 isHovered
                 (Ui.row
@@ -7382,6 +7402,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 localUser.user
                 SeqDict.empty
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 isHovered
                 (deletedMessageContent
@@ -7402,6 +7423,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 localUser.user
                 callStartedData.reactions
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 isHovered
                 (Ui.row
@@ -7435,6 +7457,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 localUser.user
                 gameStarted.reactions
                 localUser.customEmojis
+                localUser.emojiData
                 allUsers
                 isHovered
                 (Ui.row
@@ -8201,6 +8224,7 @@ messageContainer :
     -> Time.Zone
     -> Time.Posix
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> Maybe CachedEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> HighlightMessage
     -> Id ChannelMessageId
@@ -8212,11 +8236,11 @@ messageContainer :
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer containerWidth isThreadStarter timezone currentTime customEmojis allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent =
+messageContainer containerWidth isThreadStarter timezone currentTime customEmojis emojiData allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            reactionEmojiView isHovered currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
+            reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
@@ -8327,15 +8351,16 @@ threadMessageContainer :
     -> FrontendCurrentUser
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> Maybe CachedEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-threadMessageContainer containerWidth highlight messageIndex canEdit currentUserId currentUser reactions customEmojis allUsers isHovered messageContent =
+threadMessageContainer containerWidth highlight messageIndex canEdit currentUserId currentUser reactions customEmojis emojiData allUsers isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            reactionEmojiView isHovered currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
+            reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
