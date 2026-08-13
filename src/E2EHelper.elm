@@ -773,6 +773,10 @@ mockVoiceChatPorts request =
                     -- Same as SetAudioInputEnabled. No response.
                     Nothing
 
+                Call.ToJs_SetPeerVideoInputEnabled _ _ ->
+                    -- JS clears that peer's canvas. No response.
+                    Nothing
+
                 Call.ToJs_GetMediaDevices ->
                     fromJsEvent
                         (Call.FromJs_GotUserMediaDevices

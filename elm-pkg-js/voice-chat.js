@@ -616,6 +616,15 @@ exports.init = async function init(app) {
         peer.videoReady = false;
     }
 
+    // Clearing rather than painting black leaves the canvas transparent, and the
+    // background it sits on is already black, so it looks the same as a camera
+    // that is on but seeing nothing.
+    function clearCanvas(canvas) {
+        if (!canvas) return;
+        const context = canvas.getContext("2d");
+        if (context) context.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
     function drawFrame(state, peer, frame) {
         // Elm renders the peer's canvas only once it knows the peer is in the
         // call, which can be after their first frame arrives, so it is looked up
@@ -705,10 +714,7 @@ exports.init = async function init(app) {
             if (decoder && decoder.state !== "closed") decoder.close();
         });
         try { peer.gain.disconnect(); } catch (e) {}
-        if (peer.canvas) {
-            const context = peer.canvas.getContext("2d");
-            if (context) context.clearRect(0, 0, peer.canvas.width, peer.canvas.height);
-        }
+        clearCanvas(peer.canvas);
         state.peers.delete(senderKey);
     }
 
@@ -913,6 +919,18 @@ exports.init = async function init(app) {
             await setInput(msg.args[0], msg.args[1]);
         } else if (msg.tag === "set-video-input-enabled") {
             setVideoInputEnabled(msg.args[0]);
+        } else if (msg.tag === "set-peer-video-input-enabled") {
+            // Nothing arrives from a peer whose camera is off, so without this
+            // their canvas would keep showing the last frame that did. Their
+            // first frame back is a key frame, so nothing has to be restored
+            // when it comes on again.
+            if (!msg.args[1] && call) {
+                const senderKey = msg.args[0].otherClientId;
+                const peer = call.peers.get(senderKey);
+                clearCanvas(
+                    (peer && peer.canvas) || document.getElementById(peerNodeId(call.roomId, senderKey))
+                );
+            }
         } else if (msg.tag === "set-volume") {
             const peer = call && call.peers.get(msg.args[0].otherClientId);
             if (peer) peer.gain.gain.value = msg.args[1];

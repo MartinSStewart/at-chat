@@ -1293,8 +1293,13 @@ serverChangeCmd change _ local _ =
         Server_Left _ connectionId ->
             toJs (ToJs_PeerLeft connectionId)
 
-        Server_SetRemoteCallData _ _ ->
-            Command.none
+        {- Nothing arrives from somebody whose camera is off, so their canvas would
+           otherwise sit there showing the last frame that did. JS is told rather
+           than left to guess from the silence, which it could only do on a timer
+           that a slow connection would trip.
+        -}
+        Server_SetRemoteCallData connectionId remoteCallData ->
+            toJs (ToJs_SetPeerVideoInputEnabled connectionId remoteCallData.videoInputEnabled)
 
 
 port voice_chat_to_js : Json.Encode.Value -> Cmd msg
@@ -1311,6 +1316,7 @@ type ToJs
     | ToJs_SetAudioInputEnabled Bool
     | ToJs_SetInput Bool (IdString MediaDeviceId)
     | ToJs_SetVideoInputEnabled Bool
+    | ToJs_SetPeerVideoInputEnabled ConnectionId Bool
     | ToJs_GetMediaDevices
     | ToJs_StartLocalStream StartLocalStreamData
     | ToJs_StopLocalStream
@@ -1393,7 +1399,7 @@ peerJoinedArgsCodec =
 voiceChatToJsCodec : Codec ToJs
 voiceChatToJsCodec =
     Codec.custom
-        (\eStartCall eLeaveCall ePeerJoined ePeerLeft eSetMuted eSetAudioInput eSetVideoPaused eGetMediaDevices eStartLocalStream eStopLocalStream eSetVolume value ->
+        (\eStartCall eLeaveCall ePeerJoined ePeerLeft eSetMuted eSetAudioInput eSetVideoPaused eSetPeerVideoPaused eGetMediaDevices eStartLocalStream eStopLocalStream eSetVolume value ->
             case value of
                 ToJs_StartCall a ->
                     eStartCall a
@@ -1416,6 +1422,9 @@ voiceChatToJsCodec =
                 ToJs_SetVideoInputEnabled a ->
                     eSetVideoPaused a
 
+                ToJs_SetPeerVideoInputEnabled a b ->
+                    eSetPeerVideoPaused a b
+
                 ToJs_GetMediaDevices ->
                     eGetMediaDevices
 
@@ -1435,6 +1444,7 @@ voiceChatToJsCodec =
         |> Codec.variant1 "set-audio-input-enabled" ToJs_SetAudioInputEnabled Codec.bool
         |> Codec.variant2 "set-input" ToJs_SetInput Codec.bool IdString.codec
         |> Codec.variant1 "set-video-input-enabled" ToJs_SetVideoInputEnabled Codec.bool
+        |> Codec.variant2 "set-peer-video-input-enabled" ToJs_SetPeerVideoInputEnabled connectionIdCodec Codec.bool
         |> Codec.variant0 "get-media-devices" ToJs_GetMediaDevices
         |> Codec.variant1 "start-local-stream" ToJs_StartLocalStream startLocalStreamDataCodec
         |> Codec.variant0 "stop-local-stream" ToJs_StopLocalStream
