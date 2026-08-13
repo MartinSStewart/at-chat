@@ -106,12 +106,12 @@ checkCall : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Erro
 checkCall _ model headers text =
     case ( fromRustServer model headers, Codec.decodeString checkCallRequestCodec text ) of
         ( True, Ok request ) ->
-            case SeqDict.get (Debug.log "request" request).sessionId model.sessions of
+            case SeqDict.get request.sessionId model.sessions of
                 Just session ->
                     let
                         maybeRoomId : Maybe Call.CallId
                         maybeRoomId =
-                            case String.split "-" request.roomId |> Debug.log "asdf" of
+                            case String.split "-" request.roomId of
                                 [ "guild", guildId, channelId ] ->
                                     case ( Id.fromString guildId, Id.fromString channelId ) of
                                         ( Just guildId2, Just channelId2 ) ->
@@ -121,7 +121,7 @@ checkCall _ model headers text =
                                             Nothing
 
                                 _ ->
-                                    case DmChannelId.fromString text of
+                                    case DmChannelId.fromString request.roomId of
                                         Ok dmChannelId ->
                                             case DmChannelId.otherUserId session.userId dmChannelId of
                                                 Just otherUserId ->
@@ -133,7 +133,7 @@ checkCall _ model headers text =
                                         Err _ ->
                                             Nothing
                     in
-                    case Debug.log "maybeRoomId" maybeRoomId of
+                    case maybeRoomId of
                         Just (Call.DmRoomId otherUserId) ->
                             BackendExtra.asDmUserRpc
                                 model

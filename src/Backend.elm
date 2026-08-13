@@ -6802,11 +6802,16 @@ joinDmVoiceChat :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 joinDmVoiceChat sessionId clientId time otherUserId model userId =
     let
+        dmChannelId : DmChannelId
         dmChannelId =
             DmChannelId.fromUserIds userId otherUserId
+
+        dmChannel : DmChannel
+        dmChannel =
+            SeqDict.get dmChannelId model.dmChannels |> Maybe.withDefault DmChannel.backendInit
     in
-    case ( SeqDict.get sessionId model.connections, SeqDict.get dmChannelId model.dmChannels ) of
-        ( Just connections, Just dmChannel ) ->
+    case SeqDict.get sessionId model.connections of
+        Just connections ->
             case NonemptyDict.get clientId connections of
                 Just connection ->
                     let

@@ -2694,8 +2694,31 @@ updateLoaded msg model =
                         NewGuildRoute ->
                             ( model, Command.none )
 
-                        GuildRoute _ _ ->
-                            ( model, Command.none )
+                        GuildRoute guildId channelRoute ->
+                            case channelRoute of
+                                ChannelRoute channelId (NoThreadWithFriends a b) _ ->
+                                    FrontendExtra.routePush
+                                        model
+                                        (GuildRoute
+                                            guildId
+                                            (ChannelRoute
+                                                channelId
+                                                (NoThreadWithFriends a b)
+                                                (Just ChannelHeaderTab_VoiceChat)
+                                            )
+                                        )
+
+                                ChannelRoute _ (ViewThreadWithFriends _ _ _) _ ->
+                                    ( model, Command.none )
+
+                                NewChannelRoute ->
+                                    ( model, Command.none )
+
+                                GuildSettingsRoute ->
+                                    ( model, Command.none )
+
+                                JoinRoute _ ->
+                                    ( model, Command.none )
 
                         DiscordGuildRoute _ ->
                             ( model, Command.none )
