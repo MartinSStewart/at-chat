@@ -1,8 +1,6 @@
 module E2EHelper exposing
     ( BackendModel2(..)
     , CustomRequest
-    , addCloudflareAnalyticsApiKeys
-    , addCloudflareRealtimeApiKeys
     , adminEmail
     , allAttackerLocalChanges
     , allAttackerToBackendChanges
@@ -109,7 +107,6 @@ import Backend
 import Broadcast
 import Call
 import ChannelDescription
-import Cloudflare
 import Codec
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -655,13 +652,10 @@ mockCloudflareSfu path { currentRequest, data } =
                         |> List.filter
                             (\( _, c ) ->
                                 case c.call of
-                                    ConnectedToCall _ _ ->
+                                    ConnectedToCall _ ->
                                         True
 
                                     NotInCall ->
-                                        False
-
-                                    ConnectingToCall _ ->
                                         False
                             )
                         |> List.length
@@ -720,46 +714,18 @@ mockVoiceChatPorts request =
         Ok ok ->
             case ok of
                 Call.ToJs_StartCall _ ->
-                    -- JS would: getUserMedia + addTransceiver(audio,video) + createOffer
-                    -- + setLocalDescription, then send the offer SDP back.
-                    -- The mids match what RTCPeerConnection auto-assigns ("0", "2").
-                    fromJsEvent
-                        (Call.FromJs_PublishOffer
-                            (Cloudflare.sdpFromString "fake-publish-offer-sdp")
-                            [ "0", "2" ]
-                        )
-
-                Call.ToJs_LeaveCall ->
-                    -- JS closes the PC and stops local media. No response.
                     Nothing
 
-                Call.ToJs_PublishAnswer _ ->
-                    -- JS sets the SDP answer as the remote description and waits
-                    -- for the PeerConnection to actually connect to Cloudflare.
-                    -- Once connected it tells the backend (FromJs_PublishConnected),
-                    -- which then drives the bidirectional track pulls via
-                    -- Server_Joined → ToJs_PeerJoined. We simulate "connected"
-                    -- firing immediately.
-                    fromJsEvent Call.FromJs_PublishConnected
+                Call.ToJs_LeaveCall ->
+                    Nothing
 
-                Call.ToJs_PeerJoined { connectionId, sessionId, trackNames } ->
-                    -- A peer joined while we're in the call. JS reacts by asking
-                    -- Elm to pull that peer's tracks.
-                    fromJsEvent (Call.FromJs_RequestPullTracks connectionId sessionId trackNames)
+                Call.ToJs_PeerJoined { connectionId } ->
+                    Nothing
 
                 Call.ToJs_PeerLeft _ ->
                     -- JS removes the peer's video element and stops their tracks.
                     -- No response.
                     Nothing
-
-                Call.ToJs_AcceptPullOffer args ->
-                    -- JS setRemoteDescription(offer) + createAnswer + setLocalDescription,
-                    -- then sends the answer back so Elm can call /renegotiate.
-                    fromJsEvent
-                        (Call.FromJs_PullAnswer
-                            args.connectionId
-                            (Cloudflare.sdpFromString "fake-pull-answer-sdp")
-                        )
 
                 Call.ToJs_SetAudioInputEnabled _ ->
                     -- JS flips track.enabled in place. No response.
@@ -972,61 +938,6 @@ voiceChatFromJsPayloads data =
             )
 
 
-addCloudflareRealtimeApiKeys :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-addCloudflareRealtimeApiKeys admin =
-    T.collapsableGroup
-        "Add Cloudflare Realtime API keys"
-        [ admin.click 100 (Dom.id "guild_showUserOptions")
-        , admin.click 100 (Dom.id "userOptions_gotoAdmin")
-        , admin.click 100 (Dom.id "admin_expandSectionButton_API keys")
-        , admin.input 100 (Dom.id "userOptions_cloudflareRealtimeAppId_label") "test-app-id"
-        , admin.click 100 (Dom.id "userOptions_cloudflareRealtimeAppId_acceptEdit")
-        , admin.input 100 (Dom.id "userOptions_cloudflareRealtimeApiToken_label") "test-api-token"
-        , admin.click 100 (Dom.id "userOptions_cloudflareRealtimeApiToken_acceptEdit")
-        , admin.navigateBack 100
-        , T.checkBackend 100
-            (\m ->
-                case ( (unwrapBackend m).cloudflareRealtimeAppId, (unwrapBackend m).cloudflareRealtimeApiToken ) of
-                    ( Just _, Just _ ) ->
-                        Ok ()
-
-                    _ ->
-                        Err "Cloudflare keys did not land on the backend"
-            )
-        ]
-
-
-{-| Configure the Cloudflare account id and analytics API token (used for the monthly cost check)
-through the admin page.
--}
-addCloudflareAnalyticsApiKeys :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-addCloudflareAnalyticsApiKeys admin =
-    T.collapsableGroup
-        "Add Cloudflare analytics API keys"
-        [ admin.click 100 (Dom.id "guild_showUserOptions")
-        , admin.click 100 (Dom.id "userOptions_gotoAdmin")
-        , admin.click 100 (Dom.id "admin_expandSectionButton_API keys")
-        , admin.input 100 (Dom.id "userOptions_cloudflareAccountId_label") "test-account-id"
-        , admin.click 100 (Dom.id "userOptions_cloudflareAccountId_acceptEdit")
-        , admin.input 100 (Dom.id "userOptions_cloudflareAnalyticsApiToken_label") "test-analytics-token"
-        , admin.click 100 (Dom.id "userOptions_cloudflareAnalyticsApiToken_acceptEdit")
-        , admin.navigateBack 100
-        , T.checkBackend 100
-            (\m ->
-                case ( (unwrapBackend m).cloudflareAccountId, (unwrapBackend m).cloudflareAnalyticsApiToken ) of
-                    ( Just _, Just _ ) ->
-                        Ok ()
-
-                    _ ->
-                        Err "Cloudflare analytics keys did not land on the backend"
-            )
-        ]
-
-
 dmCallTest :
     Bool
     -> T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
@@ -1138,8 +1049,7 @@ dmCallTest isMobile normalConfig =
                 in
                 [ T.collapsableGroup
                     "Voice chat"
-                    [ addCloudflareRealtimeApiKeys admin
-                    , openDm admin 100 "2"
+                    [ openDm admin 100 "2"
                     , openDm user 100 "0"
                     , admin.click 100 (Dom.id "guild_voiceChat")
                     , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminOpensVoiceChat)
@@ -1155,13 +1065,10 @@ dmCallTest isMobile normalConfig =
                                         List.filter
                                             (\( _, c ) ->
                                                 case c.call of
-                                                    ConnectedToCall _ _ ->
+                                                    ConnectedToCall _ ->
                                                         True
 
                                                     NotInCall ->
-                                                        False
-
-                                                    ConnectingToCall _ ->
                                                         False
                                             )
                                             (NonemptyDict.toList conns)
@@ -1193,13 +1100,10 @@ dmCallTest isMobile normalConfig =
                                         List.filter
                                             (\( _, c ) ->
                                                 case c.call of
-                                                    ConnectedToCall _ _ ->
+                                                    ConnectedToCall _ ->
                                                         True
 
                                                     NotInCall ->
-                                                        False
-
-                                                    ConnectingToCall _ ->
                                                         False
                                             )
                                             (NonemptyDict.toList conns)
@@ -1225,13 +1129,10 @@ dmCallTest isMobile normalConfig =
                                         List.filter
                                             (\( _, c ) ->
                                                 case c.call of
-                                                    ConnectedToCall _ _ ->
+                                                    ConnectedToCall _ ->
                                                         True
 
                                                     NotInCall ->
-                                                        False
-
-                                                    ConnectingToCall _ ->
                                                         False
                                             )
                                             (NonemptyDict.toList conns)
@@ -3191,10 +3092,7 @@ allAttackerLocalChanges =
     , Local_SetEmojiSkinTone Nothing
     , Local_SetEmojiSkinTone (Just SkinTone5)
     , Local_AddCustomEmojisToUser (NonemptySet.fromNonemptyList (Nonempty (Id.fromInt 0) []))
-    , Local_VoiceChatChange (Call.Local_Join startTime (Call.DmRoomId normalUserId) EmptyPlaceholder)
     , Local_VoiceChatChange (Call.Local_Leave startTime)
-    , Local_VoiceChatChange (Call.Local_RenegotiateAnswer (Cloudflare.sdpFromString "") EmptyPlaceholder)
-    , Local_VoiceChatChange Call.Local_PublishConnected
     , Local_Game
         (GuildOrDmId_Dm Broadcast.adminUserId)
         (Game.LocalChange_Go

@@ -1,10 +1,8 @@
-module E2EVoiceChat exposing (cloudflareCostTest, voiceChatTest)
+module E2EVoiceChat exposing (voiceChatTest)
 
-import Array
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
-import Log
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
@@ -25,8 +23,7 @@ voiceChatTest normalConfig =
             [ E2EHelper.connectTwoUsersAndJoinNewGuild
                 E2EHelper.desktopWindow
                 (\admin user ->
-                    [ E2EHelper.addCloudflareRealtimeApiKeys admin
-                    , E2EHelper.openDm admin 100 "0"
+                    [ E2EHelper.openDm admin 100 "0"
                     , E2EHelper.openDm user 100 "0"
                     , admin.checkView
                         100
@@ -74,67 +71,4 @@ voiceChatTest normalConfig =
                     ]
                 )
             ]
-        ]
-
-
-cloudflareCostTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-cloudflareCostTest config =
-    E2EHelper.startTest
-        "Cloudflare cost alert logs and emails the admin"
-        E2EHelper.startTime
-        config
-        [ T.connectFrontend
-            100
-            E2EHelper.sessionId0
-            "/"
-            E2EHelper.desktopWindow
-            (\admin ->
-                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
-                , E2EHelper.addCloudflareAnalyticsApiKeys admin
-
-                -- The admin can also load current egress on demand from the voice chat section.
-                , admin.click 100 (Dom.id "guild_showUserOptions")
-                , admin.click 100 (Dom.id "userOptions_gotoAdmin")
-                , admin.click 100 (Dom.id "admin_expandSectionButton_Voice chat")
-                , admin.click 100 (Dom.id "admin_loadCloudflareEgress")
-                , E2EHelper.hasText admin [ "1100.00 GB used (estimated $5.00 this month)" ]
-                , admin.navigateBack 100
-                ]
-            )
-        , -- The hourly job queries Cloudflare (mocked to return 1100 GB of egress => $5.00/month).
-          T.backendUpdate 100 (Types.HourlyUpdate E2EHelper.startTime)
-        , T.checkBackend 200
-            (\m ->
-                if
-                    Array.toList (E2EHelper.unwrapBackend m).logs
-                        |> List.any
-                            (\entry ->
-                                case entry.log of
-                                    Log.CloudflareCostExceeded _ _ ->
-                                        True
-
-                                    _ ->
-                                        False
-                            )
-                then
-                    Ok ()
-
-                else
-                    Err "Expected a CloudflareCostExceeded log to be recorded"
-            )
-        , T.checkState 200
-            (\data ->
-                case List.filterMap (E2EHelper.isLogErrorEmail E2EHelper.adminEmail) data.httpRequests of
-                    log :: _ ->
-                        if String.startsWith "Cloudflare services are estimated to cost" log then
-                            Ok ()
-
-                        else
-                            Err ("Unexpected error email body: " ++ log)
-
-                    [] ->
-                        Err "Expected an error-notification email about Cloudflare costs"
-            )
         ]

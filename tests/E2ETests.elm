@@ -2050,7 +2050,6 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EVoiceChat.voiceChatTest normalConfig
-    , E2EVoiceChat.cloudflareCostTest normalConfig
     , E2EHelper.startTest "Logins are rate limited"
         E2EHelper.startTime
         normalConfig

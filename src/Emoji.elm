@@ -576,7 +576,7 @@ searchInput model skinTone categories columns =
                 , Ui.width Ui.fill
                 , Ui.id (Dom.idToString searchInputId)
                 , Ui.htmlAttribute
-                    (Html.Events.preventDefaultOn "keydown" (decodeArrowKey model categories (Debug.log "columns" columns)))
+                    (Html.Events.preventDefaultOn "keydown" (decodeArrowKey model categories columns))
                 ]
                 { onChange = TypedSearchText
                 , text = model.searchText
