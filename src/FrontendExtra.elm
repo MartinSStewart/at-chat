@@ -1843,7 +1843,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                                         | games =
                                             Game.routeRequest
                                                 model3.time
-                                                local.localUser.session.userId
+                                                local.localUser
                                                 guildOrDmId2
                                                 messageId
                                                 dmChannel.games
@@ -1860,7 +1860,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                                         | games =
                                             Game.routeRequest
                                                 model3.time
-                                                local.localUser.session.userId
+                                                local.localUser
                                                 guildOrDmId2
                                                 messageId
                                                 channel.games

@@ -3,6 +3,7 @@ module E2ESheepGame exposing (tests)
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
+import Expect
 import Html.Attributes
 import Test.Html.Query
 import Test.Html.Selector
@@ -51,9 +52,22 @@ sheepGameDmTest normalConfig =
                         , admin.click 100 (Dom.id "sheepGame_cancel")
                         , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "sheepGame_start" ])
                         , admin.click 100 (Dom.id "game_select_Sheep Game")
-                        , admin.input 100 (Dom.id "sheepGame_question_0") "Name a colour"
+                        , admin.input 100 (Dom.id "sheepGame_question_0") "Name a **colour**"
                         , admin.input 100 (Dom.id "sheepGame_question_1") "Name an animal"
                         , admin.click 100 (Dom.id "sheepGame_start")
+
+                        -- Questions are rich text, so the part the host wrote in asterisks
+                        -- is rendered bold rather than shown with the asterisks in it.
+                        , admin.checkView
+                            100
+                            (\view ->
+                                Test.Html.Query.findAll
+                                    [ Test.Html.Selector.style "font-weight" "700"
+                                    , Test.Html.Selector.text "colour"
+                                    ]
+                                    view
+                                    |> Test.Html.Query.count (Expect.greaterThan 0)
+                            )
 
                         -- Both players answer. They agree about the colour and disagree about
                         -- the animal, so the first question is worth 2 points each and the
@@ -114,7 +128,7 @@ sheepGameDmTest normalConfig =
                             100
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.text "Scores after 1 of 2 questions"
-                                , Test.Html.Selector.text "Name a colour"
+                                , Test.Html.Selector.text "colour"
                                 ]
                             )
 
