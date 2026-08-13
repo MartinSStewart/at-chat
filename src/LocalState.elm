@@ -474,6 +474,9 @@ gameStartedText game =
         Message.GameType_WordSpellingGame ->
             "Word Spelling Game started"
 
+        Message.GameType_SheepGame ->
+            "Sheep Game started"
+
 
 messageDeleted : String
 messageDeleted =

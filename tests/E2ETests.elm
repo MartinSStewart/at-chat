@@ -15,6 +15,7 @@ import E2EHelper
 import E2ELogin
 import E2EMedia
 import E2EMisc
+import E2ESheepGame
 import E2EVoiceChat
 import E2EWordSpellingGame
 import Effect.Browser.Dom as Dom
@@ -2909,6 +2910,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EGo.tests normalConfig
+    , E2ESheepGame.tests normalConfig
     , E2EWordSpellingGame.tests normalConfig
     ]
 

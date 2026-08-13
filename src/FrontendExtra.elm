@@ -97,6 +97,7 @@ import Scroll
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
+import SheepGame
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import Thread exposing (FrontendGenericThread)
@@ -270,6 +271,9 @@ pendingChangesText localChange =
 
                 Game.LocalChange_WordSpellingGame _ _ ->
                     "Word spelling game change"
+
+                Game.LocalChange_SheepGame _ _ ->
+                    "Sheep game change"
 
         Local_Drawing _ _ _ ->
             "Drew on a message"
@@ -5351,6 +5355,44 @@ gameChangeUpdateChannel changeBy gameChange channel =
                     { channel
                         | games =
                             SeqDict.updateIfExists matchId (Game.addWordSpellingGameAction action) channel.games
+                    }
+
+        Game.LocalChange_SheepGame matchId sheepChange ->
+            case sheepChange of
+                SheepGame.StartMatch createdAt setup ->
+                    let
+                        channel2 =
+                            LocalState.createChannelMessageFrontend
+                                (GameStarted
+                                    { startedAt = createdAt
+                                    , startedBy = changeBy
+                                    , reactions = SeqDict.empty
+                                    , gameType = GameType_SheepGame
+                                    , timestampDrawings = Drawing.emptyDrawing
+                                    , cardDrawings = Drawing.emptyDrawing
+                                    }
+                                )
+                                channel
+
+                        newMatchId : Id ChannelMessageId
+                        newMatchId =
+                            DmChannel.latestFrontendMessageId channel2
+                    in
+                    { channel2
+                        | games =
+                            SeqDict.insert
+                                newMatchId
+                                (Game.initMatchData
+                                    (Game.GameData_SheepGame setup Array.empty SheepGame.initShared)
+                                    Nothing
+                                )
+                                channel2.games
+                    }
+
+                SheepGame.Action action ->
+                    { channel
+                        | games =
+                            SeqDict.updateIfExists matchId (Game.addSheepGameAction action) channel.games
                     }
 
 

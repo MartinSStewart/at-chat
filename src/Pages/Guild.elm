@@ -8083,6 +8083,18 @@ goMatchStartedCard userIdToColor isSelectingAnchor drawings messageId userId all
                 (User.toString userId allUsers)
                 "started a Word Spelling game"
 
+        GameType_SheepGame ->
+            eventCard
+                userIdToColor
+                isSelectingAnchor
+                messageId
+                drawings
+                (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
+                MessageViewMsg_PressedGameStartedCard
+                (Ui.html Icons.go)
+                (User.toString userId allUsers)
+                "started a Sheep Game"
+
 
 eventCard :
     (userId -> String)
