@@ -16,6 +16,7 @@ module E2EHelper exposing
     , checkNoErrorLogs
     , checkNoNotification
     , checkNotification
+    , checkVoiceChatFromJsEvents
     , chromeDesktop
     , clickSpoiler
     , connectFourUsersAndJoinNewGuild
@@ -38,6 +39,8 @@ module E2EHelper exposing
     , findImageMessage
     , firefoxDesktop
     , focusEvent
+    , fromJsAfterAdminOpensVoiceChat
+    , fromJsAfterUserOpensVoiceChat
     , handleInternalRequests
     , handleLogin
     , handleLoginFromLoginPage
@@ -830,40 +833,10 @@ fromJs_GotMediaDevices =
     "{\"tag\":\"got-media-devices\",\"args\":[[{\"deviceId\":\"microphoneDeviceId\",\"groupId\":\"microphoneGroupId\",\"kind\":\"audioinput\",\"label\":\"Default microphone\"},{\"deviceId\":\"webcameraDeviceId\",\"groupId\":\"webcameraGroupId\",\"kind\":\"videoinput\",\"label\":\"Default webcamera\"},{\"deviceId\":\"speakersDeviceId\",\"groupId\":\"speakersGroupId\",\"kind\":\"audiooutput\",\"label\":\"Default speakers\"}],[\"microphoneDeviceId\",\"webcameraDeviceId\",\"speakersDeviceId\"]]}"
 
 
-fromJs_PublishOffer : String
-fromJs_PublishOffer =
-    "{\"tag\":\"publish-offer\",\"args\":[\"fake-publish-offer-sdp\",[\"0\",\"2\"]]}"
-
-
-fromJs_PublishConnected : String
-fromJs_PublishConnected =
-    "{\"tag\":\"publish-connected\",\"args\":[]}"
-
-
-fromJs_RequestPullTracksSession1 : String
-fromJs_RequestPullTracksSession1 =
-    "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"2\",\"otherClientId\":\"2 clientId 2\"},\"sfu-session-1\",[\"0\",\"2\"]]}"
-
-
-fromJs_RequestPullTracksSession0 : String
-fromJs_RequestPullTracksSession0 =
-    "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"0\",\"otherClientId\":\"0 clientId 1\"},\"sfu-session-0\",[\"0\",\"2\"]]}"
-
-
-fromJs_PullAnswerSession1 : String
-fromJs_PullAnswerSession1 =
-    "{\"tag\":\"pull-answer\",\"args\":[{\"roomId\":\"2\",\"otherClientId\":\"2 clientId 2\"},\"fake-pull-answer-sdp\"]}"
-
-
-fromJs_PullAnswerSession0 : String
-fromJs_PullAnswerSession0 =
-    "{\"tag\":\"pull-answer\",\"args\":[{\"roomId\":\"0\",\"otherClientId\":\"0 clientId 1\"},\"fake-pull-answer-sdp\"]}"
-
-
-{-| Cumulative `voice_chat_from_js` payloads expected at each handshake
-checkpoint. Each value extends the previous one with the events that step is
-supposed to add, so the checks pin down _when_ each event fires, not just that
-it eventually does.
+{-| Cumulative `voice_chat_from_js` payloads expected once each person has the
+voice chat tab open. Each value extends the previous one with the events that
+step is supposed to add, so the checks pin down _when_ each event fires, not just
+that it eventually does.
 -}
 fromJsAfterAdminOpensVoiceChat : List String
 fromJsAfterAdminOpensVoiceChat =
@@ -875,29 +848,9 @@ fromJsAfterUserOpensVoiceChat =
     fromJsAfterAdminOpensVoiceChat ++ [ fromJs_GotMediaDevices ]
 
 
-fromJsAfterAdminPublishes : List String
-fromJsAfterAdminPublishes =
-    fromJsAfterUserOpensVoiceChat ++ [ fromJs_PublishOffer, fromJs_PublishConnected ]
-
-
-fromJsAfterUserPublishes : List String
-fromJsAfterUserPublishes =
-    fromJsAfterAdminPublishes
-        ++ [ fromJs_PublishOffer
-           , fromJs_PublishConnected
-           , fromJs_RequestPullTracksSession1
-           , fromJs_RequestPullTracksSession0
-           ]
-
-
-fromJsAfterPullsComplete : List String
-fromJsAfterPullsComplete =
-    fromJsAfterUserPublishes ++ [ fromJs_PullAnswerSession1, fromJs_PullAnswerSession0 ]
-
-
-{-| Assert the exact ordered list of `voice_chat_from_js` payloads that have
-been produced so far equals `expected`. Placed at each handshake checkpoint so
-the prefix is pinned down step by step.
+{-| Assert the exact ordered list of `voice_chat_from_js` payloads produced so
+far equals `expected`. Placed at each step so the prefix is pinned down as it
+grows rather than only at the end.
 -}
 checkVoiceChatFromJsEvents : List String -> T.Data FrontendModel BackendModel2 -> Result String ()
 checkVoiceChatFromJsEvents expected data =

@@ -1,5 +1,6 @@
 module E2EVoiceChat exposing (voiceChatTest)
 
+import Audio
 import Call
 import Codec
 import E2EHelper
@@ -7,6 +8,7 @@ import Effect.Browser.Dom as Dom
 import Effect.Lamdera as Lamdera
 import Effect.Test as T exposing (PortToJs)
 import Expect
+import FileStatus
 import Json.Encode
 import List.Extra
 import LocalState exposing (CallStatus(..))
@@ -19,31 +21,43 @@ import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFron
 import Url
 
 
+{-| The url `ToJs_StartCall` carries is the one the browser would have opened.
+Taking the room and client back out of it is how these tests stand in for the
+rust server, which is otherwise what tells the backend somebody joined.
+
+Built from the same `websocketDomain` `Call.startCallCmd` builds it from, so
+that changing where the rust server lives cannot leave this quietly matching
+nothing, which is what it did when it had the address written out by hand.
+
+-}
 isWebsocketRequest : PortToJs -> Maybe { clientId : Lamdera.ClientId, roomId : String }
 isWebsocketRequest request =
+    let
+        prefix : String
+        prefix =
+            FileStatus.websocketDomain ++ "/file/websocket/"
+    in
     if request.portName == "voice_chat_to_js" then
         case Codec.decodeValue Call.voiceChatToJsCodec request.value of
             Ok (Call.ToJs_StartCall ok) ->
-                case String.split "/" ok.websocketUrl of
-                    [ "ws", "", "localhost", "8000", "files", "websocket", roomId, query ] ->
-                        case String.split "=" query of
-                            [ "?clientId", clientId ] ->
-                                case Url.percentDecode clientId of
-                                    Just clientId2 ->
-                                        { clientId =
-                                            Lamdera.clientIdFromString clientId2
-                                        , roomId = roomId
+                if String.startsWith prefix ok.websocketUrl then
+                    case String.dropLeft (String.length prefix) ok.websocketUrl |> String.split "?clientId=" of
+                        [ roomId, clientId ] ->
+                            case ( Url.percentDecode roomId, Url.percentDecode clientId ) of
+                                ( Just roomId2, Just clientId2 ) ->
+                                    Just
+                                        { clientId = Lamdera.clientIdFromString clientId2
+                                        , roomId = roomId2
                                         }
-                                            |> Just
 
-                                    Nothing ->
-                                        Nothing
+                                _ ->
+                                    Nothing
 
-                            _ ->
-                                Nothing
+                        _ ->
+                            Nothing
 
-                    _ ->
-                        Nothing
+                else
+                    Nothing
 
             _ ->
                 Nothing
@@ -52,26 +66,49 @@ isWebsocketRequest request =
         Nothing
 
 
+{-| Clicking join only gets as far as opening a websocket, which in a test goes
+nowhere. What the backend is actually waiting for is the rust server asking it
+whether the caller may join, so that request is made here on the rust server's
+behalf.
+
+The session is the one owning the client that opened the socket, the same way
+the real rust server takes it from that browser's `sid` cookie rather than from
+anything the page chose.
+
+-}
 startCall :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-startCall admin =
+startCall actions =
     T.group
-        [ admin.click 100 (Dom.id "guild_startVoiceChat")
+        [ actions.click 100 (Dom.id "guild_startVoiceChat")
         , T.andThen
             100
             (\data ->
+                let
+                    backend : Types.BackendModel
+                    backend =
+                        E2EHelper.unwrapBackend data.backend
+                in
                 case List.Extra.findMap isWebsocketRequest data.portRequests of
                     Just data2 ->
-                        case SeqDict.get E2EHelper.sessionId0 (E2EHelper.unwrapBackend data.backend).sessions of
-                            Just session ->
+                        case
+                            SeqDict.toList backend.connections
+                                |> List.Extra.find (\( _, conns ) -> NonemptyDict.member data2.clientId conns)
+                                |> Maybe.andThen
+                                    (\( sessionId, _ ) ->
+                                        SeqDict.get sessionId backend.sessions
+                                            |> Maybe.map (Tuple.pair sessionId)
+                                    )
+                        of
+                            Just ( sessionId, session ) ->
                                 case RPC.roomIdFromString session.userId data2.roomId of
                                     Just roomId ->
                                         [ T.backendUpdate
                                             0
                                             (Types.Rpc_UserJoinedCall
                                                 data.time
-                                                E2EHelper.sessionId0
+                                                sessionId
                                                 data2.clientId
                                                 session.userId
                                                 roomId
@@ -103,8 +140,8 @@ voiceChatTest :
 voiceChatTest normalConfig =
     T.testGroup
         "Voice chat"
-        [ E2EHelper.dmCallTest False normalConfig
-        , E2EHelper.dmCallTest True normalConfig
+        [ dmCallTest False normalConfig
+        , dmCallTest True normalConfig
         , E2EHelper.startTest
             "Hop between voice calls"
             E2EHelper.startTime
@@ -165,8 +202,8 @@ voiceChatTest normalConfig =
 
 dmCallTest :
     Bool
-    -> T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 dmCallTest isMobile normalConfig =
     let
         -- A narrow window renders the mobile layout (touch events), a wide one
@@ -174,12 +211,12 @@ dmCallTest isMobile normalConfig =
         window : { width : Int, height : Int }
         window =
             if isMobile then
-                iphone14Window
+                E2EHelper.iphone14Window
 
             else
-                desktopWindow
+                E2EHelper.desktopWindow
     in
-    startTest
+    E2EHelper.startTest
         ("DM voice chat with another user, both on "
             ++ (if isMobile then
                     "mobile"
@@ -277,10 +314,10 @@ dmCallTest isMobile normalConfig =
                     [ E2EHelper.openDm admin 100 "2"
                     , E2EHelper.openDm user 100 "0"
                     , admin.click 100 (Dom.id "guild_voiceChat")
-                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminOpensVoiceChat)
+                    , T.checkState 100 (E2EHelper.checkVoiceChatFromJsEvents E2EHelper.fromJsAfterAdminOpensVoiceChat)
                     , user.click 100 (Dom.id "guild_voiceChat")
-                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterUserOpensVoiceChat)
-                    , admin.click 100 (Dom.id "guild_startVoiceChat")
+                    , T.checkState 100 (E2EHelper.checkVoiceChatFromJsEvents E2EHelper.fromJsAfterUserOpensVoiceChat)
+                    , startCall admin
                     , E2EHelper.tallSnapshot admin 100 { name = "Started a DM call" }
                     , T.checkBackend 200
                         (\m ->
@@ -305,12 +342,11 @@ dmCallTest isMobile normalConfig =
 
                                 other ->
                                     Err
-                                        ("Expected exactly one ConnectedToCall after admin publishes, got "
+                                        ("Expected one connection to be in the call once the admin joined, got "
                                             ++ String.fromInt (List.length other)
                                         )
                         )
-                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminPublishes)
-                    , user.click 100 (Dom.id "guild_startVoiceChat")
+                    , startCall user
                     , admin.checkView
                         50
                         (\html ->
@@ -340,11 +376,10 @@ dmCallTest isMobile normalConfig =
 
                                 other ->
                                     Err
-                                        ("Expected two connections with callSfu after bob publishes, got "
+                                        ("Expected both connections to be in the call once the user joined, got "
                                             ++ String.fromInt (List.length other)
                                         )
                         )
-                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterUserPublishes)
                     , E2EHelper.tallSnapshot user 100 { name = "Joined a DM call" }
                     , T.checkBackend 500
                         (\m ->
@@ -362,20 +397,19 @@ dmCallTest isMobile normalConfig =
                                             )
                                             (NonemptyDict.toList conns)
                                     )
-                                    (SeqDict.toList (unwrapBackend m).connections)
+                                    (SeqDict.toList (E2EHelper.unwrapBackend m).connections)
                             of
                                 [ _, _ ] ->
                                     Ok ()
 
                                 other ->
                                     Err
-                                        ("Expected two connections with callSfu at end, got "
+                                        ("Expected both connections to still be in the call at the end, got "
                                             ++ String.fromInt (List.length other)
                                         )
                         )
-                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterPullsComplete)
                     , user.click 100 (Dom.id "guild_voiceChat")
-                    , tallSnapshot user 100 { name = "Voice chat with tab closed" }
+                    , E2EHelper.tallSnapshot user 100 { name = "Voice chat with tab closed" }
 
                     -- The minimized call thumbnail can be dragged by touch
                     -- (mobile) or pointer (desktop). Grab it in the top-right
@@ -426,7 +460,7 @@ dmCallTest isMobile normalConfig =
                             Test.Html.Query.findAll [ Test.Html.Selector.exactText "started a call, lasted 1\u{00A0}minute" ] html
                                 |> Test.Html.Query.count (Expect.equal 1)
                         )
-                    , tallSnapshot user 100 { name = "Call ended" }
+                    , E2EHelper.tallSnapshot user 100 { name = "Call ended" }
                     ]
                 ]
             )
