@@ -1,4 +1,4 @@
-module RPC exposing (checkFileUpload, lamdera_handleEndpoints)
+module RPC exposing (checkFileUpload, lamdera_handleEndpoints, roomIdFromString)
 
 import BackendExtra
 import Call
@@ -9,7 +9,7 @@ import DmChannelId
 import Effect.Lamdera exposing (ClientId)
 import FileStatus
 import Http
-import Id
+import Id exposing (Id, UserId)
 import Json.Encode as Json
 import Lamdera exposing (SessionId)
 import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
@@ -97,6 +97,31 @@ checkCallRequestCodec =
         |> Codec.buildObject
 
 
+roomIdFromString : Id UserId -> String -> Maybe Call.CallId
+roomIdFromString userId text =
+    case String.split "-" text of
+        [ "guild", guildId, channelId ] ->
+            case ( Id.fromString guildId, Id.fromString channelId ) of
+                ( Just guildId2, Just channelId2 ) ->
+                    Just (Call.GuildRoomId guildId2 channelId2)
+
+                _ ->
+                    Nothing
+
+        _ ->
+            case DmChannelId.fromString text of
+                Ok dmChannelId ->
+                    case DmChannelId.otherUserId userId dmChannelId of
+                        Just otherUserId ->
+                            Just (Call.DmRoomId otherUserId)
+
+                        Nothing ->
+                            Nothing
+
+                Err _ ->
+                    Nothing
+
+
 {-| A room id is a `DmChannelId`, which both people in a DM derive the same way
 from the pair of user ids. That makes it guessable, so being in the room is not
 something the room id can be trusted to prove. `DmChannelId.otherUserId` is what
@@ -111,33 +136,14 @@ checkCall _ model headers text =
                     let
                         maybeRoomId : Maybe Call.CallId
                         maybeRoomId =
-                            case String.split "-" request.roomId of
-                                [ "guild", guildId, channelId ] ->
-                                    case ( Id.fromString guildId, Id.fromString channelId ) of
-                                        ( Just guildId2, Just channelId2 ) ->
-                                            Just (Call.GuildRoomId guildId2 channelId2)
-
-                                        _ ->
-                                            Nothing
-
-                                _ ->
-                                    case DmChannelId.fromString request.roomId of
-                                        Ok dmChannelId ->
-                                            case DmChannelId.otherUserId session.userId dmChannelId of
-                                                Just otherUserId ->
-                                                    Just (Call.DmRoomId otherUserId)
-
-                                                Nothing ->
-                                                    Nothing
-
-                                        Err _ ->
-                                            Nothing
+                            roomIdFromString session.userId request.roomId
                     in
                     case maybeRoomId of
                         Just (Call.DmRoomId otherUserId) ->
                             BackendExtra.asDmUserRpc
                                 model
                                 request.sessionId
+                                request.clientId
                                 { otherUserId = otherUserId }
                                 (\_ _ _ _ _ ->
                                     ( Ok "valid"
@@ -159,6 +165,7 @@ checkCall _ model headers text =
                             BackendExtra.asGuildMemberRpc
                                 model
                                 request.sessionId
+                                request.clientId
                                 guildId
                                 (\_ _ _ ->
                                     ( Ok "valid"

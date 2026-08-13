@@ -2330,28 +2330,33 @@ asGuildMember model sessionId guildId func =
 asGuildMemberRpc :
     BackendModel
     -> SessionId
+    -> ClientId
     -> Id GuildId
     -> (UserSession -> BackendUser -> BackendGuild -> ( Result Http.Error String, BackendModel, Cmd BackendMsg ))
     -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
-asGuildMemberRpc model sessionId guildId func =
-    case SeqDict.get sessionId model.sessions of
-        Just session ->
-            case ( NonemptyDict.get session.userId model.users, SeqDict.get guildId model.guilds ) of
-                ( Just user, Just guild ) ->
-                    case MembersAndOwner.isMember session.userId guild.membersAndOwner of
-                        IsNotMember ->
-                            rpcInvalidRequest model
+asGuildMemberRpc model sessionId clientId guildId func =
+    case ( SeqDict.get sessionId model.sessions, SeqDict.get sessionId model.connections ) of
+        ( Just session, Just connections ) ->
+            if NonemptyDict.member clientId connections then
+                case ( NonemptyDict.get session.userId model.users, SeqDict.get guildId model.guilds ) of
+                    ( Just user, Just guild ) ->
+                        case MembersAndOwner.isMember session.userId guild.membersAndOwner of
+                            IsNotMember ->
+                                rpcInvalidRequest model
 
-                        IsMember ->
-                            func session user guild
+                            IsMember ->
+                                func session user guild
 
-                        IsOwner ->
-                            func session user guild
+                            IsOwner ->
+                                func session user guild
 
-                _ ->
-                    rpcInvalidRequest model
+                    _ ->
+                        rpcInvalidRequest model
 
-        Nothing ->
+            else
+                rpcInvalidRequest model
+
+        _ ->
             rpcInvalidRequest model
 
 
@@ -2663,36 +2668,41 @@ asDmUser model sessionId { otherUserId } func =
 asDmUserRpc :
     BackendModel
     -> SessionId
+    -> ClientId
     -> { otherUserId : Id UserId }
     -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> DmChannel -> ( Result Http.Error String, BackendModel, Cmd BackendMsg ))
     -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
-asDmUserRpc model sessionId { otherUserId } func =
-    case SeqDict.get sessionId model.sessions of
-        Just session ->
-            let
-                dmChannelId =
-                    DmChannelId.fromUserIds session.userId otherUserId
-            in
-            case
-                ( NonemptyDict.get session.userId model.users
-                , NonemptyDict.get otherUserId model.users
-                , SeqDict.get dmChannelId model.dmChannels
-                )
-            of
-                ( Just user, Just otherUser, Just dmChannel ) ->
-                    func session user otherUser dmChannelId dmChannel
+asDmUserRpc model sessionId clientId { otherUserId } func =
+    case ( SeqDict.get sessionId model.sessions, SeqDict.get sessionId model.connections ) of
+        ( Just session, Just connections ) ->
+            if NonemptyDict.member clientId connections then
+                let
+                    dmChannelId =
+                        DmChannelId.fromUserIds session.userId otherUserId
+                in
+                case
+                    ( NonemptyDict.get session.userId model.users
+                    , NonemptyDict.get otherUserId model.users
+                    , SeqDict.get dmChannelId model.dmChannels
+                    )
+                of
+                    ( Just user, Just otherUser, Just dmChannel ) ->
+                        func session user otherUser dmChannelId dmChannel
 
-                ( Just user, Just otherUser, Nothing ) ->
-                    if usersHaveSharedGuilds session.userId otherUserId model then
-                        func session user otherUser dmChannelId DmChannel.backendInit
+                    ( Just user, Just otherUser, Nothing ) ->
+                        if usersHaveSharedGuilds session.userId otherUserId model then
+                            func session user otherUser dmChannelId DmChannel.backendInit
 
-                    else
+                        else
+                            rpcInvalidRequest model
+
+                    _ ->
                         rpcInvalidRequest model
 
-                _ ->
-                    rpcInvalidRequest model
+            else
+                rpcInvalidRequest model
 
-        Nothing ->
+        _ ->
             rpcInvalidRequest model
 
 
