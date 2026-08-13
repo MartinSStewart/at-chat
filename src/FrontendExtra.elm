@@ -3545,11 +3545,6 @@ changeUpdate localMsg local =
                     }
 
                 Local_VoiceChatChange voiceChatChange ->
-                    let
-                        calls : Call.Local
-                        calls =
-                            local.calls
-                    in
                     case voiceChatChange of
                         Call.Local_Leave time ->
                             leaveCall time local
@@ -4861,7 +4856,7 @@ changeUpdate localMsg local =
                         Call.Server_Left time connectionId ->
                             otherUserLeaveCall time connectionId local
 
-                        Call.Server_Joining time connectionId ->
+                        Call.Server_Joined time connectionId ->
                             let
                                 alreadyInCall : Bool
                                 alreadyInCall =

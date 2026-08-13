@@ -6860,12 +6860,11 @@ joinDmVoiceChat sessionId clientId time otherUserId model userId =
                     in
                     ( model3
                     , Command.batch
-                        [ Broadcast.toDmChannelExcludingOne
-                            clientId
+                        [ Broadcast.toDmChannel
                             userId
                             otherUserId
                             (\otherUserId2 ->
-                                Call.Server_Joining
+                                Call.Server_Joined
                                     time
                                     { roomId = Call.DmRoomId otherUserId2
                                     , otherClientId = ( otherUserId2, clientId )
@@ -6955,10 +6954,9 @@ joinGuildVoiceChat sessionId clientId time guildId channelId model userId =
                     in
                     ( model3
                     , Command.batch
-                        [ Broadcast.toGuildExcludingOne
-                            clientId
+                        [ Broadcast.toGuild
                             guildId
-                            (Call.Server_Joining
+                            (Call.Server_Joined
                                 time
                                 { roomId = Call.GuildRoomId guildId channelId
                                 , otherClientId = ( userId, clientId )
