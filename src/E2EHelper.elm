@@ -721,7 +721,7 @@ mockVoiceChatPorts request =
                 Call.ToJs_LeaveCall ->
                     Nothing
 
-                Call.ToJs_PeerJoined { connectionId } ->
+                Call.ToJs_PeerJoined _ ->
                     Nothing
 
                 Call.ToJs_PeerLeft _ ->

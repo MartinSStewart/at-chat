@@ -18,7 +18,6 @@ import Call exposing (RemoteCallData)
 import ChannelDescription
 import ChannelExport
 import CustomEmoji exposing (CustomEmojiData)
-import Date exposing (Date)
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
@@ -278,13 +277,6 @@ init =
       }
     , Command.none
     )
-
-
-{-| Alert when estimated Cloudflare costs exceed this many US dollars per month.
--}
-cloudflareCostThresholdUsd : Float
-cloudflareCostThresholdUsd =
-    1
 
 
 subscriptions : BackendModel -> Subscription BackendOnly BackendMsg
@@ -6841,7 +6833,7 @@ joinDmVoiceChat sessionId clientId time otherUserId model userId =
                                         )
                                         model2.connections
                                 , dmChannels =
-                                    if dmVoiceChatRoomHasOtherMembers dmChannelId clientId model then
+                                    if dmVoiceChatRoomHasOtherMembers dmChannelId clientId model2 then
                                         model2.dmChannels
 
                                     else
@@ -6937,7 +6929,7 @@ joinGuildVoiceChat sessionId clientId time guildId channelId model userId =
                                         )
                                         model2.connections
                                 , guilds =
-                                    if guildVoiceChatRoomHasOtherMembers guildId channelId clientId model then
+                                    if guildVoiceChatRoomHasOtherMembers guildId channelId clientId model2 then
                                         model2.guilds
 
                                     else
@@ -7841,11 +7833,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 , timeout = Just Duration.minute
                 }
                 |> Task.attempt (RegeneratedServerSecret time changeId clientId)
-            )
-
-        Pages.Admin.EndAllCalls ->
-            ( Pages.Admin.endAllCalls model
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
 

@@ -1,11 +1,9 @@
 port module Call exposing
-    ( CallError(..)
-    , CallId(..)
+    ( CallId(..)
     , ChannelSidebarMode(..)
     , ConnectionId
     , DeviceKind(..)
     , DisplayMode(..)
-    , ExistingPeer
     , FromJs(..)
     , Local
     , LocalChange(..)
@@ -75,7 +73,7 @@ import Ui exposing (Element)
 import Ui.Font
 import Url
 import User exposing (LocalUser)
-import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend)
+import UserSession exposing (ChannelHeaderTab(..))
 
 
 type LocalChange
@@ -88,18 +86,6 @@ type ServerChange
     | Server_OtherJoined Time.Posix ConnectionId
     | Server_Left Time.Posix ConnectionId
     | Server_SetRemoteCallData ConnectionId RemoteCallData
-
-
-type alias ExistingPeer =
-    { connectionId : ConnectionId
-    }
-
-
-existingPeerCodec : Codec ExistingPeer
-existingPeerCodec =
-    Codec.object ExistingPeer
-        |> Codec.field "connectionId" .connectionId connectionIdCodec
-        |> Codec.buildObject
 
 
 type Msg
@@ -120,7 +106,6 @@ type Msg
 type alias Local =
     { currentRoom : Maybe CallId
     , voiceChats : SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
-    , error : Maybe CallError
     }
 
 
@@ -131,12 +116,6 @@ type alias RemoteCallData =
 defaultRemoteCallData : RemoteCallData
 defaultRemoteCallData =
     { audioInputEnabled = True, videoInputEnabled = True }
-
-
-type CallError
-    = MissingApiKeys
-    | FailedToPullTracks
-    | FailedToRenegotiate
 
 
 type alias Model =
@@ -182,7 +161,6 @@ init : SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData) -> L
 init voiceChats =
     { currentRoom = Nothing
     , voiceChats = voiceChats
-    , error = Nothing
     }
 
 
@@ -388,7 +366,7 @@ displayMode currentUserId route local =
                 Route.GuildSettingsRoute ->
                     thumbnailOrNoVideo
 
-                Route.JoinRoute secretId ->
+                Route.JoinRoute _ ->
                     thumbnailOrNoVideo
 
         DiscordGuildRoute _ ->
@@ -1098,30 +1076,12 @@ view windowSize roomId calls model =
         , Ui.inFront
             (Ui.column
                 [ Ui.alignBottom ]
-                [ case calls.error of
-                    Just callError ->
-                        MyUi.errorBox
-                            (Dom.id "voiceChat_errorBox")
-                            PressedCopyError
-                            (case callError of
-                                MissingApiKeys ->
-                                    "Call API keys missing. Admin needs to add them."
-
-                                FailedToPullTracks ->
-                                    "Failed to pull remote audio/video tracks."
-
-                                FailedToRenegotiate ->
-                                    "Failed to renegotiate connection."
-                            )
-                            |> Ui.el [ Ui.paddingXY 16 0 ]
+                [ case model.startConnectionError of
+                    Just error ->
+                        MyUi.errorBox (Dom.id "voiceChat_errorBox") PressedCopyError error |> Ui.el [ Ui.paddingXY 16 0 ]
 
                     Nothing ->
-                        case model.startConnectionError of
-                            Just error ->
-                                MyUi.errorBox (Dom.id "voiceChat_errorBox") PressedCopyError error |> Ui.el [ Ui.paddingXY 16 0 ]
-
-                            Nothing ->
-                                Ui.none
+                        Ui.none
                 , (if isMobile then
                     Ui.column
 

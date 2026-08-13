@@ -478,7 +478,6 @@ type AdminUiSection
     | FilesSection
     | ToBackendLogsSection
     | StickersAndEmojisSection
-    | VoiceChatSection
     | WebsocketCloseEventsSection
     | SessionsSection
     | WordSpellingGameSwedishSection
@@ -529,9 +528,6 @@ sectionToString section2 =
 
         StickersAndEmojisSection ->
             "Stickers and emojis"
-
-        VoiceChatSection ->
-            "Voice chat"
 
         WebCodecsTestSection ->
             "WebCodecs streaming test"

@@ -4770,7 +4770,7 @@ changeUpdate localMsg local =
                                 time
                                 ((calls.currentRoom == Just roomId) || SeqDict.member roomId calls.voiceChats)
                                 roomId
-                                { calls | currentRoom = Just roomId, error = Nothing }
+                                { calls | currentRoom = Just roomId }
                                 local
 
                         Call.Server_OtherJoined time { roomId, otherClientId } ->

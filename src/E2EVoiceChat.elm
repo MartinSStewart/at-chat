@@ -91,10 +91,10 @@ startCall actions =
                         E2EHelper.unwrapBackend data.backend
                 in
                 case List.Extra.findMap isWebsocketRequest data.portRequests of
-                    Just data2 ->
+                    Just websocketRequest ->
                         case
                             SeqDict.toList backend.connections
-                                |> List.Extra.find (\( _, conns ) -> NonemptyDict.member data2.clientId conns)
+                                |> List.Extra.find (\( _, conns ) -> NonemptyDict.member websocketRequest.clientId conns)
                                 |> Maybe.andThen
                                     (\( sessionId, _ ) ->
                                         SeqDict.get sessionId backend.sessions
@@ -102,14 +102,14 @@ startCall actions =
                                     )
                         of
                             Just ( sessionId, session ) ->
-                                case RPC.roomIdFromString session.userId data2.roomId of
+                                case RPC.roomIdFromString session.userId websocketRequest.roomId of
                                     Just roomId ->
                                         [ T.backendUpdate
                                             0
                                             (Types.Rpc_UserJoinedCall
                                                 data.time
                                                 sessionId
-                                                data2.clientId
+                                                websocketRequest.clientId
                                                 session.userId
                                                 roomId
                                             )

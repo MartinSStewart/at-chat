@@ -19,7 +19,6 @@ module Pages.Admin exposing
     , applyChangesToBackendUsers
     , disconnectClient
     , discordChannelReloadUser
-    , endAllCalls
     , initForAdmin
     , initForUser
     , logSectionId
@@ -62,7 +61,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), CallStatus(..), ConnectionData, DiscordRole, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
+import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordRole, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -152,7 +151,6 @@ type Msg
     | PressedDisconnectClient SessionIdHash ClientId
     | PressedDeleteSession SessionIdHash
     | PressedRegenerateServerSecret
-    | PressedDeleteCall
     | PressedWebsocketCloseEventsPage Int
     | PressedStartWebCodecsTest
     | PressedStopWebCodecsTest
@@ -295,7 +293,6 @@ type AdminChange
     | DisconnectClient SessionIdHash ClientId
     | DeleteSession SessionIdHash
     | RegenerateServerSecret (ToBeFilledInByBackend (Result Http.Error Time.Posix))
-    | EndAllCalls
 
 
 type alias EditedBackendUser =
@@ -648,9 +645,6 @@ updateAdmin changedBy change adminData local =
                         }
             }
 
-        EndAllCalls ->
-            { local | adminData = endAllCalls adminData |> IsAdmin }
-
 
 rolesToDict : List Discord.Role -> SeqDict (Discord.Id Discord.RoleId) DiscordRole
 rolesToDict roles =
@@ -665,18 +659,6 @@ rolesToDict roles =
         )
         roles
         |> SeqDict.fromList
-
-
-endAllCalls :
-    { a | connections : SeqDict sessionId (NonemptyDict ClientId ConnectionData) }
-    -> { a | connections : SeqDict sessionId (NonemptyDict ClientId ConnectionData) }
-endAllCalls adminData =
-    { adminData
-        | connections =
-            SeqDict.map
-                (\_ connection -> NonemptyDict.map (\_ connection2 -> { connection2 | call = NotInCall }) connection)
-                adminData.connections
-    }
 
 
 disconnectClient :
@@ -1272,9 +1254,6 @@ update navigationKey time adminData localState msg model =
         PressedRegenerateServerSecret ->
             ( model, Command.none, AdminChange (RegenerateServerSecret EmptyPlaceholder) )
 
-        PressedDeleteCall ->
-            ( model, Command.none, AdminChange EndAllCalls )
-
         PressedStartWebCodecsTest ->
             ( model, Ports.webCodecsTest True, NoOutMsg )
 
@@ -1583,9 +1562,6 @@ pendingChangesText change =
 
         RegenerateServerSecret _ ->
             "Regenerate server secret"
-
-        EndAllCalls ->
-            "End all call"
 
 
 view : Bool -> Maybe Int -> Time.Posix -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
