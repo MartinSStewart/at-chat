@@ -54,6 +54,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
+import FileStatus
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -72,6 +73,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 import Ui.Font
+import Url
 import User exposing (LocalUser)
 import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend)
 
@@ -1354,7 +1356,7 @@ startLocalStreamDataCodec =
 
 type alias StartCallData =
     { roomId : CallId
-    , websocketRoomId : String
+    , websocketUrl : String
     , selfId : ( Id UserId, ClientId )
     , audioInput : Maybe (IdString MediaDeviceId)
     , videoInput : Maybe (IdString MediaDeviceId)
@@ -1367,7 +1369,7 @@ startCallDataCodec : Codec StartCallData
 startCallDataCodec =
     Codec.object StartCallData
         |> Codec.field "roomId" .roomId roomIdCodec
-        |> Codec.field "websocketRoomId" .websocketRoomId Codec.string
+        |> Codec.field "websocketUrl" .websocketUrl Codec.string
         |> Codec.field "selfId" .selfId otherClientIdCodec
         |> Codec.field "audioInput" .audioInput (Codec.nullable IdString.codec)
         |> Codec.field "videoInput" .videoInput (Codec.nullable IdString.codec)
@@ -1468,13 +1470,19 @@ have named a different room at each end.
 startCallCmd : CallId -> Id UserId -> ClientId -> Model -> Command FrontendOnly toMsg msg
 startCallCmd roomId userId clientId model =
     { roomId = roomId
-    , websocketRoomId =
-        case roomId of
-            DmRoomId otherUserId ->
-                DmChannelId.fromUserIds userId otherUserId |> DmChannelId.toString
+    , websocketUrl =
+        FileStatus.websocketDomain
+            ++ "/file/websocket/"
+            ++ Url.percentEncode
+                (case roomId of
+                    DmRoomId otherUserId ->
+                        DmChannelId.fromUserIds userId otherUserId |> DmChannelId.toString
 
-            GuildRoomId guildId channelId ->
-                "guild-" ++ Id.toString guildId ++ "-" ++ Id.toString channelId
+                    GuildRoomId guildId channelId ->
+                        "guild-" ++ Id.toString guildId ++ "-" ++ Id.toString channelId
+                )
+            ++ "?clientId="
+            ++ Url.percentEncode (Lamdera.clientIdToString clientId)
     , selfId = ( userId, clientId )
     , audioInput = model.selectedAudioInputDevice
     , videoInput = model.selectedVideoInputDevice

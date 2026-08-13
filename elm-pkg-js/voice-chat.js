@@ -22,10 +22,9 @@
 const AUDIO_SAMPLE_RATE = 48000;
 const AUDIO_BLOCK_FRAMES = 960; // 20ms, which is the frame size opus wants.
 
-// Loud enough to count as speaking, on the 0..1 scale of decoded samples. The
-// old implementation read this off an AnalyserNode's 0..255 byte spectrum and
-// compared against 20; peers now arrive as decoded samples with no analyser in
-// between, so the same judgement is made directly on their amplitude.
+// Loud enough to count as speaking, as a mean sample amplitude between 0 and 1.
+// One number for our own mic and for everyone else, which is only possible
+// because both are measured the same way; see "who is speaking" below.
 const SPEAKING_THRESHOLD = 0.02;
 
 // A peer that has sent nothing for this long is treated as silent. Without it a
@@ -73,16 +72,6 @@ exports.init = async function init(app) {
     //   encoders        video and audio encoders, closed on stop
     let call = null;
     let localStreamPreview = null;
-
-    // Same rule as FileStatus.domain: production talks to the deployed server,
-    // development talks to the one npm run rust-server starts.
-    function websocketUrl(roomId, clientId) {
-        const host = location.hostname === "localhost" || location.hostname === "127.0.0.1"
-            ? "ws://localhost:3000"
-            : (location.protocol === "https:" ? "wss://" : "ws://") + location.host;
-        return host + "/file/websocket/" + encodeURIComponent(roomId)
-            + "?clientId=" + encodeURIComponent(clientId);
-    }
 
     // Must match Call.connectionIdToString, which the peer's <canvas> id is
     // built from: "<dmOtherUserId> <peerUserId> <peerClientId>". `senderKey` is
@@ -257,9 +246,9 @@ exports.init = async function init(app) {
         await stopLocalStream();
         localStreamPreview = stream;
         showLocalPreview(stream);
-        handleAudioStream(stream, "local-video");
+        startLocalSpeaking(stream);
 
-        const socket = new WebSocket(websocketUrl(args.websocketRoomId, clientIdOf(args.selfId)));
+        const socket = new WebSocket(args.websocketUrl);
         socket.binaryType = "arraybuffer";
         state.socket = socket;
 
@@ -289,13 +278,6 @@ exports.init = async function init(app) {
         };
 
         await startEncoding(state, args);
-    }
-
-    // The client id is the second half of "<userId> <clientId>". Splitting on
-    // the first space keeps client ids containing spaces intact.
-    function clientIdOf(selfId) {
-        const space = selfId.indexOf(" ");
-        return space === -1 ? selfId : selfId.slice(space + 1);
     }
 
     async function startEncoding(state, args) {
@@ -553,10 +535,13 @@ exports.init = async function init(app) {
             playheadSeconds: 0,
             videoReady: false,
             videoCodec: null,
-            isSpeaking: false,
-            speakingTimeout: null,
             videoDecoder: null,
             audioDecoder: null,
+            // What updateSpeaking works on: who this loudness belongs to, and
+            // whether Elm has been told they are speaking.
+            speaker: { tag: "is-connection", args: [connectionId(state.roomId, senderKey)] },
+            isSpeaking: false,
+            speakingTimeout: null,
         };
 
         peer.audioDecoder = new AudioDecoder({
@@ -669,35 +654,7 @@ exports.init = async function init(app) {
         source.start(peer.playheadSeconds);
         peer.playheadSeconds += buffer.duration;
 
-        setPeerSpeaking(state, peer, loudest > SPEAKING_THRESHOLD);
-    }
-
-    function meanAmplitude(samples) {
-        let total = 0;
-        for (let i = 0; i < samples.length; i++) {
-            total += Math.abs(samples[i]);
-        }
-        return samples.length === 0 ? 0 : total / samples.length;
-    }
-
-    function setPeerSpeaking(state, peer, isSpeaking) {
-        clearTimeout(peer.speakingTimeout);
-        if (isSpeaking) {
-            // Nothing arriving at all is silence too, and no decoded block will
-            // ever say so, so falling quiet is driven by this timer.
-            peer.speakingTimeout = setTimeout(function () {
-                setPeerSpeaking(state, peer, false);
-            }, SPEAKING_TIMEOUT_MS);
-        }
-        if (isSpeaking === peer.isSpeaking) return;
-        peer.isSpeaking = isSpeaking;
-        app.ports.voice_chat_from_js.send({
-            tag: "is-speaking-changed",
-            args: [
-                { tag: "is-connection", args: [connectionId(state.roomId, peer.senderKey)] },
-                isSpeaking,
-            ],
-        });
+        updateSpeaking(peer, loudest);
     }
 
     function peerLeft(connectionId2) {
@@ -708,8 +665,7 @@ exports.init = async function init(app) {
     function removePeer(state, senderKey) {
         const peer = state.peers.get(senderKey);
         if (!peer) return;
-        setPeerSpeaking(state, peer, false);
-        clearTimeout(peer.speakingTimeout);
+        updateSpeaking(peer, 0);
         [peer.videoDecoder, peer.audioDecoder].forEach(function (decoder) {
             if (decoder && decoder.state !== "closed") decoder.close();
         });
@@ -816,7 +772,7 @@ exports.init = async function init(app) {
             // Both of these read the mic through a source node bound to the
             // track that just went away, so both need building again.
             rebindCapture(live);
-            handleAudioStream(live, "local-video");
+            startLocalSpeaking(live);
         } else {
             // requestVideoFrameCallback follows the element and the element
             // follows the stream, so capture picks the new track up on its own.
@@ -874,7 +830,7 @@ exports.init = async function init(app) {
             videoNode.srcObject = null;
         }
         localStreamPreview = null;
-        removeAudioStream("local-video");
+        stopLocalSpeaking();
     }
 
     async function startLocalStream(args) {
@@ -898,7 +854,7 @@ exports.init = async function init(app) {
         showLocalPreview(localStreamPreview);
         setAudioInputEnabled(args.audioInputEnabled);
         setVideoInputEnabled(args.videoInputEnabled);
-        handleAudioStream(localStreamPreview, "local-video");
+        startLocalSpeaking(localStreamPreview);
     }
 
     app.ports.voice_chat_to_js.subscribe(async function (msg) {
@@ -954,71 +910,94 @@ exports.init = async function init(app) {
         }
     });
 
-    // ------------------------------------------------------------------
-    // Active speaker detection for our own mic, which is still a MediaStream.
-    // Peers are judged from their decoded samples instead, in playAudio.
+    // --- who is speaking ---
+    //
+    // One rule, applied to our own mic and to every peer: loud enough, recently
+    // enough. Peers are measured from their decoded samples in playAudio; our
+    // own mic never leaves the browser as encoded audio, so it is measured here
+    // off an AnalyserNode instead.
+    //
     // Original technique: https://www.linkedin.com/pulse/webrtc-active-speaker-detection-nilesh-gawande
-    // ------------------------------------------------------------------
-    const VOLUME_THRESHOLD = 20;
     const AUDIO_WINDOW_SIZE = 256;
-    const audioStreams = new Map();
 
-    function handleAudioStream(stream, key) {
-        removeAudioStream(key);
+    let localSpeaking = null;
+
+    // `entry` is anything carrying `speaker`, `isSpeaking` and
+    // `speakingTimeout`: who this loudness belongs to, as the
+    // Call.LocalOrConnection Elm expects, and what Elm was last told about them.
+    function updateSpeaking(entry, loudness) {
+        clearTimeout(entry.speakingTimeout);
+
+        const isSpeaking = loudness > SPEAKING_THRESHOLD;
+        if (isSpeaking) {
+            // Silence is also nothing arriving at all, which no measurement will
+            // ever report, so falling quiet is driven by this timer.
+            entry.speakingTimeout = setTimeout(function () {
+                updateSpeaking(entry, 0);
+            }, SPEAKING_TIMEOUT_MS);
+        }
+
+        if (isSpeaking === entry.isSpeaking) return;
+        entry.isSpeaking = isSpeaking;
+        app.ports.voice_chat_from_js.send({
+            tag: "is-speaking-changed",
+            args: [entry.speaker, isSpeaking],
+        });
+    }
+
+    function meanAmplitude(samples) {
+        let total = 0;
+        for (let i = 0; i < samples.length; i++) {
+            total += Math.abs(samples[i]);
+        }
+        return samples.length === 0 ? 0 : total / samples.length;
+    }
+
+    function startLocalSpeaking(stream) {
+        stopLocalSpeaking();
         if (stream.getAudioTracks().length === 0) return;
 
         const audioContext = new AudioContext();
-        const mediaStreamSource = audioContext.createMediaStreamSource(stream);
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = AUDIO_WINDOW_SIZE;
+        source.connect(analyser);
 
-        const analyserNode = audioContext.createAnalyser();
-        analyserNode.fftSize = AUDIO_WINDOW_SIZE;
-        mediaStreamSource.connect(analyserNode);
-
-        const bufferLength = analyserNode.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-
+        // The time domain rather than the frequency spectrum, so these samples
+        // are on the same -1..1 scale as a peer's decoded audio and can be
+        // judged by the same threshold. Reading the spectrum is what left the
+        // two sides with thresholds that could not be compared to each other.
+        const samples = new Float32Array(analyser.fftSize);
         const entry = {
-            stream,
-            analyserNode,
             audioContext,
-            mediaStreamSource,
-            isSpeaking: false,
+            source,
+            analyser,
             stopped: false,
+            speaker: { tag: "local-video", args: [] },
+            isSpeaking: false,
+            speakingTimeout: null,
         };
-        audioStreams.set(key, entry);
+        localSpeaking = entry;
 
-        function processAudio() {
+        function measure() {
             if (entry.stopped) return;
-            analyserNode.getByteFrequencyData(dataArray);
-            const averageVolume = dataArray.reduce((acc, val) => acc + val, 0) / bufferLength;
-            const isSpeaking = averageVolume > VOLUME_THRESHOLD;
-            if (isSpeaking !== entry.isSpeaking) {
-                entry.isSpeaking = isSpeaking;
-                app.ports.voice_chat_from_js.send({
-                    tag: "is-speaking-changed",
-                    args: [{ tag: "local-video", args: [] }, isSpeaking],
-                });
-            }
-            requestAnimationFrame(processAudio);
+            analyser.getFloatTimeDomainData(samples);
+            updateSpeaking(entry, meanAmplitude(samples));
+            requestAnimationFrame(measure);
         }
 
-        processAudio();
+        measure();
     }
 
-    function removeAudioStream(key) {
-        const streamData = audioStreams.get(key);
-        if (streamData) {
-            streamData.stopped = true;
-            try { streamData.mediaStreamSource.disconnect(); } catch (e) {}
-            try { streamData.analyserNode.disconnect(); } catch (e) {}
-            try { streamData.audioContext.close(); } catch (e) {}
-            audioStreams.delete(key);
-            if (streamData.isSpeaking) {
-                app.ports.voice_chat_from_js.send({
-                    tag: "is-speaking-changed",
-                    args: [{ tag: "local-video", args: [] }, false],
-                });
-            }
-        }
+    function stopLocalSpeaking() {
+        const entry = localSpeaking;
+        localSpeaking = null;
+        if (!entry) return;
+
+        entry.stopped = true;
+        updateSpeaking(entry, 0);
+        try { entry.source.disconnect(); } catch (e) {}
+        try { entry.analyser.disconnect(); } catch (e) {}
+        try { entry.audioContext.close(); } catch (e) {}
     }
 };

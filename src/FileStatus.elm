@@ -48,6 +48,7 @@ module FileStatus exposing
     , uploadUrlCodec
     , videoHasMetadata
     , webpContent
+    , websocketDomain
     )
 
 import Bytes exposing (Bytes)
@@ -675,6 +676,15 @@ domain =
 
     else
         "http://localhost:3000"
+
+
+{-| The rust server's websocket endpoints are on the same server as its file
+endpoints, so the address is the same one with a websocket scheme. Deriving it
+rather than writing it out is what stops the two drifting apart.
+-}
+websocketDomain : String
+websocketDomain =
+    String.replace "http" "ws" domain
 
 
 imageInfoView : Time.Zone -> msg -> FileDataWithImage -> Element msg
