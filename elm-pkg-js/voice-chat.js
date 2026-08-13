@@ -225,6 +225,7 @@ exports.init = async function init(app) {
             // everything we send. Stays 0 when there is no camera, where it is
             // never read because no video is sent.
             videoCodec: 0,
+            videoInputEnabled: args.videoInputEnabled,
             forceKeyFrame: false,
             videoEncoder: null,
             audioEncoder: null,
@@ -356,15 +357,23 @@ exports.init = async function init(app) {
     // A WebCodecs encoder that errors is closed for good, so the one thing that
     // must not happen is assuming the encoder from a moment ago is still usable:
     // every frame after would throw, which is what turned one bad frame into a
-    // permanent loss of video. Handing it a frame that is not the size it was
-    // configured for is one way to provoke that error, so a size change
-    // reconfigures rather than waiting to be told off.
+    // permanent loss of video.
+    //
+    // A frame that is not the size the encoder was configured for gets a fresh
+    // encoder rather than another configure() call on the live one. Configuring
+    // twice is allowed by the spec, but Firefox's H.264 encoder answers it with
+    // NotSupportedError, and building a new encoder is supported everywhere.
     function videoEncoderFor(state, width, height) {
         if (width === 0 || height === 0) return null;
 
-        if (state.videoEncoder && state.videoEncoder.state === "closed") {
+        const wrongSize =
+            state.videoSize && (state.videoSize.width !== width || state.videoSize.height !== height);
+
+        if (state.videoEncoder && (state.videoEncoder.state === "closed" || wrongSize)) {
+            if (state.videoEncoder.state !== "closed") state.videoEncoder.close();
             state.videoEncoder = null;
         }
+
         if (!state.videoEncoder) {
             state.videoEncoder = new VideoEncoder({
                 output: function (chunk) {
@@ -374,16 +383,12 @@ exports.init = async function init(app) {
                     fail("video encoder: " + e);
                 },
             });
-            state.videoSize = null;
-        }
-
-        if (!state.videoSize || state.videoSize.width !== width || state.videoSize.height !== height) {
             state.videoEncoder.configure(
                 Object.assign({}, state.videoConfig, { width, height })
             );
             state.videoSize = { width, height };
-            // Whoever is decoding has no idea the size changed until a key frame
-            // tells them.
+            // A new encoder starts a new stream, which no decoder can join
+            // partway through.
             state.forceKeyFrame = true;
         }
 
@@ -417,6 +422,15 @@ exports.init = async function init(app) {
         // too large followed by one that went backwards.
         function onFrame(now) {
             if (state.stopped) return;
+
+            // With the camera off there is nothing worth sending, and a disabled
+            // track does not necessarily keep producing frames the size the
+            // encoder was set up for. The callback below stays registered, so
+            // capture picks up again on the first frame after it comes back.
+            if (!state.videoInputEnabled) {
+                videoElement.requestVideoFrameCallback(onFrame);
+                return;
+            }
 
             if (state.videoStartTime === null) state.videoStartTime = now;
 
@@ -757,6 +771,10 @@ exports.init = async function init(app) {
     function setVideoInputEnabled(enabled) {
         if (call) {
             call.stream.getVideoTracks().forEach(function (t) { t.enabled = enabled; });
+            // Nobody has had a frame from us while the camera was off, so what
+            // they need first when it returns is a key frame.
+            if (enabled && !call.videoInputEnabled) call.forceKeyFrame = true;
+            call.videoInputEnabled = enabled;
         }
         if (localStreamPreview) {
             localStreamPreview.getVideoTracks().forEach(function (t) { t.enabled = enabled; });
