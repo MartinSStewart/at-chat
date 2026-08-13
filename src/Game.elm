@@ -10,6 +10,7 @@ module Game exposing
     , Setup(..)
     , addGoAction
     , addPublicLink
+    , addSheepGameAction
     , addWordSpellingGameAction
     , audio
     , dragEnd
@@ -45,6 +46,7 @@ import NonemptyDict exposing (NonemptyDict)
 import Scroll
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
+import SheepGame
 import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Font
@@ -62,17 +64,20 @@ type alias Model =
 type Game
     = GoModel_Game Go.GameModel
     | WordSpellingGame_Game WordSpellingGame.GameData
+    | SheepGame_Game SheepGame.GameData
 
 
 type Setup
     = GameSelect
     | GoModel_Setup Go.SetupModel
     | WordSpellingGame_Setup WordSpellingGame.SetupModel
+    | SheepGame_Setup SheepGame.SetupModel
 
 
 type BackendGameData
     = GameData_Go Go.ValidatedSetup (Array Go.ActionWithTime)
     | GameData_WordSpellingGame WordSpellingGame.ValidatedSetup (Array WordSpellingGame.ActionWithTime) WordSpellingGame.Shared
+    | GameData_SheepGame SheepGame.ValidatedSetup (Array SheepGame.ActionWithTime) SheepGame.Shared
 
 
 {-| OpaqueVariants
@@ -80,6 +85,7 @@ type BackendGameData
 type FrontendGameData
     = FrontendGameData_Go Go.ValidatedSetup (Array Go.ActionWithTime) Go.Shared
     | FrontendGameData_WordSpellingGame WordSpellingGame.ValidatedSetup (Array WordSpellingGame.ActionWithTime) WordSpellingGame.Shared
+    | FrontendGameData_SheepGame SheepGame.ValidatedSetup (Array SheepGame.ActionWithTime) SheepGame.Shared
 
 
 type Msg
@@ -87,6 +93,8 @@ type Msg
     | GoSetupMsg Go.SetupMsg
     | WordSpellingGameMsg WordSpellingGame.GameMsg
     | WordSpellingSetupMsg WordSpellingGame.SetupMsg
+    | SheepGameMsg SheepGame.GameMsg
+    | SheepSetupMsg SheepGame.SetupMsg
     | PressedShareMatch (Id ChannelMessageId)
     | PressedCopyLink String
     | SelectedMatch (Id ChannelMessageId)
@@ -128,6 +136,9 @@ audio popSound currentUserId matchId (MatchData matchData) model =
                 _ ->
                     Audio.silence
 
+        FrontendGameData_SheepGame _ _ _ ->
+            Audio.silence
+
 
 isAnimating : Time.Posix -> Coord CssPixels -> Id ChannelMessageId -> MatchData -> Model -> Bool
 isAnimating time windowSize matchId (MatchData matchData) model =
@@ -145,6 +156,9 @@ isAnimating time windowSize matchId (MatchData matchData) model =
                         _ ->
                             False
                    )
+
+        FrontendGameData_SheepGame _ _ _ ->
+            False
 
 
 insideBoard : Coord CssPixels -> Coord CssPixels -> GuildOrDmId -> Id ChannelMessageId -> MatchData -> SeqDict GuildOrDmId Model -> Bool
@@ -165,6 +179,9 @@ insideBoard windowSize coord guildOrDmId matchId (MatchData matchData) games =
                 _ ->
                     False
 
+        FrontendGameData_SheepGame _ _ _ ->
+            False
+
 
 initModel : Model
 initModel =
@@ -182,6 +199,9 @@ initMatchData gameData publicLink =
 
             GameData_WordSpellingGame setup actions shared ->
                 FrontendGameData_WordSpellingGame setup actions shared
+
+            GameData_SheepGame setup actions shared ->
+                FrontendGameData_SheepGame setup actions shared
     , publicLink = publicLink
     }
         |> MatchData
@@ -195,7 +215,7 @@ addGoAction action (MatchData match) =
                 FrontendGameData_Go setup actions cache ->
                     FrontendGameData_Go setup (Array.push action actions) (Go.updateAction setup action cache)
 
-                FrontendGameData_WordSpellingGame _ _ _ ->
+                _ ->
                     match.data
     }
         |> MatchData
@@ -267,6 +287,24 @@ routeRequest time currentUserId guildOrDmId matchId matchData models =
                                         )
                                         model.startedGames
                             }
+
+                        FrontendGameData_SheepGame setup _ shared ->
+                            { model
+                                | startedGames =
+                                    SeqDict.update
+                                        matchId
+                                        (\maybeGame ->
+                                            case maybeGame of
+                                                Just _ ->
+                                                    maybeGame
+
+                                                Nothing ->
+                                                    SheepGame.initGame currentUserId setup shared
+                                                        |> SheepGame_Game
+                                                        |> Just
+                                        )
+                                        model.startedGames
+                            }
                     )
                         |> Just
                 )
@@ -289,6 +327,26 @@ addWordSpellingGameAction action (MatchData match) =
                         setup
                         (Array.push action actions)
                         (WordSpellingGame.updateAction setup action cache |> Tuple.first)
+
+                _ ->
+                    match.data
+    }
+        |> MatchData
+
+
+addSheepGameAction : SheepGame.ActionWithTime -> MatchData -> MatchData
+addSheepGameAction action (MatchData match) =
+    { match
+        | data =
+            case match.data of
+                FrontendGameData_SheepGame setup actions cache ->
+                    FrontendGameData_SheepGame
+                        setup
+                        (Array.push action actions)
+                        (SheepGame.updateAction setup action cache)
+
+                _ ->
+                    match.data
     }
         |> MatchData
 
@@ -297,6 +355,7 @@ type LocalChange
     = CreatePublicLink (Id ChannelMessageId) (ToBeFilledInByBackend (SecretId GamePublicId))
     | LocalChange_Go (Id ChannelMessageId) Go.LocalChange
     | LocalChange_WordSpellingGame (Id ChannelMessageId) WordSpellingGame.LocalChange
+    | LocalChange_SheepGame (Id ChannelMessageId) SheepGame.LocalChange
 
 
 type OutMsg
@@ -483,6 +542,69 @@ update time windowSize currentUserId guildOrDmId msg newMatchId maybeMatch model
                     []
             )
 
+        SheepGameMsg sheepMsg ->
+            case maybeMatch of
+                Just ( matchId, MatchData matchData ) ->
+                    case ( matchData.data, SeqDict.get matchId model.startedGames ) of
+                        ( FrontendGameData_SheepGame setup _ cache, Just (SheepGame_Game game) ) ->
+                            let
+                                ( game2, maybeAction ) =
+                                    SheepGame.updateGame setup cache sheepMsg game
+                            in
+                            ( { model | startedGames = SeqDict.insert matchId (SheepGame_Game game2) model.startedGames }
+                            , case maybeAction of
+                                Just action ->
+                                    [ OutLocalChange
+                                        (LocalChange_SheepGame
+                                            matchId
+                                            (SheepGame.Action { userId = currentUserId, time = time, change = action })
+                                        )
+                                    ]
+
+                                Nothing ->
+                                    []
+                            )
+
+                        _ ->
+                            ( model, [] )
+
+                Nothing ->
+                    ( model, [] )
+
+        SheepSetupMsg sheepMsg ->
+            let
+                ( gameOrSetup, maybeSetup ) =
+                    SheepGame.updateSetup
+                        currentUserId
+                        sheepMsg
+                        (case model.setup of
+                            SheepGame_Setup setup ->
+                                setup
+
+                            _ ->
+                                SheepGame.initSetup
+                        )
+            in
+            ( case gameOrSetup of
+                SheepGame.Setup setup ->
+                    { model | setup = SheepGame_Setup setup }
+
+                SheepGame.Game game ->
+                    { model | startedGames = SeqDict.insert newMatchId (SheepGame_Game game) model.startedGames }
+
+                SheepGame.CancelSetup ->
+                    { model | setup = GameSelect }
+            , case maybeSetup of
+                Just setup ->
+                    -- A brand new match takes the next message id, then we navigate to it.
+                    [ OutLocalChange (LocalChange_SheepGame newMatchId (SheepGame.StartMatch time setup))
+                    , OutSelectMatch (Just newMatchId)
+                    ]
+
+                Nothing ->
+                    []
+            )
+
         PressedSelectGame game ->
             case game of
                 GameType_Go ->
@@ -490,6 +612,9 @@ update time windowSize currentUserId guildOrDmId msg newMatchId maybeMatch model
 
                 GameType_WordSpellingGame ->
                     ( { model | setup = WordSpellingGame_Setup WordSpellingGame.initSetup }, [] )
+
+                GameType_SheepGame ->
+                    ( { model | setup = SheepGame_Setup SheepGame.initSetup }, [] )
 
         PressedReset ->
             ( { model | setup = GameSelect }, [ OutSelectMatch Nothing ] )
@@ -533,6 +658,9 @@ dragStart time windowSize currentUserId touches matchId (MatchData matchData) mo
 
                                 _ ->
                                     game
+
+                        FrontendGameData_SheepGame _ _ _ ->
+                            game
                 )
                 model.startedGames
     }
@@ -590,6 +718,9 @@ dragEnd time windowSize currentUserId touches matchId (MatchData matchData) mode
 
                                 _ ->
                                     ( game, Nothing )
+
+                        FrontendGameData_SheepGame _ _ _ ->
+                            ( game, Nothing )
             in
             ( { model | startedGames = SeqDict.insert matchId game4 model.startedGames }, outMsg )
 
@@ -669,6 +800,15 @@ view currentTime windowSize showMemberTab maybeDragging lastCopied localUser gui
                                 _ ->
                                     matchNotFound
 
+                        FrontendGameData_SheepGame setup _ cache ->
+                            case game of
+                                SheepGame_Game game2 ->
+                                    SheepGame.gameView windowSize localUser setup cache game2
+                                        |> Ui.map SheepGameMsg
+
+                                _ ->
+                                    matchNotFound
+
                 _ ->
                     matchNotFound
 
@@ -689,6 +829,9 @@ view currentTime windowSize showMemberTab maybeDragging lastCopied localUser gui
                     WordSpellingGame_Setup setup ->
                         WordSpellingGame.setupView windowSize False setup |> Ui.map WordSpellingSetupMsg
 
+                    SheepGame_Setup setup ->
+                        SheepGame.setupView windowSize setup |> Ui.map SheepSetupMsg
+
                     GameSelect ->
                         Ui.row
                             [ Ui.spacing 8
@@ -708,6 +851,7 @@ allGames : List GameType
 allGames =
     [ GameType_Go
     , GameType_WordSpellingGame
+    , GameType_SheepGame
     ]
 
 
@@ -752,6 +896,9 @@ gameToString game =
         GameType_WordSpellingGame ->
             "Word Spelling Game"
 
+        GameType_SheepGame ->
+            "Sheep Game"
+
 
 gameToPreviewUrl : GameType -> String
 gameToPreviewUrl game =
@@ -761,6 +908,9 @@ gameToPreviewUrl game =
 
         GameType_WordSpellingGame ->
             "/word-spelling-game-preview.webp"
+
+        GameType_SheepGame ->
+            "/sheep-game-preview.jpg"
 
 
 gameSelectButton : Bool -> GameType -> Element Msg
@@ -951,6 +1101,9 @@ pressedKey matchId key (MatchData matchData) maybeGameModel =
 
                                 _ ->
                                     game
+
+                        FrontendGameData_SheepGame _ _ _ ->
+                            game
                 )
                 model.startedGames
     }
@@ -1063,5 +1216,19 @@ gameChangeFromServer time currentUserId gameChange maybeModel =
 
                         _ ->
                             model
+
+        LocalChange_SheepGame matchId sheepChange ->
+            case sheepChange of
+                SheepGame.StartMatch _ setup ->
+                    { model
+                        | startedGames =
+                            SeqDict.insert
+                                matchId
+                                (SheepGame_Game (SheepGame.initGame currentUserId setup SheepGame.initShared))
+                                model.startedGames
+                    }
+
+                SheepGame.Action _ ->
+                    model
     )
         |> Just

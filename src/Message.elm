@@ -72,6 +72,7 @@ type alias GameStartedData userId =
 type GameType
     = GameType_Go
     | GameType_WordSpellingGame
+    | GameType_SheepGame
 
 
 maxEmbeds : number

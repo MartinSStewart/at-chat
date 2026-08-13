@@ -456,6 +456,9 @@ encodeMessage userIdToString userNames maybeThread message =
 
                         GameType_WordSpellingGame ->
                             "wordSpellingGame"
+
+                        GameType_SheepGame ->
+                            "sheepGame"
                     )
               )
             ]

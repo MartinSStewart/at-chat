@@ -73,6 +73,7 @@ import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
 import Sha256
+import SheepGame
 import Slack
 import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString)
@@ -5390,6 +5391,51 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 _ ->
                                                     ( model2, cmd )
+
+                                        Game.LocalChange_SheepGame matchId sheepChange ->
+                                            let
+                                                ( model2, cmd ) =
+                                                    handleSheepGame
+                                                        time
+                                                        session
+                                                        clientId
+                                                        changeId
+                                                        guildOrDmId
+                                                        dmChannel
+                                                        (\dmChannel2 model3 ->
+                                                            { model3 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model3.dmChannels }
+                                                        )
+                                                        (\localMsg2 model3 ->
+                                                            Broadcast.toDmChannelExcludingOne
+                                                                clientId
+                                                                session.userId
+                                                                otherUserId
+                                                                (\otherUserId2 ->
+                                                                    Server_Game session.userId (GuildOrDmId_Dm otherUserId2) localMsg2
+                                                                )
+                                                                model3
+                                                        )
+                                                        matchId
+                                                        sheepChange
+                                                        model
+                                            in
+                                            case sheepChange of
+                                                SheepGame.StartMatch _ _ ->
+                                                    let
+                                                        ( sessions, notificationCmd ) =
+                                                            Broadcast.gameStartedDmNotification
+                                                                time
+                                                                session.userId
+                                                                otherUserId
+                                                                GameType_SheepGame
+                                                                model2
+                                                    in
+                                                    ( { model2 | sessions = sessions }
+                                                    , Command.batch [ cmd, notificationCmd ]
+                                                    )
+
+                                                _ ->
+                                                    ( model2, cmd )
                                 )
 
                         GuildOrDmId_Guild id ->
@@ -5438,6 +5484,51 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 session.userId
                                                                 id
                                                                 GameType_WordSpellingGame
+                                                                guild
+                                                                model2
+                                                                cmd
+
+                                                        _ ->
+                                                            ( model2, cmd )
+
+                                                Game.LocalChange_SheepGame matchId sheepChange ->
+                                                    let
+                                                        ( model2, cmd ) =
+                                                            handleSheepGame
+                                                                time
+                                                                session
+                                                                clientId
+                                                                changeId
+                                                                guildOrDmId
+                                                                channel
+                                                                (\channel2 model3 ->
+                                                                    { model3
+                                                                        | guilds =
+                                                                            SeqDict.insert
+                                                                                guildId
+                                                                                { guild | channels = SeqDict.insert channelId channel2 guild.channels }
+                                                                                model3.guilds
+                                                                    }
+                                                                )
+                                                                (\localMsg2 model3 ->
+                                                                    Broadcast.toGuildExcludingOne
+                                                                        clientId
+                                                                        guildId
+                                                                        (Server_Game session.userId guildOrDmId localMsg2 |> ServerChange)
+                                                                        model3
+                                                                )
+                                                                matchId
+                                                                sheepChange
+                                                                model
+                                                    in
+                                                    case sheepChange of
+                                                        SheepGame.StartMatch _ _ ->
+                                                            notifyGameStartedInGuild
+                                                                time
+                                                                session.userId
+                                                                guildId
+                                                                channelId
+                                                                GameType_SheepGame
                                                                 guild
                                                                 model2
                                                                 cmd
@@ -6298,6 +6389,106 @@ handleDmGoGame time session clientId changeId id matchId goChange dmChannelId dm
 
                     else
                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                _ ->
+                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+
+handleSheepGame :
+    Time.Posix
+    -> UserSession
+    -> ClientId
+    -> ChangeId
+    -> GuildOrDmId
+    ->
+        { c
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
+            , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
+        }
+    ->
+        ({ c
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
+            , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
+         }
+         -> BackendModel
+         -> BackendModel
+        )
+    -> (Game.LocalChange -> BackendModel -> Command BackendOnly ToFrontend BackendMsg)
+    -> Id ChannelMessageId
+    -> SheepGame.LocalChange
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleSheepGame time session clientId changeId guildOrDmId channel setChannel broadcast matchId sheepChange model =
+    case sheepChange of
+        SheepGame.StartMatch _ setup ->
+            let
+                ( messageId, channel2 ) =
+                    LocalState.createChannelMessageBackend
+                        (GameStarted
+                            { startedAt = time
+                            , startedBy = session.userId
+                            , reactions = SeqDict.empty
+                            , gameType = GameType_SheepGame
+                            , timestampDrawings = Drawing.emptyDrawing
+                            , cardDrawings = Drawing.emptyDrawing
+                            }
+                        )
+                        channel
+
+                localMsg2 : Game.LocalChange
+                localMsg2 =
+                    Game.LocalChange_SheepGame messageId (SheepGame.StartMatch time setup)
+            in
+            ( setChannel
+                { channel2
+                    | games =
+                        SeqDict.insert
+                            messageId
+                            (Game.GameData_SheepGame setup Array.empty SheepGame.initShared)
+                            channel2.games
+                }
+                model
+            , Command.batch
+                [ Local_Game guildOrDmId localMsg2
+                    |> LocalChangeResponse changeId
+                    |> Lamdera.sendToFrontend clientId
+                , broadcast localMsg2 model
+                ]
+            )
+
+        SheepGame.Action action ->
+            -- Actions only carry weight when they come from the person they claim to. Whether
+            -- that person is allowed to make this particular move is decided by
+            -- `SheepGame.updateAction`, which the frontend runs over the same actions.
+            case ( action.userId == session.userId, SeqDict.get matchId channel.games ) of
+                ( True, Just (Game.GameData_SheepGame setup actions shared) ) ->
+                    let
+                        localMsg2 : Game.LocalChange
+                        localMsg2 =
+                            Game.LocalChange_SheepGame matchId (SheepGame.Action action)
+                    in
+                    ( setChannel
+                        { channel
+                            | games =
+                                SeqDict.insert
+                                    matchId
+                                    (Game.GameData_SheepGame
+                                        setup
+                                        (Array.push action actions)
+                                        (SheepGame.updateAction setup action shared)
+                                    )
+                                    channel.games
+                        }
+                        model
+                    , Command.batch
+                        [ Local_Game guildOrDmId localMsg2
+                            |> LocalChangeResponse changeId
+                            |> Lamdera.sendToFrontend clientId
+                        , broadcast localMsg2 model
+                        ]
+                    )
 
                 _ ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
