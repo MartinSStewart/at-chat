@@ -226,7 +226,13 @@ exports.init = async function init(app) {
             // never read because no video is sent.
             videoCodec: 0,
             forceKeyFrame: false,
-            encoders: [],
+            videoEncoder: null,
+            audioEncoder: null,
+            // The encoder config, kept so the encoder can be set up again at a
+            // different size, and the size it was last set up for.
+            videoConfig: null,
+            videoSize: null,
+            videoStartTime: null,
             audioNodes: [],
             framesCaptured: 0,
             stopped: false,
@@ -300,16 +306,7 @@ exports.init = async function init(app) {
         if (videoTrack && !videoConfig) {
             fail("No supported video codec found (tried H.264 and VP8).");
         } else if (videoTrack) {
-            const videoEncoder = new VideoEncoder({
-                output: function (chunk) {
-                    send(state, VIDEO, chunk);
-                },
-                error: function (e) {
-                    fail("video encoder: " + e);
-                },
-            });
-            videoEncoder.configure(videoConfig.config);
-            state.encoders.push(videoEncoder);
+            state.videoConfig = videoConfig.config;
             state.videoCodec = videoConfig.index;
 
             // A decoder can do nothing with delta frames until it has seen a
@@ -318,9 +315,11 @@ exports.init = async function init(app) {
             // making them wait out the interval staring at nothing.
             let frameCount = 0;
             pumpVideo(state, function (frame) {
+                const encoder = videoEncoderFor(state, frame.displayWidth, frame.displayHeight);
+                if (!encoder) return;
                 const forced = state.forceKeyFrame;
                 state.forceKeyFrame = false;
-                videoEncoder.encode(frame, { keyFrame: forced || frameCount % 60 === 0 });
+                encoder.encode(frame, { keyFrame: forced || frameCount % 60 === 0 });
                 frameCount += 1;
             });
         }
@@ -342,15 +341,53 @@ exports.init = async function init(app) {
                 numberOfChannels: 1,
                 bitrate: 64000,
             });
-            state.encoders.push(audioEncoder);
+            state.audioEncoder = audioEncoder;
 
             await pumpAudio(state, function (audioData) {
+                if (audioEncoder.state !== "configured") return;
                 audioEncoder.encode(audioData);
             });
         }
 
         setAudioInputEnabled(args.audioInputEnabled);
         setVideoInputEnabled(args.videoInputEnabled);
+    }
+
+    // A WebCodecs encoder that errors is closed for good, so the one thing that
+    // must not happen is assuming the encoder from a moment ago is still usable:
+    // every frame after would throw, which is what turned one bad frame into a
+    // permanent loss of video. Handing it a frame that is not the size it was
+    // configured for is one way to provoke that error, so a size change
+    // reconfigures rather than waiting to be told off.
+    function videoEncoderFor(state, width, height) {
+        if (width === 0 || height === 0) return null;
+
+        if (state.videoEncoder && state.videoEncoder.state === "closed") {
+            state.videoEncoder = null;
+        }
+        if (!state.videoEncoder) {
+            state.videoEncoder = new VideoEncoder({
+                output: function (chunk) {
+                    send(state, VIDEO, chunk);
+                },
+                error: function (e) {
+                    fail("video encoder: " + e);
+                },
+            });
+            state.videoSize = null;
+        }
+
+        if (!state.videoSize || state.videoSize.width !== width || state.videoSize.height !== height) {
+            state.videoEncoder.configure(
+                Object.assign({}, state.videoConfig, { width, height })
+            );
+            state.videoSize = { width, height };
+            // Whoever is decoding has no idea the size changed until a key frame
+            // tells them.
+            state.forceKeyFrame = true;
+        }
+
+        return state.videoEncoder;
     }
 
     function readyToSend(state) {
@@ -372,12 +409,20 @@ exports.init = async function init(app) {
             return;
         }
 
-        function onFrame(now, metadata) {
+        // An encoder will only accept timestamps that increase, so the frame
+        // clock is the monotonic one rVFC hands us rather than the element's
+        // media time. Media time stops while the camera track is disabled and
+        // need not resume where it left off, and it is in different units, so
+        // mixing the two could hand the encoder a timestamp millions of times
+        // too large followed by one that went backwards.
+        function onFrame(now) {
             if (state.stopped) return;
+
+            if (state.videoStartTime === null) state.videoStartTime = now;
 
             try {
                 const frame = new VideoFrame(videoElement, {
-                    timestamp: Math.round((metadata.mediaTime || now / 1000) * 1e6),
+                    timestamp: Math.round((now - state.videoStartTime) * 1000),
                 });
                 if (readyToSend(state)) encode(frame);
                 frame.close();
@@ -665,8 +710,8 @@ exports.init = async function init(app) {
         state.audioNodes.forEach(function (node) {
             try { node.disconnect(); } catch (e) {}
         });
-        state.encoders.forEach(function (encoder) {
-            if (encoder.state !== "closed") encoder.close();
+        [state.videoEncoder, state.audioEncoder].forEach(function (encoder) {
+            if (encoder && encoder.state !== "closed") encoder.close();
         });
         if (state.socket) state.socket.close();
         state.captureVideo.srcObject = null;
