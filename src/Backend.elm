@@ -4300,14 +4300,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         getNewUsers connection guildId guild =
                             case connection.currentlyViewing of
                                 UserSession.Viewing_DiscordChannel data ->
-                                    if guildId == data.guildId then
+                                    if guildId == data.id.guildId then
                                         SeqDict.empty
 
                                     else
                                         getNewUsersHelper guild
 
                                 UserSession.Viewing_DiscordChannelThread data ->
-                                    if guildId == data.guildId then
+                                    if guildId == data.id.guildId then
                                         SeqDict.empty
 
                                     else
@@ -4362,14 +4362,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             BackendExtra.asDmUser
                                 model
                                 sessionId
-                                { otherUserId = data.otherUserId }
+                                { otherUserId = data.id.otherUserId }
                                 (\session user _ _ dmChannel ->
                                     ( { model
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
                                                 (User.setLastDmViewed
-                                                    data.otherUserId
+                                                    data.id.otherUserId
                                                     (NoThreadWithMaybeMessage
                                                         (if routeRequestCausedByPressingLink then
                                                             DmChannel.latestMessageId dmChannel |> Just
@@ -4388,7 +4388,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             data
                                             (case previouslyViewing of
                                                 Viewing_Dm previousData ->
-                                                    if previousData.otherUserId == data.otherUserId then
+                                                    if previousData.id == data.id then
                                                         SetViewing_NothingToFillIn
 
                                                     else
@@ -4409,18 +4409,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             BackendExtra.asDmUser
                                 model
                                 sessionId
-                                { otherUserId = data.otherUserId }
+                                { otherUserId = data.id.otherUserId }
                                 (\session user _ _ dmChannel ->
                                     ( { model
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
                                                 (User.setLastDmViewed
-                                                    data.otherUserId
+                                                    data.id.otherUserId
                                                     (ViewThreadWithMaybeMessage
-                                                        data.threadId
+                                                        data.id.threadId
                                                         (if routeRequestCausedByPressingLink then
-                                                            SeqDict.get data.threadId dmChannel.threads
+                                                            SeqDict.get data.id.threadId dmChannel.threads
                                                                 |> Maybe.withDefault Thread.backendInit
                                                                 |> DmChannel.latestThreadMessageId
                                                                 |> Just
@@ -4439,17 +4439,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             data
                                             (case previouslyViewing of
                                                 Viewing_DmThread previousData ->
-                                                    if previousData.otherUserId == data.otherUserId && previousData.threadId == data.threadId then
+                                                    if previousData.id == data.id then
                                                         SetViewing_NothingToFillIn
 
                                                     else
-                                                        SeqDict.get data.threadId dmChannel.threads
+                                                        SeqDict.get data.id.threadId dmChannel.threads
                                                             |> Maybe.withDefault Thread.backendInit
                                                             |> loadMessagesHelper
                                                             |> SetViewing_FilledInByBackend
 
                                                 _ ->
-                                                    SeqDict.get data.threadId dmChannel.threads
+                                                    SeqDict.get data.id.threadId dmChannel.threads
                                                         |> Maybe.withDefault Thread.backendInit
                                                         |> loadMessagesHelper
                                                         |> SetViewing_FilledInByBackend
@@ -4466,15 +4466,15 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             BackendExtra.asDiscordDmUser_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
-                                { currentUserId = data.currentUserId, channelId = data.channelId }
+                                { currentUserId = data.id.currentUserId, channelId = data.id.channelId }
                                 (\session _ user dmChannel ->
                                     ( { model
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
                                                 (User.setLastDiscordDmViewed
-                                                    data.currentUserId
-                                                    data.channelId
+                                                    data.id.currentUserId
+                                                    data.id.channelId
                                                     (if routeRequestCausedByPressingLink then
                                                         DmChannel.latestMessageId dmChannel |> Just
 
@@ -4491,7 +4491,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             data
                                             (case previouslyViewing of
                                                 Viewing_DiscordDm previousData ->
-                                                    if previousData.currentUserId == data.currentUserId && previousData.channelId == data.channelId then
+                                                    if previousData.id == data.id then
                                                         SetViewing_NothingToFillIn
 
                                                     else
@@ -4512,17 +4512,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             BackendExtra.asGuildMember
                                 model
                                 sessionId
-                                data.guildId
+                                data.id.guildId
                                 (\session user guild ->
-                                    case SeqDict.get data.channelId guild.channels of
+                                    case SeqDict.get data.id.channelId guild.channels of
                                         Just channel ->
                                             ( { model
                                                 | users =
                                                     NonemptyDict.insert
                                                         session.userId
                                                         (User.setLastChannelViewed
-                                                            data.guildId
-                                                            data.channelId
+                                                            data.id.guildId
+                                                            data.id.channelId
                                                             (NoThreadWithMaybeMessage
                                                                 (if routeRequestCausedByPressingLink then
                                                                     DmChannel.latestMessageId channel |> Just
@@ -4541,7 +4541,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     data
                                                     (case previouslyViewing of
                                                         Viewing_Channel previousData ->
-                                                            if previousData.guildId == data.guildId && previousData.channelId == data.channelId then
+                                                            if previousData.id == data.id then
                                                                 SetViewing_NothingToFillIn
 
                                                             else
@@ -4567,21 +4567,21 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             BackendExtra.asGuildMember
                                 model
                                 sessionId
-                                data.guildId
+                                data.id.guildId
                                 (\session user guild ->
-                                    case SeqDict.get data.channelId guild.channels of
+                                    case SeqDict.get data.id.channelId guild.channels of
                                         Just channel ->
                                             ( { model
                                                 | users =
                                                     NonemptyDict.insert
                                                         session.userId
                                                         (User.setLastChannelViewed
-                                                            data.guildId
-                                                            data.channelId
+                                                            data.id.guildId
+                                                            data.id.channelId
                                                             (ViewThreadWithMaybeMessage
-                                                                data.threadId
+                                                                data.id.threadId
                                                                 (if routeRequestCausedByPressingLink then
-                                                                    SeqDict.get data.threadId channel.threads
+                                                                    SeqDict.get data.id.threadId channel.threads
                                                                         |> Maybe.withDefault Thread.backendInit
                                                                         |> DmChannel.latestThreadMessageId
                                                                         |> Just
@@ -4600,17 +4600,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     data
                                                     (case previouslyViewing of
                                                         Viewing_ChannelThread previousData ->
-                                                            if previousData.guildId == data.guildId && previousData.channelId == data.channelId && previousData.threadId == data.threadId then
+                                                            if previousData.id == data.id then
                                                                 SetViewing_NothingToFillIn
 
                                                             else
-                                                                SeqDict.get data.threadId channel.threads
+                                                                SeqDict.get data.id.threadId channel.threads
                                                                     |> Maybe.withDefault Thread.backendInit
                                                                     |> loadMessagesHelper
                                                                     |> SetViewing_FilledInByBackend
 
                                                         _ ->
-                                                            SeqDict.get data.threadId channel.threads
+                                                            SeqDict.get data.id.threadId channel.threads
                                                                 |> Maybe.withDefault Thread.backendInit
                                                                 |> loadMessagesHelper
                                                                 |> SetViewing_FilledInByBackend
@@ -4649,18 +4649,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 clientId
-                                data.guildId
-                                data.channelId
-                                data.currentUserId
+                                data.id.guildId
+                                data.id.channelId
+                                data.id.currentUserId
                                 (\session connectionData _ user guild channel ->
                                     ( { model
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
                                                 (User.setLastDiscordChannelViewed
-                                                    data.currentUserId
-                                                    data.guildId
-                                                    data.channelId
+                                                    data.id.currentUserId
+                                                    data.id.guildId
+                                                    data.id.channelId
                                                     (NoThreadWithMaybeMessage
                                                         (if routeRequestCausedByPressingLink then
                                                             DmChannel.latestMessageId channel |> Just
@@ -4679,19 +4679,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             data
                                             (case previouslyViewing of
                                                 Viewing_DiscordChannel previousData ->
-                                                    if previousData.currentUserId == data.currentUserId && previousData.channelId == data.channelId then
+                                                    if previousData.id == data.id then
                                                         SetViewing_NothingToFillIn
 
                                                     else
                                                         SetViewing_FilledInByBackend
                                                             { messages = loadMessagesHelper channel
-                                                            , newUsers = getNewUsers connectionData data.guildId guild
+                                                            , newUsers = getNewUsers connectionData data.id.guildId guild
                                                             }
 
                                                 _ ->
                                                     SetViewing_FilledInByBackend
                                                         { messages = loadMessagesHelper channel
-                                                        , newUsers = getNewUsers connectionData data.guildId guild
+                                                        , newUsers = getNewUsers connectionData data.id.guildId guild
                                                         }
                                             )
                                             |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
@@ -4707,22 +4707,22 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 clientId
-                                data.guildId
-                                data.channelId
-                                data.currentUserId
+                                data.id.guildId
+                                data.id.channelId
+                                data.id.currentUserId
                                 (\session connectionData _ user guild channel ->
                                     ( { model
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
                                                 (User.setLastDiscordChannelViewed
-                                                    data.currentUserId
-                                                    data.guildId
-                                                    data.channelId
+                                                    data.id.currentUserId
+                                                    data.id.guildId
+                                                    data.id.channelId
                                                     (ViewThreadWithMaybeMessage
-                                                        data.threadId
+                                                        data.id.threadId
                                                         (if routeRequestCausedByPressingLink then
-                                                            SeqDict.get data.threadId channel.threads
+                                                            SeqDict.get data.id.threadId channel.threads
                                                                 |> Maybe.withDefault Thread.discordBackendInit
                                                                 |> DmChannel.latestThreadMessageId
                                                                 |> Just
@@ -4741,25 +4741,25 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             data
                                             (case previouslyViewing of
                                                 Viewing_DiscordChannelThread previousData ->
-                                                    if previousData.currentUserId == data.currentUserId && previousData.channelId == data.channelId && previousData.threadId == data.threadId then
+                                                    if previousData.id == data.id then
                                                         SetViewing_NothingToFillIn
 
                                                     else
                                                         SetViewing_FilledInByBackend
                                                             { messages =
-                                                                SeqDict.get data.threadId channel.threads
+                                                                SeqDict.get data.id.threadId channel.threads
                                                                     |> Maybe.withDefault Thread.discordBackendInit
                                                                     |> loadMessagesHelper
-                                                            , newUsers = getNewUsers connectionData data.guildId guild
+                                                            , newUsers = getNewUsers connectionData data.id.guildId guild
                                                             }
 
                                                 _ ->
                                                     SetViewing_FilledInByBackend
                                                         { messages =
-                                                            SeqDict.get data.threadId channel.threads
+                                                            SeqDict.get data.id.threadId channel.threads
                                                                 |> Maybe.withDefault Thread.discordBackendInit
                                                                 |> loadMessagesHelper
-                                                        , newUsers = getNewUsers connectionData data.guildId guild
+                                                        , newUsers = getNewUsers connectionData data.id.guildId guild
                                                         }
                                             )
                                             |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }

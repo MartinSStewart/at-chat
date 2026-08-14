@@ -91,7 +91,7 @@ import Ui.Lazy
 import Ui.Prose
 import Ui.Shadow
 import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
-import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser)
+import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, PreviouslyLastViewedMessage(..), Viewing(..))
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -1275,10 +1275,28 @@ dmChannelView dmRoute loggedIn local model =
 
                         NoThreadWithFriends maybeUrlMessageId _ ->
                             conversationView
-                                (SeqDict.get
-                                    (GuildOrDmId (GuildOrDmId_Dm otherUserId))
-                                    local.localUser.user.lastViewedMessage
-                                    |> Maybe.withDefault (Id.fromInt -1)
+                                (let
+                                    helper =
+                                        SeqDict.get
+                                            (GuildOrDmId (GuildOrDmId_Dm otherUserId))
+                                            local.localUser.user.lastViewedMessage
+                                            |> Maybe.withDefault (Id.fromInt -1)
+                                 in
+                                 case local.localUser.currentlyViewing of
+                                    Viewing_Dm data ->
+                                        if data.id == { otherUserId = otherUserId } then
+                                            case data.previouslyLastViewedMessage of
+                                                PreviouslyLastViewedMessage messageId ->
+                                                    messageId
+
+                                                DontCare ->
+                                                    helper
+
+                                        else
+                                            helper
+
+                                    _ ->
+                                        helper
                                 )
                                 (GuildOrDmId_Dm otherUserId)
                                 maybeUrlMessageId

@@ -13,12 +13,19 @@ module UserSession exposing
     , ViewDiscordGuildData
     , Viewing(..)
     , Viewing_ChannelData
+    , Viewing_ChannelId
     , Viewing_ChannelThreadData
+    , Viewing_ChannelThreadId
     , Viewing_DiscordChannelData
+    , Viewing_DiscordChannelId
     , Viewing_DiscordChannelThreadData
+    , Viewing_DiscordChannelThreadId
     , Viewing_DiscordDmData
+    , Viewing_DiscordDmId
     , Viewing_DmData
+    , Viewing_DmId
     , Viewing_DmThreadData
+    , Viewing_DmThreadId
     , init
     , isViewing
     , isViewingGame
@@ -114,56 +121,91 @@ type PreviouslyLastViewedMessage messageId
 
 
 type alias Viewing_DmData =
-    { otherUserId : Id UserId
+    { id : Viewing_DmId
     , channelHeaderTab : Maybe ChannelHeaderTab
     , previouslyLastViewedMessage : PreviouslyLastViewedMessage ChannelMessageId
+    }
+
+
+type alias Viewing_DmId =
+    { otherUserId : Id UserId
     }
 
 
 type alias Viewing_DmThreadData =
-    { otherUserId : Id UserId
-    , threadId : Id ChannelMessageId
+    { id : Viewing_DmThreadId
     , previouslyLastViewedMessage : PreviouslyLastViewedMessage ThreadMessageId
     }
 
 
+type alias Viewing_DmThreadId =
+    { otherUserId : Id UserId
+    , threadId : Id ChannelMessageId
+    }
+
+
 type alias Viewing_DiscordDmData =
-    { currentUserId : Discord.Id Discord.UserId
-    , channelId : Discord.Id Discord.PrivateChannelId
+    { id : Viewing_DiscordDmId
     , previouslyLastViewedMessage : PreviouslyLastViewedMessage ChannelMessageId
     }
 
 
+type alias Viewing_DiscordDmId =
+    { currentUserId : Discord.Id Discord.UserId
+    , channelId : Discord.Id Discord.PrivateChannelId
+    }
+
+
 type alias Viewing_ChannelData =
-    { guildId : Id GuildId
-    , channelId : Id ChannelId
+    { id : Viewing_ChannelId
     , channelHeaderTab : Maybe ChannelHeaderTab
     , previouslyLastViewedMessage : PreviouslyLastViewedMessage ChannelMessageId
     }
 
 
+type alias Viewing_ChannelId =
+    { guildId : Id GuildId
+    , channelId : Id ChannelId
+    }
+
+
 type alias Viewing_ChannelThreadData =
+    { id : Viewing_ChannelThreadId
+    , previouslyLastViewedMessage : PreviouslyLastViewedMessage ThreadMessageId
+    }
+
+
+type alias Viewing_ChannelThreadId =
     { guildId : Id GuildId
     , channelId : Id ChannelId
     , threadId : Id ChannelMessageId
-    , previouslyLastViewedMessage : PreviouslyLastViewedMessage ThreadMessageId
     }
 
 
 type alias Viewing_DiscordChannelData =
-    { guildId : Discord.Id Discord.GuildId
-    , channelId : Discord.Id Discord.ChannelId
-    , currentUserId : Discord.Id Discord.UserId
+    { id : Viewing_DiscordChannelId
     , previouslyLastViewedMessage : PreviouslyLastViewedMessage ChannelMessageId
     }
 
 
+type alias Viewing_DiscordChannelId =
+    { guildId : Discord.Id Discord.GuildId
+    , channelId : Discord.Id Discord.ChannelId
+    , currentUserId : Discord.Id Discord.UserId
+    }
+
+
 type alias Viewing_DiscordChannelThreadData =
+    { id : Viewing_DiscordChannelThreadId
+    , previouslyLastViewedMessage : PreviouslyLastViewedMessage ThreadMessageId
+    }
+
+
+type alias Viewing_DiscordChannelThreadId =
     { guildId : Discord.Id Discord.GuildId
     , channelId : Discord.Id Discord.ChannelId
     , currentUserId : Discord.Id Discord.UserId
     , threadId : Id ChannelMessageId
-    , previouslyLastViewedMessage : PreviouslyLastViewedMessage ThreadMessageId
     }
 
 
@@ -267,25 +309,25 @@ isViewing : AnyGuildOrDmId -> ThreadRoute -> Viewing -> Bool
 isViewing guildOrDmId threadRoute viewing =
     case ( viewing, threadRoute ) of
         ( Viewing_Dm data, NoThread ) ->
-            guildOrDmId == GuildOrDmId (GuildOrDmId_Dm data.otherUserId)
+            guildOrDmId == GuildOrDmId (GuildOrDmId_Dm data.id.otherUserId)
 
         ( Viewing_DmThread data, ViewThread threadId ) ->
-            guildOrDmId == GuildOrDmId (GuildOrDmId_Dm data.otherUserId) && data.threadId == threadId
+            guildOrDmId == GuildOrDmId (GuildOrDmId_Dm data.id.otherUserId) && data.id.threadId == threadId
 
         ( Viewing_DiscordDm data, NoThread ) ->
-            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = data.currentUserId, channelId = data.channelId })
+            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = data.id.currentUserId, channelId = data.id.channelId })
 
         ( Viewing_Channel data, NoThread ) ->
-            guildOrDmId == GuildOrDmId (GuildOrDmId_Guild data.guildId data.channelId)
+            guildOrDmId == GuildOrDmId (GuildOrDmId_Guild data.id.guildId data.id.channelId)
 
         ( Viewing_ChannelThread data, ViewThread threadId ) ->
-            guildOrDmId == GuildOrDmId (GuildOrDmId_Guild data.guildId data.channelId) && data.threadId == threadId
+            guildOrDmId == GuildOrDmId (GuildOrDmId_Guild data.id.guildId data.id.channelId) && data.id.threadId == threadId
 
         ( Viewing_DiscordChannel data, NoThread ) ->
-            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Guild data.currentUserId data.guildId data.channelId)
+            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Guild data.id.currentUserId data.id.guildId data.id.channelId)
 
         ( Viewing_DiscordChannelThread data, ViewThread threadId ) ->
-            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Guild data.currentUserId data.guildId data.channelId) && data.threadId == threadId
+            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Guild data.id.currentUserId data.id.guildId data.id.channelId) && data.id.threadId == threadId
 
         _ ->
             False
