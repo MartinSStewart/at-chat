@@ -1099,12 +1099,12 @@ getVoiceChatDataHelper roomId session otherSession otherClientId remoteCallData 
             let
                 dmChannelId : DmChannelId
                 dmChannelId =
-                    DmChannelId.fromUserIds otherSession.userId dmingWith
+                    DmChannelId.fromUserIds otherSession.userId dmingWith.otherUserId
             in
             case DmChannelId.otherUserId session.userId dmChannelId of
                 Just otherUserId ->
                     SeqDict.update
-                        (DmRoomId otherUserId)
+                        (DmRoomId { otherUserId = otherUserId })
                         (\maybe ->
                             case maybe of
                                 Just nonempty ->
@@ -1118,9 +1118,9 @@ getVoiceChatDataHelper roomId session otherSession otherClientId remoteCallData 
                 Nothing ->
                     dict2
 
-        GuildRoomId guildId channelId ->
+        GuildRoomId { guildId, channelId } ->
             SeqDict.update
-                (GuildRoomId guildId channelId)
+                (GuildRoomId { guildId = guildId, channelId = channelId })
                 (\maybe ->
                     case maybe of
                         Just nonempty ->
@@ -1665,8 +1665,7 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                                         usersMentioned2
                                         time
                                         session.userId
-                                        guildId
-                                        channelId
+                                        id
                                         threadRouteNoReply
                                         message2
                                         (MembersAndOwner.membersAndOwner guild.membersAndOwner)
@@ -1675,14 +1674,14 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                             ( ( usersMentioned2, messageNotification, channel3 )
                             , Command.map
                                 identity
-                                (GotGuildMessageEmbed guildId channelId (NoThreadWithMessage messageId))
+                                (GotGuildMessageEmbed id.guildId id.channelId (NoThreadWithMessage messageId))
                                 cmds
                             , stickers2
                             )
 
                 guildOrDmId : GuildOrDmId
                 guildOrDmId =
-                    GuildOrDmId_Guild guildId channelId
+                    GuildOrDmId_Guild id
 
                 users2 : NonemptyDict (Id UserId) BackendUser
                 users2 =
@@ -1702,7 +1701,7 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                             else
                                 NonemptyDict.updateIfExists
                                     userId2
-                                    (User.addDirectMention guildId channelId threadRouteNoReply)
+                                    (User.addDirectMention id.guildId id.channelId threadRouteNoReply)
                                     users
                         )
                         model.users
@@ -1711,8 +1710,8 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
             ( { model
                 | guilds =
                     SeqDict.insert
-                        guildId
-                        { guild | channels = SeqDict.insert channelId channel2 guild.channels }
+                        id.guildId
+                        { guild | channels = SeqDict.insert id.channelId channel2 guild.channels }
                         model.guilds
                 , users =
                     NonemptyDict.insert
@@ -1752,7 +1751,7 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                     |> Lamdera.sendToFrontend clientId
                 , Broadcast.toGuildExcludingOne
                     clientId
-                    guildId
+                    id.guildId
                     (Server_SendMessage
                         session.userId
                         (User.backendToFrontendForUser user)
@@ -1841,7 +1840,7 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
                         ({ user
                             | lastViewedThreadMessage =
                                 SeqDict.insert
-                                    ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadId )
+                                    ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId }), threadId )
                                     messageId
                                     user.lastViewedThreadMessage
                          }
@@ -1896,7 +1895,7 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
                         session.userId
                         ({ user
                             | lastViewedMessage =
-                                SeqDict.insert (GuildOrDmId (GuildOrDmId_Dm otherUserId)) messageId user.lastViewedMessage
+                                SeqDict.insert (GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId })) messageId user.lastViewedMessage
                          }
                             |> User.addRecentlyUsedEmojis emojis
                         )
@@ -1930,7 +1929,7 @@ handleDrawingChange sessionId clientId changeId guildOrDmId anchor change model 
             Local_Drawing guildOrDmId anchor change
     in
     case guildOrDmId of
-        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+        GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }) ->
             asGuildMember
                 model
                 sessionId
@@ -1982,7 +1981,7 @@ handleDrawingChange sessionId clientId changeId guildOrDmId anchor change model 
                             ( model, invalidChangeResponse changeId clientId )
                 )
 
-        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+        GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
             asDmUser
                 model
                 sessionId
@@ -2016,7 +2015,7 @@ handleDrawingChange sessionId clientId changeId guildOrDmId anchor change model 
                         , Broadcast.toDmChannelExcludingOne
                             clientId
                             session.userId
-                            otherUserId
+                            { otherUserId = otherUserId }
                             (\otherUserId2 ->
                                 Server_Drawing session.userId (GuildOrDmId (GuildOrDmId_Dm otherUserId2)) anchor change
                             )
@@ -2025,13 +2024,11 @@ handleDrawingChange sessionId clientId changeId guildOrDmId anchor change model 
                     )
                 )
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) ->
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }) ->
             asDiscordGuildChannelMember
                 model
                 sessionId
-                guildId
-                channelId
-                currentDiscordUserId
+                { guildId = guildId, channelId = channelId, currentUserId = currentUserId }
                 (\session _ _ guild channel ->
                     ( { model
                         | discordGuilds =
@@ -2044,7 +2041,7 @@ handleDrawingChange sessionId clientId changeId guildOrDmId anchor change model 
                                             (case anchor of
                                                 Drawing.MessageAnchor threadRoute anchor2 ->
                                                     LocalState.drawingHandleChangeHelperBackend
-                                                        currentDiscordUserId
+                                                        currentUserId
                                                         change
                                                         threadRoute
                                                         anchor2
@@ -2054,7 +2051,7 @@ handleDrawingChange sessionId clientId changeId guildOrDmId anchor change model 
                                                     LocalState.drawingHandleDateDivider
                                                         threadRoute
                                                         date
-                                                        currentDiscordUserId
+                                                        currentUserId
                                                         change
                                                         channel
                                             )
@@ -2500,9 +2497,7 @@ asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain :
     BackendModel
     -> SessionId
     -> ClientId
-    -> Discord.Id Discord.GuildId
-    -> Discord.Id Discord.ChannelId
-    -> Discord.Id Discord.UserId
+    -> Viewing_DiscordChannelId
     ->
         (UserSession
          -> LocalState.ConnectionData
@@ -2516,7 +2511,7 @@ asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain :
             )
         )
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain model sessionId clientId guildId channelId discordUserId func =
+asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain model sessionId clientId { guildId, channelId, currentUserId } func =
     case
         ( SeqDict.get sessionId model.sessions
         , SeqDict.get sessionId model.connections |> Maybe.andThen (NonemptyDict.get clientId)
@@ -2529,13 +2524,13 @@ asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain model sessionId clientId
                 )
             of
                 ( Just user, Just guild ) ->
-                    case ( SeqDict.get channelId guild.channels, SeqDict.get discordUserId model.discordUsers ) of
+                    case ( SeqDict.get channelId guild.channels, SeqDict.get currentUserId model.discordUsers ) of
                         ( Just channel, Just (FullData discordUser) ) ->
                             if
-                                LocalState.canViewDiscordChannel guildId channel guild discordUserId
+                                LocalState.canViewDiscordChannel guildId channel guild currentUserId
                                     && (discordUser.linkedTo == session.userId)
                             then
-                                case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                                case MembersAndOwner.isMember currentUserId guild.membersAndOwner of
                                     IsNotMember ->
                                         ( model, Command.none )
 
@@ -2570,10 +2565,10 @@ asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain model sessionId clientId
 
                         ( Just channel, Just (NeedsAuthAgain discordUser) ) ->
                             if
-                                LocalState.canViewDiscordChannel guildId channel guild discordUserId
+                                LocalState.canViewDiscordChannel guildId channel guild currentUserId
                                     && (discordUser.linkedTo == session.userId)
                             then
-                                case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                                case MembersAndOwner.isMember currentUserId guild.membersAndOwner of
                                     IsNotMember ->
                                         ( model, Command.none )
 

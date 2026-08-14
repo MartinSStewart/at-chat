@@ -1330,7 +1330,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
 
                                     guildOrDmId : DiscordGuildOrDmId
                                     guildOrDmId =
-                                        DiscordGuildOrDmId_Guild discordMessage.author.id discordGuildId channelId
+                                        DiscordGuildOrDmId_Guild { currentUserId = discordMessage.author.id, guildId = discordGuildId, channelId = channelId }
 
                                     channelResult : Result DiscordMessageAlreadyExists ( ( ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) ), DiscordBackendChannel ), Command BackendOnly ToFrontend BackendMsg, SeqDict (Id StickerId) StickerData )
                                     channelResult =
@@ -1647,7 +1647,7 @@ addForumPost authentication post guild channel model =
                     post.forumId
                     (Server_Discord_SendMessage
                         createdAt
-                        (DiscordGuildOrDmId_Guild post.ownerId post.guildId post.forumId)
+                        (DiscordGuildOrDmId_Guild { currentUserId = post.ownerId, guildId = post.guildId, channelId = post.forumId })
                         (forumPostSender post.ownerId model2)
                         richText
                         (NoThreadWithMaybeMessage Nothing)

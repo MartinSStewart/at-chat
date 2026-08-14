@@ -103,7 +103,7 @@ roomIdFromString userId text =
         [ "guild", guildId, channelId ] ->
             case ( Id.fromString guildId, Id.fromString channelId ) of
                 ( Just guildId2, Just channelId2 ) ->
-                    Just (Call.GuildRoomId guildId2 channelId2)
+                    Just (Call.GuildRoomId { guildId = guildId2, channelId = channelId2 })
 
                 _ ->
                     Nothing
@@ -113,7 +113,7 @@ roomIdFromString userId text =
                 Ok dmChannelId ->
                     case DmChannelId.otherUserId userId dmChannelId of
                         Just otherUserId ->
-                            Just (Call.DmRoomId otherUserId)
+                            Just (Call.DmRoomId { otherUserId = otherUserId })
 
                         Nothing ->
                             Nothing
@@ -139,7 +139,7 @@ checkCall _ model headers text =
                             roomIdFromString session.userId request.roomId
                     in
                     case maybeRoomId of
-                        Just (Call.DmRoomId otherUserId) ->
+                        Just (Call.DmRoomId { otherUserId }) ->
                             BackendExtra.asDmUserRpc
                                 model
                                 request.sessionId
@@ -155,13 +155,13 @@ checkCall _ model headers text =
                                                 request.sessionId
                                                 request.clientId
                                                 session.userId
-                                                (Call.DmRoomId otherUserId)
+                                                (Call.DmRoomId { otherUserId = otherUserId })
                                         )
                                         Time.now
                                     )
                                 )
 
-                        Just (Call.GuildRoomId guildId channelId) ->
+                        Just (Call.GuildRoomId { guildId, channelId }) ->
                             BackendExtra.asGuildMemberRpc
                                 model
                                 request.sessionId
@@ -177,7 +177,7 @@ checkCall _ model headers text =
                                                 request.sessionId
                                                 request.clientId
                                                 session.userId
-                                                (Call.GuildRoomId guildId channelId)
+                                                (Call.GuildRoomId { guildId = guildId, channelId = channelId })
                                         )
                                         Time.now
                                     )

@@ -537,7 +537,7 @@ checkDmThreadIsRead otherUserId threadMessageIndex model =
                     in
                     if
                         SeqDict.get
-                            ( Id.GuildOrDmId (Id.GuildOrDmId_Dm otherUserId), threadMessageIndex )
+                            ( Id.GuildOrDmId (Id.GuildOrDmId_Dm { otherUserId = otherUserId }), threadMessageIndex )
                             local.localUser.user.lastViewedThreadMessage
                             == newestMessageId
                     then
@@ -665,7 +665,7 @@ checkMessageIsHovered messageId model =
                     if
                         loggedIn.messageHover
                             == Types.MessageHover
-                                (Id.GuildOrDmId (Id.GuildOrDmId_Guild (Id.fromInt 1) (Id.fromInt 0)))
+                                (Id.GuildOrDmId (Id.GuildOrDmId_Guild { guildId = Id.fromInt 1, channelId = Id.fromInt 0 }))
                                 (Id.NoThreadWithMessage messageId)
                     then
                         Ok ()

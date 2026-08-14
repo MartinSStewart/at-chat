@@ -1005,7 +1005,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                         [ admin.update
                                             30
                                             (Types.MessageInputMsg
-                                                (GuildOrDmId (GuildOrDmId_Guild (Id.fromInt 0) (Id.fromInt 0)))
+                                                (GuildOrDmId (GuildOrDmId_Guild { guildId = Id.fromInt 0, channelId = Id.fromInt 0 }))
                                                 NoThread
                                                 (MessageInput.TypedMessage (Sticker.idToString (Id.fromInt 3)))
                                                 |> Audio.userMsg

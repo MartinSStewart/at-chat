@@ -58,7 +58,7 @@ import Html.Attributes
 import Html.Events
 import Html.Keyed
 import Icons
-import Id exposing (ChannelId, GuildId, Id, UserId, VideoNodeId, Viewing_ChannelId, Viewing_DmId)
+import Id exposing (Id, UserId, VideoNodeId, Viewing_ChannelId, Viewing_DmId)
 import IdString exposing (IdString)
 import Json.Decode
 import Json.Encode

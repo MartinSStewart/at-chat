@@ -128,7 +128,7 @@ import FileStatus
 import Game
 import Go
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, ExportChannelId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), ExportChannelId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DiscordDmId)
 import IdArray
 import IdString
 import ImageEditor
@@ -2672,15 +2672,15 @@ allAttackerLocalChanges =
 
         guildOrDmId_dm : AnyGuildOrDmId
         guildOrDmId_dm =
-            GuildOrDmId_Dm normalUserId |> GuildOrDmId
+            GuildOrDmId_Dm { otherUserId = normalUserId } |> GuildOrDmId
 
         guildOrDmId_guild : AnyGuildOrDmId
         guildOrDmId_guild =
-            GuildOrDmId_Guild legitGuildId channelId |> GuildOrDmId
+            GuildOrDmId_Guild { guildId = legitGuildId, channelId = channelId } |> GuildOrDmId
 
         discordGuildOrDmId_guild : DiscordGuildOrDmId
         discordGuildOrDmId_guild =
-            DiscordGuildOrDmId_Guild discordUserId discordGuildId discordChannelId
+            DiscordGuildOrDmId_Guild { currentUserId = discordUserId, guildId = discordGuildId, channelId = discordChannelId }
 
         discordGuildOrDmId_dm : DiscordGuildOrDmId
         discordGuildOrDmId_dm =
@@ -2695,7 +2695,7 @@ allAttackerLocalChanges =
         emoji =
             EmojiOrCustomEmoji_Emoji (Emoji.UnicodeEmoji "👍")
 
-        discordDmData : DiscordGuildOrDmId_DmData
+        discordDmData : Viewing_DiscordDmId
         discordDmData =
             { currentUserId = discordUserId
             , channelId = discordPrivateChannelId
@@ -2732,12 +2732,12 @@ allAttackerLocalChanges =
     , Local_EditGuildName legitGuildId (Unsafe.guildName "hacked")
     , Local_Invalid
     , Local_LinkDiscordAcknowledgementIsChecked True
-    , Local_LoadChannelMessages (GuildOrDmId_Dm normalUserId) (Id.fromInt 0) EmptyPlaceholder
-    , Local_LoadThreadMessages (GuildOrDmId_Dm normalUserId) (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+    , Local_LoadChannelMessages (GuildOrDmId_Dm { otherUserId = normalUserId }) (Id.fromInt 0) EmptyPlaceholder
+    , Local_LoadThreadMessages (GuildOrDmId_Dm { otherUserId = normalUserId }) (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
     , Local_MemberEditTyping messageTime guildOrDmId_dm threadRouteWithMessage
     , Local_MemberTyping messageTime ( guildOrDmId_dm, NoThread )
-    , Local_LoadChannelMessages (GuildOrDmId_Guild legitGuildId channelId) (Id.fromInt 0) EmptyPlaceholder
-    , Local_LoadThreadMessages (GuildOrDmId_Guild legitGuildId channelId) (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+    , Local_LoadChannelMessages (GuildOrDmId_Guild { guildId = legitGuildId, channelId = channelId }) (Id.fromInt 0) EmptyPlaceholder
+    , Local_LoadThreadMessages (GuildOrDmId_Guild { guildId = legitGuildId, channelId = channelId }) (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
     , Local_MemberEditTyping messageTime guildOrDmId_guild threadRouteWithMessage
     , Local_MemberTyping messageTime ( guildOrDmId_guild, NoThread )
     , Local_NewChannel messageTime legitGuildId (Unsafe.channelName "hacked") ChannelDescription.empty
@@ -2746,11 +2746,11 @@ allAttackerLocalChanges =
     , Local_RegisterPushSubscription (Time.millisToPosix 9) (GotSubscribeData { endpoint = domain, expirationTime = Nothing, keys = { auth = "auth", p256dh = "p256dh" } })
     , Local_RegisterPushSubscription (Time.millisToPosix 9) (SubscribeJsException "")
     , Local_RemoveReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
-    , Local_SendEditMessage messageTime Time.utc (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
-    , Local_SendMessage messageTime Time.utc (GuildOrDmId_Guild legitGuildId channelId) normalText threadRouteWithMaybeMessage SeqDict.empty []
+    , Local_SendEditMessage messageTime Time.utc (GuildOrDmId_Dm { otherUserId = normalUserId }) threadRouteWithMessage normalText SeqDict.empty
+    , Local_SendMessage messageTime Time.utc (GuildOrDmId_Guild { guildId = legitGuildId, channelId = channelId }) normalText threadRouteWithMaybeMessage SeqDict.empty []
     , Local_RemoveReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
-    , Local_SendEditMessage messageTime Time.utc (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
-    , Local_SendMessage messageTime Time.utc (GuildOrDmId_Dm normalUserId) normalText threadRouteWithMaybeMessage SeqDict.empty [ EmojiOrCustomEmoji_Emoji Emoji.heart ]
+    , Local_SendEditMessage messageTime Time.utc (GuildOrDmId_Dm { otherUserId = normalUserId }) threadRouteWithMessage normalText SeqDict.empty
+    , Local_SendMessage messageTime Time.utc (GuildOrDmId_Dm { otherUserId = normalUserId }) normalText threadRouteWithMaybeMessage SeqDict.empty [ EmojiOrCustomEmoji_Emoji Emoji.heart ]
     , Local_SetDiscordGuildNotificationLevel discordUserId discordGuildId User.NotifyOnEveryMessage
     , Local_SetDomainWhitelist True (Domain "example.com")
     , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)
@@ -2776,7 +2776,7 @@ allAttackerLocalChanges =
     , Local_AddCustomEmojisToUser (NonemptySet.fromNonemptyList (Nonempty (Id.fromInt 0) []))
     , Local_VoiceChatChange (Call.Local_Leave startTime)
     , Local_Game
-        (GuildOrDmId_Dm Broadcast.adminUserId)
+        (GuildOrDmId_Dm { otherUserId = Broadcast.adminUserId })
         (Game.LocalChange_Go
             (Id.fromInt 0)
             (Go.StartMatch
@@ -2792,10 +2792,10 @@ allAttackerLocalChanges =
             )
         )
     , Local_Game
-        (GuildOrDmId_Dm Broadcast.adminUserId)
+        (GuildOrDmId_Dm { otherUserId = Broadcast.adminUserId })
         (Game.CreatePublicLink (Id.fromInt 0) EmptyPlaceholder)
     , Local_Game
-        (GuildOrDmId_Guild legitGuildId channelId)
+        (GuildOrDmId_Guild { guildId = legitGuildId, channelId = channelId })
         (Game.LocalChange_WordSpellingGame
             (Id.fromInt 0)
             (WordSpellingGame.Action
@@ -2919,7 +2919,7 @@ attackerPrivateDiscordChannelChanges =
 
         asUser : Discord.Id Discord.UserId -> DiscordGuildOrDmId
         asUser discordUserId =
-            DiscordGuildOrDmId_Guild discordUserId guildId privateDiscordChannelId
+            DiscordGuildOrDmId_Guild { currentUserId = discordUserId, guildId = guildId, channelId = privateDiscordChannelId }
 
         anyAsUser : Discord.Id Discord.UserId -> AnyGuildOrDmId
         anyAsUser discordUserId =

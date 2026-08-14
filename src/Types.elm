@@ -80,7 +80,7 @@ import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileS
 import Game
 import Go
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, ExportChannelId, GamePublicId, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, ExportChannelId, GamePublicId, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId, Viewing_DiscordDmId)
 import ImageEditor
 import ImageViewer
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
@@ -388,7 +388,7 @@ type alias BackendModel =
     , textEditor : TextEditor.LocalState
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id Discord.UserId, Discord.Id Discord.ChannelId ) ( ClientId, ChangeId, Time.Zone )
-    , pendingDiscordCreateDmMessages : SeqDict DiscordGuildOrDmId_DmData ( ClientId, ChangeId, Time.Zone )
+    , pendingDiscordCreateDmMessages : SeqDict Viewing_DiscordDmId ( ClientId, ChangeId, Time.Zone )
     , discordAttachments : SeqDict DiscordAttachmentId DiscordAttachmentData
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel DiscordChannelReload)
     , signupsEnabled : Bool
@@ -887,7 +887,7 @@ type ServerChange
     | Server_DiscordRemoveReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) EmojiOrCustomEmoji
     | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
     | Server_DiscordSendEditGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Nonempty (RichText (Discord.Id Discord.UserId)))
-    | Server_DiscordSendEditDmMessage Time.Posix DiscordGuildOrDmId_DmData (Id ChannelMessageId) (Nonempty (RichText (Discord.Id Discord.UserId)))
+    | Server_DiscordSendEditDmMessage Time.Posix Viewing_DiscordDmId (Id ChannelMessageId) (Nonempty (RichText (Discord.Id Discord.UserId)))
     | Server_MemberEditTyping Time.Posix (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DiscordDeleteGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage
@@ -965,7 +965,7 @@ type LocalChange
     | Local_RemoveReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Local_SendEditMessage Time.Posix Time.Zone GuildOrDmId ThreadRouteWithMessage NonemptyString (SeqDict (Id FileId) FileData)
     | Local_Discord_SendEditGuildMessage Time.Posix Time.Zone (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage NonemptyString
-    | Local_Discord_SendEditDmMessage Time.Posix Time.Zone DiscordGuildOrDmId_DmData (Id ChannelMessageId) NonemptyString
+    | Local_Discord_SendEditDmMessage Time.Posix Time.Zone Viewing_DiscordDmId (Id ChannelMessageId) NonemptyString
     | Local_MemberEditTyping Time.Posix AnyGuildOrDmId ThreadRouteWithMessage
     | Local_SetLastViewed AnyGuildOrDmId ThreadRouteWithMessage
     | Local_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage

@@ -973,7 +973,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         (Local_SendMessage
                             (Time.millisToPosix 0)
                             Time.utc
-                            (GuildOrDmId_Guild (Id.fromInt 1) (Id.fromInt 0))
+                            (GuildOrDmId_Guild { guildId = Id.fromInt 1, channelId = Id.fromInt 0 })
                             (NonemptyString 'm' (String.repeat RichText.maxLength "m"))
                             (NoThreadWithMaybeMessage Nothing)
                             SeqDict.empty
@@ -2953,7 +2953,7 @@ sendMessageRateLimitTest config =
                                 (Local_SendMessage
                                     (Time.millisToPosix 0)
                                     Time.utc
-                                    (GuildOrDmId_Guild guildId channelId)
+                                    (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
                                     (NonemptyString 'm' ("sg " ++ String.fromInt changeIndex))
                                     (NoThreadWithMaybeMessage Nothing)
                                     SeqDict.empty

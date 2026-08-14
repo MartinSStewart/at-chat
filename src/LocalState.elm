@@ -179,7 +179,7 @@ import UInt64
 import Unsafe
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendCurrentUser, FrontendUser, LocalUser)
-import UserSession exposing (FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), SetViewing_ToBeFilledInByBackend(..), UserSession, Viewing_DiscordChannelData)
+import UserSession exposing (FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), SetViewing_ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -931,7 +931,7 @@ type PrivateVapidKey
 --getMessages ( guildOrDmId, threadRoute ) local =
 --    case guildOrDmId of
 --        GuildOrDmId_Guild_NoThread guildId channelId ->
---            case getGuildAndChannel guildId channelId local of
+--            case getGuildAndChannel { guildId = guildId, channelId = channelId } local of
 --                Just ( _, channel ) ->
 --                    case threadRoute of
 --                        ViewThread threadMessageIndex ->
@@ -3205,7 +3205,7 @@ drawingHandleChangeFrontend :
     -> LocalState
 drawingHandleChangeFrontend guildOrDmId anchor changedBy change local =
     case guildOrDmId of
-        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+        GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }) ->
             { local
                 | guilds =
                     SeqDict.updateIfExists
@@ -3235,7 +3235,7 @@ drawingHandleChangeFrontend guildOrDmId anchor changedBy change local =
                         local.guilds
             }
 
-        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+        GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
             { local
                 | dmChannels =
                     SeqDict.updateIfExists
@@ -3251,7 +3251,7 @@ drawingHandleChangeFrontend guildOrDmId anchor changedBy change local =
                         local.dmChannels
             }
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }) ->
             { local
                 | discordGuilds =
                     SeqDict.updateIfExists

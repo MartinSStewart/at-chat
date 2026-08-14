@@ -865,7 +865,7 @@ userDropdownList isMobile nameSoFar guildOrDmId local =
             LocalState.allUsers local.localUser
     in
     (case guildOrDmId of
-        GuildOrDmId_Guild guildId _ ->
+        GuildOrDmId_Guild { guildId } ->
             case SeqDict.get guildId local.guilds of
                 Just guild ->
                     MembersAndOwner.membersAndOwner guild.membersAndOwner
@@ -873,7 +873,7 @@ userDropdownList isMobile nameSoFar guildOrDmId local =
                 Nothing ->
                     []
 
-        GuildOrDmId_Dm otherUserId ->
+        GuildOrDmId_Dm { otherUserId } ->
             if local.localUser.session.userId == otherUserId then
                 [ otherUserId ]
 
@@ -982,7 +982,7 @@ discordUserDropdownList isMobile nameSoFar guildOrDmId local =
             LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
     in
     (case guildOrDmId of
-        DiscordGuildOrDmId_Guild _ guildId _ ->
+        DiscordGuildOrDmId_Guild { guildId } ->
             case SeqDict.get guildId local.discordGuilds of
                 Just guild ->
                     MembersAndOwner.membersAndOwner guild.membersAndOwner
@@ -1128,7 +1128,7 @@ availableCustomEmojisAndStickers guildOrDmId local =
         GuildOrDmId _ ->
             ( local.localUser.user.availableCustomEmojis, local.localUser.user.availableStickers )
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId _) ->
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { guildId }) ->
             case SeqDict.get guildId local.discordGuilds of
                 Just guild ->
                     LocalState.discordGuildAvailableStickersAndCustomEmojis local.localUser guild

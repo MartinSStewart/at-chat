@@ -527,8 +527,8 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
         maybeData : Maybe MenuItemsData
         maybeData =
             case guildOrDmId of
-                GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-                    case LocalState.getGuildAndChannel guildId channelId local of
+                GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }) ->
+                    case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
                         Just ( _, channel ) ->
                             case threadRoute of
                                 ViewThreadWithMessage threadMessageIndex messageId ->
@@ -545,7 +545,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         Nothing ->
                             Nothing
 
-                GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
                     case SeqDict.get otherUserId local.dmChannels of
                         Just dmChannel ->
                             case threadRoute of
@@ -563,7 +563,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         Nothing ->
                             Nothing
 
-                DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId channelId) ->
+                DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { guildId, channelId }) ->
                     case LocalState.getDiscordGuildAndChannel guildId channelId local of
                         Just ( _, channel ) ->
                             case threadRoute of

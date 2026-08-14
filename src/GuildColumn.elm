@@ -426,7 +426,7 @@ discordDmCurrentUserId localUser dmChannel =
 
 dmHasNotifications : FrontendCurrentUser -> Id UserId -> FrontendDmChannel -> Maybe OneOrGreater
 dmHasNotifications currentUser otherUserId dmChannel =
-    channelNewMessageCount (GuildOrDmId (GuildOrDmId_Dm otherUserId)) currentUser dmChannel |> OneOrGreater.fromInt
+    channelNewMessageCount (GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId })) currentUser dmChannel |> OneOrGreater.fromInt
 
 
 {-| In the case of a channel, it's just the channel, not the threads it contains. A muted
@@ -528,7 +528,7 @@ guildNewMessageCount currentUser guildId guild =
             let
                 guildOrDmId : AnyGuildOrDmId
                 guildOrDmId =
-                    GuildOrDmId (GuildOrDmId_Guild guildId channelId)
+                    GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
             in
             SeqDict.foldl
                 (\threadId thread count2 ->
@@ -567,7 +567,7 @@ discordGuildNewMessageCount currentDiscordUserId currentUser guildId guild =
             let
                 guildOrDmId : AnyGuildOrDmId
                 guildOrDmId =
-                    DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId)
+                    DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId = currentDiscordUserId, guildId = guildId, channelId = channelId })
             in
             SeqDict.foldl
                 (\threadId thread count2 ->
