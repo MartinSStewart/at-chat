@@ -647,14 +647,14 @@ staysReadWhileViewingTest config =
                 , E2EHelper.writeMessage admin 100 "After the mark"
                 , E2EHelper.hasExactText user [ "After the mark" ]
                 , user.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
-                , user.snapshotView 100 { name = "Unread divider stays put while viewing" }
+                , E2EHelper.tallSnapshot user 100 { name = "Unread divider stays put while viewing" }
 
                 -- Which is what the unread overview shows once they leave: everything from
                 -- the message they marked onwards, and nothing from before it
                 , user.click 100 (Dom.id "guildIcon_showFriends")
                 , E2EHelper.hasExactText user [ "While away", "After the mark" ]
                 , E2EHelper.hasNotExactText user [ "In the channel" ]
-                , user.snapshotView 100 { name = "Unread overview after a message marked as unread" }
+                , E2EHelper.tallSnapshot user 100 { name = "Unread overview after a message marked as unread" }
                 ]
             )
         ]
@@ -1573,7 +1573,7 @@ startingACallOrGameStaysReadTest config =
                 , admin.navigateBack 100
                 , admin.checkModel 100 (checkChannelIsCaughtUpModel guildChannelId)
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
-                , admin.snapshotView 100 { name = "Started a call and a game without either turning up unread" }
+                , E2EHelper.tallSnapshot admin 100 { name = "Started a call and a game without either turning up unread" }
                 ]
             )
         ]
