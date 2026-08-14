@@ -38,6 +38,7 @@ module User exposing
     , setIcon
     , setLastChannelViewed
     , setLastDiscordChannelViewed
+    , setLastDiscordDmViewed
     , setLastDmViewed
     , setLastViewedMessage
     , setName
@@ -531,9 +532,83 @@ setLastDiscordChannelViewed currentUserId guildId channelId threadRoute user =
             user2
 
 
-setLastDmViewed : LastDmViewed -> { a | lastDmViewed : LastDmViewed } -> { a | lastDmViewed : LastDmViewed }
-setLastDmViewed lastDmViewed user =
-    { user | lastDmViewed = lastDmViewed }
+setLastDmViewed :
+    Id UserId
+    -> ThreadRouteWithMaybeMessage
+    ->
+        { a
+            | lastDmViewed : LastDmViewed
+            , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+        }
+    ->
+        { a
+            | lastDmViewed : LastDmViewed
+            , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+        }
+setLastDmViewed otherUserId threadRoute user =
+    let
+        user2 =
+            { user
+                | lastDmViewed =
+                    DmChannelLastViewed
+                        otherUserId
+                        (case threadRoute of
+                            ViewThreadWithMaybeMessage threadId _ ->
+                                ViewThread threadId
+
+                            NoThreadWithMaybeMessage _ ->
+                                NoThread
+                        )
+            }
+    in
+    case threadRoute of
+        ViewThreadWithMaybeMessage threadId (Just messageId) ->
+            { user2
+                | lastViewedThreadMessage =
+                    SeqDict.insert
+                        ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadId )
+                        messageId
+                        user2.lastViewedThreadMessage
+            }
+
+        ViewThreadWithMaybeMessage _ Nothing ->
+            user2
+
+        NoThreadWithMaybeMessage (Just messageId) ->
+            { user2
+                | lastViewedMessage =
+                    SeqDict.insert
+                        (GuildOrDmId (GuildOrDmId_Dm otherUserId))
+                        messageId
+                        user2.lastViewedMessage
+            }
+
+        NoThreadWithMaybeMessage Nothing ->
+            user2
+
+
+setLastDiscordDmViewed :
+    Discord.Id Discord.UserId
+    -> Discord.Id Discord.PrivateChannelId
+    -> Maybe (Id ChannelMessageId)
+    -> { a | lastDmViewed : LastDmViewed, lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId) }
+    -> { a | lastDmViewed : LastDmViewed, lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId) }
+setLastDiscordDmViewed currentUserId channelId maybeMessageId user =
+    case maybeMessageId of
+        Just messageId ->
+            { user
+                | lastDmViewed = DiscordDmChannelLastViewed channelId
+                , lastViewedMessage =
+                    SeqDict.insert
+                        (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
+                        messageId
+                        user.lastViewedMessage
+            }
+
+        Nothing ->
+            { user | lastDmViewed = DiscordDmChannelLastViewed channelId }
 
 
 setName : PersonName -> { b | name : PersonName } -> { b | name : PersonName }

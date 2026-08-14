@@ -4336,8 +4336,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         previouslyViewing : Viewing
                         previouslyViewing =
                             case SeqDict.get sessionId model.connections of
-                                Just connections ->
-                                    case NonemptyDict.get clientId connections of
+                                Just connections2 ->
+                                    case NonemptyDict.get clientId connections2 of
                                         Just connection ->
                                             connection.currentlyViewing
 
@@ -4346,6 +4346,16 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                 Nothing ->
                                     Viewing_None
+
+                        connections : SeqDict SessionId (NonemptyDict.NonemptyDict ClientId ConnectionData)
+                        connections =
+                            SeqDict.updateIfExists
+                                sessionId
+                                (NonemptyDict.updateIfExists
+                                    clientId
+                                    (\connection2 -> { connection2 | currentlyViewing = currentlyViewing })
+                                )
+                                model.connections
                     in
                     case viewing of
                         ViewDm data _ ->
@@ -4358,16 +4368,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
-                                                (User.setLastDmViewed (DmChannelLastViewed data.otherUserId NoThread) user)
-                                                model.users
-                                        , connections =
-                                            SeqDict.updateIfExists
-                                                sessionId
-                                                (NonemptyDict.updateIfExists
-                                                    clientId
-                                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                                (User.setLastDmViewed
+                                                    data.otherUserId
+                                                    (NoThreadWithMaybeMessage
+                                                        (if routeRequestCausedByPressingLink then
+                                                            DmChannel.latestMessageId dmChannel |> Just
+
+                                                         else
+                                                            Nothing
+                                                        )
+                                                    )
+                                                    user
                                                 )
-                                                model.connections
+                                                model.users
+                                        , connections = connections
                                       }
                                     , Command.batch
                                         [ ViewDm
@@ -4401,16 +4415,24 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
-                                                (User.setLastDmViewed (DmChannelLastViewed data.otherUserId (ViewThread data.threadId)) user)
-                                                model.users
-                                        , connections =
-                                            SeqDict.updateIfExists
-                                                sessionId
-                                                (NonemptyDict.updateIfExists
-                                                    clientId
-                                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                                (User.setLastDmViewed
+                                                    data.otherUserId
+                                                    (ViewThreadWithMaybeMessage
+                                                        data.threadId
+                                                        (if routeRequestCausedByPressingLink then
+                                                            SeqDict.get data.threadId dmChannel.threads
+                                                                |> Maybe.withDefault Thread.backendInit
+                                                                |> DmChannel.latestThreadMessageId
+                                                                |> Just
+
+                                                         else
+                                                            Nothing
+                                                        )
+                                                    )
+                                                    user
                                                 )
-                                                model.connections
+                                                model.users
+                                        , connections = connections
                                       }
                                     , Command.batch
                                         [ ViewDmThread
@@ -4450,16 +4472,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | users =
                                             NonemptyDict.insert
                                                 session.userId
-                                                (User.setLastDmViewed (DiscordDmChannelLastViewed data.channelId) user)
-                                                model.users
-                                        , connections =
-                                            SeqDict.updateIfExists
-                                                sessionId
-                                                (NonemptyDict.updateIfExists
-                                                    clientId
-                                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                                (User.setLastDiscordDmViewed
+                                                    data.currentUserId
+                                                    data.channelId
+                                                    (if routeRequestCausedByPressingLink then
+                                                        DmChannel.latestMessageId dmChannel |> Just
+
+                                                     else
+                                                        Nothing
+                                                    )
+                                                    user
                                                 )
-                                                model.connections
+                                                model.users
+                                        , connections = connections
                                       }
                                     , Command.batch
                                         [ ViewDiscordDm
@@ -4509,14 +4534,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             user
                                                         )
                                                         model.users
-                                                , connections =
-                                                    SeqDict.updateIfExists
-                                                        sessionId
-                                                        (NonemptyDict.updateIfExists
-                                                            clientId
-                                                            (\connection -> { connection | currentlyViewing = currentlyViewing })
-                                                        )
-                                                        model.connections
+                                                , connections = connections
                                               }
                                             , Command.batch
                                                 [ ViewChannel
@@ -4575,14 +4593,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             user
                                                         )
                                                         model.users
-                                                , connections =
-                                                    SeqDict.updateIfExists
-                                                        sessionId
-                                                        (NonemptyDict.updateIfExists
-                                                            clientId
-                                                            (\connection -> { connection | currentlyViewing = currentlyViewing })
-                                                        )
-                                                        model.connections
+                                                , connections = connections
                                               }
                                             , Command.batch
                                                 [ ViewChannelThread
@@ -4625,16 +4636,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 (\session _ ->
-                                    ( { model
-                                        | connections =
-                                            SeqDict.updateIfExists
-                                                sessionId
-                                                (NonemptyDict.updateIfExists
-                                                    clientId
-                                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
-                                                )
-                                                model.connections
-                                      }
+                                    ( { model | connections = connections }
                                     , Command.batch
                                         [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4670,14 +4672,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     user
                                                 )
                                                 model.users
-                                        , connections =
-                                            SeqDict.updateIfExists
-                                                sessionId
-                                                (NonemptyDict.updateIfExists
-                                                    clientId
-                                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
-                                                )
-                                                model.connections
+                                        , connections = connections
                                       }
                                     , Command.batch
                                         [ ViewDiscordChannel
@@ -4739,14 +4734,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     user
                                                 )
                                                 model.users
-                                        , connections =
-                                            SeqDict.updateIfExists
-                                                sessionId
-                                                (NonemptyDict.updateIfExists
-                                                    clientId
-                                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
-                                                )
-                                                model.connections
+                                        , connections = connections
                                       }
                                     , Command.batch
                                         [ ViewDiscordChannelThread
@@ -4787,16 +4775,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 (\session user ->
-                                    ( { model
-                                        | connections =
-                                            SeqDict.updateIfExists
-                                                sessionId
-                                                (NonemptyDict.updateIfExists
-                                                    clientId
-                                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
-                                                )
-                                                model.connections
-                                      }
+                                    ( { model | connections = connections }
                                     , Command.batch
                                         [ ViewOverview
                                             (case previouslyViewing of

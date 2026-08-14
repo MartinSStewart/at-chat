@@ -2962,7 +2962,8 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastDmViewed
-                                                (DmChannelLastViewed data.otherUserId (ViewThread data.threadId))
+                                                data.otherUserId
+                                                (ViewThread data.threadId)
                                                 localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
