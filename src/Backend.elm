@@ -84,7 +84,7 @@ import TwoFactorAuthentication
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
-import User exposing (BackendUser, LastDmViewed(..))
+import User exposing (BackendUser)
 import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), SetViewing_ToBeFilledInByBackend(..), ToBeFilledInByBackend(..), UserSession, Viewing(..))
 import VisibleMessages
 import WireHelper

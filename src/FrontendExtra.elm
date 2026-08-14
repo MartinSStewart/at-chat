@@ -110,7 +110,7 @@ import Ui.Font
 import Ui.Input
 import Ui.Prose
 import Url exposing (Url)
-import User exposing (FrontendCurrentUser, FrontendUser, LastDmViewed(..), LocalUser, NotificationLevel(..))
+import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
 import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), SetViewing_ToBeFilledInByBackend(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 import WordSpellingGame
@@ -2945,7 +2945,16 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastDmViewed
-                                                (DmChannelLastViewed data.otherUserId NoThread)
+                                                data.otherUserId
+                                                (NoThreadWithMaybeMessage
+                                                    (if routeRequestCausedByPressingLink then
+                                                        SeqDict.get data.otherUserId local.dmChannels
+                                                            |> Maybe.map DmChannel.latestFrontendMessageId
+
+                                                     else
+                                                        Nothing
+                                                    )
+                                                )
                                                 localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
@@ -2963,7 +2972,18 @@ changeUpdate localMsg local =
                                         | user =
                                             User.setLastDmViewed
                                                 data.otherUserId
-                                                (ViewThread data.threadId)
+                                                (ViewThreadWithMaybeMessage
+                                                    data.threadId
+                                                    (if routeRequestCausedByPressingLink then
+                                                        SeqDict.get data.otherUserId local.dmChannels
+                                                            |> Maybe.andThen
+                                                                (\dmChannel -> SeqDict.get data.threadId dmChannel.threads)
+                                                            |> Maybe.map DmChannel.latestFrontendThreadMessageId
+
+                                                     else
+                                                        Nothing
+                                                    )
+                                                )
                                                 localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
@@ -2987,8 +3007,16 @@ changeUpdate localMsg local =
                                 | localUser =
                                     { localUser
                                         | user =
-                                            User.setLastDmViewed
-                                                (DiscordDmChannelLastViewed data.channelId)
+                                            User.setLastDiscordDmViewed
+                                                data.currentUserId
+                                                data.channelId
+                                                (if routeRequestCausedByPressingLink then
+                                                    SeqDict.get data.channelId local.discordDmChannels
+                                                        |> Maybe.map DmChannel.latestFrontendMessageId
+
+                                                 else
+                                                    Nothing
+                                                )
                                                 localUser.user
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
