@@ -1,5 +1,6 @@
 module MiscTests exposing (tests)
 
+import DiscordSync
 import Effect.Time as Time
 import Expect
 import Pages.Guild exposing (HighlightMessage(..), IsHovered(..))
@@ -42,4 +43,25 @@ tests =
                 Pages.Guild.encodeMessageView input.isMobile input.isHovered input.containerWidth input.isEditing input.highlight input.time
                     |> Pages.Guild.decodeMessageView
                     |> Expect.equal input
+        , Test.test "Discord thread name is left as is when it's short enough" <|
+            \_ ->
+                DiscordSync.threadName "Hello world!"
+                    |> Expect.equal "Hello world!"
+        , Test.test "Discord thread name is shortened to 100 characters" <|
+            \_ ->
+                DiscordSync.threadName (String.repeat 50 "ab")
+                    |> String.length
+                    |> Expect.equal 100
+        , Test.test "Discord thread name doesn't end with a partial word's trailing space" <|
+            \_ ->
+                DiscordSync.threadName (String.repeat 33 "abc ")
+                    |> Expect.equal (String.repeat 24 "abc " ++ "abc")
+        , Test.test "Discord thread name collapses whitespace onto a single line" <|
+            \_ ->
+                DiscordSync.threadName "  Hello\n\nworld!  "
+                    |> Expect.equal "Hello world!"
+        , Test.test "Discord thread name falls back to a placeholder when the message has no text" <|
+            \_ ->
+                DiscordSync.threadName "   "
+                    |> Expect.equal "Thread"
         ]

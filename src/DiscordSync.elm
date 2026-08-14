@@ -14,6 +14,7 @@ module DiscordSync exposing
     , messagesAndLinks
     , reloadChannelMaxMessages
     , sendMessage
+    , threadName
     , uploadAttachmentsForMessages
     , websocketClose
     , websocketCreateHandle
@@ -4131,6 +4132,20 @@ http secretKey request =
                 )
         , timeout = Just Duration.minute
         }
+
+
+{-| Discord rejects thread names that are empty or longer than 100 characters. Since we derive
+the name from the message the thread was started from, we need to collapse whitespace (a name
+can't span multiple lines), shorten it, and fall back to a placeholder if nothing is left.
+-}
+threadName : String -> String
+threadName text =
+    case String.words text |> String.join " " |> String.left 100 |> String.trimRight of
+        "" ->
+            "Thread"
+
+        name ->
+            name
 
 
 sendMessage :

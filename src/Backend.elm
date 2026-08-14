@@ -2217,7 +2217,7 @@ discordStartThread timezone discordUser channel channelId threadId messageId mod
         { channelId = channelId
         , messageId = messageId
         , name =
-            case IdArray.get threadId channel.messages of
+            (case IdArray.get threadId channel.messages of
                 Just message ->
                     case message of
                         UserTextMessage a ->
@@ -2248,6 +2248,8 @@ discordStartThread timezone discordUser channel channelId threadId messageId mod
 
                 Nothing ->
                     "Thread"
+            )
+                |> DiscordSync.threadName
         , autoArchiveDuration = Missing
         , rateLimitPerUser = Missing
         }
