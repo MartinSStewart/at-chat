@@ -1446,13 +1446,12 @@ member not currently looking at the channel is notified.
 gameStartedGuildNotification :
     Time.Posix
     -> Id UserId
-    -> Id GuildId
-    -> Id ChannelId
+    -> Viewing_ChannelId
     -> Message.GameType
     -> List (Id UserId)
     -> BackendModel
     -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
-gameStartedGuildNotification time sender guildId channelId gameType members model =
+gameStartedGuildNotification time sender id gameType members model =
     let
         plainText : String
         plainText =
@@ -1480,7 +1479,7 @@ gameStartedGuildNotification time sender guildId channelId gameType members mode
                             (\connection ->
                                 case connection.currentlyViewing of
                                     UserSession.Viewing_Channel data ->
-                                        data.id.guildId == guildId && data.id.channelId == channelId
+                                        data.id == id
 
                                     _ ->
                                         False
@@ -1508,7 +1507,7 @@ gameStartedGuildNotification time sender guildId channelId gameType members mode
                                 )
                                 plainText
                                 message
-                                (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing) |> Just)
+                                (GuildRoute id.guildId (ChannelRoute id.channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing) |> Just)
                                 sessions
                                 model
                                 |> Tuple.mapSecond (\a -> Command.batch a :: cmds)

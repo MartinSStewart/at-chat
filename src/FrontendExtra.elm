@@ -1849,8 +1849,8 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                                 Nothing ->
                                     loggedIn
 
-                        GuildOrDmId_Guild { guildId, channelId } ->
-                            case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
+                        GuildOrDmId_Guild id ->
+                            case LocalState.getGuildAndChannel id local of
                                 Just ( _, channel ) ->
                                     { loggedIn
                                         | games =
@@ -2527,8 +2527,8 @@ changeUpdate localMsg local =
 
                 Local_SendMessage createdAt _ guildOrDmId text threadRouteWithRepliedTo attachedFiles emojis ->
                     case guildOrDmId of
-                        GuildOrDmId_Guild { guildId, channelId } ->
-                            case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
+                        GuildOrDmId_Guild id ->
+                            case LocalState.getGuildAndChannel id local of
                                 Just ( guild, channel ) ->
                                     let
                                         user =
@@ -2540,9 +2540,9 @@ changeUpdate localMsg local =
                                     { local
                                         | guilds =
                                             guildSendMessage
-                                                guildId
+                                                id.guildId
                                                 guild
-                                                channelId
+                                                id.channelId
                                                 channel
                                                 threadRouteWithRepliedTo
                                                 createdAt
@@ -3647,8 +3647,8 @@ changeUpdate localMsg local =
             case serverChange of
                 Server_SendMessage createdBy createdByUser createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles stickers ->
                     case guildOrDmId of
-                        GuildOrDmId_Guild { guildId, channelId } ->
-                            case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
+                        GuildOrDmId_Guild id ->
+                            case LocalState.getGuildAndChannel id local of
                                 Just ( guild, channel ) ->
                                     let
                                         localUser : LocalUser
@@ -3676,9 +3676,9 @@ changeUpdate localMsg local =
                                     { local
                                         | guilds =
                                             guildSendMessage
-                                                guildId
+                                                id.guildId
                                                 guild
-                                                channelId
+                                                id.channelId
                                                 channel
                                                 threadRouteWithRepliedTo
                                                 createdAt
@@ -3724,8 +3724,8 @@ changeUpdate localMsg local =
                                                                )
                                                     then
                                                         User.addDirectMention
-                                                            guildId
-                                                            channelId
+                                                            id.guildId
+                                                            id.channelId
                                                             (case threadRouteWithRepliedTo of
                                                                 ViewThreadWithMaybeMessage threadId _ ->
                                                                     ViewThread threadId
@@ -5112,17 +5112,17 @@ gameChangeUpdate changeBy guildOrDmId gameChange local =
                         local.dmChannels
             }
 
-        GuildOrDmId_Guild { guildId, channelId } ->
-            case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
+        GuildOrDmId_Guild id ->
+            case LocalState.getGuildAndChannel id local of
                 Just ( guild, channel ) ->
                     { local
                         | guilds =
                             SeqDict.insert
-                                guildId
+                                id.guildId
                                 { guild
                                     | channels =
                                         SeqDict.insert
-                                            channelId
+                                            id.channelId
                                             (gameChangeUpdateChannel changeBy gameChange channel)
                                             guild.channels
                                 }

@@ -1118,9 +1118,9 @@ getVoiceChatDataHelper roomId session otherSession otherClientId remoteCallData 
                 Nothing ->
                     dict2
 
-        GuildRoomId { guildId, channelId } ->
+        GuildRoomId id ->
             SeqDict.update
-                (GuildRoomId { guildId = guildId, channelId = channelId })
+                (GuildRoomId id)
                 (\maybe ->
                     case maybe of
                         Just nonempty ->
