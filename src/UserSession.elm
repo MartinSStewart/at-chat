@@ -22,6 +22,8 @@ module UserSession exposing
     , init
     , isViewing
     , isViewingGame
+    , setPreviouslyLastViewedChannelMessage
+    , setPreviouslyLastViewedThreadMessage
     , setViewingToCurrentlyViewing
     , toFrontend
     , unreadOverviewMessageLimit
@@ -288,6 +290,73 @@ isViewing guildOrDmId threadRoute viewing =
 
         _ ->
             False
+
+
+{-| Move the unread divider of the conversation being looked at onto a channel message.
+The thread kinds count their messages separately, so they keep the divider they already had.
+-}
+setPreviouslyLastViewedChannelMessage : Id ChannelMessageId -> Viewing -> Viewing
+setPreviouslyLastViewedChannelMessage messageId viewing =
+    case viewing of
+        Viewing_Dm data ->
+            Viewing_Dm { data | previouslyLastViewedMessage = PreviouslyLastViewedMessage messageId }
+
+        Viewing_DiscordDm data ->
+            Viewing_DiscordDm { data | previouslyLastViewedMessage = PreviouslyLastViewedMessage messageId }
+
+        Viewing_Channel data ->
+            Viewing_Channel { data | previouslyLastViewedMessage = PreviouslyLastViewedMessage messageId }
+
+        Viewing_DiscordChannel data ->
+            Viewing_DiscordChannel { data | previouslyLastViewedMessage = PreviouslyLastViewedMessage messageId }
+
+        Viewing_DmThread _ ->
+            viewing
+
+        Viewing_ChannelThread _ ->
+            viewing
+
+        Viewing_DiscordChannelThread _ ->
+            viewing
+
+        Viewing_None ->
+            viewing
+
+        Viewing_Overview ->
+            viewing
+
+
+{-| Move the unread divider of the conversation being looked at onto a thread message.
+-}
+setPreviouslyLastViewedThreadMessage : Id ThreadMessageId -> Viewing -> Viewing
+setPreviouslyLastViewedThreadMessage messageId viewing =
+    case viewing of
+        Viewing_DmThread data ->
+            Viewing_DmThread { data | previouslyLastViewedMessage = PreviouslyLastViewedMessage messageId }
+
+        Viewing_ChannelThread data ->
+            Viewing_ChannelThread { data | previouslyLastViewedMessage = PreviouslyLastViewedMessage messageId }
+
+        Viewing_DiscordChannelThread data ->
+            Viewing_DiscordChannelThread { data | previouslyLastViewedMessage = PreviouslyLastViewedMessage messageId }
+
+        Viewing_Dm _ ->
+            viewing
+
+        Viewing_DiscordDm _ ->
+            viewing
+
+        Viewing_Channel _ ->
+            viewing
+
+        Viewing_DiscordChannel _ ->
+            viewing
+
+        Viewing_None ->
+            viewing
+
+        Viewing_Overview ->
+            viewing
 
 
 isViewingGame : GuildOrDmId -> Id ChannelMessageId -> Viewing -> Bool

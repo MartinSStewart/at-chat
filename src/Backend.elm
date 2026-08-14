@@ -40,7 +40,7 @@ import FileStatus exposing (FileData, FileId)
 import Game
 import Go
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import ImageEditor
 import Lamdera as LamderaCore
@@ -3176,7 +3176,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (Just clientId)
                                             Nothing
                                             id.otherUserId
-                                            (Server_MemberTyping time session.userId (GuildOrDmId_Dm id) threadRoute
+                                            (Server_MemberTyping
+                                                time
+                                                session.userId
+                                                (GuildOrDmId_Dm { otherUserId = session.userId })
+                                                threadRoute
                                                 |> ServerChange
                                             )
                                             model

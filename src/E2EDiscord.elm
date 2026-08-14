@@ -2185,6 +2185,46 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Discord messages arriving in the channel you are looking at stay read"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ -- The admin opens a Discord guild channel, which catches it up
+                          admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+
+                        -- Someone else writing into the channel while it is on screen leaves
+                        -- nothing unread, so no notification icon appears for the guild
+                        , discordGuildMessageFromGuildOnlyUser connection "While you watch"
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "While you watch" ])
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , E2EHelper.hasExactText admin [ "You have no unread messages!" ]
+
+                        -- The same message arriving while the admin is elsewhere does count
+                        , discordGuildMessageFromGuildOnlyUser connection "While you are away"
+                        , E2EHelper.hasNotExactText admin [ "You have no unread messages!" ]
+                        , E2EHelper.hasExactText admin [ "While you are away" ]
+
+                        -- And a Discord DM behaves the same way
+                        , admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
+                        , discordDmMessage connection "While you watch the DM"
+                        , friendLabelHasNoNotificationCircle admin "1472236476401057854" "1"
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Discord group DM notification shows red icon in guild column"
         E2EHelper.startTime
         normalConfig

@@ -32,6 +32,9 @@ module Broadcast exposing
     , toUser
     , toUserAlt
     , userGetAllConnections
+    , usersViewing
+    , usersViewingDiscordChannel
+    , usersViewingDiscordDm
     )
 
 import Codec exposing (Codec)
@@ -50,7 +53,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
-import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
+import Id exposing (GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
@@ -698,6 +701,123 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                         ( sessions, cmds )
             )
             ( model.sessions, [] )
+
+
+{-| Everyone with a client open on this conversation right now. A message arriving in it
+shouldn't leave them with something unread, so they need their last viewed message moved
+along with it.
+-}
+usersViewing : Id.AnyGuildOrDmId -> ThreadRoute -> BackendModel -> SeqSet (Id UserId)
+usersViewing guildOrDmId threadRoute model =
+    SeqDict.foldl
+        (\sessionId session set ->
+            case SeqDict.get sessionId model.connections of
+                Just connections ->
+                    if
+                        NonemptyDict.values connections
+                            |> List.Nonempty.any
+                                (\connection ->
+                                    UserSession.isViewing guildOrDmId threadRoute connection.currentlyViewing
+                                )
+                    then
+                        SeqSet.insert session.userId set
+
+                    else
+                        set
+
+                Nothing ->
+                    set
+        )
+        SeqSet.empty
+        model.sessions
+
+
+{-| Everyone with a client open on this Discord channel right now, along with the id the
+channel goes by for them. A Discord conversation keeps its unread state under the reader's
+own Discord account rather than the account that wrote the message, so the id can't be taken
+from the message.
+-}
+usersViewingDiscordChannel :
+    Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> ThreadRoute
+    -> BackendModel
+    -> List ( Id UserId, Id.AnyGuildOrDmId )
+usersViewingDiscordChannel guildId channelId threadRoute model =
+    viewingConnections
+        (\viewing ->
+            case ( viewing, threadRoute ) of
+                ( UserSession.Viewing_DiscordChannel data, NoThread ) ->
+                    if data.id.guildId == guildId && data.id.channelId == channelId then
+                        Id.DiscordGuildOrDmId (Id.DiscordGuildOrDmId_Guild data.id) |> Just
+
+                    else
+                        Nothing
+
+                ( UserSession.Viewing_DiscordChannelThread data, ViewThread threadId ) ->
+                    if data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadId then
+                        Id.DiscordGuildOrDmId
+                            (Id.DiscordGuildOrDmId_Guild
+                                { guildId = data.id.guildId
+                                , channelId = data.id.channelId
+                                , currentUserId = data.id.currentUserId
+                                }
+                            )
+                            |> Just
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
+        )
+        model
+
+
+{-| The same as `usersViewingDiscordChannel`, for a Discord DM channel.
+-}
+usersViewingDiscordDm :
+    Discord.Id Discord.PrivateChannelId
+    -> BackendModel
+    -> List ( Id UserId, Id.AnyGuildOrDmId )
+usersViewingDiscordDm channelId model =
+    viewingConnections
+        (\viewing ->
+            case viewing of
+                UserSession.Viewing_DiscordDm data ->
+                    if data.id.channelId == channelId then
+                        Id.DiscordGuildOrDmId (Id.DiscordGuildOrDmId_Dm data.id) |> Just
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
+        )
+        model
+
+
+viewingConnections :
+    (UserSession.Viewing -> Maybe Id.AnyGuildOrDmId)
+    -> BackendModel
+    -> List ( Id UserId, Id.AnyGuildOrDmId )
+viewingConnections toGuildOrDmId model =
+    SeqDict.toList model.sessions
+        |> List.concatMap
+            (\( sessionId, session ) ->
+                case SeqDict.get sessionId model.connections of
+                    Just connections ->
+                        NonemptyDict.values connections
+                            |> List.Nonempty.toList
+                            |> List.filterMap
+                                (\connection ->
+                                    toGuildOrDmId connection.currentlyViewing
+                                        |> Maybe.map (Tuple.pair session.userId)
+                                )
+
+                    Nothing ->
+                        []
+            )
 
 
 userGetAllConnections : Id UserId -> BackendModel -> List LocalState.ConnectionData

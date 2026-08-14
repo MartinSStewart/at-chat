@@ -14,6 +14,7 @@ module E2EMisc exposing
     , mentionSuggestionTest
     , noTimestampSuggestionTest
     , profileImageOpensDm
+    , staysReadWhileViewingTest
     , timeOfDaySuggestionTest
     , timeOffsetSuggestionTest
     )
@@ -574,6 +575,164 @@ checkDmRouteWithUser otherUserId model =
                     Err "Expected to be viewing a DM channel"
 
                 ( Types.NotLoggedIn _, _ ) ->
+                    Err "Expected the frontend to be logged in"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
+
+
+{-| A message someone else writes into the conversation you are looking at, with nothing
+unread in it, shouldn't leave you with something unread. The conversation stays caught up
+while you sit in it, and it is still caught up once you leave.
+-}
+staysReadWhileViewingTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+staysReadWhileViewingTest config =
+    E2EHelper.startTest
+        "Messages arriving in the conversation you are looking at stay read"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ -- The guild channel both of them are looking at
+                  E2EHelper.writeMessage admin 100 "In the channel"
+                , user.checkModel 100 (checkChannelIsCaughtUp guildChannelId)
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+
+                -- A message arriving while the reader is elsewhere is still unread
+                , E2EHelper.writeMessage admin 100 "While away"
+                , E2EHelper.hasNotExactText user [ "You have no unread messages!" ]
+                , E2EHelper.hasExactText user [ "While away" ]
+
+                -- Opening the channel catches them up again, and a thread started from a
+                -- message counts separately from the channel it hangs off
+                , user.click 100 (Dom.id "guild_openGuild_1")
+                , E2EHelper.createThread admin (Id.fromInt 1)
+                , E2EHelper.writeMessage admin 100 "Starting a thread"
+                , user.click 100 (Dom.id "guild_viewThread_0_1")
+                , E2EHelper.writeMessage admin 100 "In the thread"
+                , user.checkModel 100 (checkThreadIsCaughtUp guildChannelId (Id.fromInt 1))
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+
+                -- The same in a DM, where the reader knows the conversation by the person
+                -- writing to them
+                , E2EHelper.openDm admin 100 "2"
+                , E2EHelper.writeMessage admin 100 "Hello in a DM!"
+                , user.click 100 (Dom.id "guild_friendLabel_0")
+                , E2EHelper.writeMessage admin 100 "And another one"
+                , user.checkModel 100 (checkChannelIsCaughtUp dmWithAdminId)
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+                ]
+            )
+        ]
+
+
+guildChannelId : Id.AnyGuildOrDmId
+guildChannelId =
+    Id.GuildOrDmId (Id.GuildOrDmId_Guild { guildId = Id.fromInt 1, channelId = Id.fromInt 0 })
+
+
+dmWithAdminId : Id.AnyGuildOrDmId
+dmWithAdminId =
+    Id.GuildOrDmId (Id.GuildOrDmId_Dm { otherUserId = Id.fromInt 0 })
+
+
+{-| The reader has seen every message in the channel, which is what the notification counts
+and the unread overview are worked out from.
+-}
+checkChannelIsCaughtUp : Id.AnyGuildOrDmId -> FrontendModel -> Result String ()
+checkChannelIsCaughtUp guildOrDmId model =
+    withLocalState
+        model
+        (\local ->
+            case ( SeqDict.get guildOrDmId local.localUser.user.lastViewedMessage, latestChannelMessageId guildOrDmId local ) of
+                ( lastViewed, Just latest ) ->
+                    if lastViewed == Just latest then
+                        Ok ()
+
+                    else
+                        Err
+                            ("Expected the channel to be caught up at "
+                                ++ Id.toString latest
+                                ++ " but the last viewed message is "
+                                ++ (case lastViewed of
+                                        Just messageId ->
+                                            Id.toString messageId
+
+                                        Nothing ->
+                                            "nothing"
+                                   )
+                            )
+
+                ( _, Nothing ) ->
+                    Err "Expected the channel to exist"
+        )
+
+
+checkThreadIsCaughtUp : Id.AnyGuildOrDmId -> Id.Id Id.ChannelMessageId -> FrontendModel -> Result String ()
+checkThreadIsCaughtUp guildOrDmId threadId model =
+    withLocalState
+        model
+        (\local ->
+            case ( SeqDict.get ( guildOrDmId, threadId ) local.localUser.user.lastViewedThreadMessage, latestThreadMessageId guildOrDmId threadId local ) of
+                ( lastViewed, Just latest ) ->
+                    if lastViewed == Just latest then
+                        Ok ()
+
+                    else
+                        Err "Expected the thread to be caught up with its newest message"
+
+                ( _, Nothing ) ->
+                    Err "Expected the thread to exist"
+        )
+
+
+latestChannelMessageId : Id.AnyGuildOrDmId -> LocalState -> Maybe (Id.Id Id.ChannelMessageId)
+latestChannelMessageId guildOrDmId local =
+    case guildOrDmId of
+        Id.GuildOrDmId (Id.GuildOrDmId_Guild id) ->
+            LocalState.getGuildAndChannel id local
+                |> Maybe.map (\( _, channel ) -> DmChannel.latestFrontendMessageId channel)
+
+        Id.GuildOrDmId (Id.GuildOrDmId_Dm id) ->
+            SeqDict.get id.otherUserId local.dmChannels
+                |> Maybe.map DmChannel.latestFrontendMessageId
+
+        Id.DiscordGuildOrDmId _ ->
+            Nothing
+
+
+latestThreadMessageId : Id.AnyGuildOrDmId -> Id.Id Id.ChannelMessageId -> LocalState -> Maybe (Id.Id Id.ThreadMessageId)
+latestThreadMessageId guildOrDmId threadId local =
+    case guildOrDmId of
+        Id.GuildOrDmId (Id.GuildOrDmId_Guild id) ->
+            LocalState.getGuildAndChannel id local
+                |> Maybe.andThen (\( _, channel ) -> SeqDict.get threadId channel.threads)
+                |> Maybe.map DmChannel.latestFrontendThreadMessageId
+
+        Id.GuildOrDmId (Id.GuildOrDmId_Dm id) ->
+            SeqDict.get id.otherUserId local.dmChannels
+                |> Maybe.andThen (\dmChannel -> SeqDict.get threadId dmChannel.threads)
+                |> Maybe.map DmChannel.latestFrontendThreadMessageId
+
+        Id.DiscordGuildOrDmId _ ->
+            Nothing
+
+
+withLocalState : FrontendModel -> (LocalState -> Result String ()) -> Result String ()
+withLocalState model func =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    func (Local.model loggedIn.localState)
+
+                Types.NotLoggedIn _ ->
                     Err "Expected the frontend to be logged in"
 
         Types.Loading _ ->

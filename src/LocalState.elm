@@ -2433,56 +2433,63 @@ getDiscordGuildAndChannel guildId channelId local =
             Nothing
 
 
-incrementLastViewedMessageBackend :
-    AnyGuildOrDmId
-    -> ThreadRoute
-    -> { a | messages : IdArray ChannelMessageId c, threads : SeqDict (Id ChannelMessageId) { d | messages : IdArray ThreadMessageId e } }
-    -> BackendUser
-    -> BackendUser
-incrementLastViewedMessageBackend guildOrDmId threadRouteNoReply channel2 user2 =
-    case threadRouteNoReply of
-        NoThread ->
-            User.setLastViewedMessage
-                guildOrDmId
-                (NoThreadWithMessage (DmChannel.latestMessageId channel2))
-                user2
-
-        ViewThread threadId ->
-            case SeqDict.get threadId channel2.threads of
-                Just thread ->
-                    User.setLastViewedMessage
-                        guildOrDmId
-                        (ViewThreadWithMessage threadId (DmChannel.latestThreadMessageId thread))
-                        user2
-
-                Nothing ->
-                    user2
+{-| True when the reader had seen every message in a conversation and the one that just
+arrived is the only one they haven't. `Nothing` means they have never opened it, so the
+message sitting at index 0 is the only unseen one.
+-}
+onlyNewMessageIsUnread : Maybe (Id messageId) -> Id messageId -> Bool
+onlyNewMessageIsUnread maybeLastViewed newMessageId =
+    Id.toInt (Maybe.withDefault (Id.fromInt -1) maybeLastViewed) + 1 == Id.toInt newMessageId
 
 
+{-| A message arriving in a conversation someone is looking at shouldn't leave them with
+something unread, so their last viewed message moves onto it. Someone who was behind keeps
+where they were, which is what stops a message they marked as unread from quietly being
+marked as read again.
+-}
+incrementLastViewedMessageBackend : AnyGuildOrDmId -> ThreadRouteWithMessage -> BackendUser -> BackendUser
+incrementLastViewedMessageBackend guildOrDmId threadRoute user =
+    if hasCaughtUp guildOrDmId threadRoute user then
+        User.setLastViewedMessage guildOrDmId threadRoute user
+
+    else
+        user
+
+
+{-| The same as `incrementLastViewedMessageBackend`, plus the unread divider of the
+conversation on screen, which moves onto the new message so that nothing appears unread
+while the reader is still sitting in it.
+-}
 incrementLastViewedMessageFrontend :
     AnyGuildOrDmId
-    -> ThreadRoute
+    -> ThreadRouteWithMessage
     -> ( UserSession.Viewing, BackendUser )
-    -> { a | messages : MessageArray ChannelMessageId c, threads : SeqDict (Id ChannelMessageId) { d | messages : MessageArray ThreadMessageId e } }
     -> ( UserSession.Viewing, BackendUser )
-incrementLastViewedMessageFrontend guildOrDmId threadRouteNoReply user2 channel2 =
-    case threadRouteNoReply of
-        NoThread ->
-            User.setLastViewedMessage
-                guildOrDmId
-                (NoThreadWithMessage (DmChannel.latestFrontendMessageId channel2))
-                user2
+incrementLastViewedMessageFrontend guildOrDmId threadRoute ( viewing, user ) =
+    if hasCaughtUp guildOrDmId threadRoute user then
+        ( case threadRoute of
+            NoThreadWithMessage messageId ->
+                UserSession.setPreviouslyLastViewedChannelMessage messageId viewing
 
-        ViewThread threadId ->
-            case SeqDict.get threadId channel2.threads of
-                Just thread ->
-                    User.setLastViewedMessage
-                        guildOrDmId
-                        (ViewThreadWithMessage threadId (DmChannel.latestFrontendThreadMessageId thread))
-                        user2
+            ViewThreadWithMessage _ messageId ->
+                UserSession.setPreviouslyLastViewedThreadMessage messageId viewing
+        , User.setLastViewedMessage guildOrDmId threadRoute user
+        )
 
-                Nothing ->
-                    user2
+    else
+        ( viewing, user )
+
+
+hasCaughtUp : AnyGuildOrDmId -> ThreadRouteWithMessage -> BackendUser -> Bool
+hasCaughtUp guildOrDmId threadRoute user =
+    case threadRoute of
+        NoThreadWithMessage messageId ->
+            onlyNewMessageIsUnread (SeqDict.get guildOrDmId user.lastViewedMessage) messageId
+
+        ViewThreadWithMessage threadId messageId ->
+            onlyNewMessageIsUnread
+                (SeqDict.get ( guildOrDmId, threadId ) user.lastViewedThreadMessage)
+                messageId
 
 
 addEmbedBackend :

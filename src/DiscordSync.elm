@@ -31,6 +31,7 @@ import CustomEmoji exposing (CustomEmojiData, CustomEmojiUrl(..))
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..))
+import DmChannel
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -43,7 +44,7 @@ import Emoji exposing (EmojiOrCustomEmoji(..))
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId, FileMetadata)
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import IdArray exposing (IdArray)
 import Json.Decode
 import Json.Encode
@@ -1035,6 +1036,19 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                         addDiscordUserData
                                             (Discord.userToPartialUser discordMessage.author)
                                             model2.discordUsers
+                                    , users =
+                                        List.foldl
+                                            (\( userId, viewerGuildOrDmId ) users ->
+                                                NonemptyDict.updateIfExists
+                                                    userId
+                                                    (LocalState.incrementLastViewedMessageBackend
+                                                        viewerGuildOrDmId
+                                                        (NoThreadWithMessage messageId)
+                                                    )
+                                                    users
+                                            )
+                                            model2.users
+                                            (Broadcast.usersViewingDiscordDm dmChannelId model2)
                                     , sessions = sessions
                                   }
                                 , Command.batch
@@ -1442,19 +1456,32 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                     (Discord.userToPartialUser discordMessage.author)
                                                     model2.discordUsers
                                             , users =
+                                                let
+                                                    newMessage : ThreadRouteWithMessage
+                                                    newMessage =
+                                                        case threadRouteNoReply of
+                                                            ViewThread threadId ->
+                                                                SeqDict.get threadId channel4.threads
+                                                                    |> Maybe.withDefault Thread.discordBackendInit
+                                                                    |> DmChannel.latestThreadMessageId
+                                                                    |> ViewThreadWithMessage threadId
+
+                                                            NoThread ->
+                                                                DmChannel.latestMessageId channel4 |> NoThreadWithMessage
+
+                                                    viewers : List ( Id UserId, Id.AnyGuildOrDmId )
+                                                    viewers =
+                                                        Broadcast.usersViewingDiscordChannel
+                                                            discordGuildId
+                                                            channelId
+                                                            threadRouteNoReply
+                                                            model2
+                                                in
                                                 SeqSet.foldl
                                                     (\discordUserId2 users ->
                                                         case SeqDict.get discordUserId2 model2.discordUsers of
                                                             Just (FullData data) ->
-                                                                let
-                                                                    isViewing =
-                                                                        Broadcast.userGetAllConnections data.linkedTo model2
-                                                                            |> List.any
-                                                                                (\connection ->
-                                                                                    UserSession.isViewing (DiscordGuildOrDmId guildOrDmId) threadRouteNoReply connection.currentlyViewing
-                                                                                )
-                                                                in
-                                                                if isViewing then
+                                                                if List.any (\( userId, _ ) -> userId == data.linkedTo) viewers then
                                                                     users
 
                                                                 else
@@ -1466,7 +1493,19 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             _ ->
                                                                 users
                                                     )
-                                                    model2.users
+                                                    (List.foldl
+                                                        (\( userId, viewerGuildOrDmId ) users ->
+                                                            NonemptyDict.updateIfExists
+                                                                userId
+                                                                (LocalState.incrementLastViewedMessageBackend
+                                                                    viewerGuildOrDmId
+                                                                    newMessage
+                                                                )
+                                                                users
+                                                        )
+                                                        model2.users
+                                                        viewers
+                                                    )
                                                     usersMentioned
                                             , pendingDiscordCreateMessages =
                                                 SeqDict.remove ( discordMessage.author.id, threadOrChannelId ) model2.pendingDiscordCreateMessages

@@ -1683,32 +1683,51 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                 guildOrDmId =
                     GuildOrDmId_Guild id
 
+                newMessage : ThreadRouteWithMessage
+                newMessage =
+                    case threadRouteWithMaybeReplyTo of
+                        ViewThreadWithMaybeMessage threadId _ ->
+                            SeqDict.get threadId channel2.threads
+                                |> Maybe.withDefault Thread.backendInit
+                                |> DmChannel.latestThreadMessageId
+                                |> ViewThreadWithMessage threadId
+
+                        NoThreadWithMaybeMessage _ ->
+                            DmChannel.latestMessageId channel2 |> NoThreadWithMessage
+
+                viewers : SeqSet (Id UserId)
+                viewers =
+                    Broadcast.usersViewing (GuildOrDmId guildOrDmId) threadRouteNoReply model
+
                 users2 : NonemptyDict (Id UserId) BackendUser
                 users2 =
                     SeqSet.foldl
                         (\userId2 users ->
-                            let
-                                isViewing : Bool
-                                isViewing =
-                                    List.any
-                                        (\connection ->
-                                            UserSession.isViewing (GuildOrDmId guildOrDmId) threadRouteNoReply connection.currentlyViewing
-                                        )
-                                        (Broadcast.userGetAllConnections userId2 model)
-                            in
                             NonemptyDict.updateIfExists
                                 userId2
-                                (\user2 ->
-                                    if isViewing then
-                                        LocalState.incrementLastViewedMessageBackend (GuildOrDmId guildOrDmId) threadRouteNoReply channel2 user2
-
-                                    else
-                                        User.addDirectMention id.guildId id.channelId threadRouteNoReply user2
+                                (LocalState.incrementLastViewedMessageBackend
+                                    (GuildOrDmId guildOrDmId)
+                                    newMessage
                                 )
                                 users
                         )
                         model.users
-                        usersMentioned
+                        viewers
+                        |> (\users ->
+                                SeqSet.foldl
+                                    (\userId2 users3 ->
+                                        if SeqSet.member userId2 viewers then
+                                            users3
+
+                                        else
+                                            NonemptyDict.updateIfExists
+                                                userId2
+                                                (User.addDirectMention id.guildId id.channelId threadRouteNoReply)
+                                                users3
+                                    )
+                                    users
+                                    usersMentioned
+                           )
             in
             ( { model
                 | guilds =
@@ -1774,6 +1793,36 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
 
         _ ->
             ( model, invalidChangeResponse changeId clientId )
+
+
+{-| The person on the other end of a DM keeps up with a message that arrives while they are
+looking at the conversation. They know the DM by who they are talking to, which is the
+sender, so that is the id their last viewed message is stored under.
+-}
+readerIsViewingDm :
+    Id UserId
+    -> Id UserId
+    -> ThreadRouteWithMessage
+    -> BackendModel
+    -> NonemptyDict (Id UserId) BackendUser
+readerIsViewingDm readerId senderId threadRoute model =
+    let
+        guildOrDmId : AnyGuildOrDmId
+        guildOrDmId =
+            GuildOrDmId (GuildOrDmId_Dm { otherUserId = senderId })
+    in
+    if
+        SeqSet.member
+            readerId
+            (Broadcast.usersViewing guildOrDmId (Id.threadRouteWithoutMessage threadRoute) model)
+    then
+        NonemptyDict.updateIfExists
+            readerId
+            (LocalState.incrementLastViewedMessageBackend guildOrDmId threadRoute)
+            model.users
+
+    else
+        model.users
 
 
 sendDm :
@@ -1849,7 +1898,7 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
                          }
                             |> User.addRecentlyUsedEmojis emojis
                         )
-                        model.users
+                        (readerIsViewingDm otherUserId session.userId (ViewThreadWithMessage threadId messageId) model)
                 , sendMessageRateLimits = sendMessageRateLimits
                 , sessions = sessions
               }
@@ -1902,7 +1951,7 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
                          }
                             |> User.addRecentlyUsedEmojis emojis
                         )
-                        model.users
+                        (readerIsViewingDm otherUserId session.userId (NoThreadWithMessage messageId) model)
                 , sendMessageRateLimits = sendMessageRateLimits
                 , sessions = sessions
               }
