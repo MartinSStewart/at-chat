@@ -2244,7 +2244,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         ViewChannel data _ ->
-                            data.guildId == legitGuildId
+                            data.id.guildId == legitGuildId
 
                         ViewChannelThread _ _ ->
                             True

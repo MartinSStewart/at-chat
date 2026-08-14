@@ -2945,10 +2945,10 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastDmViewed
-                                                data.otherUserId
+                                                data.id.otherUserId
                                                 (NoThreadWithMaybeMessage
                                                     (if routeRequestCausedByPressingLink then
-                                                        SeqDict.get data.otherUserId local.dmChannels
+                                                        SeqDict.get data.id.otherUserId local.dmChannels
                                                             |> Maybe.map DmChannel.latestFrontendMessageId
 
                                                      else
@@ -2960,7 +2960,7 @@ changeUpdate localMsg local =
                                     }
                                 , dmChannels =
                                     SeqDict.updateIfExists
-                                        data.otherUserId
+                                        data.id.otherUserId
                                         (DmChannel.loadMessages messagesLoaded)
                                         local.dmChannels
                             }
@@ -2971,13 +2971,13 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastDmViewed
-                                                data.otherUserId
+                                                data.id.otherUserId
                                                 (ViewThreadWithMaybeMessage
-                                                    data.threadId
+                                                    data.id.threadId
                                                     (if routeRequestCausedByPressingLink then
-                                                        SeqDict.get data.otherUserId local.dmChannels
+                                                        SeqDict.get data.id.otherUserId local.dmChannels
                                                             |> Maybe.andThen
-                                                                (\dmChannel -> SeqDict.get data.threadId dmChannel.threads)
+                                                                (\dmChannel -> SeqDict.get data.id.threadId dmChannel.threads)
                                                             |> Maybe.map DmChannel.latestFrontendThreadMessageId
 
                                                      else
@@ -2989,12 +2989,12 @@ changeUpdate localMsg local =
                                     }
                                 , dmChannels =
                                     SeqDict.updateIfExists
-                                        data.otherUserId
+                                        data.id.otherUserId
                                         (\dmChannel ->
                                             { dmChannel
                                                 | threads =
                                                     SeqDict.updateIfExists
-                                                        data.threadId
+                                                        data.id.threadId
                                                         (DmChannel.loadMessages messagesLoaded)
                                                         dmChannel.threads
                                             }
@@ -3008,10 +3008,10 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastDiscordDmViewed
-                                                data.currentUserId
-                                                data.channelId
+                                                data.id.currentUserId
+                                                data.id.channelId
                                                 (if routeRequestCausedByPressingLink then
-                                                    SeqDict.get data.channelId local.discordDmChannels
+                                                    SeqDict.get data.id.channelId local.discordDmChannels
                                                         |> Maybe.map DmChannel.latestFrontendMessageId
 
                                                  else
@@ -3022,7 +3022,7 @@ changeUpdate localMsg local =
                                     }
                                 , discordDmChannels =
                                     SeqDict.updateIfExists
-                                        data.channelId
+                                        data.id.channelId
                                         (DmChannel.loadMessages messagesLoaded)
                                         local.discordDmChannels
                             }
@@ -3033,11 +3033,11 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastChannelViewed
-                                                data.guildId
-                                                data.channelId
+                                                data.id.guildId
+                                                data.id.channelId
                                                 (NoThreadWithMaybeMessage
                                                     (if routeRequestCausedByPressingLink then
-                                                        LocalState.getGuildAndChannel data.guildId data.channelId local
+                                                        LocalState.getGuildAndChannel data.id.guildId data.id.channelId local
                                                             |> Maybe.map (\( _, channel ) -> DmChannel.latestFrontendMessageId channel)
 
                                                      else
@@ -3049,8 +3049,8 @@ changeUpdate localMsg local =
                                     }
                                 , guilds =
                                     SeqDict.updateIfExists
-                                        data.guildId
-                                        (LocalState.updateChannel (DmChannel.loadMessages messagesLoaded) data.channelId)
+                                        data.id.guildId
+                                        (LocalState.updateChannel (DmChannel.loadMessages messagesLoaded) data.id.channelId)
                                         local.guilds
                             }
 
@@ -3060,14 +3060,14 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastChannelViewed
-                                                data.guildId
-                                                data.channelId
+                                                data.id.guildId
+                                                data.id.channelId
                                                 (ViewThreadWithMaybeMessage
-                                                    data.threadId
+                                                    data.id.threadId
                                                     (if routeRequestCausedByPressingLink then
-                                                        LocalState.getGuildAndChannel data.guildId data.channelId local
+                                                        LocalState.getGuildAndChannel data.id.guildId data.id.channelId local
                                                             |> Maybe.andThen
-                                                                (\( _, channel ) -> SeqDict.get data.threadId channel.threads)
+                                                                (\( _, channel ) -> SeqDict.get data.id.threadId channel.threads)
                                                             |> Maybe.map DmChannel.latestFrontendThreadMessageId
 
                                                      else
@@ -3079,18 +3079,18 @@ changeUpdate localMsg local =
                                     }
                                 , guilds =
                                     SeqDict.updateIfExists
-                                        data.guildId
+                                        data.id.guildId
                                         (LocalState.updateChannel
                                             (\channel ->
                                                 { channel
                                                     | threads =
                                                         SeqDict.updateIfExists
-                                                            data.threadId
+                                                            data.id.threadId
                                                             (DmChannel.loadMessages messagesLoaded)
                                                             channel.threads
                                                 }
                                             )
-                                            data.channelId
+                                            data.id.channelId
                                         )
                                         local.guilds
                             }
@@ -3104,12 +3104,12 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastDiscordChannelViewed
-                                                data.currentUserId
-                                                data.guildId
-                                                data.channelId
+                                                data.id.currentUserId
+                                                data.id.guildId
+                                                data.id.channelId
                                                 (NoThreadWithMaybeMessage
                                                     (if routeRequestCausedByPressingLink then
-                                                        LocalState.getDiscordGuildAndChannel data.guildId data.channelId local
+                                                        LocalState.getDiscordGuildAndChannel data.id.guildId data.id.channelId local
                                                             |> Maybe.map (\( _, channel ) -> DmChannel.latestFrontendMessageId channel)
 
                                                      else
@@ -3136,10 +3136,10 @@ changeUpdate localMsg local =
                                     case backendData of
                                         SetViewing_FilledInByBackend backendData2 ->
                                             SeqDict.updateIfExists
-                                                data.guildId
+                                                data.id.guildId
                                                 (LocalState.updateChannel
                                                     (DmChannel.loadMessages (SetViewing_FilledInByBackend backendData2.messages))
-                                                    data.channelId
+                                                    data.id.channelId
                                                 )
                                                 local.discordGuilds
 
@@ -3156,15 +3156,15 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastDiscordChannelViewed
-                                                data.currentUserId
-                                                data.guildId
-                                                data.channelId
+                                                data.id.currentUserId
+                                                data.id.guildId
+                                                data.id.channelId
                                                 (ViewThreadWithMaybeMessage
-                                                    data.threadId
+                                                    data.id.threadId
                                                     (if routeRequestCausedByPressingLink then
-                                                        LocalState.getDiscordGuildAndChannel data.guildId data.channelId local
+                                                        LocalState.getDiscordGuildAndChannel data.id.guildId data.id.channelId local
                                                             |> Maybe.andThen
-                                                                (\( _, channel ) -> SeqDict.get data.threadId channel.threads)
+                                                                (\( _, channel ) -> SeqDict.get data.id.threadId channel.threads)
                                                             |> Maybe.map DmChannel.latestFrontendThreadMessageId
 
                                                      else
@@ -3191,20 +3191,20 @@ changeUpdate localMsg local =
                                     case backendData of
                                         SetViewing_FilledInByBackend backendData2 ->
                                             SeqDict.updateIfExists
-                                                data.guildId
+                                                data.id.guildId
                                                 (LocalState.updateChannel
                                                     (\channel ->
                                                         { channel
                                                             | threads =
                                                                 SeqDict.updateIfExists
-                                                                    data.threadId
+                                                                    data.id.threadId
                                                                     (DmChannel.loadMessages
                                                                         (SetViewing_FilledInByBackend backendData2.messages)
                                                                     )
                                                                     channel.threads
                                                         }
                                                     )
-                                                    data.channelId
+                                                    data.id.channelId
                                                 )
                                                 local.discordGuilds
 

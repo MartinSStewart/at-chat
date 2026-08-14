@@ -2714,8 +2714,7 @@ routeToViewing route local =
                         case threadRoute of
                             NoThreadWithFriends _ _ ->
                                 ViewChannel
-                                    { guildId = guildId
-                                    , channelId = channelId
+                                    { id = { guildId = guildId, channelId = channelId }
                                     , channelHeaderTab = tab
                                     , previouslyLastViewedMessage =
                                         previouslyLastViewedMessage
@@ -2726,9 +2725,7 @@ routeToViewing route local =
 
                             ViewThreadWithFriends threadId _ _ ->
                                 ViewChannelThread
-                                    { guildId = guildId
-                                    , channelId = channelId
-                                    , threadId = threadId
+                                    { id = { guildId = guildId, channelId = channelId, threadId = threadId }
                                     , previouslyLastViewedMessage =
                                         previouslyLastViewedThreadMessage
                                             (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
@@ -2756,9 +2753,11 @@ routeToViewing route local =
                         case threadRoute of
                             NoThreadWithFriends _ _ ->
                                 ViewDiscordChannel
-                                    { guildId = guildId
-                                    , channelId = channelId
-                                    , currentUserId = currentDiscordUserId
+                                    { id =
+                                        { guildId = guildId
+                                        , channelId = channelId
+                                        , currentUserId = currentDiscordUserId
+                                        }
                                     , previouslyLastViewedMessage =
                                         previouslyLastViewedMessage
                                             (DiscordGuildOrDmId
@@ -2770,10 +2769,12 @@ routeToViewing route local =
 
                             ViewThreadWithFriends threadId _ _ ->
                                 ViewDiscordChannelThread
-                                    { guildId = guildId
-                                    , channelId = channelId
-                                    , currentUserId = currentDiscordUserId
-                                    , threadId = threadId
+                                    { id =
+                                        { guildId = guildId
+                                        , channelId = channelId
+                                        , currentUserId = currentDiscordUserId
+                                        , threadId = threadId
+                                        }
                                     , previouslyLastViewedMessage =
                                         previouslyLastViewedThreadMessage
                                             (DiscordGuildOrDmId
@@ -2800,7 +2801,7 @@ routeToViewing route local =
                         case threadRoute of
                             NoThreadWithFriends _ _ ->
                                 ViewDm
-                                    { otherUserId = otherUserId
+                                    { id = { otherUserId = otherUserId }
                                     , channelHeaderTab = tab
                                     , previouslyLastViewedMessage =
                                         previouslyLastViewedMessage
@@ -2811,8 +2812,7 @@ routeToViewing route local =
 
                             ViewThreadWithFriends threadId _ _ ->
                                 ViewDmThread
-                                    { otherUserId = otherUserId
-                                    , threadId = threadId
+                                    { id = { otherUserId = otherUserId, threadId = threadId }
                                     , previouslyLastViewedMessage =
                                         previouslyLastViewedThreadMessage
                                             (GuildOrDmId (GuildOrDmId_Dm otherUserId))
@@ -2830,8 +2830,7 @@ routeToViewing route local =
         DiscordDmRoute data ->
             if SeqDict.member data.channelId local.discordDmChannels then
                 ViewDiscordDm
-                    { currentUserId = data.currentDiscordUserId
-                    , channelId = data.channelId
+                    { id = { currentUserId = data.currentDiscordUserId, channelId = data.channelId }
                     , previouslyLastViewedMessage =
                         previouslyLastViewedMessage
                             (DiscordGuildOrDmId

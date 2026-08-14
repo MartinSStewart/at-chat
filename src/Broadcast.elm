@@ -534,10 +534,10 @@ messageNotification usersMentioned time sender guildId channelId threadRoute mes
                             (\connection ->
                                 case ( connection.currentlyViewing, threadRoute ) of
                                     ( UserSession.Viewing_Channel data, NoThread ) ->
-                                        data.guildId == guildId && data.channelId == channelId
+                                        data.id.guildId == guildId && data.id.channelId == channelId
 
                                     ( UserSession.Viewing_ChannelThread data, ViewThread threadId ) ->
-                                        data.guildId == guildId && data.channelId == channelId && data.threadId == threadId
+                                        data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadId
 
                                     _ ->
                                         False
@@ -634,10 +634,10 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                     (\connection ->
                                         case ( connection.currentlyViewing, threadRoute ) of
                                             ( UserSession.Viewing_DiscordChannel data, NoThread ) ->
-                                                data.guildId == guildId && data.channelId == channelId
+                                                data.id.guildId == guildId && data.id.channelId == channelId
 
                                             ( UserSession.Viewing_DiscordChannelThread data, ViewThread threadId ) ->
-                                                data.guildId == guildId && data.channelId == channelId && data.threadId == threadId
+                                                data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadId
 
                                             _ ->
                                                 False
@@ -1002,7 +1002,7 @@ isViewingDiscordDm channelId userId2 model =
         (\connection ->
             case connection.currentlyViewing of
                 UserSession.Viewing_DiscordDm data ->
-                    data.channelId == channelId
+                    data.id.channelId == channelId
 
                 _ ->
                     False
@@ -1290,10 +1290,10 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
                 (\connection ->
                     case ( connection.currentlyViewing, threadRouteWithReplyTo ) of
                         ( UserSession.Viewing_Dm data, NoThreadWithMaybeMessage _ ) ->
-                            data.otherUserId == userId
+                            data.id.otherUserId == userId
 
                         ( UserSession.Viewing_DmThread data, ViewThreadWithMaybeMessage threadIdB _ ) ->
-                            data.otherUserId == userId && data.threadId == threadIdB
+                            data.id.otherUserId == userId && data.id.threadId == threadIdB
 
                         _ ->
                             False
@@ -1387,7 +1387,7 @@ gameStartedDmNotification time senderId otherUserId gameType model =
                 (\connection ->
                     case connection.currentlyViewing of
                         UserSession.Viewing_Dm data ->
-                            data.otherUserId == senderId
+                            data.id.otherUserId == senderId
 
                         _ ->
                             False
@@ -1481,7 +1481,7 @@ gameStartedGuildNotification time sender guildId channelId gameType members mode
                             (\connection ->
                                 case connection.currentlyViewing of
                                     UserSession.Viewing_Channel data ->
-                                        data.guildId == guildId && data.channelId == channelId
+                                        data.id.guildId == guildId && data.id.channelId == channelId
 
                                     _ ->
                                         False

@@ -2549,9 +2549,11 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 (Local_CurrentlyViewing
                                     { routeRequestCausedByPressingLink = False }
                                     (ViewDiscordChannel
-                                        { guildId = E2EHelper.botTestGuild
-                                        , channelId = E2EHelper.privateDiscordChannelId
-                                        , currentUserId = E2EHelper.secondDiscordUserId
+                                        { id =
+                                            { guildId = E2EHelper.botTestGuild
+                                            , channelId = E2EHelper.privateDiscordChannelId
+                                            , currentUserId = E2EHelper.secondDiscordUserId
+                                            }
                                         , previouslyLastViewedMessage = UserSession.DontCare
                                         }
                                         UserSession.SetViewing_EmptyPlaceholder

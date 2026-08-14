@@ -278,25 +278,24 @@ requestedForToGuildOrDmId userId requestMessagesFor =
             case threadRoute of
                 NoThread ->
                     UserSession.Viewing_DiscordChannel
-                        { guildId = guildId
-                        , channelId = channelId
-                        , currentUserId = discordUserId
+                        { id = { guildId = guildId, channelId = channelId, currentUserId = discordUserId }
                         , previouslyLastViewedMessage = UserSession.DontCare
                         }
 
                 ViewThread threadId ->
                     UserSession.Viewing_DiscordChannelThread
-                        { guildId = guildId
-                        , channelId = channelId
-                        , currentUserId = discordUserId
-                        , threadId = threadId
+                        { id =
+                            { guildId = guildId
+                            , channelId = channelId
+                            , currentUserId = discordUserId
+                            , threadId = threadId
+                            }
                         , previouslyLastViewedMessage = UserSession.DontCare
                         }
 
         InitialLoadRequested_DiscordDm discordUserId channelId ->
             UserSession.Viewing_DiscordDm
-                { currentUserId = discordUserId
-                , channelId = channelId
+                { id = { currentUserId = discordUserId, channelId = channelId }
                 , previouslyLastViewedMessage = UserSession.DontCare
                 }
 
@@ -307,17 +306,14 @@ requestedForToGuildOrDmId userId requestMessagesFor =
             case threadRoute of
                 NoThread ->
                     UserSession.Viewing_Channel
-                        { guildId = guildId
-                        , channelId = channelId
+                        { id = { guildId = guildId, channelId = channelId }
                         , channelHeaderTab = tab
                         , previouslyLastViewedMessage = UserSession.DontCare
                         }
 
                 ViewThread threadId ->
                     UserSession.Viewing_ChannelThread
-                        { guildId = guildId
-                        , channelId = channelId
-                        , threadId = threadId
+                        { id = { guildId = guildId, channelId = channelId, threadId = threadId }
                         , previouslyLastViewedMessage = UserSession.DontCare
                         }
 
@@ -327,15 +323,14 @@ requestedForToGuildOrDmId userId requestMessagesFor =
                     case threadRoute of
                         NoThread ->
                             UserSession.Viewing_Dm
-                                { otherUserId = otherUserId
+                                { id = { otherUserId = otherUserId }
                                 , channelHeaderTab = tab
                                 , previouslyLastViewedMessage = UserSession.DontCare
                                 }
 
                         ViewThread threadId ->
                             UserSession.Viewing_DmThread
-                                { otherUserId = otherUserId
-                                , threadId = threadId
+                                { id = { otherUserId = otherUserId, threadId = threadId }
                                 , previouslyLastViewedMessage = UserSession.DontCare
                                 }
 
@@ -1355,10 +1350,10 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
                 visibleDmUsers
 
             UserSession.Viewing_DiscordChannel data ->
-                getDiscordGuild data.guildId
+                getDiscordGuild data.id.guildId
 
             UserSession.Viewing_DiscordChannelThread data ->
-                getDiscordGuild data.guildId
+                getDiscordGuild data.id.guildId
 
             UserSession.Viewing_DiscordDm _ ->
                 visibleDmUsers

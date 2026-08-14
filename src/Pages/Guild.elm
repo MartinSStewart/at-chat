@@ -1227,6 +1227,22 @@ unreadMessages maybeLastViewed channel =
             Nothing
 
 
+{-| Where the unread divider goes. Opening a conversation marks it as read, so the last
+viewed message of the local state has already moved to the newest message by the time it is
+drawn. The session remembers where the divider was on the way in, and that is what the
+conversation being looked at right now needs, so that its unread messages stay marked while
+the reader is still working through them.
+-}
+unreadDividerAt : Id messageId -> PreviouslyLastViewedMessage messageId -> Id messageId
+unreadDividerAt lastViewed previouslyLastViewedMessage =
+    case previouslyLastViewedMessage of
+        PreviouslyLastViewedMessage messageId ->
+            messageId
+
+        DontCare ->
+            lastViewed
+
+
 dmChannelView : DmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg_
 dmChannelView dmRoute loggedIn local model =
     case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
@@ -1253,11 +1269,24 @@ dmChannelView dmRoute loggedIn local model =
                             SeqDict.get threadMessageIndex dmChannel.threads
                                 |> Maybe.withDefault Thread.frontendInit
                                 |> threadConversationView
-                                    (SeqDict.get
-                                        ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadMessageIndex )
-                                        local.localUser.user.lastViewedThreadMessage
-                                        |> Maybe.withDefault (Id.fromInt -1)
-                                        |> Id.changeType
+                                    (let
+                                        lastViewed : Id ThreadMessageId
+                                        lastViewed =
+                                            SeqDict.get
+                                                ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadMessageIndex )
+                                                local.localUser.user.lastViewedThreadMessage
+                                                |> Maybe.withDefault (Id.fromInt -1)
+                                     in
+                                     case local.localUser.currentlyViewing of
+                                        Viewing_DmThread data ->
+                                            if data.id == { otherUserId = otherUserId, threadId = threadMessageIndex } then
+                                                unreadDividerAt lastViewed data.previouslyLastViewedMessage
+
+                                            else
+                                                lastViewed
+
+                                        _ ->
+                                            lastViewed
                                     )
                                     (GuildOrDmId_Dm otherUserId)
                                     maybeUrlMessageId
@@ -1276,7 +1305,8 @@ dmChannelView dmRoute loggedIn local model =
                         NoThreadWithFriends maybeUrlMessageId _ ->
                             conversationView
                                 (let
-                                    helper =
+                                    lastViewed : Id ChannelMessageId
+                                    lastViewed =
                                         SeqDict.get
                                             (GuildOrDmId (GuildOrDmId_Dm otherUserId))
                                             local.localUser.user.lastViewedMessage
@@ -1285,18 +1315,13 @@ dmChannelView dmRoute loggedIn local model =
                                  case local.localUser.currentlyViewing of
                                     Viewing_Dm data ->
                                         if data.id == { otherUserId = otherUserId } then
-                                            case data.previouslyLastViewedMessage of
-                                                PreviouslyLastViewedMessage messageId ->
-                                                    messageId
-
-                                                DontCare ->
-                                                    helper
+                                            unreadDividerAt lastViewed data.previouslyLastViewedMessage
 
                                         else
-                                            helper
+                                            lastViewed
 
                                     _ ->
-                                        helper
+                                        lastViewed
                                 )
                                 (GuildOrDmId_Dm otherUserId)
                                 maybeUrlMessageId
@@ -1326,14 +1351,33 @@ discordDmChannelView routeData loggedIn local model =
     case SeqDict.get routeData.channelId local.discordDmChannels of
         Just dmChannel ->
             discordConversationView
-                (SeqDict.get
-                    (DiscordGuildOrDmId
-                        (DiscordGuildOrDmId_Dm
-                            { currentUserId = routeData.currentDiscordUserId, channelId = routeData.channelId }
-                        )
-                    )
-                    local.localUser.user.lastViewedMessage
-                    |> Maybe.withDefault (Id.fromInt -1)
+                (let
+                    lastViewed : Id ChannelMessageId
+                    lastViewed =
+                        SeqDict.get
+                            (DiscordGuildOrDmId
+                                (DiscordGuildOrDmId_Dm
+                                    { currentUserId = routeData.currentDiscordUserId, channelId = routeData.channelId }
+                                )
+                            )
+                            local.localUser.user.lastViewedMessage
+                            |> Maybe.withDefault (Id.fromInt -1)
+                 in
+                 case local.localUser.currentlyViewing of
+                    Viewing_DiscordDm data ->
+                        if
+                            data.id
+                                == { currentUserId = routeData.currentDiscordUserId
+                                   , channelId = routeData.channelId
+                                   }
+                        then
+                            unreadDividerAt lastViewed data.previouslyLastViewedMessage
+
+                        else
+                            lastViewed
+
+                    _ ->
+                        lastViewed
                 )
                 routeData.currentDiscordUserId
                 (DiscordGuildOrDmId_Dm
@@ -2499,11 +2543,30 @@ channelView channelRoute guildId guild loggedIn local model =
                             SeqDict.get threadMessageIndex channel.threads
                                 |> Maybe.withDefault Thread.frontendInit
                                 |> threadConversationView
-                                    (SeqDict.get
-                                        ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadMessageIndex )
-                                        local.localUser.user.lastViewedThreadMessage
-                                        |> Maybe.withDefault (Id.fromInt -1)
-                                        |> Id.changeType
+                                    (let
+                                        lastViewed : Id ThreadMessageId
+                                        lastViewed =
+                                            SeqDict.get
+                                                ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadMessageIndex )
+                                                local.localUser.user.lastViewedThreadMessage
+                                                |> Maybe.withDefault (Id.fromInt -1)
+                                     in
+                                     case local.localUser.currentlyViewing of
+                                        Viewing_ChannelThread data ->
+                                            if
+                                                data.id
+                                                    == { guildId = guildId
+                                                       , channelId = channelId
+                                                       , threadId = threadMessageIndex
+                                                       }
+                                            then
+                                                unreadDividerAt lastViewed data.previouslyLastViewedMessage
+
+                                            else
+                                                lastViewed
+
+                                        _ ->
+                                            lastViewed
                                     )
                                     (GuildOrDmId_Guild guildId channelId)
                                     maybeUrlMessageId
@@ -2521,10 +2584,24 @@ channelView channelRoute guildId guild loggedIn local model =
 
                         NoThreadWithFriends maybeUrlMessageId _ ->
                             conversationView
-                                (SeqDict.get
-                                    (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
-                                    local.localUser.user.lastViewedMessage
-                                    |> Maybe.withDefault (Id.fromInt -1)
+                                (let
+                                    lastViewed : Id ChannelMessageId
+                                    lastViewed =
+                                        SeqDict.get
+                                            (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
+                                            local.localUser.user.lastViewedMessage
+                                            |> Maybe.withDefault (Id.fromInt -1)
+                                 in
+                                 case local.localUser.currentlyViewing of
+                                    Viewing_Channel data ->
+                                        if data.id == { guildId = guildId, channelId = channelId } then
+                                            unreadDividerAt lastViewed data.previouslyLastViewedMessage
+
+                                        else
+                                            lastViewed
+
+                                    _ ->
+                                        lastViewed
                                 )
                                 (GuildOrDmId_Guild guildId channelId)
                                 maybeUrlMessageId
@@ -2564,14 +2641,34 @@ discordChannelView routeData guild loggedIn local model =
                             SeqDict.get threadMessageIndex channel.threads
                                 |> Maybe.withDefault Thread.discordFrontendInit
                                 |> discordThreadConversationView
-                                    (SeqDict.get
-                                        ( DiscordGuildOrDmId
-                                            (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)
-                                        , threadMessageIndex
-                                        )
-                                        local.localUser.user.lastViewedThreadMessage
-                                        |> Maybe.withDefault (Id.fromInt -1)
-                                        |> Id.changeType
+                                    (let
+                                        lastViewed : Id ThreadMessageId
+                                        lastViewed =
+                                            SeqDict.get
+                                                ( DiscordGuildOrDmId
+                                                    (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)
+                                                , threadMessageIndex
+                                                )
+                                                local.localUser.user.lastViewedThreadMessage
+                                                |> Maybe.withDefault (Id.fromInt -1)
+                                     in
+                                     case local.localUser.currentlyViewing of
+                                        Viewing_DiscordChannelThread data ->
+                                            if
+                                                data.id
+                                                    == { guildId = routeData.guildId
+                                                       , channelId = channelId
+                                                       , currentUserId = routeData.currentDiscordUserId
+                                                       , threadId = threadMessageIndex
+                                                       }
+                                            then
+                                                unreadDividerAt lastViewed data.previouslyLastViewedMessage
+
+                                            else
+                                                lastViewed
+
+                                        _ ->
+                                            lastViewed
                                     )
                                     routeData.currentDiscordUserId
                                     (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)
@@ -2593,10 +2690,32 @@ discordChannelView routeData guild loggedIn local model =
 
                         NoThreadWithFriends maybeUrlMessageId _ ->
                             discordConversationView
-                                (SeqDict.get
-                                    (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId))
-                                    local.localUser.user.lastViewedMessage
-                                    |> Maybe.withDefault (Id.fromInt -1)
+                                (let
+                                    lastViewed : Id ChannelMessageId
+                                    lastViewed =
+                                        SeqDict.get
+                                            (DiscordGuildOrDmId
+                                                (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)
+                                            )
+                                            local.localUser.user.lastViewedMessage
+                                            |> Maybe.withDefault (Id.fromInt -1)
+                                 in
+                                 case local.localUser.currentlyViewing of
+                                    Viewing_DiscordChannel data ->
+                                        if
+                                            data.id
+                                                == { guildId = routeData.guildId
+                                                   , channelId = channelId
+                                                   , currentUserId = routeData.currentDiscordUserId
+                                                   }
+                                        then
+                                            unreadDividerAt lastViewed data.previouslyLastViewedMessage
+
+                                        else
+                                            lastViewed
+
+                                    _ ->
+                                        lastViewed
                                 )
                                 routeData.currentDiscordUserId
                                 (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)
