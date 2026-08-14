@@ -598,7 +598,7 @@ staysReadWhileViewingTest config =
             (\admin user ->
                 [ -- The guild channel both of them are looking at
                   E2EHelper.writeMessage admin 100 "In the channel"
-                , user.checkModel 100 (checkChannelIsCaughtUp guildChannelId)
+                , checkChannelIsCaughtUp guildChannelId user
                 , user.click 100 (Dom.id "guildIcon_showFriends")
                 , E2EHelper.hasExactText user [ "You have no unread messages!" ]
 
@@ -610,11 +610,13 @@ staysReadWhileViewingTest config =
                 -- Opening the channel catches them up again, and a thread started from a
                 -- message counts separately from the channel it hangs off
                 , user.click 100 (Dom.id "guild_openGuild_1")
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "new" ])
                 , E2EHelper.createThread admin (Id.fromInt 1)
                 , E2EHelper.writeMessage admin 100 "Starting a thread"
                 , user.click 100 (Dom.id "guild_viewThread_0_1")
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "new" ])
                 , E2EHelper.writeMessage admin 100 "In the thread"
-                , user.checkModel 100 (checkThreadIsCaughtUp guildChannelId (Id.fromInt 1))
+                , checkThreadIsCaughtUp guildChannelId (Id.fromInt 1) user
                 , user.click 100 (Dom.id "guildIcon_showFriends")
                 , E2EHelper.hasExactText user [ "You have no unread messages!" ]
 
@@ -623,8 +625,9 @@ staysReadWhileViewingTest config =
                 , E2EHelper.openDm admin 100 "2"
                 , E2EHelper.writeMessage admin 100 "Hello in a DM!"
                 , user.click 100 (Dom.id "guild_friendLabel_0")
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "new" ])
                 , E2EHelper.writeMessage admin 100 "And another one"
-                , user.checkModel 100 (checkChannelIsCaughtUp dmWithAdminId)
+                , checkChannelIsCaughtUp dmWithAdminId user
                 , user.click 100 (Dom.id "guildIcon_showFriends")
                 , E2EHelper.hasExactText user [ "You have no unread messages!" ]
 
@@ -693,51 +696,72 @@ dmWithAdminId =
 {-| The reader has seen every message in the channel, which is what the notification counts
 and the unread overview are worked out from.
 -}
-checkChannelIsCaughtUp : Id.AnyGuildOrDmId -> FrontendModel -> Result String ()
-checkChannelIsCaughtUp guildOrDmId model =
-    withLocalState
-        model
-        (\local ->
-            case ( SeqDict.get guildOrDmId local.localUser.user.lastViewedMessage, latestChannelMessageId guildOrDmId local ) of
-                ( lastViewed, Just latest ) ->
-                    if lastViewed == Just latest then
-                        Ok ()
+checkChannelIsCaughtUp :
+    Id.AnyGuildOrDmId
+    -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+checkChannelIsCaughtUp guildOrDmId user =
+    T.group
+        [ user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
+        , user.checkModel
+            0
+            (\model ->
+                withLocalState
+                    model
+                    (\local ->
+                        case ( SeqDict.get guildOrDmId local.localUser.user.lastViewedMessage, latestChannelMessageId guildOrDmId local ) of
+                            ( lastViewed, Just latest ) ->
+                                if lastViewed == Just latest then
+                                    Ok ()
 
-                    else
-                        Err
-                            ("Expected the channel to be caught up at "
-                                ++ Id.toString latest
-                                ++ " but the last viewed message is "
-                                ++ (case lastViewed of
-                                        Just messageId ->
-                                            Id.toString messageId
+                                else
+                                    Err
+                                        ("Expected the channel to be caught up at "
+                                            ++ Id.toString latest
+                                            ++ " but the last viewed message is "
+                                            ++ (case lastViewed of
+                                                    Just messageId ->
+                                                        Id.toString messageId
 
-                                        Nothing ->
-                                            "nothing"
-                                   )
-                            )
+                                                    Nothing ->
+                                                        "nothing"
+                                               )
+                                        )
 
-                ( _, Nothing ) ->
-                    Err "Expected the channel to exist"
-        )
+                            ( _, Nothing ) ->
+                                Err "Expected the channel to exist"
+                    )
+            )
+        ]
 
 
-checkThreadIsCaughtUp : Id.AnyGuildOrDmId -> Id.Id Id.ChannelMessageId -> FrontendModel -> Result String ()
-checkThreadIsCaughtUp guildOrDmId threadId model =
-    withLocalState
-        model
-        (\local ->
-            case ( SeqDict.get ( guildOrDmId, threadId ) local.localUser.user.lastViewedThreadMessage, latestThreadMessageId guildOrDmId threadId local ) of
-                ( lastViewed, Just latest ) ->
-                    if lastViewed == Just latest then
-                        Ok ()
+checkThreadIsCaughtUp :
+    Id.AnyGuildOrDmId
+    -> Id.Id Id.ChannelMessageId
+    -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+checkThreadIsCaughtUp guildOrDmId threadId user =
+    T.group
+        [ user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
+        , user.checkModel
+            0
+            (\model ->
+                withLocalState
+                    model
+                    (\local ->
+                        case ( SeqDict.get ( guildOrDmId, threadId ) local.localUser.user.lastViewedThreadMessage, latestThreadMessageId guildOrDmId threadId local ) of
+                            ( lastViewed, Just latest ) ->
+                                if lastViewed == Just latest then
+                                    Ok ()
 
-                    else
-                        Err "Expected the thread to be caught up with its newest message"
+                                else
+                                    Err "Expected the thread to be caught up with its newest message"
 
-                ( _, Nothing ) ->
-                    Err "Expected the thread to exist"
-        )
+                            ( _, Nothing ) ->
+                                Err "Expected the thread to exist"
+                    )
+            )
+        ]
 
 
 latestChannelMessageId : Id.AnyGuildOrDmId -> LocalState -> Maybe (Id.Id Id.ChannelMessageId)
