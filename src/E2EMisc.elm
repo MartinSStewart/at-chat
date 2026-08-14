@@ -627,9 +627,57 @@ staysReadWhileViewingTest config =
                 , user.checkModel 100 (checkChannelIsCaughtUp dmWithAdminId)
                 , user.click 100 (Dom.id "guildIcon_showFriends")
                 , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+
+                -- A reader who is behind stays where they are. Marking "While away" as
+                -- unread puts them one message back, and a message arriving while they are
+                -- still looking at the channel leaves that where it is instead of catching
+                -- them up over the top of it.
+                , user.click 100 (Dom.id "guild_openGuild_1")
+                , user.click 100 (Dom.id "guild_openChannel_0")
+                , markAsUnread user (Id.fromInt 2)
+                , user.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
+                , admin.click 100 (Dom.id "guild_openGuild_1")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.writeMessage admin 100 "After the mark"
+                , E2EHelper.hasExactText user [ "After the mark" ]
+                , user.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
+                , user.snapshotView 100 { name = "Unread divider stays put while viewing" }
+
+                -- Which is what the unread overview shows once they leave: everything from
+                -- the message they marked onwards, and nothing from before it
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.hasExactText user [ "While away", "After the mark" ]
+                , E2EHelper.hasNotExactText user [ "In the channel" ]
+                , user.snapshotView 100 { name = "Unread overview after a message marked as unread" }
                 ]
             )
         ]
+
+
+{-| The reader is behind by however far the given message sits from the newest one, which
+is what the unread divider and the notification counts are drawn from.
+-}
+checkLastViewedMessageIs : Id.AnyGuildOrDmId -> Id.Id Id.ChannelMessageId -> FrontendModel -> Result String ()
+checkLastViewedMessageIs guildOrDmId messageId model =
+    withLocalState
+        model
+        (\local ->
+            case SeqDict.get guildOrDmId local.localUser.user.lastViewedMessage of
+                Just lastViewed ->
+                    if lastViewed == messageId then
+                        Ok ()
+
+                    else
+                        Err
+                            ("Expected the last viewed message to be "
+                                ++ Id.toString messageId
+                                ++ " but it is "
+                                ++ Id.toString lastViewed
+                            )
+
+                Nothing ->
+                    Err "Expected the channel to have been viewed"
+        )
 
 
 guildChannelId : Id.AnyGuildOrDmId
