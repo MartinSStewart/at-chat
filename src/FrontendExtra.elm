@@ -2946,6 +2946,23 @@ changeUpdate localMsg local =
                         | localUser =
                             { localUser
                                 | user = User.setLastViewedMessage guildOrDmId threadRoute local.localUser.user
+
+                                -- Marking a message as unread happens in the conversation being
+                                -- looked at, and the divider of that conversation is drawn from
+                                -- the session rather than from lastViewedMessage. Marking some
+                                -- other conversation as read from the unread overview leaves the
+                                -- divider of the one being looked at where it is.
+                                , currentlyViewing =
+                                    if UserSession.isViewing guildOrDmId (Id.threadRouteWithoutMessage threadRoute) localUser.currentlyViewing then
+                                        case threadRoute of
+                                            NoThreadWithMessage messageId ->
+                                                UserSession.setPreviouslyLastViewedChannelMessage messageId localUser.currentlyViewing
+
+                                            ViewThreadWithMessage _ messageId ->
+                                                UserSession.setPreviouslyLastViewedThreadMessage messageId localUser.currentlyViewing
+
+                                    else
+                                        localUser.currentlyViewing
                             }
                     }
 

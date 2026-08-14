@@ -3524,6 +3524,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
         ( Nothing, [] )
         (VisibleMessages.slice channel)
         |> Tuple.second
+        |> prependUnreadDivider lastViewedIndex channel.visibleMessages.oldest
 
 
 maybeRepliedTo : Message messageId userId -> { a | messages : MessageArray messageId (Message messageId userId) } -> Maybe ( Id messageId, Message messageId userId )
@@ -3820,6 +3821,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
         ( Nothing, [] )
         (VisibleMessages.slice channel)
         |> Tuple.second
+        |> prependUnreadDivider lastViewedIndex channel.visibleMessages.oldest
 
 
 newMessageLine :
@@ -3887,6 +3889,34 @@ newMessageLine drawingUserColor isSelectingAnchor dateDividerDrawings maybeLastD
 
         Nothing ->
             []
+
+
+{-| The divider is drawn underneath the last message the reader had already seen, so a
+reader who hasn't seen anything yet has no message to hang it off and newMessageLine draws
+nothing. The same happens further up a long conversation, where the message they stopped at
+is older than anything loaded. Both mean everything on screen is new, which is the divider
+sitting above all of it.
+-}
+prependUnreadDivider :
+    Id messageId
+    -> Id messageId
+    -> List ( String, Element msg )
+    -> List ( String, Element msg )
+prependUnreadDivider lastViewedIndex oldestVisibleMessage list =
+    if List.isEmpty list || Id.toInt lastViewedIndex >= Id.toInt oldestVisibleMessage then
+        list
+
+    else
+        ( "nTop"
+        , Ui.el
+            ([ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+             , Ui.borderColor MyUi.alertColor
+             ]
+                ++ newContentLabel
+            )
+            Ui.none
+        )
+            :: list
 
 
 threadConversationViewHelper :
@@ -4099,6 +4129,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
         ( Nothing, [] )
         (VisibleMessages.slice thread)
         |> Tuple.second
+        |> prependUnreadDivider lastViewedIndex thread.visibleMessages.oldest
 
 
 discordThreadConversationViewHelper :
@@ -4311,6 +4342,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
         ( Nothing, [] )
         (VisibleMessages.slice thread)
         |> Tuple.second
+        |> prependUnreadDivider lastViewedIndex thread.visibleMessages.oldest
 
 
 unloadedMessageView : Int -> Element msg
