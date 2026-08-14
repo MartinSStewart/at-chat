@@ -58,7 +58,7 @@ import Html.Attributes
 import Html.Events
 import Html.Keyed
 import Icons
-import Id exposing (ChannelId, GuildId, Id, UserId, VideoNodeId)
+import Id exposing (Id, UserId, VideoNodeId, Viewing_ChannelId, Viewing_DmId)
 import IdString exposing (IdString)
 import Json.Decode
 import Json.Encode
@@ -266,8 +266,8 @@ type alias ConnectionId =
 
 
 type CallId
-    = DmRoomId (Id UserId)
-    | GuildRoomId (Id GuildId) (Id ChannelId)
+    = DmRoomId Viewing_DmId
+    | GuildRoomId Viewing_ChannelId
 
 
 type DisplayMode
@@ -341,7 +341,7 @@ displayMode currentUserId route local =
                 Route.ChannelRoute channelId _ tab ->
                     let
                         roomId =
-                            GuildRoomId guildId channelId
+                            GuildRoomId { guildId = guildId, channelId = channelId }
 
                         isTabExpanded =
                             tab == Just ChannelHeaderTab_VoiceChat
@@ -377,7 +377,7 @@ displayMode currentUserId route local =
                 Just otherUserId ->
                     let
                         roomId =
-                            DmRoomId otherUserId
+                            DmRoomId { otherUserId = otherUserId }
 
                         isTabExpanded =
                             dmRoute.tab == Just ChannelHeaderTab_VoiceChat
@@ -1435,11 +1435,11 @@ startCallCmd roomId userId clientId model =
             ++ "/file/websocket/"
             ++ Url.percentEncode
                 (case roomId of
-                    DmRoomId otherUserId ->
+                    DmRoomId { otherUserId } ->
                         DmChannelId.fromUserIds userId otherUserId |> DmChannelId.toString
 
-                    GuildRoomId guildId channelId ->
-                        "guild-" ++ Id.toString guildId ++ "-" ++ Id.toString channelId
+                    GuildRoomId id ->
+                        "guild-" ++ Id.toString id.guildId ++ "-" ++ Id.toString id.channelId
                 )
             ++ "?clientId="
             ++ Url.percentEncode (Lamdera.clientIdToString clientId)
@@ -1570,10 +1570,10 @@ otherUserIdToString otherClientId =
 connectionIdToString : ConnectionId -> String
 connectionIdToString { roomId, otherClientId } =
     (case roomId of
-        DmRoomId otherUserId ->
+        DmRoomId { otherUserId } ->
             Id.toString otherUserId
 
-        GuildRoomId guildId channelId ->
+        GuildRoomId { guildId, channelId } ->
             "guild-" ++ Id.toString guildId ++ "-" ++ Id.toString channelId
     )
         ++ " "
@@ -1618,7 +1618,7 @@ roomIdCodec =
                 [ "guild", guildId, channelId ] ->
                     case ( Id.fromString guildId, Id.fromString channelId ) of
                         ( Just guildId2, Just channelId2 ) ->
-                            Codec.succeed (GuildRoomId guildId2 channelId2)
+                            Codec.succeed (GuildRoomId { guildId = guildId2, channelId = channelId2 })
 
                         _ ->
                             Codec.fail ("Invalid roomId: " ++ text)
@@ -1626,17 +1626,17 @@ roomIdCodec =
                 _ ->
                     case Id.fromString text of
                         Just id ->
-                            Codec.succeed (DmRoomId id)
+                            Codec.succeed (DmRoomId { otherUserId = id })
 
                         Nothing ->
                             Codec.fail ("Invalid roomId: " ++ text)
         )
         (\roomId ->
             case roomId of
-                DmRoomId otherUserId ->
+                DmRoomId { otherUserId } ->
                     Id.toString otherUserId
 
-                GuildRoomId guildId channelId ->
+                GuildRoomId { guildId, channelId } ->
                     "guild-" ++ Id.toString guildId ++ "-" ++ Id.toString channelId
         )
         Codec.string

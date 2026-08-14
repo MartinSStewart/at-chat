@@ -527,8 +527,8 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
         maybeData : Maybe MenuItemsData
         maybeData =
             case guildOrDmId of
-                GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-                    case LocalState.getGuildAndChannel guildId channelId local of
+                GuildOrDmId (GuildOrDmId_Guild id) ->
+                    case LocalState.getGuildAndChannel id local of
                         Just ( _, channel ) ->
                             case threadRoute of
                                 ViewThreadWithMessage threadMessageIndex messageId ->
@@ -545,7 +545,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         Nothing ->
                             Nothing
 
-                GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
                     case SeqDict.get otherUserId local.dmChannels of
                         Just dmChannel ->
                             case threadRoute of
@@ -563,8 +563,8 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         Nothing ->
                             Nothing
 
-                DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId channelId) ->
-                    case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                DiscordGuildOrDmId (DiscordGuildOrDmId_Guild id) ->
+                    case LocalState.getDiscordGuildAndChannel id.guildId id.channelId local of
                         Just ( _, channel ) ->
                             case threadRoute of
                                 ViewThreadWithMessage threadMessageIndex messageId ->
@@ -581,8 +581,8 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         Nothing ->
                             Nothing
 
-                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
-                    case SeqDict.get data.channelId local.discordDmChannels of
+                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm id) ->
+                    case SeqDict.get id.channelId local.discordDmChannels of
                         Just channel ->
                             case threadRoute of
                                 ViewThreadWithMessage _ _ ->
@@ -721,6 +721,13 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
                 Nothing ->
                     NoItem
+            , button
+                isMobile
+                (Dom.id "messageMenu_markAsUnread")
+                Icons.backward
+                "Mark as unread"
+                (MessageMenu_PressedMarkAsUnread guildOrDmId threadRoute)
+                |> ButtonItem
             , case newCustomEmojiIds of
                 Just newCustomEmojiIds2 ->
                     button

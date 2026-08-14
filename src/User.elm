@@ -38,7 +38,9 @@ module User exposing
     , setIcon
     , setLastChannelViewed
     , setLastDiscordChannelViewed
+    , setLastDiscordDmViewed
     , setLastDmViewed
+    , setLastViewedMessage
     , setName
     , toString
     , toStringAlt
@@ -57,7 +59,7 @@ import FileStatus exposing (FileHash)
 import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, GuildId, Id, StickerId, ThreadMessageId, ThreadRoute, UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId)
 import Json.Decode
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import MuteSettings
@@ -89,8 +91,8 @@ type alias BackendUser =
     , createdAt : Time.Posix
     , emailNotifications : EmailNotifications
     , lastEmailNotification : Time.Posix
-    , lastViewed : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
-    , lastViewedThreads : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+    , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+    , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
     , lastDmViewed : LastDmViewed
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
     , lastDiscordChannelViewed : SeqDict (Discord.Id Discord.GuildId) ( Discord.Id Discord.ChannelId, ThreadRoute )
@@ -109,6 +111,31 @@ type alias BackendUser =
     , availableCustomEmojis : SeqSet (Id CustomEmojiId)
     , muteSettings : MuteSettings.Model
     }
+
+
+setLastViewedMessage :
+    AnyGuildOrDmId
+    -> ThreadRouteWithMessage
+    ->
+        { b
+            | lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+            , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+        }
+    ->
+        { b
+            | lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+            , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+        }
+setLastViewedMessage guildOrDmId threadRoute user =
+    case threadRoute of
+        ViewThreadWithMessage threadMessageId messageId ->
+            { user
+                | lastViewedThreadMessage =
+                    SeqDict.insert ( guildOrDmId, threadMessageId ) messageId user.lastViewedThreadMessage
+            }
+
+        NoThreadWithMessage messageId ->
+            { user | lastViewedMessage = SeqDict.insert guildOrDmId messageId user.lastViewedMessage }
 
 
 commonlyUsedEmojis : FrontendCurrentUser -> List ( EmojiOrCustomEmoji, Int )
@@ -234,8 +261,8 @@ init createdAt name email userIsAdmin =
     , createdAt = createdAt
     , emailNotifications = NeverNotifyMe
     , lastEmailNotification = createdAt
-    , lastViewed = SeqDict.empty
-    , lastViewedThreads = SeqDict.empty
+    , lastViewedMessage = SeqDict.empty
+    , lastViewedThreadMessage = SeqDict.empty
     , lastDmViewed = NoLastDmViewed
     , lastChannelViewed = SeqDict.empty
     , lastDiscordChannelViewed = SeqDict.empty
@@ -357,76 +384,226 @@ setDiscordGuildNotificationLevel guildId notificationLevel user =
 
 
 setLastChannelViewed :
-    Id GuildId
-    -> Id ChannelId
-    -> ThreadRoute
+    Viewing_ChannelId
+    -> ThreadRouteWithMaybeMessage
     ->
         { a
             | lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
             , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
+            , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
         }
     ->
         { a
             | lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
             , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
+            , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
         }
-setLastChannelViewed guildId channelId threadRoute user =
-    { user
-        | lastChannelViewed = SeqDict.insert guildId ( channelId, threadRoute ) user.lastChannelViewed
-        , directMentions =
-            SeqDict.update
-                guildId
-                (\maybeDict ->
-                    case maybeDict of
-                        Just dict ->
-                            NonemptyDict.toSeqDict dict
-                                |> SeqDict.remove ( channelId, threadRoute )
-                                |> NonemptyDict.fromSeqDict
+setLastChannelViewed id threadRoute user =
+    let
+        threadRouteNoMessage : ThreadRoute
+        threadRouteNoMessage =
+            case threadRoute of
+                ViewThreadWithMaybeMessage threadId _ ->
+                    ViewThread threadId
 
-                        Nothing ->
-                            Nothing
-                )
-                user.directMentions
-    }
+                NoThreadWithMaybeMessage _ ->
+                    NoThread
+
+        user2 =
+            { user
+                | lastChannelViewed = SeqDict.insert id.guildId ( id.channelId, threadRouteNoMessage ) user.lastChannelViewed
+                , directMentions =
+                    SeqDict.update
+                        id.guildId
+                        (\maybeDict ->
+                            case maybeDict of
+                                Just dict ->
+                                    NonemptyDict.toSeqDict dict
+                                        |> SeqDict.remove ( id.channelId, threadRouteNoMessage )
+                                        |> NonemptyDict.fromSeqDict
+
+                                Nothing ->
+                                    Nothing
+                        )
+                        user.directMentions
+            }
+    in
+    case threadRoute of
+        ViewThreadWithMaybeMessage threadId (Just messageId) ->
+            { user2
+                | lastViewedThreadMessage =
+                    SeqDict.insert
+                        ( GuildOrDmId (GuildOrDmId_Guild id), threadId )
+                        messageId
+                        user2.lastViewedThreadMessage
+            }
+
+        ViewThreadWithMaybeMessage _ Nothing ->
+            user2
+
+        NoThreadWithMaybeMessage (Just messageId) ->
+            { user2
+                | lastViewedMessage =
+                    SeqDict.insert (GuildOrDmId (GuildOrDmId_Guild id)) messageId user2.lastViewedMessage
+            }
+
+        NoThreadWithMaybeMessage Nothing ->
+            user2
 
 
 setLastDiscordChannelViewed :
-    Discord.Id Discord.GuildId
-    -> Discord.Id Discord.ChannelId
-    -> ThreadRoute
+    Viewing_DiscordChannelId
+    -> ThreadRouteWithMaybeMessage
     ->
         { a
             | lastDiscordChannelViewed : SeqDict (Discord.Id Discord.GuildId) ( Discord.Id Discord.ChannelId, ThreadRoute )
             , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
+            , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
         }
     ->
         { a
             | lastDiscordChannelViewed : SeqDict (Discord.Id Discord.GuildId) ( Discord.Id Discord.ChannelId, ThreadRoute )
             , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
+            , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
         }
-setLastDiscordChannelViewed guildId channelId threadRoute user =
-    { user
-        | lastDiscordChannelViewed = SeqDict.insert guildId ( channelId, threadRoute ) user.lastDiscordChannelViewed
-        , discordDirectMentions =
-            SeqDict.update
-                guildId
-                (\maybeDict ->
-                    case maybeDict of
-                        Just dict ->
-                            NonemptyDict.toSeqDict dict
-                                |> SeqDict.remove ( channelId, threadRoute )
-                                |> NonemptyDict.fromSeqDict
+setLastDiscordChannelViewed id threadRoute user =
+    let
+        threadRouteNoMessage : ThreadRoute
+        threadRouteNoMessage =
+            case threadRoute of
+                ViewThreadWithMaybeMessage threadId _ ->
+                    ViewThread threadId
 
-                        Nothing ->
-                            Nothing
-                )
-                user.discordDirectMentions
-    }
+                NoThreadWithMaybeMessage _ ->
+                    NoThread
+
+        user2 =
+            { user
+                | lastDiscordChannelViewed =
+                    SeqDict.insert id.guildId ( id.channelId, threadRouteNoMessage ) user.lastDiscordChannelViewed
+                , discordDirectMentions =
+                    SeqDict.update
+                        id.guildId
+                        (\maybeDict ->
+                            case maybeDict of
+                                Just dict ->
+                                    NonemptyDict.toSeqDict dict
+                                        |> SeqDict.remove ( id.channelId, threadRouteNoMessage )
+                                        |> NonemptyDict.fromSeqDict
+
+                                Nothing ->
+                                    Nothing
+                        )
+                        user.discordDirectMentions
+            }
+    in
+    case threadRoute of
+        ViewThreadWithMaybeMessage threadId (Just messageId) ->
+            { user2
+                | lastViewedThreadMessage =
+                    SeqDict.insert
+                        ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild id), threadId )
+                        messageId
+                        user2.lastViewedThreadMessage
+            }
+
+        ViewThreadWithMaybeMessage _ Nothing ->
+            user2
+
+        NoThreadWithMaybeMessage (Just messageId) ->
+            { user2
+                | lastViewedMessage =
+                    SeqDict.insert
+                        (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild id))
+                        messageId
+                        user2.lastViewedMessage
+            }
+
+        NoThreadWithMaybeMessage Nothing ->
+            user2
 
 
-setLastDmViewed : LastDmViewed -> { a | lastDmViewed : LastDmViewed } -> { a | lastDmViewed : LastDmViewed }
-setLastDmViewed lastDmViewed user =
-    { user | lastDmViewed = lastDmViewed }
+setLastDmViewed :
+    Viewing_DmId
+    -> ThreadRouteWithMaybeMessage
+    ->
+        { a
+            | lastDmViewed : LastDmViewed
+            , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+        }
+    ->
+        { a
+            | lastDmViewed : LastDmViewed
+            , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+            , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+        }
+setLastDmViewed id threadRoute user =
+    let
+        user2 =
+            { user
+                | lastDmViewed =
+                    DmChannelLastViewed
+                        id.otherUserId
+                        (case threadRoute of
+                            ViewThreadWithMaybeMessage threadId _ ->
+                                ViewThread threadId
+
+                            NoThreadWithMaybeMessage _ ->
+                                NoThread
+                        )
+            }
+    in
+    case threadRoute of
+        ViewThreadWithMaybeMessage threadId (Just messageId) ->
+            { user2
+                | lastViewedThreadMessage =
+                    SeqDict.insert
+                        ( GuildOrDmId (GuildOrDmId_Dm id), threadId )
+                        messageId
+                        user2.lastViewedThreadMessage
+            }
+
+        ViewThreadWithMaybeMessage _ Nothing ->
+            user2
+
+        NoThreadWithMaybeMessage (Just messageId) ->
+            { user2
+                | lastViewedMessage =
+                    SeqDict.insert
+                        (GuildOrDmId (GuildOrDmId_Dm id))
+                        messageId
+                        user2.lastViewedMessage
+            }
+
+        NoThreadWithMaybeMessage Nothing ->
+            user2
+
+
+setLastDiscordDmViewed :
+    Discord.Id Discord.UserId
+    -> Discord.Id Discord.PrivateChannelId
+    -> Maybe (Id ChannelMessageId)
+    -> { a | lastDmViewed : LastDmViewed, lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId) }
+    -> { a | lastDmViewed : LastDmViewed, lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId) }
+setLastDiscordDmViewed currentUserId channelId maybeMessageId user =
+    case maybeMessageId of
+        Just messageId ->
+            { user
+                | lastDmViewed = DiscordDmChannelLastViewed channelId
+                , lastViewedMessage =
+                    SeqDict.insert
+                        (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
+                        messageId
+                        user.lastViewedMessage
+            }
+
+        Nothing ->
+            { user | lastDmViewed = DiscordDmChannelLastViewed channelId }
 
 
 setName : PersonName -> { b | name : PersonName } -> { b | name : PersonName }
@@ -622,8 +799,8 @@ backendToFrontendCurrent user =
     , createdAt = user.createdAt
     , emailNotifications = user.emailNotifications
     , lastEmailNotification = user.lastEmailNotification
-    , lastViewed = user.lastViewed
-    , lastViewedThreads = user.lastViewedThreads
+    , lastViewedMessage = user.lastViewedMessage
+    , lastViewedThreadMessage = user.lastViewedThreadMessage
     , lastDmViewed = user.lastDmViewed
     , lastChannelViewed = user.lastChannelViewed
     , lastDiscordChannelViewed = user.lastDiscordChannelViewed

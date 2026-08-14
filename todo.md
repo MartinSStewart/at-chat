@@ -34,6 +34,8 @@
   user saw duplicated messages for both themselves and the other user.
 * On mobile, the channel header can get very cramped. Also DM (perhaps guild too) names can get word wrapped causing
   layout issues
+* Scroll down warning is shown on iphone in DMs when the user is already scrolled down and writes a message.
+* Emoji in reaction emoji tooltip gets horizontally swished if there are many names (maybe MyUi.noShrinking is needed)
 
 Requested features:
 

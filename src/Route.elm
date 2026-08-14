@@ -809,7 +809,7 @@ toGuildOrDmId : Id UserId -> Route -> Maybe ( AnyGuildOrDmId, ThreadRoute )
 toGuildOrDmId userId route =
     case route of
         GuildRoute guildId (ChannelRoute channelId threadRoute _) ->
-            ( GuildOrDmId_Guild guildId channelId |> GuildOrDmId
+            ( GuildOrDmId_Guild { guildId = guildId, channelId = channelId } |> GuildOrDmId
             , case threadRoute of
                 ViewThreadWithFriends threadMessageId _ _ ->
                     ViewThread threadMessageId
@@ -822,7 +822,7 @@ toGuildOrDmId userId route =
         DmRoute { channelId, threadRoute } ->
             case DmChannelId.otherUserId userId channelId of
                 Just otherUserId ->
-                    ( GuildOrDmId_Dm otherUserId |> GuildOrDmId
+                    ( GuildOrDmId_Dm { otherUserId = otherUserId } |> GuildOrDmId
                     , case threadRoute of
                         ViewThreadWithFriends threadMessageId _ _ ->
                             ViewThread threadMessageId
@@ -838,7 +838,12 @@ toGuildOrDmId userId route =
         DiscordGuildRoute data ->
             case data.channelRoute of
                 DiscordChannel_ChannelRoute channelId threadRoute _ ->
-                    ( DiscordGuildOrDmId_Guild data.currentDiscordUserId data.guildId channelId |> DiscordGuildOrDmId
+                    ( DiscordGuildOrDmId_Guild
+                        { currentUserId = data.currentDiscordUserId
+                        , guildId = data.guildId
+                        , channelId = channelId
+                        }
+                        |> DiscordGuildOrDmId
                     , case threadRoute of
                         ViewThreadWithFriends threadMessageId _ _ ->
                             ViewThread threadMessageId

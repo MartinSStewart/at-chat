@@ -4,7 +4,6 @@ module Id exposing
     , ChannelMessageId(..)
     , CustomEmojiId(..)
     , DiscordGuildOrDmId(..)
-    , DiscordGuildOrDmId_DmData
     , ExportChannelId(..)
     , GamePublicId(..)
     , GuildId(..)
@@ -18,6 +17,13 @@ module Id exposing
     , ThreadRouteWithMessage(..)
     , UserId(..)
     , VideoNodeId(..)
+    , Viewing_ChannelId
+    , Viewing_ChannelThreadId
+    , Viewing_DiscordChannelId
+    , Viewing_DiscordChannelThreadId
+    , Viewing_DiscordDmId
+    , Viewing_DmId
+    , Viewing_DmThreadId
     , changeType
     , fromInt
     , fromString
@@ -37,18 +43,57 @@ import SeqDict exposing (SeqDict)
 
 
 type GuildOrDmId
-    = GuildOrDmId_Guild (Id GuildId) (Id ChannelId)
-    | GuildOrDmId_Dm (Id UserId)
+    = GuildOrDmId_Guild Viewing_ChannelId
+    | GuildOrDmId_Dm Viewing_DmId
 
 
 type DiscordGuildOrDmId
-    = DiscordGuildOrDmId_Guild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
-    | DiscordGuildOrDmId_Dm DiscordGuildOrDmId_DmData
+    = DiscordGuildOrDmId_Guild Viewing_DiscordChannelId
+    | DiscordGuildOrDmId_Dm Viewing_DiscordDmId
 
 
-type alias DiscordGuildOrDmId_DmData =
+type alias Viewing_DmId =
+    { otherUserId : Id UserId
+    }
+
+
+type alias Viewing_DmThreadId =
+    { otherUserId : Id UserId
+    , threadId : Id ChannelMessageId
+    }
+
+
+type alias Viewing_DiscordDmId =
     { currentUserId : Discord.Id Discord.UserId
     , channelId : Discord.Id Discord.PrivateChannelId
+    }
+
+
+type alias Viewing_ChannelId =
+    { guildId : Id GuildId
+    , channelId : Id ChannelId
+    }
+
+
+type alias Viewing_ChannelThreadId =
+    { guildId : Id GuildId
+    , channelId : Id ChannelId
+    , threadId : Id ChannelMessageId
+    }
+
+
+type alias Viewing_DiscordChannelId =
+    { guildId : Discord.Id Discord.GuildId
+    , channelId : Discord.Id Discord.ChannelId
+    , currentUserId : Discord.Id Discord.UserId
+    }
+
+
+type alias Viewing_DiscordChannelThreadId =
+    { guildId : Discord.Id Discord.GuildId
+    , channelId : Discord.Id Discord.ChannelId
+    , currentUserId : Discord.Id Discord.UserId
+    , threadId : Id ChannelMessageId
     }
 
 

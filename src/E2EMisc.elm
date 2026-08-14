@@ -10,9 +10,12 @@ module E2EMisc exposing
     , inactiveThreadsAreHiddenTest
     , inviteUserAndDmChat
     , largePasteBecomesAttachment
+    , markMessageAsUnreadTest
     , mentionSuggestionTest
     , noTimestampSuggestionTest
     , profileImageOpensDm
+    , startingACallOrGameStaysReadTest
+    , staysReadWhileViewingTest
     , timeOfDaySuggestionTest
     , timeOffsetSuggestionTest
     )
@@ -22,6 +25,7 @@ import DmChannel
 import DmChannelId
 import Duration
 import E2EHelper
+import E2EVoiceChat
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Time as Time
@@ -536,8 +540,8 @@ checkDmThreadIsRead otherUserId threadMessageIndex model =
                     in
                     if
                         SeqDict.get
-                            ( Id.GuildOrDmId (Id.GuildOrDmId_Dm otherUserId), threadMessageIndex )
-                            local.localUser.user.lastViewedThreads
+                            ( Id.GuildOrDmId (Id.GuildOrDmId_Dm { otherUserId = otherUserId }), threadMessageIndex )
+                            local.localUser.user.lastViewedThreadMessage
                             == newestMessageId
                     then
                         Ok ()
@@ -573,6 +577,333 @@ checkDmRouteWithUser otherUserId model =
                     Err "Expected to be viewing a DM channel"
 
                 ( Types.NotLoggedIn _, _ ) ->
+                    Err "Expected the frontend to be logged in"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
+
+
+{-| A message someone else writes into the conversation you are looking at, with nothing
+unread in it, shouldn't leave you with something unread. The conversation stays caught up
+while you sit in it, and it is still caught up once you leave.
+-}
+staysReadWhileViewingTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+staysReadWhileViewingTest config =
+    E2EHelper.startTest
+        "Messages arriving in the conversation you are looking at stay read"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ -- The guild channel both of them are looking at
+                  E2EHelper.writeMessage admin 100 "In the channel"
+                , checkChannelIsCaughtUp guildChannelId user
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+
+                -- A message arriving while the reader is elsewhere is still unread
+                , E2EHelper.writeMessage admin 100 "While away"
+                , E2EHelper.hasNotExactText user [ "You have no unread messages!" ]
+                , E2EHelper.hasExactText user [ "While away" ]
+
+                -- Opening the channel catches them up again, and a thread started from a
+                -- message counts separately from the channel it hangs off
+                , user.click 100 (Dom.id "guild_openGuild_1")
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "new" ])
+                , E2EHelper.createThread admin (Id.fromInt 1)
+                , E2EHelper.writeMessage admin 100 "Starting a thread"
+                , user.click 100 (Dom.id "guild_viewThread_0_1")
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "new" ])
+                , E2EHelper.writeMessage admin 100 "In the thread"
+                , checkThreadIsCaughtUp guildChannelId (Id.fromInt 1) user
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+
+                -- The same in a DM, where the reader knows the conversation by the person
+                -- writing to them
+                , E2EHelper.openDm admin 100 "2"
+                , E2EHelper.writeMessage admin 100 "Hello in a DM!"
+                , user.click 100 (Dom.id "guild_friendLabel_0")
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "new" ])
+                , E2EHelper.writeMessage admin 100 "And another one"
+                , checkChannelIsCaughtUp dmWithAdminId user
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+
+                -- A reader who is behind stays where they are. Marking "While away" as
+                -- unread puts them one message back, and a message arriving while they are
+                -- still looking at the channel leaves that where it is instead of catching
+                -- them up over the top of it.
+                , user.click 100 (Dom.id "guild_openGuild_1")
+                , user.click 100 (Dom.id "guild_openChannel_0")
+                , markAsUnread user (Id.fromInt 2)
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "new" ])
+                , user.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
+                , admin.click 100 (Dom.id "guild_openGuild_1")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.writeMessage admin 100 "After the mark"
+                , E2EHelper.hasExactText user [ "After the mark" ]
+                , user.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
+                , E2EHelper.tallSnapshot user 100 { name = "Unread divider stays put while viewing" }
+
+                -- Which is what the unread overview shows once they leave: everything from
+                -- the message they marked onwards, and nothing from before it
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.hasExactText user [ "While away", "After the mark" ]
+                , E2EHelper.hasNotExactText user [ "In the channel" ]
+                , E2EHelper.tallSnapshot user 100 { name = "Unread overview after a message marked as unread" }
+                ]
+            )
+        ]
+
+
+{-| The reader is behind by however far the given message sits from the newest one, which
+is what the unread divider and the notification counts are drawn from.
+-}
+checkLastViewedMessageIs : Id.AnyGuildOrDmId -> Id.Id Id.ChannelMessageId -> FrontendModel -> Result String ()
+checkLastViewedMessageIs guildOrDmId messageId model =
+    withLocalState
+        model
+        (\local ->
+            case SeqDict.get guildOrDmId local.localUser.user.lastViewedMessage of
+                Just lastViewed ->
+                    if lastViewed == messageId then
+                        Ok ()
+
+                    else
+                        Err
+                            ("Expected the last viewed message to be "
+                                ++ Id.toString messageId
+                                ++ " but it is "
+                                ++ Id.toString lastViewed
+                            )
+
+                Nothing ->
+                    Err "Expected the channel to have been viewed"
+        )
+
+
+guildChannelId : Id.AnyGuildOrDmId
+guildChannelId =
+    Id.GuildOrDmId (Id.GuildOrDmId_Guild { guildId = Id.fromInt 1, channelId = Id.fromInt 0 })
+
+
+dmWithAdminId : Id.AnyGuildOrDmId
+dmWithAdminId =
+    Id.GuildOrDmId (Id.GuildOrDmId_Dm { otherUserId = Id.fromInt 0 })
+
+
+{-| The reader has seen every message in the channel, which is what the notification counts
+and the unread overview are worked out from.
+-}
+checkChannelIsCaughtUp :
+    Id.AnyGuildOrDmId
+    -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+checkChannelIsCaughtUp guildOrDmId user =
+    T.group
+        [ user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
+        , user.checkModel
+            0
+            (\model ->
+                withLocalState
+                    model
+                    (\local ->
+                        case ( SeqDict.get guildOrDmId local.localUser.user.lastViewedMessage, latestChannelMessageId guildOrDmId local ) of
+                            ( lastViewed, Just latest ) ->
+                                if lastViewed == Just latest then
+                                    Ok ()
+
+                                else
+                                    Err
+                                        ("Expected the channel to be caught up at "
+                                            ++ Id.toString latest
+                                            ++ " but the last viewed message is "
+                                            ++ (case lastViewed of
+                                                    Just messageId ->
+                                                        Id.toString messageId
+
+                                                    Nothing ->
+                                                        "nothing"
+                                               )
+                                        )
+
+                            ( _, Nothing ) ->
+                                Err "Expected the channel to exist"
+                    )
+            )
+        ]
+
+
+checkThreadIsCaughtUp :
+    Id.AnyGuildOrDmId
+    -> Id.Id Id.ChannelMessageId
+    -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+checkThreadIsCaughtUp guildOrDmId threadId user =
+    T.group
+        [ user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
+        , user.checkModel
+            0
+            (\model ->
+                withLocalState
+                    model
+                    (\local ->
+                        case ( SeqDict.get ( guildOrDmId, threadId ) local.localUser.user.lastViewedThreadMessage, latestThreadMessageId guildOrDmId threadId local ) of
+                            ( lastViewed, Just latest ) ->
+                                if lastViewed == Just latest then
+                                    Ok ()
+
+                                else
+                                    Err "Expected the thread to be caught up with its newest message"
+
+                            ( _, Nothing ) ->
+                                Err "Expected the thread to exist"
+                    )
+            )
+        ]
+
+
+latestChannelMessageId : Id.AnyGuildOrDmId -> LocalState -> Maybe (Id.Id Id.ChannelMessageId)
+latestChannelMessageId guildOrDmId local =
+    case guildOrDmId of
+        Id.GuildOrDmId (Id.GuildOrDmId_Guild id) ->
+            LocalState.getGuildAndChannel id local
+                |> Maybe.map (\( _, channel ) -> DmChannel.latestFrontendMessageId channel)
+
+        Id.GuildOrDmId (Id.GuildOrDmId_Dm id) ->
+            SeqDict.get id.otherUserId local.dmChannels
+                |> Maybe.map DmChannel.latestFrontendMessageId
+
+        Id.DiscordGuildOrDmId _ ->
+            Nothing
+
+
+latestThreadMessageId : Id.AnyGuildOrDmId -> Id.Id Id.ChannelMessageId -> LocalState -> Maybe (Id.Id Id.ThreadMessageId)
+latestThreadMessageId guildOrDmId threadId local =
+    case guildOrDmId of
+        Id.GuildOrDmId (Id.GuildOrDmId_Guild id) ->
+            LocalState.getGuildAndChannel id local
+                |> Maybe.andThen (\( _, channel ) -> SeqDict.get threadId channel.threads)
+                |> Maybe.map DmChannel.latestFrontendThreadMessageId
+
+        Id.GuildOrDmId (Id.GuildOrDmId_Dm id) ->
+            SeqDict.get id.otherUserId local.dmChannels
+                |> Maybe.andThen (\dmChannel -> SeqDict.get threadId dmChannel.threads)
+                |> Maybe.map DmChannel.latestFrontendThreadMessageId
+
+        Id.DiscordGuildOrDmId _ ->
+            Nothing
+
+
+withLocalState : FrontendModel -> (LocalState -> Result String ()) -> Result String ()
+withLocalState model func =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    func (Local.model loggedIn.localState)
+
+                Types.NotLoggedIn _ ->
+                    Err "Expected the frontend to be logged in"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
+
+
+markMessageAsUnreadTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+markMessageAsUnreadTest config =
+    E2EHelper.startTest
+        "Mark a message as unread"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                let
+                    -- "Two" and "Three" are unread, the message announcing that the user
+                    -- joined and "One" are not
+                    twoUnread : Test.Html.Selector.Selector
+                    twoUnread =
+                        Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "2")
+                in
+                [ E2EHelper.writeMessage admin 100 "One"
+                , E2EHelper.writeMessage admin 100 "Two"
+                , E2EHelper.writeMessage admin 100 "Three"
+
+                -- Leaving the channel marks everything in it as read
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+                , user.checkView 100 (Test.Html.Query.hasNot [ twoUnread ])
+
+                -- Marking the second of the three messages as unread leaves it and the
+                -- message after it unread
+                , user.click 100 (Dom.id "guild_openGuild_1")
+                , markAsUnread user (Id.fromInt 2)
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , user.checkView 100 (Test.Html.Query.has [ twoUnread ])
+                , E2EHelper.hasExactText user [ "Two", "Three" ]
+                , E2EHelper.hasNotExactText user [ "One" ]
+
+                -- Hovering a message in the overview restarts the animations inside it,
+                -- which the mini menu of a channel message stays out of
+                , user.mouseEnter 100 (Dom.id "guild_message_2") ( 10, 10 ) []
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_showFullMenu" ])
+                , user.checkModel 100 (checkMessageIsHovered (Id.fromInt 2))
+
+                -- Reading the channel for real puts the unread count away again
+                , user.click 100 (Dom.id "guild_openGuild_1")
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+                , user.checkView 100 (Test.Html.Query.hasNot [ twoUnread ])
+                ]
+            )
+        ]
+
+
+markAsUnread :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> Id.Id Id.ChannelMessageId
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+markAsUnread user messageId =
+    T.group
+        [ user.mouseEnter 100 (Dom.id ("guild_message_" ++ Id.toString messageId)) ( 10, 10 ) []
+        , user.custom
+            100
+            (Dom.id "miniView_showFullMenu")
+            "click"
+            (Json.Encode.object
+                [ ( "clientX", Json.Encode.int 500 )
+                , ( "clientY", Json.Encode.int 300 )
+                ]
+            )
+        , user.click 100 (Dom.id "messageMenu_markAsUnread")
+        ]
+
+
+checkMessageIsHovered : Id.Id Id.ChannelMessageId -> FrontendModel -> Result String ()
+checkMessageIsHovered messageId model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    if
+                        loggedIn.messageHover
+                            == Types.MessageHover
+                                (Id.GuildOrDmId (Id.GuildOrDmId_Guild { guildId = Id.fromInt 1, channelId = Id.fromInt 0 }))
+                                (Id.NoThreadWithMessage messageId)
+                    then
+                        Ok ()
+
+                    else
+                        Err "Expected the message in the unread overview to be hovered"
+
+                Types.NotLoggedIn _ ->
                     Err "Expected the frontend to be logged in"
 
         Types.Loading _ ->
@@ -1206,3 +1537,69 @@ codeBlockInputTest config =
                 ]
             )
         ]
+
+
+{-| A call or a game leaves a card behind in the conversation it was started from. It is
+the starter's own doing, the same as a message they wrote, so it doesn't leave them with
+something unread or with the card sitting under an unread divider.
+-}
+startingACallOrGameStaysReadTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+startingACallOrGameStaysReadTest config =
+    E2EHelper.startTest
+        "Starting a call or a game doesn't leave the starter with something unread"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ -- The admin is caught up in the channel both of them are looking at
+                  E2EHelper.writeMessage user 100 "In the channel"
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
+
+                -- Starting a call from it leaves them caught up on the card it wrote
+                , admin.click 100 (Dom.id "guild_voiceChat")
+                , E2EVoiceChat.startCall admin
+                , admin.navigateBack 100
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
+                , admin.checkModel 100 (checkChannelIsCaughtUpModel guildChannelId)
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
+
+                -- And so does starting a game
+                , admin.click 100 (Dom.id "guild_openGamesTab")
+                , admin.click 100 (Dom.id "game_select_Go (Baduk)")
+                , admin.click 100 (Dom.id "go_start")
+                , admin.navigateBack 100
+                , admin.checkModel 100 (checkChannelIsCaughtUpModel guildChannelId)
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
+                , E2EHelper.tallSnapshot admin 100 { name = "Started a call and a game without either turning up unread" }
+                ]
+            )
+        ]
+
+
+{-| The reader has seen every message in the channel, which is what the notification counts
+and the unread overview are worked out from.
+-}
+checkChannelIsCaughtUpModel : Id.AnyGuildOrDmId -> FrontendModel -> Result String ()
+checkChannelIsCaughtUpModel guildOrDmId model =
+    withLocalState
+        model
+        (\local ->
+            case ( SeqDict.get guildOrDmId local.localUser.user.lastViewedMessage, latestChannelMessageId guildOrDmId local ) of
+                ( Just lastViewed, Just latest ) ->
+                    if lastViewed == latest then
+                        Ok ()
+
+                    else
+                        Err
+                            ("Expected the channel to be caught up at "
+                                ++ Id.toString latest
+                                ++ " but the last viewed message is "
+                                ++ Id.toString lastViewed
+                            )
+
+                _ ->
+                    Err "Expected the channel to exist and to have been viewed"
+        )

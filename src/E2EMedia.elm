@@ -475,7 +475,7 @@ imageViewerTests imageUploadConfig =
                         (Test.Html.Query.has
                             [ Test.Html.Selector.id "messageMenu_copyImageLink" ]
                         )
-                    , admin.snapshotView 100 { name = "Message menu with copy image options" }
+                    , E2EHelper.tallSnapshot admin 100 { name = "Message menu with copy image options" }
 
                     -- "Copy image" copies the actual image data to the clipboard.
                     , admin.click 100 (Dom.id "messageMenu_copyImage")

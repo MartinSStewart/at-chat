@@ -389,7 +389,7 @@ update time windowSize currentUserId guildOrDmId msg newMatchId maybeMatch model
             , case maybeStartMatch of
                 Just setup ->
                     -- A brand new match takes the next message id, then we navigate to it.
-                    (if GuildOrDmId_Dm currentUserId == guildOrDmId then
+                    (if GuildOrDmId_Dm { otherUserId = currentUserId } == guildOrDmId then
                         [ OutLocalChange (LocalChange_Go newMatchId (Go.Action { time = time, change = Go.Joined currentUserId })) ]
 
                      else
@@ -617,7 +617,7 @@ view currentTime windowSize showMemberTab maybeDragging lastCopied localUser gui
 
         isPersonalDm : Bool
         isPersonalDm =
-            guildOrDmId == GuildOrDmId_Dm localUser.session.userId
+            guildOrDmId == GuildOrDmId_Dm { otherUserId = localUser.session.userId }
     in
     case maybeMatchId of
         Just matchId ->

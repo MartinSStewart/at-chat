@@ -323,6 +323,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , E2EMisc.inactiveThreadsAreHiddenTest normalConfig
     , E2EMisc.dmThreadsTest normalConfig
+    , E2EMisc.startingACallOrGameStaysReadTest normalConfig
+    , E2EMisc.markMessageAsUnreadTest normalConfig
+    , E2EMisc.staysReadWhileViewingTest normalConfig
     , E2EMisc.inactiveDmThreadsAreHiddenTest normalConfig
     , E2EHelper.startTest
         "Admin can disable Discord account linking"
@@ -837,7 +840,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (LocalModelChangeRequest (ChangeId 100) (Local_SetGuildNotificationLevel guildId NotifyOnEveryMessage))
                 , user.sendToBackend
                     100
-                    (LocalModelChangeRequest (ChangeId 101) (Local_CurrentlyViewing StopViewingChannel))
+                    (LocalModelChangeRequest (ChangeId 101) (Local_CurrentlyViewing { routeRequestCausedByPressingLink = False } StopViewingChannel))
 
                 -- Email notifications are off by default, so this message must not send an email.
                 , admin.click 100 (Dom.id "channel_textinput")
@@ -862,7 +865,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 -- Closing the user options returns the user to the channel, so stop viewing again.
                 , user.sendToBackend
                     100
-                    (LocalModelChangeRequest (ChangeId 102) (Local_CurrentlyViewing StopViewingChannel))
+                    (LocalModelChangeRequest (ChangeId 102) (Local_CurrentlyViewing { routeRequestCausedByPressingLink = False } StopViewingChannel))
 
                 -- Now a new message should trigger an email notification to the user.
                 , admin.click 100 (Dom.id "channel_textinput")
@@ -972,7 +975,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         (Local_SendMessage
                             (Time.millisToPosix 0)
                             Time.utc
-                            (GuildOrDmId_Guild (Id.fromInt 1) (Id.fromInt 0))
+                            (GuildOrDmId_Guild { guildId = Id.fromInt 1, channelId = Id.fromInt 0 })
                             (NonemptyString 'm' (String.repeat RichText.maxLength "m"))
                             (NoThreadWithMaybeMessage Nothing)
                             SeqDict.empty
@@ -2952,7 +2955,7 @@ sendMessageRateLimitTest config =
                                 (Local_SendMessage
                                     (Time.millisToPosix 0)
                                     Time.utc
-                                    (GuildOrDmId_Guild guildId channelId)
+                                    (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
                                     (NonemptyString 'm' ("sg " ++ String.fromInt changeIndex))
                                     (NoThreadWithMaybeMessage Nothing)
                                     SeqDict.empty

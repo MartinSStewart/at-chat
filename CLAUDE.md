@@ -28,6 +28,18 @@ Run the tests:
 npx elm-test-rs --compiler "$(realpath node_modules/.bin/lamdera)"
 ```
 
+Run the end-to-end tests (a few minutes, so only when you've touched something they
+cover):
+
+```
+node tests/EndToEndTestsRunner.js
+```
+
+The workers run compiled Elm, so that command compiles `tests/EndToEndTestsRunner.elm`
+first and stops if it doesn't build. Don't skip past that step by requiring the
+compiled output some other way — a runner that starts without compiling reports on
+whatever was built last, and passing tests then mean nothing.
+
 Run elm-review and fix what it reports before you're done:
 
 ```

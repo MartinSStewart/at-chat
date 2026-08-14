@@ -423,6 +423,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , toFrontendLogs = Nothing
             , popSound = loading.popSound
             , startupData = startupData
+            , routeRequestCausedByPressingLink = False
             }
 
         ( model2, cmdA ) =
@@ -897,14 +898,7 @@ updateLoaded msg model =
             ( { model | elmUiState = Ui.Anim.update ElmUiMsg elmUiMsg model.elmUiState }, Command.none )
 
         PressedLink route ->
-            let
-                ( model2, cmd ) =
-                    FrontendExtra.updateLoggedIn (setLastViewedToLatestMessage model) model
-
-                ( model3, routeCmd ) =
-                    FrontendExtra.routePush model2 route
-            in
-            ( model3, Command.batch [ cmd, routeCmd ] )
+            FrontendExtra.routePush { model | routeRequestCausedByPressingLink = True } route
 
         DebouncedTyping ->
             FrontendExtra.updateLoggedIn
@@ -1069,7 +1063,7 @@ updateLoaded msg model =
                                 { loggedIn
                                     | drafts =
                                         SeqDict.remove
-                                            ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), NoThread )
+                                            ( GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId }), NoThread )
                                             loggedIn.drafts
                                     , editChannelForm =
                                         SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
@@ -1881,6 +1875,27 @@ updateLoaded msg model =
                 )
                 model
 
+        MessageMenu_PressedMarkAsUnread guildOrDmId threadRoute ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetLastViewed
+                            guildOrDmId
+                            (case threadRoute of
+                                ViewThreadWithMessage threadMessageId messageId ->
+                                    ViewThreadWithMessage threadMessageId (messageBefore messageId)
+
+                                NoThreadWithMessage messageId ->
+                                    NoThreadWithMessage (messageBefore messageId)
+                            )
+                            |> Just
+                        )
+                        (MessageMenu.close model loggedIn)
+                        Command.none
+                )
+                model
+
         MessageMenu_PressedAddCustomEmojisToUser customEmojiIds ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -2420,7 +2435,7 @@ updateLoaded msg model =
                                     case LocalState.guildOrDmIdToMessage guildOrDmId2 threadRoute (Local.model loggedIn.localState) of
                                         Just ( _, maybeRepliedTo ) ->
                                             case ( guildOrDmId2, maybeRepliedTo ) of
-                                                ( GuildOrDmId_Guild guildId channelId, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
+                                                ( GuildOrDmId_Guild { guildId, channelId }, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
                                                         (GuildRoute guildId
@@ -2431,7 +2446,7 @@ updateLoaded msg model =
                                                             )
                                                         )
 
-                                                ( GuildOrDmId_Guild guildId channelId, NoThreadWithMaybeMessage (Just repliedTo) ) ->
+                                                ( GuildOrDmId_Guild { guildId, channelId }, NoThreadWithMaybeMessage (Just repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
                                                         (GuildRoute guildId
@@ -2442,7 +2457,7 @@ updateLoaded msg model =
                                                             )
                                                         )
 
-                                                ( GuildOrDmId_Dm otherUserId, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
+                                                ( GuildOrDmId_Dm { otherUserId }, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
                                                         (DmRoute
@@ -2456,7 +2471,7 @@ updateLoaded msg model =
                                                             }
                                                         )
 
-                                                ( GuildOrDmId_Dm otherUserId, NoThreadWithMaybeMessage (Just repliedTo) ) ->
+                                                ( GuildOrDmId_Dm { otherUserId }, NoThreadWithMaybeMessage (Just repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
                                                         (DmRoute
@@ -2480,10 +2495,10 @@ updateLoaded msg model =
                                     case LocalState.discordGuildOrDmIdToMessage guildOrDmId2 threadRoute (Local.model loggedIn.localState) of
                                         Just ( _, maybeRepliedTo ) ->
                                             case ( guildOrDmId2, maybeRepliedTo ) of
-                                                ( DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
+                                                ( DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
-                                                        ({ currentDiscordUserId = currentDiscordUserId
+                                                        ({ currentDiscordUserId = currentUserId
                                                          , guildId = guildId
                                                          , channelRoute =
                                                             DiscordChannel_ChannelRoute
@@ -2494,10 +2509,10 @@ updateLoaded msg model =
                                                             |> DiscordGuildRoute
                                                         )
 
-                                                ( DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId, NoThreadWithMaybeMessage (Just repliedTo) ) ->
+                                                ( DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }, NoThreadWithMaybeMessage (Just repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
-                                                        ({ currentDiscordUserId = currentDiscordUserId
+                                                        ({ currentDiscordUserId = currentUserId
                                                          , guildId = guildId
                                                          , channelRoute =
                                                             DiscordChannel_ChannelRoute
@@ -2576,7 +2591,7 @@ updateLoaded msg model =
 
                 MessageView.MessageView_PressedViewThreadLink ->
                     case ( guildOrDmId, threadRoute ) of
-                        ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), NoThreadWithMessage messageId ) ->
+                        ( GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }), NoThreadWithMessage messageId ) ->
                             FrontendExtra.routePush
                                 model
                                 (GuildRoute
@@ -2584,7 +2599,7 @@ updateLoaded msg model =
                                     (ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideMembersTab) Nothing)
                                 )
 
-                        ( GuildOrDmId (GuildOrDmId_Dm otherUserId), NoThreadWithMessage messageId ) ->
+                        ( GuildOrDmId (GuildOrDmId_Dm { otherUserId }), NoThreadWithMessage messageId ) ->
                             case model.loginStatus of
                                 LoggedIn loggedIn ->
                                     { channelId =
@@ -2600,10 +2615,10 @@ updateLoaded msg model =
                                 NotLoggedIn _ ->
                                     ( model, Command.none )
 
-                        ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId), NoThreadWithMessage messageId ) ->
+                        ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }), NoThreadWithMessage messageId ) ->
                             FrontendExtra.routePush
                                 model
-                                ({ currentDiscordUserId = currentDiscordUserId
+                                ({ currentDiscordUserId = currentUserId
                                  , guildId = guildId
                                  , channelRoute =
                                     DiscordChannel_ChannelRoute
@@ -2978,10 +2993,16 @@ updateLoaded msg model =
                             FrontendExtra.handleLocalChange
                                 model.time
                                 (if hasFocus then
-                                    Local_CurrentlyViewing (LocalState.routeToViewing model.route (Local.model loggedIn.localState)) |> Just
+                                    Local_CurrentlyViewing
+                                        { routeRequestCausedByPressingLink = False }
+                                        (LocalState.routeToViewing model.route (Local.model loggedIn.localState))
+                                        |> Just
 
                                  else
-                                    Local_CurrentlyViewing StopViewingChannel |> Just
+                                    Local_CurrentlyViewing
+                                        { routeRequestCausedByPressingLink = False }
+                                        StopViewingChannel
+                                        |> Just
                                 )
                                 loggedIn
                                 (if hasFocus then
@@ -3423,7 +3444,7 @@ updateLoaded msg model =
 
                                                             else
                                                                 case guildOrDmId2 of
-                                                                    DiscordGuildOrDmId_Guild currentUserId guildId channelId ->
+                                                                    DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId } ->
                                                                         Local_Discord_SendEditGuildMessage
                                                                             model.time
                                                                             model.timezone
@@ -4357,7 +4378,7 @@ updateLoaded msg model =
                                 Call.ShowLocalVideoAndCall _ ->
                                     ( model, Command.none )
 
-                                Call.ShowLocalVideoAndCallThumbnail (Call.DmRoomId otherUserId) ->
+                                Call.ShowLocalVideoAndCallThumbnail (Call.DmRoomId { otherUserId }) ->
                                     FrontendExtra.routePush
                                         model
                                         (DmRoute
@@ -4368,7 +4389,7 @@ updateLoaded msg model =
                                             }
                                         )
 
-                                Call.ShowLocalVideoAndCallThumbnail (Call.GuildRoomId guildId channelId) ->
+                                Call.ShowLocalVideoAndCallThumbnail (Call.GuildRoomId { guildId, channelId }) ->
                                     FrontendExtra.routePush
                                         model
                                         (GuildRoute
@@ -4777,7 +4798,7 @@ updateLoaded msg model =
 
                 MessageView.MessageViewMsg_PressedCallStartedCard ->
                     case guildOrDmId of
-                        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+                        GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }) ->
                             GuildRoute
                                 guildId
                                 (ChannelRoute
@@ -4787,7 +4808,7 @@ updateLoaded msg model =
                                 )
                                 |> FrontendExtra.routePush model
 
-                        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                        GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
                             case model.loginStatus of
                                 LoggedIn loggedIn ->
                                     DmRoute
@@ -4808,7 +4829,7 @@ updateLoaded msg model =
 
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
                     case guildOrDmId of
-                        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+                        GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }) ->
                             GuildRoute
                                 guildId
                                 (ChannelRoute
@@ -4818,7 +4839,7 @@ updateLoaded msg model =
                                 )
                                 |> FrontendExtra.routePush model
 
-                        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                        GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
                             case model.loginStatus of
                                 LoggedIn loggedIn ->
                                     DmRoute
@@ -5408,13 +5429,13 @@ loadOlderMessages guildOrDmId threadRoute local =
                 Nothing
     in
     case guildOrDmId of
-        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-            case LocalState.getGuildAndChannel guildId channelId local of
+        GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }) ->
+            case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
                 Just ( _, channel ) ->
                     case threadRoute of
                         NoThread ->
                             Local_LoadChannelMessages
-                                (GuildOrDmId_Guild guildId channelId)
+                                (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
                                 channel.visibleMessages.oldest
                                 EmptyPlaceholder
                                 |> messagesLeft channel
@@ -5425,7 +5446,7 @@ loadOlderMessages guildOrDmId threadRoute local =
                                     SeqDict.get threadId channel.threads |> Maybe.withDefault Thread.frontendInit
                             in
                             Local_LoadThreadMessages
-                                (GuildOrDmId_Guild guildId channelId)
+                                (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
                                 threadId
                                 thread.visibleMessages.oldest
                                 EmptyPlaceholder
@@ -5434,7 +5455,7 @@ loadOlderMessages guildOrDmId threadRoute local =
                 Nothing ->
                     Nothing
 
-        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+        GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
             let
                 dmChannel : FrontendDmChannel
                 dmChannel =
@@ -5444,7 +5465,7 @@ loadOlderMessages guildOrDmId threadRoute local =
             case threadRoute of
                 NoThread ->
                     Local_LoadChannelMessages
-                        (GuildOrDmId_Dm otherUserId)
+                        (GuildOrDmId_Dm { otherUserId = otherUserId })
                         dmChannel.visibleMessages.oldest
                         EmptyPlaceholder
                         |> messagesLeft dmChannel
@@ -5455,13 +5476,13 @@ loadOlderMessages guildOrDmId threadRoute local =
                             SeqDict.get threadId dmChannel.threads |> Maybe.withDefault Thread.frontendInit
                     in
                     Local_LoadThreadMessages
-                        (GuildOrDmId_Dm otherUserId)
+                        (GuildOrDmId_Dm { otherUserId = otherUserId })
                         threadId
                         thread.visibleMessages.oldest
                         EmptyPlaceholder
                         |> messagesLeft thread
 
-        DiscordGuildOrDmId ((DiscordGuildOrDmId_Guild _ guildId channelId) as guildOrDmId2) ->
+        DiscordGuildOrDmId ((DiscordGuildOrDmId_Guild { guildId, channelId }) as guildOrDmId2) ->
             case LocalState.getDiscordGuildAndChannel guildId channelId local of
                 Just ( _, channel ) ->
                     case threadRoute of
@@ -5531,7 +5552,7 @@ messageHasReaction emoji guildOrDmId threadRoute local =
                 Nothing ->
                     False
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }) ->
             case LocalState.getDiscordGuildAndChannel guildId channelId local of
                 Just ( _, channel ) ->
                     case
@@ -6125,37 +6146,13 @@ viewImageInfo guildOrDmId fileId model =
         model
 
 
-setLastViewedToLatestMessage : LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-setLastViewedToLatestMessage model loggedIn =
-    let
-        local =
-            Local.model loggedIn.localState
-    in
-    FrontendExtra.handleLocalChange
-        model.time
-        (case Route.toGuildOrDmId local.localUser.session.userId model.route of
-            Just ( guildOrDmId, threadRoute ) ->
-                case LocalState.guildOrDmIdToMessagesCount guildOrDmId threadRoute local of
-                    Just messages ->
-                        Local_SetLastViewed
-                            guildOrDmId
-                            (case threadRoute of
-                                ViewThread threadMessageId ->
-                                    ViewThreadWithMessage threadMessageId (messages - 1 |> Id.fromInt)
-
-                                NoThread ->
-                                    NoThreadWithMessage (messages - 1 |> Id.fromInt)
-                            )
-                            |> Just
-
-                    Nothing ->
-                        Nothing
-
-            Nothing ->
-                Nothing
-        )
-        loggedIn
-        Command.none
+{-| The message ahead of the given one. Marking a message as unread means the last message
+that was read is the one before it, and -1 stands for nothing having been read at all, the
+same value a conversation that was never opened falls back to.
+-}
+messageBefore : Id messageId -> Id messageId
+messageBefore messageId =
+    Id.toInt messageId - 1 |> Id.fromInt
 
 
 handleEditable :
@@ -6954,12 +6951,12 @@ updateLoadedFromBackend msg model =
                                 Nothing ->
                                     Command.none
 
-                        Local_CurrentlyViewing viewing ->
+                        Local_CurrentlyViewing _ viewing ->
                             case viewing of
-                                ViewChannel guildId channelId _ _ ->
+                                ViewChannel data _ ->
                                     case Route.toGuildOrDmId userId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), NoThread ) ->
-                                            if guildId == guildIdRoute && channelId == channelIdRoute then
+                                        Just ( GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }), NoThread ) ->
+                                            if data.id.guildId == guildId && data.id.channelId == channelId then
                                                 Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
@@ -6968,10 +6965,10 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewDm otherUserId _ _ ->
+                                ViewDm data _ ->
                                     case Route.toGuildOrDmId userId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), NoThread ) ->
-                                            if otherUserId == otherUserIdRoute then
+                                        Just ( GuildOrDmId (GuildOrDmId_Dm { otherUserId }), NoThread ) ->
+                                            if data.id.otherUserId == otherUserId then
                                                 Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
@@ -6980,10 +6977,10 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewChannelThread guildId channelId threadId _ ->
+                                ViewChannelThread data _ ->
                                     case Route.toGuildOrDmId userId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
-                                            if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
+                                        Just ( GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }), ViewThread threadIdRoute ) ->
+                                            if data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
@@ -6992,10 +6989,10 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewDmThread otherUserId threadId _ ->
+                                ViewDmThread data _ ->
                                     case Route.toGuildOrDmId userId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), ViewThread threadIdRoute ) ->
-                                            if otherUserId == otherUserIdRoute && threadId == threadIdRoute then
+                                        Just ( GuildOrDmId (GuildOrDmId_Dm { otherUserId }), ViewThread threadIdRoute ) ->
+                                            if data.id.otherUserId == otherUserId && data.id.threadId == threadIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
@@ -7007,10 +7004,10 @@ updateLoadedFromBackend msg model =
                                 StopViewingChannel ->
                                     Command.none
 
-                                ViewDiscordChannel guildId channelId discordUserId _ ->
+                                ViewDiscordChannel data _ ->
                                     case Route.toGuildOrDmId userId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), NoThread ) ->
-                                            if discordUserId == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute then
+                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }), NoThread ) ->
+                                            if data.id.currentUserId == currentUserId && data.id.guildId == guildId && data.id.channelId == channelId then
                                                 Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
@@ -7019,10 +7016,10 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewDiscordChannelThread guildId channelId discordUserId threadId _ ->
+                                ViewDiscordChannelThread data _ ->
                                     case Route.toGuildOrDmId userId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
-                                            if discordUserId == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
+                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }), ViewThread threadIdRoute ) ->
+                                            if data.id.currentUserId == currentUserId && data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
@@ -7031,10 +7028,10 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewDiscordDm _ channelId _ ->
+                                ViewDiscordDm data _ ->
                                     case Route.toGuildOrDmId userId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), NoThread ) ->
-                                            if channelId == data.channelId then
+                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm dmRoute), NoThread ) ->
+                                            if data.id.channelId == dmRoute.channelId then
                                                 Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
@@ -7197,15 +7194,15 @@ updateLoadedFromBackend msg model =
                                       else
                                         loggedIn2
                                     , case guildOrDmId of
-                                        GuildOrDmId_Guild guildId channelId ->
-                                            case LocalState.getGuildAndChannel guildId channelId local of
+                                        GuildOrDmId_Guild { guildId, channelId } ->
+                                            case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
                                                 Just ( _, channel ) ->
                                                     helper channel
 
                                                 Nothing ->
                                                     Command.none
 
-                                        GuildOrDmId_Dm otherUserId ->
+                                        GuildOrDmId_Dm { otherUserId } ->
                                             case SeqDict.get otherUserId local.dmChannels of
                                                 Just channel ->
                                                     helper channel
@@ -7271,10 +7268,10 @@ updateLoadedFromBackend msg model =
                                       else
                                         loggedIn2
                                     , case guildOrDmId of
-                                        DiscordGuildOrDmId_Guild senderId guildId channelId ->
+                                        DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId } ->
                                             case LocalState.getDiscordGuildAndChannel guildId channelId local of
                                                 Just ( _, channel ) ->
-                                                    helper senderId channel
+                                                    helper currentUserId channel
 
                                                 Nothing ->
                                                     Command.none
@@ -7294,7 +7291,7 @@ updateLoadedFromBackend msg model =
                                     let
                                         id : ( AnyGuildOrDmId, ThreadRoute )
                                         id =
-                                            ( GuildOrDmId (GuildOrDmId_Dm userId)
+                                            ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = userId })
                                             , Id.threadRouteWithoutMessage threadRoute
                                             )
                                     in
@@ -7310,7 +7307,7 @@ updateLoadedFromBackend msg model =
                                     let
                                         id : ( AnyGuildOrDmId, ThreadRoute )
                                         id =
-                                            ( GuildOrDmId (GuildOrDmId_Guild guildId channelId)
+                                            ( GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
                                             , Id.threadRouteWithoutMessage threadRoute
                                             )
                                     in
@@ -7339,10 +7336,10 @@ updateLoadedFromBackend msg model =
                                 Server_GotDiscordGuildMessageEmbed guildIdA channelIdA threadRouteA _ ->
                                     ( loggedIn2
                                     , case Route.toGuildOrDmId local.localUser.session.userId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildIdB channelIdB), threadRouteB ) ->
+                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { guildId, channelId }), threadRouteB ) ->
                                             if
-                                                (guildIdA == guildIdB)
-                                                    && (channelIdA == channelIdB)
+                                                (guildIdA == guildId)
+                                                    && (channelIdA == channelId)
                                                     && (Id.threadRouteWithoutMessage threadRouteA == threadRouteB)
                                             then
                                                 Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition

@@ -564,19 +564,19 @@ uploadAvatar onResult file2 =
 uploadTrackerId : ( AnyGuildOrDmId, ThreadRoute ) -> Id FileId -> String
 uploadTrackerId ( guildOrDmId, threadRoute ) fileId =
     (case guildOrDmId of
-        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+        GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }) ->
             Id.toString guildId
                 ++ ","
                 ++ Id.toString channelId
 
-        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+        GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
             Id.toString otherUserId
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId channelId) ->
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild id) ->
             "d"
-                ++ Discord.idToString guildId
+                ++ Discord.idToString id.guildId
                 ++ ","
-                ++ Discord.idToString channelId
+                ++ Discord.idToString id.channelId
 
         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId, channelId }) ->
             "dd"

@@ -32,6 +32,9 @@ module Broadcast exposing
     , toUser
     , toUserAlt
     , userGetAllConnections
+    , usersViewing
+    , usersViewingDiscordChannel
+    , usersViewingDiscordDm
     )
 
 import Codec exposing (Codec)
@@ -50,7 +53,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
-import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
@@ -488,14 +491,13 @@ messageNotification :
     SeqSet (Id UserId)
     -> Time.Posix
     -> Id UserId
-    -> Id GuildId
-    -> Id ChannelId
+    -> Viewing_ChannelId
     -> ThreadRoute
     -> UserTextMessageData messageId (Id UserId)
     -> List (Id UserId)
     -> BackendModel
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
-messageNotification usersMentioned time sender guildId channelId threadRoute message members model =
+messageNotification usersMentioned time sender id threadRoute message members model =
     let
         plainText : String
         plainText =
@@ -507,7 +509,7 @@ messageNotification usersMentioned time sender guildId channelId threadRoute mes
                 (\userId ->
                     case NonemptyDict.get userId model.users of
                         Just user ->
-                            SeqSet.member guildId user.notifyOnAllMessages
+                            SeqSet.member id.guildId user.notifyOnAllMessages
 
                         Nothing ->
                             False
@@ -533,11 +535,11 @@ messageNotification usersMentioned time sender guildId channelId threadRoute mes
                         List.any
                             (\connection ->
                                 case ( connection.currentlyViewing, threadRoute ) of
-                                    ( UserSession.Viewing_Channel viewingGuildId viewingChannelId _, NoThread ) ->
-                                        viewingGuildId == guildId && viewingChannelId == channelId
+                                    ( UserSession.Viewing_Channel data, NoThread ) ->
+                                        data.id == id
 
-                                    ( UserSession.Viewing_ChannelThread viewingGuildId viewingChannelId viewingThreadId, ViewThread threadId ) ->
-                                        viewingGuildId == guildId && viewingChannelId == channelId && viewingThreadId == threadId
+                                    ( UserSession.Viewing_ChannelThread data, ViewThread threadId ) ->
+                                        data.id.guildId == id.guildId && data.id.channelId == id.channelId && data.id.threadId == threadId
 
                                     _ ->
                                         False
@@ -565,7 +567,7 @@ messageNotification usersMentioned time sender guildId channelId threadRoute mes
                                 )
                                 plainText
                                 (UserTextMessage message)
-                                (GuildRoute guildId (ChannelRoute channelId threadRouteWithFriends Nothing) |> Just)
+                                (GuildRoute id.guildId (ChannelRoute id.channelId threadRouteWithFriends Nothing) |> Just)
                                 sessions
                                 model
                                 |> Tuple.mapSecond (\a -> Command.batch a :: cmds)
@@ -633,11 +635,11 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                 List.any
                                     (\connection ->
                                         case ( connection.currentlyViewing, threadRoute ) of
-                                            ( UserSession.Viewing_DiscordChannel viewingGuildId viewingChannelId _, NoThread ) ->
-                                                viewingGuildId == guildId && viewingChannelId == channelId
+                                            ( UserSession.Viewing_DiscordChannel data, NoThread ) ->
+                                                data.id.guildId == guildId && data.id.channelId == channelId
 
-                                            ( UserSession.Viewing_DiscordChannelThread viewingGuildId viewingChannelId _ viewingThreadId, ViewThread threadId ) ->
-                                                viewingGuildId == guildId && viewingChannelId == channelId && viewingThreadId == threadId
+                                            ( UserSession.Viewing_DiscordChannelThread data, ViewThread threadId ) ->
+                                                data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadId
 
                                             _ ->
                                                 False
@@ -699,6 +701,123 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                         ( sessions, cmds )
             )
             ( model.sessions, [] )
+
+
+{-| Everyone with a client open on this conversation right now. A message arriving in it
+shouldn't leave them with something unread, so they need their last viewed message moved
+along with it.
+-}
+usersViewing : Id.AnyGuildOrDmId -> ThreadRoute -> BackendModel -> SeqSet (Id UserId)
+usersViewing guildOrDmId threadRoute model =
+    SeqDict.foldl
+        (\sessionId session set ->
+            case SeqDict.get sessionId model.connections of
+                Just connections ->
+                    if
+                        NonemptyDict.values connections
+                            |> List.Nonempty.any
+                                (\connection ->
+                                    UserSession.isViewing guildOrDmId threadRoute connection.currentlyViewing
+                                )
+                    then
+                        SeqSet.insert session.userId set
+
+                    else
+                        set
+
+                Nothing ->
+                    set
+        )
+        SeqSet.empty
+        model.sessions
+
+
+{-| Everyone with a client open on this Discord channel right now, along with the id the
+channel goes by for them. A Discord conversation keeps its unread state under the reader's
+own Discord account rather than the account that wrote the message, so the id can't be taken
+from the message.
+-}
+usersViewingDiscordChannel :
+    Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> ThreadRoute
+    -> BackendModel
+    -> List ( Id UserId, Id.AnyGuildOrDmId )
+usersViewingDiscordChannel guildId channelId threadRoute model =
+    viewingConnections
+        (\viewing ->
+            case ( viewing, threadRoute ) of
+                ( UserSession.Viewing_DiscordChannel data, NoThread ) ->
+                    if data.id.guildId == guildId && data.id.channelId == channelId then
+                        Id.DiscordGuildOrDmId (Id.DiscordGuildOrDmId_Guild data.id) |> Just
+
+                    else
+                        Nothing
+
+                ( UserSession.Viewing_DiscordChannelThread data, ViewThread threadId ) ->
+                    if data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadId then
+                        Id.DiscordGuildOrDmId
+                            (Id.DiscordGuildOrDmId_Guild
+                                { guildId = data.id.guildId
+                                , channelId = data.id.channelId
+                                , currentUserId = data.id.currentUserId
+                                }
+                            )
+                            |> Just
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
+        )
+        model
+
+
+{-| The same as `usersViewingDiscordChannel`, for a Discord DM channel.
+-}
+usersViewingDiscordDm :
+    Discord.Id Discord.PrivateChannelId
+    -> BackendModel
+    -> List ( Id UserId, Id.AnyGuildOrDmId )
+usersViewingDiscordDm channelId model =
+    viewingConnections
+        (\viewing ->
+            case viewing of
+                UserSession.Viewing_DiscordDm data ->
+                    if data.id.channelId == channelId then
+                        Id.DiscordGuildOrDmId (Id.DiscordGuildOrDmId_Dm data.id) |> Just
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
+        )
+        model
+
+
+viewingConnections :
+    (UserSession.Viewing -> Maybe Id.AnyGuildOrDmId)
+    -> BackendModel
+    -> List ( Id UserId, Id.AnyGuildOrDmId )
+viewingConnections toGuildOrDmId model =
+    SeqDict.toList model.sessions
+        |> List.concatMap
+            (\( sessionId, session ) ->
+                case SeqDict.get sessionId model.connections of
+                    Just connections ->
+                        NonemptyDict.values connections
+                            |> List.Nonempty.toList
+                            |> List.filterMap
+                                (\connection ->
+                                    toGuildOrDmId connection.currentlyViewing
+                                        |> Maybe.map (Tuple.pair session.userId)
+                                )
+
+                    Nothing ->
+                        []
+            )
 
 
 userGetAllConnections : Id UserId -> BackendModel -> List LocalState.ConnectionData
@@ -1001,8 +1120,8 @@ isViewingDiscordDm channelId userId2 model =
     List.any
         (\connection ->
             case connection.currentlyViewing of
-                UserSession.Viewing_DiscordDm _ channelIdB ->
-                    channelIdB == channelId
+                UserSession.Viewing_DiscordDm data ->
+                    data.id.channelId == channelId
 
                 _ ->
                     False
@@ -1087,35 +1206,35 @@ discordDmNotification time channelId senderId senderName senderIcon text message
 toDmChannelExcludingOne :
     ClientId
     -> Id UserId
-    -> Id UserId
-    -> (Id UserId -> ServerChange)
+    -> Viewing_DmId
+    -> (Viewing_DmId -> ServerChange)
     -> BackendModel
     -> Command BackendOnly ToFrontend BackendMsg
-toDmChannelExcludingOne clientId userId otherUserId serverMsg model =
-    if userId == otherUserId then
-        toUser (Just clientId) Nothing userId (serverMsg otherUserId |> ServerChange) model
+toDmChannelExcludingOne clientId userId id serverMsg model =
+    if userId == id.otherUserId then
+        toUser (Just clientId) Nothing userId (serverMsg id |> ServerChange) model
 
     else
         Command.batch
-            [ toUser (Just clientId) Nothing userId (serverMsg otherUserId |> ServerChange) model
-            , toUser (Just clientId) Nothing otherUserId (serverMsg userId |> ServerChange) model
+            [ toUser (Just clientId) Nothing userId (serverMsg id |> ServerChange) model
+            , toUser (Just clientId) Nothing id.otherUserId (serverMsg { otherUserId = userId } |> ServerChange) model
             ]
 
 
 toDmChannel :
     Id UserId
-    -> Id UserId
-    -> (Id UserId -> ServerChange)
+    -> Viewing_DmId
+    -> (Viewing_DmId -> ServerChange)
     -> BackendModel
     -> Command BackendOnly ToFrontend msg
-toDmChannel userId otherUserId serverMsg model =
-    if userId == otherUserId then
-        toUser Nothing Nothing userId (serverMsg otherUserId |> ServerChange) model
+toDmChannel userId id serverMsg model =
+    if userId == id.otherUserId then
+        toUser Nothing Nothing userId (serverMsg id |> ServerChange) model
 
     else
         Command.batch
-            [ toUser Nothing Nothing userId (serverMsg otherUserId |> ServerChange) model
-            , toUser Nothing Nothing otherUserId (serverMsg userId |> ServerChange) model
+            [ toUser Nothing Nothing userId (serverMsg id |> ServerChange) model
+            , toUser Nothing Nothing id.otherUserId (serverMsg { otherUserId = userId } |> ServerChange) model
             ]
 
 
@@ -1289,11 +1408,11 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
             List.any
                 (\connection ->
                     case ( connection.currentlyViewing, threadRouteWithReplyTo ) of
-                        ( UserSession.Viewing_Dm viewingUserId _, NoThreadWithMaybeMessage _ ) ->
-                            viewingUserId == userId
+                        ( UserSession.Viewing_Dm data, NoThreadWithMaybeMessage _ ) ->
+                            data.id.otherUserId == userId
 
-                        ( UserSession.Viewing_DmThread viewingUserId threadIdA, ViewThreadWithMaybeMessage threadIdB _ ) ->
-                            viewingUserId == userId && threadIdA == threadIdB
+                        ( UserSession.Viewing_DmThread data, ViewThreadWithMaybeMessage threadIdB _ ) ->
+                            data.id.otherUserId == userId && data.id.threadId == threadIdB
 
                         _ ->
                             False
@@ -1345,12 +1464,12 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
     , Command.batch
         [ LocalChangeResponse
             changeId
-            (Local_SendMessage time timezone (GuildOrDmId_Dm otherUserId) text threadRouteWithReplyTo attachedFiles emojis)
+            (Local_SendMessage time timezone (GuildOrDmId_Dm { otherUserId = otherUserId }) text threadRouteWithReplyTo attachedFiles emojis)
             |> Lamdera.sendToFrontend clientId
         , toDmChannelExcludingOne
             clientId
             userId
-            otherUserId
+            { otherUserId = otherUserId }
             (\otherUserId2 ->
                 Server_SendMessage
                     userId
@@ -1386,8 +1505,8 @@ gameStartedDmNotification time senderId otherUserId gameType model =
             List.any
                 (\connection ->
                     case connection.currentlyViewing of
-                        UserSession.Viewing_Dm viewingUserId _ ->
-                            viewingUserId == senderId
+                        UserSession.Viewing_Dm data ->
+                            data.id.otherUserId == senderId
 
                         _ ->
                             False
@@ -1447,13 +1566,12 @@ member not currently looking at the channel is notified.
 gameStartedGuildNotification :
     Time.Posix
     -> Id UserId
-    -> Id GuildId
-    -> Id ChannelId
+    -> Viewing_ChannelId
     -> Message.GameType
     -> List (Id UserId)
     -> BackendModel
     -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
-gameStartedGuildNotification time sender guildId channelId gameType members model =
+gameStartedGuildNotification time sender id gameType members model =
     let
         plainText : String
         plainText =
@@ -1480,8 +1598,8 @@ gameStartedGuildNotification time sender guildId channelId gameType members mode
                         List.any
                             (\connection ->
                                 case connection.currentlyViewing of
-                                    UserSession.Viewing_Channel viewingGuildId viewingChannelId _ ->
-                                        viewingGuildId == guildId && viewingChannelId == channelId
+                                    UserSession.Viewing_Channel data ->
+                                        data.id == id
 
                                     _ ->
                                         False
@@ -1509,7 +1627,7 @@ gameStartedGuildNotification time sender guildId channelId gameType members mode
                                 )
                                 plainText
                                 message
-                                (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing) |> Just)
+                                (GuildRoute id.guildId (ChannelRoute id.channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing) |> Just)
                                 sessions
                                 model
                                 |> Tuple.mapSecond (\a -> Command.batch a :: cmds)

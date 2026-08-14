@@ -20,7 +20,7 @@ import Game
 import GuildIcon
 import Html.Attributes
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_DiscordDmId)
 import LinkedAndOtherDiscordUsers
 import LocalState exposing (LocalState)
 import Message exposing (Message)
@@ -52,14 +52,14 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
     channelHeader
         isMobile
         (case guildOrDmIdNoThread of
-            GuildOrDmId_Dm otherUserId ->
+            GuildOrDmId_Dm { otherUserId } ->
                 if otherUserId == local.localUser.session.userId then
                     privateChatWithYourself isMobile model.route currentChannelHeaderTab local
 
                 else
                     privateChatWith isMobile model.route currentChannelHeaderTab otherUserId local name
 
-            GuildOrDmId_Guild guildId channelId ->
+            GuildOrDmId_Guild { guildId, channelId } ->
                 Ui.row
                     [ Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill ]
                     [ channelHeaderTabRow
@@ -75,7 +75,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                         [ voiceChatButton
                             isMobile
                             (Route.toChannelHeaderTab model.route)
-                            (GuildRoomId guildId channelId)
+                            (GuildRoomId { guildId = guildId, channelId = channelId })
                             local.localUser
                             local.calls
                         , Ui.Lazy.lazy2 gameButton isMobile currentChannelHeaderTab
@@ -93,7 +93,7 @@ thread isMobile name threadName guildOrDmIdNoThread local loggedIn model =
     channelHeader
         isMobile
         (case guildOrDmIdNoThread of
-            GuildOrDmId_Dm otherUserId ->
+            GuildOrDmId_Dm { otherUserId } ->
                 if otherUserId == local.localUser.session.userId then
                     privateChatWithYourselfInThread isMobile model.route (Route.toChannelHeaderTab model.route) local threadName
 
@@ -107,7 +107,7 @@ thread isMobile name threadName guildOrDmIdNoThread local loggedIn model =
                         name
                         threadName
 
-            GuildOrDmId_Guild _ _ ->
+            GuildOrDmId_Guild _ ->
                 Ui.row
                     [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill ]
                     [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
@@ -142,7 +142,7 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
                         discordPrivateChatWith isMobile model.route currentChannelHeaderTab name
                     ]
 
-            DiscordGuildOrDmId_Guild _ _ _ ->
+            DiscordGuildOrDmId_Guild _ ->
                 Ui.row
                     [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill ]
                     [ channelHeaderTabRow
@@ -176,7 +176,7 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
                 else
                     discordPrivateChatWith isMobile model.route (Route.toChannelHeaderTab model.route) name
 
-            DiscordGuildOrDmId_Guild _ _ _ ->
+            DiscordGuildOrDmId_Guild _ ->
                 Ui.row
                     [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis, Ui.contentCenterY, Ui.height Ui.fill ]
                     [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
@@ -192,7 +192,7 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
         (tabBodyView isMobile local loggedIn model)
 
 
-chattingWithYourself : DiscordGuildOrDmId_DmData -> LocalState -> Bool
+chattingWithYourself : Viewing_DiscordDmId -> LocalState -> Bool
 chattingWithYourself data local =
     case SeqDict.get data.channelId local.discordDmChannels of
         Just channel2 ->
@@ -514,7 +514,7 @@ dmHeaderButtons : Bool -> Route -> Maybe ChannelHeaderTab -> Id UserId -> LocalS
 dmHeaderButtons isMobile route currentTab otherUserId local =
     Ui.row
         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-        [ voiceChatButton isMobile currentTab (DmRoomId otherUserId) local.localUser local.calls
+        [ voiceChatButton isMobile currentTab (DmRoomId { otherUserId = otherUserId }) local.localUser local.calls
         , Ui.Lazy.lazy2 gameButton isMobile currentTab
         , drawingTab isMobile currentTab
         , channelSettingsTab isMobile (Route.toShowMembersTab route |> Just)
@@ -627,7 +627,7 @@ tabBodyView isMobile local loggedIn model =
                 ChannelRoute channelId _ (Just tab) ->
                     case tab of
                         ChannelHeaderTab_ChannelDescription ->
-                            case LocalState.getGuildAndChannel guildId channelId local of
+                            case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
                                 Just ( _, channel2 ) ->
                                     Just (channelDescriptionView (Just channel2.name) (ChannelDescription.toString channel2.description))
 
@@ -635,15 +635,15 @@ tabBodyView isMobile local loggedIn model =
                                     Nothing
 
                         ChannelHeaderTab_VoiceChat ->
-                            Call.view model.windowSize (GuildRoomId guildId channelId) local.calls loggedIn.voiceChat
+                            Call.view model.windowSize (GuildRoomId { guildId = guildId, channelId = channelId }) local.calls loggedIn.voiceChat
                                 |> Ui.map VoiceChatMsg
                                 |> Just
 
                         ChannelHeaderTab_Games maybeMatchId ->
-                            case LocalState.getGuildAndChannel guildId channelId local of
+                            case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
                                 Just ( _, channel2 ) ->
                                     gameTabBody
-                                        (GuildOrDmId_Guild guildId channelId)
+                                        (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
                                         maybeMatchId
                                         local
                                         loggedIn
@@ -674,7 +674,7 @@ tabBodyView isMobile local loggedIn model =
                     case dmRoute.tab of
                         Just (ChannelHeaderTab_Games maybeMatchId) ->
                             gameTabBody
-                                (GuildOrDmId_Dm otherUserId)
+                                (GuildOrDmId_Dm { otherUserId = otherUserId })
                                 maybeMatchId
                                 local
                                 loggedIn
@@ -682,7 +682,7 @@ tabBodyView isMobile local loggedIn model =
                                 model
 
                         Just ChannelHeaderTab_VoiceChat ->
-                            Call.view model.windowSize (DmRoomId otherUserId) local.calls loggedIn.voiceChat
+                            Call.view model.windowSize (DmRoomId { otherUserId = otherUserId }) local.calls loggedIn.voiceChat
                                 |> Ui.map VoiceChatMsg
                                 |> Just
 
@@ -915,15 +915,15 @@ drawingCanUndoOrRedo guildOrDmId anchor local =
                                     ( False, False )
     in
     case guildOrDmId of
-        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-            case LocalState.getGuildAndChannel guildId channelId local of
+        GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }) ->
+            case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
                 Just ( _, channel2 ) ->
                     helper local.localUser.session.userId channel2
 
                 Nothing ->
                     ( False, False )
 
-        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+        GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
             case SeqDict.get otherUserId local.dmChannels of
                 Just channel2 ->
                     helper local.localUser.session.userId channel2
@@ -931,7 +931,7 @@ drawingCanUndoOrRedo guildOrDmId anchor local =
                 Nothing ->
                     ( False, False )
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }) ->
             case LocalState.getDiscordGuildAndChannel guildId channelId local of
                 Just ( _, channel2 ) ->
                     helper currentUserId channel2
