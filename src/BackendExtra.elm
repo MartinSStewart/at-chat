@@ -62,7 +62,7 @@ import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Http
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DiscordDmId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import Lamdera.Wire3
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
@@ -399,7 +399,10 @@ unreadOverviewData userId user model =
                                     let
                                         guildOrDmId : AnyGuildOrDmId
                                         guildOrDmId =
-                                            DiscordGuildOrDmId (DiscordGuildOrDmId_Guild discordUserId guildId channelId)
+                                            DiscordGuildOrDmId
+                                                (DiscordGuildOrDmId_Guild
+                                                    { currentUserId = discordUserId, guildId = guildId, channelId = channelId }
+                                                )
                                     in
                                     if LocalState.canViewDiscordChannel guildId channel guild discordUserId then
                                         case channel.status of
@@ -507,7 +510,7 @@ unreadOverviewData userId user model =
                                     let
                                         guildOrDmId : AnyGuildOrDmId
                                         guildOrDmId =
-                                            GuildOrDmId (GuildOrDmId_Guild guildId channelId)
+                                            GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
                                     in
                                     case channel.status of
                                         ChannelActive ->
@@ -560,7 +563,7 @@ unreadOverviewData userId user model =
                             let
                                 guildOrDmId : AnyGuildOrDmId
                                 guildOrDmId =
-                                    GuildOrDmId (GuildOrDmId_Dm otherUserId)
+                                    GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId })
                             in
                             { channels =
                                 case unreadMessages (SeqDict.get guildOrDmId user.lastViewedMessage) dmChannel of
@@ -1550,8 +1553,7 @@ sendGuildMessage :
     -> Time.Zone
     -> ClientId
     -> ChangeId
-    -> Id GuildId
-    -> Id ChannelId
+    -> Viewing_ChannelId
     -> ThreadRouteWithMaybeMessage
     -> NonemptyString
     -> SeqDict (Id FileId) FileData
@@ -1560,8 +1562,8 @@ sendGuildMessage :
     -> BackendUser
     -> BackendGuild
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendGuildMessage model time timezone clientId changeId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles emojis session user guild =
-    case ( SeqDict.get channelId guild.channels, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of
+sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeReplyTo text attachedFiles emojis session user guild =
+    case ( SeqDict.get id.channelId guild.channels, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of
         ( Just channel, Ok sendMessageRateLimits ) ->
             let
                 richText : Nonempty (RichText (Id UserId))
@@ -1621,8 +1623,7 @@ sendGuildMessage model time timezone clientId changeId guildId channelId threadR
                                         usersMentioned2
                                         time
                                         session.userId
-                                        guildId
-                                        channelId
+                                        id
                                         threadRouteNoReply
                                         message2
                                         (MembersAndOwner.membersAndOwner guild.membersAndOwner)
@@ -1631,7 +1632,7 @@ sendGuildMessage model time timezone clientId changeId guildId channelId threadR
                             ( ( usersMentioned2, messageNotification, channel3 )
                             , Command.map
                                 identity
-                                (GotGuildMessageEmbed guildId channelId (ViewThreadWithMessage threadId messageId))
+                                (GotGuildMessageEmbed id.guildId id.channelId (ViewThreadWithMessage threadId messageId))
                                 cmds
                             , stickers2
                             )
@@ -2396,9 +2397,7 @@ rpcInvalidRequest model =
 asDiscordGuildChannelMember :
     BackendModel
     -> SessionId
-    -> Discord.Id Discord.GuildId
-    -> Discord.Id Discord.ChannelId
-    -> Discord.Id Discord.UserId
+    -> Viewing_DiscordChannelId
     ->
         (UserSession
          -> DiscordFullUserData
@@ -2411,23 +2410,23 @@ asDiscordGuildChannelMember :
             )
         )
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-asDiscordGuildChannelMember model sessionId guildId channelId discordUserId func =
+asDiscordGuildChannelMember model sessionId id func =
     case SeqDict.get sessionId model.sessions of
         Just session ->
             case
                 ( NonemptyDict.get session.userId model.users
-                , SeqDict.get guildId model.discordGuilds
-                , SeqDict.get discordUserId model.discordUsers
+                , SeqDict.get id.guildId model.discordGuilds
+                , SeqDict.get id.currentUserId model.discordUsers
                 )
             of
                 ( Just user, Just guild, Just (FullData discordUser) ) ->
-                    case SeqDict.get channelId guild.channels of
+                    case SeqDict.get id.channelId guild.channels of
                         Just channel ->
                             if
-                                LocalState.canViewDiscordChannel guildId channel guild discordUserId
+                                LocalState.canViewDiscordChannel id.guildId channel guild id.currentUserId
                                     && (discordUser.linkedTo == session.userId)
                             then
-                                case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                                case MembersAndOwner.isMember id.currentUserId guild.membersAndOwner of
                                     IsNotMember ->
                                         ( model, Command.none )
 
@@ -2660,7 +2659,7 @@ asUser model sessionId func =
 asDmUser :
     BackendModel
     -> SessionId
-    -> { otherUserId : Id UserId }
+    -> Viewing_DmId
     -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> DmChannel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asDmUser model sessionId { otherUserId } func =
@@ -2697,7 +2696,7 @@ asDmUserRpc :
     BackendModel
     -> SessionId
     -> ClientId
-    -> { otherUserId : Id UserId }
+    -> Viewing_DmId
     -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> DmChannel -> ( Result Http.Error String, BackendModel, Cmd BackendMsg ))
     -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
 asDmUserRpc model sessionId clientId { otherUserId } func =
@@ -2778,7 +2777,7 @@ asDiscordUser model sessionId discordUserId func =
 asDiscordDmUser :
     BackendModel
     -> SessionId
-    -> DiscordGuildOrDmId_DmData
+    -> Viewing_DiscordDmId
     ->
         (UserSession
          -> DiscordFullUserData
@@ -2813,7 +2812,7 @@ asDiscordDmUser model sessionId { currentUserId, channelId } func =
 asDiscordDmUser_AllowUserThatNeedsAuthAgain :
     BackendModel
     -> SessionId
-    -> DiscordGuildOrDmId_DmData
+    -> Viewing_DiscordDmId
     ->
         (UserSession
          -> NeedsAuthAgainData

@@ -148,7 +148,7 @@ import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileHash)
 import Game
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId)
 import IdArray exposing (IdArray)
 import LinkedAndOtherDiscordUsers
 import List.Extra
@@ -179,7 +179,7 @@ import UInt64
 import Unsafe
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendCurrentUser, FrontendUser, LocalUser)
-import UserSession exposing (FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), SetViewing_ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), SetViewing_ToBeFilledInByBackend(..), UserSession, Viewing_DiscordChannelData)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -381,15 +381,15 @@ type alias DiscordFrontendChannel =
 messageReactions : GuildOrDmId -> ThreadRouteWithMessage -> LocalState -> SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId))
 messageReactions guildOrDmId threadRoute local =
     case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
-            case getGuildAndChannel guildId channelId local of
+        GuildOrDmId_Guild id ->
+            case getGuildAndChannel id local of
                 Just ( _, channel ) ->
                     messageReactionsHelper channel threadRoute
 
                 Nothing ->
                     SeqDict.empty
 
-        GuildOrDmId_Dm otherUserId ->
+        GuildOrDmId_Dm { otherUserId } ->
             case SeqDict.get otherUserId local.dmChannels of
                 Just channel ->
                     messageReactionsHelper channel threadRoute
@@ -2080,7 +2080,7 @@ markAllChannelsAndThreadsAsViewedBackend guildId guild user =
             SeqDict.foldl
                 (\channelId channel state ->
                     SeqDict.insert
-                        (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
+                        (GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId }))
                         (DmChannel.latestMessageId channel)
                         state
                 )
@@ -2092,7 +2092,7 @@ markAllChannelsAndThreadsAsViewedBackend guildId guild user =
                     SeqDict.foldl
                         (\threadId thread state2 ->
                             SeqDict.insert
-                                ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadId )
+                                ( GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId }), threadId )
                                 (DmChannel.latestThreadMessageId thread)
                                 state2
                         )
@@ -2111,7 +2111,7 @@ markAllChannelsAndThreadsAsViewedFrontend guildId guild user =
             SeqDict.foldl
                 (\channelId channel state ->
                     SeqDict.insert
-                        (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
+                        (GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId }))
                         (DmChannel.latestFrontendMessageId channel)
                         state
                 )
@@ -2123,7 +2123,7 @@ markAllChannelsAndThreadsAsViewedFrontend guildId guild user =
                     SeqDict.foldl
                         (\threadId thread state2 ->
                             SeqDict.insert
-                                ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadId )
+                                ( GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId }), threadId )
                                 (DmChannel.latestFrontendThreadMessageId thread)
                                 state2
                         )
@@ -2391,8 +2391,8 @@ deleteMessageFrontendNoThread messageId channel =
             channel
 
 
-getGuildAndChannel : Id GuildId -> Id ChannelId -> LocalState -> Maybe ( FrontendGuild, FrontendChannel )
-getGuildAndChannel guildId channelId local =
+getGuildAndChannel : Viewing_ChannelId -> LocalState -> Maybe ( FrontendGuild, FrontendChannel )
+getGuildAndChannel { guildId, channelId } local =
     case SeqDict.get guildId local.guilds of
         Just guild ->
             case SeqDict.get channelId guild.channels of
@@ -2624,7 +2624,7 @@ repliedToUserIdFrontend maybeRepliedTo channel =
 canSendDiscordMessage : LocalState -> DiscordGuildOrDmId -> Result String ()
 canSendDiscordMessage local guildOrDmId =
     case guildOrDmId of
-        DiscordGuildOrDmId_Guild _ _ _ ->
+        DiscordGuildOrDmId_Guild _ ->
             Ok ()
 
         DiscordGuildOrDmId_Dm data ->
@@ -2711,15 +2711,17 @@ routeToViewing route local =
             if SeqDict.member guildId local.guilds then
                 case channelRoute of
                     ChannelRoute channelId threadRoute tab ->
+                        let
+                            id =
+                                { guildId = guildId, channelId = channelId }
+                        in
                         case threadRoute of
                             NoThreadWithFriends _ _ ->
                                 ViewChannel
-                                    { id = { guildId = guildId, channelId = channelId }
+                                    { id = id
                                     , channelHeaderTab = tab
                                     , previouslyLastViewedMessage =
-                                        previouslyLastViewedMessage
-                                            (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
-                                            local
+                                        previouslyLastViewedMessage (GuildOrDmId (GuildOrDmId_Guild id)) local
                                     }
                                     SetViewing_EmptyPlaceholder
 
@@ -2728,7 +2730,7 @@ routeToViewing route local =
                                     { id = { guildId = guildId, channelId = channelId, threadId = threadId }
                                     , previouslyLastViewedMessage =
                                         previouslyLastViewedThreadMessage
-                                            (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
+                                            (GuildOrDmId (GuildOrDmId_Guild id))
                                             threadId
                                             local
                                     }
@@ -2750,19 +2752,21 @@ routeToViewing route local =
             if SeqDict.member guildId local.discordGuilds then
                 case channelRoute of
                     DiscordChannel_ChannelRoute channelId threadRoute _ ->
+                        let
+                            id : Viewing_DiscordChannelId
+                            id =
+                                { guildId = guildId
+                                , channelId = channelId
+                                , currentUserId = currentDiscordUserId
+                                }
+                        in
                         case threadRoute of
                             NoThreadWithFriends _ _ ->
                                 ViewDiscordChannel
-                                    { id =
-                                        { guildId = guildId
-                                        , channelId = channelId
-                                        , currentUserId = currentDiscordUserId
-                                        }
+                                    { id = id
                                     , previouslyLastViewedMessage =
                                         previouslyLastViewedMessage
-                                            (DiscordGuildOrDmId
-                                                (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId)
-                                            )
+                                            (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild id))
                                             local
                                     }
                                     SetViewing_EmptyPlaceholder
@@ -2777,9 +2781,7 @@ routeToViewing route local =
                                         }
                                     , previouslyLastViewedMessage =
                                         previouslyLastViewedThreadMessage
-                                            (DiscordGuildOrDmId
-                                                (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId)
-                                            )
+                                            (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild id))
                                             threadId
                                             local
                                     }
@@ -2798,15 +2800,17 @@ routeToViewing route local =
             case DmChannelId.otherUserId local.localUser.session.userId channelId of
                 Just otherUserId ->
                     if SeqDict.member otherUserId local.dmChannels then
+                        let
+                            id =
+                                { otherUserId = otherUserId }
+                        in
                         case threadRoute of
                             NoThreadWithFriends _ _ ->
                                 ViewDm
-                                    { id = { otherUserId = otherUserId }
+                                    { id = id
                                     , channelHeaderTab = tab
                                     , previouslyLastViewedMessage =
-                                        previouslyLastViewedMessage
-                                            (GuildOrDmId (GuildOrDmId_Dm otherUserId))
-                                            local
+                                        previouslyLastViewedMessage (GuildOrDmId (GuildOrDmId_Dm id)) local
                                     }
                                     SetViewing_EmptyPlaceholder
 
@@ -2815,7 +2819,7 @@ routeToViewing route local =
                                     { id = { otherUserId = otherUserId, threadId = threadId }
                                     , previouslyLastViewedMessage =
                                         previouslyLastViewedThreadMessage
-                                            (GuildOrDmId (GuildOrDmId_Dm otherUserId))
+                                            (GuildOrDmId (GuildOrDmId_Dm id))
                                             threadId
                                             local
                                     }
@@ -2913,15 +2917,15 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                             Nothing
     in
     case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
-            case getGuildAndChannel guildId channelId local of
+        GuildOrDmId_Guild id ->
+            case getGuildAndChannel id local of
                 Just ( _, channel ) ->
                     helper channel
 
                 Nothing ->
                     Nothing
 
-        GuildOrDmId_Dm otherUserId ->
+        GuildOrDmId_Dm { otherUserId } ->
             case SeqDict.get otherUserId local.dmChannels of
                 Just dmChannel ->
                     helper dmChannel
@@ -2955,8 +2959,8 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                     Nothing
     in
     case guildOrDmId of
-        DiscordGuildOrDmId_Guild _ guildId channelId ->
-            case getDiscordGuildAndChannel guildId channelId local of
+        DiscordGuildOrDmId_Guild id ->
+            case getDiscordGuildAndChannel id.guildId id.channelId local of
                 Just ( _, channel ) ->
                     case threadRoute of
                         ViewThreadWithMessage threadId messageId ->
@@ -3019,15 +3023,15 @@ guildOrDmIdToLatestMessages count ( guildOrDmId, threadRoute ) local =
                     latestMessagesHelper count channel |> Just
     in
     case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
-            case getGuildAndChannel guildId channelId local of
+        GuildOrDmId_Guild id ->
+            case getGuildAndChannel id local of
                 Just ( _, channel ) ->
                     helper channel
 
                 Nothing ->
                     Nothing
 
-        GuildOrDmId_Dm otherUserId ->
+        GuildOrDmId_Dm { otherUserId } ->
             case SeqDict.get otherUserId local.dmChannels of
                 Just dmChannel ->
                     helper dmChannel
@@ -3095,8 +3099,8 @@ discordGuildOrDmIdToLatestMessages count guildOrDmId threadRoute local =
             latestMessagesHelper count channel |> Just
     in
     case guildOrDmId of
-        DiscordGuildOrDmId_Guild _ guildId channelId ->
-            case getDiscordGuildAndChannel guildId channelId local of
+        DiscordGuildOrDmId_Guild id ->
+            case getDiscordGuildAndChannel id.guildId id.channelId local of
                 Just ( _, channel ) ->
                     case threadRoute of
                         ViewThread threadMessageIndex ->
@@ -3113,8 +3117,8 @@ discordGuildOrDmIdToLatestMessages count guildOrDmId threadRoute local =
                 Nothing ->
                     Nothing
 
-        DiscordGuildOrDmId_Dm data ->
-            case SeqDict.get data.channelId local.discordDmChannels of
+        DiscordGuildOrDmId_Dm id ->
+            case SeqDict.get id.channelId local.discordDmChannels of
                 Just dmChannel ->
                     helper2 dmChannel
 
@@ -3125,8 +3129,8 @@ discordGuildOrDmIdToLatestMessages count guildOrDmId threadRoute local =
 guildOrDmIdToMessagesCount : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe Int
 guildOrDmIdToMessagesCount guildOrDmId threadRoute local =
     case guildOrDmId of
-        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-            case getGuildAndChannel guildId channelId local of
+        GuildOrDmId (GuildOrDmId_Guild id) ->
+            case getGuildAndChannel id local of
                 Just ( _, channel ) ->
                     case threadRoute of
                         ViewThread threadMessageIndex ->
@@ -3142,7 +3146,7 @@ guildOrDmIdToMessagesCount guildOrDmId threadRoute local =
                 Nothing ->
                     Nothing
 
-        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+        GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
             case SeqDict.get otherUserId local.dmChannels of
                 Just dmChannel ->
                     case threadRoute of
@@ -3159,8 +3163,8 @@ guildOrDmIdToMessagesCount guildOrDmId threadRoute local =
                 Nothing ->
                     Nothing
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId channelId) ->
-            case getDiscordGuildAndChannel guildId channelId local of
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild id) ->
+            case getDiscordGuildAndChannel id.guildId id.channelId local of
                 Just ( _, channel ) ->
                     case threadRoute of
                         ViewThread threadMessageIndex ->

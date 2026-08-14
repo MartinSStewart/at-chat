@@ -59,7 +59,7 @@ import FileStatus exposing (FileHash)
 import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId)
 import Json.Decode
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import MuteSettings
@@ -384,8 +384,7 @@ setDiscordGuildNotificationLevel guildId notificationLevel user =
 
 
 setLastChannelViewed :
-    Id GuildId
-    -> Id ChannelId
+    Viewing_ChannelId
     -> ThreadRouteWithMaybeMessage
     ->
         { a
@@ -401,7 +400,7 @@ setLastChannelViewed :
             , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
             , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
         }
-setLastChannelViewed guildId channelId threadRoute user =
+setLastChannelViewed id threadRoute user =
     let
         threadRouteNoMessage : ThreadRoute
         threadRouteNoMessage =
@@ -414,15 +413,15 @@ setLastChannelViewed guildId channelId threadRoute user =
 
         user2 =
             { user
-                | lastChannelViewed = SeqDict.insert guildId ( channelId, threadRouteNoMessage ) user.lastChannelViewed
+                | lastChannelViewed = SeqDict.insert id.guildId ( id.channelId, threadRouteNoMessage ) user.lastChannelViewed
                 , directMentions =
                     SeqDict.update
-                        guildId
+                        id.guildId
                         (\maybeDict ->
                             case maybeDict of
                                 Just dict ->
                                     NonemptyDict.toSeqDict dict
-                                        |> SeqDict.remove ( channelId, threadRouteNoMessage )
+                                        |> SeqDict.remove ( id.channelId, threadRouteNoMessage )
                                         |> NonemptyDict.fromSeqDict
 
                                 Nothing ->
@@ -436,7 +435,7 @@ setLastChannelViewed guildId channelId threadRoute user =
             { user2
                 | lastViewedThreadMessage =
                     SeqDict.insert
-                        ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadId )
+                        ( GuildOrDmId (GuildOrDmId_Guild id), threadId )
                         messageId
                         user2.lastViewedThreadMessage
             }
@@ -447,10 +446,7 @@ setLastChannelViewed guildId channelId threadRoute user =
         NoThreadWithMaybeMessage (Just messageId) ->
             { user2
                 | lastViewedMessage =
-                    SeqDict.insert
-                        (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
-                        messageId
-                        user2.lastViewedMessage
+                    SeqDict.insert (GuildOrDmId (GuildOrDmId_Guild id)) messageId user2.lastViewedMessage
             }
 
         NoThreadWithMaybeMessage Nothing ->
@@ -458,9 +454,7 @@ setLastChannelViewed guildId channelId threadRoute user =
 
 
 setLastDiscordChannelViewed :
-    Discord.Id Discord.UserId
-    -> Discord.Id Discord.GuildId
-    -> Discord.Id Discord.ChannelId
+    Viewing_DiscordChannelId
     -> ThreadRouteWithMaybeMessage
     ->
         { a
@@ -476,7 +470,7 @@ setLastDiscordChannelViewed :
             , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
             , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
         }
-setLastDiscordChannelViewed currentUserId guildId channelId threadRoute user =
+setLastDiscordChannelViewed id threadRoute user =
     let
         threadRouteNoMessage : ThreadRoute
         threadRouteNoMessage =
@@ -489,15 +483,16 @@ setLastDiscordChannelViewed currentUserId guildId channelId threadRoute user =
 
         user2 =
             { user
-                | lastDiscordChannelViewed = SeqDict.insert guildId ( channelId, threadRouteNoMessage ) user.lastDiscordChannelViewed
+                | lastDiscordChannelViewed =
+                    SeqDict.insert id.guildId ( id.channelId, threadRouteNoMessage ) user.lastDiscordChannelViewed
                 , discordDirectMentions =
                     SeqDict.update
-                        guildId
+                        id.guildId
                         (\maybeDict ->
                             case maybeDict of
                                 Just dict ->
                                     NonemptyDict.toSeqDict dict
-                                        |> SeqDict.remove ( channelId, threadRouteNoMessage )
+                                        |> SeqDict.remove ( id.channelId, threadRouteNoMessage )
                                         |> NonemptyDict.fromSeqDict
 
                                 Nothing ->
@@ -511,7 +506,7 @@ setLastDiscordChannelViewed currentUserId guildId channelId threadRoute user =
             { user2
                 | lastViewedThreadMessage =
                     SeqDict.insert
-                        ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId), threadId )
+                        ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild id), threadId )
                         messageId
                         user2.lastViewedThreadMessage
             }
@@ -523,7 +518,7 @@ setLastDiscordChannelViewed currentUserId guildId channelId threadRoute user =
             { user2
                 | lastViewedMessage =
                     SeqDict.insert
-                        (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId))
+                        (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild id))
                         messageId
                         user2.lastViewedMessage
             }
@@ -533,7 +528,7 @@ setLastDiscordChannelViewed currentUserId guildId channelId threadRoute user =
 
 
 setLastDmViewed :
-    Id UserId
+    Viewing_DmId
     -> ThreadRouteWithMaybeMessage
     ->
         { a
@@ -547,13 +542,13 @@ setLastDmViewed :
             , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
             , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
         }
-setLastDmViewed otherUserId threadRoute user =
+setLastDmViewed id threadRoute user =
     let
         user2 =
             { user
                 | lastDmViewed =
                     DmChannelLastViewed
-                        otherUserId
+                        id.otherUserId
                         (case threadRoute of
                             ViewThreadWithMaybeMessage threadId _ ->
                                 ViewThread threadId
@@ -568,7 +563,7 @@ setLastDmViewed otherUserId threadRoute user =
             { user2
                 | lastViewedThreadMessage =
                     SeqDict.insert
-                        ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadId )
+                        ( GuildOrDmId (GuildOrDmId_Dm id), threadId )
                         messageId
                         user2.lastViewedThreadMessage
             }
@@ -580,7 +575,7 @@ setLastDmViewed otherUserId threadRoute user =
             { user2
                 | lastViewedMessage =
                     SeqDict.insert
-                        (GuildOrDmId (GuildOrDmId_Dm otherUserId))
+                        (GuildOrDmId (GuildOrDmId_Dm id))
                         messageId
                         user2.lastViewedMessage
             }

@@ -13,19 +13,12 @@ module UserSession exposing
     , ViewDiscordGuildData
     , Viewing(..)
     , Viewing_ChannelData
-    , Viewing_ChannelId
     , Viewing_ChannelThreadData
-    , Viewing_ChannelThreadId
     , Viewing_DiscordChannelData
-    , Viewing_DiscordChannelId
     , Viewing_DiscordChannelThreadData
-    , Viewing_DiscordChannelThreadId
     , Viewing_DiscordDmData
-    , Viewing_DiscordDmId
     , Viewing_DmData
-    , Viewing_DmId
     , Viewing_DmThreadData
-    , Viewing_DmThreadId
     , init
     , isViewing
     , isViewingGame
@@ -39,7 +32,7 @@ import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import FileStatus exposing (FileHash)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_ChannelThreadId, Viewing_DiscordChannelId, Viewing_DiscordChannelThreadId, Viewing_DiscordDmId, Viewing_DmId, Viewing_DmThreadId)
 import Message exposing (Message)
 import PersonName exposing (PersonName)
 import Ports exposing (SubscribeData)
@@ -127,32 +120,15 @@ type alias Viewing_DmData =
     }
 
 
-type alias Viewing_DmId =
-    { otherUserId : Id UserId
-    }
-
-
 type alias Viewing_DmThreadData =
     { id : Viewing_DmThreadId
     , previouslyLastViewedMessage : PreviouslyLastViewedMessage ThreadMessageId
     }
 
 
-type alias Viewing_DmThreadId =
-    { otherUserId : Id UserId
-    , threadId : Id ChannelMessageId
-    }
-
-
 type alias Viewing_DiscordDmData =
     { id : Viewing_DiscordDmId
     , previouslyLastViewedMessage : PreviouslyLastViewedMessage ChannelMessageId
-    }
-
-
-type alias Viewing_DiscordDmId =
-    { currentUserId : Discord.Id Discord.UserId
-    , channelId : Discord.Id Discord.PrivateChannelId
     }
 
 
@@ -163,22 +139,9 @@ type alias Viewing_ChannelData =
     }
 
 
-type alias Viewing_ChannelId =
-    { guildId : Id GuildId
-    , channelId : Id ChannelId
-    }
-
-
 type alias Viewing_ChannelThreadData =
     { id : Viewing_ChannelThreadId
     , previouslyLastViewedMessage : PreviouslyLastViewedMessage ThreadMessageId
-    }
-
-
-type alias Viewing_ChannelThreadId =
-    { guildId : Id GuildId
-    , channelId : Id ChannelId
-    , threadId : Id ChannelMessageId
     }
 
 
@@ -188,24 +151,9 @@ type alias Viewing_DiscordChannelData =
     }
 
 
-type alias Viewing_DiscordChannelId =
-    { guildId : Discord.Id Discord.GuildId
-    , channelId : Discord.Id Discord.ChannelId
-    , currentUserId : Discord.Id Discord.UserId
-    }
-
-
 type alias Viewing_DiscordChannelThreadData =
     { id : Viewing_DiscordChannelThreadId
     , previouslyLastViewedMessage : PreviouslyLastViewedMessage ThreadMessageId
-    }
-
-
-type alias Viewing_DiscordChannelThreadId =
-    { guildId : Discord.Id Discord.GuildId
-    , channelId : Discord.Id Discord.ChannelId
-    , currentUserId : Discord.Id Discord.UserId
-    , threadId : Id ChannelMessageId
     }
 
 
@@ -309,25 +257,34 @@ isViewing : AnyGuildOrDmId -> ThreadRoute -> Viewing -> Bool
 isViewing guildOrDmId threadRoute viewing =
     case ( viewing, threadRoute ) of
         ( Viewing_Dm data, NoThread ) ->
-            guildOrDmId == GuildOrDmId (GuildOrDmId_Dm data.id.otherUserId)
+            guildOrDmId == GuildOrDmId (GuildOrDmId_Dm data.id)
 
         ( Viewing_DmThread data, ViewThread threadId ) ->
-            guildOrDmId == GuildOrDmId (GuildOrDmId_Dm data.id.otherUserId) && data.id.threadId == threadId
+            guildOrDmId == GuildOrDmId (GuildOrDmId_Dm { otherUserId = data.id.otherUserId }) && data.id.threadId == threadId
 
         ( Viewing_DiscordDm data, NoThread ) ->
             guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = data.id.currentUserId, channelId = data.id.channelId })
 
         ( Viewing_Channel data, NoThread ) ->
-            guildOrDmId == GuildOrDmId (GuildOrDmId_Guild data.id.guildId data.id.channelId)
+            guildOrDmId == GuildOrDmId (GuildOrDmId_Guild data.id)
 
         ( Viewing_ChannelThread data, ViewThread threadId ) ->
-            guildOrDmId == GuildOrDmId (GuildOrDmId_Guild data.id.guildId data.id.channelId) && data.id.threadId == threadId
+            (guildOrDmId == GuildOrDmId (GuildOrDmId_Guild { guildId = data.id.guildId, channelId = data.id.channelId }))
+                && (data.id.threadId == threadId)
 
         ( Viewing_DiscordChannel data, NoThread ) ->
-            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Guild data.id.currentUserId data.id.guildId data.id.channelId)
+            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Guild data.id)
 
         ( Viewing_DiscordChannelThread data, ViewThread threadId ) ->
-            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Guild data.id.currentUserId data.id.guildId data.id.channelId) && data.id.threadId == threadId
+            guildOrDmId
+                == DiscordGuildOrDmId
+                    (DiscordGuildOrDmId_Guild
+                        { currentUserId = data.id.currentUserId
+                        , guildId = data.id.guildId
+                        , channelId = data.id.channelId
+                        }
+                    )
+                && (data.id.threadId == threadId)
 
         _ ->
             False

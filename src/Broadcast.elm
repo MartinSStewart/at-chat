@@ -50,7 +50,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
-import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
@@ -488,14 +488,13 @@ messageNotification :
     SeqSet (Id UserId)
     -> Time.Posix
     -> Id UserId
-    -> Id GuildId
-    -> Id ChannelId
+    -> Viewing_ChannelId
     -> ThreadRoute
     -> UserTextMessageData messageId (Id UserId)
     -> List (Id UserId)
     -> BackendModel
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
-messageNotification usersMentioned time sender guildId channelId threadRoute message members model =
+messageNotification usersMentioned time sender id threadRoute message members model =
     let
         plainText : String
         plainText =
@@ -507,7 +506,7 @@ messageNotification usersMentioned time sender guildId channelId threadRoute mes
                 (\userId ->
                     case NonemptyDict.get userId model.users of
                         Just user ->
-                            SeqSet.member guildId user.notifyOnAllMessages
+                            SeqSet.member id.guildId user.notifyOnAllMessages
 
                         Nothing ->
                             False
@@ -534,10 +533,10 @@ messageNotification usersMentioned time sender guildId channelId threadRoute mes
                             (\connection ->
                                 case ( connection.currentlyViewing, threadRoute ) of
                                     ( UserSession.Viewing_Channel data, NoThread ) ->
-                                        data.id.guildId == guildId && data.id.channelId == channelId
+                                        data.id == id
 
                                     ( UserSession.Viewing_ChannelThread data, ViewThread threadId ) ->
-                                        data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadId
+                                        data.id.guildId == id.guildId && data.id.channelId == id.channelId && data.id.threadId == threadId
 
                                     _ ->
                                         False
@@ -565,7 +564,7 @@ messageNotification usersMentioned time sender guildId channelId threadRoute mes
                                 )
                                 plainText
                                 (UserTextMessage message)
-                                (GuildRoute guildId (ChannelRoute channelId threadRouteWithFriends Nothing) |> Just)
+                                (GuildRoute id.guildId (ChannelRoute id.channelId threadRouteWithFriends Nothing) |> Just)
                                 sessions
                                 model
                                 |> Tuple.mapSecond (\a -> Command.batch a :: cmds)
@@ -1087,35 +1086,35 @@ discordDmNotification time channelId senderId senderName senderIcon text message
 toDmChannelExcludingOne :
     ClientId
     -> Id UserId
-    -> Id UserId
-    -> (Id UserId -> ServerChange)
+    -> Viewing_DmId
+    -> (Viewing_DmId -> ServerChange)
     -> BackendModel
     -> Command BackendOnly ToFrontend BackendMsg
-toDmChannelExcludingOne clientId userId otherUserId serverMsg model =
-    if userId == otherUserId then
-        toUser (Just clientId) Nothing userId (serverMsg otherUserId |> ServerChange) model
+toDmChannelExcludingOne clientId userId id serverMsg model =
+    if userId == id.otherUserId then
+        toUser (Just clientId) Nothing userId (serverMsg id |> ServerChange) model
 
     else
         Command.batch
-            [ toUser (Just clientId) Nothing userId (serverMsg otherUserId |> ServerChange) model
-            , toUser (Just clientId) Nothing otherUserId (serverMsg userId |> ServerChange) model
+            [ toUser (Just clientId) Nothing userId (serverMsg id |> ServerChange) model
+            , toUser (Just clientId) Nothing id.otherUserId (serverMsg { otherUserId = userId } |> ServerChange) model
             ]
 
 
 toDmChannel :
     Id UserId
-    -> Id UserId
-    -> (Id UserId -> ServerChange)
+    -> Viewing_DmId
+    -> (Viewing_DmId -> ServerChange)
     -> BackendModel
     -> Command BackendOnly ToFrontend msg
-toDmChannel userId otherUserId serverMsg model =
-    if userId == otherUserId then
-        toUser Nothing Nothing userId (serverMsg otherUserId |> ServerChange) model
+toDmChannel userId id serverMsg model =
+    if userId == id.otherUserId then
+        toUser Nothing Nothing userId (serverMsg id |> ServerChange) model
 
     else
         Command.batch
-            [ toUser Nothing Nothing userId (serverMsg otherUserId |> ServerChange) model
-            , toUser Nothing Nothing otherUserId (serverMsg userId |> ServerChange) model
+            [ toUser Nothing Nothing userId (serverMsg id |> ServerChange) model
+            , toUser Nothing Nothing id.otherUserId (serverMsg { otherUserId = userId } |> ServerChange) model
             ]
 
 
@@ -1345,12 +1344,12 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
     , Command.batch
         [ LocalChangeResponse
             changeId
-            (Local_SendMessage time timezone (GuildOrDmId_Dm otherUserId) text threadRouteWithReplyTo attachedFiles emojis)
+            (Local_SendMessage time timezone (GuildOrDmId_Dm { otherUserId = otherUserId }) text threadRouteWithReplyTo attachedFiles emojis)
             |> Lamdera.sendToFrontend clientId
         , toDmChannelExcludingOne
             clientId
             userId
-            otherUserId
+            { otherUserId = otherUserId }
             (\otherUserId2 ->
                 Server_SendMessage
                     userId
