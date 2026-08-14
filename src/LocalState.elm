@@ -118,6 +118,7 @@ module LocalState exposing
     , messageReactionsHelper
     , messageReactionsNoThread
     , messageToString
+    , ownMessageIsReadFrontend
     , removeInvite
     , removeReactionEmoji
     , removeReactionEmojiFrontend
@@ -2480,6 +2481,31 @@ incrementLastViewedMessageFrontend guildOrDmId threadRoute ( viewing, user ) =
         ( viewing, user )
 
 
+{-| A message the user made themselves is read the moment it exists, whether that's a
+message they wrote or the card left behind by a call or a game they started. The unread
+divider follows it down only when they had nothing unread above it, so that making one
+doesn't quietly clear a divider they still have messages to read under.
+-}
+ownMessageIsReadFrontend :
+    AnyGuildOrDmId
+    -> ThreadRouteWithMessage
+    -> ( UserSession.Viewing, BackendUser )
+    -> ( UserSession.Viewing, BackendUser )
+ownMessageIsReadFrontend guildOrDmId threadRoute ( viewing, user ) =
+    ( if hasCaughtUp guildOrDmId threadRoute user then
+        case threadRoute of
+            NoThreadWithMessage messageId ->
+                UserSession.setPreviouslyLastViewedChannelMessage messageId viewing
+
+            ViewThreadWithMessage _ messageId ->
+                UserSession.setPreviouslyLastViewedThreadMessage messageId viewing
+
+      else
+        viewing
+    , User.setLastViewedMessage guildOrDmId threadRoute user
+    )
+
+
 hasCaughtUp : AnyGuildOrDmId -> ThreadRouteWithMessage -> BackendUser -> Bool
 hasCaughtUp guildOrDmId threadRoute user =
     case threadRoute of
@@ -2730,15 +2756,16 @@ sentEnoughDiscordDmMessages currentUserId channel =
 {-| Where the last viewed message of a channel sat before the user opened it. Entering a
 channel marks it as read, so this is what keeps its unread messages visible while the user is
 still looking at them.
+
+A channel with no entry has never been opened, so the reader has seen nothing in it and the
+divider belongs above everything rather than nowhere.
+
 -}
 previouslyLastViewedMessage : AnyGuildOrDmId -> LocalState -> PreviouslyLastViewedMessage ChannelMessageId
 previouslyLastViewedMessage guildOrDmId local =
-    case SeqDict.get guildOrDmId local.localUser.user.lastViewedMessage of
-        Just lastViewed ->
-            PreviouslyLastViewedMessage lastViewed
-
-        Nothing ->
-            DontCare
+    SeqDict.get guildOrDmId local.localUser.user.lastViewedMessage
+        |> Maybe.withDefault (Id.fromInt -1)
+        |> PreviouslyLastViewedMessage
 
 
 previouslyLastViewedThreadMessage :
@@ -2747,12 +2774,9 @@ previouslyLastViewedThreadMessage :
     -> LocalState
     -> PreviouslyLastViewedMessage ThreadMessageId
 previouslyLastViewedThreadMessage guildOrDmId threadId local =
-    case SeqDict.get ( guildOrDmId, threadId ) local.localUser.user.lastViewedThreadMessage of
-        Just lastViewed ->
-            PreviouslyLastViewedMessage lastViewed
-
-        Nothing ->
-            DontCare
+    SeqDict.get ( guildOrDmId, threadId ) local.localUser.user.lastViewedThreadMessage
+        |> Maybe.withDefault (Id.fromInt -1)
+        |> PreviouslyLastViewedMessage
 
 
 routeToViewing : Route -> LocalState -> SetViewing
