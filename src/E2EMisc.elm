@@ -638,6 +638,7 @@ staysReadWhileViewingTest config =
                 , user.click 100 (Dom.id "guild_openGuild_1")
                 , user.click 100 (Dom.id "guild_openChannel_0")
                 , markAsUnread user (Id.fromInt 2)
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "new" ])
                 , user.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
                 , admin.click 100 (Dom.id "guild_openGuild_1")
                 , admin.click 100 (Dom.id "guild_openChannel_0")
