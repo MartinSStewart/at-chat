@@ -580,10 +580,6 @@ checkDmRouteWithUser otherUserId model =
             Err "Expected the frontend to have finished loading"
 
 
-{-| The message menu marks a message and everything after it as unread. Leaving a channel is
-what normally marks it as read, so the mark has to survive that, and hovering the messages it
-puts in the unread overview restarts their animations the way hovering does in a channel.
--}
 markMessageAsUnreadTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2

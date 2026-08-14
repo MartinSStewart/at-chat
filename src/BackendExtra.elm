@@ -1688,6 +1688,7 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                     SeqSet.foldl
                         (\userId2 users ->
                             let
+                                isViewing : Bool
                                 isViewing =
                                     List.any
                                         (\connection ->
@@ -1695,14 +1696,16 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                                         )
                                         (Broadcast.userGetAllConnections userId2 model)
                             in
-                            if isViewing then
-                                users
+                            NonemptyDict.updateIfExists
+                                userId2
+                                (\user2 ->
+                                    if isViewing then
+                                        LocalState.incrementLastViewedMessageBackend (GuildOrDmId guildOrDmId) threadRouteNoReply channel2 user2
 
-                            else
-                                NonemptyDict.updateIfExists
-                                    userId2
-                                    (User.addDirectMention id.guildId id.channelId threadRouteNoReply)
-                                    users
+                                    else
+                                        User.addDirectMention id.guildId id.channelId threadRouteNoReply user2
+                                )
+                                users
                         )
                         model.users
                         usersMentioned

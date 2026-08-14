@@ -3659,8 +3659,8 @@ changeUpdate localMsg local =
                                         user =
                                             localUser.user
 
-                                        isNotViewing : Bool
-                                        isNotViewing =
+                                        isViewing2 : Bool
+                                        isViewing2 =
                                             isViewing
                                                 (GuildOrDmId guildOrDmId)
                                                 (case threadRouteWithRepliedTo of
@@ -3671,7 +3671,6 @@ changeUpdate localMsg local =
                                                         NoThread
                                                 )
                                                 local
-                                                |> not
                                     in
                                     { local
                                         | guilds =
@@ -3689,54 +3688,57 @@ changeUpdate localMsg local =
                                         , localUser =
                                             { localUser
                                                 | user =
-                                                    if createdBy == localUser.session.userId then
-                                                        case threadRouteWithRepliedTo of
-                                                            ViewThreadWithMaybeMessage threadId _ ->
-                                                                { user
-                                                                    | lastViewedThreadMessage =
-                                                                        SeqDict.insert
-                                                                            ( GuildOrDmId guildOrDmId, threadId )
-                                                                            (SeqDict.get threadId channel.threads
-                                                                                |> Maybe.withDefault Thread.frontendInit
-                                                                                |> .messages
-                                                                                |> MessageArray.length
-                                                                                |> Id.fromInt
-                                                                            )
-                                                                            user.lastViewedThreadMessage
-                                                                }
+                                                    case ( isViewing2, createdBy == localUser.session.userId ) of
+                                                        ( _, True ) ->
+                                                            case threadRouteWithRepliedTo of
+                                                                ViewThreadWithMaybeMessage threadId _ ->
+                                                                    { user
+                                                                        | lastViewedThreadMessage =
+                                                                            SeqDict.insert
+                                                                                ( GuildOrDmId guildOrDmId, threadId )
+                                                                                (SeqDict.get threadId channel.threads
+                                                                                    |> Maybe.withDefault Thread.frontendInit
+                                                                                    |> .messages
+                                                                                    |> MessageArray.length
+                                                                                    |> Id.fromInt
+                                                                                )
+                                                                                user.lastViewedThreadMessage
+                                                                    }
 
-                                                            NoThreadWithMaybeMessage _ ->
-                                                                { user
-                                                                    | lastViewedMessage =
-                                                                        SeqDict.insert
-                                                                            (GuildOrDmId guildOrDmId)
-                                                                            (MessageArray.length channel.messages |> Id.fromInt)
-                                                                            user.lastViewedMessage
-                                                                }
+                                                                NoThreadWithMaybeMessage _ ->
+                                                                    { user
+                                                                        | lastViewedMessage =
+                                                                            SeqDict.insert
+                                                                                (GuildOrDmId guildOrDmId)
+                                                                                (MessageArray.length channel.messages |> Id.fromInt)
+                                                                                user.lastViewedMessage
+                                                                    }
 
-                                                    else if
-                                                        isNotViewing
-                                                            && (LocalState.usersMentionedOrRepliedToFrontend
+                                                        ( True, _ ) ->
+                                                            Debug.todo ""
+
+                                                        ( False, _ ) ->
+                                                            if
+                                                                LocalState.usersMentionedOrRepliedToFrontend
                                                                     threadRouteWithRepliedTo
                                                                     text
                                                                     channel
                                                                     |> SeqSet.member localUser.session.userId
-                                                               )
-                                                    then
-                                                        User.addDirectMention
-                                                            id.guildId
-                                                            id.channelId
-                                                            (case threadRouteWithRepliedTo of
-                                                                ViewThreadWithMaybeMessage threadId _ ->
-                                                                    ViewThread threadId
+                                                            then
+                                                                User.addDirectMention
+                                                                    id.guildId
+                                                                    id.channelId
+                                                                    (case threadRouteWithRepliedTo of
+                                                                        ViewThreadWithMaybeMessage threadId _ ->
+                                                                            ViewThread threadId
 
-                                                                NoThreadWithMaybeMessage _ ->
-                                                                    NoThread
-                                                            )
-                                                            user
+                                                                        NoThreadWithMaybeMessage _ ->
+                                                                            NoThread
+                                                                    )
+                                                                    user
 
-                                                    else
-                                                        user
+                                                            else
+                                                                user
                                                 , otherUsers = addMessageSender createdBy createdByUser localUser
                                                 , stickers = SeqDict.union stickers localUser.stickers
                                             }

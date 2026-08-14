@@ -96,6 +96,8 @@ module LocalState exposing
     , guildOrDmIdToMessagesCount
     , guildToFrontend
     , guildToFrontendForUser
+    , incrementLastViewedMessageBackend
+    , incrementLastViewedMessageFrontend
     , isDiscordDmChannelReloading
     , isDiscordGuildChannelReloading
     , loadingDiscordChannelMap
@@ -2429,6 +2431,58 @@ getDiscordGuildAndChannel guildId channelId local =
 
         Nothing ->
             Nothing
+
+
+incrementLastViewedMessageBackend :
+    AnyGuildOrDmId
+    -> ThreadRoute
+    -> { a | messages : IdArray ChannelMessageId c, threads : SeqDict (Id ChannelMessageId) { d | messages : IdArray ThreadMessageId e } }
+    -> BackendUser
+    -> BackendUser
+incrementLastViewedMessageBackend guildOrDmId threadRouteNoReply channel2 user2 =
+    case threadRouteNoReply of
+        NoThread ->
+            User.setLastViewedMessage
+                guildOrDmId
+                (NoThreadWithMessage (DmChannel.latestMessageId channel2))
+                user2
+
+        ViewThread threadId ->
+            case SeqDict.get threadId channel2.threads of
+                Just thread ->
+                    User.setLastViewedMessage
+                        guildOrDmId
+                        (ViewThreadWithMessage threadId (DmChannel.latestThreadMessageId thread))
+                        user2
+
+                Nothing ->
+                    user2
+
+
+incrementLastViewedMessageFrontend :
+    AnyGuildOrDmId
+    -> ThreadRoute
+    -> ( UserSession.Viewing, BackendUser )
+    -> { a | messages : MessageArray ChannelMessageId c, threads : SeqDict (Id ChannelMessageId) { d | messages : MessageArray ThreadMessageId e } }
+    -> ( UserSession.Viewing, BackendUser )
+incrementLastViewedMessageFrontend guildOrDmId threadRouteNoReply user2 channel2 =
+    case threadRouteNoReply of
+        NoThread ->
+            User.setLastViewedMessage
+                guildOrDmId
+                (NoThreadWithMessage (DmChannel.latestFrontendMessageId channel2))
+                user2
+
+        ViewThread threadId ->
+            case SeqDict.get threadId channel2.threads of
+                Just thread ->
+                    User.setLastViewedMessage
+                        guildOrDmId
+                        (ViewThreadWithMessage threadId (DmChannel.latestFrontendThreadMessageId thread))
+                        user2
+
+                Nothing ->
+                    user2
 
 
 addEmbedBackend :
