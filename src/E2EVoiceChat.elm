@@ -1,4 +1,4 @@
-module E2EVoiceChat exposing (voiceChatTest)
+module E2EVoiceChat exposing (startCall, voiceChatTest)
 
 import Audio
 import Call

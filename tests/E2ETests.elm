@@ -323,6 +323,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , E2EMisc.inactiveThreadsAreHiddenTest normalConfig
     , E2EMisc.dmThreadsTest normalConfig
+    , E2EMisc.startingACallOrGameStaysReadTest normalConfig
     , E2EMisc.markMessageAsUnreadTest normalConfig
     , E2EMisc.staysReadWhileViewingTest normalConfig
     , E2EMisc.inactiveDmThreadsAreHiddenTest normalConfig

@@ -6102,6 +6102,12 @@ handleGuildGoGame time session clientId changeId id matchId goChange guild chann
                                     guild.channels
                         }
                         model.guilds
+                , users =
+                    BackendExtra.ownMessageIsReadBackend
+                        session.userId
+                        (GuildOrDmId guildOrDmId)
+                        messageId
+                        model.users
               }
             , Command.batch
                 [ Local_Game guildOrDmId localMsg2
@@ -6207,6 +6213,12 @@ handleDmGoGame time session clientId changeId id matchId goChange dmChannelId dm
                                     dmChannel2.games
                         }
                         model.dmChannels
+                , users =
+                    BackendExtra.ownMessageIsReadBackend
+                        session.userId
+                        (GuildOrDmId (GuildOrDmId_Dm id))
+                        messageId
+                        model.users
               }
             , Command.batch
                 [ Local_Game (GuildOrDmId_Dm id) localMsg2
@@ -6369,6 +6381,12 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
 
                         else
                             model.wordSpellingGameSwedish
+                    , users =
+                        BackendExtra.ownMessageIsReadBackend
+                            session.userId
+                            (GuildOrDmId guildOrDmId)
+                            messageId
+                            model.users
                 }
             , Command.batch
                 [ Local_Game guildOrDmId localMsg2
@@ -6882,6 +6900,23 @@ joinDmVoiceChat sessionId clientId time id model userId =
                         voiceChatId =
                             Call.DmRoomId id
 
+                        startsTheCall : Bool
+                        startsTheCall =
+                            dmVoiceChatRoomHasOtherMembers dmChannelId clientId model2 |> not
+
+                        ( messageId, dmChannel2 ) =
+                            LocalState.createChannelMessageBackend
+                                (CallStarted
+                                    { startedAt = time
+                                    , endedAt = Nothing
+                                    , startedBy = userId
+                                    , reactions = SeqDict.empty
+                                    , timestampDrawings = Drawing.emptyDrawing
+                                    , cardDrawings = Drawing.emptyDrawing
+                                    }
+                                )
+                                dmChannel
+
                         model3 : BackendModel
                         model3 =
                             { model2
@@ -6896,26 +6931,21 @@ joinDmVoiceChat sessionId clientId time id model userId =
                                         )
                                         model2.connections
                                 , dmChannels =
-                                    if dmVoiceChatRoomHasOtherMembers dmChannelId clientId model2 then
-                                        model2.dmChannels
+                                    if startsTheCall then
+                                        SeqDict.insert dmChannelId dmChannel2 model2.dmChannels
 
                                     else
-                                        SeqDict.insert
-                                            dmChannelId
-                                            (LocalState.createChannelMessageBackend
-                                                (CallStarted
-                                                    { startedAt = time
-                                                    , endedAt = Nothing
-                                                    , startedBy = userId
-                                                    , reactions = SeqDict.empty
-                                                    , timestampDrawings = Drawing.emptyDrawing
-                                                    , cardDrawings = Drawing.emptyDrawing
-                                                    }
-                                                )
-                                                dmChannel
-                                                |> Tuple.second
-                                            )
-                                            model2.dmChannels
+                                        model2.dmChannels
+                                , users =
+                                    if startsTheCall then
+                                        BackendExtra.ownMessageIsReadBackend
+                                            userId
+                                            (GuildOrDmId (GuildOrDmId_Dm id))
+                                            messageId
+                                            model2.users
+
+                                    else
+                                        model2.users
                             }
                     in
                     ( model3
@@ -6977,6 +7007,23 @@ joinGuildVoiceChat sessionId clientId time id model userId =
                         voiceChatId =
                             Call.GuildRoomId id
 
+                        startsTheCall : Bool
+                        startsTheCall =
+                            guildVoiceChatRoomHasOtherMembers id clientId model2 |> not
+
+                        ( messageId, channel2 ) =
+                            LocalState.createChannelMessageBackend
+                                (CallStarted
+                                    { startedAt = time
+                                    , endedAt = Nothing
+                                    , startedBy = userId
+                                    , reactions = SeqDict.empty
+                                    , timestampDrawings = Drawing.emptyDrawing
+                                    , cardDrawings = Drawing.emptyDrawing
+                                    }
+                                )
+                                channel
+
                         model3 : BackendModel
                         model3 =
                             { model2
@@ -6991,32 +7038,24 @@ joinGuildVoiceChat sessionId clientId time id model userId =
                                         )
                                         model2.connections
                                 , guilds =
-                                    if guildVoiceChatRoomHasOtherMembers id clientId model2 then
-                                        model2.guilds
-
-                                    else
+                                    if startsTheCall then
                                         SeqDict.insert
                                             id.guildId
-                                            { guild
-                                                | channels =
-                                                    SeqDict.insert
-                                                        id.channelId
-                                                        (LocalState.createChannelMessageBackend
-                                                            (CallStarted
-                                                                { startedAt = time
-                                                                , endedAt = Nothing
-                                                                , startedBy = userId
-                                                                , reactions = SeqDict.empty
-                                                                , timestampDrawings = Drawing.emptyDrawing
-                                                                , cardDrawings = Drawing.emptyDrawing
-                                                                }
-                                                            )
-                                                            channel
-                                                            |> Tuple.second
-                                                        )
-                                                        guild.channels
-                                            }
+                                            { guild | channels = SeqDict.insert id.channelId channel2 guild.channels }
                                             model2.guilds
+
+                                    else
+                                        model2.guilds
+                                , users =
+                                    if startsTheCall then
+                                        BackendExtra.ownMessageIsReadBackend
+                                            userId
+                                            (GuildOrDmId (GuildOrDmId_Guild id))
+                                            messageId
+                                            model2.users
+
+                                    else
+                                        model2.users
                             }
                     in
                     ( model3

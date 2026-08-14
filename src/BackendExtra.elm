@@ -26,6 +26,7 @@ module BackendExtra exposing
     , loginEmailContent
     , loginEmailSubject
     , loginWithToken
+    , ownMessageIsReadBackend
     , requestedForToGuildOrDmId
     , sendDm
     , sendGuildMessage
@@ -1793,6 +1794,22 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
 
         _ ->
             ( model, invalidChangeResponse changeId clientId )
+
+
+{-| The card a call or a game leaves behind in a conversation is read the moment it exists
+for the person who started it, the same as a message they wrote themselves.
+-}
+ownMessageIsReadBackend :
+    Id UserId
+    -> AnyGuildOrDmId
+    -> Id ChannelMessageId
+    -> NonemptyDict (Id UserId) BackendUser
+    -> NonemptyDict (Id UserId) BackendUser
+ownMessageIsReadBackend userId guildOrDmId messageId users =
+    NonemptyDict.updateIfExists
+        userId
+        (User.setLastViewedMessage guildOrDmId (NoThreadWithMessage messageId))
+        users
 
 
 {-| The person on the other end of a DM keeps up with a message that arrives while they are

@@ -14,6 +14,7 @@ module E2EMisc exposing
     , mentionSuggestionTest
     , noTimestampSuggestionTest
     , profileImageOpensDm
+    , startingACallOrGameStaysReadTest
     , staysReadWhileViewingTest
     , timeOfDaySuggestionTest
     , timeOffsetSuggestionTest
@@ -24,6 +25,7 @@ import DmChannel
 import DmChannelId
 import Duration
 import E2EHelper
+import E2EVoiceChat
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Time as Time
@@ -1535,3 +1537,69 @@ codeBlockInputTest config =
                 ]
             )
         ]
+
+
+{-| A call or a game leaves a card behind in the conversation it was started from. It is
+the starter's own doing, the same as a message they wrote, so it doesn't leave them with
+something unread or with the card sitting under an unread divider.
+-}
+startingACallOrGameStaysReadTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+startingACallOrGameStaysReadTest config =
+    E2EHelper.startTest
+        "Starting a call or a game doesn't leave the starter with something unread"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ -- The admin is caught up in the channel both of them are looking at
+                  E2EHelper.writeMessage user 100 "In the channel"
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
+
+                -- Starting a call from it leaves them caught up on the card it wrote
+                , admin.click 100 (Dom.id "guild_voiceChat")
+                , E2EVoiceChat.startCall admin
+                , admin.navigateBack 100
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
+                , admin.checkModel 100 (checkChannelIsCaughtUpModel guildChannelId)
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
+
+                -- And so does starting a game
+                , admin.click 100 (Dom.id "guild_openGamesTab")
+                , admin.click 100 (Dom.id "game_select_Go (Baduk)")
+                , admin.click 100 (Dom.id "go_start")
+                , admin.navigateBack 100
+                , admin.checkModel 100 (checkChannelIsCaughtUpModel guildChannelId)
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
+                , admin.snapshotView 100 { name = "Started a call and a game without either turning up unread" }
+                ]
+            )
+        ]
+
+
+{-| The reader has seen every message in the channel, which is what the notification counts
+and the unread overview are worked out from.
+-}
+checkChannelIsCaughtUpModel : Id.AnyGuildOrDmId -> FrontendModel -> Result String ()
+checkChannelIsCaughtUpModel guildOrDmId model =
+    withLocalState
+        model
+        (\local ->
+            case ( SeqDict.get guildOrDmId local.localUser.user.lastViewedMessage, latestChannelMessageId guildOrDmId local ) of
+                ( Just lastViewed, Just latest ) ->
+                    if lastViewed == latest then
+                        Ok ()
+
+                    else
+                        Err
+                            ("Expected the channel to be caught up at "
+                                ++ Id.toString latest
+                                ++ " but the last viewed message is "
+                                ++ Id.toString lastViewed
+                            )
+
+                _ ->
+                    Err "Expected the channel to exist and to have been viewed"
+        )
