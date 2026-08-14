@@ -4,8 +4,37 @@
 // runs one test per request. Tests are handed out to workers one at a time so
 // the load stays balanced regardless of how long individual tests take.
 const { Worker } = require('node:worker_threads');
+const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+
+const projectRoot = path.join(__dirname, '..');
+const compiledTests = path.join(__dirname, 'EndToEndTestsRunnerElm.js');
+
+// The workers run compiled Elm, so without this the tests silently run against
+// whatever was compiled last rather than against the source on disk. Compiling
+// here rather than in the npm script means it happens however this file is
+// started.
+function compileTests() {
+    // `lamdera` is often not on PATH, so prefer the one npm installed.
+    const local = path.join(projectRoot, 'node_modules', '.bin', 'lamdera');
+    const compiler = fs.existsSync(local) ? local : 'lamdera';
+    console.log('Compiling the end-to-end tests...');
+    try {
+        execFileSync(
+            compiler,
+            ['make', 'tests/EndToEndTestsRunner.elm', '--output', compiledTests],
+            { cwd: projectRoot, stdio: 'inherit' }
+        );
+    }
+    catch (error) {
+        console.error('Compiling the end-to-end tests failed. Not running them against a stale build.');
+        process.exit(1);
+    }
+}
+
+compileTests();
 
 // XMLHttpRequest.js resolves file paths relative to the tests directory.
 process.chdir(__dirname);
