@@ -5304,7 +5304,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             Broadcast.gameStartedDmNotification
                                                                 time
                                                                 session.userId
-                                                                id.otherUserId
+                                                                id
                                                                 GameType_Go
                                                                 model2
                                                     in
@@ -5381,7 +5381,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             Broadcast.gameStartedDmNotification
                                                                 time
                                                                 session.userId
-                                                                id.otherUserId
+                                                                id
                                                                 GameType_WordSpellingGame
                                                                 model2
                                                     in
@@ -5409,7 +5409,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             Broadcast.toDmChannelExcludingOne
                                                                 clientId
                                                                 session.userId
-                                                                otherUserId
+                                                                id
                                                                 (\otherUserId2 ->
                                                                     Server_Game session.userId (GuildOrDmId_Dm otherUserId2) localMsg2
                                                                 )
@@ -5426,7 +5426,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             Broadcast.gameStartedDmNotification
                                                                 time
                                                                 session.userId
-                                                                otherUserId
+                                                                id
                                                                 GameType_SheepGame
                                                                 model2
                                                     in
@@ -5505,15 +5505,15 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                     { model3
                                                                         | guilds =
                                                                             SeqDict.insert
-                                                                                guildId
-                                                                                { guild | channels = SeqDict.insert channelId channel2 guild.channels }
+                                                                                id.guildId
+                                                                                { guild | channels = SeqDict.insert id.channelId channel2 guild.channels }
                                                                                 model3.guilds
                                                                     }
                                                                 )
                                                                 (\localMsg2 model3 ->
                                                                     Broadcast.toGuildExcludingOne
                                                                         clientId
-                                                                        guildId
+                                                                        id.guildId
                                                                         (Server_Game session.userId guildOrDmId localMsg2 |> ServerChange)
                                                                         model3
                                                                 )
@@ -5526,8 +5526,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             notifyGameStartedInGuild
                                                                 time
                                                                 session.userId
-                                                                guildId
-                                                                channelId
+                                                                id
                                                                 GameType_SheepGame
                                                                 guild
                                                                 model2

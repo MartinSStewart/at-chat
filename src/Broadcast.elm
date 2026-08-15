@@ -1494,11 +1494,11 @@ so this mirrors `broadcastDm`'s notification handling for the game-start case.
 gameStartedDmNotification :
     Time.Posix
     -> Id UserId
-    -> Id UserId
+    -> Viewing_DmId
     -> Message.GameType
     -> BackendModel
     -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
-gameStartedDmNotification time senderId otherUserId gameType model =
+gameStartedDmNotification time senderId { otherUserId } gameType model =
     let
         isViewing : Bool
         isViewing =
