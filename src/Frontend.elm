@@ -582,7 +582,7 @@ loadedInitHelper startupData emojiData loginData loading =
         , -- We need to check if a video preview is visible immediately since we might be on the call route
           Call.displayModeChangeCmd
             Call.NoVideo
-            (Call.displayMode local.localUser.session.userId loading.route local.calls)
+            (Call.displayMode local.localUser.session.userId loggedIn.sidebarMode loading.route local.calls)
             loggedIn.voiceChat
         ]
     )
@@ -4405,7 +4405,7 @@ updateLoaded msg model =
                                 local =
                                     Local.model loggedIn.localState
                             in
-                            case Call.displayMode local.localUser.session.userId model.route local.calls of
+                            case Call.displayMode local.localUser.session.userId loggedIn.sidebarMode model.route local.calls of
                                 Call.NoVideo ->
                                     ( model, Command.none )
 
@@ -5364,8 +5364,8 @@ checkCallDisplayModeChange modelOld modelNew =
                     Local.model loggedInNew.localState
             in
             Call.displayModeChangeCmd
-                (Call.displayMode localOld.localUser.session.userId modelOld.route localOld.calls)
-                (Call.displayMode localNew.localUser.session.userId modelNew.route localNew.calls)
+                (Call.displayMode localOld.localUser.session.userId loggedInOld.sidebarMode modelOld.route localOld.calls)
+                (Call.displayMode localNew.localUser.session.userId loggedInNew.sidebarMode modelNew.route localNew.calls)
                 loggedInNew.voiceChat
 
         ( NotLoggedIn _, LoggedIn loggedInNew ) ->
@@ -5375,7 +5375,7 @@ checkCallDisplayModeChange modelOld modelNew =
             in
             Call.displayModeChangeCmd
                 Call.NoVideo
-                (Call.displayMode localNew.localUser.session.userId modelNew.route localNew.calls)
+                (Call.displayMode localNew.localUser.session.userId loggedInNew.sidebarMode modelNew.route localNew.calls)
                 loggedInNew.voiceChat
 
         ( LoggedIn loggedInOld, NotLoggedIn _ ) ->
@@ -5384,7 +5384,7 @@ checkCallDisplayModeChange modelOld modelNew =
                     Local.model loggedInOld.localState
             in
             Call.displayModeChangeCmd
-                (Call.displayMode localOld.localUser.session.userId modelOld.route localOld.calls)
+                (Call.displayMode localOld.localUser.session.userId loggedInOld.sidebarMode modelOld.route localOld.calls)
                 Call.NoVideo
                 loggedInOld.voiceChat
 
@@ -6634,7 +6634,7 @@ dragTargetHelper startTouches loggedIn model =
                 Nothing ->
                     False
     in
-    case Call.displayMode local.localUser.session.userId model.route local.calls of
+    case Call.displayMode local.localUser.session.userId loggedIn.sidebarMode model.route local.calls of
         Call.ShowLocalVideoAndCallThumbnail _ ->
             if Call.insideThumbnail centroid model loggedIn.voiceChat then
                 Just Drag_CallThumbnail

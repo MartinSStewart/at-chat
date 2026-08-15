@@ -11,6 +11,7 @@ import Expect
 import FileStatus
 import Json.Encode
 import List.Extra
+import Local
 import LocalState exposing (CallStatus(..))
 import NonemptyDict
 import RPC
@@ -198,6 +199,34 @@ voiceChatTest normalConfig =
                 )
             ]
         ]
+
+
+{-| What the given client is currently drawing for the call: nothing, a local
+preview, the full size call view or the minimized thumbnail.
+-}
+displayModeOf : Lamdera.ClientId -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String Call.DisplayMode
+displayModeOf clientId data =
+    case SeqDict.get clientId data.frontends |> Maybe.map Audio.userModel of
+        Just (Types.Loaded loaded) ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    let
+                        local : LocalState.LocalState
+                        local =
+                            Local.model loggedIn.localState
+                    in
+                    Call.displayMode
+                        local.localUser.session.userId
+                        loggedIn.sidebarMode
+                        loaded.route
+                        local.calls
+                        |> Ok
+
+                Types.NotLoggedIn _ ->
+                    Err "Expected user to be logged in"
+
+        _ ->
+            Err "Expected user frontend to be loaded"
 
 
 dmCallTest :
@@ -408,6 +437,49 @@ dmCallTest isMobile normalConfig =
                                             ++ String.fromInt (List.length other)
                                         )
                         )
+                    , -- The full size call view sits on top of the conversation view. On
+                      -- mobile the conversation view can be swiped away without the route
+                      -- changing, and once it's gone the call has to shrink down to the
+                      -- thumbnail instead of staying spread over the channel list.
+                      if isMobile then
+                        T.group
+                            [ user.click 100 (Dom.id "guild_headerBackButton")
+                            , E2EHelper.tallSnapshot user 10 { name = "Call sliding away with the conversation view" }
+                            , T.checkState
+                                500
+                                (\data ->
+                                    case displayModeOf user.clientId data of
+                                        Ok (Call.ShowLocalVideoAndCallThumbnail _) ->
+                                            Ok ()
+
+                                        Ok _ ->
+                                            Err "Expected the call to shrink to a thumbnail once the conversation view was swiped closed"
+
+                                        Err error ->
+                                            Err error
+                                )
+                            , user.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "call_videoThumbnail" ])
+                            , E2EHelper.tallSnapshot user 0 { name = "Call thumbnail after swiping the conversation view closed" }
+                            , -- Double clicking the thumbnail brings the conversation view
+                              -- back, which puts the full size call view back on screen.
+                              user.custom 100 (Dom.id "call_videoThumbnail") "dblclick" (Json.Encode.object [])
+                            , T.checkState
+                                500
+                                (\data ->
+                                    case displayModeOf user.clientId data of
+                                        Ok (Call.ShowLocalVideoAndCall _) ->
+                                            Ok ()
+
+                                        Ok _ ->
+                                            Err "Expected the full size call view to come back when the conversation view was reopened"
+
+                                        Err error ->
+                                            Err error
+                                )
+                            ]
+
+                      else
+                        T.group []
                     , user.click 100 (Dom.id "guild_voiceChat")
                     , E2EHelper.tallSnapshot user 100 { name = "Voice chat with tab closed" }
 
