@@ -134,7 +134,7 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
         (case guildOrDmIdNoThread of
             DiscordGuildOrDmId_Dm data ->
                 Ui.row
-                    [ Ui.height Ui.fill ]
+                    [ Ui.height Ui.fill, Ui.clipWithEllipsis ]
                     [ if chattingWithYourself data local then
                         privateChatWithYourself isMobile model.route currentChannelHeaderTab local
 
