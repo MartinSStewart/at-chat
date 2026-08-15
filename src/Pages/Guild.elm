@@ -6755,6 +6755,22 @@ profileImagePaddingRight =
     8
 
 
+{-| Which custom emojis the one-click reactions on a Discord message may offer.
+
+Discord only accepts a reaction with an emoji it knows about, so a custom emoji picked
+up from an at-chat guild is rejected when it's used on a Discord message. Narrowing the
+offer to the current Discord guild's own emojis would mean carrying that guild's emoji
+set into the message view, and the Discord message views have already spent every
+argument `Ui.Lazy` has room for. The reactions offered up front are therefore unicode
+emojis, which Discord always takes; the emoji selector still offers the guild's custom
+emojis.
+
+-}
+discordQuickReactionCustomEmojis : SeqSet (Id CustomEmojiId)
+discordQuickReactionCustomEmojis =
+    SeqSet.empty
+
+
 messageView :
     Time.Posix
     -> Bool
@@ -6780,6 +6796,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 isThreadStarter
                 localUser.timezone
                 time
+                localUser.user.availableCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -6822,6 +6839,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 isThreadStarter
                 localUser.timezone
                 time
+                localUser.user.availableCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -6853,6 +6871,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 isThreadStarter
                 localUser.timezone
                 time
+                localUser.user.availableCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -6878,6 +6897,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 isThreadStarter
                 localUser.timezone
                 time
+                localUser.user.availableCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -6917,6 +6937,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 isThreadStarter
                 localUser.timezone
                 time
+                localUser.user.availableCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -6974,6 +6995,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 isThreadStarter
                 localUser.timezone
                 time
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -7015,6 +7037,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 isThreadStarter
                 localUser.timezone
                 time
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -7046,6 +7069,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 isThreadStarter
                 localUser.timezone
                 time
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -7071,6 +7095,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 isThreadStarter
                 localUser.timezone
                 time
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -7110,6 +7135,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 isThreadStarter
                 localUser.timezone
                 time
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -7179,6 +7205,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 currentUserId
                 localUser.user
                 message2.reactions
+                localUser.user.availableCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -7207,6 +7234,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 currentUserId
                 localUser.user
                 reactions
+                localUser.user.availableCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -7233,6 +7261,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 currentUserId
                 localUser.user
                 SeqDict.empty
+                localUser.user.availableCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -7254,6 +7283,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 currentUserId
                 localUser.user
                 callStartedData.reactions
+                localUser.user.availableCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -7288,6 +7318,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 currentUserId
                 localUser.user
                 gameStarted.reactions
+                localUser.user.availableCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -7348,6 +7379,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 currentUserId
                 localUser.user
                 message2.reactions
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -7375,6 +7407,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 currentUserId
                 localUser.user
                 reactions
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -7401,6 +7434,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 currentUserId
                 localUser.user
                 SeqDict.empty
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -7422,6 +7456,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 currentUserId
                 localUser.user
                 callStartedData.reactions
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -7456,6 +7491,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 currentUserId
                 localUser.user
                 gameStarted.reactions
+                discordQuickReactionCustomEmojis
                 localUser.customEmojis
                 localUser.emojiData
                 allUsers
@@ -8235,6 +8271,7 @@ messageContainer :
     -> Bool
     -> Time.Zone
     -> Time.Posix
+    -> SeqSet (Id CustomEmojiId)
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> Maybe CachedEmojiData
     -> SeqDict userId { a | name : PersonName }
@@ -8248,7 +8285,7 @@ messageContainer :
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer containerWidth isThreadStarter timezone currentTime customEmojis emojiData allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent =
+messageContainer containerWidth isThreadStarter timezone currentTime availableCustomEmojis customEmojis emojiData allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -8320,7 +8357,7 @@ messageContainer containerWidth isThreadStarter timezone currentTime customEmoji
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageView.miniView currentUser isThreadStarter canEdit customEmojis |> Ui.inFront
+                        , MessageView.miniView currentUser isThreadStarter canEdit availableCustomEmojis customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->
@@ -8362,13 +8399,14 @@ threadMessageContainer :
     -> userId
     -> FrontendCurrentUser
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+    -> SeqSet (Id CustomEmojiId)
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> Maybe CachedEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-threadMessageContainer containerWidth highlight messageIndex canEdit currentUserId currentUser reactions customEmojis emojiData allUsers isHovered messageContent =
+threadMessageContainer containerWidth highlight messageIndex canEdit currentUserId currentUser reactions availableCustomEmojis customEmojis emojiData allUsers isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -8440,7 +8478,7 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageView.miniView currentUser False canEdit customEmojis |> Ui.inFront
+                        , MessageView.miniView currentUser False canEdit availableCustomEmojis customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->
