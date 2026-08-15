@@ -315,8 +315,29 @@ showLocalVideo displayMode2 =
             True
 
 
-displayMode : Id UserId -> Route -> Local -> DisplayMode
-displayMode currentUserId route local =
+{-| True once the conversation view has been swiped all the way off screen on mobile.
+-}
+conversationHidden : ChannelSidebarMode -> Bool
+conversationHidden sidebarMode =
+    case sidebarMode of
+        ChannelSidebarClosed ->
+            True
+
+        ChannelSidebarOpened ->
+            False
+
+        ChannelSidebarClosing _ ->
+            False
+
+        ChannelSidebarOpening _ ->
+            False
+
+        ChannelSidebarDragging _ ->
+            False
+
+
+displayMode : Id UserId -> ChannelSidebarMode -> Route -> Local -> DisplayMode
+displayMode currentUserId sidebarMode route local =
     let
         thumbnailOrNoVideo =
             case local.currentRoom of
@@ -326,96 +347,103 @@ displayMode currentUserId route local =
                 Nothing ->
                     NoVideo
     in
-    case route of
-        HomePageRoute ->
-            thumbnailOrNoVideo
+    if conversationHidden sidebarMode then
+        -- The full size videos are laid out on top of the conversation view. Once
+        -- that's swiped away there's nothing left for them to sit on, so they get
+        -- replaced by the thumbnail (or nothing at all when we aren't in a call).
+        thumbnailOrNoVideo
 
-        AdminRoute _ ->
-            thumbnailOrNoVideo
+    else
+        case route of
+            HomePageRoute ->
+                thumbnailOrNoVideo
 
-        NewGuildRoute ->
-            thumbnailOrNoVideo
+            AdminRoute _ ->
+                thumbnailOrNoVideo
 
-        GuildRoute guildId channelRoute ->
-            case channelRoute of
-                Route.ChannelRoute channelId _ tab ->
-                    let
-                        roomId =
-                            GuildRoomId { guildId = guildId, channelId = channelId }
+            NewGuildRoute ->
+                thumbnailOrNoVideo
 
-                        isTabExpanded =
-                            tab == Just ChannelHeaderTab_VoiceChat
-                    in
-                    if Just roomId == local.currentRoom && isTabExpanded then
-                        case SeqDict.get roomId local.voiceChats of
-                            Just _ ->
-                                ShowLocalVideoAndCall roomId
+            GuildRoute guildId channelRoute ->
+                case channelRoute of
+                    Route.ChannelRoute channelId _ tab ->
+                        let
+                            roomId =
+                                GuildRoomId { guildId = guildId, channelId = channelId }
 
-                            Nothing ->
-                                ShowLocalVideo
+                            isTabExpanded =
+                                tab == Just ChannelHeaderTab_VoiceChat
+                        in
+                        if Just roomId == local.currentRoom && isTabExpanded then
+                            case SeqDict.get roomId local.voiceChats of
+                                Just _ ->
+                                    ShowLocalVideoAndCall roomId
 
-                    else if isTabExpanded then
-                        ShowLocalVideo
+                                Nothing ->
+                                    ShowLocalVideo
 
-                    else
+                        else if isTabExpanded then
+                            ShowLocalVideo
+
+                        else
+                            thumbnailOrNoVideo
+
+                    Route.NewChannelRoute ->
                         thumbnailOrNoVideo
 
-                Route.NewChannelRoute ->
-                    thumbnailOrNoVideo
-
-                Route.GuildSettingsRoute ->
-                    thumbnailOrNoVideo
-
-                Route.JoinRoute _ ->
-                    thumbnailOrNoVideo
-
-        DiscordGuildRoute _ ->
-            thumbnailOrNoVideo
-
-        DmRoute dmRoute ->
-            case DmChannelId.otherUserId currentUserId dmRoute.channelId of
-                Just otherUserId ->
-                    let
-                        roomId =
-                            DmRoomId { otherUserId = otherUserId }
-
-                        isTabExpanded =
-                            dmRoute.tab == Just ChannelHeaderTab_VoiceChat
-                    in
-                    if Just roomId == local.currentRoom && isTabExpanded then
-                        case SeqDict.get roomId local.voiceChats of
-                            Just _ ->
-                                ShowLocalVideoAndCall roomId
-
-                            Nothing ->
-                                ShowLocalVideo
-
-                    else if isTabExpanded then
-                        ShowLocalVideo
-
-                    else
+                    Route.GuildSettingsRoute ->
                         thumbnailOrNoVideo
 
-                Nothing ->
-                    thumbnailOrNoVideo
+                    Route.JoinRoute _ ->
+                        thumbnailOrNoVideo
 
-        DiscordDmRoute _ ->
-            thumbnailOrNoVideo
+            DiscordGuildRoute _ ->
+                thumbnailOrNoVideo
 
-        AiChatRoute ->
-            thumbnailOrNoVideo
+            DmRoute dmRoute ->
+                case DmChannelId.otherUserId currentUserId dmRoute.channelId of
+                    Just otherUserId ->
+                        let
+                            roomId =
+                                DmRoomId { otherUserId = otherUserId }
 
-        SlackOAuthRedirect _ ->
-            thumbnailOrNoVideo
+                            isTabExpanded =
+                                dmRoute.tab == Just ChannelHeaderTab_VoiceChat
+                        in
+                        if Just roomId == local.currentRoom && isTabExpanded then
+                            case SeqDict.get roomId local.voiceChats of
+                                Just _ ->
+                                    ShowLocalVideoAndCall roomId
 
-        TextEditorRoute ->
-            thumbnailOrNoVideo
+                                Nothing ->
+                                    ShowLocalVideo
 
-        LinkDiscord _ ->
-            thumbnailOrNoVideo
+                        else if isTabExpanded then
+                            ShowLocalVideo
 
-        PublicGoMatchRoute _ ->
-            thumbnailOrNoVideo
+                        else
+                            thumbnailOrNoVideo
+
+                    Nothing ->
+                        thumbnailOrNoVideo
+
+            DiscordDmRoute _ ->
+                thumbnailOrNoVideo
+
+            AiChatRoute ->
+                thumbnailOrNoVideo
+
+            SlackOAuthRedirect _ ->
+                thumbnailOrNoVideo
+
+            TextEditorRoute ->
+                thumbnailOrNoVideo
+
+            LinkDiscord _ ->
+                thumbnailOrNoVideo
+
+            PublicGoMatchRoute _ ->
+                thumbnailOrNoVideo
 
 
 localVideoNodeId : String
@@ -452,10 +480,22 @@ videoNodes localUser config loggedIn local =
         voiceChatX : Int
         voiceChatX =
             if isMobile then
-                padding
+                padding + sidebarOffset
 
             else
                 MyUi.channelAndGuildColumnWidth config.windowSize + padding
+
+        -- The full size videos are drawn on top of the conversation view, so they have
+        -- to travel with it while it's being swiped away. The member column slides over
+        -- the conversation view instead of moving it, so it contributes no offset.
+        sidebarOffset : Int
+        sidebarOffset =
+            case Route.toShowMembersTab config.route of
+                ( ShowMembersTab, _ ) ->
+                    0
+
+                ( HideMembersTab, _ ) ->
+                    sidebarOffsetAttr loggedIn.sidebarMode config
 
         voiceChatY =
             MyUi.channelHeaderHeight + 4
@@ -506,7 +546,7 @@ videoNodes localUser config loggedIn local =
         isMobile =
             MyUi.isMobile { windowSize = config.windowSize }
     in
-    (case displayMode localUser.session.userId config.route local of
+    (case displayMode localUser.session.userId loggedIn.sidebarMode config.route local of
         NoVideo ->
             [ videoNode
                 localUser.session.userId
