@@ -28,7 +28,7 @@ import MuteSettings exposing (IsMuted(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), GuildChannelsVisibleOnMobile(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Types exposing (Drag(..), FrontendMsg_(..), LoadedFrontend)
@@ -231,6 +231,7 @@ discordGuildIcon localUser route guildId guild =
                                 (LocalState.discordAnnouncementChannel guild)
                                 (NoThreadWithFriends Nothing HideMembersTab)
                                 Nothing
+                 , channelsVisible = GuildChannelsVisibleOnMobile
                  }
                     |> DiscordGuildRoute
                 )
@@ -280,11 +281,12 @@ guildIcon localUser route guildId guild =
                         (NoThreadWithFriends Nothing HideMembersTab)
                         Nothing
             )
+            GuildChannelsVisibleOnMobile
         )
         []
         (GuildIcon.view
             (case route of
-                GuildRoute a _ ->
+                GuildRoute a _ _ ->
                     if a == guildId then
                         GuildIcon.IsSelected
 

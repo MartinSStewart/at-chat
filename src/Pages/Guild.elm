@@ -70,7 +70,7 @@ import PersonName exposing (PersonName)
 import QRCode
 import Quantity
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, GuildChannelsVisibleOnMobile(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SecretId
 import SeqDict exposing (SeqDict)
@@ -698,6 +698,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                 GuildRoute
                                                     guildId
                                                     (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing)
+                                                    GuildChannelsHiddenOnMobile
                                           , guildOrDmId = guildOrDmId
                                           , threadRoute = NoThreadWithMessage unread.newestMessageId
                                           , additionalUnread = unread.additionalUnread
@@ -733,6 +734,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                                 (ViewThreadWithFriends threadId Nothing HideMembersTab)
                                                                 Nothing
                                                             )
+                                                            GuildChannelsHiddenOnMobile
                                                     , guildOrDmId = guildOrDmId
                                                     , threadRoute =
                                                         ViewThreadWithMessage threadId unread.newestMessageId
@@ -843,6 +845,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                                         channelId
                                                                         (NoThreadWithFriends Nothing HideMembersTab)
                                                                         Nothing
+                                                                , channelsVisible = GuildChannelsHiddenOnMobile
                                                                 }
                                                       , guildOrDmId = guildOrDmId
                                                       , threadRoute = NoThreadWithMessage unread.newestMessageId
@@ -881,6 +884,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                                                 channelId
                                                                                 (ViewThreadWithFriends threadId Nothing HideMembersTab)
                                                                                 Nothing
+                                                                        , channelsVisible = GuildChannelsHiddenOnMobile
                                                                         }
                                                                 , guildOrDmId = guildOrDmId
                                                                 , threadRoute =
@@ -2867,7 +2871,7 @@ guildSettingsView model loggedIn local guildId guild =
                             let
                                 url : String
                                 url =
-                                    Route.encode (GuildRoute guildId (JoinRoute inviteId))
+                                    Route.encode (GuildRoute guildId (JoinRoute inviteId) GuildChannelsHiddenOnMobile)
 
                                 inviteLink : String
                                 inviteLink =
@@ -8831,7 +8835,7 @@ channelColumn isMobile time localUser guildId guild channelRoute canScroll2 chan
                     in
                     GuildColumn.rowLinkButton
                         (Dom.id "guild_newChannel")
-                        (GuildRoute guildId NewChannelRoute)
+                        (GuildRoute guildId NewChannelRoute GuildChannelsHiddenOnMobile)
                         [ Ui.paddingXY 4 8
                         , Ui.Font.color MyUi.font3
                         , Ui.attrIf isSelected (Ui.background MyUi.selectedHighlight)
@@ -8853,7 +8857,7 @@ channelColumn isMobile time localUser guildId guild channelRoute canScroll2 chan
         [ Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName)
         , GuildColumn.elLinkButton
             (Dom.id "guild_inviteLinkCreatorRoute")
-            (GuildRoute guildId GuildSettingsRoute)
+            (GuildRoute guildId GuildSettingsRoute GuildChannelsHiddenOnMobile)
             [ Ui.Font.color MyUi.font2
             , Ui.width (Ui.px 40)
             , Ui.alignRight
@@ -9092,6 +9096,7 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
                 { currentDiscordUserId = routeData.currentDiscordUserId
                 , guildId = routeData.guildId
                 , channelRoute = DiscordChannel_GuildSettingsRoute
+                , channelsVisible = GuildChannelsHiddenOnMobile
                 }
             )
             [ Ui.Font.color MyUi.font2
@@ -9352,7 +9357,11 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
                 index
                 count
                 (Dom.id ("guild_viewThread_" ++ Id.toString channelId ++ "_" ++ Id.toString threadMessageIndex))
-                (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab) Nothing))
+                (GuildRoute
+                    guildId
+                    (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab) Nothing)
+                    GuildChannelsHiddenOnMobile
+                )
                 (threadPreviewText localUser.timezone (LocalState.allUsers localUser) threadMessageIndex channel)
         )
         threads2
@@ -9504,6 +9513,7 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
                             channelId
                             (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab)
                             Nothing
+                    , channelsVisible = GuildChannelsHiddenOnMobile
                     }
                 )
                 (threadPreviewText localUser.timezone (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers) threadMessageIndex channel)
@@ -9534,7 +9544,11 @@ channelColumnRow isMobile isMuted hasNotification channelRoute guildId channelId
     in
     GuildColumn.rowLinkButton
         (Dom.id ("guild_openChannel_" ++ Id.toString channelId))
-        (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing))
+        (GuildRoute
+            guildId
+            (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing)
+            GuildChannelsHiddenOnMobile
+        )
         [ Ui.paddingWith { left = 26, right = 8, top = 0, bottom = 0 }
         , Ui.el
             [ (if isSelected && not isMobile then
@@ -9612,6 +9626,7 @@ discordChannelColumnRow isMobile isMuted hasNotifications routeData channelId ch
                     channelId
                     (NoThreadWithFriends Nothing HideMembersTab)
                     Nothing
+            , channelsVisible = GuildChannelsHiddenOnMobile
             }
         )
         [ Ui.paddingWith

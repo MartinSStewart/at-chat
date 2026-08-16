@@ -65,7 +65,7 @@ import PersonName
 import Ports exposing (SubscribeData)
 import Postmark
 import RichText
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), GuildChannelsVisibleOnMobile(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -567,7 +567,12 @@ messageNotification usersMentioned time sender id threadRoute message members mo
                                 )
                                 plainText
                                 (UserTextMessage message)
-                                (GuildRoute id.guildId (ChannelRoute id.channelId threadRouteWithFriends Nothing) |> Just)
+                                (GuildRoute
+                                    id.guildId
+                                    (ChannelRoute id.channelId threadRouteWithFriends Nothing)
+                                    GuildChannelsHiddenOnMobile
+                                    |> Just
+                                )
                                 sessions
                                 model
                                 |> Tuple.mapSecond (\a -> Command.batch a :: cmds)
@@ -690,6 +695,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                     { currentDiscordUserId = userId2
                                     , guildId = guildId
                                     , channelRoute = DiscordChannel_ChannelRoute channelId threadRouteWithFriends Nothing
+                                    , channelsVisible = GuildChannelsHiddenOnMobile
                                     }
                                     |> Just
                                 )
@@ -1627,7 +1633,12 @@ gameStartedGuildNotification time sender id gameType members model =
                                 )
                                 plainText
                                 message
-                                (GuildRoute id.guildId (ChannelRoute id.channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing) |> Just)
+                                (GuildRoute
+                                    id.guildId
+                                    (ChannelRoute id.channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing)
+                                    GuildChannelsHiddenOnMobile
+                                    |> Just
+                                )
                                 sessions
                                 model
                                 |> Tuple.mapSecond (\a -> Command.batch a :: cmds)

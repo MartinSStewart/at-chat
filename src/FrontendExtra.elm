@@ -92,7 +92,7 @@ import Ports exposing (RegisterPushSubscription(..))
 import Range exposing (Range)
 import RecoveryLogin
 import RichText exposing (Domain, RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), GuildChannelsVisibleOnMobile(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -527,8 +527,12 @@ disableTextSelect isMobile model =
                         True
 
 
-canDropFiles : Id UserId -> Route -> Maybe (Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ ))
-canDropFiles currentUserId route =
+canDropFiles :
+    Bool
+    -> Id UserId
+    -> Route
+    -> Maybe (Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ ))
+canDropFiles isMobile currentUserId route =
     case route of
         HomePageRoute ->
             Nothing
@@ -539,29 +543,33 @@ canDropFiles currentUserId route =
         NewGuildRoute ->
             Nothing
 
-        GuildRoute guildId channelRoute ->
-            case channelRoute of
-                ChannelRoute channelId threadRoute _ ->
-                    let
-                        threadRoute2 : ThreadRoute
-                        threadRoute2 =
-                            case threadRoute of
-                                NoThreadWithFriends _ _ ->
-                                    NoThread
+        GuildRoute guildId channelRoute channelsVisible ->
+            if channelsVisible == GuildChannelsVisibleOnMobile && isMobile then
+                Nothing
 
-                                ViewThreadWithFriends threadId _ _ ->
-                                    ViewThread threadId
-                    in
-                    canDropFileHelper (GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })) threadRoute2 |> Just
+            else
+                case channelRoute of
+                    ChannelRoute channelId threadRoute _ ->
+                        let
+                            threadRoute2 : ThreadRoute
+                            threadRoute2 =
+                                case threadRoute of
+                                    NoThreadWithFriends _ _ ->
+                                        NoThread
 
-                NewChannelRoute ->
-                    Nothing
+                                    ViewThreadWithFriends threadId _ _ ->
+                                        ViewThread threadId
+                        in
+                        canDropFileHelper (GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })) threadRoute2 |> Just
 
-                GuildSettingsRoute ->
-                    Nothing
+                    NewChannelRoute ->
+                        Nothing
 
-                JoinRoute _ ->
-                    Nothing
+                    GuildSettingsRoute ->
+                        Nothing
+
+                    JoinRoute _ ->
+                        Nothing
 
         DiscordGuildRoute routeData ->
             case routeData.channelRoute of
@@ -665,7 +673,11 @@ fileDragOverlay loggedIn model =
         let
             canDrop : Bool
             canDrop =
-                canDropFiles (Local.model loggedIn.localState |> .localUser |> .session |> .userId) model.route /= Nothing
+                canDropFiles
+                    (MyUi.isMobile model)
+                    (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
+                    model.route
+                    /= Nothing
 
             accentColor : Ui.Color
             accentColor =
@@ -1468,7 +1480,7 @@ routeRequest previousRoute newRoute model =
             -- Opening the create guild page always starts with a blank form
             updateLoggedIn (\loggedIn -> ( { loggedIn | newGuildForm = Nothing }, Command.none )) model2
 
-        GuildRoute guildId channelRoute ->
+        GuildRoute guildId channelRoute channelsVisible ->
             let
                 model3 : LoadedFrontend
                 model3 =
@@ -1477,7 +1489,7 @@ routeRequest previousRoute newRoute model =
                 sameGuild : Bool
                 sameGuild =
                     case previousRoute of
-                        Just (GuildRoute previousGuildId _) ->
+                        Just (GuildRoute previousGuildId _ _) ->
                             guildId == previousGuildId
 
                         _ ->
@@ -1492,7 +1504,7 @@ routeRequest previousRoute newRoute model =
                         sameGuild
                         (if sameGuild then
                             case previousRoute of
-                                Just (GuildRoute _ (ChannelRoute previousChannelId previousThreadRoute _)) ->
+                                Just (GuildRoute _ (ChannelRoute previousChannelId previousThreadRoute _) _) ->
                                     if channelId == previousChannelId then
                                         sameThread threadRoute previousThreadRoute
 
@@ -1545,6 +1557,7 @@ routeRequest previousRoute newRoute model =
                                                     (NoThreadWithFriends Nothing HideMembersTab)
                                                     Nothing
                                                 )
+                                                GuildChannelsVisibleOnMobile
                                             )
 
                                     Nothing ->
@@ -1782,7 +1795,7 @@ currentGamesTab local route =
                 _ ->
                     Nothing
 
-        GuildRoute guildId (ChannelRoute channelId _ (Just (ChannelHeaderTab_Games maybeMatchId))) ->
+        GuildRoute guildId (ChannelRoute channelId _ (Just (ChannelHeaderTab_Games maybeMatchId))) _ ->
             case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
                 Just ( _, channel ) ->
                     Just
@@ -2427,31 +2440,6 @@ setFocus model htmlId =
 
     else
         Dom.focus htmlId |> Task.attempt (\_ -> SetFocus)
-
-
-startOpeningChannelSidebar : LoggedIn2 -> LoggedIn2
-startOpeningChannelSidebar loggedIn =
-    { loggedIn
-        | sidebarMode =
-            ChannelSidebarOpening
-                { offset =
-                    case loggedIn.sidebarMode of
-                        ChannelSidebarClosing { offset } ->
-                            offset
-
-                        ChannelSidebarClosed ->
-                            1
-
-                        ChannelSidebarOpened ->
-                            0
-
-                        ChannelSidebarOpening { offset } ->
-                            offset
-
-                        ChannelSidebarDragging { offset } ->
-                            offset
-                }
-    }
 
 
 textToRichText :
