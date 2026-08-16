@@ -19,6 +19,7 @@ port module Call exposing
     , StartCallData
     , StartLocalStreamData
     , ToJs(..)
+    , conversationOffset
     , defaultRemoteCallData
     , displayMode
     , displayModeChangeCmd
@@ -31,8 +32,8 @@ port module Call exposing
     , insideThumbnail
     , isPressMsg
     , leaveVoiceChatCmds
+    , memberColumnOffset
     , serverChangeCmd
-    , sidebarOffsetAttr
     , startCallCmd
     , startLocalStream
     , toJs
@@ -312,8 +313,8 @@ showLocalVideo displayMode2 =
             True
 
 
-displayMode : Id UserId -> Route -> Local -> DisplayMode
-displayMode currentUserId route local =
+displayMode : Bool -> Id UserId -> Route -> Local -> DisplayMode
+displayMode isMobile currentUserId route local =
     let
         thumbnailOrNoVideo =
             case local.currentRoom of
@@ -334,8 +335,13 @@ displayMode currentUserId route local =
             thumbnailOrNoVideo
 
         GuildRoute guildId channelRoute channelsVisible ->
-            case channelsVisible of
-                GuildChannelsHiddenOnMobile ->
+            -- Only mobile puts the channel list over the conversation the videos are laid
+            -- out on top of, so only mobile can leave them with nothing to sit on
+            case ( isMobile, channelsVisible ) of
+                ( True, GuildChannelsVisibleOnMobile ) ->
+                    thumbnailOrNoVideo
+
+                _ ->
                     case channelRoute of
                         Route.ChannelRoute channelId _ tab ->
                             let
@@ -367,9 +373,6 @@ displayMode currentUserId route local =
 
                         Route.JoinRoute _ ->
                             thumbnailOrNoVideo
-
-                GuildChannelsVisibleOnMobile ->
-                    thumbnailOrNoVideo
 
         DiscordGuildRoute _ ->
             thumbnailOrNoVideo
@@ -454,22 +457,12 @@ videoNodes localUser config loggedIn local =
         voiceChatX : Int
         voiceChatX =
             if isMobile then
-                padding + sidebarOffset
+                -- The full size videos are drawn on top of the conversation view, so they
+                -- travel with it while it's being swiped away
+                padding + conversationOffset loggedIn.sidebarMode config
 
             else
                 MyUi.channelAndGuildColumnWidth config.windowSize + padding
-
-        -- The full size videos are drawn on top of the conversation view, so they have
-        -- to travel with it while it's being swiped away. The member column slides over
-        -- the conversation view instead of moving it, so it contributes no offset.
-        sidebarOffset : Int
-        sidebarOffset =
-            case Route.toShowMembersTab config.route of
-                ( ShowMembersTab, _ ) ->
-                    0
-
-                ( HideMembersTab, _ ) ->
-                    sidebarOffsetAttr loggedIn.sidebarMode config
 
         voiceChatY =
             MyUi.channelHeaderHeight + 4
@@ -520,7 +513,7 @@ videoNodes localUser config loggedIn local =
         isMobile =
             MyUi.isMobile { windowSize = config.windowSize }
     in
-    (case displayMode localUser.session.userId config.route local of
+    (case displayMode isMobile localUser.session.userId config.route local of
         NoVideo ->
             [ videoNode
                 localUser.session.userId
@@ -1839,19 +1832,34 @@ deviceDropdown isMobile labelText icon devices selected onSelect =
         ]
 
 
-sidebarOffsetAttr : ChannelSidebarMode -> { a | windowSize : Coord CssPixels } -> Int
-sidebarOffsetAttr sidebarMode model =
-    let
-        width : Int
-        width =
-            Coord.xRaw model.windowSize
-    in
-    (case sidebarMode of
+{-| The mobile layout is three screens laid out left to right that the offset slides
+along: the member column at 0, the conversation view at 1 and the guild's channel list at
+
+1.  Each screen sits where it is until the offset reaches it, then slides off to the right.
+
+-}
+memberColumnOffset : ChannelSidebarMode -> { a | windowSize : Coord CssPixels } -> Int
+memberColumnOffset sidebarMode model =
+    clamp 0 1 (sidebarOffset sidebarMode)
+        * toFloat (Coord.xRaw model.windowSize)
+        |> round
+
+
+{-| See `memberColumnOffset`. The conversation view is the middle of the three, so it sits
+still until the member column has finished sliding off it.
+-}
+conversationOffset : ChannelSidebarMode -> { a | windowSize : Coord CssPixels } -> Int
+conversationOffset sidebarMode model =
+    clamp 0 1 (sidebarOffset sidebarMode - 1)
+        * toFloat (Coord.xRaw model.windowSize)
+        |> round
+
+
+sidebarOffset : ChannelSidebarMode -> Float
+sidebarOffset sidebarMode =
+    case sidebarMode of
         ChannelSidebarNotDragging a ->
             a.offset
 
         ChannelSidebarDragging a ->
             a.offset
-    )
-        * toFloat width
-        |> round

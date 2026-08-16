@@ -36,7 +36,7 @@ import AiChat
 import Array
 import Audio exposing (Audio, AudioData)
 import Bytes.Encode
-import Call exposing (CallId(..), ChannelSidebarMode(..))
+import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelHeader
 import ChannelName
@@ -1297,12 +1297,12 @@ handleLocalChange time maybeLocalChange loggedIn cmds =
             ( loggedIn, cmds )
 
 
-routeViewingLocalChange : Bool -> LocalState -> Route -> Maybe LocalChange
-routeViewingLocalChange routeRequestCausedByPressingLink local route =
+routeViewingLocalChange : Bool -> Bool -> LocalState -> Route -> Maybe LocalChange
+routeViewingLocalChange isMobile routeRequestCausedByPressingLink local route =
     let
         localChange : SetViewing
         localChange =
-            LocalState.routeToViewing route local
+            LocalState.routeToViewing isMobile route local
     in
     if UserSession.setViewingToCurrentlyViewing localChange == local.localUser.currentlyViewing then
         Nothing
@@ -1324,72 +1324,24 @@ clearRevealedSpoilers model =
     }
 
 
-enterSidebarRoute :
-    Bool
-    -> Maybe Route
-    -> Command FrontendOnly ToBackend FrontendMsg_
-    -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
-enterSidebarRoute sameGuild previousRoute viewCmd model =
-    updateLoggedIn
-        (\loggedIn ->
-            ( if sameGuild || previousRoute == Nothing then
-                startOpeningChannelSidebar loggedIn
-
-              else
-                loggedIn
-            , viewCmd
-            )
-        )
-        model
-
-
 enterChannelRoute :
     AnyGuildOrDmId
     -> Maybe ChannelHeaderTab
     -> ThreadRouteWithFriends
     -> Bool
-    -> Bool
-    -> Maybe Route
     -> Command FrontendOnly ToBackend FrontendMsg_
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
-enterChannelRoute guildOrDmId tab threadRoute sameGuild sameChannel previousRoute viewCmd model =
+enterChannelRoute guildOrDmId tab threadRoute sameChannel viewCmd model =
     updateLoggedIn
         (\loggedIn ->
-            let
-                showMembers : ShowMembersTab
-                showMembers =
-                    case threadRoute of
-                        ViewThreadWithFriends _ _ showMembers2 ->
-                            showMembers2
-
-                        NoThreadWithFriends _ showMembers2 ->
-                            showMembers2
-            in
             routeRequestChannelHelper
                 sameChannel
                 guildOrDmId
                 tab
                 threadRoute
                 (Local.model loggedIn.localState)
-                (case ( showMembers, MyUi.isMobile model ) of
-                    ( ShowMembersTab, True ) ->
-                        -- Parking the sidebar off screen is what makes the member
-                        -- column slide in. The column doesn't slide on desktop, so
-                        -- there's nothing to park there.
-                        startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
-
-                    ( ShowMembersTab, False ) ->
-                        startOpeningChannelSidebar loggedIn
-
-                    ( HideMembersTab, _ ) ->
-                        if sameGuild || previousRoute == Nothing then
-                            startOpeningChannelSidebar loggedIn
-
-                        else
-                            loggedIn
-                )
+                loggedIn
                 model
                 |> Tuple.mapSecond (\cmd -> Command.batch [ viewCmd, cmd ])
         )
@@ -1417,7 +1369,12 @@ routeRequest previousRoute newRoute model =
                 (\loggedIn ->
                     handleLocalChange
                         model.time
-                        (routeViewingLocalChange model.routeRequestCausedByPressingLink (Local.model loggedIn.localState) newRoute)
+                        (routeViewingLocalChange
+                            (MyUi.isMobile model)
+                            model.routeRequestCausedByPressingLink
+                            (Local.model loggedIn.localState)
+                            newRoute
+                        )
                         { loggedIn
                             | drawingMode =
                                 -- Closing the draw tab (or navigating elsewhere) also
@@ -1480,20 +1437,11 @@ routeRequest previousRoute newRoute model =
             -- Opening the create guild page always starts with a blank form
             updateLoggedIn (\loggedIn -> ( { loggedIn | newGuildForm = Nothing }, Command.none )) model2
 
-        GuildRoute guildId channelRoute channelsVisible ->
+        GuildRoute guildId channelRoute _ ->
             let
                 model3 : LoadedFrontend
                 model3 =
                     clearRevealedSpoilers model2
-
-                sameGuild : Bool
-                sameGuild =
-                    case previousRoute of
-                        Just (GuildRoute previousGuildId _ _) ->
-                            guildId == previousGuildId
-
-                        _ ->
-                            False
             in
             case channelRoute of
                 ChannelRoute channelId threadRoute tab ->
@@ -1501,31 +1449,23 @@ routeRequest previousRoute newRoute model =
                         (GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId }))
                         tab
                         threadRoute
-                        sameGuild
-                        (if sameGuild then
-                            case previousRoute of
-                                Just (GuildRoute _ (ChannelRoute previousChannelId previousThreadRoute _) _) ->
-                                    if channelId == previousChannelId then
-                                        sameThread threadRoute previousThreadRoute
+                        (case previousRoute of
+                            Just (GuildRoute previousGuildId (ChannelRoute previousChannelId previousThreadRoute _) _) ->
+                                (guildId == previousGuildId)
+                                    && (channelId == previousChannelId)
+                                    && sameThread threadRoute previousThreadRoute
 
-                                    else
-                                        False
-
-                                _ ->
-                                    False
-
-                         else
-                            False
+                            _ ->
+                                False
                         )
-                        previousRoute
                         Command.none
                         model3
 
                 NewChannelRoute ->
-                    enterSidebarRoute sameGuild previousRoute Command.none model3
+                    ( model3, Command.none )
 
                 GuildSettingsRoute ->
-                    enterSidebarRoute sameGuild previousRoute Command.none model3
+                    ( model3, Command.none )
 
                 JoinRoute inviteLinkId ->
                     case model3.loginStatus of
@@ -1570,15 +1510,6 @@ routeRequest previousRoute newRoute model =
                 model3 : LoadedFrontend
                 model3 =
                     clearRevealedSpoilers model2
-
-                sameGuild : Bool
-                sameGuild =
-                    case previousRoute of
-                        Just (DiscordGuildRoute a) ->
-                            currentDiscordUserId == a.currentDiscordUserId && guildId == a.guildId
-
-                        _ ->
-                            False
             in
             case channelRoute of
                 DiscordChannel_ChannelRoute channelId threadRoute _ ->
@@ -1586,36 +1517,29 @@ routeRequest previousRoute newRoute model =
                         (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId = currentDiscordUserId, guildId = guildId, channelId = channelId }))
                         Nothing
                         threadRoute
-                        sameGuild
-                        (if sameGuild then
-                            case previousRoute of
-                                Just (DiscordGuildRoute guildData) ->
-                                    case guildData.channelRoute of
-                                        DiscordChannel_ChannelRoute previousChannelId previousThreadRoute _ ->
-                                            if channelId == previousChannelId then
-                                                sameThread threadRoute previousThreadRoute
+                        (case previousRoute of
+                            Just (DiscordGuildRoute guildData) ->
+                                case guildData.channelRoute of
+                                    DiscordChannel_ChannelRoute previousChannelId previousThreadRoute _ ->
+                                        (currentDiscordUserId == guildData.currentDiscordUserId)
+                                            && (guildId == guildData.guildId)
+                                            && (channelId == previousChannelId)
+                                            && sameThread threadRoute previousThreadRoute
 
-                                            else
-                                                False
+                                    _ ->
+                                        False
 
-                                        _ ->
-                                            False
-
-                                _ ->
-                                    False
-
-                         else
-                            False
+                            _ ->
+                                False
                         )
-                        previousRoute
                         Command.none
                         model3
 
                 DiscordChannel_NewChannelRoute ->
-                    enterSidebarRoute sameGuild previousRoute Command.none model3
+                    ( model3, Command.none )
 
                 DiscordChannel_GuildSettingsRoute ->
-                    enterSidebarRoute sameGuild previousRoute Command.none model3
+                    ( model3, Command.none )
 
         AiChatRoute ->
             ( model2, Command.map AiChatToBackend AiChatMsg AiChat.getModels )
@@ -1643,15 +1567,6 @@ routeRequest previousRoute newRoute model =
                     let
                         local =
                             Local.model loggedIn.localState
-
-                        showMembers : ShowMembersTab
-                        showMembers =
-                            case dmRoute.threadRoute of
-                                ViewThreadWithFriends _ _ showMembers2 ->
-                                    showMembers2
-
-                                NoThreadWithFriends _ showMembers2 ->
-                                    showMembers2
                     in
                     case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                         Just otherUserId ->
@@ -1661,13 +1576,7 @@ routeRequest previousRoute newRoute model =
                                 dmRoute.tab
                                 dmRoute.threadRoute
                                 local
-                                (case ( showMembers, MyUi.isMobile model3 ) of
-                                    ( ShowMembersTab, True ) ->
-                                        startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
-
-                                    _ ->
-                                        startOpeningChannelSidebar loggedIn
-                                )
+                                loggedIn
                                 model3
 
                         Nothing ->
@@ -1707,13 +1616,7 @@ routeRequest previousRoute newRoute model =
                         Nothing
                         (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab)
                         (Local.model loggedIn.localState)
-                        (case ( routeData.showMembersTab, MyUi.isMobile model3 ) of
-                            ( ShowMembersTab, True ) ->
-                                startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
-
-                            _ ->
-                                startOpeningChannelSidebar loggedIn
-                        )
+                        loggedIn
                         model3
                 )
                 model3

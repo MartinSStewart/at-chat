@@ -306,6 +306,7 @@ drawOnMessages imageUploadConfig =
                                                 (Route.NoThreadWithFriends Nothing Route.HideMembersTab)
                                                 Nothing
                                             )
+                                            Route.GuildChannelsHiddenOnMobile
                                         )
                                     )
                                     E2EHelper.desktopWindow
@@ -447,6 +448,7 @@ drawingScalesWithImages imageUploadConfig =
                                                 (Route.NoThreadWithFriends Nothing Route.HideMembersTab)
                                                 Nothing
                                             )
+                                            Route.GuildChannelsHiddenOnMobile
                                         )
                                     )
                                     { width = 400, height = 800 }

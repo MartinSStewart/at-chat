@@ -966,6 +966,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             E2EHelper.botTestGuild_ChannelA
                             (Route.NoThreadWithFriends Nothing Route.ShowMembersTab)
                             Nothing
+                    , channelsVisible = Route.GuildChannelsHiddenOnMobile
                     }
                 )
             )
@@ -2342,6 +2343,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             E2EHelper.botTestGuild_ChannelA
                             (Route.NoThreadWithFriends Nothing HideMembersTab)
                             Nothing
+                    , channelsVisible = Route.GuildChannelsHiddenOnMobile
                     }
                 )
             )
@@ -2502,6 +2504,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                     E2EHelper.privateDiscordChannelId
                                     (Route.NoThreadWithFriends Nothing HideMembersTab)
                                     Nothing
+                            , channelsVisible = Route.GuildChannelsHiddenOnMobile
                             }
                         )
                     )
@@ -2774,6 +2777,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             E2EHelper.botTestGuild_ChannelA
                             (Route.NoThreadWithFriends Nothing Route.ShowMembersTab)
                             Nothing
+                    , channelsVisible = Route.GuildChannelsHiddenOnMobile
                     }
                 )
             )

@@ -13,6 +13,7 @@ import Json.Encode
 import List.Extra
 import Local
 import LocalState exposing (CallStatus(..))
+import MyUi
 import NonemptyDict
 import RPC
 import SeqDict
@@ -216,8 +217,8 @@ displayModeOf clientId data =
                             Local.model loggedIn.localState
                     in
                     Call.displayMode
+                        (MyUi.isMobile loaded)
                         local.localUser.session.userId
-                        loggedIn.sidebarMode
                         loaded.route
                         local.calls
                         |> Ok

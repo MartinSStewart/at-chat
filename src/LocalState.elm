@@ -2782,8 +2782,8 @@ previouslyLastViewedThreadMessage guildOrDmId threadId local =
         |> PreviouslyLastViewedMessage
 
 
-routeToViewing : Route -> LocalState -> SetViewing
-routeToViewing route local =
+routeToViewing : Bool -> Route -> LocalState -> SetViewing
+routeToViewing isMobile route local =
     case route of
         HomePageRoute ->
             -- The home page shows the unread overview when no DM is selected
@@ -2796,7 +2796,9 @@ routeToViewing route local =
             StopViewingChannel
 
         GuildRoute guildId channelRoute channelsVisible ->
-            if SeqDict.member guildId local.guilds && channelsVisible == GuildChannelsHiddenOnMobile then
+            -- Only mobile puts the channel list over the conversation, so only mobile can
+            -- leave the reader looking at something other than the channel the route names
+            if SeqDict.member guildId local.guilds && not (isMobile && channelsVisible == GuildChannelsVisibleOnMobile) then
                 case channelRoute of
                     ChannelRoute channelId threadRoute tab ->
                         let
@@ -2836,8 +2838,8 @@ routeToViewing route local =
             else
                 StopViewingChannel
 
-        DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute } ->
-            if SeqDict.member guildId local.discordGuilds then
+        DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute, channelsVisible } ->
+            if SeqDict.member guildId local.discordGuilds && not (isMobile && channelsVisible == GuildChannelsVisibleOnMobile) then
                 case channelRoute of
                     DiscordChannel_ChannelRoute channelId threadRoute _ ->
                         let

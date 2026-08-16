@@ -4,7 +4,7 @@ import DmChannelId
 import Expect
 import Fuzz exposing (Fuzzer)
 import Id exposing (Id)
-import Route exposing (ChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), GuildChannelsVisibleOnMobile(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import Test exposing (Test)
 import Url
@@ -47,7 +47,7 @@ routeFuzzer =
         , Fuzz.map AdminRoute (Fuzz.map (\highlightLog -> { highlightLog = highlightLog }) (Fuzz.maybe idFuzzer))
         , Fuzz.constant NewGuildRoute
         , Fuzz.constant AiChatRoute
-        , Fuzz.map2 GuildRoute idFuzzer channelRouteFuzzer
+        , Fuzz.map3 GuildRoute idFuzzer channelRouteFuzzer channelsVisibleFuzzer
         , Fuzz.map4
             (\userId otherUserId threadRoute tab ->
                 DmRoute
@@ -106,6 +106,14 @@ channelRouteFuzzer =
         , Fuzz.constant NewChannelRoute
         , Fuzz.constant GuildSettingsRoute
         , Fuzz.map JoinRoute secretIdFuzzer
+        ]
+
+
+channelsVisibleFuzzer : Fuzzer GuildChannelsVisibleOnMobile
+channelsVisibleFuzzer =
+    Fuzz.oneOfValues
+        [ GuildChannelsVisibleOnMobile
+        , GuildChannelsHiddenOnMobile
         ]
 
 

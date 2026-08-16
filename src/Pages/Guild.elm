@@ -169,7 +169,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                                         , Ui.background MyUi.background3
                                                         , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
                                                         , Ui.move
-                                                            { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                            { x = Call.memberColumnOffset loggedIn.sidebarMode model
                                                             , y = 0
                                                             , z = 0
                                                             }
@@ -193,7 +193,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                                         , Ui.background MyUi.background3
                                                         , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
                                                         , Ui.move
-                                                            { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                            { x = Call.memberColumnOffset loggedIn.sidebarMode model
                                                             , y = 0
                                                             , z = 0
                                                             }
@@ -223,16 +223,11 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                         [ Ui.height Ui.fill
                                         , Ui.background MyUi.background3
                                         , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
-                                        , case showMembers of
-                                            ( ShowMembersTab, _ ) ->
-                                                Ui.noAttr
-
-                                            ( HideMembersTab, _ ) ->
-                                                Ui.move
-                                                    { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
-                                                    , y = 0
-                                                    , z = 0
-                                                    }
+                                        , Ui.move
+                                            { x = Call.conversationOffset loggedIn.sidebarMode model
+                                            , y = 0
+                                            , z = 0
+                                            }
                                         , Ui.heightMin 0
                                         , Ui.borderColor MyUi.border1
                                         , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
@@ -245,16 +240,11 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                         [ Ui.height Ui.fill
                                         , Ui.background MyUi.background3
                                         , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
-                                        , case showMembers of
-                                            ( ShowMembersTab, _ ) ->
-                                                Ui.noAttr
-
-                                            ( HideMembersTab, _ ) ->
-                                                Ui.move
-                                                    { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
-                                                    , y = 0
-                                                    , z = 0
-                                                    }
+                                        , Ui.move
+                                            { x = Call.conversationOffset loggedIn.sidebarMode model
+                                            , y = 0
+                                            , z = 0
+                                            }
                                         , Ui.heightMin 0
                                         , Ui.borderColor MyUi.border1
                                         , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
@@ -1478,7 +1468,7 @@ guildView model guildId channelRoute loggedIn local =
                                             , Ui.background MyUi.background3
                                             , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
                                             , Ui.move
-                                                { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                { x = Call.memberColumnOffset loggedIn.sidebarMode model
                                                 , y = 0
                                                 , z = 0
                                                 }
@@ -1494,16 +1484,11 @@ guildView model guildId channelRoute loggedIn local =
                                     [ Ui.height Ui.fill
                                     , Ui.background MyUi.background3
                                     , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
-                                    , case showMembers of
-                                        ( ShowMembersTab, _ ) ->
-                                            Ui.noAttr
-
-                                        ( HideMembersTab, _ ) ->
-                                            Ui.move
-                                                { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
-                                                , y = 0
-                                                , z = 0
-                                                }
+                                    , Ui.move
+                                        { x = Call.conversationOffset loggedIn.sidebarMode model
+                                        , y = 0
+                                        , z = 0
+                                        }
                                     , Ui.heightMin 0
                                     ]
                                 |> Ui.inFront
@@ -1664,7 +1649,7 @@ discordGuildView model routeData loggedIn local =
                                                     , Ui.background MyUi.background3
                                                     , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
                                                     , Ui.move
-                                                        { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                        { x = Call.memberColumnOffset loggedIn.sidebarMode model
                                                         , y = 0
                                                         , z = 0
                                                         }
@@ -1686,16 +1671,11 @@ discordGuildView model routeData loggedIn local =
                                     [ Ui.height Ui.fill
                                     , Ui.background MyUi.background3
                                     , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
-                                    , case showMembers of
-                                        ( ShowMembersTab, _ ) ->
-                                            Ui.noAttr
-
-                                        ( HideMembersTab, _ ) ->
-                                            Ui.move
-                                                { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
-                                                , y = 0
-                                                , z = 0
-                                                }
+                                    , Ui.move
+                                        { x = Call.conversationOffset loggedIn.sidebarMode model
+                                        , y = 0
+                                        , z = 0
+                                        }
                                     , Ui.heightMin 0
                                     ]
                                 |> Ui.inFront
