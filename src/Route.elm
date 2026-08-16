@@ -1,10 +1,10 @@
 module Route exposing
     ( ChannelRoute(..)
-    , ConversationVisible(..)
     , DiscordChannelRoute(..)
     , DiscordDmRouteData
     , DiscordGuildRouteData
     , DmRouteData
+    , GuildChannelsVisibleOnMobile(..)
     , LinkDiscordError(..)
     , Route(..)
     , ShowMembersTab(..)
@@ -41,7 +41,7 @@ type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe (Id Pagination.ItemId) }
     | NewGuildRoute
-    | GuildRoute (Id GuildId) ChannelRoute ConversationVisible
+    | GuildRoute (Id GuildId) ChannelRoute GuildChannelsVisibleOnMobile
     | DiscordGuildRoute DiscordGuildRouteData
     | DmRoute DmRouteData
     | DiscordDmRoute DiscordDmRouteData
@@ -75,13 +75,13 @@ type alias DiscordGuildRouteData =
     { currentDiscordUserId : Discord.Id Discord.UserId
     , guildId : Discord.Id Discord.GuildId
     , channelRoute : DiscordChannelRoute
-    , conversationVisible : ConversationVisible
+    , channelsVisible : GuildChannelsVisibleOnMobile
     }
 
 
-type ConversationVisible
-    = ConversationVisibleOnMobile
-    | ConversationHiddenOnMobile
+type GuildChannelsVisibleOnMobile
+    = GuildChannelsHiddenOnMobile
+    | GuildChannelsVisibleOnMobile
 
 
 type ChannelRoute
@@ -112,9 +112,9 @@ showMembersParam =
     "show-members"
 
 
-conversationVisibleParam : String
-conversationVisibleParam =
-    "show-conversation"
+guildChannelsVisibleParam : String
+guildChannelsVisibleParam =
+    "show-channels"
 
 
 decode : Url -> Route
@@ -132,13 +132,13 @@ decode url =
                 _ ->
                     HideMembersTab
 
-        conversationVisible =
-            case Dict.get conversationVisibleParam url2.queryParameters of
-                Just [ "True" ] ->
-                    ConversationVisibleOnMobile
+        channelsVisible =
+            case Dict.get guildChannelsVisibleParam url2.queryParameters of
+                Just [ "False" ] ->
+                    GuildChannelsVisibleOnMobile
 
                 _ ->
-                    ConversationHiddenOnMobile
+                    GuildChannelsHiddenOnMobile
     in
     case url2.path of
         [ "admin" ] ->
@@ -172,7 +172,7 @@ decode url =
                                             (stringToThread showMembers threadMessageIndex messageIndex)
                                             (decodeChannelHeaderTab url2)
                                         )
-                                        conversationVisible
+                                        channelsVisible
 
                                 ( Just channelId2, [ "t", threadMessageIndex ] ) ->
                                     GuildRoute
@@ -182,7 +182,7 @@ decode url =
                                             (stringToThread showMembers threadMessageIndex "")
                                             (decodeChannelHeaderTab url2)
                                         )
-                                        conversationVisible
+                                        channelsVisible
 
                                 ( Just channelId2, [ "m", messageIndex ] ) ->
                                     GuildRoute
@@ -192,7 +192,7 @@ decode url =
                                             (NoThreadWithFriends (Id.fromString messageIndex) showMembers)
                                             (decodeChannelHeaderTab url2)
                                         )
-                                        conversationVisible
+                                        channelsVisible
 
                                 ( Just channelId2, [] ) ->
                                     GuildRoute
@@ -202,19 +202,19 @@ decode url =
                                             (NoThreadWithFriends Nothing showMembers)
                                             (decodeChannelHeaderTab url2)
                                         )
-                                        conversationVisible
+                                        channelsVisible
 
                                 _ ->
                                     HomePageRoute
 
                         [ "new" ] ->
-                            GuildRoute guildId2 NewChannelRoute conversationVisible
+                            GuildRoute guildId2 NewChannelRoute channelsVisible
 
                         [ "settings" ] ->
-                            GuildRoute guildId2 GuildSettingsRoute conversationVisible
+                            GuildRoute guildId2 GuildSettingsRoute channelsVisible
 
                         [ "join", inviteLinkId ] ->
-                            GuildRoute guildId2 (JoinRoute (SecretId.fromString inviteLinkId)) conversationVisible
+                            GuildRoute guildId2 (JoinRoute (SecretId.fromString inviteLinkId)) channelsVisible
 
                         _ ->
                             HomePageRoute
@@ -237,7 +237,7 @@ decode url =
                                             (stringToThread showMembers threadMessageIndex messageIndex)
                                             (decodeChannelHeaderTab url2)
                                         )
-                                        conversationVisible
+                                        channelsVisible
                                         |> DiscordGuildRoute
 
                                 ( Just channelId2, [ "t", threadMessageIndex ] ) ->
@@ -249,7 +249,7 @@ decode url =
                                             (stringToThread showMembers threadMessageIndex "")
                                             (decodeChannelHeaderTab url2)
                                         )
-                                        conversationVisible
+                                        channelsVisible
                                         |> DiscordGuildRoute
 
                                 ( Just channelId2, [ "m", messageIndex ] ) ->
@@ -261,7 +261,7 @@ decode url =
                                             (NoThreadWithFriends (Id.fromString messageIndex) showMembers)
                                             (decodeChannelHeaderTab url2)
                                         )
-                                        conversationVisible
+                                        channelsVisible
                                         |> DiscordGuildRoute
 
                                 ( Just channelId2, [] ) ->
@@ -273,18 +273,18 @@ decode url =
                                             (NoThreadWithFriends Nothing showMembers)
                                             (decodeChannelHeaderTab url2)
                                         )
-                                        conversationVisible
+                                        channelsVisible
                                         |> DiscordGuildRoute
 
                                 _ ->
                                     HomePageRoute
 
                         [ "new" ] ->
-                            DiscordGuildRouteData userId2 guildId2 DiscordChannel_NewChannelRoute conversationVisible
+                            DiscordGuildRouteData userId2 guildId2 DiscordChannel_NewChannelRoute channelsVisible
                                 |> DiscordGuildRoute
 
                         [ "settings" ] ->
-                            DiscordGuildRouteData userId2 guildId2 DiscordChannel_GuildSettingsRoute conversationVisible
+                            DiscordGuildRouteData userId2 guildId2 DiscordChannel_GuildSettingsRoute channelsVisible
                                 |> DiscordGuildRoute
 
                         _ ->
@@ -547,8 +547,8 @@ setChannelHeaderTab tab route =
         DmRoute dmRoute ->
             DmRoute { dmRoute | tab = tab }
 
-        GuildRoute guildId (ChannelRoute channelId threadRoute _) conversationVisible ->
-            GuildRoute guildId (ChannelRoute channelId threadRoute tab) conversationVisible
+        GuildRoute guildId (ChannelRoute channelId threadRoute _) channelsVisible ->
+            GuildRoute guildId (ChannelRoute channelId threadRoute tab) channelsVisible
 
         DiscordGuildRoute routeData ->
             case routeData.channelRoute of
@@ -631,7 +631,7 @@ encode route =
                 AiChatRoute ->
                     ( [ "ai-chat" ], [] )
 
-                GuildRoute guildId maybeChannelId conversationVisible ->
+                GuildRoute guildId maybeChannelId channelsVisible ->
                     case maybeChannelId of
                         ChannelRoute channelId thread tab ->
                             case thread of
@@ -646,7 +646,7 @@ encode route =
                                         ++ maybeMessageIdToString maybeMessageId
                                     , encodeShowMembers showMembers
                                         ++ encodeChannelHeaderTab tab
-                                        ++ encodeConversationVisible conversationVisible
+                                        ++ encodeConversationVisible channelsVisible
                                     )
 
                                 NoThreadWithFriends maybeMessageId showMembers ->
@@ -654,18 +654,18 @@ encode route =
                                         ++ maybeMessageIdToString maybeMessageId
                                     , encodeShowMembers showMembers
                                         ++ encodeChannelHeaderTab tab
-                                        ++ encodeConversationVisible conversationVisible
+                                        ++ encodeConversationVisible channelsVisible
                                     )
 
                         NewChannelRoute ->
-                            ( [ "g", Id.toString guildId, "new" ], encodeConversationVisible conversationVisible )
+                            ( [ "g", Id.toString guildId, "new" ], encodeConversationVisible channelsVisible )
 
                         GuildSettingsRoute ->
-                            ( [ "g", Id.toString guildId, "settings" ], encodeConversationVisible conversationVisible )
+                            ( [ "g", Id.toString guildId, "settings" ], encodeConversationVisible channelsVisible )
 
                         JoinRoute inviteLinkId ->
                             ( [ "g", Id.toString guildId, "join", SecretId.toString inviteLinkId ]
-                            , encodeConversationVisible conversationVisible
+                            , encodeConversationVisible channelsVisible
                             )
 
                 DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute } ->
@@ -765,13 +765,13 @@ encodeShowMembers showMembers =
             []
 
 
-encodeConversationVisible : ConversationVisible -> List Url.Builder.QueryParameter
-encodeConversationVisible conversationVisible =
-    case conversationVisible of
-        ConversationVisibleOnMobile ->
-            [ Url.Builder.string conversationVisibleParam "True" ]
+encodeConversationVisible : GuildChannelsVisibleOnMobile -> List Url.Builder.QueryParameter
+encodeConversationVisible channelsVisible =
+    case channelsVisible of
+        GuildChannelsHiddenOnMobile ->
+            [ Url.Builder.string guildChannelsVisibleParam "True" ]
 
-        ConversationHiddenOnMobile ->
+        GuildChannelsVisibleOnMobile ->
             []
 
 

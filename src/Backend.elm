@@ -66,7 +66,7 @@ import Postmark
 import Quantity
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
-import Route exposing (Route)
+import Route exposing (GuildChannelsVisibleOnMobile(..), Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -6715,6 +6715,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                             (Route.NoThreadWithFriends Nothing Route.HideMembersTab)
                                             (Just (UserSession.ChannelHeaderTab_Games (Just matchId)))
                                         )
+                                        GuildChannelsHiddenOnMobile
 
                                 GuildOrDmId_Dm id ->
                                     Route.DmRoute

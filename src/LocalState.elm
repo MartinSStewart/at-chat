@@ -168,7 +168,7 @@ import Pagination exposing (Pagination)
 import PersonName exposing (PersonName)
 import Postmark
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), GuildChannelsVisibleOnMobile(..), Route(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -2795,8 +2795,8 @@ routeToViewing route local =
         NewGuildRoute ->
             StopViewingChannel
 
-        GuildRoute guildId channelRoute ->
-            if SeqDict.member guildId local.guilds then
+        GuildRoute guildId channelRoute channelsVisible ->
+            if SeqDict.member guildId local.guilds && channelsVisible == GuildChannelsHiddenOnMobile then
                 case channelRoute of
                     ChannelRoute channelId threadRoute tab ->
                         let
