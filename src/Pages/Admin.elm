@@ -204,7 +204,7 @@ type alias Model =
     , exportProgress : Maybe ExportProgress
     , exportSubsetSelection : Maybe ExportSubsetSelection
     , websocketCloseEventsPage : Int
-    , countToFrontend : Maybe Int
+    , countToFrontend : String
     }
 
 
@@ -338,7 +338,7 @@ initForUser =
     , exportProgress = Nothing
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
-    , countToFrontend = Nothing
+    , countToFrontend = ""
     }
 
 
@@ -364,7 +364,7 @@ initForAdmin { highlightLog } =
     , exportProgress = Nothing
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
-    , countToFrontend = Nothing
+    , countToFrontend = ""
     }
 
 
@@ -1189,7 +1189,7 @@ update navigationKey time adminData localState msg model =
             )
 
         PressedCountToBackend ->
-            ( { model | countToFrontend = Nothing }
+            ( { model | countToFrontend = "" }
             , Lamdera.sendToBackend CountToBackendRequest
             , NoOutMsg
             )
@@ -1438,7 +1438,7 @@ updateFromBackend toFrontend model =
                     ( { model | exportProgress = Just progress }, Command.none )
 
         CountToFrontend count ->
-            ( { model | countToFrontend = Just count }, Command.none )
+            ( { model | countToFrontend = model.countToFrontend ++ " " ++ String.fromInt count }, Command.none )
 
         ImportBackendResponse result ->
             case result of
@@ -2590,12 +2590,7 @@ exportSection isMobile user adminData model =
                 (Dom.id "admin_countToBackendButton")
                 PressedCountToBackend
                 (Ui.text "Count to 200")
-            , case model.countToFrontend of
-                Nothing ->
-                    Ui.none
-
-                Just count ->
-                    Ui.text (String.fromInt count)
+            , Ui.text model.countToFrontend
             ]
         ]
 
