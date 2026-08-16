@@ -3,6 +3,7 @@ module Types exposing
     , BackendFileData
     , BackendModel
     , BackendMsg(..)
+    , CountToFrontendState
     , DiscordAttachmentData
     , Drag(..)
     , DragTarget(..)
@@ -394,6 +395,7 @@ type alias BackendModel =
     , signupsEnabled : Bool
     , discordLinkingEnabled : Bool
     , exportState : Maybe ExportState
+    , countToFrontendState : Maybe CountToFrontendState
     , scheduledExportState : Maybe ExportStateProgress
     , lastScheduledExportTime : Maybe Time.Posix
     , sendMessageRateLimits : SeqDict (Id UserId) (Array Time.Posix)
@@ -732,6 +734,7 @@ type BackendMsg
     | ReloadedDiscordGuildChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
     | ReloadedDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
     | ExportBackendStep
+    | CountToFrontendStep
     | ScheduledExportBackendStep Time.Posix
     | GotDiscordGuildChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Result Discord.HttpError DiscordChannelReload)
     | GotDiscordDmChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Result Discord.HttpError (List Discord.Message))
@@ -791,6 +794,15 @@ type alias ExportStateProgress =
 type alias ExportState =
     { progress : ExportStateProgress
     , exportSubset : ExportSubset
+    , clientId : ClientId
+    }
+
+
+{-| The next count the admin page is waiting on, sent one update at a time the
+way the export progress is, so the two can be compared against each other.
+-}
+type alias CountToFrontendState =
+    { count : Int
     , clientId : ClientId
     }
 
