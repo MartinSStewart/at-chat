@@ -259,6 +259,7 @@ init =
       , signupsEnabled = True
       , discordLinkingEnabled = True
       , exportState = Nothing
+      , countToFrontendState = Nothing
       , scheduledExportState = Nothing
       , lastScheduledExportTime = Nothing
       , sendMessageRateLimits = SeqDict.empty
@@ -317,6 +318,12 @@ subscriptions model =
         , case model.exportState of
             Just _ ->
                 Time.every (Duration.milliseconds 30) (\_ -> ExportBackendStep)
+
+            Nothing ->
+                Subscription.none
+        , case model.countToFrontendState of
+            Just _ ->
+                Time.every (Duration.milliseconds 30) (\_ -> CountToFrontendStep)
 
             Nothing ->
                 Subscription.none
@@ -1415,6 +1422,22 @@ update msg model =
                 Nothing ->
                     ( model, Command.none )
 
+        CountToFrontendStep ->
+            case model.countToFrontendState of
+                Just countState ->
+                    ( if countState.count >= 200 then
+                        { model | countToFrontendState = Nothing }
+
+                      else
+                        { model | countToFrontendState = Just { countState | count = countState.count + 1 } }
+                    , Pages.Admin.CountToFrontend countState.count
+                        |> AdminToFrontend
+                        |> Lamdera.sendToFrontend countState.clientId
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
+
         ScheduledExportBackendStep time ->
             case model.scheduledExportState of
                 Just exportState ->
@@ -2172,6 +2195,7 @@ startExport time model =
                 , discordGuilds = SeqDict.empty
                 , discordDmChannels = SeqDict.empty
                 , exportState = Nothing
+                , countToFrontendState = Nothing
                 , scheduledExportState = Nothing
             }
     in
@@ -7953,6 +7977,7 @@ updateFromFrontendAdmin clientId toBackend model =
                         , discordGuilds = SeqDict.empty
                         , discordDmChannels = SeqDict.empty
                         , exportState = Nothing
+                        , countToFrontendState = Nothing
                         , scheduledExportState = Nothing
                     }
 
@@ -8006,6 +8031,11 @@ updateFromFrontendAdmin clientId toBackend model =
             , Pages.Admin.ExportBackendProgress isPartial Pages.Admin.ExportStarting
                 |> AdminToFrontend
                 |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.CountToBackendRequest ->
+            ( { model | countToFrontendState = Just { count = 0, clientId = clientId } }
+            , Command.none
             )
 
         Pages.Admin.ImportBackendRequest bytes ->

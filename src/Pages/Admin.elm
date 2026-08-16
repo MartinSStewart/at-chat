@@ -154,11 +154,13 @@ type Msg
     | PressedWebsocketCloseEventsPage Int
     | PressedStartWebCodecsTest
     | PressedStopWebCodecsTest
+    | PressedCountToBackend
 
 
 type ToBackend
     = ExportBackendRequest ExportSubset
     | ImportBackendRequest Bytes
+    | CountToBackendRequest
 
 
 type ExportSubset
@@ -175,6 +177,7 @@ type alias ExportSubsetSelection =
 type ToFrontend
     = ImportBackendResponse (Result () ())
     | ExportBackendProgress ExportSubset ExportProgress
+    | CountToFrontend Int
 
 
 type ExportProgress
@@ -201,6 +204,7 @@ type alias Model =
     , exportProgress : Maybe ExportProgress
     , exportSubsetSelection : Maybe ExportSubsetSelection
     , websocketCloseEventsPage : Int
+    , countToFrontend : String
     }
 
 
@@ -334,6 +338,7 @@ initForUser =
     , exportProgress = Nothing
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
+    , countToFrontend = ""
     }
 
 
@@ -359,6 +364,7 @@ initForAdmin { highlightLog } =
     , exportProgress = Nothing
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
+    , countToFrontend = ""
     }
 
 
@@ -1182,6 +1188,12 @@ update navigationKey time adminData localState msg model =
             , NoOutMsg
             )
 
+        PressedCountToBackend ->
+            ( { model | countToFrontend = "" }
+            , Lamdera.sendToBackend CountToBackendRequest
+            , NoOutMsg
+            )
+
         PressedExportSubsetBackend ->
             ( { model
                 | exportSubsetSelection =
@@ -1424,6 +1436,9 @@ updateFromBackend toFrontend model =
 
                 _ ->
                     ( { model | exportProgress = Just progress }, Command.none )
+
+        CountToFrontend count ->
+            ( { model | countToFrontend = model.countToFrontend ++ " " ++ String.fromInt count }, Command.none )
 
         ImportBackendResponse result ->
             case result of
@@ -2568,6 +2583,14 @@ exportSection isMobile user adminData model =
 
                 ImportedBackendSuccessfully ->
                     Ui.text "Imported!"
+            ]
+        , Ui.row
+            [ Ui.spacing 8 ]
+            [ MyUi.simpleButton
+                (Dom.id "admin_countToBackendButton")
+                PressedCountToBackend
+                (Ui.text "Count to 200")
+            , Ui.text model.countToFrontend
             ]
         ]
 
