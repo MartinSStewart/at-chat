@@ -804,6 +804,7 @@ way the export progress is, so the two can be compared against each other.
 type alias CountToFrontendState =
     { count : Int
     , clientId : ClientId
+    , busyWork : Int
     }
 
 

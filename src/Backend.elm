@@ -1429,7 +1429,14 @@ update msg model =
                         { model | countToFrontendState = Nothing }
 
                       else
-                        { model | countToFrontendState = Just { countState | count = countState.count + 1 } }
+                        { model
+                            | countToFrontendState =
+                                Just
+                                    { countState
+                                        | count = countState.count + 1
+                                        , busyWork = slowlyCountTo 14000000 countState.busyWork
+                                    }
+                        }
                     , Pages.Admin.CountToFrontend countState.count
                         |> AdminToFrontend
                         |> Lamdera.sendToFrontend countState.clientId
@@ -8034,7 +8041,7 @@ updateFromFrontendAdmin clientId toBackend model =
             )
 
         Pages.Admin.CountToBackendRequest ->
-            ( { model | countToFrontendState = Just { count = 0, clientId = clientId } }
+            ( { model | countToFrontendState = Just { count = 0, clientId = clientId, busyWork = 0 } }
             , Command.none
             )
 
@@ -8049,6 +8056,22 @@ updateFromFrontendAdmin clientId toBackend model =
                     ( model
                     , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Err ()) |> AdminToFrontend)
                     )
+
+
+{-| Burns CPU so a CountToFrontendStep update takes longer than the 30ms between
+ticks. 14 million iterations measured at around 50ms.
+
+The total it returns is meaningless. It gets kept in the backend model so that
+neither the Elm optimizer nor the JIT can decide the loop isn't worth running.
+
+-}
+slowlyCountTo : Int -> Int -> Int
+slowlyCountTo iterations total =
+    if iterations <= 0 then
+        total
+
+    else
+        slowlyCountTo (iterations - 1) (total + modBy 7 iterations)
 
 
 handleExportBackendStep : ExportStateProgress -> ( Pages.Admin.ExportProgress, Maybe ExportStateProgress )
