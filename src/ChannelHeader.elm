@@ -29,7 +29,7 @@ import MyUi
 import NonemptyDict
 import OneOrGreater exposing (OneOrGreater)
 import PersonName
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import Thread
@@ -81,7 +81,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                         , Ui.Lazy.lazy2 gameButton isMobile currentChannelHeaderTab
                         , drawingTab isMobile currentChannelHeaderTab
                         , showFilesButton
-                        , channelSettingsTab isMobile (Route.toShowMembersTab model.route |> Just)
+                        , channelSettingsTab isMobile model.route
                         ]
                     ]
         )
@@ -116,7 +116,7 @@ thread isMobile name threadName guildOrDmIdNoThread local loggedIn model =
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
                         [ drawingTab isMobile (Route.toChannelHeaderTab model.route)
                         , showFilesButton
-                        , channelSettingsTab isMobile (Route.toShowMembersTab model.route |> Just)
+                        , channelSettingsTab isMobile model.route
                         ]
                     ]
         )
@@ -157,7 +157,7 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
                         [ drawingTab isMobile currentChannelHeaderTab
                         , showFilesButton
-                        , channelSettingsTab isMobile (Route.toShowMembersTab model.route |> Just)
+                        , channelSettingsTab isMobile model.route
                         ]
                     ]
         )
@@ -185,7 +185,7 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
                         [ drawingTab isMobile (Route.toChannelHeaderTab model.route)
                         , showFilesButton
-                        , channelSettingsTab isMobile (Route.toShowMembersTab model.route |> Just)
+                        , channelSettingsTab isMobile model.route
                         ]
                     ]
         )
@@ -296,10 +296,10 @@ tabBodyZIndex =
     MyUi.htmlStyle "z-index" "20"
 
 
-channelSettingsTab : Bool -> Maybe ( ShowMembersTab, Bool ) -> Element FrontendMsg_
-channelSettingsTab isMobile showMembers =
-    case showMembers of
-        Just ( HideMembersTab, isThread ) ->
+channelSettingsTab : Bool -> Route -> Element FrontendMsg_
+channelSettingsTab isMobile route =
+    case Route.toShowMembersTab route of
+        ( HideChannelSettings, isThread ) ->
             MyUi.elButton
                 (Dom.id "guild_showMembers")
                 PressedShowMembers
@@ -319,10 +319,7 @@ channelSettingsTab isMobile showMembers =
                 ]
                 (Ui.html Icons.gear)
 
-        Just ( ShowMembersTab, _ ) ->
-            Ui.none
-
-        Nothing ->
+        ( ShowChannelSettings, _ ) ->
             Ui.none
 
 
@@ -517,7 +514,7 @@ dmHeaderButtons isMobile route currentTab otherUserId local =
         [ voiceChatButton isMobile currentTab (DmRoomId { otherUserId = otherUserId }) local.localUser local.calls
         , Ui.Lazy.lazy2 gameButton isMobile currentTab
         , drawingTab isMobile currentTab
-        , channelSettingsTab isMobile (Route.toShowMembersTab route |> Just)
+        , channelSettingsTab isMobile route
         ]
 
 
@@ -614,7 +611,7 @@ discordPrivateChatWith isMobile route currentTab name =
         , Ui.row
             [ Ui.alignRight, Ui.height Ui.fill ]
             [ drawingTab isMobile currentTab
-            , channelSettingsTab isMobile (Route.toShowMembersTab route |> Just)
+            , channelSettingsTab isMobile route
             ]
         ]
 
@@ -832,10 +829,10 @@ gameTabBody guildOrDmId maybeMatchId local loggedIn matchData model =
         model.time
         model.windowSize
         (case Route.toShowMembersTab model.route of
-            ( ShowMembersTab, _ ) ->
+            ( ShowChannelSettings, _ ) ->
                 True
 
-            ( HideMembersTab, _ ) ->
+            ( HideChannelSettings, _ ) ->
                 False
         )
         -- Touches are reported from the viewport top (behind the safe-area

@@ -168,7 +168,7 @@ import Pagination exposing (Pagination)
 import PersonName exposing (PersonName)
 import Postmark
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), GuildChannelsVisibleOnMobile(..), Route(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -2798,7 +2798,7 @@ routeToViewing isMobile route local =
         GuildRoute guildId channelRoute channelsVisible ->
             -- Only mobile puts the channel list over the conversation, so only mobile can
             -- leave the reader looking at something other than the channel the route names
-            if SeqDict.member guildId local.guilds && not (isMobile && channelsVisible == GuildChannelsVisibleOnMobile) then
+            if SeqDict.member guildId local.guilds && not (isMobile && channelsVisible == ChannelsVisibleOnMobile) then
                 case channelRoute of
                     ChannelRoute channelId threadRoute tab ->
                         let
@@ -2839,7 +2839,7 @@ routeToViewing isMobile route local =
                 StopViewingChannel
 
         DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute, channelsVisible } ->
-            if SeqDict.member guildId local.discordGuilds && not (isMobile && channelsVisible == GuildChannelsVisibleOnMobile) then
+            if SeqDict.member guildId local.discordGuilds && not (isMobile && channelsVisible == ChannelsVisibleOnMobile) then
                 case channelRoute of
                     DiscordChannel_ChannelRoute channelId threadRoute _ ->
                         let

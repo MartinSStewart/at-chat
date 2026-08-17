@@ -36,7 +36,7 @@ import Pages.Admin
 import Pages.Guild
 import PersonName
 import RichText
-import Route exposing (ShowMembersTab(..))
+import Route exposing (ShowChannelSettings(..))
 import SeqDict
 import SeqSet
 import Sticker
@@ -964,9 +964,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     , channelRoute =
                         Route.DiscordChannel_ChannelRoute
                             E2EHelper.botTestGuild_ChannelA
-                            (Route.NoThreadWithFriends Nothing Route.ShowMembersTab)
+                            (Route.NoThreadWithFriends Nothing Route.ShowChannelSettings)
                             Nothing
-                    , channelsVisible = Route.GuildChannelsHiddenOnMobile
+                    , channelsVisible = Route.ChannelsHiddenOnMobile
                     }
                 )
             )
@@ -2341,9 +2341,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     , channelRoute =
                         Route.DiscordChannel_ChannelRoute
                             E2EHelper.botTestGuild_ChannelA
-                            (Route.NoThreadWithFriends Nothing HideMembersTab)
+                            (Route.NoThreadWithFriends Nothing HideChannelSettings)
                             Nothing
-                    , channelsVisible = Route.GuildChannelsHiddenOnMobile
+                    , channelsVisible = Route.ChannelsHiddenOnMobile
                     }
                 )
             )
@@ -2502,9 +2502,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             , channelRoute =
                                 Route.DiscordChannel_ChannelRoute
                                     E2EHelper.privateDiscordChannelId
-                                    (Route.NoThreadWithFriends Nothing HideMembersTab)
+                                    (Route.NoThreadWithFriends Nothing HideChannelSettings)
                                     Nothing
-                            , channelsVisible = Route.GuildChannelsHiddenOnMobile
+                            , channelsVisible = Route.ChannelsHiddenOnMobile
                             }
                         )
                     )
@@ -2775,9 +2775,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     , channelRoute =
                         Route.DiscordChannel_ChannelRoute
                             E2EHelper.botTestGuild_ChannelA
-                            (Route.NoThreadWithFriends Nothing Route.ShowMembersTab)
+                            (Route.NoThreadWithFriends Nothing Route.ShowChannelSettings)
                             Nothing
-                    , channelsVisible = Route.GuildChannelsHiddenOnMobile
+                    , channelsVisible = Route.ChannelsHiddenOnMobile
                     }
                 )
             )

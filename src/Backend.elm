@@ -66,7 +66,7 @@ import Postmark
 import Quantity
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
-import Route exposing (GuildChannelsVisibleOnMobile(..), Route)
+import Route exposing (ChannelsVisibleOnMobile(..), Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -6712,16 +6712,17 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                         guildId
                                         (Route.ChannelRoute
                                             channelId
-                                            (Route.NoThreadWithFriends Nothing Route.HideMembersTab)
+                                            (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
                                             (Just (UserSession.ChannelHeaderTab_Games (Just matchId)))
                                         )
-                                        GuildChannelsHiddenOnMobile
+                                        ChannelsHiddenOnMobile
 
                                 GuildOrDmId_Dm id ->
                                     Route.DmRoute
                                         { channelId = DmChannelId.fromUserIds session.userId id.otherUserId
-                                        , threadRoute = Route.NoThreadWithFriends Nothing Route.HideMembersTab
+                                        , threadRoute = Route.NoThreadWithFriends Nothing Route.HideChannelSettings
                                         , tab = Just (UserSession.ChannelHeaderTab_Games (Just matchId))
+                                        , channelsVisible = ChannelsHiddenOnMobile
                                         }
 
                         userToString : Id UserId -> String

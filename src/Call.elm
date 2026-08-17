@@ -1,6 +1,5 @@
 port module Call exposing
     ( CallId(..)
-    , ChannelSidebarMode(..)
     , ConnectionId
     , DeviceKind(..)
     , DisplayMode(..)
@@ -67,7 +66,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import Route exposing (GuildChannelsVisibleOnMobile(..), Route(..), ShowMembersTab(..))
+import Route exposing (ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), Route(..), ShowChannelSettings(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
@@ -148,11 +147,6 @@ type MediaDevicesStatus
     = MediaDevicesNotLoaded
     | HasMediaDevices (List MediaDevice)
     | FailedToGetMediaDevices String
-
-
-type ChannelSidebarMode
-    = ChannelSidebarNotDragging { offset : Float }
-    | ChannelSidebarDragging { offset : Float, previousOffset : Float, time : Time.Posix }
 
 
 init : SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData) -> Local
@@ -338,7 +332,7 @@ displayMode isMobile currentUserId route local =
             -- Only mobile puts the channel list over the conversation the videos are laid
             -- out on top of, so only mobile can leave them with nothing to sit on
             case ( isMobile, channelsVisible ) of
-                ( True, GuildChannelsVisibleOnMobile ) ->
+                ( True, ChannelsVisibleOnMobile ) ->
                     thumbnailOrNoVideo
 
                 _ ->
@@ -472,10 +466,10 @@ videoNodes localUser config loggedIn local =
             MyUi.conversationWidthIgnoreScrollbar
                 config.windowSize
                 (case Route.toShowMembersTab config.route of
-                    ( ShowMembersTab, _ ) ->
+                    ( ShowChannelSettings, _ ) ->
                         True
 
-                    ( HideMembersTab, _ ) ->
+                    ( HideChannelSettings, _ ) ->
                         False
                 )
                 - padding

@@ -5,7 +5,7 @@ import Array
 import Audio exposing (AudioCmd, AudioData)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
-import Call exposing (ChannelSidebarMode(..), MediaDevicesStatus(..))
+import Call exposing (MediaDevicesStatus(..))
 import ChannelDescription
 import ChannelName
 import Coord exposing (Coord)
@@ -65,7 +65,7 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RecoveryLogin
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), GuildChannelsVisibleOnMobile(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -986,8 +986,8 @@ updateLoaded msg model =
                                         { model | loginStatus = LoggedIn loggedIn2 }
                                         (GuildRoute
                                             guildId
-                                            (ChannelRoute nextChannelId (NoThreadWithFriends Nothing HideMembersTab) Nothing)
-                                            GuildChannelsHiddenOnMobile
+                                            (ChannelRoute nextChannelId (NoThreadWithFriends Nothing HideChannelSettings) Nothing)
+                                            ChannelsHiddenOnMobile
                                         )
                             in
                             ( model2, Command.batch [ routeCmd, cmd ] )
@@ -1081,10 +1081,10 @@ updateLoaded msg model =
                                             guildId
                                             (ChannelRoute
                                                 (LocalState.announcementChannel guild)
-                                                (NoThreadWithFriends Nothing HideMembersTab)
+                                                (NoThreadWithFriends Nothing HideChannelSettings)
                                                 Nothing
                                             )
-                                            GuildChannelsVisibleOnMobile
+                                            ChannelsVisibleOnMobile
                                         )
 
                                 Nothing ->
@@ -1510,8 +1510,8 @@ updateLoaded msg model =
                         { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
                         (GuildRoute
                             guildId
-                            (ChannelRoute channelId (ViewThreadWithFriends messageIndex Nothing HideMembersTab) Nothing)
-                            GuildChannelsHiddenOnMobile
+                            (ChannelRoute channelId (ViewThreadWithFriends messageIndex Nothing HideChannelSettings) Nothing)
+                            ChannelsHiddenOnMobile
                         )
 
                 ( DmRoute dmRoute, LoggedIn loggedIn ) ->
@@ -1519,7 +1519,7 @@ updateLoaded msg model =
                         NoThreadWithFriends _ _ ->
                             FrontendExtra.routePush
                                 { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
-                                (DmRoute { dmRoute | threadRoute = ViewThreadWithFriends messageIndex Nothing HideMembersTab })
+                                (DmRoute { dmRoute | threadRoute = ViewThreadWithFriends messageIndex Nothing HideChannelSettings })
 
                         ViewThreadWithFriends _ _ _ ->
                             ( model, Command.none )
@@ -1534,7 +1534,7 @@ updateLoaded msg model =
                                         | channelRoute =
                                             DiscordChannel_ChannelRoute
                                                 channelId
-                                                (ViewThreadWithFriends messageIndex Nothing HideMembersTab)
+                                                (ViewThreadWithFriends messageIndex Nothing HideChannelSettings)
                                                 Nothing
                                     }
                                 )
@@ -1665,7 +1665,11 @@ updateLoaded msg model =
                                                                 loggedIn.sidebarMode
 
                                                             _ ->
-                                                                dragChannelSidebar (channelSidebarDragRange model.route) time tHorizontal loggedIn.sidebarMode
+                                                                dragChannelSidebar
+                                                                    (channelSidebarDragRange model.route)
+                                                                    time
+                                                                    tHorizontal
+                                                                    loggedIn.sidebarMode
                                                 }
 
                                             else
@@ -1817,10 +1821,10 @@ updateLoaded msg model =
             startClosingChannelSidebar model
 
         PressedShowMembers ->
-            setShowMembers ShowMembersTab model
+            setShowMembers ShowChannelSettings model
 
         PressedHideMembers ->
-            setShowMembers HideMembersTab model
+            setShowMembers HideChannelSettings model
 
         UserScrolled guildOrDmId threadRoute scrollPosition ->
             FrontendExtra.updateLoggedIn
@@ -1914,8 +1918,9 @@ updateLoaded msg model =
                                 DmChannelId.fromUserIds
                                     otherUserId
                                     (Local.model loggedIn.localState).localUser.session.userId
-                            , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                            , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                             , tab = Nothing
+                            , channelsVisible = ChannelsHiddenOnMobile
                             }
                         )
 
@@ -1931,8 +1936,9 @@ updateLoaded msg model =
                             { currentDiscordUserId = currentUserId
                             , channelId = channelId
                             , viewingMessage = Nothing
-                            , showMembersTab = HideMembersTab
+                            , showMembersTab = HideChannelSettings
                             , tab = Nothing
+                            , channelsVisible = ChannelsHiddenOnMobile
                             }
                         )
 
@@ -2439,10 +2445,10 @@ updateLoaded msg model =
                                                             guildId
                                                             (ChannelRoute
                                                                 channelId
-                                                                (ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab)
+                                                                (ViewThreadWithFriends threadId (Just repliedTo) HideChannelSettings)
                                                                 Nothing
                                                             )
-                                                            GuildChannelsHiddenOnMobile
+                                                            ChannelsHiddenOnMobile
                                                         )
 
                                                 ( GuildOrDmId_Guild { guildId, channelId }, NoThreadWithMaybeMessage (Just repliedTo) ) ->
@@ -2452,10 +2458,10 @@ updateLoaded msg model =
                                                             guildId
                                                             (ChannelRoute
                                                                 channelId
-                                                                (NoThreadWithFriends (Just repliedTo) HideMembersTab)
+                                                                (NoThreadWithFriends (Just repliedTo) HideChannelSettings)
                                                                 Nothing
                                                             )
-                                                            GuildChannelsHiddenOnMobile
+                                                            ChannelsHiddenOnMobile
                                                         )
 
                                                 ( GuildOrDmId_Dm { otherUserId }, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
@@ -2467,8 +2473,9 @@ updateLoaded msg model =
                                                                     (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
                                                                     otherUserId
                                                             , threadRoute =
-                                                                ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab
+                                                                ViewThreadWithFriends threadId (Just repliedTo) HideChannelSettings
                                                             , tab = Nothing
+                                                            , channelsVisible = ChannelsHiddenOnMobile
                                                             }
                                                         )
 
@@ -2481,8 +2488,9 @@ updateLoaded msg model =
                                                                     (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
                                                                     otherUserId
                                                             , threadRoute =
-                                                                NoThreadWithFriends (Just repliedTo) HideMembersTab
+                                                                NoThreadWithFriends (Just repliedTo) HideChannelSettings
                                                             , tab = Nothing
+                                                            , channelsVisible = ChannelsHiddenOnMobile
                                                             }
                                                         )
 
@@ -2504,9 +2512,9 @@ updateLoaded msg model =
                                                          , channelRoute =
                                                             DiscordChannel_ChannelRoute
                                                                 channelId
-                                                                (ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab)
+                                                                (ViewThreadWithFriends threadId (Just repliedTo) HideChannelSettings)
                                                                 Nothing
-                                                         , channelsVisible = GuildChannelsHiddenOnMobile
+                                                         , channelsVisible = ChannelsHiddenOnMobile
                                                          }
                                                             |> DiscordGuildRoute
                                                         )
@@ -2519,9 +2527,9 @@ updateLoaded msg model =
                                                          , channelRoute =
                                                             DiscordChannel_ChannelRoute
                                                                 channelId
-                                                                (NoThreadWithFriends (Just repliedTo) HideMembersTab)
+                                                                (NoThreadWithFriends (Just repliedTo) HideChannelSettings)
                                                                 Nothing
-                                                         , channelsVisible = GuildChannelsHiddenOnMobile
+                                                         , channelsVisible = ChannelsHiddenOnMobile
                                                          }
                                                             |> DiscordGuildRoute
                                                         )
@@ -2533,8 +2541,9 @@ updateLoaded msg model =
                                                             { currentDiscordUserId = currentUserId
                                                             , channelId = channelId
                                                             , viewingMessage = Just repliedTo
-                                                            , showMembersTab = HideMembersTab
+                                                            , showMembersTab = HideChannelSettings
                                                             , tab = Nothing
+                                                            , channelsVisible = ChannelsHiddenOnMobile
                                                             }
                                                         )
 
@@ -2599,8 +2608,8 @@ updateLoaded msg model =
                                 model
                                 (GuildRoute
                                     guildId
-                                    (ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideMembersTab) Nothing)
-                                    GuildChannelsHiddenOnMobile
+                                    (ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideChannelSettings) Nothing)
+                                    ChannelsHiddenOnMobile
                                 )
 
                         ( GuildOrDmId (GuildOrDmId_Dm { otherUserId }), NoThreadWithMessage messageId ) ->
@@ -2610,8 +2619,9 @@ updateLoaded msg model =
                                         DmChannelId.fromUserIds
                                             (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
                                             otherUserId
-                                    , threadRoute = ViewThreadWithFriends messageId Nothing HideMembersTab
+                                    , threadRoute = ViewThreadWithFriends messageId Nothing HideChannelSettings
                                     , tab = Nothing
+                                    , channelsVisible = ChannelsHiddenOnMobile
                                     }
                                         |> DmRoute
                                         |> FrontendExtra.routePush model
@@ -2627,9 +2637,9 @@ updateLoaded msg model =
                                  , channelRoute =
                                     DiscordChannel_ChannelRoute
                                         channelId
-                                        (ViewThreadWithFriends messageId Nothing HideMembersTab)
+                                        (ViewThreadWithFriends messageId Nothing HideChannelSettings)
                                         Nothing
-                                 , channelsVisible = GuildChannelsHiddenOnMobile
+                                 , channelsVisible = ChannelsHiddenOnMobile
                                  }
                                     |> DiscordGuildRoute
                                 )
@@ -2641,8 +2651,9 @@ updateLoaded msg model =
                                     { currentDiscordUserId = currentUserId
                                     , channelId = channelId
                                     , viewingMessage = Nothing
-                                    , showMembersTab = HideMembersTab
+                                    , showMembersTab = HideChannelSettings
                                     , tab = Nothing
+                                    , channelsVisible = ChannelsHiddenOnMobile
                                     }
                                 )
 
@@ -3134,8 +3145,9 @@ updateLoaded msg model =
                                     { currentDiscordUserId = data.currentUserId
                                     , channelId = channelId
                                     , viewingMessage = Nothing
-                                    , showMembersTab = HideMembersTab
+                                    , showMembersTab = HideChannelSettings
                                     , tab = Nothing
+                                    , channelsVisible = ChannelsHiddenOnMobile
                                     }
                                 )
 
@@ -4390,8 +4402,9 @@ updateLoaded msg model =
                                         (DmRoute
                                             { channelId =
                                                 DmChannelId.fromUserIds local.localUser.session.userId otherUserId
-                                            , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                                            , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                                             , tab = Just ChannelHeaderTab_VoiceChat
+                                            , channelsVisible = ChannelsHiddenOnMobile
                                             }
                                         )
 
@@ -4402,10 +4415,10 @@ updateLoaded msg model =
                                             guildId
                                             (ChannelRoute
                                                 channelId
-                                                (NoThreadWithFriends Nothing HideMembersTab)
+                                                (NoThreadWithFriends Nothing HideChannelSettings)
                                                 (Just ChannelHeaderTab_VoiceChat)
                                             )
-                                            GuildChannelsHiddenOnMobile
+                                            ChannelsHiddenOnMobile
                                         )
 
                         NotLoggedIn _ ->
@@ -4812,10 +4825,10 @@ updateLoaded msg model =
                                 guildId
                                 (ChannelRoute
                                     channelId
-                                    (NoThreadWithFriends Nothing HideMembersTab)
+                                    (NoThreadWithFriends Nothing HideChannelSettings)
                                     (Just ChannelHeaderTab_VoiceChat)
                                 )
-                                GuildChannelsHiddenOnMobile
+                                ChannelsHiddenOnMobile
                                 |> FrontendExtra.routePush model
 
                         GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
@@ -4826,8 +4839,9 @@ updateLoaded msg model =
                                             DmChannelId.fromUserIds
                                                 (Local.model loggedIn.localState).localUser.session.userId
                                                 otherUserId
-                                        , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                                        , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                                         , tab = Just ChannelHeaderTab_VoiceChat
+                                        , channelsVisible = ChannelsHiddenOnMobile
                                         }
                                         |> FrontendExtra.routePush model
 
@@ -4844,10 +4858,10 @@ updateLoaded msg model =
                                 guildId
                                 (ChannelRoute
                                     channelId
-                                    (NoThreadWithFriends Nothing HideMembersTab)
+                                    (NoThreadWithFriends Nothing HideChannelSettings)
                                     (Just (ChannelHeaderTab_Games (Just messageId)))
                                 )
-                                GuildChannelsHiddenOnMobile
+                                ChannelsHiddenOnMobile
                                 |> FrontendExtra.routePush model
 
                         GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
@@ -4858,8 +4872,9 @@ updateLoaded msg model =
                                             DmChannelId.fromUserIds
                                                 (Local.model loggedIn.localState).localUser.session.userId
                                                 otherUserId
-                                        , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                                        , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                                         , tab = Just (ChannelHeaderTab_Games (Just messageId))
+                                        , channelsVisible = ChannelsHiddenOnMobile
                                         }
                                         |> FrontendExtra.routePush model
 
@@ -5036,8 +5051,9 @@ handlePressedUserIconButton otherUserId model =
                         DmChannelId.fromUserIds
                             (Local.model loggedIn.localState).localUser.session.userId
                             otherUserId
-                    , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                    , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                     , tab = Nothing
+                    , channelsVisible = ChannelsHiddenOnMobile
                     }
                 )
 
@@ -5057,8 +5073,9 @@ handlePressedDiscordUserIconButton otherUserId model =
                             { currentDiscordUserId = currentDiscordUserId
                             , channelId = channelId
                             , viewingMessage = Nothing
-                            , showMembersTab = HideMembersTab
+                            , showMembersTab = HideChannelSettings
                             , tab = Nothing
+                            , channelsVisible = ChannelsHiddenOnMobile
                             }
                         )
 
@@ -6037,7 +6054,7 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
             )
 
 
-setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
+setShowMembers : ShowChannelSettings -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 setShowMembers showMembers model =
     case model.route of
         GuildRoute guildId (ChannelRoute channelId threadRoute tab) channelsVisible ->
@@ -6413,11 +6430,6 @@ handleAltPressedMessage guildOrDmId threadRoute isThreadStarter maybeImageUrl ma
 
 handleTouchEnd : Time.Posix -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 handleTouchEnd time model =
-    let
-        releasedSidebar : Maybe Route
-        releasedSidebar =
-            releasedSidebarDrag time model
-    in
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
             let
@@ -6425,10 +6437,7 @@ handleTouchEnd time model =
                 loggedIn2 =
                     case loggedIn.sidebarMode of
                         ChannelSidebarDragging a ->
-                            -- The conversation view carries on from where the finger let
-                            -- go of it. Which way it carries on is a route change, made
-                            -- once the drag has been let go of (see releasedSidebarDrag).
-                            { loggedIn | sidebarMode = ChannelSidebarNotDragging { offset = clamp 0 1 a.offset } }
+                            { loggedIn | sidebarMode = ChannelSidebarNotDragging { offset = a.offset } }
 
                         ChannelSidebarNotDragging _ ->
                             loggedIn
@@ -6502,18 +6511,18 @@ handleTouchEnd time model =
             )
         )
         { model | drag = NoDrag, dragPrevious = model.drag }
-        |> (\( model2, cmd ) ->
-                case releasedSidebar of
+        |> (\( newModel, cmd ) ->
+                case releasedSidebarDrag time model of
                     Just route ->
-                        if route == model2.route then
-                            ( model2, cmd )
+                        if route == newModel.route then
+                            ( newModel, cmd )
 
                         else
-                            FrontendExtra.routePush model2 route
+                            FrontendExtra.routePush newModel route
                                 |> Tuple.mapSecond (\routeCmd -> Command.batch [ cmd, routeCmd ])
 
                     Nothing ->
-                        ( model2, cmd )
+                        ( newModel, cmd )
            )
 
 
@@ -6525,7 +6534,7 @@ releasedSidebarDrag : Time.Posix -> LoadedFrontend -> Maybe Route
 releasedSidebarDrag time model =
     case model.loginStatus of
         LoggedIn loggedIn ->
-            case loggedIn.sidebarMode of
+            case Debug.log "loggedIn.sidebarMode" loggedIn.sidebarMode of
                 ChannelSidebarDragging a ->
                     let
                         range : { min : Float, max : Float }
@@ -6548,20 +6557,20 @@ releasedSidebarDrag time model =
                                    )
                     in
                     (case Route.toShowMembersTab model.route of
-                        ( ShowMembersTab, _ ) ->
+                        ( ShowChannelSettings, _ ) ->
                             if landsOnTheNearSide then
                                 model.route
 
                             else
-                                Route.setShowMembers HideMembersTab model.route
+                                Route.setShowMembers HideChannelSettings model.route
 
-                        ( HideMembersTab, _ ) ->
+                        ( HideChannelSettings, _ ) ->
                             Route.setChannelsVisible
                                 (if landsOnTheNearSide then
-                                    GuildChannelsHiddenOnMobile
+                                    ChannelsHiddenOnMobile
 
                                  else
-                                    GuildChannelsVisibleOnMobile
+                                    ChannelsVisibleOnMobile
                                 )
                                 model.route
                     )
@@ -6724,11 +6733,11 @@ way there on its own.
 startClosingChannelSidebar : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 startClosingChannelSidebar model =
     case Route.toShowMembersTab model.route of
-        ( ShowMembersTab, _ ) ->
-            setShowMembers HideMembersTab model
+        ( ShowChannelSettings, _ ) ->
+            setShowMembers HideChannelSettings model
 
-        ( HideMembersTab, _ ) ->
-            FrontendExtra.routePush model (Route.setChannelsVisible GuildChannelsVisibleOnMobile model.route)
+        ( HideChannelSettings, _ ) ->
+            FrontendExtra.routePush model (Route.setChannelsVisible ChannelsVisibleOnMobile model.route)
 
 
 {-| Which of the three screens the mobile layout is heading for: the member column at 0,
@@ -6737,16 +6746,64 @@ the conversation view at 1, or the guild's channel list at 2.
 channelSidebarTarget : Route -> Float
 channelSidebarTarget route =
     case Route.toShowMembersTab route of
-        ( ShowMembersTab, _ ) ->
+        ( ShowChannelSettings, _ ) ->
             0
 
-        ( HideMembersTab, _ ) ->
-            case Route.toChannelsVisible route of
-                GuildChannelsHiddenOnMobile ->
-                    1
+        ( HideChannelSettings, _ ) ->
+            let
+                helper channelsVisible =
+                    case channelsVisible of
+                        ChannelsVisibleOnMobile ->
+                            2
 
-                GuildChannelsVisibleOnMobile ->
+                        ChannelsHiddenOnMobile ->
+                            1
+            in
+            case route of
+                GuildRoute _ _ channelsVisible ->
+                    helper channelsVisible
+
+                DiscordGuildRoute routeData ->
+                    helper routeData.channelsVisible
+
+                HomePageRoute ->
                     2
+
+                AdminRoute _ ->
+                    2
+
+                NewGuildRoute ->
+                    2
+
+                DmRoute routeData ->
+                    helper routeData.channelsVisible
+
+                DiscordDmRoute routeData ->
+                    helper routeData.channelsVisible
+
+                AiChatRoute ->
+                    2
+
+                SlackOAuthRedirect _ ->
+                    2
+
+                TextEditorRoute ->
+                    2
+
+                LinkDiscord _ ->
+                    2
+
+                PublicGoMatchRoute _ ->
+                    2
+
+
+
+--case Route.toChannelsVisible route of
+--    GuildChannelsHiddenOnMobile ->
+--        1
+--
+--    GuildChannelsVisibleOnMobile ->
+--        2
 
 
 {-| A swipe only ever travels between the screen the route is on and the one next door, so
@@ -6755,10 +6812,10 @@ that letting go lands on one or the other.
 channelSidebarDragRange : Route -> { min : Float, max : Float }
 channelSidebarDragRange route =
     case Route.toShowMembersTab route of
-        ( ShowMembersTab, _ ) ->
+        ( ShowChannelSettings, _ ) ->
             { min = 0, max = 1 }
 
-        ( HideMembersTab, _ ) ->
+        ( HideChannelSettings, _ ) ->
             { min = 1, max = 2 }
 
 
@@ -7028,10 +7085,10 @@ updateLoadedFromBackend msg model =
                                             guildId
                                             (ChannelRoute
                                                 (LocalState.announcementChannel guild)
-                                                (NoThreadWithFriends Nothing HideMembersTab)
+                                                (NoThreadWithFriends Nothing HideChannelSettings)
                                                 Nothing
                                             )
-                                            GuildChannelsHiddenOnMobile
+                                            ChannelsHiddenOnMobile
                                         )
 
                                 Nothing ->
@@ -7211,10 +7268,10 @@ updateLoadedFromBackend msg model =
                                                         guildId
                                                         (ChannelRoute
                                                             (LocalState.announcementChannel guild)
-                                                            (NoThreadWithFriends Nothing HideMembersTab)
+                                                            (NoThreadWithFriends Nothing HideChannelSettings)
                                                             Nothing
                                                         )
-                                                        GuildChannelsHiddenOnMobile
+                                                        ChannelsHiddenOnMobile
                                                     )
 
                                             else

@@ -17,7 +17,7 @@ import Json.Encode
 import List.Nonempty
 import Message
 import OneOrGreater
-import Route exposing (ShowMembersTab(..))
+import Route exposing (ShowChannelSettings(..))
 import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
@@ -386,7 +386,7 @@ tests normalConfig =
                         (Route.encode
                             (Route.DmRoute
                                 { channelId = DmChannelId.fromUserIds (Id.fromInt 2) Broadcast.adminUserId
-                                , threadRoute = Route.NoThreadWithFriends Nothing HideMembersTab
+                                , threadRoute = Route.NoThreadWithFriends Nothing HideChannelSettings
                                 , tab = Just (UserSession.ChannelHeaderTab_Games (Just (Id.fromInt 0)))
                                 }
                             )

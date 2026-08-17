@@ -1099,7 +1099,7 @@ dmThreadsTest config =
                     (Route.encode
                         (Route.DmRoute
                             { channelId = DmChannelId.fromUserIds (Id.fromInt 0) (Id.fromInt 2)
-                            , threadRoute = Route.ViewThreadWithFriends (Id.fromInt 0) Nothing Route.HideMembersTab
+                            , threadRoute = Route.ViewThreadWithFriends (Id.fromInt 0) Nothing Route.HideChannelSettings
                             , tab = Nothing
                             }
                         )

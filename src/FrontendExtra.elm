@@ -92,7 +92,7 @@ import Ports exposing (RegisterPushSubscription(..))
 import Range exposing (Range)
 import RecoveryLogin
 import RichText exposing (Domain, RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), GuildChannelsVisibleOnMobile(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -544,7 +544,7 @@ canDropFiles isMobile currentUserId route =
             Nothing
 
         GuildRoute guildId channelRoute channelsVisible ->
-            if channelsVisible == GuildChannelsVisibleOnMobile && isMobile then
+            if channelsVisible == ChannelsVisibleOnMobile && isMobile then
                 Nothing
 
             else
@@ -1494,10 +1494,10 @@ routeRequest previousRoute newRoute model =
                                                 guildId
                                                 (ChannelRoute
                                                     (LocalState.announcementChannel guild)
-                                                    (NoThreadWithFriends Nothing HideMembersTab)
+                                                    (NoThreadWithFriends Nothing HideChannelSettings)
                                                     Nothing
                                                 )
-                                                GuildChannelsVisibleOnMobile
+                                                ChannelsVisibleOnMobile
                                             )
 
                                     Nothing ->

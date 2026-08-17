@@ -303,10 +303,10 @@ drawOnMessages imageUploadConfig =
                                             guildId
                                             (Route.ChannelRoute
                                                 (Id.fromInt 0)
-                                                (Route.NoThreadWithFriends Nothing Route.HideMembersTab)
+                                                (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
                                                 Nothing
                                             )
-                                            Route.GuildChannelsHiddenOnMobile
+                                            Route.ChannelsHiddenOnMobile
                                         )
                                     )
                                     E2EHelper.desktopWindow
@@ -445,10 +445,10 @@ drawingScalesWithImages imageUploadConfig =
                                             guildId
                                             (Route.ChannelRoute
                                                 (Id.fromInt 0)
-                                                (Route.NoThreadWithFriends Nothing Route.HideMembersTab)
+                                                (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
                                                 Nothing
                                             )
-                                            Route.GuildChannelsHiddenOnMobile
+                                            Route.ChannelsHiddenOnMobile
                                         )
                                     )
                                     { width = 400, height = 800 }

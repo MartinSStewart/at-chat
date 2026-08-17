@@ -4,7 +4,7 @@ import DmChannelId
 import Expect
 import Fuzz exposing (Fuzzer)
 import Id exposing (Id)
-import Route exposing (ChannelRoute(..), GuildChannelsVisibleOnMobile(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import Test exposing (Test)
 import Url
@@ -109,17 +109,17 @@ channelRouteFuzzer =
         ]
 
 
-channelsVisibleFuzzer : Fuzzer GuildChannelsVisibleOnMobile
+channelsVisibleFuzzer : Fuzzer ChannelsVisibleOnMobile
 channelsVisibleFuzzer =
     Fuzz.oneOfValues
-        [ GuildChannelsVisibleOnMobile
-        , GuildChannelsHiddenOnMobile
+        [ ChannelsVisibleOnMobile
+        , ChannelsHiddenOnMobile
         ]
 
 
-showMemberTabFuzzer : Fuzzer ShowMembersTab
+showMemberTabFuzzer : Fuzzer ShowChannelSettings
 showMemberTabFuzzer =
     Fuzz.oneOfValues
-        [ ShowMembersTab
-        , HideMembersTab
+        [ ShowChannelSettings
+        , HideChannelSettings
         ]
