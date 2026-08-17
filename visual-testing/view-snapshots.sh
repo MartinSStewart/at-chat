@@ -13,8 +13,11 @@ cd "$(dirname "$0")"
 vt_dir=$(pwd)
 repo_root=$(git rev-parse --show-toplevel)
 
-current_dir="$vt_dir/snapshots/current"
-diff_dir="$vt_dir/snapshots/diff"
+# Which browser's snapshots to look at, matching run-snapshot-test.sh.
+browser=${SNAPSHOT_BROWSER:-chrome}
+
+current_dir="$vt_dir/snapshots/$browser/current"
+diff_dir="$vt_dir/snapshots/$browser/diff"
 
 # Find the baseline folder the same way run-snapshot-test.sh names it
 # (baseline-<merge-base sha>); fall back to the most recently written
@@ -29,22 +32,22 @@ else
 fi
 if [ -n "$base_branch" ]; then
   base_sha=$(git merge-base "$base_branch" HEAD 2>/dev/null || true)
-  if [ -n "$base_sha" ] && [ -d "$vt_dir/snapshots/baseline-$base_sha" ]; then
-    baseline_dir="$vt_dir/snapshots/baseline-$base_sha"
+  if [ -n "$base_sha" ] && [ -d "$vt_dir/snapshots/$browser/baseline-$base_sha" ]; then
+    baseline_dir="$vt_dir/snapshots/$browser/baseline-$base_sha"
   fi
 fi
 if [ -z "$baseline_dir" ]; then
-  baseline_dir=$(ls -dt "$vt_dir"/snapshots/baseline-*/ 2>/dev/null | head -n 1)
+  baseline_dir=$(ls -dt "$vt_dir"/snapshots/"$browser"/baseline-*/ 2>/dev/null | head -n 1)
   baseline_dir=${baseline_dir%/}
 fi
 if [ -z "$baseline_dir" ]; then
   # Nothing rendered yet for the baseline; point at the canonical (missing)
   # path so the viewer still works for current-only snapshots.
-  baseline_dir="$vt_dir/snapshots/baseline-none"
+  baseline_dir="$vt_dir/snapshots/$browser/baseline-none"
 fi
 
 if [ ! -d "$current_dir" ] && [ ! -d "$baseline_dir" ]; then
-  echo "❌ No snapshots found in $vt_dir/snapshots. Run ./run-snapshot-test.sh first." >&2
+  echo "❌ No snapshots found in $vt_dir/snapshots/$browser. Run ./run-snapshot-test.sh first." >&2
   exit 1
 fi
 

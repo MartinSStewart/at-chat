@@ -1,6 +1,6 @@
 ## Visual snapshot testing
 
-Compiles the Elm app through a snapshot harness, drives a headless Chrome via
+Compiles the Elm app through a snapshot harness, drives a headless browser via
 WebdriverIO, and saves one PNG per snapshot defined in the recorded tests.
 
 ### Deps
@@ -36,6 +36,38 @@ repository root) so the Elm build's esbuild step is available.
   runs headless as root / inside containers. These flags are set in
   `runner-candidate-harness.js` and are harmless on macOS.
 
+### Choosing the browser
+
+`SNAPSHOT_BROWSER` selects the renderer; it defaults to `chrome`.
+
+```bash
+SNAPSHOT_BROWSER=firefox ./run-snapshot-test.sh
+```
+
+Each browser draws text slightly differently, so its snapshots live in their own
+`snapshots/<browser>/` folder and are only ever compared with images from the
+same browser. Switching browsers therefore re-renders the baseline once; it
+never reports every snapshot as changed. Pass the same variable to
+`view-snapshots.sh` to browse that browser's results.
+
+Note that the browser only rasterises the DOM. Which browser the *app* thinks
+it is talking to comes from the user agent the test passes to
+`load_startup_data_from_js` (`E2EHelper.firefoxDesktop`, `safariIphone`, ...),
+so rendering in Firefox doesn't change any of the app's own browser detection.
+
+- **chrome** (default) — WebdriverIO downloads Chrome and chromedriver on
+  demand, so nothing needs installing.
+- **firefox** — WebdriverIO downloads geckodriver, but it uses the Firefox that
+  is already installed (`firefox` on your `PATH`, or the usual macOS/Linux
+  locations). Its download fallback only knows how to fetch Firefox *Nightly*
+  from `latest-mozilla-central` and that URL no longer resolves, so on a machine
+  with no Firefox you get `Couldn't find a matching firefox browser for tag
+  "…a1"`. Install Firefox (any recent version) and it works.
+- **safari** — macOS only, and `safaridriver --enable` has to have been run
+  once. safaridriver has no headless mode, so the run drives a real Safari
+  window on a real screen: don't lock the Mac mid-run, and expect snapshots at
+  the display's device pixel ratio (2× on a Retina screen).
+
 ### Running
 
 ```bash
@@ -48,28 +80,29 @@ branch changed. Concretely it:
 
 1. Refuses to run if you're on `master`/`main` — you must be on a feature
    branch (this is what defines "what changed").
-2. Renders snapshots of your current branch into `snapshots/current/`.
+2. Renders snapshots of your current branch into
+   `snapshots/<browser>/current/`.
 3. Finds the commit on `master` your branch forked from
    (`git merge-base master HEAD`), checks it out in a throwaway **git
    worktree**, and renders baseline snapshots into
-   `snapshots/baseline-<sha>/`. Your branch, working tree and uncommitted
+   `snapshots/<browser>/baseline-<sha>/`. Your branch, working tree and uncommitted
    changes are never touched. To keep the base/current comparison fair, the
    base app code is rendered with the *current* test harness + runner (only the
    app/test code differs, not the tooling).
 4. Removes the worktree, leaving you exactly where you started.
 5. Diffs `current/` against `baseline-<sha>/` with
    [`odiff`](https://github.com/dmtrKovalenko/odiff), writing a diff mask per
-   changed snapshot into `snapshots/diff/` and printing which snapshots changed
+   changed snapshot into `snapshots/<browser>/diff/` and printing which snapshots changed
    (or were added / removed). Exits non-zero if anything differs, so it's
    usable as a pass/fail check.
 
-Baselines are cached per base commit (`snapshots/baseline-<sha>/`), so steps 3
-and 4 are skipped on repeat runs against the same base. Delete that folder (or
-the whole `snapshots/` folder) to force a fresh baseline. Everything under
-`snapshots/` is gitignored.
+Baselines are cached per browser and base commit
+(`snapshots/<browser>/baseline-<sha>/`), so steps 3 and 4 are skipped on repeat
+runs against the same base. Delete that folder (or the whole `snapshots/`
+folder) to force a fresh baseline. Everything under `snapshots/` is gitignored.
 
 ```
-$ ls snapshots
+$ ls snapshots/chrome
 baseline-2460e7e…/   current/   diff/
 ```
 
