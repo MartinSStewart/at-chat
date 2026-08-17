@@ -138,10 +138,21 @@ setLastViewedMessage guildOrDmId threadRoute user =
             { user | lastViewedMessage = SeqDict.insert guildOrDmId messageId user.lastViewedMessage }
 
 
-commonlyUsedEmojis : FrontendCurrentUser -> List ( EmojiOrCustomEmoji, Int )
-commonlyUsedEmojis user =
+{-| The emojis to offer as one-click reactions, most used first. `availableCustomEmojis`
+is the set of custom emojis that can be used where the reaction is going, so that a
+custom emoji picked up somewhere else isn't offered in a Discord conversation, where
+reacting with it is rejected.
+-}
+commonlyUsedEmojis : SeqSet (Id CustomEmojiId) -> FrontendCurrentUser -> List ( EmojiOrCustomEmoji, Int )
+commonlyUsedEmojis availableCustomEmojis user =
     Array.foldl
-        (\emoji dict -> SeqDict.update emoji (\maybe -> Maybe.withDefault 0 maybe |> (+) 1 |> Just) dict)
+        (\emoji dict ->
+            if canUseEmoji availableCustomEmojis emoji then
+                SeqDict.update emoji (\maybe -> Maybe.withDefault 0 maybe |> (+) 1 |> Just) dict
+
+            else
+                dict
+        )
         (SeqDict.fromList
             [ ( EmojiOrCustomEmoji_Emoji Emoji.heart, 0 )
             , ( EmojiOrCustomEmoji_Emoji Emoji.thumbsUp, 0 )
@@ -151,6 +162,16 @@ commonlyUsedEmojis user =
         user.emojiConfig.lastUsedEmojis
         |> SeqDict.toList
         |> List.sortBy (\( _, count ) -> -count)
+
+
+canUseEmoji : SeqSet (Id CustomEmojiId) -> EmojiOrCustomEmoji -> Bool
+canUseEmoji availableCustomEmojis emoji =
+    case emoji of
+        EmojiOrCustomEmoji_Emoji _ ->
+            True
+
+        EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
+            SeqSet.member customEmojiId availableCustomEmojis
 
 
 addRecentlyUsedEmoji : EmojiOrCustomEmoji -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
@@ -759,6 +780,7 @@ type alias LocalUser =
     , devicePixelRatio : Float
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+    , emojiData : Maybe Emoji.CachedEmojiData
     }
 
 

@@ -5,7 +5,7 @@ import Array
 import Audio exposing (AudioCmd, AudioData)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
-import Call exposing (ChannelSidebarMode(..), MediaDevicesStatus(..))
+import Call exposing (MediaDevicesStatus(..))
 import ChannelDescription
 import ChannelName
 import Coord exposing (Coord)
@@ -29,7 +29,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
-import Emoji exposing (EmojiOrCustomEmoji(..), EmojiOrSticker(..))
+import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji(..), EmojiOrSticker(..))
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
 import Game
@@ -65,7 +65,7 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RecoveryLogin
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -158,6 +158,39 @@ setDevicePixelRatio devicePixelRatio model =
                                         in
                                         { local
                                             | localUser = { localUser | devicePixelRatio = devicePixelRatio }
+                                        }
+                                    )
+                                    loggedIn.localState
+                        }
+
+                NotLoggedIn _ ->
+                    model.loginStatus
+    }
+
+
+{-| LocalUser keeps a copy of the emoji data so that a reaction can name the emoji it
+shows without messageView needing another parameter. It arrives once, after the rest of
+the page has loaded, so both copies are filled in when it does.
+-}
+setEmojiData : CachedEmojiData -> LoadedFrontend -> LoadedFrontend
+setEmojiData emojiData model =
+    { model
+        | emojiData = Just emojiData
+        , loginStatus =
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    LoggedIn
+                        { loggedIn
+                            | localState =
+                                Local.mapModel
+                                    (\local ->
+                                        let
+                                            localUser : User.LocalUser
+                                            localUser =
+                                                local.localUser
+                                        in
+                                        { local
+                                            | localUser = { localUser | emojiData = Just emojiData }
                                         }
                                     )
                                     loggedIn.localState
@@ -270,20 +303,15 @@ subscriptions _ model =
                                     Nothing ->
                                         Subscription.none
                                 , case loggedIn.sidebarMode of
-                                    ChannelSidebarOpened ->
-                                        Subscription.none
-
-                                    ChannelSidebarClosed ->
-                                        Subscription.none
-
                                     ChannelSidebarDragging _ ->
                                         Subscription.none
 
-                                    ChannelSidebarClosing _ ->
-                                        Effect.Browser.Events.onAnimationFrameDelta ChannelSidebarAnimated
+                                    ChannelSidebarNotDragging { offset } ->
+                                        if offset == channelSidebarTarget loaded.route then
+                                            Subscription.none
 
-                                    ChannelSidebarOpening _ ->
-                                        Effect.Browser.Events.onAnimationFrameDelta ChannelSidebarAnimated
+                                        else
+                                            Effect.Browser.Events.onAnimationFrameDelta ChannelSidebarAnimated
                                 , case loggedIn.messageHover of
                                     NoMessageHover ->
                                         Subscription.none
@@ -384,7 +412,9 @@ initLoadedFrontend loading clientId time startupData loginResult =
         ( loginStatus, cmdB ) =
             case loginResult of
                 Ok loginData ->
-                    loadedInitHelper startupData loginData loading |> Tuple.mapFirst LoggedIn
+                    -- The emoji data is requested as part of this same load, so it's
+                    -- always still on its way at this point.
+                    loadedInitHelper startupData Nothing loginData loading |> Tuple.mapFirst LoggedIn
 
                 Err () ->
                     ( NotLoggedIn
@@ -449,14 +479,15 @@ initLoadedFrontend loading clientId time startupData loginResult =
 
 loadedInitHelper :
     Ports.StartupData
+    -> Maybe CachedEmojiData
     -> LoginData
     -> { a | windowSize : Coord CssPixels, navigationKey : Key, route : Route }
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-loadedInitHelper startupData loginData loading =
+loadedInitHelper startupData emojiData loginData loading =
     let
         local : LocalState
         local =
-            loginDataToLocalState startupData loginData
+            loginDataToLocalState startupData emojiData loginData
 
         loggedIn : LoggedIn2
         loggedIn =
@@ -498,7 +529,7 @@ loadedInitHelper startupData loginData loading =
             , editMessage = SeqDict.empty
             , replyTo = SeqDict.empty
             , revealedSpoilers = SeqDict.empty
-            , sidebarMode = ChannelSidebarOpened
+            , sidebarMode = ChannelSidebarNotDragging { offset = channelSidebarTarget loading.route }
             , userOptions = Nothing
             , twoFactor =
                 case loginData.twoFactorAuthenticationEnabled of
@@ -546,14 +577,14 @@ loadedInitHelper startupData loginData loading =
         , -- We need to check if a video preview is visible immediately since we might be on the call route
           Call.displayModeChangeCmd
             Call.NoVideo
-            (Call.displayMode local.localUser.session.userId loading.route local.calls)
+            (Call.displayMode (MyUi.isMobile loading) local.localUser.session.userId loading.route local.calls)
             loggedIn.voiceChat
         ]
     )
 
 
-loginDataToLocalState : Ports.StartupData -> LoginData -> LocalState
-loginDataToLocalState startupData loginData =
+loginDataToLocalState : Ports.StartupData -> Maybe CachedEmojiData -> LoginData -> LocalState
+loginDataToLocalState startupData emojiData loginData =
     { adminData =
         case loginData.adminData of
             IsAdminLoginData adminData ->
@@ -580,6 +611,7 @@ loginDataToLocalState startupData loginData =
         , devicePixelRatio = startupData.devicePixelRatio
         , stickers = loginData.stickers
         , customEmojis = loginData.customEmojis
+        , emojiData = emojiData
         }
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
@@ -954,7 +986,8 @@ updateLoaded msg model =
                                         { model | loginStatus = LoggedIn loggedIn2 }
                                         (GuildRoute
                                             guildId
-                                            (ChannelRoute nextChannelId (NoThreadWithFriends Nothing HideMembersTab) Nothing)
+                                            (ChannelRoute nextChannelId (NoThreadWithFriends Nothing HideChannelSettings) Nothing)
+                                            ChannelsHiddenOnMobile
                                         )
                             in
                             ( model2, Command.batch [ routeCmd, cmd ] )
@@ -1048,9 +1081,10 @@ updateLoaded msg model =
                                             guildId
                                             (ChannelRoute
                                                 (LocalState.announcementChannel guild)
-                                                (NoThreadWithFriends Nothing HideMembersTab)
+                                                (NoThreadWithFriends Nothing HideChannelSettings)
                                                 Nothing
                                             )
+                                            ChannelsVisibleOnMobile
                                         )
 
                                 Nothing ->
@@ -1471,12 +1505,13 @@ updateLoaded msg model =
 
         MessageMenu_PressedOpenThread messageIndex ->
             case ( model.route, model.loginStatus ) of
-                ( GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends _ _) _), LoggedIn loggedIn ) ->
+                ( GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends _ _) _) _, LoggedIn loggedIn ) ->
                     FrontendExtra.routePush
                         { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
                         (GuildRoute
                             guildId
-                            (ChannelRoute channelId (ViewThreadWithFriends messageIndex Nothing HideMembersTab) Nothing)
+                            (ChannelRoute channelId (ViewThreadWithFriends messageIndex Nothing HideChannelSettings) Nothing)
+                            ChannelsHiddenOnMobile
                         )
 
                 ( DmRoute dmRoute, LoggedIn loggedIn ) ->
@@ -1484,7 +1519,7 @@ updateLoaded msg model =
                         NoThreadWithFriends _ _ ->
                             FrontendExtra.routePush
                                 { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
-                                (DmRoute { dmRoute | threadRoute = ViewThreadWithFriends messageIndex Nothing HideMembersTab })
+                                (DmRoute { dmRoute | threadRoute = ViewThreadWithFriends messageIndex Nothing HideChannelSettings })
 
                         ViewThreadWithFriends _ _ _ ->
                             ( model, Command.none )
@@ -1499,7 +1534,7 @@ updateLoaded msg model =
                                         | channelRoute =
                                             DiscordChannel_ChannelRoute
                                                 channelId
-                                                (ViewThreadWithFriends messageIndex Nothing HideMembersTab)
+                                                (ViewThreadWithFriends messageIndex Nothing HideChannelSettings)
                                                 Nothing
                                     }
                                 )
@@ -1630,7 +1665,11 @@ updateLoaded msg model =
                                                                 loggedIn.sidebarMode
 
                                                             _ ->
-                                                                dragChannelSidebar time tHorizontal loggedIn.sidebarMode
+                                                                dragChannelSidebar
+                                                                    (channelSidebarDragRange model.route)
+                                                                    time
+                                                                    tHorizontal
+                                                                    loggedIn.sidebarMode
                                                 }
 
                                             else
@@ -1682,7 +1721,7 @@ updateLoaded msg model =
                                                                 loggedIn.sidebarMode
 
                                                             _ ->
-                                                                dragChannelSidebar time tHorizontal loggedIn.sidebarMode
+                                                                dragChannelSidebar (channelSidebarDragRange model.route) time tHorizontal loggedIn.sidebarMode
                                                 }
 
                                             else
@@ -1737,78 +1776,40 @@ updateLoaded msg model =
             case model.loginStatus of
                 LoggedIn loggedIn ->
                     case loggedIn.sidebarMode of
-                        ChannelSidebarClosed ->
+                        ChannelSidebarDragging _ ->
                             ( model, Command.none )
 
-                        ChannelSidebarOpened ->
-                            ( model, Command.none )
-
-                        ChannelSidebarOpening { offset } ->
+                        ChannelSidebarNotDragging { offset } ->
                             let
+                                target : Float
+                                target =
+                                    channelSidebarTarget model.route
+
+                                step : Float
+                                step =
+                                    Quantity.unwrap (Quantity.for elapsedTime sidebarSpeed)
+
+                                offset2 : Float
                                 offset2 =
-                                    offset - Quantity.unwrap (Quantity.for elapsedTime sidebarSpeed)
+                                    if offset < target then
+                                        min target (offset + step)
+
+                                    else
+                                        max target (offset - step)
                             in
                             ( { model
                                 | loginStatus =
-                                    { loggedIn
-                                        | sidebarMode =
-                                            if offset2 <= 0 then
-                                                ChannelSidebarOpened
-
-                                            else
-                                                ChannelSidebarOpening { offset = offset2 }
-                                    }
+                                    { loggedIn | sidebarMode = ChannelSidebarNotDragging { offset = offset2 } }
                                         |> LoggedIn
                               }
-                            , Command.none
+                            , if target > 1 then
+                                -- The conversation view's text input is going off screen,
+                                -- so let go of the keyboard it's holding open
+                                Dom.blur Pages.Guild.channelTextInputId |> Task.attempt (\_ -> RemoveFocus)
+
+                              else
+                                Command.none
                             )
-
-                        ChannelSidebarClosing { offset } ->
-                            let
-                                offset2 =
-                                    offset + Quantity.unwrap (Quantity.for elapsedTime sidebarSpeed)
-                            in
-                            case Route.toShowMembersTab model.route of
-                                ( ShowMembersTab, _ ) ->
-                                    if offset2 >= 1 then
-                                        setShowMembers
-                                            HideMembersTab
-                                            { model
-                                                | loginStatus =
-                                                    { loggedIn | sidebarMode = ChannelSidebarOpened }
-                                                        |> LoggedIn
-                                            }
-
-                                    else
-                                        ( { model
-                                            | loginStatus =
-                                                { loggedIn
-                                                    | sidebarMode =
-                                                        ChannelSidebarClosing { offset = offset2 }
-                                                }
-                                                    |> LoggedIn
-                                          }
-                                        , Command.none
-                                        )
-
-                                ( HideMembersTab, _ ) ->
-                                    ( { model
-                                        | loginStatus =
-                                            { loggedIn
-                                                | sidebarMode =
-                                                    if offset2 >= 1 then
-                                                        ChannelSidebarClosed
-
-                                                    else
-                                                        ChannelSidebarClosing { offset = offset2 }
-                                            }
-                                                |> LoggedIn
-                                      }
-                                    , Dom.blur Pages.Guild.channelTextInputId |> Task.attempt (\_ -> RemoveFocus)
-                                    )
-
-                        ChannelSidebarDragging _ ->
-                            ( model, Command.none )
 
                 NotLoggedIn _ ->
                     ( model, Command.none )
@@ -1817,13 +1818,13 @@ updateLoaded msg model =
             ( model, Command.none )
 
         PressedChannelHeaderBackButton ->
-            FrontendExtra.updateLoggedIn (\loggedIn -> ( startClosingChannelSidebar loggedIn, Command.none )) model
+            startClosingChannelSidebar model
 
         PressedShowMembers ->
-            setShowMembers ShowMembersTab model
+            setShowMembers ShowChannelSettings model
 
         PressedHideMembers ->
-            setShowMembers HideMembersTab model
+            setShowMembers HideChannelSettings model
 
         UserScrolled guildOrDmId threadRoute scrollPosition ->
             FrontendExtra.updateLoggedIn
@@ -1917,8 +1918,9 @@ updateLoaded msg model =
                                 DmChannelId.fromUserIds
                                     otherUserId
                                     (Local.model loggedIn.localState).localUser.session.userId
-                            , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                            , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                             , tab = Nothing
+                            , channelsVisible = ChannelsHiddenOnMobile
                             }
                         )
 
@@ -1934,8 +1936,9 @@ updateLoaded msg model =
                             { currentDiscordUserId = currentUserId
                             , channelId = channelId
                             , viewingMessage = Nothing
-                            , showMembersTab = HideMembersTab
+                            , showMembersTab = HideChannelSettings
                             , tab = Nothing
+                            , channelsVisible = ChannelsHiddenOnMobile
                             }
                         )
 
@@ -2123,7 +2126,7 @@ updateLoaded msg model =
                                     Game.update
                                         model.time
                                         model.windowSize
-                                        local.localUser.session.userId
+                                        local.localUser
                                         gamesTab.guildOrDmId
                                         gameMsg
                                         gamesTab.newMatchId
@@ -2438,23 +2441,27 @@ updateLoaded msg model =
                                                 ( GuildOrDmId_Guild { guildId, channelId }, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
-                                                        (GuildRoute guildId
+                                                        (GuildRoute
+                                                            guildId
                                                             (ChannelRoute
                                                                 channelId
-                                                                (ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab)
+                                                                (ViewThreadWithFriends threadId (Just repliedTo) HideChannelSettings)
                                                                 Nothing
                                                             )
+                                                            ChannelsHiddenOnMobile
                                                         )
 
                                                 ( GuildOrDmId_Guild { guildId, channelId }, NoThreadWithMaybeMessage (Just repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
-                                                        (GuildRoute guildId
+                                                        (GuildRoute
+                                                            guildId
                                                             (ChannelRoute
                                                                 channelId
-                                                                (NoThreadWithFriends (Just repliedTo) HideMembersTab)
+                                                                (NoThreadWithFriends (Just repliedTo) HideChannelSettings)
                                                                 Nothing
                                                             )
+                                                            ChannelsHiddenOnMobile
                                                         )
 
                                                 ( GuildOrDmId_Dm { otherUserId }, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
@@ -2466,8 +2473,9 @@ updateLoaded msg model =
                                                                     (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
                                                                     otherUserId
                                                             , threadRoute =
-                                                                ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab
+                                                                ViewThreadWithFriends threadId (Just repliedTo) HideChannelSettings
                                                             , tab = Nothing
+                                                            , channelsVisible = ChannelsHiddenOnMobile
                                                             }
                                                         )
 
@@ -2480,8 +2488,9 @@ updateLoaded msg model =
                                                                     (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
                                                                     otherUserId
                                                             , threadRoute =
-                                                                NoThreadWithFriends (Just repliedTo) HideMembersTab
+                                                                NoThreadWithFriends (Just repliedTo) HideChannelSettings
                                                             , tab = Nothing
+                                                            , channelsVisible = ChannelsHiddenOnMobile
                                                             }
                                                         )
 
@@ -2503,8 +2512,9 @@ updateLoaded msg model =
                                                          , channelRoute =
                                                             DiscordChannel_ChannelRoute
                                                                 channelId
-                                                                (ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab)
+                                                                (ViewThreadWithFriends threadId (Just repliedTo) HideChannelSettings)
                                                                 Nothing
+                                                         , channelsVisible = ChannelsHiddenOnMobile
                                                          }
                                                             |> DiscordGuildRoute
                                                         )
@@ -2517,8 +2527,9 @@ updateLoaded msg model =
                                                          , channelRoute =
                                                             DiscordChannel_ChannelRoute
                                                                 channelId
-                                                                (NoThreadWithFriends (Just repliedTo) HideMembersTab)
+                                                                (NoThreadWithFriends (Just repliedTo) HideChannelSettings)
                                                                 Nothing
+                                                         , channelsVisible = ChannelsHiddenOnMobile
                                                          }
                                                             |> DiscordGuildRoute
                                                         )
@@ -2530,8 +2541,9 @@ updateLoaded msg model =
                                                             { currentDiscordUserId = currentUserId
                                                             , channelId = channelId
                                                             , viewingMessage = Just repliedTo
-                                                            , showMembersTab = HideMembersTab
+                                                            , showMembersTab = HideChannelSettings
                                                             , tab = Nothing
+                                                            , channelsVisible = ChannelsHiddenOnMobile
                                                             }
                                                         )
 
@@ -2596,7 +2608,8 @@ updateLoaded msg model =
                                 model
                                 (GuildRoute
                                     guildId
-                                    (ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideMembersTab) Nothing)
+                                    (ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideChannelSettings) Nothing)
+                                    ChannelsHiddenOnMobile
                                 )
 
                         ( GuildOrDmId (GuildOrDmId_Dm { otherUserId }), NoThreadWithMessage messageId ) ->
@@ -2606,8 +2619,9 @@ updateLoaded msg model =
                                         DmChannelId.fromUserIds
                                             (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
                                             otherUserId
-                                    , threadRoute = ViewThreadWithFriends messageId Nothing HideMembersTab
+                                    , threadRoute = ViewThreadWithFriends messageId Nothing HideChannelSettings
                                     , tab = Nothing
+                                    , channelsVisible = ChannelsHiddenOnMobile
                                     }
                                         |> DmRoute
                                         |> FrontendExtra.routePush model
@@ -2623,8 +2637,9 @@ updateLoaded msg model =
                                  , channelRoute =
                                     DiscordChannel_ChannelRoute
                                         channelId
-                                        (ViewThreadWithFriends messageId Nothing HideMembersTab)
+                                        (ViewThreadWithFriends messageId Nothing HideChannelSettings)
                                         Nothing
+                                 , channelsVisible = ChannelsHiddenOnMobile
                                  }
                                     |> DiscordGuildRoute
                                 )
@@ -2636,8 +2651,9 @@ updateLoaded msg model =
                                     { currentDiscordUserId = currentUserId
                                     , channelId = channelId
                                     , viewingMessage = Nothing
-                                    , showMembersTab = HideMembersTab
+                                    , showMembersTab = HideChannelSettings
                                     , tab = Nothing
+                                    , channelsVisible = ChannelsHiddenOnMobile
                                     }
                                 )
 
@@ -2709,7 +2725,7 @@ updateLoaded msg model =
                         NewGuildRoute ->
                             ( model, Command.none )
 
-                        GuildRoute guildId channelRoute ->
+                        GuildRoute guildId channelRoute channelsVisible ->
                             case channelRoute of
                                 ChannelRoute channelId (NoThreadWithFriends a b) _ ->
                                     FrontendExtra.routePush
@@ -2721,6 +2737,7 @@ updateLoaded msg model =
                                                 (NoThreadWithFriends a b)
                                                 (Just ChannelHeaderTab_VoiceChat)
                                             )
+                                            channelsVisible
                                         )
 
                                 ChannelRoute _ (ViewThreadWithFriends _ _ _) _ ->
@@ -2980,7 +2997,7 @@ updateLoaded msg model =
                 model
 
         PressedMemberListBack ->
-            FrontendExtra.updateLoggedIn (\loggedIn -> ( startClosingChannelSidebar loggedIn, Command.none )) model
+            startClosingChannelSidebar model
 
         PressedExportChannel exportChannelId ->
             ( model, Lamdera.sendToBackend (ExportChannelRequest exportChannelId) )
@@ -2994,13 +3011,13 @@ updateLoaded msg model =
                                 model.time
                                 (if hasFocus then
                                     Local_CurrentlyViewing
-                                        { routeRequestCausedByPressingLink = False }
-                                        (LocalState.routeToViewing model.route (Local.model loggedIn.localState))
+                                        { markMessagesAsViewed = False }
+                                        (LocalState.routeToViewing (MyUi.isMobile model) model.route (Local.model loggedIn.localState))
                                         |> Just
 
                                  else
                                     Local_CurrentlyViewing
-                                        { routeRequestCausedByPressingLink = False }
+                                        { markMessagesAsViewed = False }
                                         StopViewingChannel
                                         |> Just
                                 )
@@ -3128,8 +3145,9 @@ updateLoaded msg model =
                                     { currentDiscordUserId = data.currentUserId
                                     , channelId = channelId
                                     , viewingMessage = Nothing
-                                    , showMembersTab = HideMembersTab
+                                    , showMembersTab = HideChannelSettings
                                     , tab = Nothing
+                                    , channelsVisible = ChannelsHiddenOnMobile
                                     }
                                 )
 
@@ -3977,7 +3995,7 @@ updateLoaded msg model =
         GotEmojiData result ->
             case result of
                 Ok emojiData ->
-                    ( { model | emojiData = Just emojiData }, Command.none )
+                    ( setEmojiData emojiData model, Command.none )
 
                 Err error ->
                     let
@@ -4368,7 +4386,7 @@ updateLoaded msg model =
                                 local =
                                     Local.model loggedIn.localState
                             in
-                            case Call.displayMode local.localUser.session.userId model.route local.calls of
+                            case Call.displayMode (MyUi.isMobile model) local.localUser.session.userId model.route local.calls of
                                 Call.NoVideo ->
                                     ( model, Command.none )
 
@@ -4384,8 +4402,9 @@ updateLoaded msg model =
                                         (DmRoute
                                             { channelId =
                                                 DmChannelId.fromUserIds local.localUser.session.userId otherUserId
-                                            , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                                            , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                                             , tab = Just ChannelHeaderTab_VoiceChat
+                                            , channelsVisible = ChannelsHiddenOnMobile
                                             }
                                         )
 
@@ -4396,9 +4415,10 @@ updateLoaded msg model =
                                             guildId
                                             (ChannelRoute
                                                 channelId
-                                                (NoThreadWithFriends Nothing HideMembersTab)
+                                                (NoThreadWithFriends Nothing HideChannelSettings)
                                                 (Just ChannelHeaderTab_VoiceChat)
                                             )
+                                            ChannelsHiddenOnMobile
                                         )
 
                         NotLoggedIn _ ->
@@ -4455,6 +4475,7 @@ updateLoaded msg model =
                 ( Just nonemptyFiles, LoggedIn loggedIn ) ->
                     case
                         FrontendExtra.canDropFiles
+                            (MyUi.isMobile model)
                             (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
                             modelReset.route
                     of
@@ -4495,7 +4516,7 @@ updateLoaded msg model =
                 NewGuildRoute ->
                     ( model, Command.none )
 
-                GuildRoute guildId channelRoute ->
+                GuildRoute guildId channelRoute channelsVisible ->
                     case channelRoute of
                         ChannelRoute channelId threadRoute currentTab ->
                             FrontendExtra.routePush
@@ -4503,6 +4524,7 @@ updateLoaded msg model =
                                 (GuildRoute
                                     guildId
                                     (ChannelRoute channelId threadRoute (sameTab tab currentTab))
+                                    channelsVisible
                                 )
 
                         _ ->
@@ -4803,9 +4825,10 @@ updateLoaded msg model =
                                 guildId
                                 (ChannelRoute
                                     channelId
-                                    (NoThreadWithFriends Nothing HideMembersTab)
+                                    (NoThreadWithFriends Nothing HideChannelSettings)
                                     (Just ChannelHeaderTab_VoiceChat)
                                 )
+                                ChannelsHiddenOnMobile
                                 |> FrontendExtra.routePush model
 
                         GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
@@ -4816,8 +4839,9 @@ updateLoaded msg model =
                                             DmChannelId.fromUserIds
                                                 (Local.model loggedIn.localState).localUser.session.userId
                                                 otherUserId
-                                        , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                                        , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                                         , tab = Just ChannelHeaderTab_VoiceChat
+                                        , channelsVisible = ChannelsHiddenOnMobile
                                         }
                                         |> FrontendExtra.routePush model
 
@@ -4834,9 +4858,10 @@ updateLoaded msg model =
                                 guildId
                                 (ChannelRoute
                                     channelId
-                                    (NoThreadWithFriends Nothing HideMembersTab)
+                                    (NoThreadWithFriends Nothing HideChannelSettings)
                                     (Just (ChannelHeaderTab_Games (Just messageId)))
                                 )
+                                ChannelsHiddenOnMobile
                                 |> FrontendExtra.routePush model
 
                         GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
@@ -4847,8 +4872,9 @@ updateLoaded msg model =
                                             DmChannelId.fromUserIds
                                                 (Local.model loggedIn.localState).localUser.session.userId
                                                 otherUserId
-                                        , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                                        , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                                         , tab = Just (ChannelHeaderTab_Games (Just messageId))
+                                        , channelsVisible = ChannelsHiddenOnMobile
                                         }
                                         |> FrontendExtra.routePush model
 
@@ -5025,8 +5051,9 @@ handlePressedUserIconButton otherUserId model =
                         DmChannelId.fromUserIds
                             (Local.model loggedIn.localState).localUser.session.userId
                             otherUserId
-                    , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                    , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                     , tab = Nothing
+                    , channelsVisible = ChannelsHiddenOnMobile
                     }
                 )
 
@@ -5046,8 +5073,9 @@ handlePressedDiscordUserIconButton otherUserId model =
                             { currentDiscordUserId = currentDiscordUserId
                             , channelId = channelId
                             , viewingMessage = Nothing
-                            , showMembersTab = HideMembersTab
+                            , showMembersTab = HideChannelSettings
                             , tab = Nothing
+                            , channelsVisible = ChannelsHiddenOnMobile
                             }
                         )
 
@@ -5327,8 +5355,8 @@ checkCallDisplayModeChange modelOld modelNew =
                     Local.model loggedInNew.localState
             in
             Call.displayModeChangeCmd
-                (Call.displayMode localOld.localUser.session.userId modelOld.route localOld.calls)
-                (Call.displayMode localNew.localUser.session.userId modelNew.route localNew.calls)
+                (Call.displayMode (MyUi.isMobile modelOld) localOld.localUser.session.userId modelOld.route localOld.calls)
+                (Call.displayMode (MyUi.isMobile modelNew) localNew.localUser.session.userId modelNew.route localNew.calls)
                 loggedInNew.voiceChat
 
         ( NotLoggedIn _, LoggedIn loggedInNew ) ->
@@ -5338,7 +5366,7 @@ checkCallDisplayModeChange modelOld modelNew =
             in
             Call.displayModeChangeCmd
                 Call.NoVideo
-                (Call.displayMode localNew.localUser.session.userId modelNew.route localNew.calls)
+                (Call.displayMode (MyUi.isMobile modelNew) localNew.localUser.session.userId modelNew.route localNew.calls)
                 loggedInNew.voiceChat
 
         ( LoggedIn loggedInOld, NotLoggedIn _ ) ->
@@ -5347,7 +5375,7 @@ checkCallDisplayModeChange modelOld modelNew =
                     Local.model loggedInOld.localState
             in
             Call.displayModeChangeCmd
-                (Call.displayMode localOld.localUser.session.userId modelOld.route localOld.calls)
+                (Call.displayMode (MyUi.isMobile modelOld) localOld.localUser.session.userId modelOld.route localOld.calls)
                 Call.NoVideo
                 loggedInOld.voiceChat
 
@@ -6026,15 +6054,19 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
             )
 
 
-setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
+setShowMembers : ShowChannelSettings -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 setShowMembers showMembers model =
     case model.route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute tab) ->
+        GuildRoute guildId (ChannelRoute channelId threadRoute tab) channelsVisible ->
             case threadRoute of
                 NoThreadWithFriends a _ ->
                     FrontendExtra.routePush
                         model
-                        (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends a showMembers) tab))
+                        (GuildRoute
+                            guildId
+                            (ChannelRoute channelId (NoThreadWithFriends a showMembers) tab)
+                            channelsVisible
+                        )
 
                 ViewThreadWithFriends threadId a _ ->
                     FrontendExtra.routePush
@@ -6042,9 +6074,10 @@ setShowMembers showMembers model =
                         (GuildRoute
                             guildId
                             (ChannelRoute channelId (ViewThreadWithFriends threadId a showMembers) tab)
+                            channelsVisible
                         )
 
-        GuildRoute _ _ ->
+        GuildRoute _ _ _ ->
             ( model, Command.none )
 
         DmRoute dmRoute ->
@@ -6404,34 +6437,9 @@ handleTouchEnd time model =
                 loggedIn2 =
                     case loggedIn.sidebarMode of
                         ChannelSidebarDragging a ->
-                            let
-                                delta : Duration
-                                delta =
-                                    Duration.from a.time time
+                            { loggedIn | sidebarMode = ChannelSidebarNotDragging { offset = a.offset } }
 
-                                sidebarDelta : Quantity Float (Rate CssPixels Seconds)
-                                sidebarDelta =
-                                    a.offset
-                                        - a.previousOffset
-                                        |> (*) (toFloat (Coord.xRaw model.windowSize))
-                                        |> CssPixels.cssPixels
-                                        |> Quantity.per delta
-                            in
-                            { loggedIn
-                                | sidebarMode =
-                                    if
-                                        (sidebarDelta |> Quantity.lessThan (Quantity.unsafe -100))
-                                            || ((a.offset < 0.5)
-                                                    && (sidebarDelta |> Quantity.lessThan (Quantity.unsafe 100))
-                                               )
-                                    then
-                                        ChannelSidebarOpening { offset = clamp 0 1 a.offset }
-
-                                    else
-                                        ChannelSidebarClosing { offset = clamp 0 1 a.offset }
-                            }
-
-                        _ ->
+                        ChannelSidebarNotDragging _ ->
                             loggedIn
 
                 ( loggedIn3, cmds ) =
@@ -6503,6 +6511,76 @@ handleTouchEnd time model =
             )
         )
         { model | drag = NoDrag, dragPrevious = model.drag }
+        |> (\( newModel, cmd ) ->
+                case releasedSidebarDrag time model of
+                    Just route ->
+                        if route == newModel.route then
+                            ( newModel, cmd )
+
+                        else
+                            FrontendExtra.routePush newModel route
+                                |> Tuple.mapSecond (\routeCmd -> Command.batch [ cmd, routeCmd ])
+
+                    Nothing ->
+                        ( newModel, cmd )
+           )
+
+
+{-| Which of the two screens a swipe lands on once it's let go of. A fast enough flick
+decides it on its own, otherwise whichever side of half way it was left on does. Nothing
+when the swipe wasn't the sidebar.
+-}
+releasedSidebarDrag : Time.Posix -> LoadedFrontend -> Maybe Route
+releasedSidebarDrag time model =
+    case model.loginStatus of
+        LoggedIn loggedIn ->
+            case loggedIn.sidebarMode of
+                ChannelSidebarDragging a ->
+                    let
+                        range : { min : Float, max : Float }
+                        range =
+                            channelSidebarDragRange model.route
+
+                        sidebarDelta : Quantity Float (Rate CssPixels Seconds)
+                        sidebarDelta =
+                            a.offset
+                                - a.previousOffset
+                                |> (*) (toFloat (Coord.xRaw model.windowSize))
+                                |> CssPixels.cssPixels
+                                |> Quantity.per (Duration.from a.time time)
+
+                        landsOnTheNearSide : Bool
+                        landsOnTheNearSide =
+                            (sidebarDelta |> Quantity.lessThan (Quantity.unsafe -100))
+                                || ((a.offset < range.min + 0.5)
+                                        && (sidebarDelta |> Quantity.lessThan (Quantity.unsafe 100))
+                                   )
+                    in
+                    (case Route.toShowMembersTab model.route of
+                        ( ShowChannelSettings, _ ) ->
+                            if landsOnTheNearSide then
+                                model.route
+
+                            else
+                                Route.setShowMembers HideChannelSettings model.route
+
+                        ( HideChannelSettings, _ ) ->
+                            Route.setChannelsVisible
+                                (if landsOnTheNearSide then
+                                    ChannelsHiddenOnMobile
+
+                                 else
+                                    ChannelsVisibleOnMobile
+                                )
+                                model.route
+                    )
+                        |> Just
+
+                ChannelSidebarNotDragging _ ->
+                    Nothing
+
+        NotLoggedIn _ ->
+            Nothing
 
 
 finalizeWordSpellingDrag : Time.Posix -> LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
@@ -6597,7 +6675,7 @@ dragTargetHelper startTouches loggedIn model =
                 Nothing ->
                     False
     in
-    case Call.displayMode local.localUser.session.userId model.route local.calls of
+    case Call.displayMode (MyUi.isMobile model) local.localUser.session.userId model.route local.calls of
         Call.ShowLocalVideoAndCallThumbnail _ ->
             if Call.insideThumbnail centroid model loggedIn.voiceChat then
                 Just Drag_CallThumbnail
@@ -6622,24 +6700,19 @@ dragTargetHelper startTouches loggedIn model =
                 Nothing
 
 
-dragChannelSidebar : Time.Posix -> Float -> ChannelSidebarMode -> ChannelSidebarMode
-dragChannelSidebar time delta sidebar =
+dragChannelSidebar : { min : Float, max : Float } -> Time.Posix -> Float -> ChannelSidebarMode -> ChannelSidebarMode
+dragChannelSidebar range time delta sidebar =
     case sidebar of
-        ChannelSidebarClosed ->
-            ChannelSidebarDragging { offset = 1, previousOffset = 1, time = time }
-
-        ChannelSidebarOpened ->
-            ChannelSidebarDragging { offset = 0, previousOffset = 0, time = time }
-
-        ChannelSidebarClosing { offset } ->
-            ChannelSidebarDragging { offset = clamp 0 1 (offset + delta), previousOffset = offset, time = time }
-
-        ChannelSidebarOpening { offset } ->
-            ChannelSidebarDragging { offset = clamp 0 1 (offset + delta), previousOffset = offset, time = time }
+        ChannelSidebarNotDragging { offset } ->
+            ChannelSidebarDragging
+                { offset = clamp range.min range.max (offset + delta)
+                , previousOffset = offset
+                , time = time
+                }
 
         ChannelSidebarDragging record ->
             ChannelSidebarDragging
-                { record | offset = clamp 0 1 (record.offset + delta), time = time }
+                { record | offset = clamp range.min range.max (record.offset + delta), time = time }
 
 
 isTouchingTextInput : NonemptyDict Int Touch -> Bool
@@ -6652,29 +6725,98 @@ isTouchingTextInput touches =
         touches
 
 
-startClosingChannelSidebar : LoggedIn2 -> LoggedIn2
-startClosingChannelSidebar loggedIn =
-    { loggedIn
-        | sidebarMode =
-            ChannelSidebarClosing
-                { offset =
-                    case loggedIn.sidebarMode of
-                        ChannelSidebarClosing { offset } ->
-                            offset
+{-| Back out of whichever of the three mobile screens the reader is on: the member column
+gives way to the conversation view, and the conversation view to the guild's channel list.
+Where it's heading lives in the route, so this is a route change and the offset slides its
+way there on its own.
+-}
+startClosingChannelSidebar : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
+startClosingChannelSidebar model =
+    case Route.toShowMembersTab model.route of
+        ( ShowChannelSettings, _ ) ->
+            setShowMembers HideChannelSettings model
 
-                        ChannelSidebarClosed ->
+        ( HideChannelSettings, _ ) ->
+            FrontendExtra.routePush model (Route.setChannelsVisible ChannelsVisibleOnMobile model.route)
+
+
+{-| Which of the three screens the mobile layout is heading for: the member column at 0,
+the conversation view at 1, or the guild's channel list at 2.
+-}
+channelSidebarTarget : Route -> Float
+channelSidebarTarget route =
+    case Route.toShowMembersTab route of
+        ( ShowChannelSettings, _ ) ->
+            0
+
+        ( HideChannelSettings, _ ) ->
+            let
+                helper channelsVisible =
+                    case channelsVisible of
+                        ChannelsVisibleOnMobile ->
+                            2
+
+                        ChannelsHiddenOnMobile ->
                             1
+            in
+            case route of
+                GuildRoute _ _ channelsVisible ->
+                    helper channelsVisible
 
-                        ChannelSidebarOpened ->
-                            0
+                DiscordGuildRoute routeData ->
+                    helper routeData.channelsVisible
 
-                        ChannelSidebarOpening { offset } ->
-                            offset
+                HomePageRoute ->
+                    2
 
-                        ChannelSidebarDragging { offset } ->
-                            offset
-                }
-    }
+                AdminRoute _ ->
+                    2
+
+                NewGuildRoute ->
+                    2
+
+                DmRoute routeData ->
+                    helper routeData.channelsVisible
+
+                DiscordDmRoute routeData ->
+                    helper routeData.channelsVisible
+
+                AiChatRoute ->
+                    2
+
+                SlackOAuthRedirect _ ->
+                    2
+
+                TextEditorRoute ->
+                    2
+
+                LinkDiscord _ ->
+                    2
+
+                PublicGoMatchRoute _ ->
+                    2
+
+
+
+--case Route.toChannelsVisible route of
+--    GuildChannelsHiddenOnMobile ->
+--        1
+--
+--    GuildChannelsVisibleOnMobile ->
+--        2
+
+
+{-| A swipe only ever travels between the screen the route is on and the one next door, so
+that letting go lands on one or the other.
+-}
+channelSidebarDragRange : Route -> { min : Float, max : Float }
+channelSidebarDragRange route =
+    case Route.toShowMembersTab route of
+        ( ShowChannelSettings, _ ) ->
+            { min = 0, max = 1 }
+
+        ( HideChannelSettings, _ ) ->
+            { min = 1, max = 2 }
 
 
 sidebarSpeed : Quantity Float (Rate Unitless Seconds)
@@ -6755,7 +6897,7 @@ updateLoadedFromBackend msg model =
                         LoginSuccess loginData ->
                             let
                                 ( loggedIn, cmdA ) =
-                                    loadedInitHelper model.startupData loginData model
+                                    loadedInitHelper model.startupData model.emojiData loginData model
 
                                 ( model2, cmdB ) =
                                     FrontendExtra.routeRequest
@@ -6768,7 +6910,7 @@ updateLoadedFromBackend msg model =
                                 [ cmdA
                                 , cmdB
                                 , case ( model2.route, notLoggedIn.useInviteAfterLoggedIn ) of
-                                    ( GuildRoute guildId _, Just inviteLinkId ) ->
+                                    ( GuildRoute guildId _ _, Just inviteLinkId ) ->
                                         JoinGuildByInviteRequest guildId inviteLinkId
                                             |> Lamdera.sendToBackend
 
@@ -6943,9 +7085,10 @@ updateLoadedFromBackend msg model =
                                             guildId
                                             (ChannelRoute
                                                 (LocalState.announcementChannel guild)
-                                                (NoThreadWithFriends Nothing HideMembersTab)
+                                                (NoThreadWithFriends Nothing HideChannelSettings)
                                                 Nothing
                                             )
+                                            ChannelsHiddenOnMobile
                                         )
 
                                 Nothing ->
@@ -7117,7 +7260,7 @@ updateLoadedFromBackend msg model =
                                 Server_YouJoinedGuildByInvite (Ok { guildId, guild }) ->
                                     ( loggedIn2
                                     , case model.route of
-                                        GuildRoute inviteGuildId _ ->
+                                        GuildRoute inviteGuildId _ _ ->
                                             if inviteGuildId == guildId then
                                                 FrontendExtra.routeReplace
                                                     model
@@ -7125,9 +7268,10 @@ updateLoadedFromBackend msg model =
                                                         guildId
                                                         (ChannelRoute
                                                             (LocalState.announcementChannel guild)
-                                                            (NoThreadWithFriends Nothing HideMembersTab)
+                                                            (NoThreadWithFriends Nothing HideChannelSettings)
                                                             Nothing
                                                         )
+                                                        ChannelsHiddenOnMobile
                                                     )
 
                                             else
@@ -7375,7 +7519,7 @@ updateLoadedFromBackend msg model =
                                         updatedGameModel =
                                             Game.gameChangeFromServer
                                                 model.time
-                                                local.localUser.session.userId
+                                                local.localUser
                                                 gameChange
                                                 (SeqDict.get guildOrDmId loggedIn2.games)
                                     in
@@ -7452,7 +7596,7 @@ updateLoadedFromBackend msg model =
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
-                                | localState = loginDataToLocalState model.startupData loginData |> Local.init
+                                | localState = loginDataToLocalState model.startupData model.emojiData loginData |> Local.init
                                 , isReloading = False
                               }
                             , Command.none
@@ -7728,7 +7872,7 @@ view _ model =
                                     Ui.noAttr
                                 ]
 
-                    GuildRoute guildId maybeChannelId ->
+                    GuildRoute guildId maybeChannelId _ ->
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)
 
                     DiscordGuildRoute data ->
@@ -7854,7 +7998,7 @@ errorPage model text =
 routeToInitialDataRequest : Route -> InitialLoadRequest
 routeToInitialDataRequest route =
     case route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute tab) ->
+        GuildRoute guildId (ChannelRoute channelId threadRoute tab) _ ->
             InitialLoadRequested_Guild
                 guildId
                 channelId

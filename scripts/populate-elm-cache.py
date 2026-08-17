@@ -22,8 +22,9 @@ Elm cache. After running it, `lamdera make` compiles offline.
 
 Notes
 -----
-* lamdera/* packages are NOT on GitHub; they ship with the lamdera compiler
-  and are already present in the cache. They are skipped automatically.
+* lamdera/* packages are NOT on GitHub. The lamdera compiler knows them without
+  a cache entry, but elm-test-rs and elm-review solve dependencies themselves and
+  need the sources on disk, so those come from static.lamdera.com instead.
 * Safe to re-run: packages that already have a `src/` directory are skipped.
 * Honors ELM_HOME (defaults to ~/.elm). Elm 0.19.1 layout is assumed.
 
@@ -41,10 +42,14 @@ It also repairs half-downloaded packages already in the cache — see stubs().
 
 import concurrent.futures
 import glob
+import hashlib
+import io
 import json
 import os
+import shutil
 import sys
 import urllib.request
+import zipfile
 
 ELM_HOME = os.environ.get("ELM_HOME") or os.path.expanduser("~/.elm")
 PACKAGES = os.path.join(ELM_HOME, "0.19.1", "packages")
@@ -55,6 +60,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # e.g. elm/json 1.1.3, which neither of our manifests mention). Globbing these picks
 # up whatever that solve chose, so nothing has to be hardcoded here.
 GENERATED = os.path.join(ROOT, "elm-stuff", "generated-code", "**", "elm.json")
+
+# elm-review keeps its own cache of each dependency's docs.json, separate from the
+# compiler's package cache, and fills it from package.elm-lang.org. The directories
+# below are versioned by elm-review and by Elm, so both are globbed rather than named.
+REVIEW_DOCS = os.path.join(ELM_HOME, "elm-review", "*", "*", "packages")
+REVIEW_RESULTS = os.path.join(
+    ROOT, "elm-stuff", "generated-code", "jfmengels", "elm-review", "cli", "*", "result-cache"
+)
 
 # elm-test-rs compiles the test suite against its own runner package, which isn't a
 # dependency in elm.json. Without it, `elm-test-rs --offline` fails with
@@ -85,8 +98,15 @@ def all_deps(elm_jsons):
     return deps
 
 
+def fetch(url, timeout):
+    # static.lamdera.com answers 403 to urllib's default "Python-urllib/3.x"
+    # User-Agent, so every request sends one of our own.
+    request = urllib.request.Request(url, headers={"User-Agent": "populate-elm-cache"})
+    return urllib.request.urlopen(request, timeout=timeout)
+
+
 def get_json(url):
-    with urllib.request.urlopen(url, timeout=30) as r:
+    with fetch(url, 30) as r:
         return json.load(r)
 
 
@@ -105,7 +125,7 @@ def download(owner, repo, ver, name):
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     for attempt in range(3):
         try:
-            with urllib.request.urlopen(url, timeout=60) as r:
+            with fetch(url, 60) as r:
                 content = r.read()
             with open(dest, "wb") as f:
                 f.write(content)
@@ -113,6 +133,62 @@ def download(owner, repo, ver, name):
         except Exception as e:
             if attempt == 2:
                 return f"{owner}/{repo}@{ver}{name}: {e}"
+
+
+def download_lamdera(pkg, ver):
+    """Fetch one lamdera/* package from static.lamdera.com into the cache.
+
+    The compiler resolves these itself, so `lamdera make` is happy without them,
+    but elm-test-rs and elm-review run their own dependency solve against the
+    cache and fail outright when they are missing ("there is no version of
+    lamdera/containers in 1.0.0"). Each package is published as an endpoint.json
+    naming a zip and its sha1; the zip holds a single `<version>/` directory.
+    """
+    for attempt in range(3):
+        try:
+            endpoint = get_json(f"https://static.lamdera.com/r/{pkg}/{ver}/endpoint.json")
+            with fetch(endpoint["url"], 60) as r:
+                archive = r.read()
+            break
+        except Exception as e:
+            if attempt == 2:
+                return f"{pkg}@{ver}: {e}"
+
+    digest = hashlib.sha1(archive).hexdigest()
+    if digest != endpoint["hash"]:
+        return f"{pkg}@{ver}: expected sha1 {endpoint['hash']}, got {digest}"
+
+    # Extract to a scratch dir first so a failure part way through can't leave a
+    # src-less stub behind, which is what stubs() has to clean up after.
+    dest = os.path.join(PACKAGES, pkg, ver)
+    staging = dest + ".partial"
+    shutil.rmtree(staging, ignore_errors=True)
+    zipfile.ZipFile(io.BytesIO(archive)).extractall(staging)
+    shutil.rmtree(dest, ignore_errors=True)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    os.rename(os.path.join(staging, ver), dest)
+    shutil.rmtree(staging, ignore_errors=True)
+    return None
+
+
+def mirror_lamdera_docs():
+    """Copy the lamdera/* docs.json files into elm-review's package cache.
+
+    package.elm-lang.org has never heard of the lamdera packages, so elm-review
+    ends up with no docs for them. Without docs it can't tell that anything
+    imports SeqDict or Effect.Command and reports lamdera/containers and
+    lamdera/program-test as unused dependencies.
+    """
+    copied = 0
+    for cache in glob.glob(REVIEW_DOCS):
+        for docs in glob.glob(os.path.join(PACKAGES, "lamdera", "*", "*", "docs.json")):
+            dest = os.path.join(cache, os.path.relpath(docs, PACKAGES))
+            if os.path.exists(dest):
+                continue
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            shutil.copyfile(docs, dest)
+            copied += 1
+    return copied
 
 
 def stubs():
@@ -138,13 +214,14 @@ def stubs():
 def main():
     elm_jsons = sys.argv[1:] or default_elm_jsons()
 
-    todo = []
+    todo, lamdera = [], []
     for pkg, ver in sorted(all_deps(elm_jsons) | stubs()):
-        if pkg.startswith("lamdera/"):
-            continue  # not on GitHub; ships with the compiler
         if os.path.isdir(os.path.join(PACKAGES, pkg, ver, "src")):
             continue  # already populated
-        todo.append(pkg.split("/") + [ver])
+        if pkg.startswith("lamdera/"):
+            lamdera.append((pkg, ver))
+        else:
+            todo.append(pkg.split("/") + [ver])
 
     tasks, errors = [], []
     for owner, repo, ver in todo:
@@ -154,11 +231,24 @@ def main():
         except Exception as e:
             errors.append(f"LIST {owner}/{repo}@{ver}: {e}")
 
-    print(f"{len(todo)} packages, {len(tasks)} files -> {PACKAGES}", flush=True)
+    print(
+        f"{len(todo) + len(lamdera)} packages, {len(tasks)} files -> {PACKAGES}",
+        flush=True,
+    )
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
         for e in ex.map(lambda t: download(*t), tasks):
             if e:
                 errors.append(e)
+        for e in ex.map(lambda t: download_lamdera(*t), lamdera):
+            if e:
+                errors.append(e)
+
+    if mirror_lamdera_docs():
+        # The verdicts elm-review reached while those docs were missing are cached
+        # per review run and would otherwise outlive the fix, so drop them and let
+        # the next run review with the full picture.
+        for cache in glob.glob(REVIEW_RESULTS):
+            shutil.rmtree(cache, ignore_errors=True)
 
     print(f"done ({len(errors)} errors)")
     for e in errors:

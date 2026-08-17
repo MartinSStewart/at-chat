@@ -23,8 +23,9 @@ npm install --no-audit --no-fund
 python3 scripts/populate-elm-cache.py
 
 # elm-review solves its own dependencies and only writes that solve to disk when it
-# runs, so the first run is the one that discovers what else the cache is missing.
-# Get that over with here rather than in the middle of someone's work: run it once
-# (expected to fail on the blocked downloads), then fill in what it asked for.
+# runs, so the first run is the one that discovers what else the cache is missing —
+# and the one that creates the separate docs cache the second populate fills in for
+# the lamdera packages. Get that over with here rather than in the middle of
+# someone's work: run it once (expected to fail), then fill in what it asked for.
 npx elm-review --compiler "$(realpath node_modules/.bin/lamdera)" >/dev/null 2>&1 || true
 python3 scripts/populate-elm-cache.py

@@ -626,7 +626,9 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                     let
                         commonEmojis : List (Element FrontendMsg_)
                         commonEmojis =
-                            User.commonlyUsedEmojis local.localUser.user
+                            User.commonlyUsedEmojis
+                                (MessageInput.availableCustomEmojisAndStickers guildOrDmId local |> Tuple.first)
+                                local.localUser.user
                                 |> List.take 3
                                 |> List.indexedMap
                                     (\index ( emoji, _ ) ->

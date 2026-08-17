@@ -52,7 +52,7 @@ import Array exposing (Array)
 import Audio
 import Browser exposing (UrlRequest)
 import Bytes exposing (Bytes)
-import Call exposing (CallId, ChannelSidebarMode, FromJs)
+import Call exposing (CallId, FromJs)
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
@@ -110,7 +110,7 @@ import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
 import RecoveryLogin
 import RichText exposing (DiscordCustomEmojiIdAndName, Domain, RichText)
-import Route exposing (Route)
+import Route exposing (ChannelSidebarMode, Route)
 import Scroll exposing (ScrollPosition)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
@@ -981,7 +981,7 @@ type LocalChange
     | Local_MemberEditTyping Time.Posix AnyGuildOrDmId ThreadRouteWithMessage
     | Local_SetLastViewed AnyGuildOrDmId ThreadRouteWithMessage
     | Local_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
-    | Local_CurrentlyViewing { routeRequestCausedByPressingLink : Bool } SetViewing
+    | Local_CurrentlyViewing { markMessagesAsViewed : Bool } SetViewing
     | Local_SetName PersonName
     | Local_LoadChannelMessages GuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
     | Local_LoadThreadMessages GuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))

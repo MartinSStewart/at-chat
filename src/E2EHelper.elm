@@ -10,6 +10,7 @@ module E2EHelper exposing
     , attackerPrivateDiscordChannelChanges
     , attackerShouldNotGetThisToFrontend
     , backendApp
+    , backendViewing
     , botTestGuild
     , botTestGuild_ChannelA
     , botTestGuild_ForumA
@@ -2715,7 +2716,7 @@ allAttackerLocalChanges =
     [ Local_AddReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
     , Local_AddReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
     , Local_Admin (Pages.Admin.SetSignupsEnabled True)
-    , Local_CurrentlyViewing { routeRequestCausedByPressingLink = False } StopViewingChannel
+    , Local_CurrentlyViewing { markMessagesAsViewed = False } StopViewingChannel
     , Local_DeleteChannel legitGuildId channelId
     , Local_DeleteGuild legitGuildId
     , Local_DeleteMessage guildOrDmId_dm threadRouteWithMessage
@@ -3362,6 +3363,24 @@ Wrapping the model in a custom type here gets the reference-sized version withou
 -}
 type BackendModel2
     = BackendModel2 BackendModel
+
+
+{-| What the backend has this session's connection looking at, which is what it goes by
+when working out whether a message needs to be left unread for them.
+-}
+backendViewing : SessionId -> T.Data FrontendModel BackendModel2 -> Result String UserSession.Viewing
+backendViewing sessionId data =
+    case SeqDict.get sessionId (unwrapBackend data.backend).connections of
+        Just connections ->
+            case NonemptyDict.toList connections of
+                [ ( _, connection ) ] ->
+                    Ok connection.currentlyViewing
+
+                _ ->
+                    Err "Expected the session to have exactly one connection to the backend"
+
+        Nothing ->
+            Err "Expected the session to have a connection to the backend"
 
 
 unwrapBackend : BackendModel2 -> BackendModel

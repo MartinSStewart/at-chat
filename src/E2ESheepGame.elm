@@ -1,0 +1,194 @@
+module E2ESheepGame exposing (tests)
+
+import E2EHelper
+import Effect.Browser.Dom as Dom
+import Effect.Test as T
+import Expect
+import Html.Attributes
+import Test.Html.Query
+import Test.Html.Selector
+import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+
+
+tests :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+tests normalConfig =
+    T.testGroup
+        "Sheep game"
+        [ sheepGameDmTest normalConfig
+        , setupNeedsAQuestionTest normalConfig
+        ]
+
+
+{-| A whole match between two people: the host writes the questions, both answer, the host
+locks and reveals, and the score everyone can see reflects who wrote the same thing.
+-}
+sheepGameDmTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+sheepGameDmTest normalConfig =
+    E2EHelper.startTest
+        "Play a sheep game in a DM"
+        E2EHelper.startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.tallDesktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , E2EHelper.inviteUser
+                    admin
+                    (\user ->
+                        [ E2EHelper.openDm user 1000 "0"
+                        , admin.click 100 (Dom.id "guild_openChannel_0")
+                        , E2EHelper.openDm admin 100 "2"
+                        , admin.click 100 (Dom.id "guild_openGamesTab")
+                        , admin.click 100 (Dom.id "game_select_Sheep Game")
+
+                        -- Cancelling out of the setup goes back to picking a game.
+                        , admin.click 100 (Dom.id "sheepGame_cancel")
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "sheepGame_start" ])
+                        , admin.click 100 (Dom.id "game_select_Sheep Game")
+                        , admin.input 100 (Dom.id "sheepGame_question_0") "Name a **colour**"
+                        , admin.input 100 (Dom.id "sheepGame_question_1") "Name an animal"
+                        , admin.click 100 (Dom.id "sheepGame_start")
+
+                        -- Questions are rich text, so the part the host wrote in asterisks
+                        -- is rendered bold rather than shown with the asterisks in it.
+                        , admin.checkView
+                            100
+                            (\view ->
+                                Test.Html.Query.findAll
+                                    [ Test.Html.Selector.style "font-weight" "700"
+                                    , Test.Html.Selector.text "colour"
+                                    ]
+                                    view
+                                    |> Test.Html.Query.count (Expect.greaterThan 0)
+                            )
+
+                        -- Both players answer. They agree about the colour and disagree about
+                        -- the animal, so the first question is worth 2 points each and the
+                        -- second is worth 1.
+                        , admin.input 100 (Dom.id "sheepGame_answer_0") "Blue"
+                        , admin.input 100 (Dom.id "sheepGame_answer_1") "Dog"
+                        , admin.click 100 (Dom.id "sheepGame_submitAnswers")
+                        , user.click 100 (Dom.id "guild_gameStartedCard_0")
+                        , user.input 100 (Dom.id "sheepGame_answer_0") "blue"
+                        , user.input 100 (Dom.id "sheepGame_answer_1") "Cat"
+                        , user.click 100 (Dom.id "sheepGame_submitAnswers")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "2 players have answered so far" ])
+
+                        -- Opening the match fresh puts the answers already submitted back in
+                        -- the boxes, so pressing the button again can't blank them out.
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId1
+                            "/"
+                            E2EHelper.tallDesktopWindow
+                            (\user2 ->
+                                [ T.andThen
+                                    10
+                                    (\data ->
+                                        [ user2.portEvent
+                                            10
+                                            "load_startup_data_from_js"
+                                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                        ]
+                                    )
+                                , user2.click 100 (Dom.id "guild_friendLabel_0")
+                                , user2.click 100 (Dom.id "guild_gameStartedCard_0")
+                                , user2.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.attribute (Html.Attributes.value "blue") ]
+                                    )
+                                ]
+                            )
+
+                        -- Only the host gets to lock the answers and group them.
+                        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "sheepGame_lockAnswers" ])
+                        , admin.click 100 (Dom.id "sheepGame_lockAnswers")
+                        , user.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "The host is grouping the answers" ])
+                        , admin.click 100 (Dom.id "sheepGame_revealScores")
+
+                        -- Nothing is revealed until the host starts stepping through the
+                        -- questions, so both players are on nothing to begin with.
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Scores after 0 of 2 questions" ])
+                        , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.text "Scores after 1 of 2 questions"
+                                , Test.Html.Selector.text "colour"
+                                ]
+                            )
+
+                        -- The reveal is shared, so the other player sees it without doing
+                        -- anything, and the answers that matched are shown together.
+                        , user.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.text "Scores after 1 of 2 questions"
+                                , Test.Html.Selector.text "Blue"
+                                ]
+                            )
+                        , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final scores" ])
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final scores" ])
+
+                        -- Matching on the colour and going it alone on the animal is 3 points.
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "3" ])
+
+                        -- Stepping back hides the last question again.
+                        , admin.click 100 (Dom.id "sheepGame_hidePreviousQuestion")
+                        , user.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Scores after 1 of 2 questions" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| The host can't start a match without writing something to answer.
+-}
+setupNeedsAQuestionTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+setupNeedsAQuestionTest normalConfig =
+    E2EHelper.startTest
+        "A sheep game needs at least one question"
+        E2EHelper.startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.tallDesktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 1000 (Dom.id "guild_friendLabel_0")
+                , admin.click 100 (Dom.id "guild_openGamesTab")
+                , admin.click 100 (Dom.id "game_select_Sheep Game")
+                , admin.click 100 (Dom.id "sheepGame_start")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "Write at least one question before starting" ])
+
+                -- Writing a question and starting leaves the setup view for the game itself.
+                , admin.input 100 (Dom.id "sheepGame_question_0") "Name a colour"
+                , admin.click 100 (Dom.id "sheepGame_start")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "sheepGame_submitAnswers" ])
+                ]
+            )
+        ]

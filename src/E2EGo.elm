@@ -313,7 +313,7 @@ guildChannelGoGames backend =
                     Game.GameData_Go setup actions ->
                         Just ( matchId, setup, actions )
 
-                    Game.GameData_WordSpellingGame _ _ _ ->
+                    _ ->
                         Nothing
             )
 

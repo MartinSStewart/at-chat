@@ -65,7 +65,7 @@ import PersonName
 import Ports exposing (SubscribeData)
 import Postmark
 import RichText
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -521,10 +521,10 @@ messageNotification usersMentioned time sender id threadRoute message members mo
         threadRouteWithFriends =
             case threadRoute of
                 NoThread ->
-                    NoThreadWithFriends Nothing HideMembersTab
+                    NoThreadWithFriends Nothing HideChannelSettings
 
                 ViewThread threadId ->
-                    ViewThreadWithFriends threadId Nothing HideMembersTab
+                    ViewThreadWithFriends threadId Nothing HideChannelSettings
     in
     SeqSet.union alwaysNotify usersMentioned
         |> SeqSet.remove sender
@@ -567,7 +567,12 @@ messageNotification usersMentioned time sender id threadRoute message members mo
                                 )
                                 plainText
                                 (UserTextMessage message)
-                                (GuildRoute id.guildId (ChannelRoute id.channelId threadRouteWithFriends Nothing) |> Just)
+                                (GuildRoute
+                                    id.guildId
+                                    (ChannelRoute id.channelId threadRouteWithFriends Nothing)
+                                    ChannelsHiddenOnMobile
+                                    |> Just
+                                )
                                 sessions
                                 model
                                 |> Tuple.mapSecond (\a -> Command.batch a :: cmds)
@@ -618,10 +623,10 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
         threadRouteWithFriends =
             case threadRoute of
                 NoThread ->
-                    NoThreadWithFriends Nothing HideMembersTab
+                    NoThreadWithFriends Nothing HideChannelSettings
 
                 ViewThread threadId ->
-                    ViewThreadWithFriends threadId Nothing HideMembersTab
+                    ViewThreadWithFriends threadId Nothing HideChannelSettings
     in
     SeqSet.union alwaysNotify usersMentioned
         |> SeqSet.remove sender
@@ -690,6 +695,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                     { currentDiscordUserId = userId2
                                     , guildId = guildId
                                     , channelRoute = DiscordChannel_ChannelRoute channelId threadRouteWithFriends Nothing
+                                    , channelsVisible = ChannelsHiddenOnMobile
                                     }
                                     |> Just
                                 )
@@ -1190,8 +1196,9 @@ discordDmNotification time channelId senderId senderName senderIcon text message
                     { currentDiscordUserId = discordUserId
                     , channelId = channelId
                     , viewingMessage = Nothing
-                    , showMembersTab = HideMembersTab
+                    , showMembersTab = HideChannelSettings
                     , tab = Nothing
+                    , channelsVisible = ChannelsHiddenOnMobile
                     }
                     |> Just
                 )
@@ -1446,11 +1453,12 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
                                 , threadRoute =
                                     case threadRouteWithReplyTo of
                                         NoThreadWithMaybeMessage _ ->
-                                            NoThreadWithFriends Nothing HideMembersTab
+                                            NoThreadWithFriends Nothing HideChannelSettings
 
                                         ViewThreadWithMaybeMessage threadId _ ->
-                                            ViewThreadWithFriends threadId Nothing HideMembersTab
+                                            ViewThreadWithFriends threadId Nothing HideChannelSettings
                                 , tab = Nothing
+                                , channelsVisible = ChannelsHiddenOnMobile
                                 }
                                 |> Just
                             )
@@ -1494,11 +1502,11 @@ so this mirrors `broadcastDm`'s notification handling for the game-start case.
 gameStartedDmNotification :
     Time.Posix
     -> Id UserId
-    -> Id UserId
+    -> Viewing_DmId
     -> Message.GameType
     -> BackendModel
     -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
-gameStartedDmNotification time senderId otherUserId gameType model =
+gameStartedDmNotification time senderId { otherUserId } gameType model =
     let
         isViewing : Bool
         isViewing =
@@ -1544,8 +1552,9 @@ gameStartedDmNotification time senderId otherUserId gameType model =
                     )
                     (DmRoute
                         { channelId = DmChannelId.fromUserIds senderId otherUserId
-                        , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                        , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                         , tab = Nothing
+                        , channelsVisible = ChannelsHiddenOnMobile
                         }
                         |> Just
                     )
@@ -1627,7 +1636,12 @@ gameStartedGuildNotification time sender id gameType members model =
                                 )
                                 plainText
                                 message
-                                (GuildRoute id.guildId (ChannelRoute id.channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing) |> Just)
+                                (GuildRoute
+                                    id.guildId
+                                    (ChannelRoute id.channelId (NoThreadWithFriends Nothing HideChannelSettings) Nothing)
+                                    ChannelsHiddenOnMobile
+                                    |> Just
+                                )
                                 sessions
                                 model
                                 |> Tuple.mapSecond (\a -> Command.batch a :: cmds)

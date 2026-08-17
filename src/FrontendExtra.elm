@@ -36,7 +36,7 @@ import AiChat
 import Array
 import Audio exposing (Audio, AudioData)
 import Bytes.Encode
-import Call exposing (CallId(..), ChannelSidebarMode(..))
+import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelHeader
 import ChannelName
@@ -92,11 +92,12 @@ import Ports exposing (RegisterPushSubscription(..))
 import Range exposing (Range)
 import RecoveryLogin
 import RichText exposing (Domain, RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
+import SheepGame
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import Thread exposing (FrontendGenericThread)
@@ -270,6 +271,9 @@ pendingChangesText localChange =
 
                 Game.LocalChange_WordSpellingGame _ _ ->
                     "Word spelling game change"
+
+                Game.LocalChange_SheepGame _ _ ->
+                    "Sheep game change"
 
         Local_Drawing _ _ _ ->
             "Drew on a message"
@@ -523,8 +527,12 @@ disableTextSelect isMobile model =
                         True
 
 
-canDropFiles : Id UserId -> Route -> Maybe (Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ ))
-canDropFiles currentUserId route =
+canDropFiles :
+    Bool
+    -> Id UserId
+    -> Route
+    -> Maybe (Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ ))
+canDropFiles isMobile currentUserId route =
     case route of
         HomePageRoute ->
             Nothing
@@ -535,83 +543,99 @@ canDropFiles currentUserId route =
         NewGuildRoute ->
             Nothing
 
-        GuildRoute guildId channelRoute ->
-            case channelRoute of
-                ChannelRoute channelId threadRoute _ ->
-                    let
-                        threadRoute2 : ThreadRoute
-                        threadRoute2 =
-                            case threadRoute of
-                                NoThreadWithFriends _ _ ->
-                                    NoThread
+        GuildRoute guildId channelRoute channelsVisible ->
+            if channelsVisible == ChannelsVisibleOnMobile && isMobile then
+                Nothing
 
-                                ViewThreadWithFriends threadId _ _ ->
-                                    ViewThread threadId
-                    in
-                    canDropFileHelper (GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })) threadRoute2 |> Just
+            else
+                case channelRoute of
+                    ChannelRoute channelId threadRoute _ ->
+                        let
+                            threadRoute2 : ThreadRoute
+                            threadRoute2 =
+                                case threadRoute of
+                                    NoThreadWithFriends _ _ ->
+                                        NoThread
 
-                NewChannelRoute ->
-                    Nothing
+                                    ViewThreadWithFriends threadId _ _ ->
+                                        ViewThread threadId
+                        in
+                        canDropFileHelper (GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })) threadRoute2 |> Just
 
-                GuildSettingsRoute ->
-                    Nothing
+                    NewChannelRoute ->
+                        Nothing
 
-                JoinRoute _ ->
-                    Nothing
+                    GuildSettingsRoute ->
+                        Nothing
+
+                    JoinRoute _ ->
+                        Nothing
 
         DiscordGuildRoute routeData ->
-            case routeData.channelRoute of
-                DiscordChannel_ChannelRoute channelId threadRoute _ ->
-                    let
-                        threadRoute2 : ThreadRoute
-                        threadRoute2 =
-                            case threadRoute of
-                                NoThreadWithFriends _ _ ->
-                                    NoThread
+            if routeData.channelsVisible == ChannelsVisibleOnMobile && isMobile then
+                Nothing
 
-                                ViewThreadWithFriends threadId _ _ ->
-                                    ViewThread threadId
-                    in
-                    canDropFileHelper
-                        (DiscordGuildOrDmId
-                            (DiscordGuildOrDmId_Guild { currentUserId = routeData.currentDiscordUserId, guildId = routeData.guildId, channelId = channelId })
-                        )
-                        threadRoute2
-                        |> Just
+            else
+                case routeData.channelRoute of
+                    DiscordChannel_ChannelRoute channelId threadRoute _ ->
+                        let
+                            threadRoute2 : ThreadRoute
+                            threadRoute2 =
+                                case threadRoute of
+                                    NoThreadWithFriends _ _ ->
+                                        NoThread
 
-                DiscordChannel_NewChannelRoute ->
-                    Nothing
+                                    ViewThreadWithFriends threadId _ _ ->
+                                        ViewThread threadId
+                        in
+                        canDropFileHelper
+                            (DiscordGuildOrDmId
+                                (DiscordGuildOrDmId_Guild { currentUserId = routeData.currentDiscordUserId, guildId = routeData.guildId, channelId = channelId })
+                            )
+                            threadRoute2
+                            |> Just
 
-                DiscordChannel_GuildSettingsRoute ->
-                    Nothing
+                    DiscordChannel_NewChannelRoute ->
+                        Nothing
+
+                    DiscordChannel_GuildSettingsRoute ->
+                        Nothing
 
         DmRoute routeData ->
-            case DmChannelId.otherUserId currentUserId routeData.channelId of
-                Just otherUserId ->
-                    let
-                        threadRoute2 : ThreadRoute
-                        threadRoute2 =
-                            case routeData.threadRoute of
-                                NoThreadWithFriends _ _ ->
-                                    NoThread
+            if routeData.channelsVisible == ChannelsVisibleOnMobile && isMobile then
+                Nothing
 
-                                ViewThreadWithFriends threadId _ _ ->
-                                    ViewThread threadId
-                    in
-                    canDropFileHelper (GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId })) threadRoute2 |> Just
+            else
+                case DmChannelId.otherUserId currentUserId routeData.channelId of
+                    Just otherUserId ->
+                        let
+                            threadRoute2 : ThreadRoute
+                            threadRoute2 =
+                                case routeData.threadRoute of
+                                    NoThreadWithFriends _ _ ->
+                                        NoThread
 
-                Nothing ->
-                    Nothing
+                                    ViewThreadWithFriends threadId _ _ ->
+                                        ViewThread threadId
+                        in
+                        canDropFileHelper (GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId })) threadRoute2 |> Just
+
+                    Nothing ->
+                        Nothing
 
         DiscordDmRoute routeData ->
-            canDropFileHelper
-                (DiscordGuildOrDmId
-                    (DiscordGuildOrDmId_Dm
-                        { currentUserId = routeData.currentDiscordUserId, channelId = routeData.channelId }
+            if routeData.channelsVisible == ChannelsVisibleOnMobile && isMobile then
+                Nothing
+
+            else
+                canDropFileHelper
+                    (DiscordGuildOrDmId
+                        (DiscordGuildOrDmId_Dm
+                            { currentUserId = routeData.currentDiscordUserId, channelId = routeData.channelId }
+                        )
                     )
-                )
-                NoThread
-                |> Just
+                    NoThread
+                    |> Just
 
         AiChatRoute ->
             Nothing
@@ -661,7 +685,11 @@ fileDragOverlay loggedIn model =
         let
             canDrop : Bool
             canDrop =
-                canDropFiles (Local.model loggedIn.localState |> .localUser |> .session |> .userId) model.route /= Nothing
+                canDropFiles
+                    (MyUi.isMobile model)
+                    (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
+                    model.route
+                    /= Nothing
 
             accentColor : Ui.Color
             accentColor =
@@ -1281,18 +1309,18 @@ handleLocalChange time maybeLocalChange loggedIn cmds =
             ( loggedIn, cmds )
 
 
-routeViewingLocalChange : Bool -> LocalState -> Route -> Maybe LocalChange
-routeViewingLocalChange routeRequestCausedByPressingLink local route =
+routeViewingLocalChange : Bool -> Bool -> LocalState -> Route -> Maybe LocalChange
+routeViewingLocalChange isMobile routeRequestCausedByPressingLink local route =
     let
         localChange : SetViewing
         localChange =
-            LocalState.routeToViewing route local
+            LocalState.routeToViewing isMobile route local
     in
     if UserSession.setViewingToCurrentlyViewing localChange == local.localUser.currentlyViewing then
         Nothing
 
     else
-        Just (Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink } localChange)
+        Just (Local_CurrentlyViewing { markMessagesAsViewed = routeRequestCausedByPressingLink } localChange)
 
 
 clearRevealedSpoilers : LoadedFrontend -> LoadedFrontend
@@ -1308,72 +1336,24 @@ clearRevealedSpoilers model =
     }
 
 
-enterSidebarRoute :
-    Bool
-    -> Maybe Route
-    -> Command FrontendOnly ToBackend FrontendMsg_
-    -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
-enterSidebarRoute sameGuild previousRoute viewCmd model =
-    updateLoggedIn
-        (\loggedIn ->
-            ( if sameGuild || previousRoute == Nothing then
-                startOpeningChannelSidebar loggedIn
-
-              else
-                loggedIn
-            , viewCmd
-            )
-        )
-        model
-
-
 enterChannelRoute :
     AnyGuildOrDmId
     -> Maybe ChannelHeaderTab
     -> ThreadRouteWithFriends
     -> Bool
-    -> Bool
-    -> Maybe Route
     -> Command FrontendOnly ToBackend FrontendMsg_
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
-enterChannelRoute guildOrDmId tab threadRoute sameGuild sameChannel previousRoute viewCmd model =
+enterChannelRoute guildOrDmId tab threadRoute sameChannel viewCmd model =
     updateLoggedIn
         (\loggedIn ->
-            let
-                showMembers : ShowMembersTab
-                showMembers =
-                    case threadRoute of
-                        ViewThreadWithFriends _ _ showMembers2 ->
-                            showMembers2
-
-                        NoThreadWithFriends _ showMembers2 ->
-                            showMembers2
-            in
             routeRequestChannelHelper
                 sameChannel
                 guildOrDmId
                 tab
                 threadRoute
                 (Local.model loggedIn.localState)
-                (case ( showMembers, MyUi.isMobile model ) of
-                    ( ShowMembersTab, True ) ->
-                        -- Parking the sidebar off screen is what makes the member
-                        -- column slide in. The column doesn't slide on desktop, so
-                        -- there's nothing to park there.
-                        startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
-
-                    ( ShowMembersTab, False ) ->
-                        startOpeningChannelSidebar loggedIn
-
-                    ( HideMembersTab, _ ) ->
-                        if sameGuild || previousRoute == Nothing then
-                            startOpeningChannelSidebar loggedIn
-
-                        else
-                            loggedIn
-                )
+                loggedIn
                 model
                 |> Tuple.mapSecond (\cmd -> Command.batch [ viewCmd, cmd ])
         )
@@ -1401,7 +1381,12 @@ routeRequest previousRoute newRoute model =
                 (\loggedIn ->
                     handleLocalChange
                         model.time
-                        (routeViewingLocalChange model.routeRequestCausedByPressingLink (Local.model loggedIn.localState) newRoute)
+                        (routeViewingLocalChange
+                            (MyUi.isMobile model)
+                            model.routeRequestCausedByPressingLink
+                            (Local.model loggedIn.localState)
+                            newRoute
+                        )
                         { loggedIn
                             | drawingMode =
                                 -- Closing the draw tab (or navigating elsewhere) also
@@ -1464,20 +1449,11 @@ routeRequest previousRoute newRoute model =
             -- Opening the create guild page always starts with a blank form
             updateLoggedIn (\loggedIn -> ( { loggedIn | newGuildForm = Nothing }, Command.none )) model2
 
-        GuildRoute guildId channelRoute ->
+        GuildRoute guildId channelRoute _ ->
             let
                 model3 : LoadedFrontend
                 model3 =
                     clearRevealedSpoilers model2
-
-                sameGuild : Bool
-                sameGuild =
-                    case previousRoute of
-                        Just (GuildRoute previousGuildId _) ->
-                            guildId == previousGuildId
-
-                        _ ->
-                            False
             in
             case channelRoute of
                 ChannelRoute channelId threadRoute tab ->
@@ -1485,31 +1461,23 @@ routeRequest previousRoute newRoute model =
                         (GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId }))
                         tab
                         threadRoute
-                        sameGuild
-                        (if sameGuild then
-                            case previousRoute of
-                                Just (GuildRoute _ (ChannelRoute previousChannelId previousThreadRoute _)) ->
-                                    if channelId == previousChannelId then
-                                        sameThread threadRoute previousThreadRoute
+                        (case previousRoute of
+                            Just (GuildRoute previousGuildId (ChannelRoute previousChannelId previousThreadRoute _) _) ->
+                                (guildId == previousGuildId)
+                                    && (channelId == previousChannelId)
+                                    && sameThread threadRoute previousThreadRoute
 
-                                    else
-                                        False
-
-                                _ ->
-                                    False
-
-                         else
-                            False
+                            _ ->
+                                False
                         )
-                        previousRoute
                         Command.none
                         model3
 
                 NewChannelRoute ->
-                    enterSidebarRoute sameGuild previousRoute Command.none model3
+                    ( model3, Command.none )
 
                 GuildSettingsRoute ->
-                    enterSidebarRoute sameGuild previousRoute Command.none model3
+                    ( model3, Command.none )
 
                 JoinRoute inviteLinkId ->
                     case model3.loginStatus of
@@ -1538,9 +1506,10 @@ routeRequest previousRoute newRoute model =
                                                 guildId
                                                 (ChannelRoute
                                                     (LocalState.announcementChannel guild)
-                                                    (NoThreadWithFriends Nothing HideMembersTab)
+                                                    (NoThreadWithFriends Nothing HideChannelSettings)
                                                     Nothing
                                                 )
+                                                ChannelsVisibleOnMobile
                                             )
 
                                     Nothing ->
@@ -1553,15 +1522,6 @@ routeRequest previousRoute newRoute model =
                 model3 : LoadedFrontend
                 model3 =
                     clearRevealedSpoilers model2
-
-                sameGuild : Bool
-                sameGuild =
-                    case previousRoute of
-                        Just (DiscordGuildRoute a) ->
-                            currentDiscordUserId == a.currentDiscordUserId && guildId == a.guildId
-
-                        _ ->
-                            False
             in
             case channelRoute of
                 DiscordChannel_ChannelRoute channelId threadRoute _ ->
@@ -1569,36 +1529,29 @@ routeRequest previousRoute newRoute model =
                         (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId = currentDiscordUserId, guildId = guildId, channelId = channelId }))
                         Nothing
                         threadRoute
-                        sameGuild
-                        (if sameGuild then
-                            case previousRoute of
-                                Just (DiscordGuildRoute guildData) ->
-                                    case guildData.channelRoute of
-                                        DiscordChannel_ChannelRoute previousChannelId previousThreadRoute _ ->
-                                            if channelId == previousChannelId then
-                                                sameThread threadRoute previousThreadRoute
+                        (case previousRoute of
+                            Just (DiscordGuildRoute guildData) ->
+                                case guildData.channelRoute of
+                                    DiscordChannel_ChannelRoute previousChannelId previousThreadRoute _ ->
+                                        (currentDiscordUserId == guildData.currentDiscordUserId)
+                                            && (guildId == guildData.guildId)
+                                            && (channelId == previousChannelId)
+                                            && sameThread threadRoute previousThreadRoute
 
-                                            else
-                                                False
+                                    _ ->
+                                        False
 
-                                        _ ->
-                                            False
-
-                                _ ->
-                                    False
-
-                         else
-                            False
+                            _ ->
+                                False
                         )
-                        previousRoute
                         Command.none
                         model3
 
                 DiscordChannel_NewChannelRoute ->
-                    enterSidebarRoute sameGuild previousRoute Command.none model3
+                    ( model3, Command.none )
 
                 DiscordChannel_GuildSettingsRoute ->
-                    enterSidebarRoute sameGuild previousRoute Command.none model3
+                    ( model3, Command.none )
 
         AiChatRoute ->
             ( model2, Command.map AiChatToBackend AiChatMsg AiChat.getModels )
@@ -1626,15 +1579,6 @@ routeRequest previousRoute newRoute model =
                     let
                         local =
                             Local.model loggedIn.localState
-
-                        showMembers : ShowMembersTab
-                        showMembers =
-                            case dmRoute.threadRoute of
-                                ViewThreadWithFriends _ _ showMembers2 ->
-                                    showMembers2
-
-                                NoThreadWithFriends _ showMembers2 ->
-                                    showMembers2
                     in
                     case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                         Just otherUserId ->
@@ -1644,13 +1588,7 @@ routeRequest previousRoute newRoute model =
                                 dmRoute.tab
                                 dmRoute.threadRoute
                                 local
-                                (case ( showMembers, MyUi.isMobile model3 ) of
-                                    ( ShowMembersTab, True ) ->
-                                        startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
-
-                                    _ ->
-                                        startOpeningChannelSidebar loggedIn
-                                )
+                                loggedIn
                                 model3
 
                         Nothing ->
@@ -1690,13 +1628,7 @@ routeRequest previousRoute newRoute model =
                         Nothing
                         (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab)
                         (Local.model loggedIn.localState)
-                        (case ( routeData.showMembersTab, MyUi.isMobile model3 ) of
-                            ( ShowMembersTab, True ) ->
-                                startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
-
-                            _ ->
-                                startOpeningChannelSidebar loggedIn
-                        )
+                        loggedIn
                         model3
                 )
                 model3
@@ -1778,7 +1710,7 @@ currentGamesTab local route =
                 _ ->
                     Nothing
 
-        GuildRoute guildId (ChannelRoute channelId _ (Just (ChannelHeaderTab_Games maybeMatchId))) ->
+        GuildRoute guildId (ChannelRoute channelId _ (Just (ChannelHeaderTab_Games maybeMatchId))) _ ->
             case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
                 Just ( _, channel ) ->
                     Just
@@ -1839,7 +1771,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                                         | games =
                                             Game.routeRequest
                                                 model3.time
-                                                local.localUser.session.userId
+                                                local.localUser
                                                 guildOrDmId2
                                                 messageId
                                                 dmChannel.games
@@ -1856,7 +1788,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                                         | games =
                                             Game.routeRequest
                                                 model3.time
-                                                local.localUser.session.userId
+                                                local.localUser
                                                 guildOrDmId2
                                                 messageId
                                                 channel.games
@@ -2425,31 +2357,6 @@ setFocus model htmlId =
         Dom.focus htmlId |> Task.attempt (\_ -> SetFocus)
 
 
-startOpeningChannelSidebar : LoggedIn2 -> LoggedIn2
-startOpeningChannelSidebar loggedIn =
-    { loggedIn
-        | sidebarMode =
-            ChannelSidebarOpening
-                { offset =
-                    case loggedIn.sidebarMode of
-                        ChannelSidebarClosing { offset } ->
-                            offset
-
-                        ChannelSidebarClosed ->
-                            1
-
-                        ChannelSidebarOpened ->
-                            0
-
-                        ChannelSidebarOpening { offset } ->
-                            offset
-
-                        ChannelSidebarDragging { offset } ->
-                            offset
-                }
-    }
-
-
 textToRichText :
     NonemptyString
     -> List (Id UserId)
@@ -2933,7 +2840,7 @@ changeUpdate localMsg local =
                 Local_DeleteMessage guildOrDmId threadRoute ->
                     deleteMessage guildOrDmId threadRoute local
 
-                Local_CurrentlyViewing { routeRequestCausedByPressingLink } viewing ->
+                Local_CurrentlyViewing { markMessagesAsViewed } viewing ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -2948,7 +2855,7 @@ changeUpdate localMsg local =
                                             User.setLastDmViewed
                                                 data.id
                                                 (NoThreadWithMaybeMessage
-                                                    (if routeRequestCausedByPressingLink then
+                                                    (if markMessagesAsViewed then
                                                         SeqDict.get data.id.otherUserId local.dmChannels
                                                             |> Maybe.map DmChannel.latestFrontendMessageId
 
@@ -2975,7 +2882,7 @@ changeUpdate localMsg local =
                                                 { otherUserId = data.id.otherUserId }
                                                 (ViewThreadWithMaybeMessage
                                                     data.id.threadId
-                                                    (if routeRequestCausedByPressingLink then
+                                                    (if markMessagesAsViewed then
                                                         SeqDict.get data.id.otherUserId local.dmChannels
                                                             |> Maybe.andThen
                                                                 (\dmChannel -> SeqDict.get data.id.threadId dmChannel.threads)
@@ -3011,7 +2918,7 @@ changeUpdate localMsg local =
                                             User.setLastDiscordDmViewed
                                                 data.id.currentUserId
                                                 data.id.channelId
-                                                (if routeRequestCausedByPressingLink then
+                                                (if markMessagesAsViewed then
                                                     SeqDict.get data.id.channelId local.discordDmChannels
                                                         |> Maybe.map DmChannel.latestFrontendMessageId
 
@@ -3036,7 +2943,7 @@ changeUpdate localMsg local =
                                             User.setLastChannelViewed
                                                 data.id
                                                 (NoThreadWithMaybeMessage
-                                                    (if routeRequestCausedByPressingLink then
+                                                    (if markMessagesAsViewed then
                                                         LocalState.getGuildAndChannel data.id local
                                                             |> Maybe.map (\( _, channel ) -> DmChannel.latestFrontendMessageId channel)
 
@@ -3063,7 +2970,7 @@ changeUpdate localMsg local =
                                                 { guildId = data.id.guildId, channelId = data.id.channelId }
                                                 (ViewThreadWithMaybeMessage
                                                     data.id.threadId
-                                                    (if routeRequestCausedByPressingLink then
+                                                    (if markMessagesAsViewed then
                                                         LocalState.getGuildAndChannel { guildId = data.id.guildId, channelId = data.id.channelId } local
                                                             |> Maybe.andThen
                                                                 (\( _, channel ) -> SeqDict.get data.id.threadId channel.threads)
@@ -3105,7 +3012,7 @@ changeUpdate localMsg local =
                                             User.setLastDiscordChannelViewed
                                                 data.id
                                                 (NoThreadWithMaybeMessage
-                                                    (if routeRequestCausedByPressingLink then
+                                                    (if markMessagesAsViewed then
                                                         LocalState.getDiscordGuildAndChannel data.id.guildId data.id.channelId local
                                                             |> Maybe.map (\( _, channel ) -> DmChannel.latestFrontendMessageId channel)
 
@@ -3156,7 +3063,7 @@ changeUpdate localMsg local =
                                                 { guildId = data.id.guildId, channelId = data.id.channelId, currentUserId = data.id.currentUserId }
                                                 (ViewThreadWithMaybeMessage
                                                     data.id.threadId
-                                                    (if routeRequestCausedByPressingLink then
+                                                    (if markMessagesAsViewed then
                                                         LocalState.getDiscordGuildAndChannel data.id.guildId data.id.channelId local
                                                             |> Maybe.andThen
                                                                 (\( _, channel ) -> SeqDict.get data.id.threadId channel.threads)
@@ -5351,6 +5258,44 @@ gameChangeUpdateChannel changeBy gameChange channel =
                     { channel
                         | games =
                             SeqDict.updateIfExists matchId (Game.addWordSpellingGameAction action) channel.games
+                    }
+
+        Game.LocalChange_SheepGame matchId sheepChange ->
+            case sheepChange of
+                SheepGame.StartMatch createdAt setup ->
+                    let
+                        channel2 =
+                            LocalState.createChannelMessageFrontend
+                                (GameStarted
+                                    { startedAt = createdAt
+                                    , startedBy = changeBy
+                                    , reactions = SeqDict.empty
+                                    , gameType = GameType_SheepGame
+                                    , timestampDrawings = Drawing.emptyDrawing
+                                    , cardDrawings = Drawing.emptyDrawing
+                                    }
+                                )
+                                channel
+
+                        newMatchId : Id ChannelMessageId
+                        newMatchId =
+                            DmChannel.latestFrontendMessageId channel2
+                    in
+                    { channel2
+                        | games =
+                            SeqDict.insert
+                                newMatchId
+                                (Game.initMatchData
+                                    (Game.GameData_SheepGame setup Array.empty SheepGame.initShared)
+                                    Nothing
+                                )
+                                channel2.games
+                    }
+
+                SheepGame.Action action ->
+                    { channel
+                        | games =
+                            SeqDict.updateIfExists matchId (Game.addSheepGameAction action) channel.games
                     }
 
 

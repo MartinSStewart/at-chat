@@ -1,6 +1,5 @@
 port module Call exposing
     ( CallId(..)
-    , ChannelSidebarMode(..)
     , ConnectionId
     , DeviceKind(..)
     , DisplayMode(..)
@@ -19,6 +18,7 @@ port module Call exposing
     , StartCallData
     , StartLocalStreamData
     , ToJs(..)
+    , conversationOffset
     , defaultRemoteCallData
     , displayMode
     , displayModeChangeCmd
@@ -31,8 +31,8 @@ port module Call exposing
     , insideThumbnail
     , isPressMsg
     , leaveVoiceChatCmds
+    , memberColumnOffset
     , serverChangeCmd
-    , sidebarOffsetAttr
     , startCallCmd
     , startLocalStream
     , toJs
@@ -66,7 +66,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import Route exposing (Route(..), ShowMembersTab(..))
+import Route exposing (ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), Route(..), ShowChannelSettings(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
@@ -147,14 +147,6 @@ type MediaDevicesStatus
     = MediaDevicesNotLoaded
     | HasMediaDevices (List MediaDevice)
     | FailedToGetMediaDevices String
-
-
-type ChannelSidebarMode
-    = ChannelSidebarClosed
-    | ChannelSidebarOpened
-    | ChannelSidebarClosing { offset : Float }
-    | ChannelSidebarOpening { offset : Float }
-    | ChannelSidebarDragging { offset : Float, previousOffset : Float, time : Time.Posix }
 
 
 init : SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData) -> Local
@@ -315,8 +307,8 @@ showLocalVideo displayMode2 =
             True
 
 
-displayMode : Id UserId -> Route -> Local -> DisplayMode
-displayMode currentUserId route local =
+displayMode : Bool -> Id UserId -> Route -> Local -> DisplayMode
+displayMode isMobile currentUserId route local =
     let
         thumbnailOrNoVideo =
             case local.currentRoom of
@@ -336,68 +328,82 @@ displayMode currentUserId route local =
         NewGuildRoute ->
             thumbnailOrNoVideo
 
-        GuildRoute guildId channelRoute ->
-            case channelRoute of
-                Route.ChannelRoute channelId _ tab ->
-                    let
-                        roomId =
-                            GuildRoomId { guildId = guildId, channelId = channelId }
+        GuildRoute guildId channelRoute channelsVisible ->
+            -- Only mobile puts the channel list over the conversation the videos are laid
+            -- out on top of, so only mobile can leave them with nothing to sit on
+            case ( isMobile, channelsVisible ) of
+                ( True, ChannelsVisibleOnMobile ) ->
+                    thumbnailOrNoVideo
 
-                        isTabExpanded =
-                            tab == Just ChannelHeaderTab_VoiceChat
-                    in
-                    if Just roomId == local.currentRoom && isTabExpanded then
-                        case SeqDict.get roomId local.voiceChats of
-                            Just _ ->
-                                ShowLocalVideoAndCall roomId
+                _ ->
+                    case channelRoute of
+                        Route.ChannelRoute channelId _ tab ->
+                            let
+                                roomId =
+                                    GuildRoomId { guildId = guildId, channelId = channelId }
 
-                            Nothing ->
+                                isTabExpanded =
+                                    tab == Just ChannelHeaderTab_VoiceChat
+                            in
+                            if Just roomId == local.currentRoom && isTabExpanded then
+                                case SeqDict.get roomId local.voiceChats of
+                                    Just _ ->
+                                        ShowLocalVideoAndCall roomId
+
+                                    Nothing ->
+                                        ShowLocalVideo
+
+                            else if isTabExpanded then
                                 ShowLocalVideo
 
-                    else if isTabExpanded then
-                        ShowLocalVideo
+                            else
+                                thumbnailOrNoVideo
 
-                    else
-                        thumbnailOrNoVideo
+                        Route.NewChannelRoute ->
+                            thumbnailOrNoVideo
 
-                Route.NewChannelRoute ->
-                    thumbnailOrNoVideo
+                        Route.GuildSettingsRoute ->
+                            thumbnailOrNoVideo
 
-                Route.GuildSettingsRoute ->
-                    thumbnailOrNoVideo
-
-                Route.JoinRoute _ ->
-                    thumbnailOrNoVideo
+                        Route.JoinRoute _ ->
+                            thumbnailOrNoVideo
 
         DiscordGuildRoute _ ->
             thumbnailOrNoVideo
 
         DmRoute dmRoute ->
-            case DmChannelId.otherUserId currentUserId dmRoute.channelId of
-                Just otherUserId ->
-                    let
-                        roomId =
-                            DmRoomId { otherUserId = otherUserId }
+            -- Only mobile puts the friends list over the conversation the videos are laid
+            -- out on top of, so only mobile can leave them with nothing to sit on
+            case ( isMobile, dmRoute.channelsVisible ) of
+                ( True, ChannelsVisibleOnMobile ) ->
+                    thumbnailOrNoVideo
 
-                        isTabExpanded =
-                            dmRoute.tab == Just ChannelHeaderTab_VoiceChat
-                    in
-                    if Just roomId == local.currentRoom && isTabExpanded then
-                        case SeqDict.get roomId local.voiceChats of
-                            Just _ ->
-                                ShowLocalVideoAndCall roomId
+                _ ->
+                    case DmChannelId.otherUserId currentUserId dmRoute.channelId of
+                        Just otherUserId ->
+                            let
+                                roomId =
+                                    DmRoomId { otherUserId = otherUserId }
 
-                            Nothing ->
+                                isTabExpanded =
+                                    dmRoute.tab == Just ChannelHeaderTab_VoiceChat
+                            in
+                            if Just roomId == local.currentRoom && isTabExpanded then
+                                case SeqDict.get roomId local.voiceChats of
+                                    Just _ ->
+                                        ShowLocalVideoAndCall roomId
+
+                                    Nothing ->
+                                        ShowLocalVideo
+
+                            else if isTabExpanded then
                                 ShowLocalVideo
 
-                    else if isTabExpanded then
-                        ShowLocalVideo
+                            else
+                                thumbnailOrNoVideo
 
-                    else
-                        thumbnailOrNoVideo
-
-                Nothing ->
-                    thumbnailOrNoVideo
+                        Nothing ->
+                            thumbnailOrNoVideo
 
         DiscordDmRoute _ ->
             thumbnailOrNoVideo
@@ -452,7 +458,9 @@ videoNodes localUser config loggedIn local =
         voiceChatX : Int
         voiceChatX =
             if isMobile then
-                padding
+                -- The full size videos are drawn on top of the conversation view, so they
+                -- travel with it while it's being swiped away
+                padding + conversationOffset loggedIn.sidebarMode config
 
             else
                 MyUi.channelAndGuildColumnWidth config.windowSize + padding
@@ -465,10 +473,10 @@ videoNodes localUser config loggedIn local =
             MyUi.conversationWidthIgnoreScrollbar
                 config.windowSize
                 (case Route.toShowMembersTab config.route of
-                    ( ShowMembersTab, _ ) ->
+                    ( ShowChannelSettings, _ ) ->
                         True
 
-                    ( HideMembersTab, _ ) ->
+                    ( HideChannelSettings, _ ) ->
                         False
                 )
                 - padding
@@ -506,7 +514,7 @@ videoNodes localUser config loggedIn local =
         isMobile =
             MyUi.isMobile { windowSize = config.windowSize }
     in
-    (case displayMode localUser.session.userId config.route local of
+    (case displayMode isMobile localUser.session.userId config.route local of
         NoVideo ->
             [ videoNode
                 localUser.session.userId
@@ -1825,28 +1833,34 @@ deviceDropdown isMobile labelText icon devices selected onSelect =
         ]
 
 
-sidebarOffsetAttr : ChannelSidebarMode -> { a | windowSize : Coord CssPixels } -> Int
-sidebarOffsetAttr sidebarMode model =
-    let
-        width : Int
-        width =
-            Coord.xRaw model.windowSize
-    in
-    (case sidebarMode of
-        ChannelSidebarClosed ->
-            1
+{-| The mobile layout is three screens laid out left to right that the offset slides
+along: the member column at 0, the conversation view at 1 and the guild's channel list at
 
-        ChannelSidebarOpened ->
-            0
+1.  Each screen sits where it is until the offset reaches it, then slides off to the right.
 
-        ChannelSidebarClosing a ->
-            a.offset
+-}
+memberColumnOffset : ChannelSidebarMode -> { a | windowSize : Coord CssPixels } -> Int
+memberColumnOffset sidebarMode model =
+    clamp 0 1 (sidebarOffset sidebarMode)
+        * toFloat (Coord.xRaw model.windowSize)
+        |> round
 
-        ChannelSidebarOpening a ->
+
+{-| See `memberColumnOffset`. The conversation view is the middle of the three, so it sits
+still until the member column has finished sliding off it.
+-}
+conversationOffset : ChannelSidebarMode -> { a | windowSize : Coord CssPixels } -> Int
+conversationOffset sidebarMode model =
+    clamp 0 1 (sidebarOffset sidebarMode - 1)
+        * toFloat (Coord.xRaw model.windowSize)
+        |> round
+
+
+sidebarOffset : ChannelSidebarMode -> Float
+sidebarOffset sidebarMode =
+    case sidebarMode of
+        ChannelSidebarNotDragging a ->
             a.offset
 
         ChannelSidebarDragging a ->
             a.offset
-    )
-        * toFloat width
-        |> round

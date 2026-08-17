@@ -4,7 +4,7 @@ import DmChannelId
 import Expect
 import Fuzz exposing (Fuzzer)
 import Id exposing (Id)
-import Route exposing (ChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import Test exposing (Test)
 import Url
@@ -47,19 +47,21 @@ routeFuzzer =
         , Fuzz.map AdminRoute (Fuzz.map (\highlightLog -> { highlightLog = highlightLog }) (Fuzz.maybe idFuzzer))
         , Fuzz.constant NewGuildRoute
         , Fuzz.constant AiChatRoute
-        , Fuzz.map2 GuildRoute idFuzzer channelRouteFuzzer
-        , Fuzz.map4
-            (\userId otherUserId threadRoute tab ->
+        , Fuzz.map3 GuildRoute idFuzzer channelRouteFuzzer channelsVisibleFuzzer
+        , Fuzz.map5
+            (\userId otherUserId threadRoute tab channelsVisible ->
                 DmRoute
                     { channelId = DmChannelId.fromUserIds userId otherUserId
                     , threadRoute = threadRoute
                     , tab = tab
+                    , channelsVisible = channelsVisible
                     }
             )
             idFuzzer
             idFuzzer
             threadRouteFuzzer
             (Fuzz.maybe tabFuzzer)
+            channelsVisibleFuzzer
         , Fuzz.map PublicGoMatchRoute secretIdFuzzer
         ]
 
@@ -109,9 +111,17 @@ channelRouteFuzzer =
         ]
 
 
-showMemberTabFuzzer : Fuzzer ShowMembersTab
+channelsVisibleFuzzer : Fuzzer ChannelsVisibleOnMobile
+channelsVisibleFuzzer =
+    Fuzz.oneOfValues
+        [ ChannelsVisibleOnMobile
+        , ChannelsHiddenOnMobile
+        ]
+
+
+showMemberTabFuzzer : Fuzzer ShowChannelSettings
 showMemberTabFuzzer =
     Fuzz.oneOfValues
-        [ ShowMembersTab
-        , HideMembersTab
+        [ ShowChannelSettings
+        , HideChannelSettings
         ]

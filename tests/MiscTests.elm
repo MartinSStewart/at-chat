@@ -1,10 +1,15 @@
 module MiscTests exposing (tests)
 
+import Backend
 import DiscordSync
 import Effect.Time as Time
+import Emoji exposing (EmojiOrCustomEmoji(..))
 import Expect
+import Id exposing (CustomEmojiId, Id)
 import Pages.Guild exposing (HighlightMessage(..), IsHovered(..))
+import SeqSet
 import Test exposing (Test)
+import User
 
 
 tests : Test
@@ -64,4 +69,43 @@ tests =
             \_ ->
                 DiscordSync.threadName "   "
                     |> Expect.equal "Thread"
+        , Test.test "Commonly used emojis keeps a custom emoji the conversation can use" <|
+            \_ ->
+                User.commonlyUsedEmojis
+                    (SeqSet.singleton usableCustomEmoji)
+                    (User.addRecentlyUsedEmojis
+                        (List.repeat 3 (EmojiOrCustomEmoji_CustomEmoji usableCustomEmoji))
+                        Backend.adminUser
+                    )
+                    |> List.map Tuple.first
+                    |> Expect.equal
+                        [ EmojiOrCustomEmoji_CustomEmoji usableCustomEmoji
+                        , EmojiOrCustomEmoji_Emoji Emoji.heart
+                        , EmojiOrCustomEmoji_Emoji Emoji.thumbsUp
+                        , EmojiOrCustomEmoji_Emoji Emoji.smiley
+                        ]
+        , Test.test "Commonly used emojis drops a custom emoji the conversation can't use" <|
+            \_ ->
+                User.commonlyUsedEmojis
+                    (SeqSet.singleton usableCustomEmoji)
+                    (User.addRecentlyUsedEmojis
+                        (List.repeat 5 (EmojiOrCustomEmoji_CustomEmoji unusableCustomEmoji))
+                        Backend.adminUser
+                    )
+                    |> List.map Tuple.first
+                    |> Expect.equal
+                        [ EmojiOrCustomEmoji_Emoji Emoji.heart
+                        , EmojiOrCustomEmoji_Emoji Emoji.thumbsUp
+                        , EmojiOrCustomEmoji_Emoji Emoji.smiley
+                        ]
         ]
+
+
+usableCustomEmoji : Id CustomEmojiId
+usableCustomEmoji =
+    Id.fromInt 1
+
+
+unusableCustomEmoji : Id CustomEmojiId
+unusableCustomEmoji =
+    Id.fromInt 2

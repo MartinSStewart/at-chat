@@ -36,7 +36,7 @@ import Pages.Admin
 import Pages.Guild
 import PersonName
 import RichText
-import Route exposing (ShowMembersTab(..))
+import Route exposing (ShowChannelSettings(..))
 import SeqDict
 import SeqSet
 import Sticker
@@ -964,8 +964,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     , channelRoute =
                         Route.DiscordChannel_ChannelRoute
                             E2EHelper.botTestGuild_ChannelA
-                            (Route.NoThreadWithFriends Nothing Route.ShowMembersTab)
+                            (Route.NoThreadWithFriends Nothing Route.ShowChannelSettings)
                             Nothing
+                    , channelsVisible = Route.ChannelsHiddenOnMobile
                     }
                 )
             )
@@ -1986,6 +1987,37 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Swiping a Discord DM closed on mobile stops it counting as viewed"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ admin.resizeWindow 100 E2EHelper.iphone14Window
+                        , discordDmMessage connection "Starting a Discord DM"
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
+                        , T.checkState 100 checkBackendIsViewingTheDiscordDm
+
+                        -- Swiping the conversation view away leaves the admin on the
+                        -- friends list, which the backend has to hear about, otherwise a
+                        -- message arriving now is marked as read on their behalf
+                        , admin.click 100 (Dom.id "guild_headerBackButton")
+                        , T.checkState 500 checkBackendIsViewingNothing
+                        , E2EHelper.tallSnapshot admin 100 { name = "Discord DM swiped closed" }
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "No Discord DM push notification while viewing the channel"
         E2EHelper.startTime
         normalConfig
@@ -2340,8 +2372,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     , channelRoute =
                         Route.DiscordChannel_ChannelRoute
                             E2EHelper.botTestGuild_ChannelA
-                            (Route.NoThreadWithFriends Nothing HideMembersTab)
+                            (Route.NoThreadWithFriends Nothing HideChannelSettings)
                             Nothing
+                    , channelsVisible = Route.ChannelsHiddenOnMobile
                     }
                 )
             )
@@ -2500,8 +2533,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             , channelRoute =
                                 Route.DiscordChannel_ChannelRoute
                                     E2EHelper.privateDiscordChannelId
-                                    (Route.NoThreadWithFriends Nothing HideMembersTab)
+                                    (Route.NoThreadWithFriends Nothing HideChannelSettings)
                                     Nothing
+                            , channelsVisible = Route.ChannelsHiddenOnMobile
                             }
                         )
                     )
@@ -2587,7 +2621,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             (LocalModelChangeRequest
                                 (ChangeId 900)
                                 (Local_CurrentlyViewing
-                                    { routeRequestCausedByPressingLink = False }
+                                    { markMessagesAsViewed = False }
                                     (ViewDiscordChannel
                                         { id =
                                             { guildId = E2EHelper.botTestGuild
@@ -2772,8 +2806,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     , channelRoute =
                         Route.DiscordChannel_ChannelRoute
                             E2EHelper.botTestGuild_ChannelA
-                            (Route.NoThreadWithFriends Nothing Route.ShowMembersTab)
+                            (Route.NoThreadWithFriends Nothing Route.ShowChannelSettings)
                             Nothing
+                    , channelsVisible = Route.ChannelsHiddenOnMobile
                     }
                 )
             )
@@ -3190,6 +3225,32 @@ channel the linked admin shares with user `137748026084163584`, sent by that oth
 user. The message timestamp is the current test time and the sequence number/message
 id are derived from it.
 -}
+checkBackendIsViewingTheDiscordDm : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkBackendIsViewingTheDiscordDm data =
+    case E2EHelper.backendViewing E2EHelper.sessionId0 data of
+        Ok (UserSession.Viewing_DiscordDm _) ->
+            Ok ()
+
+        Ok _ ->
+            Err "Expected the backend to have the admin viewing the Discord DM"
+
+        Err error ->
+            Err error
+
+
+checkBackendIsViewingNothing : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkBackendIsViewingNothing data =
+    case E2EHelper.backendViewing E2EHelper.sessionId0 data of
+        Ok UserSession.Viewing_None ->
+            Ok ()
+
+        Ok _ ->
+            Err "Expected the backend to hear that the swiped away Discord DM is no longer being viewed"
+
+        Err error ->
+            Err error
+
+
 discordDmMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 discordDmMessage connection content =
     T.andThen

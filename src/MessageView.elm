@@ -18,6 +18,7 @@ import NonemptyDict exposing (NonemptyDict)
 import Point2d exposing (Point2d)
 import RichText
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import Sticker exposing (AnimationMode(..))
 import Touch exposing (ScreenCoordinate, Touch)
 import Ui exposing (Element)
@@ -148,12 +149,12 @@ reactionEmojiButtonContent customEmojis emoji =
             CustomEmoji.view "1.1em" "0.2em" customEmojiId customEmojis LoopAFewTimesOnLoad
 
 
-miniView : FrontendCurrentUser -> Bool -> Bool -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
-miniView user isThreadStarter canEdit customEmojis =
+miniView : FrontendCurrentUser -> Bool -> Bool -> SeqSet (Id CustomEmojiId) -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
+miniView user isThreadStarter canEdit availableCustomEmojis customEmojis =
     let
         recentEmojis : List (Element MessageViewMsg)
         recentEmojis =
-            User.commonlyUsedEmojis user
+            User.commonlyUsedEmojis availableCustomEmojis user
                 |> List.take 3
                 |> List.indexedMap
                     (\index ( emoji, _ ) ->

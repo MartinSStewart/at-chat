@@ -66,13 +66,14 @@ import Postmark
 import Quantity
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
-import Route exposing (Route)
+import Route exposing (ChannelsVisibleOnMobile(..), Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
 import Sha256
+import SheepGame
 import Slack
 import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString)
@@ -4285,7 +4286,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             ( model, Command.none )
                                 )
 
-                Local_CurrentlyViewing { routeRequestCausedByPressingLink } viewing ->
+                Local_CurrentlyViewing { markMessagesAsViewed } viewing ->
                     let
                         currentlyViewing : Viewing
                         currentlyViewing =
@@ -4379,7 +4380,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 (User.setLastDmViewed
                                                     data.id
                                                     (NoThreadWithMaybeMessage
-                                                        (if routeRequestCausedByPressingLink then
+                                                        (if markMessagesAsViewed then
                                                             DmChannel.latestMessageId dmChannel |> Just
 
                                                          else
@@ -4405,7 +4406,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 _ ->
                                                     loadMessagesHelper dmChannel |> SetViewing_FilledInByBackend
                                             )
-                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                            |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4427,7 +4428,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     { otherUserId = data.id.otherUserId }
                                                     (ViewThreadWithMaybeMessage
                                                         data.id.threadId
-                                                        (if routeRequestCausedByPressingLink then
+                                                        (if markMessagesAsViewed then
                                                             SeqDict.get data.id.threadId dmChannel.threads
                                                                 |> Maybe.withDefault Thread.backendInit
                                                                 |> DmChannel.latestThreadMessageId
@@ -4462,7 +4463,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         |> loadMessagesHelper
                                                         |> SetViewing_FilledInByBackend
                                             )
-                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                            |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4483,7 +4484,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 (User.setLastDiscordDmViewed
                                                     data.id.currentUserId
                                                     data.id.channelId
-                                                    (if routeRequestCausedByPressingLink then
+                                                    (if markMessagesAsViewed then
                                                         DmChannel.latestMessageId dmChannel |> Just
 
                                                      else
@@ -4508,7 +4509,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 _ ->
                                                     loadMessagesHelper dmChannel |> SetViewing_FilledInByBackend
                                             )
-                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                            |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4531,7 +4532,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         (User.setLastChannelViewed
                                                             data.id
                                                             (NoThreadWithMaybeMessage
-                                                                (if routeRequestCausedByPressingLink then
+                                                                (if markMessagesAsViewed then
                                                                     DmChannel.latestMessageId channel |> Just
 
                                                                  else
@@ -4557,7 +4558,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         _ ->
                                                             loadMessagesHelper channel |> SetViewing_FilledInByBackend
                                                     )
-                                                    |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                                    |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                                     |> LocalChangeResponse changeId
                                                     |> Lamdera.sendToFrontend clientId
                                                 , broadcastCmd session
@@ -4586,7 +4587,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             { guildId = data.id.guildId, channelId = data.id.channelId }
                                                             (ViewThreadWithMaybeMessage
                                                                 data.id.threadId
-                                                                (if routeRequestCausedByPressingLink then
+                                                                (if markMessagesAsViewed then
                                                                     SeqDict.get data.id.threadId channel.threads
                                                                         |> Maybe.withDefault Thread.backendInit
                                                                         |> DmChannel.latestThreadMessageId
@@ -4621,7 +4622,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 |> loadMessagesHelper
                                                                 |> SetViewing_FilledInByBackend
                                                     )
-                                                    |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                                    |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                                     |> LocalChangeResponse changeId
                                                     |> Lamdera.sendToFrontend clientId
                                                 , broadcastCmd session
@@ -4664,7 +4665,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 (User.setLastDiscordChannelViewed
                                                     data.id
                                                     (NoThreadWithMaybeMessage
-                                                        (if routeRequestCausedByPressingLink then
+                                                        (if markMessagesAsViewed then
                                                             DmChannel.latestMessageId channel |> Just
 
                                                          else
@@ -4696,7 +4697,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         , newUsers = getNewUsers connectionData data.id.guildId guild
                                                         }
                                             )
-                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                            |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4719,7 +4720,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     { guildId = data.id.guildId, channelId = data.id.channelId, currentUserId = data.id.currentUserId }
                                                     (ViewThreadWithMaybeMessage
                                                         data.id.threadId
-                                                        (if routeRequestCausedByPressingLink then
+                                                        (if markMessagesAsViewed then
                                                             SeqDict.get data.id.threadId channel.threads
                                                                 |> Maybe.withDefault Thread.discordBackendInit
                                                                 |> DmChannel.latestThreadMessageId
@@ -4760,7 +4761,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         , newUsers = getNewUsers connectionData data.id.guildId guild
                                                         }
                                             )
-                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                            |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4784,7 +4785,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     BackendExtra.unreadOverviewData session.userId user model
                                                         |> SetViewing_FilledInByBackend
                                             )
-                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                            |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -5303,7 +5304,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             Broadcast.gameStartedDmNotification
                                                                 time
                                                                 session.userId
-                                                                id.otherUserId
+                                                                id
                                                                 GameType_Go
                                                                 model2
                                                     in
@@ -5380,8 +5381,53 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             Broadcast.gameStartedDmNotification
                                                                 time
                                                                 session.userId
-                                                                id.otherUserId
+                                                                id
                                                                 GameType_WordSpellingGame
+                                                                model2
+                                                    in
+                                                    ( { model2 | sessions = sessions }
+                                                    , Command.batch [ cmd, notificationCmd ]
+                                                    )
+
+                                                _ ->
+                                                    ( model2, cmd )
+
+                                        Game.LocalChange_SheepGame matchId sheepChange ->
+                                            let
+                                                ( model2, cmd ) =
+                                                    handleSheepGame
+                                                        time
+                                                        session
+                                                        clientId
+                                                        changeId
+                                                        guildOrDmId
+                                                        dmChannel
+                                                        (\dmChannel2 model3 ->
+                                                            { model3 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model3.dmChannels }
+                                                        )
+                                                        (\localMsg2 model3 ->
+                                                            Broadcast.toDmChannelExcludingOne
+                                                                clientId
+                                                                session.userId
+                                                                id
+                                                                (\otherUserId2 ->
+                                                                    Server_Game session.userId (GuildOrDmId_Dm otherUserId2) localMsg2
+                                                                )
+                                                                model3
+                                                        )
+                                                        matchId
+                                                        sheepChange
+                                                        model
+                                            in
+                                            case sheepChange of
+                                                SheepGame.StartMatch _ _ ->
+                                                    let
+                                                        ( sessions, notificationCmd ) =
+                                                            Broadcast.gameStartedDmNotification
+                                                                time
+                                                                session.userId
+                                                                id
+                                                                GameType_SheepGame
                                                                 model2
                                                     in
                                                     ( { model2 | sessions = sessions }
@@ -5438,6 +5484,50 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 session.userId
                                                                 id
                                                                 GameType_WordSpellingGame
+                                                                guild
+                                                                model2
+                                                                cmd
+
+                                                        _ ->
+                                                            ( model2, cmd )
+
+                                                Game.LocalChange_SheepGame matchId sheepChange ->
+                                                    let
+                                                        ( model2, cmd ) =
+                                                            handleSheepGame
+                                                                time
+                                                                session
+                                                                clientId
+                                                                changeId
+                                                                guildOrDmId
+                                                                channel
+                                                                (\channel2 model3 ->
+                                                                    { model3
+                                                                        | guilds =
+                                                                            SeqDict.insert
+                                                                                id.guildId
+                                                                                { guild | channels = SeqDict.insert id.channelId channel2 guild.channels }
+                                                                                model3.guilds
+                                                                    }
+                                                                )
+                                                                (\localMsg2 model3 ->
+                                                                    Broadcast.toGuildExcludingOne
+                                                                        clientId
+                                                                        id.guildId
+                                                                        (Server_Game session.userId guildOrDmId localMsg2 |> ServerChange)
+                                                                        model3
+                                                                )
+                                                                matchId
+                                                                sheepChange
+                                                                model
+                                                    in
+                                                    case sheepChange of
+                                                        SheepGame.StartMatch _ _ ->
+                                                            notifyGameStartedInGuild
+                                                                time
+                                                                session.userId
+                                                                id
+                                                                GameType_SheepGame
                                                                 guild
                                                                 model2
                                                                 cmd
@@ -6303,6 +6393,106 @@ handleDmGoGame time session clientId changeId id matchId goChange dmChannelId dm
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
 
+handleSheepGame :
+    Time.Posix
+    -> UserSession
+    -> ClientId
+    -> ChangeId
+    -> GuildOrDmId
+    ->
+        { c
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
+            , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
+        }
+    ->
+        ({ c
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
+            , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
+         }
+         -> BackendModel
+         -> BackendModel
+        )
+    -> (Game.LocalChange -> BackendModel -> Command BackendOnly ToFrontend BackendMsg)
+    -> Id ChannelMessageId
+    -> SheepGame.LocalChange
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleSheepGame time session clientId changeId guildOrDmId channel setChannel broadcast matchId sheepChange model =
+    case sheepChange of
+        SheepGame.StartMatch _ setup ->
+            let
+                ( messageId, channel2 ) =
+                    LocalState.createChannelMessageBackend
+                        (GameStarted
+                            { startedAt = time
+                            , startedBy = session.userId
+                            , reactions = SeqDict.empty
+                            , gameType = GameType_SheepGame
+                            , timestampDrawings = Drawing.emptyDrawing
+                            , cardDrawings = Drawing.emptyDrawing
+                            }
+                        )
+                        channel
+
+                localMsg2 : Game.LocalChange
+                localMsg2 =
+                    Game.LocalChange_SheepGame messageId (SheepGame.StartMatch time setup)
+            in
+            ( setChannel
+                { channel2
+                    | games =
+                        SeqDict.insert
+                            messageId
+                            (Game.GameData_SheepGame setup Array.empty SheepGame.initShared)
+                            channel2.games
+                }
+                model
+            , Command.batch
+                [ Local_Game guildOrDmId localMsg2
+                    |> LocalChangeResponse changeId
+                    |> Lamdera.sendToFrontend clientId
+                , broadcast localMsg2 model
+                ]
+            )
+
+        SheepGame.Action action ->
+            -- Actions only carry weight when they come from the person they claim to. Whether
+            -- that person is allowed to make this particular move is decided by
+            -- `SheepGame.updateAction`, which the frontend runs over the same actions.
+            case ( action.userId == session.userId, SeqDict.get matchId channel.games ) of
+                ( True, Just (Game.GameData_SheepGame setup actions shared) ) ->
+                    let
+                        localMsg2 : Game.LocalChange
+                        localMsg2 =
+                            Game.LocalChange_SheepGame matchId (SheepGame.Action action)
+                    in
+                    ( setChannel
+                        { channel
+                            | games =
+                                SeqDict.insert
+                                    matchId
+                                    (Game.GameData_SheepGame
+                                        setup
+                                        (Array.push action actions)
+                                        (SheepGame.updateAction setup action shared)
+                                    )
+                                    channel.games
+                        }
+                        model
+                    , Command.batch
+                        [ Local_Game guildOrDmId localMsg2
+                            |> LocalChangeResponse changeId
+                            |> Lamdera.sendToFrontend clientId
+                        , broadcast localMsg2 model
+                        ]
+                    )
+
+                _ ->
+                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+
 handleWordSpellingGame :
     Time.Posix
     -> UserSession
@@ -6522,15 +6712,17 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                         guildId
                                         (Route.ChannelRoute
                                             channelId
-                                            (Route.NoThreadWithFriends Nothing Route.HideMembersTab)
+                                            (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
                                             (Just (UserSession.ChannelHeaderTab_Games (Just matchId)))
                                         )
+                                        ChannelsHiddenOnMobile
 
                                 GuildOrDmId_Dm id ->
                                     Route.DmRoute
                                         { channelId = DmChannelId.fromUserIds session.userId id.otherUserId
-                                        , threadRoute = Route.NoThreadWithFriends Nothing Route.HideMembersTab
+                                        , threadRoute = Route.NoThreadWithFriends Nothing Route.HideChannelSettings
                                         , tab = Just (UserSession.ChannelHeaderTab_Games (Just matchId))
+                                        , channelsVisible = ChannelsHiddenOnMobile
                                         }
 
                         userToString : Id UserId -> String

@@ -15,6 +15,7 @@ import E2EHelper
 import E2ELogin
 import E2EMedia
 import E2EMisc
+import E2ESheepGame
 import E2EVoiceChat
 import E2EWordSpellingGame
 import Effect.Browser.Dom as Dom
@@ -297,6 +298,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.exportDmChannelTest normalConfig
     , E2EMisc.largePasteBecomesAttachment nonImageUploadConfig
     , E2EMisc.profileImageOpensDm normalConfig
+    , E2EMisc.reactionPopupNamesEmojiTest normalConfig
     , E2EMisc.timeOfDaySuggestionTest normalConfig
     , E2EMisc.timeOffsetSuggestionTest normalConfig
     , E2EMisc.noTimestampSuggestionTest normalConfig
@@ -326,6 +328,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.startingACallOrGameStaysReadTest normalConfig
     , E2EMisc.markMessageAsUnreadTest normalConfig
     , E2EMisc.staysReadWhileViewingTest normalConfig
+    , E2EMisc.swipedAwayConversationStopsBeingViewedTest normalConfig
     , E2EMisc.inactiveDmThreadsAreHiddenTest normalConfig
     , E2EHelper.startTest
         "Admin can disable Discord account linking"
@@ -840,7 +843,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (LocalModelChangeRequest (ChangeId 100) (Local_SetGuildNotificationLevel guildId NotifyOnEveryMessage))
                 , user.sendToBackend
                     100
-                    (LocalModelChangeRequest (ChangeId 101) (Local_CurrentlyViewing { routeRequestCausedByPressingLink = False } StopViewingChannel))
+                    (LocalModelChangeRequest (ChangeId 101) (Local_CurrentlyViewing { markMessagesAsViewed = False } StopViewingChannel))
 
                 -- Email notifications are off by default, so this message must not send an email.
                 , admin.click 100 (Dom.id "channel_textinput")
@@ -865,7 +868,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 -- Closing the user options returns the user to the channel, so stop viewing again.
                 , user.sendToBackend
                     100
-                    (LocalModelChangeRequest (ChangeId 102) (Local_CurrentlyViewing { routeRequestCausedByPressingLink = False } StopViewingChannel))
+                    (LocalModelChangeRequest (ChangeId 102) (Local_CurrentlyViewing { markMessagesAsViewed = False } StopViewingChannel))
 
                 -- Now a new message should trigger an email notification to the user.
                 , admin.click 100 (Dom.id "channel_textinput")
@@ -2908,6 +2911,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EGo.tests normalConfig
+    , E2ESheepGame.tests normalConfig
     , E2EWordSpellingGame.tests normalConfig
     ]
 

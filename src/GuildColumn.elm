@@ -28,7 +28,7 @@ import MuteSettings exposing (IsMuted(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Types exposing (Drag(..), FrontendMsg_(..), LoadedFrontend)
@@ -219,18 +219,19 @@ discordGuildIcon localUser route guildId guild =
                                 channelId
                                 (case threadRoute of
                                     ViewThread threadId ->
-                                        ViewThreadWithFriends threadId Nothing HideMembersTab
+                                        ViewThreadWithFriends threadId Nothing HideChannelSettings
 
                                     NoThread ->
-                                        NoThreadWithFriends Nothing HideMembersTab
+                                        NoThreadWithFriends Nothing HideChannelSettings
                                 )
                                 Nothing
 
                         Nothing ->
                             DiscordChannel_ChannelRoute
                                 (LocalState.discordAnnouncementChannel guild)
-                                (NoThreadWithFriends Nothing HideMembersTab)
+                                (NoThreadWithFriends Nothing HideChannelSettings)
                                 Nothing
+                 , channelsVisible = ChannelsVisibleOnMobile
                  }
                     |> DiscordGuildRoute
                 )
@@ -267,24 +268,25 @@ guildIcon localUser route guildId guild =
                         channelId
                         (case threadRoute of
                             ViewThread threadId ->
-                                ViewThreadWithFriends threadId Nothing HideMembersTab
+                                ViewThreadWithFriends threadId Nothing HideChannelSettings
 
                             NoThread ->
-                                NoThreadWithFriends Nothing HideMembersTab
+                                NoThreadWithFriends Nothing HideChannelSettings
                         )
                         Nothing
 
                 Nothing ->
                     ChannelRoute
                         (LocalState.announcementChannel guild)
-                        (NoThreadWithFriends Nothing HideMembersTab)
+                        (NoThreadWithFriends Nothing HideChannelSettings)
                         Nothing
             )
+            ChannelsVisibleOnMobile
         )
         []
         (GuildIcon.view
             (case route of
-                GuildRoute a _ ->
+                GuildRoute a _ _ ->
                     if a == guildId then
                         GuildIcon.IsSelected
 
@@ -309,8 +311,9 @@ dmGuildIcon route localUser otherUserId dmChannel =
                         (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
                         (DmRoute
                             { channelId = DmChannelId.fromUserIds localUser.session.userId otherUserId
-                            , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                            , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                             , tab = Nothing
+                            , channelsVisible = ChannelsHiddenOnMobile
                             }
                         )
                         []
@@ -366,8 +369,9 @@ discordDmGuildIcon route localUser channelId dmChannel =
                             { currentDiscordUserId = currentUserId
                             , channelId = channelId
                             , viewingMessage = Nothing
-                            , showMembersTab = HideMembersTab
+                            , showMembersTab = HideChannelSettings
                             , tab = Nothing
+                            , channelsVisible = ChannelsHiddenOnMobile
                             }
                         )
                         []

@@ -168,7 +168,7 @@ import Pagination exposing (Pagination)
 import PersonName exposing (PersonName)
 import Postmark
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -473,6 +473,9 @@ gameStartedText game =
 
         Message.GameType_WordSpellingGame ->
             "Word Spelling Game started"
+
+        Message.GameType_SheepGame ->
+            "Sheep Game started"
 
 
 messageDeleted : String
@@ -2779,8 +2782,8 @@ previouslyLastViewedThreadMessage guildOrDmId threadId local =
         |> PreviouslyLastViewedMessage
 
 
-routeToViewing : Route -> LocalState -> SetViewing
-routeToViewing route local =
+routeToViewing : Bool -> Route -> LocalState -> SetViewing
+routeToViewing isMobile route local =
     case route of
         HomePageRoute ->
             -- The home page shows the unread overview when no DM is selected
@@ -2792,8 +2795,10 @@ routeToViewing route local =
         NewGuildRoute ->
             StopViewingChannel
 
-        GuildRoute guildId channelRoute ->
-            if SeqDict.member guildId local.guilds then
+        GuildRoute guildId channelRoute channelsVisible ->
+            -- Only mobile puts the channel list over the conversation, so only mobile can
+            -- leave the reader looking at something other than the channel the route names
+            if SeqDict.member guildId local.guilds && not (isMobile && channelsVisible == ChannelsVisibleOnMobile) then
                 case channelRoute of
                     ChannelRoute channelId threadRoute tab ->
                         let
@@ -2833,8 +2838,8 @@ routeToViewing route local =
             else
                 StopViewingChannel
 
-        DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute } ->
-            if SeqDict.member guildId local.discordGuilds then
+        DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute, channelsVisible } ->
+            if SeqDict.member guildId local.discordGuilds && not (isMobile && channelsVisible == ChannelsVisibleOnMobile) then
                 case channelRoute of
                     DiscordChannel_ChannelRoute channelId threadRoute _ ->
                         let
@@ -2881,10 +2886,14 @@ routeToViewing route local =
             else
                 StopViewingChannel
 
-        DmRoute { channelId, threadRoute, tab } ->
+        DmRoute { channelId, threadRoute, tab, channelsVisible } ->
             case DmChannelId.otherUserId local.localUser.session.userId channelId of
                 Just otherUserId ->
-                    if SeqDict.member otherUserId local.dmChannels then
+                    -- We don't check `SeqDict.members otherUserId local.dmChannels` since it might not have any messages in it yet but still be valid
+                    if isMobile && channelsVisible == ChannelsVisibleOnMobile then
+                        StopViewingChannel
+
+                    else
                         let
                             id =
                                 { otherUserId = otherUserId }
@@ -2910,14 +2919,11 @@ routeToViewing route local =
                                     }
                                     SetViewing_EmptyPlaceholder
 
-                    else
-                        StopViewingChannel
-
                 Nothing ->
                     StopViewingChannel
 
         DiscordDmRoute data ->
-            if SeqDict.member data.channelId local.discordDmChannels then
+            if SeqDict.member data.channelId local.discordDmChannels && not (isMobile && data.channelsVisible == ChannelsVisibleOnMobile) then
                 ViewDiscordDm
                     { id = { currentUserId = data.currentDiscordUserId, channelId = data.channelId }
                     , previouslyLastViewedMessage =

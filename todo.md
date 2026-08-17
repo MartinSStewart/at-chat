@@ -19,8 +19,6 @@
 * Unlinking a Discord account causes "Something went wrong" to appear in the direct message list
 * Track frequent emojis in messages and sort :emoji: autocompletes based on frequency
 * Automatically set focus on search input when opening emoji picker
-* Show reaction emoji name when hovering over a message reaction (done for custom emojis; standard
-  unicode emoji names still need model.emojiData threaded into the message render path)
 * I played a premove and it failed and when I looked at the board, the premoved letters had switched (the word itself
   was invalid so it's unclear if the letter switch is just a visual bug).
   Update: it seems like this might be caused by premoving, switching to another device and doing another turn, and then
@@ -35,6 +33,7 @@
   layout issues
 * Scroll down warning is shown on iphone in DMs when the user is already scrolled down and writes a message.
 * Emoji in reaction emoji tooltip gets horizontally swished if there are many names (maybe MyUi.noShrinking is needed)
+* Modify pushRoute to require the caller to specify if this was triggered by a user click (for purposes of set viewing)
 
 Requested features:
 
