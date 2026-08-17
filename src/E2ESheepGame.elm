@@ -46,12 +46,12 @@ sheepGameDmTest normalConfig =
                         , admin.click 100 (Dom.id "guild_openChannel_0")
                         , E2EHelper.openDm admin 100 "2"
                         , admin.click 100 (Dom.id "guild_openGamesTab")
-                        , admin.click 100 (Dom.id "game_select_Sheep Game")
+                        , admin.click 100 (Dom.id "game_select_Sheep Game (WIP)")
 
                         -- Cancelling out of the setup goes back to picking a game.
                         , admin.click 100 (Dom.id "sheepGame_cancel")
                         , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "sheepGame_start" ])
-                        , admin.click 100 (Dom.id "game_select_Sheep Game")
+                        , admin.click 100 (Dom.id "game_select_Sheep Game (WIP)")
                         , admin.input 100 (Dom.id "sheepGame_question_0") "Name a **colour**"
                         , admin.input 100 (Dom.id "sheepGame_question_1") "Name an animal"
                         , admin.click 100 (Dom.id "sheepGame_start")
@@ -179,7 +179,7 @@ setupNeedsAQuestionTest normalConfig =
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
                 , admin.click 1000 (Dom.id "guild_friendLabel_0")
                 , admin.click 100 (Dom.id "guild_openGamesTab")
-                , admin.click 100 (Dom.id "game_select_Sheep Game")
+                , admin.click 100 (Dom.id "game_select_Sheep Game (WIP)")
                 , admin.click 100 (Dom.id "sheepGame_start")
                 , admin.checkView
                     100
