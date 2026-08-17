@@ -2164,7 +2164,7 @@ disconnectClient time sessionId clientId model =
                             }
 
                         NotInCall ->
-                            model
+                            { model | connections = connections }
             in
             ( model2
             , Command.batch
