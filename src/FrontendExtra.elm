@@ -1320,7 +1320,7 @@ routeViewingLocalChange isMobile routeRequestCausedByPressingLink local route =
         Nothing
 
     else
-        Just (Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink } localChange)
+        Just (Local_CurrentlyViewing { markMessagesAsViewed = routeRequestCausedByPressingLink } localChange)
 
 
 clearRevealedSpoilers : LoadedFrontend -> LoadedFrontend
@@ -2840,7 +2840,7 @@ changeUpdate localMsg local =
                 Local_DeleteMessage guildOrDmId threadRoute ->
                     deleteMessage guildOrDmId threadRoute local
 
-                Local_CurrentlyViewing { routeRequestCausedByPressingLink } viewing ->
+                Local_CurrentlyViewing { markMessagesAsViewed } viewing ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -2855,7 +2855,7 @@ changeUpdate localMsg local =
                                             User.setLastDmViewed
                                                 data.id
                                                 (NoThreadWithMaybeMessage
-                                                    (if routeRequestCausedByPressingLink then
+                                                    (if markMessagesAsViewed then
                                                         SeqDict.get data.id.otherUserId local.dmChannels
                                                             |> Maybe.map DmChannel.latestFrontendMessageId
 
@@ -2882,7 +2882,7 @@ changeUpdate localMsg local =
                                                 { otherUserId = data.id.otherUserId }
                                                 (ViewThreadWithMaybeMessage
                                                     data.id.threadId
-                                                    (if routeRequestCausedByPressingLink then
+                                                    (if markMessagesAsViewed then
                                                         SeqDict.get data.id.otherUserId local.dmChannels
                                                             |> Maybe.andThen
                                                                 (\dmChannel -> SeqDict.get data.id.threadId dmChannel.threads)
@@ -2918,7 +2918,7 @@ changeUpdate localMsg local =
                                             User.setLastDiscordDmViewed
                                                 data.id.currentUserId
                                                 data.id.channelId
-                                                (if routeRequestCausedByPressingLink then
+                                                (if markMessagesAsViewed then
                                                     SeqDict.get data.id.channelId local.discordDmChannels
                                                         |> Maybe.map DmChannel.latestFrontendMessageId
 
@@ -2943,7 +2943,7 @@ changeUpdate localMsg local =
                                             User.setLastChannelViewed
                                                 data.id
                                                 (NoThreadWithMaybeMessage
-                                                    (if routeRequestCausedByPressingLink then
+                                                    (if markMessagesAsViewed then
                                                         LocalState.getGuildAndChannel data.id local
                                                             |> Maybe.map (\( _, channel ) -> DmChannel.latestFrontendMessageId channel)
 
@@ -2970,7 +2970,7 @@ changeUpdate localMsg local =
                                                 { guildId = data.id.guildId, channelId = data.id.channelId }
                                                 (ViewThreadWithMaybeMessage
                                                     data.id.threadId
-                                                    (if routeRequestCausedByPressingLink then
+                                                    (if markMessagesAsViewed then
                                                         LocalState.getGuildAndChannel { guildId = data.id.guildId, channelId = data.id.channelId } local
                                                             |> Maybe.andThen
                                                                 (\( _, channel ) -> SeqDict.get data.id.threadId channel.threads)
@@ -3012,7 +3012,7 @@ changeUpdate localMsg local =
                                             User.setLastDiscordChannelViewed
                                                 data.id
                                                 (NoThreadWithMaybeMessage
-                                                    (if routeRequestCausedByPressingLink then
+                                                    (if markMessagesAsViewed then
                                                         LocalState.getDiscordGuildAndChannel data.id.guildId data.id.channelId local
                                                             |> Maybe.map (\( _, channel ) -> DmChannel.latestFrontendMessageId channel)
 
@@ -3063,7 +3063,7 @@ changeUpdate localMsg local =
                                                 { guildId = data.id.guildId, channelId = data.id.channelId, currentUserId = data.id.currentUserId }
                                                 (ViewThreadWithMaybeMessage
                                                     data.id.threadId
-                                                    (if routeRequestCausedByPressingLink then
+                                                    (if markMessagesAsViewed then
                                                         LocalState.getDiscordGuildAndChannel data.id.guildId data.id.channelId local
                                                             |> Maybe.andThen
                                                                 (\( _, channel ) -> SeqDict.get data.id.threadId channel.threads)

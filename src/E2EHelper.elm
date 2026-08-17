@@ -2715,7 +2715,7 @@ allAttackerLocalChanges =
     [ Local_AddReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
     , Local_AddReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
     , Local_Admin (Pages.Admin.SetSignupsEnabled True)
-    , Local_CurrentlyViewing { routeRequestCausedByPressingLink = False } StopViewingChannel
+    , Local_CurrentlyViewing { markMessagesAsViewed = False } StopViewingChannel
     , Local_DeleteChannel legitGuildId channelId
     , Local_DeleteGuild legitGuildId
     , Local_DeleteMessage guildOrDmId_dm threadRouteWithMessage

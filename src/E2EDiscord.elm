@@ -2590,7 +2590,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             (LocalModelChangeRequest
                                 (ChangeId 900)
                                 (Local_CurrentlyViewing
-                                    { routeRequestCausedByPressingLink = False }
+                                    { markMessagesAsViewed = False }
                                     (ViewDiscordChannel
                                         { id =
                                             { guildId = E2EHelper.botTestGuild

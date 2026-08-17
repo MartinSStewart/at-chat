@@ -3011,13 +3011,13 @@ updateLoaded msg model =
                                 model.time
                                 (if hasFocus then
                                     Local_CurrentlyViewing
-                                        { routeRequestCausedByPressingLink = False }
+                                        { markMessagesAsViewed = False }
                                         (LocalState.routeToViewing (MyUi.isMobile model) model.route (Local.model loggedIn.localState))
                                         |> Just
 
                                  else
                                     Local_CurrentlyViewing
-                                        { routeRequestCausedByPressingLink = False }
+                                        { markMessagesAsViewed = False }
                                         StopViewingChannel
                                         |> Just
                                 )

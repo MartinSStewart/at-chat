@@ -4286,7 +4286,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             ( model, Command.none )
                                 )
 
-                Local_CurrentlyViewing { routeRequestCausedByPressingLink } viewing ->
+                Local_CurrentlyViewing { markMessagesAsViewed } viewing ->
                     let
                         currentlyViewing : Viewing
                         currentlyViewing =
@@ -4380,7 +4380,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 (User.setLastDmViewed
                                                     data.id
                                                     (NoThreadWithMaybeMessage
-                                                        (if routeRequestCausedByPressingLink then
+                                                        (if markMessagesAsViewed then
                                                             DmChannel.latestMessageId dmChannel |> Just
 
                                                          else
@@ -4406,7 +4406,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 _ ->
                                                     loadMessagesHelper dmChannel |> SetViewing_FilledInByBackend
                                             )
-                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                            |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4428,7 +4428,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     { otherUserId = data.id.otherUserId }
                                                     (ViewThreadWithMaybeMessage
                                                         data.id.threadId
-                                                        (if routeRequestCausedByPressingLink then
+                                                        (if markMessagesAsViewed then
                                                             SeqDict.get data.id.threadId dmChannel.threads
                                                                 |> Maybe.withDefault Thread.backendInit
                                                                 |> DmChannel.latestThreadMessageId
@@ -4463,7 +4463,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         |> loadMessagesHelper
                                                         |> SetViewing_FilledInByBackend
                                             )
-                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                            |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4484,7 +4484,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 (User.setLastDiscordDmViewed
                                                     data.id.currentUserId
                                                     data.id.channelId
-                                                    (if routeRequestCausedByPressingLink then
+                                                    (if markMessagesAsViewed then
                                                         DmChannel.latestMessageId dmChannel |> Just
 
                                                      else
@@ -4509,7 +4509,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 _ ->
                                                     loadMessagesHelper dmChannel |> SetViewing_FilledInByBackend
                                             )
-                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                            |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4532,7 +4532,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         (User.setLastChannelViewed
                                                             data.id
                                                             (NoThreadWithMaybeMessage
-                                                                (if routeRequestCausedByPressingLink then
+                                                                (if markMessagesAsViewed then
                                                                     DmChannel.latestMessageId channel |> Just
 
                                                                  else
@@ -4558,7 +4558,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         _ ->
                                                             loadMessagesHelper channel |> SetViewing_FilledInByBackend
                                                     )
-                                                    |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                                    |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                                     |> LocalChangeResponse changeId
                                                     |> Lamdera.sendToFrontend clientId
                                                 , broadcastCmd session
@@ -4587,7 +4587,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             { guildId = data.id.guildId, channelId = data.id.channelId }
                                                             (ViewThreadWithMaybeMessage
                                                                 data.id.threadId
-                                                                (if routeRequestCausedByPressingLink then
+                                                                (if markMessagesAsViewed then
                                                                     SeqDict.get data.id.threadId channel.threads
                                                                         |> Maybe.withDefault Thread.backendInit
                                                                         |> DmChannel.latestThreadMessageId
@@ -4622,7 +4622,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 |> loadMessagesHelper
                                                                 |> SetViewing_FilledInByBackend
                                                     )
-                                                    |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                                    |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                                     |> LocalChangeResponse changeId
                                                     |> Lamdera.sendToFrontend clientId
                                                 , broadcastCmd session
@@ -4665,7 +4665,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 (User.setLastDiscordChannelViewed
                                                     data.id
                                                     (NoThreadWithMaybeMessage
-                                                        (if routeRequestCausedByPressingLink then
+                                                        (if markMessagesAsViewed then
                                                             DmChannel.latestMessageId channel |> Just
 
                                                          else
@@ -4697,7 +4697,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         , newUsers = getNewUsers connectionData data.id.guildId guild
                                                         }
                                             )
-                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                            |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4720,7 +4720,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     { guildId = data.id.guildId, channelId = data.id.channelId, currentUserId = data.id.currentUserId }
                                                     (ViewThreadWithMaybeMessage
                                                         data.id.threadId
-                                                        (if routeRequestCausedByPressingLink then
+                                                        (if markMessagesAsViewed then
                                                             SeqDict.get data.id.threadId channel.threads
                                                                 |> Maybe.withDefault Thread.discordBackendInit
                                                                 |> DmChannel.latestThreadMessageId
@@ -4761,7 +4761,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         , newUsers = getNewUsers connectionData data.id.guildId guild
                                                         }
                                             )
-                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                            |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
@@ -4785,7 +4785,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     BackendExtra.unreadOverviewData session.userId user model
                                                         |> SetViewing_FilledInByBackend
                                             )
-                                            |> Local_CurrentlyViewing { routeRequestCausedByPressingLink = routeRequestCausedByPressingLink }
+                                            |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
