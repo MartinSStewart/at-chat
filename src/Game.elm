@@ -907,7 +907,7 @@ gameToString game =
             "Word Spelling Game"
 
         GameType_SheepGame ->
-            "Sheep Game"
+            "Sheep Game (WIP)"
 
 
 gameToPreviewUrl : GameType -> String
