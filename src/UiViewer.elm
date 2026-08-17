@@ -29,7 +29,7 @@ import MyUi
 import OneOrGreater
 import Postmark
 import RichText exposing (Domain, EscapedChar(..), HasLeadingLineBreak(..), HeadingLevel(..), Language(..), RichText(..))
-import Route
+import Route exposing (ChannelsVisibleOnMobile(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set
@@ -462,6 +462,7 @@ wordSpellingGameEmail =
                                 (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
                                 (Just (UserSession.ChannelHeaderTab_Games (Just (Id.fromInt 0))))
                             )
+                            ChannelsVisibleOnMobile
                         )
                         sharedC
                         descriptionD
