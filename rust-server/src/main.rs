@@ -1123,10 +1123,41 @@ const IMMUTABLE_CACHE_CONTROL: &str = "public, max-age=31536000, immutable";
 /// response loaded as a document, which is what a click on a file link does; an
 /// `<img>` or `<video>` in the chat ignores it.
 ///
-/// Never pair `allow-scripts` with `allow-same-origin` if an allowance is ever
-/// needed here. Either alone keeps the origin opaque, but together they undo it
-/// and hand the file back the access this is taking away.
+/// Pdfs need an allowance and get their own value below. Whatever is added here,
+/// never pair `allow-scripts` with `allow-same-origin`: either alone keeps the
+/// origin opaque, but together they undo it and hand the file back the access
+/// this is taking away.
 const SANDBOX_CSP: &str = "sandbox";
+
+/// Safari draws a pdf with a viewer that is itself an html document driven by
+/// script, so a bare `sandbox` leaves it unable to show the file at all.
+/// `allow-scripts` gives that viewer its script back without giving up what the
+/// sandbox is for: the origin stays opaque while `allow-same-origin` is absent,
+/// so script here still cannot reach the sid cookie or the app's storage.
+const PDF_SANDBOX_CSP: &str = "sandbox allow-scripts";
+
+/// Which of the two a file is served with.
+///
+/// The content type is whatever the url asked for rather than anything about the
+/// stored file, so any upload can claim to be a pdf and be served with script
+/// allowed. That costs nothing while the origin is opaque, and `nosniff` is what
+/// stops those bytes being rendered as the html they might really be.
+///
+/// Matching the type by name rather than by its index in `CONTENT_TYPES` keeps
+/// this pointing at pdfs when entries are added to that list.
+fn sandbox_csp(content_type: &str) -> &'static str {
+    if content_type == "application/pdf" {
+        PDF_SANDBOX_CSP
+    } else {
+        SANDBOX_CSP
+    }
+}
+
+/// The content type on these responses is the one the url asked for, and the
+/// sandbox above is chosen from it. Letting the browser sniff a different type
+/// out of the bytes would decide the file is something other than what that
+/// choice was made for.
+const NOSNIFF: &str = "nosniff";
 
 async fn get_file_endpoint(
     Path((content_type_index, hash)): Path<(String, String)>,
@@ -1149,17 +1180,19 @@ async fn get_file_endpoint(
                         .header("Content-Type", *content_type2)
                         .header("Content-Disposition", "inline")
                         .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
-                        .header("Content-Security-Policy", SANDBOX_CSP)
+                        .header("Content-Security-Policy", sandbox_csp(content_type2))
+                        .header("X-Content-Type-Options", NOSNIFF)
                         .body(Body::from(data))
                         .unwrap(),
-                    // No content type to send, so the browser sniffs one out of
-                    // the bytes. That can land on html just as readily as the
-                    // branch above can be asked for it, so the sandbox matters
-                    // here too.
+                    // No content type to send, so the browser would otherwise
+                    // sniff one out of the bytes and could land on html. This
+                    // branch is only reached by a url with an index the app never
+                    // generates, so refusing to guess costs nothing.
                     None => Response::builder()
                         .status(StatusCode::OK)
                         .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
                         .header("Content-Security-Policy", SANDBOX_CSP)
+                        .header("X-Content-Type-Options", NOSNIFF)
                         .body(Body::from(data))
                         .unwrap(),
                 }
@@ -1816,6 +1849,13 @@ mod tests {
             .and_then(|value| value.to_str().ok())
     }
 
+    fn index_of_content_type(content_type: &str) -> usize {
+        content_types::CONTENT_TYPES
+            .iter()
+            .position(|candidate| *candidate == content_type)
+            .unwrap_or_else(|| panic!("the content type list should contain {content_type}"))
+    }
+
     // The content type is whatever the url asked for, so any upload can be
     // fetched back as html from at-chat.app itself. Without the sandbox its
     // script would run with the sid cookie and the app's storage in reach.
@@ -1840,6 +1880,67 @@ mod tests {
         );
     }
 
+    // Safari's pdf viewer is an html document that cannot draw anything without
+    // script, so pdfs are served with script allowed. The origin stays opaque,
+    // which is what keeps the app out of that script's reach.
+    #[tokio::test]
+    async fn a_pdf_is_allowed_the_script_its_viewer_is_built_from() {
+        let response = get_stored_file(
+            "sandboxedPdfFile",
+            index_of_content_type("application/pdf").to_string(),
+            b"%PDF-1.4",
+        )
+        .await;
+
+        assert_eq!(
+            content_security_policy(&response),
+            Some("sandbox allow-scripts"),
+            "a pdf should keep the sandbox but be allowed the script its viewer needs"
+        );
+    }
+
+    // The one combination that would undo all of this: `allow-scripts` beside
+    // `allow-same-origin` puts the file back on at-chat.app's own origin with
+    // script in hand, which is the exploit these headers exist to close. No entry
+    // in the list may be served that way, whatever else changes here.
+    #[test]
+    fn no_content_type_is_served_back_on_the_apps_origin() {
+        for content_type in content_types::CONTENT_TYPES {
+            let csp = sandbox_csp(content_type);
+
+            assert!(
+                csp == "sandbox" || csp.starts_with("sandbox "),
+                "{content_type} is served with {csp}, which does not sandbox it"
+            );
+            assert!(
+                !csp.contains("allow-same-origin"),
+                "{content_type} is served with {csp}, which hands it back the app's origin"
+            );
+        }
+    }
+
+    // The sandbox is picked from the content type in the url, so a browser that
+    // sniffed a different type out of the bytes would be rendering something
+    // other than what that choice was made for.
+    #[tokio::test]
+    async fn a_served_file_is_not_sniffed() {
+        let response = get_stored_file(
+            "unsniffedFile",
+            index_of_content_type("image/png").to_string(),
+            b"not really a png",
+        )
+        .await;
+
+        assert_eq!(
+            response
+                .headers()
+                .get("X-Content-Type-Options")
+                .and_then(|value| value.to_str().ok()),
+            Some("nosniff"),
+            "the browser should be told not to look for a type of its own"
+        );
+    }
+
     // This response carries no content type at all, so the browser picks one by
     // looking at the bytes and can arrive at html without being asked to.
     #[tokio::test]
@@ -1858,7 +1959,15 @@ mod tests {
         assert_eq!(
             content_security_policy(&response),
             Some("sandbox"),
-            "a file the browser sniffs a type for should be sandboxed as well"
+            "a file with no declared type should be sandboxed as well"
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get("X-Content-Type-Options")
+                .and_then(|value| value.to_str().ok()),
+            Some("nosniff"),
+            "with no type declared, this is what stops the browser picking one"
         );
     }
 }
