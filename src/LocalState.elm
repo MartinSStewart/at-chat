@@ -2889,7 +2889,11 @@ routeToViewing isMobile route local =
         DmRoute { channelId, threadRoute, tab, channelsVisible } ->
             case DmChannelId.otherUserId local.localUser.session.userId channelId of
                 Just otherUserId ->
-                    if SeqDict.member otherUserId local.dmChannels && not (isMobile && channelsVisible == ChannelsVisibleOnMobile) then
+                    -- We don't check `SeqDict.members otherUserId local.dmChannels` since it might not have any messages in it yet but still be valid
+                    if isMobile && channelsVisible == ChannelsVisibleOnMobile then
+                        StopViewingChannel
+
+                    else
                         let
                             id =
                                 { otherUserId = otherUserId }
@@ -2914,9 +2918,6 @@ routeToViewing isMobile route local =
                                             local
                                     }
                                     SetViewing_EmptyPlaceholder
-
-                    else
-                        StopViewingChannel
 
                 Nothing ->
                     StopViewingChannel
