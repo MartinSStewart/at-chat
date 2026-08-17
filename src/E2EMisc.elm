@@ -17,6 +17,7 @@ module E2EMisc exposing
     , reactionPopupNamesEmojiTest
     , startingACallOrGameStaysReadTest
     , staysReadWhileViewingTest
+    , swipedAwayConversationStopsBeingViewedTest
     , timeOfDaySuggestionTest
     , timeOffsetSuggestionTest
     )
@@ -48,6 +49,7 @@ import Test.Html.Query
 import Test.Html.Selector
 import TimeInMinutes
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import UserSession
 
 
 {-| Pasting a large chunk of text that would push the message over the max message length converts the pasted text into a text file attachment instead of inserting it into the text input.
@@ -696,6 +698,92 @@ staysReadWhileViewingTest config =
                 ]
             )
         ]
+
+
+{-| Swiping the conversation view off screen on mobile has to tell the backend the reader
+isn't looking at it any more, otherwise messages written while they sit on the channel list
+are marked as read on their behalf.
+-}
+swipedAwayConversationStopsBeingViewedTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+swipedAwayConversationStopsBeingViewedTest config =
+    E2EHelper.startTest
+        "Swiping the conversation view closed on mobile stops it counting as viewed"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.iphone14Window
+            (\admin user ->
+                [ -- A guild channel is what the reader lands in, so that's what the backend
+                  -- has them looking at
+                  T.checkState 100 checkBackendIsViewingTheChannel
+                , E2EHelper.writeMessageMobile admin "While looking at the channel"
+                , user.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
+
+                -- Swiping it away leaves them on the guild's channel list, which the
+                -- backend has to hear about
+                , user.click 100 (Dom.id "guild_headerBackButton")
+                , T.checkState 500 checkBackendIsViewingNothing
+                , E2EHelper.writeMessageMobile admin "While the channel is swiped away"
+                , user.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
+
+                -- The same goes for a DM, where swiping the conversation away leaves them
+                -- on the friends list instead
+                , E2EHelper.openDm admin 100 "2"
+                , E2EHelper.writeMessageMobile admin "Starting a DM"
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , user.click 100 (Dom.id "guild_friendLabel_0")
+                , T.checkState 100 checkBackendIsViewingTheDm
+                , E2EHelper.writeMessageMobile admin "While looking at the DM"
+                , user.checkModel 100 (checkLastViewedMessageIs dmWithAdminId (Id.fromInt 1))
+                , user.click 100 (Dom.id "guild_headerBackButton")
+                , T.checkState 500 checkBackendIsViewingNothing
+                , E2EHelper.writeMessageMobile admin "While the DM is swiped away"
+                , user.checkModel 100 (checkLastViewedMessageIs dmWithAdminId (Id.fromInt 1))
+                , E2EHelper.tallSnapshot user 100 { name = "DM left unread while swiped away" }
+                ]
+            )
+        ]
+
+
+checkBackendIsViewingTheChannel : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkBackendIsViewingTheChannel data =
+    case E2EHelper.backendViewing E2EHelper.sessionId1 data of
+        Ok (UserSession.Viewing_Channel _) ->
+            Ok ()
+
+        Ok _ ->
+            Err "Expected the backend to have the reader viewing the guild channel"
+
+        Err error ->
+            Err error
+
+
+checkBackendIsViewingTheDm : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkBackendIsViewingTheDm data =
+    case E2EHelper.backendViewing E2EHelper.sessionId1 data of
+        Ok (UserSession.Viewing_Dm _) ->
+            Ok ()
+
+        Ok _ ->
+            Err "Expected the backend to have the reader viewing the DM"
+
+        Err error ->
+            Err error
+
+
+checkBackendIsViewingNothing : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkBackendIsViewingNothing data =
+    case E2EHelper.backendViewing E2EHelper.sessionId1 data of
+        Ok UserSession.Viewing_None ->
+            Ok ()
+
+        Ok _ ->
+            Err "Expected the backend to hear that the swiped away conversation is no longer being viewed"
+
+        Err error ->
+            Err error
 
 
 {-| The reader is behind by however far the given message sits from the newest one, which

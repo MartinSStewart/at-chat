@@ -328,6 +328,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.startingACallOrGameStaysReadTest normalConfig
     , E2EMisc.markMessageAsUnreadTest normalConfig
     , E2EMisc.staysReadWhileViewingTest normalConfig
+    , E2EMisc.swipedAwayConversationStopsBeingViewedTest normalConfig
     , E2EMisc.inactiveDmThreadsAreHiddenTest normalConfig
     , E2EHelper.startTest
         "Admin can disable Discord account linking"
