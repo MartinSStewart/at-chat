@@ -6534,7 +6534,7 @@ releasedSidebarDrag : Time.Posix -> LoadedFrontend -> Maybe Route
 releasedSidebarDrag time model =
     case model.loginStatus of
         LoggedIn loggedIn ->
-            case Debug.log "loggedIn.sidebarMode" loggedIn.sidebarMode of
+            case loggedIn.sidebarMode of
                 ChannelSidebarDragging a ->
                     let
                         range : { min : Float, max : Float }

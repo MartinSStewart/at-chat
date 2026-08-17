@@ -41,7 +41,7 @@ import LocalState exposing (LocalState)
 import Message
 import Pages.Guild
 import RichText
-import Route
+import Route exposing (ChannelsVisibleOnMobile(..))
 import SeqDict
 import String.Nonempty
 import Test.Html.Query
@@ -1101,6 +1101,7 @@ dmThreadsTest config =
                             { channelId = DmChannelId.fromUserIds (Id.fromInt 0) (Id.fromInt 2)
                             , threadRoute = Route.ViewThreadWithFriends (Id.fromInt 0) Nothing Route.HideChannelSettings
                             , tab = Nothing
+                            , channelsVisible = ChannelsHiddenOnMobile
                             }
                         )
                     )
