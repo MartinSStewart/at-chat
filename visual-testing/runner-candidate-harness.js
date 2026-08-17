@@ -26,6 +26,36 @@ const port = parseInt(process.env.SNAPSHOT_PORT || '8877', 10)
 const outDir = process.env.SNAPSHOT_OUT || 'snapshots'
 const projectAssets = '../public'
 
+// Which browser renders the snapshots (SNAPSHOT_BROWSER, default chrome).
+// webdriverio fetches the matching driver itself. It also downloads Chrome, but
+// Firefox has to be installed already (its download fallback only knows how to
+// fetch Nightly, from a URL that no longer resolves), and Safari is whatever
+// Safari the Mac has. See readme.md.
+const browserCapabilities = {
+  chrome: {
+    browserName: 'chrome',
+    // --no-sandbox and --disable-dev-shm-usage are required to run headless
+    // Chrome on Linux (especially as root / in CI containers). They are
+    // harmless on macOS, so we always pass them to keep this cross-platform.
+    'goog:chromeOptions': { args: ['--headless=new', '--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage'] },
+  },
+  firefox: {
+    browserName: 'firefox',
+    'moz:firefoxOptions': { args: ['-headless'] },
+  },
+  safari: {
+    // safaridriver has no headless mode, so this drives a real Safari window
+    // on a real screen. macOS only, and `safaridriver --enable` must have been
+    // run once.
+    browserName: 'safari',
+  },
+}[process.env.SNAPSHOT_BROWSER || 'chrome']
+
+if (!browserCapabilities) {
+  console.error(`❌ Unknown SNAPSHOT_BROWSER '${process.env.SNAPSHOT_BROWSER}' (expected chrome, firefox or safari)`)
+  process.exit(2)
+}
+
 // webdriverio's saveScreenshot throws if the target directory doesn't exist.
 fs.mkdirSync(outDir, { recursive: true })
 
@@ -67,14 +97,7 @@ server.listen(port, () => {
 
 (async () => {
     markTime("boot")
-    let browser = await remote({
-      capabilities: { browserName: 'chrome',
-        // --no-sandbox and --disable-dev-shm-usage are required to run headless
-        // Chrome on Linux (especially as root / in CI containers). They are
-        // harmless on macOS, so we always pass them to keep this cross-platform.
-        'goog:chromeOptions': { args: ['--headless=new', '--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage'] },
-      },
-    });
+    let browser = await remote({ capabilities: browserCapabilities });
     markTime("remote")
 
     await browser.navigateTo(`http://localhost:${port}`);

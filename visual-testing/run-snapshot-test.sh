@@ -11,8 +11,13 @@
 #
 # Pass --view to open the result viewer (view-snapshots.sh) when done.
 #
-# Baselines are cached per base commit in snapshots/baseline-<sha>/, so steps
-# 3 and 4 are skipped when that folder already exists.
+# SNAPSHOT_BROWSER picks the renderer (chrome, the default, firefox or safari).
+# Every browser renders text slightly differently, so each one gets its own
+# snapshots/<browser>/ folder and its images are only ever compared with images
+# from the same browser.
+#
+# Baselines are cached per base commit in snapshots/<browser>/baseline-<sha>/,
+# so steps 3 and 4 are skipped when that folder already exists.
 set -e
 
 cd "$(dirname "$0")"
@@ -37,12 +42,14 @@ else
 fi
 
 base_sha=$(git merge-base "$base_branch" HEAD)
+browser=${SNAPSHOT_BROWSER:-chrome}
 echo "ℹ️  Feature branch : $branch"
 echo "ℹ️  Base ($base_branch) : $base_sha"
+echo "ℹ️  Browser       : $browser"
 
-current_dir="$vt_dir/snapshots/current"
-baseline_dir="$vt_dir/snapshots/baseline-$base_sha"
-diff_dir="$vt_dir/snapshots/diff"
+current_dir="$vt_dir/snapshots/$browser/current"
+baseline_dir="$vt_dir/snapshots/$browser/baseline-$base_sha"
+diff_dir="$vt_dir/snapshots/$browser/diff"
 
 # Guarded `rm -rf`. Refuses to delete anything that isn't strictly inside this
 # repo's snapshots/ folder, so a bug that leaves a path variable empty (e.g.
@@ -85,7 +92,7 @@ render_snapshots() {
     fi
     cp visual-testing/snapshot-harnessed-app.js visual-testing/dist/snapshot-harnessed-app.js
     ( cd visual-testing/dist && npx esbuild harness.js --entry-names="harness-compiled" --bundle --minify --outdir=. )
-    ( cd visual-testing && SNAPSHOT_OUT="$out" node runner-candidate-harness.js )
+    ( cd visual-testing && SNAPSHOT_OUT="$out" SNAPSHOT_BROWSER="$browser" node runner-candidate-harness.js )
   )
 }
 
