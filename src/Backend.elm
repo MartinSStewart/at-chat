@@ -342,8 +342,9 @@ update : BackendMsg -> BackendModel -> ( BackendModel, Command BackendOnly ToFro
 update msg model =
     case msg of
         UserConnected sessionId clientId ->
-            ( { model
-                | connections =
+            let
+                connections : SeqDict SessionId (NonemptyDict.NonemptyDict ClientId ConnectionData)
+                connections =
                     SeqDictHelper.addToDict
                         sessionId
                         clientId
@@ -353,8 +354,14 @@ update msg model =
                         , currentlyViewing = UserSession.Viewing_None
                         }
                         model.connections
-              }
-            , Lamdera.sendToFrontend clientId (YouConnected clientId)
+            in
+            ( { model | connections = connections }
+            , Command.batch
+                (Lamdera.sendToFrontend clientId (YouConnected clientId)
+                    :: List.map
+                        (\staleClientId -> Task.perform (UserDisconnectedWithTime sessionId staleClientId) Time.now)
+                        (staleConnections sessionId connections)
+                )
             )
 
         UserDisconnected sessionId clientId ->
@@ -2088,6 +2095,28 @@ recordWebsocketCloseEvent event model =
 maxWebsocketCloseEvents : Int
 maxWebsocketCloseEvents =
     10000
+
+
+maxConnectionsPerSession : Int
+maxConnectionsPerSession =
+    5
+
+
+{-| Lamdera.onDisconnect doesn't always fire, which leaves connections behind that will never go
+away on their own. Until that's fixed, a session that has more than maxConnectionsPerSession
+connections gets its oldest ones disconnected.
+-}
+staleConnections : SessionId -> SeqDict SessionId (NonemptyDict.NonemptyDict ClientId ConnectionData) -> List ClientId
+staleConnections sessionId connections =
+    case SeqDict.get sessionId connections of
+        Just clients ->
+            -- NonemptyDict.toList is ordered oldest first
+            NonemptyDict.toList clients
+                |> List.map Tuple.first
+                |> List.take (NonemptyDict.size clients - maxConnectionsPerSession)
+
+        Nothing ->
+            []
 
 
 disconnectClient : Time.Posix -> SessionId -> ClientId -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend msg )
