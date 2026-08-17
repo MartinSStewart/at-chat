@@ -2886,10 +2886,10 @@ routeToViewing isMobile route local =
             else
                 StopViewingChannel
 
-        DmRoute { channelId, threadRoute, tab } ->
+        DmRoute { channelId, threadRoute, tab, channelsVisible } ->
             case DmChannelId.otherUserId local.localUser.session.userId channelId of
                 Just otherUserId ->
-                    if SeqDict.member otherUserId local.dmChannels then
+                    if SeqDict.member otherUserId local.dmChannels && not (isMobile && channelsVisible == ChannelsVisibleOnMobile) then
                         let
                             id =
                                 { otherUserId = otherUserId }
@@ -2922,7 +2922,7 @@ routeToViewing isMobile route local =
                     StopViewingChannel
 
         DiscordDmRoute data ->
-            if SeqDict.member data.channelId local.discordDmChannels then
+            if SeqDict.member data.channelId local.discordDmChannels && not (isMobile && data.channelsVisible == ChannelsVisibleOnMobile) then
                 ViewDiscordDm
                     { id = { currentUserId = data.currentDiscordUserId, channelId = data.channelId }
                     , previouslyLastViewedMessage =

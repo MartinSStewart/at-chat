@@ -572,58 +572,70 @@ canDropFiles isMobile currentUserId route =
                         Nothing
 
         DiscordGuildRoute routeData ->
-            case routeData.channelRoute of
-                DiscordChannel_ChannelRoute channelId threadRoute _ ->
-                    let
-                        threadRoute2 : ThreadRoute
-                        threadRoute2 =
-                            case threadRoute of
-                                NoThreadWithFriends _ _ ->
-                                    NoThread
+            if routeData.channelsVisible == ChannelsVisibleOnMobile && isMobile then
+                Nothing
 
-                                ViewThreadWithFriends threadId _ _ ->
-                                    ViewThread threadId
-                    in
-                    canDropFileHelper
-                        (DiscordGuildOrDmId
-                            (DiscordGuildOrDmId_Guild { currentUserId = routeData.currentDiscordUserId, guildId = routeData.guildId, channelId = channelId })
-                        )
-                        threadRoute2
-                        |> Just
+            else
+                case routeData.channelRoute of
+                    DiscordChannel_ChannelRoute channelId threadRoute _ ->
+                        let
+                            threadRoute2 : ThreadRoute
+                            threadRoute2 =
+                                case threadRoute of
+                                    NoThreadWithFriends _ _ ->
+                                        NoThread
 
-                DiscordChannel_NewChannelRoute ->
-                    Nothing
+                                    ViewThreadWithFriends threadId _ _ ->
+                                        ViewThread threadId
+                        in
+                        canDropFileHelper
+                            (DiscordGuildOrDmId
+                                (DiscordGuildOrDmId_Guild { currentUserId = routeData.currentDiscordUserId, guildId = routeData.guildId, channelId = channelId })
+                            )
+                            threadRoute2
+                            |> Just
 
-                DiscordChannel_GuildSettingsRoute ->
-                    Nothing
+                    DiscordChannel_NewChannelRoute ->
+                        Nothing
+
+                    DiscordChannel_GuildSettingsRoute ->
+                        Nothing
 
         DmRoute routeData ->
-            case DmChannelId.otherUserId currentUserId routeData.channelId of
-                Just otherUserId ->
-                    let
-                        threadRoute2 : ThreadRoute
-                        threadRoute2 =
-                            case routeData.threadRoute of
-                                NoThreadWithFriends _ _ ->
-                                    NoThread
+            if routeData.channelsVisible == ChannelsVisibleOnMobile && isMobile then
+                Nothing
 
-                                ViewThreadWithFriends threadId _ _ ->
-                                    ViewThread threadId
-                    in
-                    canDropFileHelper (GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId })) threadRoute2 |> Just
+            else
+                case DmChannelId.otherUserId currentUserId routeData.channelId of
+                    Just otherUserId ->
+                        let
+                            threadRoute2 : ThreadRoute
+                            threadRoute2 =
+                                case routeData.threadRoute of
+                                    NoThreadWithFriends _ _ ->
+                                        NoThread
 
-                Nothing ->
-                    Nothing
+                                    ViewThreadWithFriends threadId _ _ ->
+                                        ViewThread threadId
+                        in
+                        canDropFileHelper (GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId })) threadRoute2 |> Just
+
+                    Nothing ->
+                        Nothing
 
         DiscordDmRoute routeData ->
-            canDropFileHelper
-                (DiscordGuildOrDmId
-                    (DiscordGuildOrDmId_Dm
-                        { currentUserId = routeData.currentDiscordUserId, channelId = routeData.channelId }
+            if routeData.channelsVisible == ChannelsVisibleOnMobile && isMobile then
+                Nothing
+
+            else
+                canDropFileHelper
+                    (DiscordGuildOrDmId
+                        (DiscordGuildOrDmId_Dm
+                            { currentUserId = routeData.currentDiscordUserId, channelId = routeData.channelId }
+                        )
                     )
-                )
-                NoThread
-                |> Just
+                    NoThread
+                    |> Just
 
         AiChatRoute ->
             Nothing

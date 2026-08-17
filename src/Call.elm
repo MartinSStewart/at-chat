@@ -372,31 +372,38 @@ displayMode isMobile currentUserId route local =
             thumbnailOrNoVideo
 
         DmRoute dmRoute ->
-            case DmChannelId.otherUserId currentUserId dmRoute.channelId of
-                Just otherUserId ->
-                    let
-                        roomId =
-                            DmRoomId { otherUserId = otherUserId }
+            -- Only mobile puts the friends list over the conversation the videos are laid
+            -- out on top of, so only mobile can leave them with nothing to sit on
+            case ( isMobile, dmRoute.channelsVisible ) of
+                ( True, ChannelsVisibleOnMobile ) ->
+                    thumbnailOrNoVideo
 
-                        isTabExpanded =
-                            dmRoute.tab == Just ChannelHeaderTab_VoiceChat
-                    in
-                    if Just roomId == local.currentRoom && isTabExpanded then
-                        case SeqDict.get roomId local.voiceChats of
-                            Just _ ->
-                                ShowLocalVideoAndCall roomId
+                _ ->
+                    case DmChannelId.otherUserId currentUserId dmRoute.channelId of
+                        Just otherUserId ->
+                            let
+                                roomId =
+                                    DmRoomId { otherUserId = otherUserId }
 
-                            Nothing ->
+                                isTabExpanded =
+                                    dmRoute.tab == Just ChannelHeaderTab_VoiceChat
+                            in
+                            if Just roomId == local.currentRoom && isTabExpanded then
+                                case SeqDict.get roomId local.voiceChats of
+                                    Just _ ->
+                                        ShowLocalVideoAndCall roomId
+
+                                    Nothing ->
+                                        ShowLocalVideo
+
+                            else if isTabExpanded then
                                 ShowLocalVideo
 
-                    else if isTabExpanded then
-                        ShowLocalVideo
+                            else
+                                thumbnailOrNoVideo
 
-                    else
-                        thumbnailOrNoVideo
-
-                Nothing ->
-                    thumbnailOrNoVideo
+                        Nothing ->
+                            thumbnailOrNoVideo
 
         DiscordDmRoute _ ->
             thumbnailOrNoVideo

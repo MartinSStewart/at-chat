@@ -48,18 +48,20 @@ routeFuzzer =
         , Fuzz.constant NewGuildRoute
         , Fuzz.constant AiChatRoute
         , Fuzz.map3 GuildRoute idFuzzer channelRouteFuzzer channelsVisibleFuzzer
-        , Fuzz.map4
-            (\userId otherUserId threadRoute tab ->
+        , Fuzz.map5
+            (\userId otherUserId threadRoute tab channelsVisible ->
                 DmRoute
                     { channelId = DmChannelId.fromUserIds userId otherUserId
                     , threadRoute = threadRoute
                     , tab = tab
+                    , channelsVisible = channelsVisible
                     }
             )
             idFuzzer
             idFuzzer
             threadRouteFuzzer
             (Fuzz.maybe tabFuzzer)
+            channelsVisibleFuzzer
         , Fuzz.map PublicGoMatchRoute secretIdFuzzer
         ]
 
