@@ -1113,6 +1113,21 @@ async fn discord_sticker_endpoint(sticker_path: Path<String>) -> http::Response<
 /// each page load.
 const IMMUTABLE_CACHE_CONTROL: &str = "public, max-age=31536000, immutable";
 
+/// Uploads are served from the same origin as the app, so an html or svg file
+/// among them would otherwise run script with everything at-chat.app has:
+/// the `sid` cookie, local storage, and the app's own requests. `sandbox` drops
+/// the response into an opaque origin with no allowances, so such a file can no
+/// longer read any of that, run script, submit a form or navigate the tab.
+///
+/// Images, video and audio are unaffected. The directive only applies to a
+/// response loaded as a document, which is what a click on a file link does; an
+/// `<img>` or `<video>` in the chat ignores it.
+///
+/// Never pair `allow-scripts` with `allow-same-origin` if an allowance is ever
+/// needed here. Either alone keeps the origin opaque, but together they undo it
+/// and hand the file back the access this is taking away.
+const SANDBOX_CSP: &str = "sandbox";
+
 async fn get_file_endpoint(
     Path((content_type_index, hash)): Path<(String, String)>,
 ) -> http::Response<Body> {
@@ -1134,11 +1149,17 @@ async fn get_file_endpoint(
                         .header("Content-Type", *content_type2)
                         .header("Content-Disposition", "inline")
                         .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
+                        .header("Content-Security-Policy", SANDBOX_CSP)
                         .body(Body::from(data))
                         .unwrap(),
+                    // No content type to send, so the browser sniffs one out of
+                    // the bytes. That can land on html just as readily as the
+                    // branch above can be asked for it, so the sandbox matters
+                    // here too.
                     None => Response::builder()
                         .status(StatusCode::OK)
                         .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
+                        .header("Content-Security-Policy", SANDBOX_CSP)
                         .body(Body::from(data))
                         .unwrap(),
                 }
@@ -1764,6 +1785,80 @@ mod tests {
             origin_check_status(None).await,
             StatusCode::OK,
             "a request without an Origin header should be allowed through"
+        );
+    }
+
+    // Put a file where the endpoint looks for it and ask for it back, so the
+    // tests below can read the headers it came with. Each caller passes its own
+    // hash, which is the filename, so the two never tread on each other.
+    async fn get_stored_file(
+        hash: &str,
+        content_type_index: String,
+        bytes: &[u8],
+    ) -> http::Response<Body> {
+        create_dir_if_missing("./var".to_string());
+        create_dir_if_missing("./var/lib".to_string());
+        create_dir_if_missing("./var/lib/atchat".to_string());
+        create_dir_if_missing("./var/lib/atchat/storage".to_string());
+        fs::write(filepath(hash), bytes).expect("failed to write the file to serve");
+
+        let response = get_file_endpoint(Path((content_type_index, hash.to_string()))).await;
+
+        let _ = fs::remove_file(filepath(hash));
+
+        response
+    }
+
+    fn content_security_policy(response: &http::Response<Body>) -> Option<&str> {
+        response
+            .headers()
+            .get("Content-Security-Policy")
+            .and_then(|value| value.to_str().ok())
+    }
+
+    // The content type is whatever the url asked for, so any upload can be
+    // fetched back as html from at-chat.app itself. Without the sandbox its
+    // script would run with the sid cookie and the app's storage in reach.
+    #[tokio::test]
+    async fn a_file_served_as_html_is_sandboxed() {
+        let html_index = content_types::CONTENT_TYPES
+            .iter()
+            .position(|content_type| content_type.starts_with("text/html"))
+            .expect("the content type list should contain text/html");
+
+        let response = get_stored_file(
+            "sandboxedHtmlFile",
+            html_index.to_string(),
+            b"<script>alert(document.cookie)</script>",
+        )
+        .await;
+
+        assert_eq!(
+            content_security_policy(&response),
+            Some("sandbox"),
+            "a file served as html should be sandboxed out of the app's origin"
+        );
+    }
+
+    // This response carries no content type at all, so the browser picks one by
+    // looking at the bytes and can arrive at html without being asked to.
+    #[tokio::test]
+    async fn a_file_with_no_content_type_to_send_is_sandboxed() {
+        let response = get_stored_file(
+            "sandboxedSniffedFile",
+            (content_types::CONTENT_TYPES.len() + 1).to_string(),
+            b"<script>alert(document.cookie)</script>",
+        )
+        .await;
+
+        assert!(
+            response.headers().get("Content-Type").is_none(),
+            "an out of range index should be what leaves the content type unset"
+        );
+        assert_eq!(
+            content_security_policy(&response),
+            Some("sandbox"),
+            "a file the browser sniffs a type for should be sandboxed as well"
         );
     }
 }
