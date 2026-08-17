@@ -9,7 +9,10 @@
     "end-to-end-tests": "node tests/EndToEndTestsRunner.js",
     "backup-downloader": "lamdera make scripts/backup-downloader/src/Backup.elm --output scripts/backup-downloader/BackupElm.js && node scripts/backup-downloader/run.js",
     "rust-server": "cd tests && cargo run --manifest-path ../rust-server/Cargo.toml",
-    "snapshot-tests": "cd visual-testing && ./run-snapshot-test.sh --view"
+    "snapshot-tests": "cd visual-testing && ./run-snapshot-test.sh --view",
+    "snapshot-chrome": "cd visual-testing && SNAPSHOT_BROWSER=chrome ./run-snapshot-test.sh --view",
+    "snapshot-firefox": "cd visual-testing && SNAPSHOT_BROWSER=firefox ./run-snapshot-test.sh --view",
+    "snapshot-safari": "cd visual-testing && SNAPSHOT_BROWSER=safari ./run-snapshot-test.sh --view"
   },
   "devDependencies": {
     "elm-codegen": "^0.5.3",

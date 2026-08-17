@@ -44,6 +44,13 @@ repository root) so the Elm build's esbuild step is available.
 SNAPSHOT_BROWSER=firefox ./run-snapshot-test.sh
 ```
 
+From the repository root there is a script per browser, each of which also
+opens the viewer when it's done:
+
+```bash
+npm run snapshot-chrome     # or snapshot-firefox, snapshot-safari
+```
+
 Each browser draws text slightly differently, so its snapshots live in their own
 `snapshots/<browser>/` folder and are only ever compared with images from the
 same browser. Switching browsers therefore re-renders the baseline once; it
