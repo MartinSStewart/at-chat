@@ -1839,7 +1839,17 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
             E2EHelper.desktopWindow
             (\_ user ->
-                [ E2EHelper.writeMessage user 1000 "Message 1"
+                [ -- More messages than fit in a page, so opening the channel loads the most
+                  -- recent page and leaves older ones to be fetched by scrolling up. The
+                  -- second message gets a thread hanging off it.
+                  E2EHelper.writeMessage user 1000 "Message 1"
+                , E2EHelper.writeMessage user 1000 "Message 2"
+                , E2EHelper.createThread user (Id.fromInt 1)
+                , E2EHelper.writeMessage user 1000 "A reply in the thread"
+                , user.click 100 (Dom.id "guild_openChannel_0")
+                , List.range 3 (VisibleMessages.pageSize + 11)
+                    |> List.map (\index -> E2EHelper.writeMessage user 1000 ("Message " ++ String.fromInt index))
+                    |> T.group
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
@@ -1849,27 +1859,85 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         [ T.andThen
                             10
                             (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+
+                        -- Everything below turns on what the view looks like midway through a
+                        -- load, so the round trip is stretched out to leave room to look.
+                        , userReload.setNetworkLatency 100 { toBackendLatency = 1000, toFrontendLatency = 1000 }
                         , userReload.click 100 (Dom.id "guild_openGuild_1")
 
                         -- The messages are still on their way, so the header saying the
                         -- channel starts here stays hidden. Showing it would tell the
                         -- reader there's nothing older while there still might be.
                         , userReload.checkView
-                            20
+                            500
                             (Test.Html.Query.hasNot
                                 [ Test.Html.Selector.exactText "This is the start of #general" ]
                             )
                         , userReload.snapshotView 0 { name = "Messages haven't loaded yet" }
                         , userReload.checkView
-                            20
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Message 1" ])
+                            0
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Message 41" ])
 
-                        -- Once the messages arrive both turn up.
+                        -- Once the page arrives the recent messages turn up. The header stays
+                        -- hidden because there really are older messages above them.
                         , userReload.checkView
-                            1000
+                            3000
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Message 41" ])
+                        , userReload.checkView
+                            0
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.exactText "This is the start of #general" ]
+                            )
+
+                        -- Scrolling up asks for the older messages. The header has to keep
+                        -- quiet until they land, otherwise it claims the channel starts at
+                        -- whatever is on screen while there's still a page on the way.
+                        , E2EHelper.scrollToTop userReload
+                        , userReload.checkView
+                            500
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.exactText "This is the start of #general" ]
+                            )
+                        , userReload.checkView
+                            3000
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.exactText "This is the start of #general"
                                 , Test.Html.Selector.exactText "Message 1"
+                                ]
+                            )
+
+                        -- A thread is the same story, except the message the thread hangs off
+                        -- is drawn alongside the header, so that has to wait too. Showing it
+                        -- on its own would read as a thread nobody has replied to yet.
+                        , userReload.click 100 (Dom.id "guild_viewThread_0_1")
+                        , userReload.checkView
+                            500
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.exactText "Start of thread" ]
+                            )
+
+                        -- The thread starter is the channel message the thread hangs off, so
+                        -- it is looked for by the id that message is drawn with rather than
+                        -- by its text (the header names the thread after it either way).
+                        , userReload.checkView
+                            0
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.id
+                                    (Dom.idToString (Pages.Guild.channelMessageHtmlId (Id.fromInt 1)))
+                                ]
+                            )
+                        , userReload.checkView
+                            3000
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Start of thread"
+                                , Test.Html.Selector.exactText "A reply in the thread"
+                                ]
+                            )
+                        , userReload.checkView
+                            0
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.id
+                                    (Dom.idToString (Pages.Guild.channelMessageHtmlId (Id.fromInt 1)))
                                 ]
                             )
                         ]
