@@ -983,7 +983,8 @@ type LocalChange
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Local_SetDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
     | Local_SetNotificationMode NotificationMode
-    | Local_ToggleUserOptionSection UserOptionSection
+    | Local_ExpandUserOptionSection UserOptionSection
+    | Local_CollapseUserOptionSection UserOptionSection
     | Local_SetEmailNotifications EmailNotifications
     | Local_RegisterPushSubscription Time.Posix RegisterPushSubscription
     | Local_TextEditor TextEditor.LocalChange

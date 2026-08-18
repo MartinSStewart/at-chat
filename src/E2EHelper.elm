@@ -2321,7 +2321,10 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetNotificationMode _ ->
                     False
 
-                Local_ToggleUserOptionSection _ ->
+                Local_ExpandUserOptionSection _ ->
+                    False
+
+                Local_CollapseUserOptionSection _ ->
                     False
 
                 Local_SetEmailNotifications _ ->
@@ -2754,6 +2757,7 @@ allAttackerLocalChanges =
     [ Local_AddReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
     , Local_AddReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
     , Local_Admin (Pages.Admin.SetSignupsEnabled True)
+    , Local_CollapseUserOptionSection UserSession.UserOption_Debug
     , Local_CurrentlyViewing { markMessagesAsViewed = False } StopViewingChannel
     , Local_DeleteChannel legitGuildId channelId
     , Local_DeleteGuild legitGuildId
@@ -2769,6 +2773,7 @@ allAttackerLocalChanges =
     , Local_Discord_SendMessage messageTime Time.utc discordGuildOrDmId_dm normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_EditChannel legitGuildId channelId (Unsafe.channelName "hacked") ChannelDescription.empty
     , Local_EditGuildName legitGuildId (Unsafe.guildName "hacked")
+    , Local_ExpandUserOptionSection UserSession.UserOption_Debug
     , Local_Invalid
     , Local_LeaveGuild legitGuildId
     , Local_LinkDiscordAcknowledgementIsChecked True
@@ -2803,7 +2808,6 @@ allAttackerLocalChanges =
     , Local_SetMuteThread legitGuildId channelId (Id.fromInt 0) MuteSettings.IsMuted
     , Local_SetName (Unsafe.personName "hacked")
     , Local_SetNotificationMode NoNotifications
-    , Local_ToggleUserOptionSection UserSession.UserOption_Debug
     , Local_SetEmailNotifications User.NotifyMeWhenMentioned
     , Local_StartReloadingDiscordUser messageTime discordUserId
     , Local_TextEditor TextEditor.Local_Reset

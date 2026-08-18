@@ -20,6 +20,8 @@ module UserSession exposing
     , Viewing_DiscordDmData
     , Viewing_DmData
     , Viewing_DmThreadData
+    , collapseUserOptionSection
+    , expandUserOptionSection
     , init
     , isViewing
     , isViewingGame
@@ -27,7 +29,6 @@ module UserSession exposing
     , setPreviouslyLastViewedThreadMessage
     , setViewingToCurrentlyViewing
     , toFrontend
-    , toggleUserOptionSection
     , unreadOverviewMessageLimit
     )
 
@@ -430,16 +431,14 @@ init time sessionId userId userAgent =
     }
 
 
-toggleUserOptionSection : UserOptionSection -> UserSession -> UserSession
-toggleUserOptionSection section session =
-    { session
-        | expandedUserOptions =
-            if SeqSet.member section session.expandedUserOptions then
-                SeqSet.remove section session.expandedUserOptions
+expandUserOptionSection : UserOptionSection -> UserSession -> UserSession
+expandUserOptionSection section session =
+    { session | expandedUserOptions = SeqSet.insert section session.expandedUserOptions }
 
-            else
-                SeqSet.insert section session.expandedUserOptions
-    }
+
+collapseUserOptionSection : UserOptionSection -> UserSession -> UserSession
+collapseUserOptionSection section session =
+    { session | expandedUserOptions = SeqSet.remove section session.expandedUserOptions }
 
 
 toFrontend : Id UserId -> SeqDict ClientId Viewing -> UserSession -> Maybe FrontendUserSession

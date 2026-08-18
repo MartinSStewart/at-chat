@@ -224,8 +224,11 @@ pendingChangesText localChange =
         Local_SetNotificationMode _ ->
             "Set notification mode"
 
-        Local_ToggleUserOptionSection _ ->
-            "Expanded or collapsed a user options section"
+        Local_ExpandUserOptionSection _ ->
+            "Expanded a user options section"
+
+        Local_CollapseUserOptionSection _ ->
+            "Collapsed a user options section"
 
         Local_SetEmailNotifications _ ->
             "Set email notifications"
@@ -3423,7 +3426,7 @@ changeUpdate localMsg local =
                     in
                     { local | localUser = { localUser | session = { session | notificationMode = notificationMode } } }
 
-                Local_ToggleUserOptionSection section ->
+                Local_ExpandUserOptionSection section ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -3431,7 +3434,18 @@ changeUpdate localMsg local =
                     in
                     { local
                         | localUser =
-                            { localUser | session = UserSession.toggleUserOptionSection section localUser.session }
+                            { localUser | session = UserSession.expandUserOptionSection section localUser.session }
+                    }
+
+                Local_CollapseUserOptionSection section ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser | session = UserSession.collapseUserOptionSection section localUser.session }
                     }
 
                 Local_SetEmailNotifications emailNotifications ->

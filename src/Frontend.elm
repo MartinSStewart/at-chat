@@ -2101,7 +2101,16 @@ updateLoaded msg model =
                 (\loggedIn ->
                     FrontendExtra.handleLocalChange
                         model.time
-                        (Local_ToggleUserOptionSection section |> Just)
+                        (if
+                            SeqSet.member
+                                section
+                                (Local.model loggedIn.localState).localUser.session.expandedUserOptions
+                         then
+                            Local_CollapseUserOptionSection section |> Just
+
+                         else
+                            Local_ExpandUserOptionSection section |> Just
+                        )
                         loggedIn
                         Command.none
                 )
