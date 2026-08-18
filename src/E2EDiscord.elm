@@ -3133,6 +3133,49 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "A Discord channel waiting on its messages doesn't claim to be at its start"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ -- A message lands in channel A while the admin is elsewhere, so the
+                          -- channel has something to fetch when they open it.
+                          discordGuildMessage connection "Written while looking elsewhere"
+
+                        -- The assertions below look at the view midway through a load, so the
+                        -- round trip is stretched out to leave room to look.
+                        , admin.setNetworkLatency 100 { toBackendLatency = 1000, toFrontendLatency = 1000 }
+                        , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+
+                        -- The channel's messages are still on their way, so the header saying
+                        -- the channel starts here keeps quiet.
+                        , admin.checkView
+                            500
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "This is the start of" ])
+
+                        -- Once they land the messages and the header both turn up.
+                        , admin.checkView
+                            3000
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Written while looking elsewhere" ]
+                            )
+                        , admin.checkView
+                            0
+                            (Test.Html.Query.has [ Test.Html.Selector.text "This is the start of" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Handle group DM created"
         E2EHelper.startTime
         normalConfig

@@ -117,6 +117,25 @@ import VisibleMessages
 import WordSpellingGame
 
 
+{-| The messages out of what the backend fills in when a Discord channel or thread is
+viewed. The two placeholders carry through rather than being treated as nothing to do, so
+that a channel still waiting on its messages is marked as loading.
+-}
+discordViewMessages :
+    SetViewing_ToBeFilledInByBackend (UserSession.ViewDiscordGuildData messageId)
+    -> SetViewing_ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId)))
+discordViewMessages backendData =
+    case backendData of
+        SetViewing_FilledInByBackend data ->
+            SetViewing_FilledInByBackend data.messages
+
+        SetViewing_EmptyPlaceholder ->
+            SetViewing_EmptyPlaceholder
+
+        SetViewing_NothingToFillIn ->
+            SetViewing_NothingToFillIn
+
+
 pendingChangesText : LocalChange -> String
 pendingChangesText localChange =
     case localChange of
@@ -3052,21 +3071,13 @@ changeUpdate localMsg local =
                                                     localUser.discordUsers
                                     }
                                 , discordGuilds =
-                                    case backendData of
-                                        SetViewing_FilledInByBackend backendData2 ->
-                                            SeqDict.updateIfExists
-                                                data.id.guildId
-                                                (LocalState.updateChannel
-                                                    (DmChannel.loadMessages (SetViewing_FilledInByBackend backendData2.messages))
-                                                    data.id.channelId
-                                                )
-                                                local.discordGuilds
-
-                                        SetViewing_EmptyPlaceholder ->
-                                            local.discordGuilds
-
-                                        SetViewing_NothingToFillIn ->
-                                            local.discordGuilds
+                                    SeqDict.updateIfExists
+                                        data.id.guildId
+                                        (LocalState.updateChannel
+                                            (DmChannel.loadMessages (discordViewMessages backendData))
+                                            data.id.channelId
+                                        )
+                                        local.discordGuilds
                             }
 
                         ViewDiscordChannelThread data backendData ->
@@ -3105,31 +3116,21 @@ changeUpdate localMsg local =
                                                     localUser.discordUsers
                                     }
                                 , discordGuilds =
-                                    case backendData of
-                                        SetViewing_FilledInByBackend backendData2 ->
-                                            SeqDict.updateIfExists
-                                                data.id.guildId
-                                                (LocalState.updateChannel
-                                                    (\channel ->
-                                                        { channel
-                                                            | threads =
-                                                                SeqDict.updateIfExists
-                                                                    data.id.threadId
-                                                                    (DmChannel.loadMessages
-                                                                        (SetViewing_FilledInByBackend backendData2.messages)
-                                                                    )
-                                                                    channel.threads
-                                                        }
-                                                    )
-                                                    data.id.channelId
-                                                )
-                                                local.discordGuilds
-
-                                        SetViewing_EmptyPlaceholder ->
-                                            local.discordGuilds
-
-                                        SetViewing_NothingToFillIn ->
-                                            local.discordGuilds
+                                    SeqDict.updateIfExists
+                                        data.id.guildId
+                                        (LocalState.updateChannel
+                                            (\channel ->
+                                                { channel
+                                                    | threads =
+                                                        SeqDict.updateIfExists
+                                                            data.id.threadId
+                                                            (DmChannel.loadMessages (discordViewMessages backendData))
+                                                            channel.threads
+                                                }
+                                            )
+                                            data.id.channelId
+                                        )
+                                        local.discordGuilds
                             }
 
                         ViewOverview overviewData ->
