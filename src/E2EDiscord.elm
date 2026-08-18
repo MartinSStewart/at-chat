@@ -3096,34 +3096,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         [ T.websocketSendString 100 connection groupChatCreated
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "at0232, joe" ])
                         , admin.click 100 (Dom.id "guild_discordFriendLabel_1539244611120144464")
-                        ]
-                    )
-                ]
-            )
-        ]
-    , E2EHelper.startTest
-        "Handle someone leaving a group DM"
-        E2EHelper.startTime
-        normalConfig
-        [ E2EHelper.linkDiscordAndLogin
-            E2EHelper.sessionId0
-            (PersonName.toString Backend.adminUser.name)
-            E2EHelper.adminEmail
-            False
-            discordOp0Ready
-            discordOp0ReadySupplemental
-            (\admin ->
-                [ E2EHelper.andThenWebsocket
-                    (\connection _ ->
-                        [ T.websocketSendString 100 connection groupChatCreated
-                        , T.checkBackend
-                            100
-                            (checkGroupChatMembers
-                                [ Discord.idToString E2EHelper.currentDiscordUserId
-                                , "161098476632014848"
-                                , "12312312312312312312"
-                                ]
-                            )
+                        , admin.snapshotView 100 { name = "Group chat with 3 members " }
 
                         -- at0232 leaves the group DM. The group DM stops being named after
                         -- them, while joe and the linked account carry on.
@@ -3137,6 +3110,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , admin.checkView
                             100
                             (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "at0232, joe" ])
+                        , admin.snapshotView 100 { name = "Group chat with only 2 members left" }
                         , admin.click 100 (Dom.id "guild_discordFriendLabel_1539244611120144464")
                         ]
                     )

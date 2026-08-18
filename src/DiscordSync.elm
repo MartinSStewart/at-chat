@@ -2990,11 +2990,6 @@ attachmentsToFileData attachment fileHash metadata =
     }
 
 
-{-| Someone was removed from (or left) a Discord group DM. The removed member is dropped
-from the channel's member list. The broadcast goes out against the model from before the
-removal so that the person who left is also told, rather than silently keeping the group
-DM around in their view.
--}
 handleChannelRecipientRemoved :
     Discord.Id Discord.PrivateChannelId
     -> Discord.Id Discord.UserId
@@ -3003,20 +2998,20 @@ handleChannelRecipientRemoved :
 handleChannelRecipientRemoved channelId removedUserId model =
     case SeqDict.get channelId model.discordDmChannels of
         Just channel ->
-            case NonemptyDict.remove removedUserId channel.members |> NonemptyDict.fromSeqDict of
-                Just members ->
-                    ( { model
-                        | discordDmChannels =
+            ( { model
+                | discordDmChannels =
+                    case NonemptyDict.remove removedUserId channel.members |> NonemptyDict.fromSeqDict of
+                        Just members ->
                             SeqDict.insert channelId { channel | members = members } model.discordDmChannels
-                      }
-                    , Broadcast.toDiscordDmChannel
-                        channelId
-                        (Server_DiscordDmChannelRecipientRemoved channelId removedUserId |> ServerChange)
-                        model
-                    )
 
-                Nothing ->
-                    ( model, Command.none )
+                        Nothing ->
+                            SeqDict.remove channelId model.discordDmChannels
+              }
+            , Broadcast.toDiscordDmChannel
+                channelId
+                (Server_DiscordDmChannelRecipientRemoved channelId removedUserId |> ServerChange)
+                model
+            )
 
         Nothing ->
             ( model, Command.none )

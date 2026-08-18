@@ -4479,15 +4479,20 @@ changeUpdate localMsg local =
                 Server_DiscordDmChannelRecipientRemoved channelId removedUserId ->
                     { local
                         | discordDmChannels =
-                            SeqDict.updateIfExists
+                            SeqDict.update
                                 channelId
-                                (\channel ->
-                                    case NonemptyDict.remove removedUserId channel.members |> NonemptyDict.fromSeqDict of
-                                        Just members ->
-                                            { channel | members = members }
+                                (\maybe ->
+                                    case maybe of
+                                        Just channel ->
+                                            case NonemptyDict.remove removedUserId channel.members |> NonemptyDict.fromSeqDict of
+                                                Just members ->
+                                                    Just { channel | members = members }
+
+                                                Nothing ->
+                                                    Just channel
 
                                         Nothing ->
-                                            channel
+                                            Nothing
                                 )
                                 local.discordDmChannels
                     }
