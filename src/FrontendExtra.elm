@@ -148,6 +148,9 @@ pendingChangesText localChange =
         Local_DeleteGuild _ ->
             "Deleted guild"
 
+        Local_LeaveGuild _ ->
+            "Left guild"
+
         Local_NewInviteLink _ _ _ ->
             "Created invite link"
 
@@ -1944,6 +1947,9 @@ isPressMsg msg =
         PressedDeleteGuild _ ->
             True
 
+        PressedLeaveGuild _ ->
+            True
+
         PressedCreateInviteLink _ ->
             True
 
@@ -2690,6 +2696,9 @@ changeUpdate localMsg local =
                     }
 
                 Local_DeleteGuild guildId ->
+                    { local | guilds = SeqDict.remove guildId local.guilds }
+
+                Local_LeaveGuild guildId ->
                     { local | guilds = SeqDict.remove guildId local.guilds }
 
                 Local_NewInviteLink time guildId inviteLinkId ->
@@ -4000,6 +4009,24 @@ changeUpdate localMsg local =
                                 local.guilds
                         , localUser = { localUser | otherUsers = SeqDict.insert userId user localUser.otherUsers }
                     }
+
+                Server_MemberLeft userId guildId ->
+                    if userId == local.localUser.session.userId then
+                        { local | guilds = SeqDict.remove guildId local.guilds }
+
+                    else
+                        { local
+                            | guilds =
+                                SeqDict.updateIfExists
+                                    guildId
+                                    (\guild ->
+                                        { guild
+                                            | membersAndOwner =
+                                                MembersAndOwner.removeMember userId guild.membersAndOwner
+                                        }
+                                    )
+                                    local.guilds
+                        }
 
                 Server_YouJoinedGuildByInvite result ->
                     case result of

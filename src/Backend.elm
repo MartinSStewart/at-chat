@@ -3093,6 +3093,40 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_LeaveGuild guildId ->
+                    BackendExtra.asGuildMember
+                        model
+                        sessionId
+                        guildId
+                        (\session _ guild ->
+                            if MembersAndOwner.owner guild.membersAndOwner == session.userId then
+                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                            else
+                                ( { model
+                                    | guilds =
+                                        SeqDict.insert
+                                            guildId
+                                            { guild
+                                                | membersAndOwner =
+                                                    MembersAndOwner.removeMember
+                                                        session.userId
+                                                        guild.membersAndOwner
+                                            }
+                                            model.guilds
+                                  }
+                                , Command.batch
+                                    [ LocalChangeResponse changeId localMsg
+                                        |> Lamdera.sendToFrontend clientId
+                                    , Broadcast.toGuildExcludingOne
+                                        clientId
+                                        guildId
+                                        (Server_MemberLeft session.userId guildId |> ServerChange)
+                                        model
+                                    ]
+                                )
+                        )
+
                 Local_NewInviteLink _ guildId _ ->
                     BackendExtra.asGuildMember
                         model

@@ -2938,7 +2938,7 @@ guildSettingsView model loggedIn local guildId guild =
                 deleteGuildSection guildId guild editGuildForm
 
               else
-                Ui.none
+                leaveGuildSection guildId editGuildForm
             ]
         )
 
@@ -2948,6 +2948,7 @@ editGuildFormInit guild =
     { name = GuildName.toString guild.name
     , deleteConfirmation = ""
     , showDeleteConfirmation = False
+    , showLeaveConfirmation = False
     , pressedSubmit = False
     }
 
@@ -3057,6 +3058,46 @@ deleteGuildSection guildId guild form =
             , Ui.border 1
             ]
             (Ui.text "Delete guild")
+        ]
+
+
+leaveGuildSection : Id GuildId -> EditGuildForm -> Element FrontendMsg_
+leaveGuildSection guildId form =
+    Ui.column
+        [ Ui.spacing 12, Ui.paddingXY 16 0 ]
+        [ Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border2 ] Ui.none
+        , if form.showLeaveConfirmation then
+            Ui.el
+                [ Ui.Font.color MyUi.font2 ]
+                (Ui.text "You'll need a new invite link to rejoin. Are you sure?")
+
+          else
+            Ui.none
+        , MyUi.elButton
+            (Dom.id "guild_leaveGuild")
+            (if form.showLeaveConfirmation then
+                PressedLeaveGuild guildId
+
+             else
+                EditGuildFormChanged guildId { form | showLeaveConfirmation = True }
+            )
+            [ Ui.paddingXY 16 4
+            , Ui.background MyUi.deleteButtonBackground
+            , Ui.width Ui.shrink
+            , Ui.rounded 4
+            , Ui.Font.color MyUi.deleteButtonFont
+            , Ui.Font.bold
+            , Ui.borderColor MyUi.deleteButtonBorder
+            , Ui.border 1
+            ]
+            (Ui.text
+                (if form.showLeaveConfirmation then
+                    "Yes, leave guild"
+
+                 else
+                    "Leave guild"
+                )
+            )
         ]
 
 

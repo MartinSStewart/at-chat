@@ -1175,6 +1175,27 @@ updateLoaded msg model =
                 NotLoggedIn _ ->
                     ( model, Command.none )
 
+        PressedLeaveGuild guildId ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    let
+                        ( model2, cmd ) =
+                            FrontendExtra.routePush model HomePageRoute
+
+                        ( loggedIn2, cmd2 ) =
+                            FrontendExtra.handleLocalChange
+                                model2.time
+                                (Local_LeaveGuild guildId |> Just)
+                                { loggedIn
+                                    | editGuildForm = SeqDict.remove guildId loggedIn.editGuildForm
+                                }
+                                cmd
+                    in
+                    ( { model | loginStatus = LoggedIn loggedIn2 }, cmd2 )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
+
         PressedCreateInviteLink guildId ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->

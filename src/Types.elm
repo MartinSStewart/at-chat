@@ -477,6 +477,7 @@ type FrontendMsg_
     | PressedResetEditGuildChanges (Id GuildId)
     | PressedSubmitEditGuildChanges (Id GuildId) EditGuildForm
     | PressedDeleteGuild (Id GuildId)
+    | PressedLeaveGuild (Id GuildId)
     | PressedCreateInviteLink (Id GuildId)
     | PressedDeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | PressedToggleInviteLinkQrCode (SecretId InviteLinkId)
@@ -629,6 +630,7 @@ type alias EditGuildForm =
     { name : String
     , deleteConfirmation : String
     , showDeleteConfirmation : Bool
+    , showLeaveConfirmation : Bool
     , pressedSubmit : Bool
     }
 
@@ -879,6 +881,7 @@ type ServerChange
     | Server_NewInviteLink Time.Posix (Id UserId) (Id GuildId) (SecretId InviteLinkId)
     | Server_DeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | Server_MemberJoined Time.Posix (Id UserId) (Id GuildId) FrontendUser
+    | Server_MemberLeft (Id UserId) (Id GuildId)
     | Server_YouJoinedGuildByInvite
         (Result
             JoinGuildError
@@ -969,6 +972,7 @@ type LocalChange
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
     | Local_EditGuildName (Id GuildId) GuildName
     | Local_DeleteGuild (Id GuildId)
+    | Local_LeaveGuild (Id GuildId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
     | Local_DeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))

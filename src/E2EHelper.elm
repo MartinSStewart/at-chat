@@ -2226,6 +2226,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_DeleteGuild _ ->
                     True
 
+                Local_LeaveGuild _ ->
+                    True
+
                 Local_NewInviteLink _ _ _ ->
                     True
 
@@ -2408,6 +2411,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_MemberJoined _ _ _ _ ->
+                            True
+
+                        Types.Server_MemberLeft _ _ ->
                             True
 
                         Types.Server_YouJoinedGuildByInvite result ->
@@ -2761,6 +2767,7 @@ allAttackerLocalChanges =
     , Local_EditChannel legitGuildId channelId (Unsafe.channelName "hacked") ChannelDescription.empty
     , Local_EditGuildName legitGuildId (Unsafe.guildName "hacked")
     , Local_Invalid
+    , Local_LeaveGuild legitGuildId
     , Local_LinkDiscordAcknowledgementIsChecked True
     , Local_LoadChannelMessages (GuildOrDmId_Dm { otherUserId = normalUserId }) (Id.fromInt 0) EmptyPlaceholder
     , Local_LoadThreadMessages (GuildOrDmId_Dm { otherUserId = normalUserId }) (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder

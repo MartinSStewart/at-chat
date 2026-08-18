@@ -2243,6 +2243,9 @@ toBackendLog toBackend =
                 Local_DeleteGuild _ ->
                     ToBackendLog_Local_DeleteGuild
 
+                Local_LeaveGuild _ ->
+                    ToBackendLog_Local_LeaveGuild
+
                 Local_NewInviteLink _ _ _ ->
                     ToBackendLog_Local_NewInviteLink
 
