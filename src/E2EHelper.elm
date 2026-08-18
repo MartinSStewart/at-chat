@@ -2142,9 +2142,38 @@ startTest name startTime2 config actions =
                             Types.Loading _ ->
                                 Err "Attacker didn't load for some reason"
                     )
+                , T.checkBackend 100 onlyTheAttackerIsConnected
                 ]
             )
         ]
+
+
+{-| Every frontend a test connects gets disconnected once it's done with, so by the time the test
+ends the attacker should be the only one the backend still has a connection for. If anything else is
+left over then a disconnect didn't clean up after itself.
+-}
+onlyTheAttackerIsConnected : BackendModel2 -> Result String ()
+onlyTheAttackerIsConnected model =
+    let
+        connections : List ( SessionId, Int )
+        connections =
+            SeqDict.toList (unwrapBackend model).connections
+                |> List.map (Tuple.mapSecond NonemptyDict.size)
+    in
+    if connections == [ ( sessionIdAttacker, 1 ) ] then
+        Ok ()
+
+    else
+        Err
+            ("Expected the attacker to be the only connection left at the end of the test but got "
+                ++ (List.map
+                        (\( sessionId, count ) ->
+                            Lamdera.sessionIdToString sessionId ++ " (" ++ String.fromInt count ++ ")"
+                        )
+                        connections
+                        |> String.join ", "
+                   )
+            )
 
 
 attackerShouldNotGetThisToFrontend : ToFrontend -> Bool
