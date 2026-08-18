@@ -6369,7 +6369,11 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
                 , emojiSelector = { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
               }
                 |> MessageMenu.close model
-            , Command.none
+            , if MyUi.isMobile model then
+                Command.none
+
+              else
+                Dom.focus Emoji.searchInputId |> Task.attempt (\_ -> SetFocus)
             )
         )
         model

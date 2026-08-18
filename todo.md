@@ -10,7 +10,6 @@
 * If someone links their Discord account, when the linking finishes, show all the accounts they are a part of, not just
   all the ones that loaded (some might already be loaded)
 * Unlinking a Discord account causes "Something went wrong" to appear in the direct message list
-* Automatically set focus on search input when opening emoji picker (doesn't work for reaction emojis)
 * I played a premove and it failed and when I looked at the board, the premoved letters had switched (the word itself
   was invalid so it's unclear if the letter switch is just a visual bug).
   Update: it seems like this might be caused by premoving, switching to another device and doing another turn, and then
