@@ -27,6 +27,7 @@ module UserSession exposing
     , setPreviouslyLastViewedThreadMessage
     , setViewingToCurrentlyViewing
     , toFrontend
+    , toggleUserOptionSection
     , unreadOverviewMessageLimit
     )
 
@@ -426,6 +427,18 @@ init time sessionId userId userAgent =
     , sessionIdHash = SessionIdHash.fromSessionId sessionId
     , signedInAt = time
     , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
+    }
+
+
+toggleUserOptionSection : UserOptionSection -> UserSession -> UserSession
+toggleUserOptionSection section session =
+    { session
+        | expandedUserOptions =
+            if SeqSet.member section session.expandedUserOptions then
+                SeqSet.remove section session.expandedUserOptions
+
+            else
+                SeqSet.insert section session.expandedUserOptions
     }
 
 

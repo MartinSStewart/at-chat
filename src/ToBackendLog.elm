@@ -58,6 +58,7 @@ type ToBackendLog
     | ToBackendLog_Local_SetGuildNotificationLevel
     | ToBackendLog_Local_SetDiscordGuildNotificationLevel
     | ToBackendLog_Local_SetNotificationMode
+    | ToBackendLog_Local_ToggleUserOptionSection
     | ToBackendLog_Local_SetEmailNotifications
     | ToBackendLog_Local_RegisterPushSubscription
     | ToBackendLog_Local_TextEditor
@@ -227,6 +228,9 @@ toBackendLogToString log =
 
         ToBackendLog_Local_SetNotificationMode ->
             "Local_SetNotificationMode"
+
+        ToBackendLog_Local_ToggleUserOptionSection ->
+            "Local_ToggleUserOptionSection"
 
         ToBackendLog_Local_SetEmailNotifications ->
             "Local_SetEmailNotifications"

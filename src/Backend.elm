@@ -5076,6 +5076,22 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_ToggleUserOptionSection section ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\session _ ->
+                            ( { model
+                                | sessions =
+                                    SeqDict.insert
+                                        sessionId
+                                        (UserSession.toggleUserOptionSection section session)
+                                        model.sessions
+                              }
+                            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                            )
+                        )
+
                 Local_SetEmailNotifications emailNotifications ->
                     BackendExtra.asUser
                         model

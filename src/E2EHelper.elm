@@ -2321,6 +2321,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetNotificationMode _ ->
                     False
 
+                Local_ToggleUserOptionSection _ ->
+                    False
+
                 Local_SetEmailNotifications _ ->
                     False
 
@@ -2800,6 +2803,7 @@ allAttackerLocalChanges =
     , Local_SetMuteThread legitGuildId channelId (Id.fromInt 0) MuteSettings.IsMuted
     , Local_SetName (Unsafe.personName "hacked")
     , Local_SetNotificationMode NoNotifications
+    , Local_ToggleUserOptionSection UserSession.UserOption_Debug
     , Local_SetEmailNotifications User.NotifyMeWhenMentioned
     , Local_StartReloadingDiscordUser messageTime discordUserId
     , Local_TextEditor TextEditor.Local_Reset

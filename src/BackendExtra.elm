@@ -2309,6 +2309,9 @@ toBackendLog toBackend =
                 Local_SetNotificationMode _ ->
                     ToBackendLog_Local_SetNotificationMode
 
+                Local_ToggleUserOptionSection _ ->
+                    ToBackendLog_Local_ToggleUserOptionSection
+
                 Local_SetEmailNotifications _ ->
                     ToBackendLog_Local_SetEmailNotifications
 

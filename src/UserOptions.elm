@@ -247,7 +247,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     IsNotAdmin ->
                         Ui.none
                 , MyUi.container
-                    (SeqSet.member UserOption_Settings loggedIn.expandedUserOptions)
+                    (SeqSet.member UserOption_Settings local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_settings")
                     (PressedExpandContainer UserOption_Settings)
                     MyUi.background1
@@ -367,7 +367,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     --    (Ui.text "Link Slack account")
                     ]
                 , MyUi.container
-                    (SeqSet.member UserOption_TwoFactorAuthentication loggedIn.expandedUserOptions)
+                    (SeqSet.member UserOption_TwoFactorAuthentication local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_twoFactor")
                     (PressedExpandContainer UserOption_TwoFactorAuthentication)
                     MyUi.background1
@@ -391,7 +391,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             model.domainWhitelistInput /= domainWhitelistToString local.localUser.user.domainWhitelist
                     in
                     MyUi.container
-                        (SeqSet.member UserOption_WhitelistedDomains loggedIn.expandedUserOptions)
+                        (SeqSet.member UserOption_WhitelistedDomains local.localUser.session.expandedUserOptions)
                         (Dom.id "userOptions_whitelistedDomains")
                         (PressedExpandContainer UserOption_WhitelistedDomains)
                         MyUi.background1
@@ -428,7 +428,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             Ui.none
                         ]
                 , MyUi.container
-                    (SeqSet.member UserOption_Discord loggedIn.expandedUserOptions)
+                    (SeqSet.member UserOption_Discord local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_discordSection")
                     (PressedExpandContainer UserOption_Discord)
                     MyUi.background1
@@ -498,7 +498,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         ]
                     ]
                 , MyUi.container
-                    (SeqSet.member UserOption_ConnectedDevices loggedIn.expandedUserOptions)
+                    (SeqSet.member UserOption_ConnectedDevices local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_connectedDevices")
                     (PressedExpandContainer UserOption_ConnectedDevices)
                     MyUi.background1
@@ -512,7 +512,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             (SeqDict.toList local.otherSessions)
                     )
                 , MyUi.container
-                    (SeqSet.member UserOption_Debug loggedIn.expandedUserOptions)
+                    (SeqSet.member UserOption_Debug local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_debug")
                     (PressedExpandContainer UserOption_Debug)
                     MyUi.background1

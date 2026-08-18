@@ -88,7 +88,7 @@ import Url exposing (Url)
 import User exposing (FrontendUser)
 import UserAgent
 import UserOptions
-import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..), UserOptionSection(..))
+import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
 import WordSpellingGame
 
@@ -555,7 +555,6 @@ loadedInitHelper startupData emojiData loginData loading =
             , showInviteLinkQrCode = Nothing
             , friendsSearch = ""
             , channelSearch = ""
-            , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
             , typedTextCounter = 0
             }
     in
@@ -2100,16 +2099,11 @@ updateLoaded msg model =
         PressedExpandContainer section ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn
-                        | expandedUserOptions =
-                            if SeqSet.member section loggedIn.expandedUserOptions then
-                                SeqSet.remove section loggedIn.expandedUserOptions
-
-                            else
-                                SeqSet.insert section loggedIn.expandedUserOptions
-                      }
-                    , Command.none
-                    )
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_ToggleUserOptionSection section |> Just)
+                        loggedIn
+                        Command.none
                 )
                 model
 
