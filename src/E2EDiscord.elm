@@ -3093,6 +3093,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ T.websocketSendString 100 connection groupChatCreated
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "at0232, joe" ])
                         , admin.click 100 (Dom.id "guild_discordFriendLabel_1539244611120144464")
                         ]
                     )
