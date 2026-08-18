@@ -78,7 +78,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionSection(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -88,7 +88,7 @@ import Url exposing (Url)
 import User exposing (FrontendUser)
 import UserAgent
 import UserOptions
-import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
+import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..), UserOptionSection(..))
 import Vector2d
 import WordSpellingGame
 

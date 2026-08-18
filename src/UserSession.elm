@@ -9,6 +9,7 @@ module UserSession exposing
     , SetViewing_ToBeFilledInByBackend(..)
     , ToBeFilledInByBackend(..)
     , UnreadOverviewData
+    , UserOptionSection(..)
     , UserSession
     , ViewDiscordGuildData
     , Viewing(..)
@@ -39,6 +40,7 @@ import Message exposing (Message)
 import PersonName exposing (PersonName)
 import Ports exposing (SubscribeData)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import UserAgent exposing (UserAgent)
 
@@ -50,7 +52,17 @@ type alias UserSession =
     , userAgent : UserAgent
     , sessionIdHash : SessionIdHash
     , signedInAt : Time.Posix
+    , expandedUserOptions : SeqSet UserOptionSection
     }
+
+
+type UserOptionSection
+    = UserOption_TwoFactorAuthentication
+    | UserOption_Settings
+    | UserOption_WhitelistedDomains
+    | UserOption_Discord
+    | UserOption_ConnectedDevices
+    | UserOption_Debug
 
 
 type alias FrontendUserSession =
@@ -413,6 +425,7 @@ init time sessionId userId userAgent =
     , userAgent = userAgent
     , sessionIdHash = SessionIdHash.fromSessionId sessionId
     , signedInAt = time
+    , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
     }
 
 

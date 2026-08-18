@@ -24,7 +24,7 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Time
 import TwoFactorAuthentication
-import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionSection(..), UserOptionsModel)
+import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -32,7 +32,7 @@ import Ui.Input
 import Ui.Prose
 import User
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
-import UserSession exposing (NotificationMode(..), PushSubscription(..))
+import UserSession exposing (NotificationMode(..), PushSubscription(..), UserOptionSection(..))
 
 
 init : SeqSet RichText.Domain -> UserOptionsModel
