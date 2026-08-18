@@ -86,7 +86,7 @@ import ImageViewer
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordChannelReload, DiscordFrontendGuild, DiscordRole, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
+import LocalState exposing (BackendChannel, BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReload, DiscordFrontendGuild, DiscordRole, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -769,13 +769,22 @@ type MessageFromGuildOrDm
     | MessageFromGuildOrDm_Dm (Discord.Id Discord.PrivateChannelId)
 
 
+{-| A guild is encoded one channel at a time so that no single step has to encode
+a whole guild. `encodedGuilds` therefore holds a guild header followed by that
+guild's channels rather than one entry per guild, and `encodedGuildCount` says how
+many guilds those entries add up to. The Discord guilds work the same way.
+-}
 type alias ExportStateProgress =
     { baseModel : Bytes
     , remainingGuilds : List ( Id GuildId, BackendGuild )
+    , remainingGuildChannels : List ( Id ChannelId, BackendChannel )
+    , encodedGuildCount : Int
     , encodedGuilds : List Bytes
     , remainingDmChannels : List ( DmChannelId, DmChannel )
     , encodedDmChannels : List Bytes
     , remainingDiscordGuilds : List ( Discord.Id Discord.GuildId, DiscordBackendGuild )
+    , remainingDiscordGuildChannels : List ( Discord.Id Discord.ChannelId, DiscordBackendChannel )
+    , encodedDiscordGuildCount : Int
     , encodedDiscordGuilds : List Bytes
     , remainingDiscordDmChannels : List ( Discord.Id Discord.PrivateChannelId, DiscordDmChannel )
     , encodedDiscordDmChannels : List Bytes

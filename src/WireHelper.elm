@@ -2,9 +2,11 @@ module WireHelper exposing
     ( decodeStreamedBackendModel
     , encodeBackendModel
     , encodeDiscordDmChannel
-    , encodeDiscordGuild
+    , encodeDiscordGuildChannel
+    , encodeDiscordGuildHeader
     , encodeDmChannel
-    , encodeGuild
+    , encodeGuildChannel
+    , encodeGuildHeader
     , foldStreamedBackendModel
     )
 
@@ -17,7 +19,7 @@ import Bytes.Encode exposing (Encoder)
 import Discord
 import DmChannel
 import DmChannelId exposing (DmChannelId)
-import Id exposing (GuildId, Id)
+import Id exposing (ChannelId, GuildId, Id)
 import Lamdera.Wire3
 import LocalState
 import SeqDict
@@ -34,19 +36,42 @@ decodeBackendModel =
     Types.w3_decode_BackendModel
 
 
-encodeGuild : ( Id GuildId, LocalState.BackendGuild ) -> Encoder
-encodeGuild ( key, value ) =
+{-| A guild is written as this header followed by one encoding per channel, so
+that encoding a guild can be spread over as many steps as it has channels. The
+header carries the guild with its channels emptied out, then the number of
+channel encodings that follow it.
+-}
+encodeGuildHeader : ( Id GuildId, LocalState.BackendGuild ) -> Encoder
+encodeGuildHeader ( key, value ) =
     Bytes.Encode.sequence
         [ Id.w3_encode_Id Lamdera.Wire3.failEncode key
-        , LocalState.w3_encode_BackendGuild value
+        , LocalState.w3_encode_BackendGuild { value | channels = SeqDict.empty }
+        , Bytes.Encode.unsignedInt32 Bytes.BE (SeqDict.size value.channels)
+        ]
+
+
+encodeGuildChannel : ( Id ChannelId, LocalState.BackendChannel ) -> Encoder
+encodeGuildChannel ( key, value ) =
+    Bytes.Encode.sequence
+        [ Id.w3_encode_Id Lamdera.Wire3.failEncode key
+        , LocalState.w3_encode_BackendChannel value
         ]
 
 
 decodeGuild : Decoder ( Id GuildId, LocalState.BackendGuild )
 decodeGuild =
-    Bytes.Decode.map2 Tuple.pair
+    Bytes.Decode.map3
+        (\key value channels -> ( key, { value | channels = SeqDict.fromList channels } ))
         (Id.w3_decode_Id Lamdera.Wire3.failDecode)
         LocalState.w3_decode_BackendGuild
+        (decodeLengthPrefixedList decodeGuildChannel)
+
+
+decodeGuildChannel : Decoder ( Id ChannelId, LocalState.BackendChannel )
+decodeGuildChannel =
+    Bytes.Decode.map2 Tuple.pair
+        (Id.w3_decode_Id Lamdera.Wire3.failDecode)
+        LocalState.w3_decode_BackendChannel
 
 
 encodeDmChannel : ( DmChannelId, DmChannel.DmChannel ) -> Encoder
@@ -64,19 +89,40 @@ decodeDmChannel =
         DmChannel.w3_decode_DmChannel
 
 
-encodeDiscordGuild : ( Discord.Id Discord.GuildId, LocalState.DiscordBackendGuild ) -> Encoder
-encodeDiscordGuild ( key, value ) =
+{-| Written the same way `encodeGuildHeader` writes a guild: the guild without
+its channels, the number of channels, and then one encoding per channel.
+-}
+encodeDiscordGuildHeader : ( Discord.Id Discord.GuildId, LocalState.DiscordBackendGuild ) -> Encoder
+encodeDiscordGuildHeader ( key, value ) =
     Bytes.Encode.sequence
         [ Discord.w3_encode_Id Lamdera.Wire3.failEncode key
-        , LocalState.w3_encode_DiscordBackendGuild value
+        , LocalState.w3_encode_DiscordBackendGuild { value | channels = SeqDict.empty }
+        , Bytes.Encode.unsignedInt32 Bytes.BE (SeqDict.size value.channels)
+        ]
+
+
+encodeDiscordGuildChannel : ( Discord.Id Discord.ChannelId, LocalState.DiscordBackendChannel ) -> Encoder
+encodeDiscordGuildChannel ( key, value ) =
+    Bytes.Encode.sequence
+        [ Discord.w3_encode_Id Lamdera.Wire3.failEncode key
+        , LocalState.w3_encode_DiscordBackendChannel value
         ]
 
 
 decodeDiscordGuild : Decoder ( Discord.Id Discord.GuildId, LocalState.DiscordBackendGuild )
 decodeDiscordGuild =
-    Bytes.Decode.map2 Tuple.pair
+    Bytes.Decode.map3
+        (\key value channels -> ( key, { value | channels = SeqDict.fromList channels } ))
         (Discord.w3_decode_Id Lamdera.Wire3.failDecode)
         LocalState.w3_decode_DiscordBackendGuild
+        (decodeLengthPrefixedList decodeDiscordGuildChannel)
+
+
+decodeDiscordGuildChannel : Decoder ( Discord.Id Discord.ChannelId, LocalState.DiscordBackendChannel )
+decodeDiscordGuildChannel =
+    Bytes.Decode.map2 Tuple.pair
+        (Discord.w3_decode_Id Lamdera.Wire3.failDecode)
+        LocalState.w3_decode_DiscordBackendChannel
 
 
 encodeDiscordDmChannel : ( Discord.Id Discord.PrivateChannelId, DmChannel.DiscordDmChannel ) -> Encoder
