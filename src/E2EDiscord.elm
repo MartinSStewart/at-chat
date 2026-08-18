@@ -24,6 +24,7 @@ import Json.Decode
 import Json.Encode
 import LinkedAndOtherDiscordUsers
 import List.Extra
+import List.Nonempty
 import Local exposing (ChangeId(..))
 import LocalState
 import MembersAndOwner
@@ -2257,6 +2258,59 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Discord messages written before an account was linked start out read"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ -- Messages pile up in a Discord guild channel while the admin is the only
+                          -- at-chat user with a Discord account linked.
+                          discordGuildMessageFromGuildOnlyUser connection "Written before the second user linked"
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , E2EHelper.hasNotExactText admin [ "You have no unread messages!" ]
+                        ]
+                    )
+
+                -- A second at-chat user links a Discord account that is a member of the same guild.
+                , E2EHelper.linkDiscordAndLoginSecondUser
+                    E2EHelper.sessionId1
+                    "Second User"
+                    E2EHelper.userEmail
+                    discordOp0Ready
+                    discordOp0ReadySupplemental
+                    (\_ -> [])
+
+                -- The guild already existed on the backend, so the second user only receives it on a
+                -- fresh page load. The messages predate the link, so none of them count as unread.
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    "/"
+                    E2EHelper.desktopWindow
+                    (\userB ->
+                        [ T.andThen
+                            10
+                            (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        , E2EHelper.hasExactText userB [ "You have no unread messages!" ]
+
+                        -- Sanity check: the second user really can see the guild and the message that
+                        -- was marked as read, so the check above isn't passing for lack of data.
+                        , userB.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , E2EHelper.hasExactText userB [ "Written before the second user linked" ]
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Discord group DM notification shows red icon in guild column"
         E2EHelper.startTime
         normalConfig
@@ -2630,7 +2684,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                             }
                                         , previouslyLastViewedMessage = UserSession.DontCare
                                         }
-                                        UserSession.SetViewing_EmptyPlaceholder
+                                        UserSession.EmptyPlaceholder
                                     )
                                 )
                             )
@@ -3078,89 +3132,141 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
+    , E2EHelper.startTest
+        "A Discord channel waiting on its messages doesn't claim to be at its start"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ -- A message lands in channel A while the admin is elsewhere, so the
+                          -- channel has something to fetch when they open it.
+                          discordGuildMessage connection "Written while looking elsewhere"
 
-    --, startTest
-    --    "Discord guild thread typing indicator"
-    --    startTime
-    --    normalConfig
-    --    [ linkDiscordAndLogin
-    --        sessionId0
-    --        (PersonName.toString Backend.adminUser.name)
-    --        adminEmail
-    --        False
-    --        discordOp0Ready
-    --        discordOp0ReadySupplemental
-    --        (\admin ->
-    --            [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-    --            , andThenWebsocket
-    --                (\connection _ ->
-    --                    [ T.websocketSendString
-    --                        100
-    --                        connection
-    --                        "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":18,\"tts\":false,\"timestamp\":\"2026-03-26T12:10:08.752000+00:00\",\"pinned\":false,\"message_reference\":{\"type\":0,\"guild_id\":\"705745250815311942\",\"channel_id\":\"1486698771915083887\"},\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1486698771915083887\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"Thread starter\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
-    --                    , T.websocketSendString
-    --                        100
-    --                        connection
-    --                        "{\"t\":\"MESSAGE_UPDATE\",\"s\":5,\"op\":0,\"d\":{\"type\":18,\"tts\":false,\"timestamp\":\"2026-03-26T12:10:08.752000+00:00\",\"pinned\":false,\"message_reference\":{\"type\":0,\"guild_id\":\"705745250815311942\",\"channel_id\":\"1486698771915083887\"},\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1486698771915083887\",\"flags\":32,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"Thread starter\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
-    --                    , T.websocketSendString
-    --                        100
-    --                        connection
-    --                        "{\"t\":\"GUILD_AUDIT_LOG_ENTRY_CREATE\",\"s\":6,\"op\":0,\"d\":{\"user_id\":\"161098476632014848\",\"target_id\":\"1486698771915083887\",\"id\":\"1486698771915083888\",\"changes\":[{\"new_value\":\"Thread starter\",\"key\":\"name\"},{\"new_value\":11,\"key\":\"type\"},{\"new_value\":false,\"key\":\"archived\"},{\"new_value\":false,\"key\":\"locked\"},{\"new_value\":4320,\"key\":\"auto_archive_duration\"},{\"new_value\":0,\"key\":\"rate_limit_per_user\"},{\"new_value\":0,\"key\":\"flags\"}],\"action_type\":110,\"guild_id\":\"705745250815311942\"}}"
-    --                    , T.websocketSendString
-    --                        100
-    --                        connection
-    --                        "{\"t\":\"THREAD_MEMBERS_UPDATE\",\"s\":7,\"op\":0,\"d\":{\"member_ids_preview\":[\"161098476632014848\",\"184437096813953035\"],\"member_count\":2,\"id\":\"1486698771915083887\",\"added_members\":[{\"user_id\":\"184437096813953035\",\"presence\":{\"user\":{\"username\":\"at28727\",\"primary_guild\":null,\"id\":\"184437096813953035\",\"global_name\":\"AT2\",\"discriminator\":\"0\",\"clan\":null,\"bot\":false,\"avatar_decoration_data\":null,\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"},\"status\":\"online\",\"processed_at_timestamp\":0,\"game\":null,\"client_status\":{\"web\":\"online\"},\"activities\":[]},\"muted\":false,\"mute_config\":null,\"member\":{\"user\":{\"username\":\"at28727\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"184437096813953035\",\"global_name\":\"AT2\",\"display_name_styles\":null,\"display_name\":\"AT2\",\"discriminator\":\"0\",\"collectibles\":null,\"bot\":false,\"avatar_decoration_data\":null,\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"},\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2025-10-11T19:44:51.312000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"join_timestamp\":\"2026-03-26T12:10:09.250111+00:00\",\"id\":\"1486698771915083887\",\"flags\":1}],\"guild_id\":\"705745250815311942\"}}"
-    --                    , T.andThen
-    --                        100
-    --                        (\data ->
-    --                            case
-    --                                List.filter
-    --                                    (\request ->
-    --                                        case ( request.url, decodeCustomRequest request ) of
-    --                                            ( "http://localhost:3000/file/internal/custom-request", Just ( method, url ) ) ->
-    --                                                (url == "https://discord.com/api/v9/channels/1486698771915083887/thread-members/@me")
-    --                                                    && (method == "PUT")
-    --
-    --                                            _ ->
-    --                                                False
-    --                                    )
-    --                                    data.httpRequests
-    --                            of
-    --                                [ _ ] ->
-    --                                    [ T.websocketSendString
-    --                                        100
-    --                                        connection
-    --                                        "{\"t\":\"THREAD_CREATE\",\"s\":8,\"op\":0,\"d\":{\"type\":11,\"total_message_sent\":0,\"thread_metadata\":{\"locked\":false,\"create_timestamp\":\"2026-03-26T12:10:08.752000+00:00\",\"auto_archive_duration\":4320,\"archived\":false,\"archive_timestamp\":\"2026-03-26T12:10:08.752000+00:00\"},\"rate_limit_per_user\":0,\"parent_id\":\"1072828564317159465\",\"owner_id\":\"161098476632014848\",\"name\":\"Thread starter\",\"message_count\":0,\"member_ids_preview\":[\"161098476632014848\",\"184437096813953035\"],\"member_count\":2,\"member\":{\"user_id\":\"184437096813953035\",\"muted\":false,\"mute_config\":null,\"join_timestamp\":\"2026-03-26T12:10:09.250111+00:00\",\"id\":\"1486698771915083887\",\"flags\":1},\"last_message_id\":null,\"id\":\"1486698771915083887\",\"guild_id\":\"705745250815311942\",\"flags\":0}}"
-    --                                    , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Thread starter" ])
-    --
-    --                                    -- Click on thread to open it
-    --                                    , admin.click 100 (Dom.id "guild_threadStarterIndicator_0")
-    --
-    --                                    -- No typing indicator yet
-    --                                    , admin.checkView
-    --                                        100
-    --                                        (Test.Html.Query.hasNot
-    --                                            [ Test.Html.Selector.exactText "at0232 is typing..." ]
-    --                                        )
-    --
-    --                                    -- Send typing start in the thread channel
-    --                                    , T.websocketSendString 100 connection "{\"t\":\"TYPING_START\",\"s\":9,\"op\":0,\"d\":{\"channel_id\":\"1486698771915083887\",\"guild_id\":\"705745250815311942\",\"user_id\":\"161098476632014848\",\"timestamp\":1}}"
-    --                                    , admin.checkView
-    --                                        100
-    --                                        (Test.Html.Query.has
-    --                                            [ Test.Html.Selector.exactText "at0232 is typing..." ]
-    --                                        )
-    --                                    ]
-    --
-    --                                _ ->
-    --                                    [ T.checkBackend 100 (\_ -> Err "Didn't join thread") ]
-    --                        )
-    --                    ]
-    --                )
-    --            ]
-    --        )
-    --    ]
+                        -- The assertions below look at the view midway through a load, so the
+                        -- round trip is stretched out to leave room to look.
+                        , admin.setNetworkLatency 100 { toBackendLatency = 1000, toFrontendLatency = 1000 }
+                        , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+
+                        -- The channel's messages are still on their way, so the header saying
+                        -- the channel starts here keeps quiet.
+                        , admin.checkView
+                            500
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "This is the start of" ])
+
+                        -- Once they land the messages and the header both turn up.
+                        , admin.checkView
+                            3000
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Written while looking elsewhere" ]
+                            )
+                        , admin.checkView
+                            0
+                            (Test.Html.Query.has [ Test.Html.Selector.text "This is the start of" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Handle group DM created"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection groupChatCreated
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "at0232, joe" ])
+                        , admin.click 100 (Dom.id "guild_discordFriendLabel_1539244611120144464")
+                        , admin.snapshotView 100 { name = "Group chat with 3 members " }
+
+                        -- at0232 leaves the group DM. The group DM stops being named after
+                        -- them, while joe and the linked account carry on.
+                        , T.websocketSendString 100 connection groupChatRecipientRemoved
+                        , T.checkBackend
+                            100
+                            (checkGroupChatMembers
+                                [ Discord.idToString E2EHelper.currentDiscordUserId, "12312312312312312312" ]
+                            )
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "joe" ])
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "at0232, joe" ])
+                        , admin.snapshotView 100 { name = "Group chat with only 2 members left" }
+                        , admin.click 100 (Dom.id "guild_discordFriendLabel_1539244611120144464")
+                        ]
+                    )
+                ]
+            )
+        ]
     ]
+
+
+groupChatCreated : String
+groupChatCreated =
+    """{"t":"CHANNEL_CREATE"
+,"s":3
+,"op":0
+,"d":
+    {"type":3
+    ,"recipients":
+        [   {"username":"at0232"
+            ,"public_flags":0
+            ,"primary_guild":null
+            ,"id":"161098476632014848"
+            ,"global_name":"AT"
+            ,"display_name_styles":null
+            ,"discriminator":"0"
+            ,"collectibles":null
+            ,"clan":null
+            ,"avatar_decoration_data":null
+            ,"avatar":"3d7b1aa7b5149fe06971b6dedf682d82"
+            }
+        ,   {"username":"joe"
+            ,"public_flags":0,"primary_guild":null
+            ,"id":"12312312312312312312"
+            ,"global_name":"joejoe"
+            ,"display_name_styles":null
+            ,"discriminator":"0"
+            ,"collectibles":null
+            ,"clan":null
+            ,"avatar_decoration_data":null
+            ,"avatar":"32132132132132132132132132132132"
+            }
+        ]
+    ,"recipient_flags":0
+    ,"owner_id":"161098476632014848"
+    ,"origin_channel_id":"185574444641550336"
+    ,"name":null
+    ,"last_message_id":null
+    ,"id":"1539244611120144464"
+    ,"icon":null
+    ,"flags":0
+    ,"blocked_user_warning_dismissed":false
+    }
+}"""
+
+
+{-| A `CHANNEL_RECIPIENT_REMOVE` for the group DM `groupChatCreated` makes, saying that
+at0232 is no longer in it.
+-}
+groupChatRecipientRemoved : String
+groupChatRecipientRemoved =
+    """{"t":"CHANNEL_RECIPIENT_REMOVE","s":6,"op":0,"d":{"user":{"username":"at0232","public_flags":0,"primary_guild":null,"id":"161098476632014848","global_name":"AT","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"3d7b1aa7b5149fe06971b6dedf682d82"},"channel_id":"1539244611120144464"}}"""
 
 
 {-| A unique value derived from the current test time. Used for the gateway sequence
@@ -3476,6 +3582,44 @@ checkDiscordUserLoaded label shouldBeLoaded discordUserId model =
 
         Types.Loading _ ->
             Err (label ++ ": expected the frontend to have finished loading")
+
+
+{-| Check exactly who the backend has as members of the group DM created by
+`groupChatCreated`, given their Discord user ids as strings. Both sides are sorted first,
+since the order members are stored in doesn't mean anything.
+-}
+checkGroupChatMembers : List String -> E2EHelper.BackendModel2 -> Result String ()
+checkGroupChatMembers expected backend =
+    case SeqDict.get groupChatChannelId (E2EHelper.unwrapBackend backend).discordDmChannels of
+        Just channel ->
+            let
+                actual : List String
+                actual =
+                    NonemptyDict.keys channel.members
+                        |> List.Nonempty.toList
+                        |> List.map Discord.idToString
+                        |> List.sort
+            in
+            if actual == List.sort expected then
+                Ok ()
+
+            else
+                Err
+                    ("Expected the group DM members to be "
+                        ++ String.join ", " (List.sort expected)
+                        ++ " but got "
+                        ++ String.join ", " actual
+                    )
+
+        Nothing ->
+            Err "The group DM is missing from the backend"
+
+
+{-| The Discord group DM that `groupChatCreated` creates.
+-}
+groupChatChannelId : Discord.Id Discord.PrivateChannelId
+groupChatChannelId =
+    Unsafe.uint64 "1539244611120144464" |> Discord.idFromUInt64
 
 
 {-| The one-on-one Discord DM channel the linked account shares with `at0232`. It's listed

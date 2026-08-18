@@ -448,7 +448,6 @@ privateChatWith isMobile route currentTab otherUserId local name =
 
              else
                 Ui.row
-                    -- For whatever reason, Ui.Font.exactWhitespace doesn't work here. So Ui.spacing is used instead
                     [ Ui.spacing 5 ]
                     [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ]
             )
@@ -495,7 +494,6 @@ privateChatWithInThread isMobile route currentTab otherUserId local name threadN
 
              else
                 Ui.row
-                    -- For whatever reason, Ui.Font.exactWhitespace doesn't work here. So Ui.spacing is used instead
                     [ Ui.spacing 5 ]
                     [ Ui.text "Chat with "
                     , Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text (name ++ " / " ++ threadName))
@@ -605,7 +603,7 @@ discordPrivateChatWith isMobile route currentTab name =
 
              else
                 Ui.row
-                    [ Ui.Font.exactWhitespace ]
+                    [ Ui.spacing 5 ]
                     [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ]
             )
         , Ui.row

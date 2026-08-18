@@ -36,6 +36,7 @@ type ToBackendLog
     | ToBackendLog_Local_DeleteChannel
     | ToBackendLog_Local_EditGuildName
     | ToBackendLog_Local_DeleteGuild
+    | ToBackendLog_Local_LeaveGuild
     | ToBackendLog_Local_NewInviteLink
     | ToBackendLog_Local_DeleteInviteLink
     | ToBackendLog_Local_NewGuild
@@ -57,6 +58,8 @@ type ToBackendLog
     | ToBackendLog_Local_SetGuildNotificationLevel
     | ToBackendLog_Local_SetDiscordGuildNotificationLevel
     | ToBackendLog_Local_SetNotificationMode
+    | ToBackendLog_Local_ExpandUserOptionSection
+    | ToBackendLog_Local_CollapseUserOptionSection
     | ToBackendLog_Local_SetEmailNotifications
     | ToBackendLog_Local_RegisterPushSubscription
     | ToBackendLog_Local_TextEditor
@@ -161,6 +164,9 @@ toBackendLogToString log =
         ToBackendLog_Local_DeleteGuild ->
             "Local_DeleteGuild"
 
+        ToBackendLog_Local_LeaveGuild ->
+            "Local_LeaveGuild"
+
         ToBackendLog_Local_NewInviteLink ->
             "Local_NewInviteLink"
 
@@ -223,6 +229,12 @@ toBackendLogToString log =
 
         ToBackendLog_Local_SetNotificationMode ->
             "Local_SetNotificationMode"
+
+        ToBackendLog_Local_ExpandUserOptionSection ->
+            "Local_ExpandUserOptionSection"
+
+        ToBackendLog_Local_CollapseUserOptionSection ->
+            "Local_CollapseUserOptionSection"
 
         ToBackendLog_Local_SetEmailNotifications ->
             "Local_SetEmailNotifications"

@@ -41,7 +41,6 @@ module Types exposing
     , ServerChange(..)
     , ToBackend(..)
     , ToFrontend(..)
-    , UserOptionSection(..)
     , UserOptionsModel
     , WaitingForLoginTokenData
     , messageMenuMobileOffset
@@ -128,7 +127,7 @@ import Untrusted exposing (Untrusted)
 import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
-import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, FrontendUserSession, NotificationMode, SetViewing, ToBeFilledInByBackend, UserSession)
+import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, FrontendUserSession, NotificationMode, SetViewing, ToBeFilledInByBackend, UserOptionSection, UserSession)
 import WordSpellingGame exposing (WordList)
 
 
@@ -267,21 +266,11 @@ type alias LoggedIn2 =
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
     , friendsSearch : String
     , channelSearch : String
-    , expandedUserOptions : SeqSet UserOptionSection
     , {- We want to slightly change the letter spacing for textarea's on Safari in order to force it to recalculate word wrap.
          This is to work around this bug https://github.com/panphora/overtype/issues/116
       -}
       typedTextCounter : Int
     }
-
-
-type UserOptionSection
-    = UserOption_TwoFactorAuthentication
-    | UserOption_Settings
-    | UserOption_WhitelistedDomains
-    | UserOption_Discord
-    | UserOption_ConnectedDevices
-    | UserOption_Debug
 
 
 type FileDrag
@@ -477,6 +466,7 @@ type FrontendMsg_
     | PressedResetEditGuildChanges (Id GuildId)
     | PressedSubmitEditGuildChanges (Id GuildId) EditGuildForm
     | PressedDeleteGuild (Id GuildId)
+    | PressedLeaveGuild (Id GuildId)
     | PressedCreateInviteLink (Id GuildId)
     | PressedDeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | PressedToggleInviteLinkQrCode (SecretId InviteLinkId)
@@ -629,6 +619,7 @@ type alias EditGuildForm =
     { name : String
     , deleteConfirmation : String
     , showDeleteConfirmation : Bool
+    , showLeaveConfirmation : Bool
     , pressedSubmit : Bool
     }
 
@@ -879,6 +870,7 @@ type ServerChange
     | Server_NewInviteLink Time.Posix (Id UserId) (Id GuildId) (SecretId InviteLinkId)
     | Server_DeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | Server_MemberJoined Time.Posix (Id UserId) (Id GuildId) FrontendUser
+    | Server_MemberLeft (Id UserId) (Id GuildId)
     | Server_YouJoinedGuildByInvite
         (Result
             JoinGuildError
@@ -921,6 +913,7 @@ type ServerChange
     | Server_UnlinkDiscordUser (Discord.Id Discord.UserId)
     | Server_DiscordChannelCreated (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) Bool ChannelName (OptionalData (Maybe String)) (List Discord.Overwrite)
     | Server_DiscordDmChannelCreated (Discord.Id Discord.PrivateChannelId) (NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int })
+    | Server_DiscordDmChannelRecipientRemoved (Discord.Id Discord.PrivateChannelId) (Discord.Id Discord.UserId)
     | Server_DiscordNeedsAuthAgain (Discord.Id Discord.UserId)
     | Server_DiscordUserLoadingDataIsDone
         (Discord.Id Discord.UserId)
@@ -929,6 +922,7 @@ type ServerChange
             { discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
             , discordDms : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
             , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+            , markEverythingAsViewed : Bool
             }
         )
     | Server_StartReloadingDiscordUser Time.Posix (Discord.Id Discord.UserId)
@@ -939,8 +933,8 @@ type ServerChange
     | Server_GotDmMessageEmbed (Id UserId) ThreadRouteWithMessage ( Url, Result () EmbedData )
     | Server_GotDiscordGuildMessageEmbed (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage ( Url, Result () EmbedData )
     | Server_GotDiscordDmMessageEmbed (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) ( Url, Result () EmbedData )
-    | Server_DiscordGuildJoinedOrCreated (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    | Server_DiscordUpdateChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (OptionalData String) (OptionalData (Maybe String)) (List Discord.Overwrite)
+    | Server_DiscordGuildJoinedOrCreated (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) DiscordFrontendGuild
+    | Server_DiscordUpdateChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (OptionalData (Maybe String)) (OptionalData (Maybe String)) (List Discord.Overwrite)
     | Server_DiscordUpdateRole (Discord.Id Discord.GuildId) (Discord.Id Discord.RoleId) DiscordRole
     | Server_DiscordUpdateGuildCustomEmojis (Discord.Id Discord.GuildId) (SeqSet (Id CustomEmojiId))
     | Server_UpdateDiscordMembers (Discord.Id Discord.GuildId) (MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) })
@@ -956,6 +950,7 @@ type ServerChange
     | Server_SetMuteDiscordThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
     | Server_SetMuteGuild (Id GuildId) IsMuted
     | Server_SetMuteDiscordGuild (Discord.Id Discord.GuildId) IsMuted
+    | Server_DiscordAvatarsLoaded (Discord.Id Discord.UserId) DiscordFrontendUser
 
 
 type LocalChange
@@ -969,6 +964,7 @@ type LocalChange
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
     | Local_EditGuildName (Id GuildId) GuildName
     | Local_DeleteGuild (Id GuildId)
+    | Local_LeaveGuild (Id GuildId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
     | Local_DeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))
@@ -990,6 +986,8 @@ type LocalChange
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Local_SetDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
     | Local_SetNotificationMode NotificationMode
+    | Local_ExpandUserOptionSection UserOptionSection
+    | Local_CollapseUserOptionSection UserOptionSection
     | Local_SetEmailNotifications EmailNotifications
     | Local_RegisterPushSubscription Time.Posix RegisterPushSubscription
     | Local_TextEditor TextEditor.LocalChange

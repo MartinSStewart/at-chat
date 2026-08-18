@@ -297,6 +297,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.exportChannelTest normalConfig
     , E2EMisc.exportDmChannelTest normalConfig
     , E2EMisc.largePasteBecomesAttachment nonImageUploadConfig
+    , E2EMisc.leaveGuildTest normalConfig
     , E2EMisc.profileImageOpensDm normalConfig
     , E2EMisc.reactionPopupNamesEmojiTest normalConfig
     , E2EMisc.timeOfDaySuggestionTest normalConfig
@@ -1084,7 +1085,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminA
                 , adminA.click 100 (Dom.id "guild_showUserOptions")
                 , adminA.click 100 (Dom.id "userOptions_connectedDevices")
-                , E2EHelper.hasExactText adminA [ "Desktop • Firefox", "Current device" ]
+                , E2EHelper.hasExactText adminA [ "Windows • Firefox", "Current device" ]
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
@@ -1092,7 +1093,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     E2EHelper.desktopWindow
                     (\adminB ->
                         [ E2EHelper.handleLogin E2EHelper.safariIphone E2EHelper.adminEmail adminB
-                        , E2EHelper.hasExactText adminA [ "Mobile • Safari", "Desktop • Firefox", "Current device" ]
+                        , E2EHelper.hasExactText adminA [ "iPhone • Safari", "Windows • Firefox", "Current device" ]
                         , adminB.click 100 (Dom.id "guild_showUserOptions")
                         , adminB.click 100 (Dom.id "userOptions_connectedDevices")
                         , T.connectFrontend
@@ -1104,25 +1105,25 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                 [ E2EHelper.handleLogin E2EHelper.chromeDesktop E2EHelper.adminEmail adminC
                                 , E2EHelper.hasExactText
                                     adminA
-                                    [ "Mobile • Safari"
-                                    , "Desktop • Firefox"
+                                    [ "iPhone • Safari"
+                                    , "Windows • Firefox"
                                     , "Current device"
-                                    , "Desktop • Chrome"
+                                    , "Windows • Chrome"
                                     ]
                                 , adminC.click 100 (Dom.id "guild_showUserOptions")
                                 , adminC.click 100 (Dom.id "userOptions_connectedDevices")
                                 , E2EHelper.hasExactText
                                     adminC
-                                    [ "Mobile • Safari"
-                                    , "Desktop • Firefox"
-                                    , "Desktop • Chrome"
+                                    [ "iPhone • Safari"
+                                    , "Windows • Firefox"
+                                    , "Windows • Chrome"
                                     , "Current device"
                                     ]
                                 ]
                             )
                         , adminB.click 100 (Dom.id "options_logout")
-                        , E2EHelper.hasNotExactText adminA [ "Mobile • Safari" ]
-                        , E2EHelper.hasExactText adminA [ "Desktop • Chrome", "Desktop • Firefox", "Current device" ]
+                        , E2EHelper.hasNotExactText adminA [ "iPhone • Safari" ]
+                        , E2EHelper.hasExactText adminA [ "Windows • Chrome", "Windows • Firefox", "Current device" ]
                         ]
                     )
                 ]
@@ -1150,7 +1151,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         [ E2EHelper.handleLogin E2EHelper.safariIphone E2EHelper.adminEmail adminB
 
                         -- adminA sees adminB's session in the connected devices list
-                        , E2EHelper.hasExactText adminA [ "Mobile • Safari", "Desktop • Firefox", "Current device" ]
+                        , E2EHelper.hasExactText adminA [ "iPhone • Safari", "Windows • Firefox", "Current device" ]
 
                         -- adminB is logged in (it's viewing the app, not the login page)
                         , E2EHelper.hasNotText adminB [ "Login/Signup" ]
@@ -1163,8 +1164,8 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                         -- adminB's session is removed from adminA's connected devices list, and adminA
                         -- itself stays logged in
-                        , E2EHelper.hasNotExactText adminA [ "Mobile • Safari" ]
-                        , E2EHelper.hasExactText adminA [ "Desktop • Firefox", "Current device" ]
+                        , E2EHelper.hasNotExactText adminA [ "iPhone • Safari" ]
+                        , E2EHelper.hasExactText adminA [ "Windows • Firefox", "Current device" ]
                         ]
                     )
                 ]
@@ -1824,6 +1825,119 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                 , userReload2.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.exactText "You have no unread messages!" ])
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "A conversation waiting on its messages doesn't claim to be at its start"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\_ user ->
+                [ -- More messages than fit in a page, so opening the channel loads the most
+                  -- recent page and leaves older ones to be fetched by scrolling up. The
+                  -- second message gets a thread hanging off it.
+                  E2EHelper.writeMessage user 1000 "Message 1"
+                , E2EHelper.writeMessage user 1000 "Message 2"
+                , E2EHelper.createThread user (Id.fromInt 1)
+                , E2EHelper.writeMessage user 1000 "A reply in the thread"
+                , user.click 100 (Dom.id "guild_openChannel_0")
+                , List.range 3 (VisibleMessages.pageSize + 11)
+                    |> List.map (\index -> E2EHelper.writeMessage user 1000 ("Message " ++ String.fromInt index))
+                    |> T.group
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    (Route.encode Route.HomePageRoute)
+                    E2EHelper.desktopWindow
+                    (\userReload ->
+                        [ T.andThen
+                            10
+                            (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+
+                        -- Everything below turns on what the view looks like midway through a
+                        -- load, so the round trip is stretched out to leave room to look.
+                        , userReload.setNetworkLatency 100 { toBackendLatency = 1000, toFrontendLatency = 1000 }
+                        , userReload.click 100 (Dom.id "guild_openGuild_1")
+
+                        -- The messages are still on their way, so the header saying the
+                        -- channel starts here stays hidden. Showing it would tell the
+                        -- reader there's nothing older while there still might be.
+                        , userReload.checkView
+                            500
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.exactText "This is the start of #general" ]
+                            )
+                        , userReload.snapshotView 0 { name = "Messages haven't loaded yet" }
+                        , userReload.checkView
+                            0
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Message 41" ])
+
+                        -- Once the page arrives the recent messages turn up. The header stays
+                        -- hidden because there really are older messages above them.
+                        , userReload.checkView
+                            3000
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Message 41" ])
+                        , userReload.checkView
+                            0
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.exactText "This is the start of #general" ]
+                            )
+
+                        -- Scrolling up asks for the older messages. The header has to keep
+                        -- quiet until they land, otherwise it claims the channel starts at
+                        -- whatever is on screen while there's still a page on the way.
+                        , E2EHelper.scrollToTop userReload
+                        , userReload.checkView
+                            500
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.exactText "This is the start of #general" ]
+                            )
+                        , userReload.checkView
+                            3000
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "This is the start of #general"
+                                , Test.Html.Selector.exactText "Message 1"
+                                ]
+                            )
+
+                        -- A thread is the same story, except the message the thread hangs off
+                        -- is drawn alongside the header, so that has to wait too. Showing it
+                        -- on its own would read as a thread nobody has replied to yet.
+                        , userReload.click 100 (Dom.id "guild_viewThread_0_1")
+                        , userReload.checkView
+                            500
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.exactText "Start of thread" ]
+                            )
+
+                        -- The thread starter is the channel message the thread hangs off, so
+                        -- it is looked for by the id that message is drawn with rather than
+                        -- by its text (the header names the thread after it either way).
+                        , userReload.checkView
+                            0
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.id
+                                    (Dom.idToString (Pages.Guild.channelMessageHtmlId (Id.fromInt 1)))
+                                ]
+                            )
+                        , userReload.checkView
+                            3000
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Start of thread"
+                                , Test.Html.Selector.exactText "A reply in the thread"
+                                ]
+                            )
+                        , userReload.checkView
+                            0
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.id
+                                    (Dom.idToString (Pages.Guild.channelMessageHtmlId (Id.fromInt 1)))
                                 ]
                             )
                         ]

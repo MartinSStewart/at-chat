@@ -103,8 +103,12 @@ module LocalState exposing
     , loadingDiscordChannelMap
     , markAllChannelsAndThreadsAsViewedBackend
     , markAllChannelsAndThreadsAsViewedFrontend
+    , markAllDiscordChannelsAndThreadsAsViewedBackend
+    , markAllDiscordChannelsAndThreadsAsViewedFrontend
     , markCallMessageAsEndedBackend
     , markCallMessageAsEndedFrontend
+    , markDiscordDmAsViewedBackend
+    , markDiscordDmAsViewedFrontend
     , memberIsEditTypingBackend
     , memberIsEditTypingBackendHelper
     , memberIsEditTypingBackendHelperNoThread
@@ -182,7 +186,7 @@ import UInt64
 import Unsafe
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendCurrentUser, FrontendUser, LocalUser)
-import UserSession exposing (FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), SetViewing_ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -2141,6 +2145,118 @@ markAllChannelsAndThreadsAsViewedFrontend guildId guild user =
     }
 
 
+{-| Discord content that a user has never had access to before should start out read.
+Otherwise linking a Discord account or joining a Discord guild floods the app with unread
+markers for messages that were written long before the user could see them.
+-}
+markAllDiscordChannelsAndThreadsAsViewedBackend :
+    Discord.Id Discord.UserId
+    -> Discord.Id Discord.GuildId
+    -> DiscordBackendGuild
+    -> BackendUser
+    -> BackendUser
+markAllDiscordChannelsAndThreadsAsViewedBackend currentUserId guildId guild user =
+    SeqDict.foldl
+        (\channelId channel user2 ->
+            if canViewDiscordChannel guildId channel guild currentUserId then
+                let
+                    guildOrDmId : AnyGuildOrDmId
+                    guildOrDmId =
+                        DiscordGuildOrDmId
+                            (DiscordGuildOrDmId_Guild
+                                { guildId = guildId, channelId = channelId, currentUserId = currentUserId }
+                            )
+                in
+                { user2
+                    | lastViewedMessage =
+                        SeqDict.insert guildOrDmId (DmChannel.latestMessageId channel) user2.lastViewedMessage
+                    , lastViewedThreadMessage =
+                        SeqDict.foldl
+                            (\threadId thread state ->
+                                SeqDict.insert
+                                    ( guildOrDmId, threadId )
+                                    (DmChannel.latestThreadMessageId thread)
+                                    state
+                            )
+                            user2.lastViewedThreadMessage
+                            channel.threads
+                }
+
+            else
+                user2
+        )
+        user
+        guild.channels
+
+
+markAllDiscordChannelsAndThreadsAsViewedFrontend :
+    Discord.Id Discord.UserId
+    -> Discord.Id Discord.GuildId
+    -> DiscordFrontendGuild
+    -> FrontendCurrentUser
+    -> FrontendCurrentUser
+markAllDiscordChannelsAndThreadsAsViewedFrontend currentUserId guildId guild user =
+    SeqDict.foldl
+        (\channelId channel user2 ->
+            let
+                guildOrDmId : AnyGuildOrDmId
+                guildOrDmId =
+                    DiscordGuildOrDmId
+                        (DiscordGuildOrDmId_Guild
+                            { guildId = guildId, channelId = channelId, currentUserId = currentUserId }
+                        )
+            in
+            { user2
+                | lastViewedMessage =
+                    SeqDict.insert guildOrDmId (DmChannel.latestFrontendMessageId channel) user2.lastViewedMessage
+                , lastViewedThreadMessage =
+                    SeqDict.foldl
+                        (\threadId thread state ->
+                            SeqDict.insert
+                                ( guildOrDmId, threadId )
+                                (DmChannel.latestFrontendThreadMessageId thread)
+                                state
+                        )
+                        user2.lastViewedThreadMessage
+                        channel.threads
+            }
+        )
+        user
+        guild.channels
+
+
+markDiscordDmAsViewedBackend :
+    Discord.Id Discord.UserId
+    -> Discord.Id Discord.PrivateChannelId
+    -> DiscordDmChannel
+    -> BackendUser
+    -> BackendUser
+markDiscordDmAsViewedBackend currentUserId channelId dmChannel user =
+    { user
+        | lastViewedMessage =
+            SeqDict.insert
+                (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
+                (DmChannel.latestMessageId dmChannel)
+                user.lastViewedMessage
+    }
+
+
+markDiscordDmAsViewedFrontend :
+    Discord.Id Discord.UserId
+    -> Discord.Id Discord.PrivateChannelId
+    -> DiscordFrontendDmChannel
+    -> FrontendCurrentUser
+    -> FrontendCurrentUser
+markDiscordDmAsViewedFrontend currentUserId channelId dmChannel user =
+    { user
+        | lastViewedMessage =
+            SeqDict.insert
+                (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
+                (DmChannel.latestFrontendMessageId dmChannel)
+                user.lastViewedMessage
+    }
+
+
 deleteMessageBackend :
     userId
     -> channelId
@@ -2787,7 +2903,7 @@ routeToViewing isMobile route local =
     case route of
         HomePageRoute ->
             -- The home page shows the unread overview when no DM is selected
-            ViewOverview SetViewing_EmptyPlaceholder
+            ViewOverview EmptyPlaceholder
 
         AdminRoute _ ->
             StopViewingChannel
@@ -2813,7 +2929,7 @@ routeToViewing isMobile route local =
                                     , previouslyLastViewedMessage =
                                         previouslyLastViewedMessage (GuildOrDmId (GuildOrDmId_Guild id)) local
                                     }
-                                    SetViewing_EmptyPlaceholder
+                                    EmptyPlaceholder
 
                             ViewThreadWithFriends threadId _ _ ->
                                 ViewChannelThread
@@ -2824,7 +2940,7 @@ routeToViewing isMobile route local =
                                             threadId
                                             local
                                     }
-                                    SetViewing_EmptyPlaceholder
+                                    EmptyPlaceholder
 
                     NewChannelRoute ->
                         StopViewingChannel
@@ -2859,7 +2975,7 @@ routeToViewing isMobile route local =
                                             (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild id))
                                             local
                                     }
-                                    SetViewing_EmptyPlaceholder
+                                    EmptyPlaceholder
 
                             ViewThreadWithFriends threadId _ _ ->
                                 ViewDiscordChannelThread
@@ -2875,7 +2991,7 @@ routeToViewing isMobile route local =
                                             threadId
                                             local
                                     }
-                                    SetViewing_EmptyPlaceholder
+                                    EmptyPlaceholder
 
                     DiscordChannel_NewChannelRoute ->
                         StopViewingChannel
@@ -2906,7 +3022,7 @@ routeToViewing isMobile route local =
                                     , previouslyLastViewedMessage =
                                         previouslyLastViewedMessage (GuildOrDmId (GuildOrDmId_Dm id)) local
                                     }
-                                    SetViewing_EmptyPlaceholder
+                                    EmptyPlaceholder
 
                             ViewThreadWithFriends threadId _ _ ->
                                 ViewDmThread
@@ -2917,7 +3033,7 @@ routeToViewing isMobile route local =
                                             threadId
                                             local
                                     }
-                                    SetViewing_EmptyPlaceholder
+                                    EmptyPlaceholder
 
                 Nothing ->
                     StopViewingChannel
@@ -2935,7 +3051,7 @@ routeToViewing isMobile route local =
                             )
                             local
                     }
-                    SetViewing_EmptyPlaceholder
+                    EmptyPlaceholder
 
             else
                 StopViewingChannel

@@ -10,6 +10,7 @@ module E2EMisc exposing
     , inactiveThreadsAreHiddenTest
     , inviteUserAndDmChat
     , largePasteBecomesAttachment
+    , leaveGuildTest
     , markMessageAsUnreadTest
     , mentionSuggestionTest
     , noTimestampSuggestionTest
@@ -39,6 +40,7 @@ import Json.Encode
 import List.Nonempty
 import Local
 import LocalState exposing (LocalState)
+import MembersAndOwner
 import Message
 import Pages.Guild
 import RichText
@@ -1730,3 +1732,101 @@ checkChannelIsCaughtUpModel guildOrDmId model =
                 _ ->
                     Err "Expected the channel to exist and to have been viewed"
         )
+
+
+leaveGuildTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+leaveGuildTest config =
+    E2EHelper.startTest
+        "A member leaves a guild from the guild settings page"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                let
+                    guildId : Id.Id Id.GuildId
+                    guildId =
+                        Id.fromInt 1
+                in
+                [ -- The owner can delete the guild but has no way to leave it
+                  admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+                , E2EHelper.hasExactText admin [ "Delete guild" ]
+                , E2EHelper.hasNotExactText admin [ "Leave guild" ]
+
+                -- A member gets the leave button instead
+                , user.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+                , E2EHelper.hasExactText user [ "Leave guild" ]
+                , E2EHelper.hasNotExactText user [ "Delete guild" ]
+                , user.snapshotView 100 { name = "Guild settings for a member who isn't the owner" }
+
+                -- The first press only asks for confirmation
+                , user.click 100 (Dom.id "guild_leaveGuild")
+                , E2EHelper.hasExactText user [ "Yes, leave guild" ]
+                , T.checkBackend 100 (checkGuildMemberCount guildId 1)
+
+                -- The second press leaves the guild
+                , user.click 100 (Dom.id "guild_leaveGuild")
+                , T.checkBackend 100 (checkGuildMemberCount guildId 0)
+                , E2EHelper.hasNotExactText user [ "My new guild!" ]
+                , user.checkModel
+                    100
+                    (\model ->
+                        withLocalState
+                            model
+                            (\local ->
+                                if SeqDict.member guildId local.guilds then
+                                    Err "The guild should be gone from the frontend of the user who left"
+
+                                else
+                                    Ok ()
+                            )
+                    )
+
+                -- The owner sees the member disappear without losing the guild
+                , admin.checkModel
+                    100
+                    (\model ->
+                        withLocalState
+                            model
+                            (\local ->
+                                case SeqDict.get guildId local.guilds of
+                                    Just guild ->
+                                        if SeqDict.isEmpty (MembersAndOwner.members guild.membersAndOwner) then
+                                            Ok ()
+
+                                        else
+                                            Err "The owner should no longer see the member who left"
+
+                                    Nothing ->
+                                        Err "The owner should still be in the guild"
+                            )
+                    )
+                ]
+            )
+        ]
+
+
+checkGuildMemberCount : Id.Id Id.GuildId -> Int -> E2EHelper.BackendModel2 -> Result String ()
+checkGuildMemberCount guildId expected backend =
+    case SeqDict.get guildId (E2EHelper.unwrapBackend backend).guilds of
+        Just guild ->
+            let
+                count : Int
+                count =
+                    SeqDict.size (MembersAndOwner.members guild.membersAndOwner)
+            in
+            if count == expected then
+                Ok ()
+
+            else
+                Err
+                    ("Expected the guild to have "
+                        ++ String.fromInt expected
+                        ++ " members besides the owner but it has "
+                        ++ String.fromInt count
+                    )
+
+        Nothing ->
+            Err "The guild should still exist after a member leaves"

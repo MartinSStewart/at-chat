@@ -32,7 +32,7 @@ import OneToOne exposing (OneToOne)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
-import UserSession exposing (SetViewing_ToBeFilledInByBackend(..), ToBeFilledInByBackend(..))
+import UserSession exposing (ToBeFilledInByBackend(..))
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -206,7 +206,7 @@ loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
             }
 
         EmptyPlaceholder ->
-            channel
+            { channel | visibleMessages = VisibleMessages.isLoading channel.visibleMessages }
 
 
 {-| Loads the messages the unread overview shows. Unlike `loadMessages` this leaves
@@ -222,20 +222,22 @@ loadUnreadMessages messages channel =
 
 
 loadMessages :
-    SetViewing_ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
+    ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
     -> { a | messages : MessageArray messageId (Message messageId userId), visibleMessages : VisibleMessages messageId }
     -> { a | messages : MessageArray messageId (Message messageId userId), visibleMessages : VisibleMessages messageId }
 loadMessages messagesLoaded channel =
     case messagesLoaded of
-        SetViewing_FilledInByBackend messagesLoaded2 ->
+        FilledInByBackend messagesLoaded2 ->
             { channel
                 | messages =
                     MessageArray.setMany (SeqDict.toList messagesLoaded2) channel.messages
-                , visibleMessages = VisibleMessages.firstLoad (MessageArray.length channel.messages)
+                , visibleMessages =
+                    if channel.visibleMessages.count == 0 then
+                        VisibleMessages.firstLoad (MessageArray.length channel.messages)
+
+                    else
+                        channel.visibleMessages
             }
 
-        SetViewing_EmptyPlaceholder ->
-            channel
-
-        SetViewing_NothingToFillIn ->
-            channel
+        EmptyPlaceholder ->
+            { channel | visibleMessages = VisibleMessages.isLoading channel.visibleMessages }

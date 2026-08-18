@@ -2839,7 +2839,7 @@ type alias Channel =
     , guildId : OptionalData (Id GuildId)
     , position : OptionalData Int
     , permissionOverwrites : OptionalData (List Overwrite)
-    , name : OptionalData String
+    , name : OptionalData (Maybe String)
     , topic : OptionalData (Maybe String)
     , nsfw : OptionalData Bool
     , lastMessageId : OptionalData (Maybe (Id MessageId))
@@ -4448,7 +4448,7 @@ decodeChannel =
         |> JD.andMap (decodeOptionalData "guild_id" decodeId)
         |> JD.andMap (decodeOptionalData "position" JD.int)
         |> JD.andMap (decodeOptionalData "permission_overwrites" (JD.list decodeOverwrite))
-        |> JD.andMap (decodeOptionalData "name" JD.string)
+        |> JD.andMap (decodeOptionalData "name" (JD.nullable JD.string))
         |> JD.andMap (decodeOptionalData "topic" (JD.nullable JD.string))
         |> JD.andMap (decodeOptionalData "nsfw" JD.bool)
         |> JD.andMap (decodeOptionalData "last_message_id" (JD.nullable decodeId))
@@ -5303,6 +5303,13 @@ decodeDispatchUserEvent eventName =
         "CHANNEL_CREATE" ->
             JD.field "d" decodeChannel |> JD.map DispatchUser_ChannelCreateEvent
 
+        "CHANNEL_RECIPIENT_REMOVE" ->
+            JD.field "d"
+                (JD.succeed DispatchUser_ChannelRecipientRemoveEvent
+                    |> JD.andMap (JD.field "channel_id" decodeId)
+                    |> JD.andMap (JD.at [ "user", "id" ] decodeId)
+                )
+
         "TYPING_START" ->
             JD.field "d" decodeTypingStart |> JD.map DispatchUser_TypingStart
 
@@ -5701,6 +5708,7 @@ type OpDispatchUserEvent
     | DispatchUser_MessageReactionRemoveEmoji ReactionRemoveEmoji
     | DispatchUser_GuildMembersChunk GuildMembersChunkData -- aka response(s) to OpRequestGuildMembers
     | DispatchUser_ChannelCreateEvent Channel
+    | DispatchUser_ChannelRecipientRemoveEvent (Id ChannelId) (Id UserId)
     | DispatchUser_TypingStart TypingStart
     | DispatchUser_PresenceUpdate Presence
     | DispatchUser_GuildIntegrationsUpdate (Id GuildId)
@@ -6456,6 +6464,7 @@ type UserOutMsg connection
     | UserOutMsg_ReadyData ReadyData
     | UserOutMsg_SupplementalReadyData ReadySupplementalData
     | UserOutMsg_ChannelCreated Channel
+    | UserOutMsg_ChannelRecipientRemoved (Id PrivateChannelId) (Id UserId)
     | UserOutMsg_TypingStarted TypingStart
     | UserOutMsg_PresenceUpdate Presence
     | UserOutMsg_EmbeddedActivityUpdateV2 EmbeddedActivityUpdateV2
@@ -6890,6 +6899,14 @@ handleUserGateway authToken intents response model =
 
                         DispatchUser_ChannelCreateEvent channel ->
                             ( model, [ UserOutMsg_ChannelCreated channel ] )
+
+                        DispatchUser_ChannelRecipientRemoveEvent channelId userId ->
+                            ( model
+                            , [ UserOutMsg_ChannelRecipientRemoved
+                                    (idToUInt64 channelId |> idFromUInt64)
+                                    userId
+                              ]
+                            )
 
                         DispatchUser_TypingStart typingStart ->
                             ( model, [ UserOutMsg_TypingStarted typingStart ] )

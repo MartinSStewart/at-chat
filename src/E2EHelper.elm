@@ -2226,6 +2226,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_DeleteGuild _ ->
                     True
 
+                Local_LeaveGuild _ ->
+                    True
+
                 Local_NewInviteLink _ _ _ ->
                     True
 
@@ -2318,6 +2321,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetNotificationMode _ ->
                     False
 
+                Local_ExpandUserOptionSection _ ->
+                    False
+
+                Local_CollapseUserOptionSection _ ->
+                    False
+
                 Local_SetEmailNotifications _ ->
                     False
 
@@ -2408,6 +2417,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_MemberJoined _ _ _ _ ->
+                            True
+
+                        Types.Server_MemberLeft _ _ ->
                             True
 
                         Types.Server_YouJoinedGuildByInvite result ->
@@ -2514,6 +2526,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_DiscordDmChannelCreated _ _ ->
                             True
 
+                        Types.Server_DiscordDmChannelRecipientRemoved _ _ ->
+                            True
+
                         Types.Server_DiscordNeedsAuthAgain _ ->
                             True
 
@@ -2544,7 +2559,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_GotDiscordDmMessageEmbed _ _ _ ->
                             True
 
-                        Types.Server_DiscordGuildJoinedOrCreated _ _ ->
+                        Types.Server_DiscordGuildJoinedOrCreated _ _ _ ->
                             True
 
                         Types.Server_DiscordUpdateChannel _ _ _ _ _ ->
@@ -2596,6 +2611,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_SetMuteDiscordGuild _ _ ->
+                            True
+
+                        Types.Server_DiscordAvatarsLoaded _ _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
@@ -2745,6 +2763,7 @@ allAttackerLocalChanges =
     [ Local_AddReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
     , Local_AddReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
     , Local_Admin (Pages.Admin.SetSignupsEnabled True)
+    , Local_CollapseUserOptionSection UserSession.UserOption_Debug
     , Local_CurrentlyViewing { markMessagesAsViewed = False } StopViewingChannel
     , Local_DeleteChannel legitGuildId channelId
     , Local_DeleteGuild legitGuildId
@@ -2760,7 +2779,9 @@ allAttackerLocalChanges =
     , Local_Discord_SendMessage messageTime Time.utc discordGuildOrDmId_dm normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_EditChannel legitGuildId channelId (Unsafe.channelName "hacked") ChannelDescription.empty
     , Local_EditGuildName legitGuildId (Unsafe.guildName "hacked")
+    , Local_ExpandUserOptionSection UserSession.UserOption_Debug
     , Local_Invalid
+    , Local_LeaveGuild legitGuildId
     , Local_LinkDiscordAcknowledgementIsChecked True
     , Local_LoadChannelMessages (GuildOrDmId_Dm { otherUserId = normalUserId }) (Id.fromInt 0) EmptyPlaceholder
     , Local_LoadThreadMessages (GuildOrDmId_Dm { otherUserId = normalUserId }) (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder

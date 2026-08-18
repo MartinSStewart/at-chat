@@ -24,7 +24,7 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Time
 import TwoFactorAuthentication
-import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionSection(..), UserOptionsModel)
+import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -32,7 +32,7 @@ import Ui.Input
 import Ui.Prose
 import User
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
-import UserSession exposing (NotificationMode(..), PushSubscription(..))
+import UserSession exposing (NotificationMode(..), PushSubscription(..), UserOptionSection(..))
 
 
 init : SeqSet RichText.Domain -> UserOptionsModel
@@ -77,15 +77,7 @@ viewConnectedDevice sessionId otherCurrentlyViewing userAgent =
 
         deviceText : String
         deviceText =
-            case userAgent.device of
-                Desktop ->
-                    "Desktop"
-
-                Mobile ->
-                    "Mobile"
-
-                Tablet ->
-                    "Tablet"
+            UserAgent.deviceToString userAgent.device
     in
     Ui.row
         [ Ui.spacing 8 ]
@@ -94,7 +86,28 @@ viewConnectedDevice sessionId otherCurrentlyViewing userAgent =
             , Ui.height (Ui.px 36)
             ]
             (case userAgent.device of
-                Desktop ->
+                IPhone ->
+                    Ui.html Icons.mobile
+
+                IPad ->
+                    Ui.html Icons.tablet
+
+                AndroidPhone ->
+                    Ui.html Icons.mobile
+
+                AndroidTablet ->
+                    Ui.html Icons.tablet
+
+                Windows ->
+                    Ui.html Icons.desktop
+
+                MacOS ->
+                    Ui.html Icons.desktop
+
+                ChromeOS ->
+                    Ui.html Icons.desktop
+
+                Linux ->
                     Ui.html Icons.desktop
 
                 Mobile ->
@@ -102,6 +115,9 @@ viewConnectedDevice sessionId otherCurrentlyViewing userAgent =
 
                 Tablet ->
                     Ui.html Icons.tablet
+
+                Desktop ->
+                    Ui.html Icons.desktop
             )
         , Ui.column
             [ Ui.spacing 2 ]
@@ -247,7 +263,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     IsNotAdmin ->
                         Ui.none
                 , MyUi.container
-                    (SeqSet.member UserOption_Settings loggedIn.expandedUserOptions)
+                    (SeqSet.member UserOption_Settings local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_settings")
                     (PressedExpandContainer UserOption_Settings)
                     MyUi.background1
@@ -367,7 +383,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     --    (Ui.text "Link Slack account")
                     ]
                 , MyUi.container
-                    (SeqSet.member UserOption_TwoFactorAuthentication loggedIn.expandedUserOptions)
+                    (SeqSet.member UserOption_TwoFactorAuthentication local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_twoFactor")
                     (PressedExpandContainer UserOption_TwoFactorAuthentication)
                     MyUi.background1
@@ -391,7 +407,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             model.domainWhitelistInput /= domainWhitelistToString local.localUser.user.domainWhitelist
                     in
                     MyUi.container
-                        (SeqSet.member UserOption_WhitelistedDomains loggedIn.expandedUserOptions)
+                        (SeqSet.member UserOption_WhitelistedDomains local.localUser.session.expandedUserOptions)
                         (Dom.id "userOptions_whitelistedDomains")
                         (PressedExpandContainer UserOption_WhitelistedDomains)
                         MyUi.background1
@@ -428,7 +444,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             Ui.none
                         ]
                 , MyUi.container
-                    (SeqSet.member UserOption_Discord loggedIn.expandedUserOptions)
+                    (SeqSet.member UserOption_Discord local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_discordSection")
                     (PressedExpandContainer UserOption_Discord)
                     MyUi.background1
@@ -498,7 +514,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         ]
                     ]
                 , MyUi.container
-                    (SeqSet.member UserOption_ConnectedDevices loggedIn.expandedUserOptions)
+                    (SeqSet.member UserOption_ConnectedDevices local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_connectedDevices")
                     (PressedExpandContainer UserOption_ConnectedDevices)
                     MyUi.background1
@@ -512,7 +528,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             (SeqDict.toList local.otherSessions)
                     )
                 , MyUi.container
-                    (SeqSet.member UserOption_Debug loggedIn.expandedUserOptions)
+                    (SeqSet.member UserOption_Debug local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_debug")
                     (PressedExpandContainer UserOption_Debug)
                     MyUi.background1

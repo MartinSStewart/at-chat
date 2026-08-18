@@ -112,9 +112,25 @@ import Ui.Input
 import Ui.Prose
 import Url exposing (Url)
 import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
-import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), SetViewing_ToBeFilledInByBackend(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 import WordSpellingGame
+
+
+{-| The messages out of what the backend fills in when a Discord channel or thread is
+viewed. The two placeholders carry through rather than being treated as nothing to do, so
+that a channel still waiting on its messages is marked as loading.
+-}
+discordViewMessages :
+    ToBeFilledInByBackend (UserSession.ViewDiscordGuildData messageId)
+    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId)))
+discordViewMessages backendData =
+    case backendData of
+        FilledInByBackend data ->
+            FilledInByBackend data.messages
+
+        EmptyPlaceholder ->
+            EmptyPlaceholder
 
 
 pendingChangesText : LocalChange -> String
@@ -147,6 +163,9 @@ pendingChangesText localChange =
 
         Local_DeleteGuild _ ->
             "Deleted guild"
+
+        Local_LeaveGuild _ ->
+            "Left guild"
 
         Local_NewInviteLink _ _ _ ->
             "Created invite link"
@@ -220,6 +239,12 @@ pendingChangesText localChange =
 
         Local_SetNotificationMode _ ->
             "Set notification mode"
+
+        Local_ExpandUserOptionSection _ ->
+            "Expanded a user options section"
+
+        Local_CollapseUserOptionSection _ ->
+            "Collapsed a user options section"
 
         Local_SetEmailNotifications _ ->
             "Set email notifications"
@@ -1944,6 +1969,9 @@ isPressMsg msg =
         PressedDeleteGuild _ ->
             True
 
+        PressedLeaveGuild _ ->
+            True
+
         PressedCreateInviteLink _ ->
             True
 
@@ -2692,6 +2720,9 @@ changeUpdate localMsg local =
                 Local_DeleteGuild guildId ->
                     { local | guilds = SeqDict.remove guildId local.guilds }
 
+                Local_LeaveGuild guildId ->
+                    { local | guilds = SeqDict.remove guildId local.guilds }
+
                 Local_NewInviteLink time guildId inviteLinkId ->
                     case inviteLinkId of
                         EmptyPlaceholder ->
@@ -3024,34 +3055,23 @@ changeUpdate localMsg local =
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                         , discordUsers =
                                             case backendData of
-                                                SetViewing_FilledInByBackend backendData2 ->
+                                                FilledInByBackend backendData2 ->
                                                     SeqDict.foldl
                                                         LinkedAndOtherDiscordUsers.addOtherUser
                                                         localUser.discordUsers
                                                         backendData2.newUsers
 
-                                                SetViewing_EmptyPlaceholder ->
-                                                    localUser.discordUsers
-
-                                                SetViewing_NothingToFillIn ->
+                                                EmptyPlaceholder ->
                                                     localUser.discordUsers
                                     }
                                 , discordGuilds =
-                                    case backendData of
-                                        SetViewing_FilledInByBackend backendData2 ->
-                                            SeqDict.updateIfExists
-                                                data.id.guildId
-                                                (LocalState.updateChannel
-                                                    (DmChannel.loadMessages (SetViewing_FilledInByBackend backendData2.messages))
-                                                    data.id.channelId
-                                                )
-                                                local.discordGuilds
-
-                                        SetViewing_EmptyPlaceholder ->
-                                            local.discordGuilds
-
-                                        SetViewing_NothingToFillIn ->
-                                            local.discordGuilds
+                                    SeqDict.updateIfExists
+                                        data.id.guildId
+                                        (LocalState.updateChannel
+                                            (DmChannel.loadMessages (discordViewMessages backendData))
+                                            data.id.channelId
+                                        )
+                                        local.discordGuilds
                             }
 
                         ViewDiscordChannelThread data backendData ->
@@ -3077,44 +3097,31 @@ changeUpdate localMsg local =
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                         , discordUsers =
                                             case backendData of
-                                                SetViewing_FilledInByBackend backendData2 ->
+                                                FilledInByBackend backendData2 ->
                                                     SeqDict.foldl
                                                         LinkedAndOtherDiscordUsers.addOtherUser
                                                         localUser.discordUsers
                                                         backendData2.newUsers
 
-                                                SetViewing_EmptyPlaceholder ->
-                                                    localUser.discordUsers
-
-                                                SetViewing_NothingToFillIn ->
+                                                EmptyPlaceholder ->
                                                     localUser.discordUsers
                                     }
                                 , discordGuilds =
-                                    case backendData of
-                                        SetViewing_FilledInByBackend backendData2 ->
-                                            SeqDict.updateIfExists
-                                                data.id.guildId
-                                                (LocalState.updateChannel
-                                                    (\channel ->
-                                                        { channel
-                                                            | threads =
-                                                                SeqDict.updateIfExists
-                                                                    data.id.threadId
-                                                                    (DmChannel.loadMessages
-                                                                        (SetViewing_FilledInByBackend backendData2.messages)
-                                                                    )
-                                                                    channel.threads
-                                                        }
-                                                    )
-                                                    data.id.channelId
-                                                )
-                                                local.discordGuilds
-
-                                        SetViewing_EmptyPlaceholder ->
-                                            local.discordGuilds
-
-                                        SetViewing_NothingToFillIn ->
-                                            local.discordGuilds
+                                    SeqDict.updateIfExists
+                                        data.id.guildId
+                                        (LocalState.updateChannel
+                                            (\channel ->
+                                                { channel
+                                                    | threads =
+                                                        SeqDict.updateIfExists
+                                                            data.id.threadId
+                                                            (DmChannel.loadMessages (discordViewMessages backendData))
+                                                            channel.threads
+                                                }
+                                            )
+                                            data.id.channelId
+                                        )
+                                        local.discordGuilds
                             }
 
                         ViewOverview overviewData ->
@@ -3124,7 +3131,7 @@ changeUpdate localMsg local =
                                     { localUser | currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing }
                             in
                             case overviewData of
-                                SetViewing_FilledInByBackend overviewData2 ->
+                                FilledInByBackend overviewData2 ->
                                     let
                                         guilds : SeqDict (Id GuildId) FrontendGuild
                                         guilds =
@@ -3243,10 +3250,7 @@ changeUpdate localMsg local =
                                                 overviewData2.discordDmChannels
                                     }
 
-                                SetViewing_EmptyPlaceholder ->
-                                    { local | localUser = localUser2 }
-
-                                SetViewing_NothingToFillIn ->
+                                EmptyPlaceholder ->
                                     { local | localUser = localUser2 }
 
                 Local_SetName name ->
@@ -3410,6 +3414,28 @@ changeUpdate localMsg local =
                             localUser.session
                     in
                     { local | localUser = { localUser | session = { session | notificationMode = notificationMode } } }
+
+                Local_ExpandUserOptionSection section ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser | session = UserSession.expandUserOptionSection section localUser.session }
+                    }
+
+                Local_CollapseUserOptionSection section ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser | session = UserSession.collapseUserOptionSection section localUser.session }
+                    }
 
                 Local_SetEmailNotifications emailNotifications ->
                     let
@@ -4001,6 +4027,24 @@ changeUpdate localMsg local =
                         , localUser = { localUser | otherUsers = SeqDict.insert userId user localUser.otherUsers }
                     }
 
+                Server_MemberLeft userId guildId ->
+                    if userId == local.localUser.session.userId then
+                        { local | guilds = SeqDict.remove guildId local.guilds }
+
+                    else
+                        { local
+                            | guilds =
+                                SeqDict.updateIfExists
+                                    guildId
+                                    (\guild ->
+                                        { guild
+                                            | membersAndOwner =
+                                                MembersAndOwner.removeMember userId guild.membersAndOwner
+                                        }
+                                    )
+                                    local.guilds
+                        }
+
                 Server_YouJoinedGuildByInvite result ->
                     case result of
                         Ok ok ->
@@ -4421,6 +4465,27 @@ changeUpdate localMsg local =
                                 local.discordDmChannels
                     }
 
+                Server_DiscordDmChannelRecipientRemoved channelId removedUserId ->
+                    { local
+                        | discordDmChannels =
+                            SeqDict.update
+                                channelId
+                                (\maybe ->
+                                    case maybe of
+                                        Just channel ->
+                                            case NonemptyDict.remove removedUserId channel.members |> NonemptyDict.fromSeqDict of
+                                                Just members ->
+                                                    Just { channel | members = members }
+
+                                                Nothing ->
+                                                    Just channel
+
+                                        Nothing ->
+                                            Nothing
+                                )
+                                local.discordDmChannels
+                    }
+
                 Server_DiscordNeedsAuthAgain userId ->
                     let
                         localUser =
@@ -4444,28 +4509,27 @@ changeUpdate localMsg local =
                     in
                     case result of
                         Ok data ->
-                            { local
-                                | localUser =
-                                    { localUser
-                                        | discordUsers =
-                                            SeqDict.foldl LinkedAndOtherDiscordUsers.addOtherUser localUser.discordUsers data.discordUsers
-                                                |> LinkedAndOtherDiscordUsers.updateLinkedUser
-                                                    discordUserId
-                                                    (\user ->
-                                                        { user
-                                                            | isLoadingData =
-                                                                case result of
-                                                                    Ok _ ->
-                                                                        DiscordUserLoadedSuccessfully
-
-                                                                    Err time ->
-                                                                        DiscordUserLoadingFailed time
-                                                        }
-                                                    )
+                            let
+                                local2 : LocalState
+                                local2 =
+                                    { local
+                                        | localUser =
+                                            { localUser
+                                                | discordUsers =
+                                                    SeqDict.foldl LinkedAndOtherDiscordUsers.addOtherUser localUser.discordUsers data.discordUsers
+                                                        |> LinkedAndOtherDiscordUsers.updateLinkedUser
+                                                            discordUserId
+                                                            (\user -> { user | isLoadingData = DiscordUserLoadedSuccessfully })
+                                            }
+                                        , discordGuilds = SeqDict.foldl SeqDict.insert local.discordGuilds data.discordGuilds
+                                        , discordDmChannels = SeqDict.foldl SeqDict.insert local.discordDmChannels data.discordDms
                                     }
-                                , discordGuilds = SeqDict.foldl SeqDict.insert local.discordGuilds data.discordGuilds
-                                , discordDmChannels = SeqDict.foldl SeqDict.insert local.discordDmChannels data.discordDms
-                            }
+                            in
+                            if data.markEverythingAsViewed then
+                                markDiscordDataAsViewed discordUserId local2
+
+                            else
+                                local2
 
                         Err time ->
                             { local
@@ -4632,7 +4696,11 @@ changeUpdate localMsg local =
                         Nothing ->
                             local
 
-                Server_DiscordGuildJoinedOrCreated guildId guild ->
+                Server_DiscordGuildJoinedOrCreated discordUserId guildId guild ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
                     { local
                         | discordGuilds =
                             SeqDict.update
@@ -4646,6 +4714,15 @@ changeUpdate localMsg local =
                                             Just guild
                                 )
                                 local.discordGuilds
+                        , localUser =
+                            { localUser
+                                | user =
+                                    LocalState.markAllDiscordChannelsAndThreadsAsViewedFrontend
+                                        discordUserId
+                                        guildId
+                                        guild
+                                        localUser.user
+                            }
                     }
 
                 Server_DiscordUpdateChannel guildId channelId name topic permissionOverwrites ->
@@ -4658,10 +4735,10 @@ changeUpdate localMsg local =
                                         { channel
                                             | name =
                                                 case name of
-                                                    Discord.Included name2 ->
+                                                    Discord.Included (Just name2) ->
                                                         ChannelName.fromStringLossy name2
 
-                                                    Discord.Missing ->
+                                                    _ ->
                                                         channel.name
                                             , description =
                                                 LocalState.discordTopicToDescription topic channel.description
@@ -4845,6 +4922,28 @@ changeUpdate localMsg local =
 
                 Server_SetMuteDiscordGuild guildId isMuted ->
                     setMuteDiscordGuild guildId isMuted local
+
+                Server_DiscordAvatarsLoaded discordUserId discordUser ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | discordUsers =
+                                    LinkedAndOtherDiscordUsers.addOtherUser
+                                        discordUserId
+                                        discordUser
+                                        localUser.discordUsers
+                                        |> LinkedAndOtherDiscordUsers.updateLinkedUser
+                                            discordUserId
+                                            (\linkedUser ->
+                                                { linkedUser | name = discordUser.name, icon = discordUser.icon }
+                                            )
+                            }
+                    }
 
 
 callStartedMessage : Time.Posix -> Id UserId -> Message ChannelMessageId (Id UserId)
@@ -5521,6 +5620,53 @@ initAdminData adminData =
     , sessions = adminData.sessions
     , wordSpellingGameEnglish = adminData.wordSpellingGameEnglish
     , wordSpellingGameSwedish = adminData.wordSpellingGameSwedish
+    }
+
+
+{-| Everything a newly linked Discord account brings with it starts out read. The
+messages were written before the user could see them here, so treating them as unread
+would bury the app in notifications the moment an account is linked.
+-}
+markDiscordDataAsViewed : Discord.Id Discord.UserId -> LocalState -> LocalState
+markDiscordDataAsViewed discordUserId local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        guildsViewed : FrontendCurrentUser
+        guildsViewed =
+            SeqDict.foldl
+                (\guildId guild state ->
+                    case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                        MembersAndOwner.IsNotMember ->
+                            state
+
+                        _ ->
+                            LocalState.markAllDiscordChannelsAndThreadsAsViewedFrontend
+                                discordUserId
+                                guildId
+                                guild
+                                state
+                )
+                localUser.user
+                local.discordGuilds
+    in
+    { local
+        | localUser =
+            { localUser
+                | user =
+                    SeqDict.foldl
+                        (\channelId dmChannel state ->
+                            if NonemptyDict.member discordUserId dmChannel.members then
+                                LocalState.markDiscordDmAsViewedFrontend discordUserId channelId dmChannel state
+
+                            else
+                                state
+                        )
+                        guildsViewed
+                        local.discordDmChannels
+            }
     }
 
 

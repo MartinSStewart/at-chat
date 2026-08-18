@@ -78,7 +78,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionSection(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -555,7 +555,6 @@ loadedInitHelper startupData emojiData loginData loading =
             , showInviteLinkQrCode = Nothing
             , friendsSearch = ""
             , channelSearch = ""
-            , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
             , typedTextCounter = 0
             }
     in
@@ -1165,6 +1164,27 @@ updateLoaded msg model =
                             FrontendExtra.handleLocalChange
                                 model2.time
                                 (Local_DeleteGuild guildId |> Just)
+                                { loggedIn
+                                    | editGuildForm = SeqDict.remove guildId loggedIn.editGuildForm
+                                }
+                                cmd
+                    in
+                    ( { model | loginStatus = LoggedIn loggedIn2 }, cmd2 )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
+
+        PressedLeaveGuild guildId ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    let
+                        ( model2, cmd ) =
+                            FrontendExtra.routePush model HomePageRoute
+
+                        ( loggedIn2, cmd2 ) =
+                            FrontendExtra.handleLocalChange
+                                model2.time
+                                (Local_LeaveGuild guildId |> Just)
                                 { loggedIn
                                     | editGuildForm = SeqDict.remove guildId loggedIn.editGuildForm
                                 }
@@ -2079,16 +2099,20 @@ updateLoaded msg model =
         PressedExpandContainer section ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn
-                        | expandedUserOptions =
-                            if SeqSet.member section loggedIn.expandedUserOptions then
-                                SeqSet.remove section loggedIn.expandedUserOptions
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (if
+                            SeqSet.member
+                                section
+                                (Local.model loggedIn.localState).localUser.session.expandedUserOptions
+                         then
+                            Local_CollapseUserOptionSection section |> Just
 
-                            else
-                                SeqSet.insert section loggedIn.expandedUserOptions
-                      }
-                    , Command.none
-                    )
+                         else
+                            Local_ExpandUserOptionSection section |> Just
+                        )
+                        loggedIn
+                        Command.none
                 )
                 model
 
@@ -6013,7 +6037,7 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
             , case maybeHtmlId of
                 Just htmlId ->
                     Command.batch
-                        [ if model.startupData.userAgent.device == UserAgent.Desktop || Maybe.map .htmlId loggedIn.textInputFocus == Just htmlId then
+                        [ if UserAgent.isDesktop model.startupData.userAgent.device || Maybe.map .htmlId loggedIn.textInputFocus == Just htmlId then
                             Command.none
 
                           else

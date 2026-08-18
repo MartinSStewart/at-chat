@@ -6,9 +6,9 @@ module UserSession exposing
     , PreviouslyLastViewedMessage(..)
     , PushSubscription(..)
     , SetViewing(..)
-    , SetViewing_ToBeFilledInByBackend(..)
     , ToBeFilledInByBackend(..)
     , UnreadOverviewData
+    , UserOptionSection(..)
     , UserSession
     , ViewDiscordGuildData
     , Viewing(..)
@@ -19,6 +19,8 @@ module UserSession exposing
     , Viewing_DiscordDmData
     , Viewing_DmData
     , Viewing_DmThreadData
+    , collapseUserOptionSection
+    , expandUserOptionSection
     , init
     , isViewing
     , isViewingGame
@@ -39,6 +41,7 @@ import Message exposing (Message)
 import PersonName exposing (PersonName)
 import Ports exposing (SubscribeData)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import UserAgent exposing (UserAgent)
 
@@ -50,7 +53,17 @@ type alias UserSession =
     , userAgent : UserAgent
     , sessionIdHash : SessionIdHash
     , signedInAt : Time.Posix
+    , expandedUserOptions : SeqSet UserOptionSection
     }
+
+
+type UserOptionSection
+    = UserOption_TwoFactorAuthentication
+    | UserOption_Settings
+    | UserOption_WhitelistedDomains
+    | UserOption_Discord
+    | UserOption_ConnectedDevices
+    | UserOption_Debug
 
 
 type alias FrontendUserSession =
@@ -80,22 +93,16 @@ type NotificationMode
     | PushNotifications
 
 
-type SetViewing_ToBeFilledInByBackend a
-    = SetViewing_EmptyPlaceholder
-    | SetViewing_FilledInByBackend a
-    | SetViewing_NothingToFillIn
-
-
 type SetViewing
-    = ViewDm Viewing_DmData (SetViewing_ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
-    | ViewDmThread Viewing_DmThreadData (SetViewing_ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
-    | ViewDiscordDm Viewing_DiscordDmData (SetViewing_ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
-    | ViewChannel Viewing_ChannelData (SetViewing_ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
-    | ViewChannelThread Viewing_ChannelThreadData (SetViewing_ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
-    | ViewDiscordChannel Viewing_DiscordChannelData (SetViewing_ToBeFilledInByBackend (ViewDiscordGuildData ChannelMessageId))
-    | ViewDiscordChannelThread Viewing_DiscordChannelThreadData (SetViewing_ToBeFilledInByBackend (ViewDiscordGuildData ThreadMessageId))
+    = ViewDm Viewing_DmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
+    | ViewDmThread Viewing_DmThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
+    | ViewDiscordDm Viewing_DiscordDmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
+    | ViewChannel Viewing_ChannelData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
+    | ViewChannelThread Viewing_ChannelThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
+    | ViewDiscordChannel Viewing_DiscordChannelData (ToBeFilledInByBackend (ViewDiscordGuildData ChannelMessageId))
+    | ViewDiscordChannelThread Viewing_DiscordChannelThreadData (ToBeFilledInByBackend (ViewDiscordGuildData ThreadMessageId))
     | StopViewingChannel
-    | ViewOverview (SetViewing_ToBeFilledInByBackend UnreadOverviewData)
+    | ViewOverview (ToBeFilledInByBackend UnreadOverviewData)
 
 
 type Viewing
@@ -413,7 +420,18 @@ init time sessionId userId userAgent =
     , userAgent = userAgent
     , sessionIdHash = SessionIdHash.fromSessionId sessionId
     , signedInAt = time
+    , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
     }
+
+
+expandUserOptionSection : UserOptionSection -> UserSession -> UserSession
+expandUserOptionSection section session =
+    { session | expandedUserOptions = SeqSet.insert section session.expandedUserOptions }
+
+
+collapseUserOptionSection : UserOptionSection -> UserSession -> UserSession
+collapseUserOptionSection section session =
+    { session | expandedUserOptions = SeqSet.remove section session.expandedUserOptions }
 
 
 toFrontend : Id UserId -> SeqDict ClientId Viewing -> UserSession -> Maybe FrontendUserSession

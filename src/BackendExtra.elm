@@ -2243,6 +2243,9 @@ toBackendLog toBackend =
                 Local_DeleteGuild _ ->
                     ToBackendLog_Local_DeleteGuild
 
+                Local_LeaveGuild _ ->
+                    ToBackendLog_Local_LeaveGuild
+
                 Local_NewInviteLink _ _ _ ->
                     ToBackendLog_Local_NewInviteLink
 
@@ -2305,6 +2308,12 @@ toBackendLog toBackend =
 
                 Local_SetNotificationMode _ ->
                     ToBackendLog_Local_SetNotificationMode
+
+                Local_ExpandUserOptionSection _ ->
+                    ToBackendLog_Local_ExpandUserOptionSection
+
+                Local_CollapseUserOptionSection _ ->
+                    ToBackendLog_Local_CollapseUserOptionSection
 
                 Local_SetEmailNotifications _ ->
                     ToBackendLog_Local_SetEmailNotifications
