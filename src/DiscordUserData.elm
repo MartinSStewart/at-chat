@@ -21,6 +21,12 @@ type DiscordUserData
     | NeedsAuthAgain NeedsAuthAgainData
 
 
+{-| `markEverythingAsViewedOnceLoaded` is set when the account is first linked. The
+guilds, channels and DMs it brings along don't exist yet at that point, so the flag is
+carried until the gateway hands us the data and everything can be marked as read. It
+stays `False` when reloading an already linked account, since that would throw away
+unread markers the user still cares about.
+-}
 type alias DiscordFullUserData =
     { auth : Discord.UserAuth
     , user : Discord.User
@@ -29,6 +35,7 @@ type alias DiscordFullUserData =
     , icon : Maybe FileHash
     , linkedAt : Time.Posix
     , isLoadingData : DiscordUserLoadingData
+    , markEverythingAsViewedOnceLoaded : Bool
     }
 
 

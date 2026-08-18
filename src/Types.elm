@@ -922,6 +922,7 @@ type ServerChange
             { discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
             , discordDms : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
             , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+            , markEverythingAsViewed : Bool
             }
         )
     | Server_StartReloadingDiscordUser Time.Posix (Discord.Id Discord.UserId)
@@ -932,7 +933,7 @@ type ServerChange
     | Server_GotDmMessageEmbed (Id UserId) ThreadRouteWithMessage ( Url, Result () EmbedData )
     | Server_GotDiscordGuildMessageEmbed (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage ( Url, Result () EmbedData )
     | Server_GotDiscordDmMessageEmbed (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) ( Url, Result () EmbedData )
-    | Server_DiscordGuildJoinedOrCreated (Discord.Id Discord.GuildId) DiscordFrontendGuild
+    | Server_DiscordGuildJoinedOrCreated (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) DiscordFrontendGuild
     | Server_DiscordUpdateChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (OptionalData (Maybe String)) (OptionalData (Maybe String)) (List Discord.Overwrite)
     | Server_DiscordUpdateRole (Discord.Id Discord.GuildId) (Discord.Id Discord.RoleId) DiscordRole
     | Server_DiscordUpdateGuildCustomEmojis (Discord.Id Discord.GuildId) (SeqSet (Id CustomEmojiId))

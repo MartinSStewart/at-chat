@@ -710,6 +710,7 @@ update msg model =
                             , icon = Nothing
                             , linkedAt = linkedAt
                             , isLoadingData = DiscordUserLoadingData linkedAt
+                            , markEverythingAsViewedOnceLoaded = True
                             }
                     in
                     ( { model | discordUsers = SeqDict.insert discordUser.id (FullData backendUser) model.discordUsers }
@@ -812,7 +813,12 @@ update msg model =
                                         | discordUsers =
                                             SeqDict.insert
                                                 discordUserId
-                                                (FullData { discordUser | isLoadingData = DiscordUserLoadedSuccessfully })
+                                                (FullData
+                                                    { discordUser
+                                                        | isLoadingData = DiscordUserLoadedSuccessfully
+                                                        , markEverythingAsViewedOnceLoaded = False
+                                                    }
+                                                )
                                                 model.discordUsers
                                         , discordGuilds =
                                             SeqDict.foldl
@@ -852,8 +858,16 @@ update msg model =
                                                 model.discordDmChannels
                                                 dmData
                                     }
+
+                                model3 : BackendModel
+                                model3 =
+                                    if discordUser.markEverythingAsViewedOnceLoaded then
+                                        markDiscordDataAsViewed discordUserId discordUser.linkedTo model2
+
+                                    else
+                                        model2
                             in
-                            ( model2
+                            ( model3
                             , Broadcast.toUserAlt
                                 discordUser.linkedTo
                                 (\session connection ->
@@ -862,7 +876,7 @@ update msg model =
                                             BackendExtra.getLinkedDiscordUsersAndOtherUsers
                                                 session.userId
                                                 connection.currentlyViewing
-                                                model2
+                                                model3
                                     in
                                     Server_DiscordUserLoadingDataIsDone
                                         discordUserId
@@ -870,7 +884,7 @@ update msg model =
                                             { discordGuilds =
                                                 SeqDict.filterMap
                                                     (\guildId _ ->
-                                                        case SeqDict.get guildId model2.discordGuilds of
+                                                        case SeqDict.get guildId model3.discordGuilds of
                                                             Just guild ->
                                                                 BackendExtra.discordGuildToFrontendForUser
                                                                     Nothing
@@ -885,7 +899,7 @@ update msg model =
                                             , discordDms =
                                                 List.filterMap
                                                     (\data ->
-                                                        case SeqDict.get data.dmChannelId model2.discordDmChannels of
+                                                        case SeqDict.get data.dmChannelId model3.discordDmChannels of
                                                             Just dmChannel ->
                                                                 case
                                                                     BackendExtra.discordDmChannelToFrontend
@@ -905,11 +919,12 @@ update msg model =
                                                     dmData
                                                     |> SeqDict.fromList
                                             , discordUsers = LinkedAndOtherDiscordUsers.otherUsers linkedAndOtherDiscordUsers
+                                            , markEverythingAsViewed = discordUser.markEverythingAsViewedOnceLoaded
                                             }
                                         )
                                         |> ServerChange
                                 )
-                                model2
+                                model3
                             )
 
                         Err error ->
@@ -1513,15 +1528,45 @@ update msg model =
                         guild2 : DiscordBackendGuild
                         guild2 =
                             addDiscordGuildData discordUserId guildData guild
+
+                        maybeLinkedTo : Maybe (Id UserId)
+                        maybeLinkedTo =
+                            case SeqDict.get discordUserId model.discordUsers of
+                                Just (FullData discordUser) ->
+                                    Just discordUser.linkedTo
+
+                                _ ->
+                                    Nothing
+
+                        model2 : BackendModel
+                        model2 =
+                            { model
+                                | discordGuilds = SeqDict.insert guildId guild2 model.discordGuilds
+                                , users =
+                                    case maybeLinkedTo of
+                                        Just linkedTo ->
+                                            NonemptyDict.updateIfExists
+                                                linkedTo
+                                                (LocalState.markAllDiscordChannelsAndThreadsAsViewedBackend
+                                                    discordUserId
+                                                    guildId
+                                                    guild2
+                                                )
+                                                model.users
+
+                                        Nothing ->
+                                            model.users
+                            }
                     in
-                    ( { model | discordGuilds = SeqDict.insert guildId guild2 model.discordGuilds }
-                    , case SeqDict.get discordUserId model.discordUsers of
-                        Just (FullData discordUser) ->
+                    ( model2
+                    , case maybeLinkedTo of
+                        Just linkedTo ->
                             Broadcast.toUser
                                 Nothing
                                 Nothing
-                                discordUser.linkedTo
+                                linkedTo
                                 (Server_DiscordGuildJoinedOrCreated
+                                    discordUserId
                                     guildId
                                     (BackendExtra.discordGuildToFrontend
                                         Nothing
@@ -1532,9 +1577,9 @@ update msg model =
                                     )
                                     |> ServerChange
                                 )
-                                model
+                                model2
 
-                        _ ->
+                        Nothing ->
                             Command.none
                     )
 
@@ -7630,6 +7675,51 @@ sendEditMessage clientId changeId time timezone newContent attachedFiles2 id thr
             ( model2
             , BackendExtra.invalidChangeResponse changeId clientId
             )
+
+
+{-| Everything a newly linked Discord account brings with it starts out read. The
+messages were written before the user could see them here, so treating them as unread
+would bury the app in notifications the moment an account is linked.
+-}
+markDiscordDataAsViewed : Discord.Id Discord.UserId -> Id UserId -> BackendModel -> BackendModel
+markDiscordDataAsViewed discordUserId userId model =
+    { model
+        | users =
+            NonemptyDict.updateIfExists
+                userId
+                (\user ->
+                    let
+                        guildsViewed : BackendUser
+                        guildsViewed =
+                            SeqDict.foldl
+                                (\guildId guild state ->
+                                    case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                                        MembersAndOwner.IsNotMember ->
+                                            state
+
+                                        _ ->
+                                            LocalState.markAllDiscordChannelsAndThreadsAsViewedBackend
+                                                discordUserId
+                                                guildId
+                                                guild
+                                                state
+                                )
+                                user
+                                model.discordGuilds
+                    in
+                    SeqDict.foldl
+                        (\channelId dmChannel state ->
+                            if NonemptyDict.member discordUserId dmChannel.members then
+                                LocalState.markDiscordDmAsViewedBackend discordUserId channelId dmChannel state
+
+                            else
+                                state
+                        )
+                        guildsViewed
+                        model.discordDmChannels
+                )
+                model.users
+    }
 
 
 joinGuildByInvite :

@@ -4520,28 +4520,27 @@ changeUpdate localMsg local =
                     in
                     case result of
                         Ok data ->
-                            { local
-                                | localUser =
-                                    { localUser
-                                        | discordUsers =
-                                            SeqDict.foldl LinkedAndOtherDiscordUsers.addOtherUser localUser.discordUsers data.discordUsers
-                                                |> LinkedAndOtherDiscordUsers.updateLinkedUser
-                                                    discordUserId
-                                                    (\user ->
-                                                        { user
-                                                            | isLoadingData =
-                                                                case result of
-                                                                    Ok _ ->
-                                                                        DiscordUserLoadedSuccessfully
-
-                                                                    Err time ->
-                                                                        DiscordUserLoadingFailed time
-                                                        }
-                                                    )
+                            let
+                                local2 : LocalState
+                                local2 =
+                                    { local
+                                        | localUser =
+                                            { localUser
+                                                | discordUsers =
+                                                    SeqDict.foldl LinkedAndOtherDiscordUsers.addOtherUser localUser.discordUsers data.discordUsers
+                                                        |> LinkedAndOtherDiscordUsers.updateLinkedUser
+                                                            discordUserId
+                                                            (\user -> { user | isLoadingData = DiscordUserLoadedSuccessfully })
+                                            }
+                                        , discordGuilds = SeqDict.foldl SeqDict.insert local.discordGuilds data.discordGuilds
+                                        , discordDmChannels = SeqDict.foldl SeqDict.insert local.discordDmChannels data.discordDms
                                     }
-                                , discordGuilds = SeqDict.foldl SeqDict.insert local.discordGuilds data.discordGuilds
-                                , discordDmChannels = SeqDict.foldl SeqDict.insert local.discordDmChannels data.discordDms
-                            }
+                            in
+                            if data.markEverythingAsViewed then
+                                markDiscordDataAsViewed discordUserId local2
+
+                            else
+                                local2
 
                         Err time ->
                             { local
@@ -4708,7 +4707,11 @@ changeUpdate localMsg local =
                         Nothing ->
                             local
 
-                Server_DiscordGuildJoinedOrCreated guildId guild ->
+                Server_DiscordGuildJoinedOrCreated discordUserId guildId guild ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
                     { local
                         | discordGuilds =
                             SeqDict.update
@@ -4722,6 +4725,15 @@ changeUpdate localMsg local =
                                             Just guild
                                 )
                                 local.discordGuilds
+                        , localUser =
+                            { localUser
+                                | user =
+                                    LocalState.markAllDiscordChannelsAndThreadsAsViewedFrontend
+                                        discordUserId
+                                        guildId
+                                        guild
+                                        localUser.user
+                            }
                     }
 
                 Server_DiscordUpdateChannel guildId channelId name topic permissionOverwrites ->
@@ -5619,6 +5631,53 @@ initAdminData adminData =
     , sessions = adminData.sessions
     , wordSpellingGameEnglish = adminData.wordSpellingGameEnglish
     , wordSpellingGameSwedish = adminData.wordSpellingGameSwedish
+    }
+
+
+{-| Everything a newly linked Discord account brings with it starts out read. The
+messages were written before the user could see them here, so treating them as unread
+would bury the app in notifications the moment an account is linked.
+-}
+markDiscordDataAsViewed : Discord.Id Discord.UserId -> LocalState -> LocalState
+markDiscordDataAsViewed discordUserId local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        guildsViewed : FrontendCurrentUser
+        guildsViewed =
+            SeqDict.foldl
+                (\guildId guild state ->
+                    case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                        MembersAndOwner.IsNotMember ->
+                            state
+
+                        _ ->
+                            LocalState.markAllDiscordChannelsAndThreadsAsViewedFrontend
+                                discordUserId
+                                guildId
+                                guild
+                                state
+                )
+                localUser.user
+                local.discordGuilds
+    in
+    { local
+        | localUser =
+            { localUser
+                | user =
+                    SeqDict.foldl
+                        (\channelId dmChannel state ->
+                            if NonemptyDict.member discordUserId dmChannel.members then
+                                LocalState.markDiscordDmAsViewedFrontend discordUserId channelId dmChannel state
+
+                            else
+                                state
+                        )
+                        guildsViewed
+                        local.discordDmChannels
+            }
     }
 
 

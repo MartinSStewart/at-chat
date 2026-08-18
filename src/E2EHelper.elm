@@ -2559,7 +2559,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_GotDiscordDmMessageEmbed _ _ _ ->
                             True
 
-                        Types.Server_DiscordGuildJoinedOrCreated _ _ ->
+                        Types.Server_DiscordGuildJoinedOrCreated _ _ _ ->
                             True
 
                         Types.Server_DiscordUpdateChannel _ _ _ _ _ ->

@@ -2258,6 +2258,59 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Discord messages written before an account was linked start out read"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ -- Messages pile up in a Discord guild channel while the admin is the only
+                          -- at-chat user with a Discord account linked.
+                          discordGuildMessageFromGuildOnlyUser connection "Written before the second user linked"
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , E2EHelper.hasNotExactText admin [ "You have no unread messages!" ]
+                        ]
+                    )
+
+                -- A second at-chat user links a Discord account that is a member of the same guild.
+                , E2EHelper.linkDiscordAndLoginSecondUser
+                    E2EHelper.sessionId1
+                    "Second User"
+                    E2EHelper.userEmail
+                    discordOp0Ready
+                    discordOp0ReadySupplemental
+                    (\_ -> [])
+
+                -- The guild already existed on the backend, so the second user only receives it on a
+                -- fresh page load. The messages predate the link, so none of them count as unread.
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    "/"
+                    E2EHelper.desktopWindow
+                    (\userB ->
+                        [ T.andThen
+                            10
+                            (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        , E2EHelper.hasExactText userB [ "You have no unread messages!" ]
+
+                        -- Sanity check: the second user really can see the guild and the message that
+                        -- was marked as read, so the check above isn't passing for lack of data.
+                        , userB.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , E2EHelper.hasExactText userB [ "Written before the second user linked" ]
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Discord group DM notification shows red icon in guild column"
         E2EHelper.startTime
         normalConfig
