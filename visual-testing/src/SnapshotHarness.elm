@@ -18,7 +18,7 @@ import Url exposing (Url)
 
 {-| Tell the JS harness we're ready to make a snapshot
 -}
-port respondReadyForSnapshot : { name : String, hasMore : Bool, width : Int, height : Int } -> Cmd msg
+port respondReadyForSnapshot : { name : String, index : Int, hasMore : Bool, width : Int, height : Int } -> Cmd msg
 
 
 {-| Received request to advance to next snapshot
@@ -118,6 +118,7 @@ respondReadyForSnapshotHelper snapshots model =
                     snapshot.name
                         |> String.filter (\char -> Char.toCode char >= 32)
                         |> String.replace "/" "-"
+                , index = model.currentIndex + 1
                 , hasMore = model.currentIndex < List.length snapshots
                 , width = List.Nonempty.head snapshot.widths
                 , height = Maybe.withDefault 1000 snapshot.minimumHeight
@@ -125,12 +126,26 @@ respondReadyForSnapshotHelper snapshots model =
             )
 
         Nothing ->
-            ( model, respondReadyForSnapshot { name = "", hasMore = False, width = 1000, height = 1000 } )
+            ( model, respondReadyForSnapshot { name = "", index = -1, hasMore = False, width = 1000, height = 1000 } )
+
+
+{-| The index of the snapshot that has actually been drawn to the page.
+
+`respondReadyForSnapshot` is a Cmd, so JS is told the next snapshot's name while
+the page still shows the previous one: Elm patches the DOM (and this title) in an
+animation frame that runs after the port message has already been delivered.
+Screenshotting at that point saves the previous snapshot's picture under the new
+snapshot's name. The runner waits for this title before it takes the screenshot.
+
+-}
+renderedMarker : Int -> String
+renderedMarker index =
+    "snapshot-" ++ String.fromInt index
 
 
 view : Model frontendMsg -> Document (Msg frontendMsg)
 view model =
-    { title = ""
+    { title = renderedMarker model.currentIndex
     , body =
         case model.snapshots of
             Just snapshots ->

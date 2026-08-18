@@ -92,25 +92,31 @@ branch changed. Concretely it:
 3. Finds the commit on `master` your branch forked from
    (`git merge-base master HEAD`), checks it out in a throwaway **git
    worktree**, and renders baseline snapshots into
-   `snapshots/<browser>/baseline-<sha>/`. Your branch, working tree and uncommitted
-   changes are never touched. To keep the base/current comparison fair, the
+   `snapshots/<browser>/baseline-<sha>-<renderer>/`. Your branch, working tree
+   and uncommitted changes are never touched. To keep the base/current comparison fair, the
    base app code is rendered with the *current* test harness + runner (only the
    app/test code differs, not the tooling).
 4. Removes the worktree, leaving you exactly where you started.
-5. Diffs `current/` against `baseline-<sha>/` with
+5. Diffs `current/` against `baseline-<sha>-<renderer>/` with
    [`odiff`](https://github.com/dmtrKovalenko/odiff), writing a diff mask per
    changed snapshot into `snapshots/<browser>/diff/` and printing which snapshots changed
    (or were added / removed). Exits non-zero if anything differs, so it's
    usable as a pass/fail check.
 
 Baselines are cached per browser and base commit
-(`snapshots/<browser>/baseline-<sha>/`), so steps 3 and 4 are skipped on repeat
-runs against the same base. Delete that folder (or the whole `snapshots/`
-folder) to force a fresh baseline. Everything under `snapshots/` is gitignored.
+(`snapshots/<browser>/baseline-<sha>-<renderer>/`), so steps 3 and 4 are skipped
+on repeat runs against the same base. Delete that folder (or the whole
+`snapshots/` folder) to force a fresh baseline. Everything under `snapshots/` is
+gitignored.
+
+The `<renderer>` part is the `renderer_version` in `run-snapshot-test.sh`. Bump
+it whenever the runner changes in a way that can change the images: cached
+baselines rendered by the old runner are then re-rendered rather than compared
+against, which would otherwise show up as a wall of spurious diffs.
 
 ```
 $ ls snapshots/chrome
-baseline-2460e7e…/   current/   diff/
+baseline-2460e7e…-r2/   current/   diff/
 ```
 
 It compiles the Elm app via `lamdera` (falling back to `npx lamdera` when

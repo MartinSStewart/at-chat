@@ -47,8 +47,14 @@ echo "ℹ️  Feature branch : $branch"
 echo "ℹ️  Base ($base_branch) : $base_sha"
 echo "ℹ️  Browser       : $browser"
 
+# Bumped whenever the renderer changes in a way that can change the images, so
+# that baselines cached by an older renderer are re-rendered instead of silently
+# reused. (r2: screenshots now wait for Elm to render the snapshot, so anything
+# cached before that can hold a picture of the wrong snapshot entirely.)
+renderer_version=r2
+
 current_dir="$vt_dir/snapshots/$browser/current"
-baseline_dir="$vt_dir/snapshots/$browser/baseline-$base_sha"
+baseline_dir="$vt_dir/snapshots/$browser/baseline-$base_sha-$renderer_version"
 diff_dir="$vt_dir/snapshots/$browser/diff"
 
 # Guarded `rm -rf`. Refuses to delete anything that isn't strictly inside this

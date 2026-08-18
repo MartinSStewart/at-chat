@@ -97,7 +97,20 @@ server.listen(port, () => {
 
 (async () => {
     markTime("boot")
-    let browser = await remote({ capabilities: browserCapabilities });
+    // The first advanceSnapshotRequested below blocks for as long as it takes to
+    // simulate the whole test suite (minutes). webdriverio gives up on a command
+    // after connectionRetryTimeout (2 minutes by default) and then RETRIES it,
+    // which is silent and destructive here: the retry sends a second advance, so
+    // the harness steps past a snapshot that never got photographed. Firefox is
+    // slow enough at the simulation to cross the 2 minute default and lose the
+    // first snapshot every run; Chrome sneaks in just under it. Wait long enough
+    // for the simulation, and never retry - a lost command should be an error, not
+    // a quietly missing image.
+    let browser = await remote({
+      capabilities: browserCapabilities,
+      connectionRetryTimeout: 600000,
+      connectionRetryCount: 0,
+    });
     markTime("remote")
 
     await browser.navigateTo(`http://localhost:${port}`);
@@ -120,11 +133,10 @@ server.listen(port, () => {
 
     // The first advanceSnapshotRequested is special: the harness only responds
     // once the test data files have loaded AND the entire test suite has been
-    // simulated (T.toSnapshots), which takes well over 10 seconds and grows as
-    // tests are added. If this call exceeds the script timeout, webdriverio
-    // SILENTLY RETRIES the command; the retry advances the harness to the next
-    // snapshot, so the first snapshot is skipped without any error. Give the
-    // first call a budget that comfortably covers the whole-suite simulation.
+    // simulated (T.toSnapshots), which takes minutes and grows as tests are
+    // added. This is the browser-side half of the budget for it (the client-side
+    // half is connectionRetryTimeout above); if it runs out the browser aborts
+    // the script and the first snapshot is lost.
     await browser.setTimeout({ script: 300000 })
 
     // Web fonts (e.g. the app's Montserrat @font-face, declared with
@@ -150,6 +162,33 @@ server.listen(port, () => {
       });
     }
 
+    // Elm renders in an animation frame, and `respondReadyForSnapshot` is a Cmd
+    // dispatched from `update`, so when the advance below resolves the page is
+    // still showing the PREVIOUS snapshot; Elm draws the new one a frame later.
+    // Screenshotting in that window saves the previous snapshot's picture under
+    // the new snapshot's name. Since consecutive snapshots often come from
+    // different tests, the result doesn't look like a timing artifact at all -
+    // e.g. snapshot 103 is a Go board and 104 is a word spelling game, so the
+    // word spelling game's file ends up with a picture of a Go board in it.
+    // document.title carries the index of the snapshot Elm has actually drawn,
+    // so wait for it to match before screenshotting. Chrome usually redraws
+    // fast enough to hide the gap; Firefox regularly loses this race.
+    async function waitForRender(index) {
+      await browser.waitUntil(
+        async function () { return (await browser.getTitle()) === `snapshot-${index}` },
+        {
+          timeout: 30000,
+          interval: 50,
+          timeoutMsg: `Timed out waiting for snapshot ${index} to be rendered`,
+        }
+      );
+      // The title is set right after the DOM patch, so the page now holds the
+      // right elements; give the browser one frame to actually paint them.
+      await browser.executeAsync(function (done) {
+        requestAnimationFrame(function () { requestAnimationFrame(function () { done(); }); });
+      });
+    }
+
     snapshot = await browser.executeAsync(function(readyForSnapshotCallback) {
       window.advanceSnapshotRequested(readyForSnapshotCallback)
     });
@@ -157,14 +196,15 @@ server.listen(port, () => {
     // Every later advance just steps to an already-simulated snapshot (a few
     // milliseconds). This budget covers each executeAsync below, including
     // waiting for web fonts to load before a screenshot.
-    await browser.setTimeout({ script: 10000 })
+    await browser.setTimeout({ script: 60000 })
 
     var count = 0
 
     while (snapshot.hasMore) {
       // @TODO security
       // snapshotName = sanitize(snapshotName);
-      browser.setWindowSize(snapshot.width, snapshot.height);
+      await browser.setWindowSize(snapshot.width, snapshot.height);
+      await waitForRender(snapshot.index);
       await waitForFonts();
       await browser.saveScreenshot(`${outDir}/${snapshot.name}.png`);
       count++;
