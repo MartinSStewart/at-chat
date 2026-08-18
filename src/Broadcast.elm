@@ -1397,7 +1397,50 @@ toEveryoneWhoCanSeeUserIncludingUser userId change model =
 -}
 toEveryoneWhoCanSeeDiscordUser : Discord.Id Discord.UserId -> ServerChange -> BackendModel -> Command BackendOnly ToFrontend msg
 toEveryoneWhoCanSeeDiscordUser discordUserId serverChange model =
-    Debug.todo ""
+    let
+        sharesAGuildWith : SeqSet (Discord.Id Discord.UserId)
+        sharesAGuildWith =
+            SeqDict.foldl
+                (\_ guild state ->
+                    case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                        IsNotMember ->
+                            state
+
+                        _ ->
+                            MembersAndOwner.membersAndOwner guild.membersAndOwner
+                                |> List.foldl SeqSet.insert state
+                )
+                SeqSet.empty
+                model.discordGuilds
+
+        sharesADmWith : SeqSet (Discord.Id Discord.UserId)
+        sharesADmWith =
+            SeqDict.foldl
+                (\_ channel state ->
+                    if NonemptyDict.member discordUserId channel.members then
+                        NonemptyDict.keys channel.members |> List.Nonempty.foldl SeqSet.insert state
+
+                    else
+                        state
+                )
+                SeqSet.empty
+                model.discordDmChannels
+    in
+    SeqSet.union sharesAGuildWith sharesADmWith
+        |> SeqSet.foldl
+            (\discordUserId2 state ->
+                case SeqDict.get discordUserId2 model.discordUsers of
+                    Just (FullData discordUser) ->
+                        SeqSet.insert discordUser.linkedTo state
+
+                    _ ->
+                        state
+            )
+            SeqSet.empty
+        |> SeqSet.foldl
+            (\userId cmds -> toUser Nothing Nothing userId (ServerChange serverChange) model :: cmds)
+            []
+        |> Command.batch
 
 
 broadcastDm :

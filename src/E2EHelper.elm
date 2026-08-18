@@ -2610,6 +2610,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetMuteDiscordGuild _ _ ->
                             True
 
+                        Types.Server_DiscordAvatarsLoaded _ _ ->
+                            True
+
         TwoFactorAuthenticationToFrontend _ ->
             False
 

@@ -584,21 +584,25 @@ update msg model =
                                             let
                                                 fileHash =
                                                     Maybe.map .fileHash maybeAvatar
+
+                                                user2 : DiscordUserData
+                                                user2 =
+                                                    case user of
+                                                        FullData data ->
+                                                            FullData { data | icon = fileHash }
+
+                                                        BasicData data ->
+                                                            BasicData { data | icon = fileHash }
+
+                                                        NeedsAuthAgain data ->
+                                                            NeedsAuthAgain { data | icon = fileHash }
                                             in
-                                            ( case user of
-                                                FullData data ->
-                                                    FullData { data | icon = fileHash }
-
-                                                BasicData data ->
-                                                    BasicData { data | icon = fileHash }
-
-                                                NeedsAuthAgain data ->
-                                                    NeedsAuthAgain { data | icon = fileHash }
+                                            ( SeqDict.insert discordUserId user2 discordUsers2
                                             , Broadcast.toEveryoneWhoCanSeeDiscordUser
                                                 discordUserId
                                                 (Server_DiscordAvatarsLoaded
                                                     discordUserId
-                                                    { name = DiscordUserData.username user |> PersonName.fromStringLossy
+                                                    { name = DiscordUserData.username user2 |> PersonName.fromStringLossy
                                                     , icon = fileHash
                                                     }
                                                 )

@@ -4901,6 +4901,28 @@ changeUpdate localMsg local =
                 Server_SetMuteDiscordGuild guildId isMuted ->
                     setMuteDiscordGuild guildId isMuted local
 
+                Server_DiscordAvatarsLoaded discordUserId discordUser ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | discordUsers =
+                                    LinkedAndOtherDiscordUsers.addOtherUser
+                                        discordUserId
+                                        discordUser
+                                        localUser.discordUsers
+                                        |> LinkedAndOtherDiscordUsers.updateLinkedUser
+                                            discordUserId
+                                            (\linkedUser ->
+                                                { linkedUser | name = discordUser.name, icon = discordUser.icon }
+                                            )
+                            }
+                    }
+
 
 callStartedMessage : Time.Posix -> Id UserId -> Message ChannelMessageId (Id UserId)
 callStartedMessage time startedBy =
