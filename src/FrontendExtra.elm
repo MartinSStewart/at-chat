@@ -4713,10 +4713,10 @@ changeUpdate localMsg local =
                                         { channel
                                             | name =
                                                 case name of
-                                                    Discord.Included name2 ->
+                                                    Discord.Included (Just name2) ->
                                                         ChannelName.fromStringLossy name2
 
-                                                    Discord.Missing ->
+                                                    _ ->
                                                         channel.name
                                             , description =
                                                 LocalState.discordTopicToDescription topic channel.description

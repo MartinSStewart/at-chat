@@ -715,10 +715,10 @@ addDiscordChannel discordChannel =
     if isTextChannel then
         { name =
             case discordChannel.name of
-                Included name ->
+                Included (Just name) ->
                     ChannelName.fromStringLossy name
 
-                Missing ->
+                _ ->
                     ChannelName.fromStringLossy "Missing"
         , description = LocalState.discordTopicToDescription discordChannel.topic ChannelDescription.empty
         , isForum = discordChannel.type_ == Discord.GuildForum
@@ -1604,7 +1604,12 @@ handleForumPostCreated authentication thread model =
                     if channel.isForum then
                         addForumPost
                             authentication
-                            { guildId = guildId, forumId = forumId, threadId = thread.id, name = name, ownerId = ownerId }
+                            { guildId = guildId
+                            , forumId = forumId
+                            , threadId = thread.id
+                            , name = Maybe.withDefault "Missing" name
+                            , ownerId = ownerId
+                            }
                             guild
                             channel
                             model
@@ -1729,7 +1734,7 @@ handleForumPostRenamed :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleForumPostRenamed thread time model =
     case ( thread.guildId, thread.parentId, thread.name ) of
-        ( Included guildId, Included (Just forumId), Included name ) ->
+        ( Included guildId, Included (Just forumId), Included (Just name) ) ->
             case ( thread.ownerId, LocalState.getDiscordGuildAndChannel guildId forumId model ) of
                 ( Included ownerId, Just ( _, channel ) ) ->
                     case
@@ -2332,7 +2337,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_ChannelCreated channel ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleChannelCreated channel model2
+                                    handleChannelCreated discordUserId channel model2
                             in
                             ( model3, cmd2 :: cmds )
 
@@ -2598,10 +2603,10 @@ handleChannelUpdated channel model =
                                                     { existingChannel
                                                         | name =
                                                             case channel.name of
-                                                                Included name ->
+                                                                Included (Just name) ->
                                                                     ChannelName.fromStringLossy name
 
-                                                                Missing ->
+                                                                _ ->
                                                                     existingChannel.name
                                                         , description =
                                                             LocalState.discordTopicToDescription
@@ -2978,12 +2983,12 @@ attachmentsToFileData attachment fileHash metadata =
     }
 
 
-handleChannelCreated : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleChannelCreated channel model =
+handleChannelCreated : Discord.Id Discord.UserId -> Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleChannelCreated discordUserId channel model =
     case channel.guildId of
         Missing ->
             case channel.recipients of
-                Included (head :: rest) ->
+                Included recipients ->
                     let
                         channelId : Discord.Id Discord.PrivateChannelId
                         channelId =
@@ -2992,8 +2997,8 @@ handleChannelCreated channel model =
                         members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
                         members =
                             Nonempty
-                                ( head.id, { messagesSent = 0 } )
-                                (List.map (\user -> ( user.id, { messagesSent = 0 } )) rest)
+                                ( discordUserId, { messagesSent = 0 } )
+                                (List.map (\user -> ( user.id, { messagesSent = 0 } )) recipients)
                                 |> NonemptyDict.fromNonemptyList
 
                         existingUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
@@ -3030,7 +3035,7 @@ handleChannelCreated channel model =
                                             , discriminator = user.discriminator
                                             }
                                         )
-                                        (head :: rest)
+                                        recipients
                                         |> List.foldl addDiscordUserData model.discordUsers
                             }
                     in
@@ -3040,7 +3045,7 @@ handleChannelCreated channel model =
                             channelId
                             (Server_DiscordDmChannelCreated channelId members |> ServerChange)
                             model2
-                        , getUserAvatars model2.serverSecret existingUsers (head :: rest)
+                        , getUserAvatars model2.serverSecret existingUsers recipients
                         ]
                     )
 
@@ -3052,10 +3057,10 @@ handleChannelCreated channel model =
                 name : ChannelName
                 name =
                     case channel.name of
-                        Included name2 ->
+                        Included (Just name2) ->
                             ChannelName.fromStringLossy name2
 
-                        Missing ->
+                        _ ->
                             ChannelName.fromStringLossy "New channel"
 
                 overwrites : List Discord.Overwrite
@@ -3827,7 +3832,7 @@ getForumPostsHelper secretKey authentication forumId { archived } offset postsSo
                                 (\thread ->
                                     case thread.name of
                                         Included name ->
-                                            Just { threadId = thread.id, name = name }
+                                            Just { threadId = thread.id, name = Maybe.withDefault "Missing" name }
 
                                         Missing ->
                                             Nothing

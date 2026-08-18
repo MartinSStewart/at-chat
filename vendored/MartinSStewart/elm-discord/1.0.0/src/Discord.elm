@@ -2839,7 +2839,7 @@ type alias Channel =
     , guildId : OptionalData (Id GuildId)
     , position : OptionalData Int
     , permissionOverwrites : OptionalData (List Overwrite)
-    , name : OptionalData String
+    , name : OptionalData (Maybe String)
     , topic : OptionalData (Maybe String)
     , nsfw : OptionalData Bool
     , lastMessageId : OptionalData (Maybe (Id MessageId))
@@ -4448,7 +4448,7 @@ decodeChannel =
         |> JD.andMap (decodeOptionalData "guild_id" decodeId)
         |> JD.andMap (decodeOptionalData "position" JD.int)
         |> JD.andMap (decodeOptionalData "permission_overwrites" (JD.list decodeOverwrite))
-        |> JD.andMap (decodeOptionalData "name" JD.string)
+        |> JD.andMap (decodeOptionalData "name" (JD.nullable JD.string))
         |> JD.andMap (decodeOptionalData "topic" (JD.nullable JD.string))
         |> JD.andMap (decodeOptionalData "nsfw" JD.bool)
         |> JD.andMap (decodeOptionalData "last_message_id" (JD.nullable decodeId))
