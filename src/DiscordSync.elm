@@ -2983,7 +2983,11 @@ attachmentsToFileData attachment fileHash metadata =
     }
 
 
-handleChannelCreated : Discord.Id Discord.UserId -> Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleChannelCreated :
+    Discord.Id Discord.UserId
+    -> Discord.Channel
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleChannelCreated discordUserId channel model =
     case channel.guildId of
         Missing ->

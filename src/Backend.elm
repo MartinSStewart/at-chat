@@ -575,29 +575,45 @@ update msg model =
         GotDiscordUserAvatars result time ->
             case result of
                 Ok userAvatars ->
-                    ( { model
-                        | discordUsers =
+                    let
+                        ( discordUsers, cmds ) =
                             List.foldl
-                                (\( discordUserId, maybeAvatar ) discordUsers ->
-                                    SeqDict.updateIfExists
-                                        discordUserId
-                                        (\user ->
-                                            case user of
+                                (\( discordUserId, maybeAvatar ) ( discordUsers2, cmds2 ) ->
+                                    case SeqDict.get discordUserId discordUsers2 of
+                                        Just user ->
+                                            let
+                                                fileHash =
+                                                    Maybe.map .fileHash maybeAvatar
+                                            in
+                                            ( case user of
                                                 FullData data ->
-                                                    FullData { data | icon = Maybe.map .fileHash maybeAvatar }
+                                                    FullData { data | icon = fileHash }
 
                                                 BasicData data ->
-                                                    BasicData { data | icon = Maybe.map .fileHash maybeAvatar }
+                                                    BasicData { data | icon = fileHash }
 
                                                 NeedsAuthAgain data ->
-                                                    NeedsAuthAgain { data | icon = Maybe.map .fileHash maybeAvatar }
-                                        )
-                                        discordUsers
+                                                    NeedsAuthAgain { data | icon = fileHash }
+                                            , Broadcast.toEveryoneWhoCanSeeDiscordUser
+                                                discordUserId
+                                                (Server_DiscordAvatarsLoaded
+                                                    discordUserId
+                                                    { name = DiscordUserData.username user |> PersonName.fromStringLossy
+                                                    , icon = fileHash
+                                                    }
+                                                )
+                                                model
+                                                :: cmds2
+                                            )
+
+                                        Nothing ->
+                                            ( discordUsers2, cmds2 )
                                 )
-                                model.discordUsers
+                                ( model.discordUsers, [] )
                                 userAvatars
-                      }
-                    , Command.none
+                    in
+                    ( { model | discordUsers = discordUsers }
+                    , Command.batch cmds
                     )
 
                 Err error ->

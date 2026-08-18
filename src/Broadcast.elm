@@ -23,6 +23,7 @@ module Broadcast exposing
     , toDmChannel
     , toDmChannelExcludingOne
     , toEveryone
+    , toEveryoneWhoCanSeeDiscordUser
     , toEveryoneWhoCanSeeUser
     , toEveryoneWhoCanSeeUserIncludingUser
     , toGuild
@@ -1390,6 +1391,13 @@ toEveryoneWhoCanSeeUserIncludingUser userId change model =
         model.guilds
         |> SeqSet.foldl (\userId2 cmds -> toUser Nothing Nothing userId2 change model :: cmds) []
         |> Command.batch
+
+
+{-| Broadcast to all users who have a shared Discord guild or Discord DM with this discord user.
+-}
+toEveryoneWhoCanSeeDiscordUser : Discord.Id Discord.UserId -> ServerChange -> BackendModel -> Command BackendOnly ToFrontend msg
+toEveryoneWhoCanSeeDiscordUser discordUserId serverChange model =
+    Debug.todo ""
 
 
 broadcastDm :

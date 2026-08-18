@@ -948,6 +948,7 @@ type ServerChange
     | Server_SetMuteDiscordThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
     | Server_SetMuteGuild (Id GuildId) IsMuted
     | Server_SetMuteDiscordGuild (Discord.Id Discord.GuildId) IsMuted
+    | Server_DiscordAvatarsLoaded (Discord.Id Discord.UserId) DiscordFrontendUser
 
 
 type LocalChange
