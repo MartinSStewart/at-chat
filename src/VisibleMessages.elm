@@ -81,9 +81,15 @@ slice { visibleMessages, messages } =
         messages
 
 
+{-| The oldest message being held is the first one ever written, so the view can show the
+header saying the conversation starts here. A load that's still in flight counts as not
+visible: `empty` starts out pointing at message 0, so a conversation waiting on its first
+page would otherwise claim to be showing its own beginning, and a slow load would leave
+someone looking at that header thinking there's nothing older.
+-}
 startIsVisible : VisibleMessages messageId -> Bool
 startIsVisible visibleMessages =
-    Id.toInt visibleMessages.oldest <= 0
+    Id.toInt visibleMessages.oldest <= 0 && not visibleMessages.loadingMessages
 
 
 pageSize : number

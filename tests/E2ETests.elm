@@ -1833,6 +1833,50 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EHelper.startTest
+        "A conversation waiting on its messages doesn't claim to be at its start"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\_ user ->
+                [ E2EHelper.writeMessage user 1000 "Message 1"
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    (Route.encode Route.HomePageRoute)
+                    E2EHelper.desktopWindow
+                    (\userReload ->
+                        [ T.andThen
+                            10
+                            (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        , userReload.click 100 (Dom.id "guild_openGuild_1")
+
+                        -- The messages are still on their way, so the header saying the
+                        -- channel starts here stays hidden. Showing it would tell the
+                        -- reader there's nothing older while there still might be.
+                        , userReload.checkView
+                            20
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.exactText "This is the start of #general" ]
+                            )
+                        , userReload.checkView
+                            20
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Message 1" ])
+
+                        -- Once the messages arrive both turn up.
+                        , userReload.checkView
+                            1000
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "This is the start of #general"
+                                , Test.Html.Selector.exactText "Message 1"
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "No messages missing even in long chat history"
         E2EHelper.startTime
         normalConfig
