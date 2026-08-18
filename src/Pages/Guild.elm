@@ -4928,32 +4928,28 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                  ]
                     ++ drawingZoomAttributes model.route loggedIn.drawingMode
                 )
-                ((if VisibleMessages.startIsVisible channel.visibleMessages then
-                    [ ( "a"
-                      , case guildOrDmIdNoThread of
+                (( "a"
+                 , Ui.el
+                    [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
+                    (if VisibleMessages.startIsVisible channel.visibleMessages then
+                        case guildOrDmIdNoThread of
                             GuildOrDmId_Guild _ ->
-                                Ui.el
-                                    [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                                    (Ui.text ("This is the start of #" ++ name))
+                                Ui.text ("This is the start of #" ++ name)
 
                             GuildOrDmId_Dm { otherUserId } ->
-                                Ui.el
-                                    [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                                    (Ui.text
-                                        (if otherUserId == local.localUser.session.userId then
-                                            "This is the start of a conversation with yourself"
+                                Ui.text
+                                    (if otherUserId == local.localUser.session.userId then
+                                        "This is the start of a conversation with yourself"
 
-                                         else
-                                            "This is the start of your conversation with " ++ name
-                                        )
+                                     else
+                                        "This is the start of your conversation with " ++ name
                                     )
-                      )
-                    ]
 
-                  else
-                    []
+                     else
+                        Ui.none
+                    )
                  )
-                    ++ conversationViewHelper
+                    :: conversationViewHelper
                         lastViewedIndex
                         guildOrDmIdNoThread
                         maybeUrlMessageId
@@ -5107,32 +5103,28 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                  ]
                     ++ drawingZoomAttributes model.route loggedIn.drawingMode
                 )
-                ((if VisibleMessages.startIsVisible channel.visibleMessages then
-                    [ ( "a"
-                      , case guildOrDmIdNoThread of
+                (( "a"
+                 , Ui.el
+                    [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
+                    (if VisibleMessages.startIsVisible channel.visibleMessages then
+                        case guildOrDmIdNoThread of
                             DiscordGuildOrDmId_Guild _ ->
-                                Ui.el
-                                    [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                                    (Ui.text ("This is the start of #" ++ name))
+                                Ui.text ("This is the start of #" ++ name)
 
                             DiscordGuildOrDmId_Dm data ->
-                                Ui.el
-                                    [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                                    (Ui.text
-                                        (if ChannelHeader.chattingWithYourself data local then
-                                            "This is the start of a conversation with yourself"
+                                Ui.text
+                                    (if ChannelHeader.chattingWithYourself data local then
+                                        "This is the start of a conversation with yourself"
 
-                                         else
-                                            "This is the start of your conversation with " ++ name
-                                        )
+                                     else
+                                        "This is the start of your conversation with " ++ name
                                     )
-                      )
-                    ]
 
-                  else
-                    []
+                     else
+                        Ui.none
+                    )
                  )
-                    ++ discordConversationViewHelper
+                    :: discordConversationViewHelper
                         lastViewedIndex
                         currentDiscordUserId
                         guildOrDmIdNoThread
@@ -5394,51 +5386,50 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                  ]
                     ++ drawingZoomAttributes model.route loggedIn.drawingMode
                 )
-                ((if VisibleMessages.startIsVisible channel.visibleMessages then
-                    [ ( "a"
-                      , Ui.column
-                            [ Ui.alignBottom ]
-                            [ Ui.el
-                                [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                                (Ui.text "Start of thread")
-                            , case guildOrDmIdNoThread of
-                                GuildOrDmId_Guild { guildId, channelId } ->
-                                    case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
-                                        Just ( _, channel2 ) ->
-                                            threadStarterMessage
-                                                isMobile
-                                                guildOrDmIdNoThread
-                                                threadId
-                                                channel2
-                                                loggedIn
-                                                local
-                                                model
+                (( "a"
+                 , Ui.column
+                    [ Ui.alignBottom ]
+                    (if VisibleMessages.startIsVisible channel.visibleMessages then
+                        [ Ui.el
+                            [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
+                            (Ui.text "Start of thread")
+                        , case guildOrDmIdNoThread of
+                            GuildOrDmId_Guild { guildId, channelId } ->
+                                case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
+                                    Just ( _, channel2 ) ->
+                                        threadStarterMessage
+                                            isMobile
+                                            guildOrDmIdNoThread
+                                            threadId
+                                            channel2
+                                            loggedIn
+                                            local
+                                            model
 
-                                        Nothing ->
-                                            Ui.none
+                                    Nothing ->
+                                        Ui.none
 
-                                GuildOrDmId_Dm { otherUserId } ->
-                                    case SeqDict.get otherUserId local.dmChannels of
-                                        Just dmChannel2 ->
-                                            threadStarterMessage
-                                                isMobile
-                                                guildOrDmIdNoThread
-                                                threadId
-                                                dmChannel2
-                                                loggedIn
-                                                local
-                                                model
+                            GuildOrDmId_Dm { otherUserId } ->
+                                case SeqDict.get otherUserId local.dmChannels of
+                                    Just dmChannel2 ->
+                                        threadStarterMessage
+                                            isMobile
+                                            guildOrDmIdNoThread
+                                            threadId
+                                            dmChannel2
+                                            loggedIn
+                                            local
+                                            model
 
-                                        Nothing ->
-                                            Ui.none
-                            ]
-                      )
-                    ]
+                                    Nothing ->
+                                        Ui.none
+                        ]
 
-                  else
-                    []
+                     else
+                        []
+                    )
                  )
-                    ++ threadConversationViewHelper
+                    :: threadConversationViewHelper
                         lastViewedIndex
                         guildOrDmIdNoThread
                         threadId
@@ -5580,39 +5571,38 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                  ]
                     ++ drawingZoomAttributes model.route loggedIn.drawingMode
                 )
-                ((if VisibleMessages.startIsVisible channel.visibleMessages then
-                    [ ( "a"
-                      , Ui.column
-                            [ Ui.alignBottom ]
-                            [ Ui.el
-                                [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                                (Ui.text "Start of thread")
-                            , case guildOrDmIdNoThread of
-                                DiscordGuildOrDmId_Guild { guildId, channelId } ->
-                                    case LocalState.getDiscordGuildAndChannel guildId channelId local of
-                                        Just ( _, channel2 ) ->
-                                            discordThreadStarterMessage
-                                                isMobile
-                                                guildOrDmIdNoThread
-                                                threadId
-                                                channel2
-                                                loggedIn
-                                                local
-                                                model
+                (( "a"
+                 , Ui.column
+                    [ Ui.alignBottom ]
+                    (if VisibleMessages.startIsVisible channel.visibleMessages then
+                        [ Ui.el
+                            [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
+                            (Ui.text "Start of thread")
+                        , case guildOrDmIdNoThread of
+                            DiscordGuildOrDmId_Guild { guildId, channelId } ->
+                                case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                                    Just ( _, channel2 ) ->
+                                        discordThreadStarterMessage
+                                            isMobile
+                                            guildOrDmIdNoThread
+                                            threadId
+                                            channel2
+                                            loggedIn
+                                            local
+                                            model
 
-                                        Nothing ->
-                                            Ui.none
+                                    Nothing ->
+                                        Ui.none
 
-                                DiscordGuildOrDmId_Dm _ ->
-                                    Ui.none
-                            ]
-                      )
-                    ]
+                            DiscordGuildOrDmId_Dm _ ->
+                                Ui.none
+                        ]
 
-                  else
-                    []
+                     else
+                        []
+                    )
                  )
-                    ++ discordThreadConversationViewHelper
+                    :: discordThreadConversationViewHelper
                         lastViewedIndex
                         currentDiscordUserId
                         guildOrDmIdNoThread

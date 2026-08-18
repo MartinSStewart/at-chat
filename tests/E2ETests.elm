@@ -1859,6 +1859,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             (Test.Html.Query.hasNot
                                 [ Test.Html.Selector.exactText "This is the start of #general" ]
                             )
+                        , userReload.snapshotView 0 { name = "Messages haven't loaded yet" }
                         , userReload.checkView
                             20
                             (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Message 1" ])
