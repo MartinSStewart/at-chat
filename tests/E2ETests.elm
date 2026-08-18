@@ -1085,7 +1085,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminA
                 , adminA.click 100 (Dom.id "guild_showUserOptions")
                 , adminA.click 100 (Dom.id "userOptions_connectedDevices")
-                , E2EHelper.hasExactText adminA [ "Desktop • Firefox", "Current device" ]
+                , E2EHelper.hasExactText adminA [ "Windows • Firefox", "Current device" ]
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
@@ -1093,7 +1093,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     E2EHelper.desktopWindow
                     (\adminB ->
                         [ E2EHelper.handleLogin E2EHelper.safariIphone E2EHelper.adminEmail adminB
-                        , E2EHelper.hasExactText adminA [ "Mobile • Safari", "Desktop • Firefox", "Current device" ]
+                        , E2EHelper.hasExactText adminA [ "iPhone • Safari", "Windows • Firefox", "Current device" ]
                         , adminB.click 100 (Dom.id "guild_showUserOptions")
                         , adminB.click 100 (Dom.id "userOptions_connectedDevices")
                         , T.connectFrontend
@@ -1105,25 +1105,25 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                 [ E2EHelper.handleLogin E2EHelper.chromeDesktop E2EHelper.adminEmail adminC
                                 , E2EHelper.hasExactText
                                     adminA
-                                    [ "Mobile • Safari"
-                                    , "Desktop • Firefox"
+                                    [ "iPhone • Safari"
+                                    , "Windows • Firefox"
                                     , "Current device"
-                                    , "Desktop • Chrome"
+                                    , "Windows • Chrome"
                                     ]
                                 , adminC.click 100 (Dom.id "guild_showUserOptions")
                                 , adminC.click 100 (Dom.id "userOptions_connectedDevices")
                                 , E2EHelper.hasExactText
                                     adminC
-                                    [ "Mobile • Safari"
-                                    , "Desktop • Firefox"
-                                    , "Desktop • Chrome"
+                                    [ "iPhone • Safari"
+                                    , "Windows • Firefox"
+                                    , "Windows • Chrome"
                                     , "Current device"
                                     ]
                                 ]
                             )
                         , adminB.click 100 (Dom.id "options_logout")
-                        , E2EHelper.hasNotExactText adminA [ "Mobile • Safari" ]
-                        , E2EHelper.hasExactText adminA [ "Desktop • Chrome", "Desktop • Firefox", "Current device" ]
+                        , E2EHelper.hasNotExactText adminA [ "iPhone • Safari" ]
+                        , E2EHelper.hasExactText adminA [ "Windows • Chrome", "Windows • Firefox", "Current device" ]
                         ]
                     )
                 ]
@@ -1151,7 +1151,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         [ E2EHelper.handleLogin E2EHelper.safariIphone E2EHelper.adminEmail adminB
 
                         -- adminA sees adminB's session in the connected devices list
-                        , E2EHelper.hasExactText adminA [ "Mobile • Safari", "Desktop • Firefox", "Current device" ]
+                        , E2EHelper.hasExactText adminA [ "iPhone • Safari", "Windows • Firefox", "Current device" ]
 
                         -- adminB is logged in (it's viewing the app, not the login page)
                         , E2EHelper.hasNotText adminB [ "Login/Signup" ]
@@ -1164,8 +1164,8 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                         -- adminB's session is removed from adminA's connected devices list, and adminA
                         -- itself stays logged in
-                        , E2EHelper.hasNotExactText adminA [ "Mobile • Safari" ]
-                        , E2EHelper.hasExactText adminA [ "Desktop • Firefox", "Current device" ]
+                        , E2EHelper.hasNotExactText adminA [ "iPhone • Safari" ]
+                        , E2EHelper.hasExactText adminA [ "Windows • Firefox", "Current device" ]
                         ]
                     )
                 ]

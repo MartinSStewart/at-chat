@@ -10,6 +10,7 @@ import Pages.Guild exposing (HighlightMessage(..), IsHovered(..))
 import SeqSet
 import Test exposing (Test)
 import User
+import UserAgent
 
 
 tests : Test
@@ -98,6 +99,51 @@ tests =
                         , EmojiOrCustomEmoji_Emoji Emoji.thumbsUp
                         , EmojiOrCustomEmoji_Emoji Emoji.smiley
                         ]
+        , Test.describe
+            "Parse device from user agent"
+            (List.map
+                (\( userAgentString, expected ) ->
+                    Test.test (UserAgent.deviceToString expected ++ ": " ++ userAgentString) <|
+                        \_ ->
+                            UserAgent.parseUserAgent userAgentString
+                                |> .device
+                                |> Expect.equal expected
+                )
+                [ ( "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
+                  , UserAgent.IPhone
+                  )
+                , ( "Mozilla/5.0 (iPad; CPU OS 12_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1 Mobile/15E148 Safari/604.1"
+                  , UserAgent.IPad
+                  )
+                , ( "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+                  , UserAgent.AndroidPhone
+                  )
+                , ( "Mozilla/5.0 (Linux; Android 13; SM-X200) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                  , UserAgent.AndroidTablet
+                  )
+                , ( "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0"
+                  , UserAgent.Windows
+                  )
+                , ( "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15"
+                  , UserAgent.MacOS
+                  )
+                , ( "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                  , UserAgent.ChromeOS
+                  )
+                , ( "Mozilla/5.0 (X11; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0"
+                  , UserAgent.Linux
+                  )
+                , ( "Mozilla/5.0 (Unknown; Mobile) SomeBrowser/1.0"
+                  , UserAgent.Mobile
+                  )
+                , ( "Mozilla/5.0 (Unknown; Tablet) SomeBrowser/1.0"
+                  , UserAgent.Tablet
+                  )
+                , ( "SomeBrowser/1.0"
+                  , UserAgent.Desktop
+                  )
+                ]
+            )
         ]
 
 

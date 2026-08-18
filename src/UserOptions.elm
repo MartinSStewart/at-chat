@@ -77,15 +77,7 @@ viewConnectedDevice sessionId otherCurrentlyViewing userAgent =
 
         deviceText : String
         deviceText =
-            case userAgent.device of
-                Desktop ->
-                    "Desktop"
-
-                Mobile ->
-                    "Mobile"
-
-                Tablet ->
-                    "Tablet"
+            UserAgent.deviceToString userAgent.device
     in
     Ui.row
         [ Ui.spacing 8 ]
@@ -94,7 +86,28 @@ viewConnectedDevice sessionId otherCurrentlyViewing userAgent =
             , Ui.height (Ui.px 36)
             ]
             (case userAgent.device of
-                Desktop ->
+                IPhone ->
+                    Ui.html Icons.mobile
+
+                IPad ->
+                    Ui.html Icons.tablet
+
+                AndroidPhone ->
+                    Ui.html Icons.mobile
+
+                AndroidTablet ->
+                    Ui.html Icons.tablet
+
+                Windows ->
+                    Ui.html Icons.desktop
+
+                MacOS ->
+                    Ui.html Icons.desktop
+
+                ChromeOS ->
+                    Ui.html Icons.desktop
+
+                Linux ->
                     Ui.html Icons.desktop
 
                 Mobile ->
@@ -102,6 +115,9 @@ viewConnectedDevice sessionId otherCurrentlyViewing userAgent =
 
                 Tablet ->
                     Ui.html Icons.tablet
+
+                Desktop ->
+                    Ui.html Icons.desktop
             )
         , Ui.column
             [ Ui.spacing 2 ]

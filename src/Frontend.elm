@@ -6037,7 +6037,7 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
             , case maybeHtmlId of
                 Just htmlId ->
                     Command.batch
-                        [ if model.startupData.userAgent.device == UserAgent.Desktop || Maybe.map .htmlId loggedIn.textInputFocus == Just htmlId then
+                        [ if UserAgent.isDesktop model.startupData.userAgent.device || Maybe.map .htmlId loggedIn.textInputFocus == Just htmlId then
                             Command.none
 
                           else

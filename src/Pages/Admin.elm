@@ -1753,20 +1753,10 @@ pushSubscriptionToString timezone pushSubscription =
 
 userAgentToString : UserAgent -> String
 userAgentToString userAgent =
-    let
-        device : String
-        device =
-            case userAgent.device of
-                UserAgent.Desktop ->
-                    "desktop"
-
-                UserAgent.Mobile ->
-                    "mobile"
-
-                UserAgent.Tablet ->
-                    "tablet"
-    in
-    UserAgent.browserToString userAgent.browser ++ " (" ++ device ++ ")"
+    UserAgent.browserToString userAgent.browser
+        ++ " ("
+        ++ String.toLower (UserAgent.deviceToString userAgent.device)
+        ++ ")"
 
 
 websocketCloseEventToString : WebsocketClosedEvent -> ( ( String, String ), Time.Posix )
