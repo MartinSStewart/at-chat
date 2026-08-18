@@ -3069,7 +3069,7 @@ leaveGuildSection guildId form =
         , if form.showLeaveConfirmation then
             Ui.el
                 [ Ui.Font.color MyUi.font2 ]
-                (Ui.text "You'll need a new invite link to rejoin. Are you sure?")
+                (Ui.text "You'll need to use an invite link to rejoin. Are you sure?")
 
           else
             Ui.none

@@ -723,7 +723,13 @@ update msg model =
                     let
                         discordUser2 : DiscordFullUserData
                         discordUser2 =
-                            { discordUser | user = discordUserData }
+                            { discordUser
+                                | user = discordUserData
+                                , {- This is to prevent the normal reconnect flow.
+                                     We want to trigger a new Ready gateway event so we can load all the data in it.
+                                  -}
+                                  connection = Discord.init
+                            }
                     in
                     ( { model | discordUsers = SeqDict.insert discordUserId (FullData discordUser2) model.discordUsers }
                     , Command.batch
