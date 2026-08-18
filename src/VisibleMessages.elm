@@ -4,6 +4,7 @@ module VisibleMessages exposing
     , firstLoad
     , increment
     , init
+    , isLoading
     , loadOlder
     , pageSize
     , slice
@@ -15,7 +16,7 @@ import MessageArray exposing (MessageArray)
 
 
 type alias VisibleMessages messageId =
-    { oldest : Id messageId, count : Int }
+    { oldest : Id messageId, count : Int, loadingMessages : Bool }
 
 
 init : Bool -> Int -> VisibleMessages messageId
@@ -29,16 +30,24 @@ init preloadMessages messageCount =
 
 empty : VisibleMessages messageId
 empty =
-    { oldest = Id.fromInt 0, count = 0 }
+    { oldest = Id.fromInt 0, count = 0, loadingMessages = False }
 
 
 increment : Int -> VisibleMessages messageId -> VisibleMessages messageId
 increment messageCount visibleMessages =
     if Id.toInt visibleMessages.oldest + visibleMessages.count == messageCount then
-        { oldest = visibleMessages.oldest, count = visibleMessages.count + 1 }
+        { oldest = visibleMessages.oldest
+        , count = visibleMessages.count + 1
+        , loadingMessages = visibleMessages.loadingMessages
+        }
 
     else
         visibleMessages
+
+
+isLoading : VisibleMessages messageId -> VisibleMessages messageId
+isLoading visibleMessages =
+    { visibleMessages | loadingMessages = True }
 
 
 loadOlder : Id messageId -> VisibleMessages messageId -> VisibleMessages messageId
@@ -50,6 +59,7 @@ loadOlder previousOldestVisibleMessage visibleMessages =
     in
     { oldest = Id.fromInt oldestNext
     , count = visibleMessages.count + (Id.toInt visibleMessages.oldest - oldestNext)
+    , loadingMessages = False
     }
 
 
@@ -57,6 +67,7 @@ firstLoad : Int -> VisibleMessages messageId
 firstLoad messageCount =
     { oldest = messageCount - pageSize |> max 0 |> Id.fromInt
     , count = pageSize
+    , loadingMessages = False
     }
 
 

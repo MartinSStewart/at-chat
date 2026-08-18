@@ -206,7 +206,7 @@ loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
             }
 
         EmptyPlaceholder ->
-            channel
+            { channel | visibleMessages = VisibleMessages.isLoading channel.visibleMessages }
 
 
 {-| Loads the messages the unread overview shows. Unlike `loadMessages` this leaves
@@ -231,11 +231,16 @@ loadMessages messagesLoaded channel =
             { channel
                 | messages =
                     MessageArray.setMany (SeqDict.toList messagesLoaded2) channel.messages
-                , visibleMessages = VisibleMessages.firstLoad (MessageArray.length channel.messages)
+                , visibleMessages =
+                    if channel.visibleMessages.count == 0 then
+                        VisibleMessages.firstLoad (MessageArray.length channel.messages)
+
+                    else
+                        channel.visibleMessages
             }
 
         SetViewing_EmptyPlaceholder ->
-            channel
+            { channel | visibleMessages = VisibleMessages.isLoading channel.visibleMessages }
 
         SetViewing_NothingToFillIn ->
             channel
