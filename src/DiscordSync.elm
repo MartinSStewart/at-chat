@@ -2341,6 +2341,13 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             in
                             ( model3, cmd2 :: cmds )
 
+                        Discord.UserOutMsg_ChannelRecipientRemoved channelId removedUserId ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleChannelRecipientRemoved channelId removedUserId model2
+                            in
+                            ( model3, cmd2 :: cmds )
+
                         Discord.UserOutMsg_TypingStarted typingStart ->
                             let
                                 ( model3, cmd2 ) =
@@ -2981,6 +2988,38 @@ attachmentsToFileData attachment fileHash metadata =
                         FileStatus.unknownContentType
     , fileHash = fileHash
     }
+
+
+{-| Someone was removed from (or left) a Discord group DM. The removed member is dropped
+from the channel's member list. The broadcast goes out against the model from before the
+removal so that the person who left is also told, rather than silently keeping the group
+DM around in their view.
+-}
+handleChannelRecipientRemoved :
+    Discord.Id Discord.PrivateChannelId
+    -> Discord.Id Discord.UserId
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleChannelRecipientRemoved channelId removedUserId model =
+    case SeqDict.get channelId model.discordDmChannels of
+        Just channel ->
+            case NonemptyDict.remove removedUserId channel.members |> NonemptyDict.fromSeqDict of
+                Just members ->
+                    ( { model
+                        | discordDmChannels =
+                            SeqDict.insert channelId { channel | members = members } model.discordDmChannels
+                      }
+                    , Broadcast.toDiscordDmChannel
+                        channelId
+                        (Server_DiscordDmChannelRecipientRemoved channelId removedUserId |> ServerChange)
+                        model
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
 
 
 handleChannelCreated :

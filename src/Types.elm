@@ -913,6 +913,7 @@ type ServerChange
     | Server_UnlinkDiscordUser (Discord.Id Discord.UserId)
     | Server_DiscordChannelCreated (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) Bool ChannelName (OptionalData (Maybe String)) (List Discord.Overwrite)
     | Server_DiscordDmChannelCreated (Discord.Id Discord.PrivateChannelId) (NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int })
+    | Server_DiscordDmChannelRecipientRemoved (Discord.Id Discord.PrivateChannelId) (Discord.Id Discord.UserId)
     | Server_DiscordNeedsAuthAgain (Discord.Id Discord.UserId)
     | Server_DiscordUserLoadingDataIsDone
         (Discord.Id Discord.UserId)

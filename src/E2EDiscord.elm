@@ -24,6 +24,7 @@ import Json.Decode
 import Json.Encode
 import LinkedAndOtherDiscordUsers
 import List.Extra
+import List.Nonempty
 import Local exposing (ChangeId(..))
 import LocalState
 import MembersAndOwner
@@ -3100,6 +3101,48 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
+    , E2EHelper.startTest
+        "Handle someone leaving a group DM"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection groupChatCreated
+                        , T.checkBackend
+                            100
+                            (checkGroupChatMembers
+                                [ Discord.idToString E2EHelper.currentDiscordUserId
+                                , "161098476632014848"
+                                , "12312312312312312312"
+                                ]
+                            )
+
+                        -- at0232 leaves the group DM. The group DM stops being named after
+                        -- them, while joe and the linked account carry on.
+                        , T.websocketSendString 100 connection groupChatRecipientRemoved
+                        , T.checkBackend
+                            100
+                            (checkGroupChatMembers
+                                [ Discord.idToString E2EHelper.currentDiscordUserId, "12312312312312312312" ]
+                            )
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "joe" ])
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "at0232, joe" ])
+                        , admin.click 100 (Dom.id "guild_discordFriendLabel_1539244611120144464")
+                        ]
+                    )
+                ]
+            )
+        ]
     ]
 
 
@@ -3146,6 +3189,14 @@ groupChatCreated =
     ,"blocked_user_warning_dismissed":false
     }
 }"""
+
+
+{-| A `CHANNEL_RECIPIENT_REMOVE` for the group DM `groupChatCreated` makes, saying that
+at0232 is no longer in it.
+-}
+groupChatRecipientRemoved : String
+groupChatRecipientRemoved =
+    """{"t":"CHANNEL_RECIPIENT_REMOVE","s":6,"op":0,"d":{"user":{"username":"at0232","public_flags":0,"primary_guild":null,"id":"161098476632014848","global_name":"AT","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"3d7b1aa7b5149fe06971b6dedf682d82"},"channel_id":"1539244611120144464"}}"""
 
 
 {-| A unique value derived from the current test time. Used for the gateway sequence
@@ -3461,6 +3512,44 @@ checkDiscordUserLoaded label shouldBeLoaded discordUserId model =
 
         Types.Loading _ ->
             Err (label ++ ": expected the frontend to have finished loading")
+
+
+{-| Check exactly who the backend has as members of the group DM created by
+`groupChatCreated`, given their Discord user ids as strings. Both sides are sorted first,
+since the order members are stored in doesn't mean anything.
+-}
+checkGroupChatMembers : List String -> E2EHelper.BackendModel2 -> Result String ()
+checkGroupChatMembers expected backend =
+    case SeqDict.get groupChatChannelId (E2EHelper.unwrapBackend backend).discordDmChannels of
+        Just channel ->
+            let
+                actual : List String
+                actual =
+                    NonemptyDict.keys channel.members
+                        |> List.Nonempty.toList
+                        |> List.map Discord.idToString
+                        |> List.sort
+            in
+            if actual == List.sort expected then
+                Ok ()
+
+            else
+                Err
+                    ("Expected the group DM members to be "
+                        ++ String.join ", " (List.sort expected)
+                        ++ " but got "
+                        ++ String.join ", " actual
+                    )
+
+        Nothing ->
+            Err "The group DM is missing from the backend"
+
+
+{-| The Discord group DM that `groupChatCreated` creates.
+-}
+groupChatChannelId : Discord.Id Discord.PrivateChannelId
+groupChatChannelId =
+    Unsafe.uint64 "1539244611120144464" |> Discord.idFromUInt64
 
 
 {-| The one-on-one Discord DM channel the linked account shares with `at0232`. It's listed

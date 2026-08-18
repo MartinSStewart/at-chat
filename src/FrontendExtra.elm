@@ -4476,6 +4476,22 @@ changeUpdate localMsg local =
                                 local.discordDmChannels
                     }
 
+                Server_DiscordDmChannelRecipientRemoved channelId removedUserId ->
+                    { local
+                        | discordDmChannels =
+                            SeqDict.updateIfExists
+                                channelId
+                                (\channel ->
+                                    case NonemptyDict.remove removedUserId channel.members |> NonemptyDict.fromSeqDict of
+                                        Just members ->
+                                            { channel | members = members }
+
+                                        Nothing ->
+                                            channel
+                                )
+                                local.discordDmChannels
+                    }
+
                 Server_DiscordNeedsAuthAgain userId ->
                     let
                         localUser =

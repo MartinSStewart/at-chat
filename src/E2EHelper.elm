@@ -2526,6 +2526,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_DiscordDmChannelCreated _ _ ->
                             True
 
+                        Types.Server_DiscordDmChannelRecipientRemoved _ _ ->
+                            True
+
                         Types.Server_DiscordNeedsAuthAgain _ ->
                             True
 
