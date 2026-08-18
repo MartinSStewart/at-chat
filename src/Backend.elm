@@ -8367,7 +8367,8 @@ handleExportBackendStep exportState =
     case ( exportState.remainingGuildChannels, exportState.remainingGuilds ) of
         ( entry :: rest, _ ) ->
             ( Pages.Admin.ExportingGuilds
-                { encoded = exportState.encodedGuildCount
+                { channelsRemaining = List.length rest
+                , encoded = exportState.encodedGuildCount
                 , total = exportState.encodedGuildCount + List.length exportState.remainingGuilds
                 }
             , { exportState
@@ -8380,7 +8381,8 @@ handleExportBackendStep exportState =
 
         ( [], ( guildId, guild ) :: rest ) ->
             ( Pages.Admin.ExportingGuilds
-                { encoded = exportState.encodedGuildCount + 1
+                { channelsRemaining = 0
+                , encoded = exportState.encodedGuildCount + 1
                 , total = exportState.encodedGuildCount + 1 + List.length rest
                 }
             , { exportState
@@ -8417,7 +8419,8 @@ handleExportBackendStep exportState =
                     case ( exportState.remainingDiscordGuildChannels, exportState.remainingDiscordGuilds ) of
                         ( entry :: rest, _ ) ->
                             ( Pages.Admin.ExportingDiscordGuilds
-                                { encoded = exportState.encodedDiscordGuildCount
+                                { channelsRemaining = List.length rest
+                                , encoded = exportState.encodedDiscordGuildCount
                                 , total = exportState.encodedDiscordGuildCount + List.length exportState.remainingDiscordGuilds
                                 }
                             , { exportState
@@ -8431,7 +8434,8 @@ handleExportBackendStep exportState =
 
                         ( [], ( guildId, guild ) :: rest ) ->
                             ( Pages.Admin.ExportingDiscordGuilds
-                                { encoded = exportState.encodedDiscordGuildCount + 1
+                                { channelsRemaining = 0
+                                , encoded = exportState.encodedDiscordGuildCount + 1
                                 , total = exportState.encodedDiscordGuildCount + 1 + List.length rest
                                 }
                             , { exportState

@@ -182,9 +182,9 @@ type ToFrontend
 
 type ExportProgress
     = ExportStarting
-    | ExportingGuilds { encoded : Int, total : Int }
+    | ExportingGuilds { channelsRemaining : Int, encoded : Int, total : Int }
     | ExportingDmChannels { encoded : Int, total : Int }
-    | ExportingDiscordGuilds { encoded : Int, total : Int }
+    | ExportingDiscordGuilds { channelsRemaining : Int, encoded : Int, total : Int }
     | ExportingDiscordDmChannels { encoded : Int, total : Int }
     | ExportingFinalStep Bytes
 
@@ -2510,14 +2510,40 @@ exportProgressText progress =
         ExportStarting ->
             "Starting export..."
 
-        ExportingGuilds { encoded, total } ->
-            "Encoding guilds " ++ String.fromInt encoded ++ "/" ++ String.fromInt total
+        ExportingGuilds { channelsRemaining, encoded, total } ->
+            "Encoding guilds "
+                ++ String.fromInt encoded
+                ++ "/"
+                ++ String.fromInt total
+                ++ (case channelsRemaining of
+                        0 ->
+                            ""
+
+                        1 ->
+                            " (1 channel remaining)"
+
+                        _ ->
+                            " (" ++ String.fromInt channelsRemaining ++ ")"
+                   )
 
         ExportingDmChannels { encoded, total } ->
             "Encoding DM channels " ++ String.fromInt encoded ++ "/" ++ String.fromInt total
 
-        ExportingDiscordGuilds { encoded, total } ->
-            "Encoding Discord guilds " ++ String.fromInt encoded ++ "/" ++ String.fromInt total
+        ExportingDiscordGuilds { channelsRemaining, encoded, total } ->
+            "Encoding Discord guilds "
+                ++ String.fromInt encoded
+                ++ "/"
+                ++ String.fromInt total
+                ++ (case channelsRemaining of
+                        0 ->
+                            ""
+
+                        1 ->
+                            " (1 channel remaining)"
+
+                        _ ->
+                            " (" ++ String.fromInt channelsRemaining ++ ")"
+                   )
 
         ExportingDiscordDmChannels { encoded, total } ->
             "Encoding Discord DM channels " ++ String.fromInt encoded ++ "/" ++ String.fromInt total
