@@ -86,7 +86,7 @@ import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, Expo
 import Unsafe
 import Untrusted
 import User exposing (BackendUser)
-import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), SetViewing_ToBeFilledInByBackend(..), ToBeFilledInByBackend(..), UserSession, Viewing(..))
+import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession, Viewing(..))
 import VisibleMessages
 import WireHelper
 import WordSpellingGame exposing (Language(..), WordList(..))
@@ -4476,20 +4476,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 SeqDict.empty
                                 (MembersAndOwner.membersAndOwner guild.membersAndOwner)
 
-                        previouslyViewing : Viewing
-                        previouslyViewing =
-                            case SeqDict.get sessionId model.connections of
-                                Just connections2 ->
-                                    case NonemptyDict.get clientId connections2 of
-                                        Just connection ->
-                                            connection.currentlyViewing
-
-                                        Nothing ->
-                                            Viewing_None
-
-                                Nothing ->
-                                    Viewing_None
-
                         connections : SeqDict SessionId (NonemptyDict.NonemptyDict ClientId ConnectionData)
                         connections =
                             SeqDict.updateIfExists
@@ -4529,17 +4515,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , Command.batch
                                         [ ViewDm
                                             data
-                                            (case previouslyViewing of
-                                                Viewing_Dm previousData ->
-                                                    if previousData.id == data.id then
-                                                        SetViewing_NothingToFillIn
-
-                                                    else
-                                                        loadMessagesHelper dmChannel |> SetViewing_FilledInByBackend
-
-                                                _ ->
-                                                    loadMessagesHelper dmChannel |> SetViewing_FilledInByBackend
-                                            )
+                                            (loadMessagesHelper dmChannel |> FilledInByBackend)
                                             |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
@@ -4580,22 +4556,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , Command.batch
                                         [ ViewDmThread
                                             data
-                                            (case previouslyViewing of
-                                                Viewing_DmThread previousData ->
-                                                    if previousData.id == data.id then
-                                                        SetViewing_NothingToFillIn
-
-                                                    else
-                                                        SeqDict.get data.id.threadId dmChannel.threads
-                                                            |> Maybe.withDefault Thread.backendInit
-                                                            |> loadMessagesHelper
-                                                            |> SetViewing_FilledInByBackend
-
-                                                _ ->
-                                                    SeqDict.get data.id.threadId dmChannel.threads
-                                                        |> Maybe.withDefault Thread.backendInit
-                                                        |> loadMessagesHelper
-                                                        |> SetViewing_FilledInByBackend
+                                            (SeqDict.get data.id.threadId dmChannel.threads
+                                                |> Maybe.withDefault Thread.backendInit
+                                                |> loadMessagesHelper
+                                                |> FilledInByBackend
                                             )
                                             |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
@@ -4632,17 +4596,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , Command.batch
                                         [ ViewDiscordDm
                                             data
-                                            (case previouslyViewing of
-                                                Viewing_DiscordDm previousData ->
-                                                    if previousData.id == data.id then
-                                                        SetViewing_NothingToFillIn
-
-                                                    else
-                                                        loadMessagesHelper dmChannel |> SetViewing_FilledInByBackend
-
-                                                _ ->
-                                                    loadMessagesHelper dmChannel |> SetViewing_FilledInByBackend
-                                            )
+                                            (loadMessagesHelper dmChannel |> FilledInByBackend)
                                             |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
@@ -4681,17 +4635,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             , Command.batch
                                                 [ ViewChannel
                                                     data
-                                                    (case previouslyViewing of
-                                                        Viewing_Channel previousData ->
-                                                            if previousData.id == data.id then
-                                                                SetViewing_NothingToFillIn
-
-                                                            else
-                                                                loadMessagesHelper channel |> SetViewing_FilledInByBackend
-
-                                                        _ ->
-                                                            loadMessagesHelper channel |> SetViewing_FilledInByBackend
-                                                    )
+                                                    (loadMessagesHelper channel |> FilledInByBackend)
                                                     |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                                     |> LocalChangeResponse changeId
                                                     |> Lamdera.sendToFrontend clientId
@@ -4739,22 +4683,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             , Command.batch
                                                 [ ViewChannelThread
                                                     data
-                                                    (case previouslyViewing of
-                                                        Viewing_ChannelThread previousData ->
-                                                            if previousData.id == data.id then
-                                                                SetViewing_NothingToFillIn
-
-                                                            else
-                                                                SeqDict.get data.id.threadId channel.threads
-                                                                    |> Maybe.withDefault Thread.backendInit
-                                                                    |> loadMessagesHelper
-                                                                    |> SetViewing_FilledInByBackend
-
-                                                        _ ->
-                                                            SeqDict.get data.id.threadId channel.threads
-                                                                |> Maybe.withDefault Thread.backendInit
-                                                                |> loadMessagesHelper
-                                                                |> SetViewing_FilledInByBackend
+                                                    (SeqDict.get data.id.threadId channel.threads
+                                                        |> Maybe.withDefault Thread.backendInit
+                                                        |> loadMessagesHelper
+                                                        |> FilledInByBackend
                                                     )
                                                     |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                                     |> LocalChangeResponse changeId
@@ -4814,22 +4746,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , Command.batch
                                         [ ViewDiscordChannel
                                             data
-                                            (case previouslyViewing of
-                                                Viewing_DiscordChannel previousData ->
-                                                    if previousData.id == data.id then
-                                                        SetViewing_NothingToFillIn
-
-                                                    else
-                                                        SetViewing_FilledInByBackend
-                                                            { messages = loadMessagesHelper channel
-                                                            , newUsers = getNewUsers connectionData data.id.guildId guild
-                                                            }
-
-                                                _ ->
-                                                    SetViewing_FilledInByBackend
-                                                        { messages = loadMessagesHelper channel
-                                                        , newUsers = getNewUsers connectionData data.id.guildId guild
-                                                        }
+                                            (FilledInByBackend
+                                                { messages = loadMessagesHelper channel
+                                                , newUsers = getNewUsers connectionData data.id.guildId guild
+                                                }
                                             )
                                             |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
@@ -4872,28 +4792,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , Command.batch
                                         [ ViewDiscordChannelThread
                                             data
-                                            (case previouslyViewing of
-                                                Viewing_DiscordChannelThread previousData ->
-                                                    if previousData.id == data.id then
-                                                        SetViewing_NothingToFillIn
-
-                                                    else
-                                                        SetViewing_FilledInByBackend
-                                                            { messages =
-                                                                SeqDict.get data.id.threadId channel.threads
-                                                                    |> Maybe.withDefault Thread.discordBackendInit
-                                                                    |> loadMessagesHelper
-                                                            , newUsers = getNewUsers connectionData data.id.guildId guild
-                                                            }
-
-                                                _ ->
-                                                    SetViewing_FilledInByBackend
-                                                        { messages =
-                                                            SeqDict.get data.id.threadId channel.threads
-                                                                |> Maybe.withDefault Thread.discordBackendInit
-                                                                |> loadMessagesHelper
-                                                        , newUsers = getNewUsers connectionData data.id.guildId guild
-                                                        }
+                                            (FilledInByBackend
+                                                { messages =
+                                                    SeqDict.get data.id.threadId channel.threads
+                                                        |> Maybe.withDefault Thread.discordBackendInit
+                                                        |> loadMessagesHelper
+                                                , newUsers = getNewUsers connectionData data.id.guildId guild
+                                                }
                                             )
                                             |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
@@ -4911,13 +4816,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     ( { model | connections = connections }
                                     , Command.batch
                                         [ ViewOverview
-                                            (case previouslyViewing of
-                                                Viewing_Overview ->
-                                                    SetViewing_NothingToFillIn
-
-                                                _ ->
-                                                    BackendExtra.unreadOverviewData session.userId user model
-                                                        |> SetViewing_FilledInByBackend
+                                            (BackendExtra.unreadOverviewData session.userId user model
+                                                |> FilledInByBackend
                                             )
                                             |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId

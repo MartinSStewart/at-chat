@@ -186,7 +186,7 @@ import UInt64
 import Unsafe
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendCurrentUser, FrontendUser, LocalUser)
-import UserSession exposing (FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), SetViewing_ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -2903,7 +2903,7 @@ routeToViewing isMobile route local =
     case route of
         HomePageRoute ->
             -- The home page shows the unread overview when no DM is selected
-            ViewOverview SetViewing_EmptyPlaceholder
+            ViewOverview EmptyPlaceholder
 
         AdminRoute _ ->
             StopViewingChannel
@@ -2929,7 +2929,7 @@ routeToViewing isMobile route local =
                                     , previouslyLastViewedMessage =
                                         previouslyLastViewedMessage (GuildOrDmId (GuildOrDmId_Guild id)) local
                                     }
-                                    SetViewing_EmptyPlaceholder
+                                    EmptyPlaceholder
 
                             ViewThreadWithFriends threadId _ _ ->
                                 ViewChannelThread
@@ -2940,7 +2940,7 @@ routeToViewing isMobile route local =
                                             threadId
                                             local
                                     }
-                                    SetViewing_EmptyPlaceholder
+                                    EmptyPlaceholder
 
                     NewChannelRoute ->
                         StopViewingChannel
@@ -2975,7 +2975,7 @@ routeToViewing isMobile route local =
                                             (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild id))
                                             local
                                     }
-                                    SetViewing_EmptyPlaceholder
+                                    EmptyPlaceholder
 
                             ViewThreadWithFriends threadId _ _ ->
                                 ViewDiscordChannelThread
@@ -2991,7 +2991,7 @@ routeToViewing isMobile route local =
                                             threadId
                                             local
                                     }
-                                    SetViewing_EmptyPlaceholder
+                                    EmptyPlaceholder
 
                     DiscordChannel_NewChannelRoute ->
                         StopViewingChannel
@@ -3022,7 +3022,7 @@ routeToViewing isMobile route local =
                                     , previouslyLastViewedMessage =
                                         previouslyLastViewedMessage (GuildOrDmId (GuildOrDmId_Dm id)) local
                                     }
-                                    SetViewing_EmptyPlaceholder
+                                    EmptyPlaceholder
 
                             ViewThreadWithFriends threadId _ _ ->
                                 ViewDmThread
@@ -3033,7 +3033,7 @@ routeToViewing isMobile route local =
                                             threadId
                                             local
                                     }
-                                    SetViewing_EmptyPlaceholder
+                                    EmptyPlaceholder
 
                 Nothing ->
                     StopViewingChannel
@@ -3051,7 +3051,7 @@ routeToViewing isMobile route local =
                             )
                             local
                     }
-                    SetViewing_EmptyPlaceholder
+                    EmptyPlaceholder
 
             else
                 StopViewingChannel

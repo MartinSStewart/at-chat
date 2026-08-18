@@ -112,7 +112,7 @@ import Ui.Input
 import Ui.Prose
 import Url exposing (Url)
 import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
-import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), SetViewing_ToBeFilledInByBackend(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 import WordSpellingGame
 
@@ -122,18 +122,15 @@ viewed. The two placeholders carry through rather than being treated as nothing 
 that a channel still waiting on its messages is marked as loading.
 -}
 discordViewMessages :
-    SetViewing_ToBeFilledInByBackend (UserSession.ViewDiscordGuildData messageId)
-    -> SetViewing_ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId)))
+    ToBeFilledInByBackend (UserSession.ViewDiscordGuildData messageId)
+    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId)))
 discordViewMessages backendData =
     case backendData of
-        SetViewing_FilledInByBackend data ->
-            SetViewing_FilledInByBackend data.messages
+        FilledInByBackend data ->
+            FilledInByBackend data.messages
 
-        SetViewing_EmptyPlaceholder ->
-            SetViewing_EmptyPlaceholder
-
-        SetViewing_NothingToFillIn ->
-            SetViewing_NothingToFillIn
+        EmptyPlaceholder ->
+            EmptyPlaceholder
 
 
 pendingChangesText : LocalChange -> String
@@ -3058,16 +3055,13 @@ changeUpdate localMsg local =
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                         , discordUsers =
                                             case backendData of
-                                                SetViewing_FilledInByBackend backendData2 ->
+                                                FilledInByBackend backendData2 ->
                                                     SeqDict.foldl
                                                         LinkedAndOtherDiscordUsers.addOtherUser
                                                         localUser.discordUsers
                                                         backendData2.newUsers
 
-                                                SetViewing_EmptyPlaceholder ->
-                                                    localUser.discordUsers
-
-                                                SetViewing_NothingToFillIn ->
+                                                EmptyPlaceholder ->
                                                     localUser.discordUsers
                                     }
                                 , discordGuilds =
@@ -3103,16 +3097,13 @@ changeUpdate localMsg local =
                                         , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                         , discordUsers =
                                             case backendData of
-                                                SetViewing_FilledInByBackend backendData2 ->
+                                                FilledInByBackend backendData2 ->
                                                     SeqDict.foldl
                                                         LinkedAndOtherDiscordUsers.addOtherUser
                                                         localUser.discordUsers
                                                         backendData2.newUsers
 
-                                                SetViewing_EmptyPlaceholder ->
-                                                    localUser.discordUsers
-
-                                                SetViewing_NothingToFillIn ->
+                                                EmptyPlaceholder ->
                                                     localUser.discordUsers
                                     }
                                 , discordGuilds =
@@ -3140,7 +3131,7 @@ changeUpdate localMsg local =
                                     { localUser | currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing }
                             in
                             case overviewData of
-                                SetViewing_FilledInByBackend overviewData2 ->
+                                FilledInByBackend overviewData2 ->
                                     let
                                         guilds : SeqDict (Id GuildId) FrontendGuild
                                         guilds =
@@ -3259,10 +3250,7 @@ changeUpdate localMsg local =
                                                 overviewData2.discordDmChannels
                                     }
 
-                                SetViewing_EmptyPlaceholder ->
-                                    { local | localUser = localUser2 }
-
-                                SetViewing_NothingToFillIn ->
+                                EmptyPlaceholder ->
                                     { local | localUser = localUser2 }
 
                 Local_SetName name ->

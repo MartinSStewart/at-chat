@@ -2684,7 +2684,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                             }
                                         , previouslyLastViewedMessage = UserSession.DontCare
                                         }
-                                        UserSession.SetViewing_EmptyPlaceholder
+                                        UserSession.EmptyPlaceholder
                                     )
                                 )
                             )

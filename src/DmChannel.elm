@@ -32,7 +32,7 @@ import OneToOne exposing (OneToOne)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
-import UserSession exposing (SetViewing_ToBeFilledInByBackend(..), ToBeFilledInByBackend(..))
+import UserSession exposing (ToBeFilledInByBackend(..))
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -222,12 +222,12 @@ loadUnreadMessages messages channel =
 
 
 loadMessages :
-    SetViewing_ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
+    ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
     -> { a | messages : MessageArray messageId (Message messageId userId), visibleMessages : VisibleMessages messageId }
     -> { a | messages : MessageArray messageId (Message messageId userId), visibleMessages : VisibleMessages messageId }
 loadMessages messagesLoaded channel =
     case messagesLoaded of
-        SetViewing_FilledInByBackend messagesLoaded2 ->
+        FilledInByBackend messagesLoaded2 ->
             { channel
                 | messages =
                     MessageArray.setMany (SeqDict.toList messagesLoaded2) channel.messages
@@ -239,8 +239,5 @@ loadMessages messagesLoaded channel =
                         channel.visibleMessages
             }
 
-        SetViewing_EmptyPlaceholder ->
+        EmptyPlaceholder ->
             { channel | visibleMessages = VisibleMessages.isLoading channel.visibleMessages }
-
-        SetViewing_NothingToFillIn ->
-            channel
