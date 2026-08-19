@@ -30,6 +30,7 @@ module MyUi exposing
     , deleteButtonBackground
     , deleteButtonBorder
     , deleteButtonFont
+    , details
     , dimFont
     , disabledButtonBackground
     , disabledButtonBorder
@@ -849,6 +850,31 @@ simpleButton htmlId onPress content =
 touchPress : msg -> Ui.Attribute msg
 touchPress onPress =
     Html.Events.Extra.Touch.onStart (\_ -> onPress) |> Ui.htmlAttribute
+
+
+{-| A section that starts collapsed and opens when the summary is clicked. The
+browser keeps track of whether it's open, so there's nothing to keep in the
+model.
+
+A `summary` only counts as the thing that opens a `details` while it's a direct
+child of it, and elm-ui has no way to write two children of a node, so this is
+written as plain html. That means `contents` has to be handed back to elm-ui,
+which starts a fresh layout that doesn't inherit anything, so the font the rest
+of the page is drawn with is set again here.
+
+-}
+details : String -> Element msg -> Element msg
+details summaryText contents =
+    Html.details
+        []
+        [ Html.summary
+            [ Html.Attributes.style "cursor" "pointer"
+            , Html.Attributes.style "font-weight" "bold"
+            ]
+            [ Html.text summaryText ]
+        , Ui.embed [ notoSans, Ui.Font.size 16, Ui.Font.color font1 ] contents
+        ]
+        |> Ui.html
 
 
 htmlStyle : String -> String -> Ui.Attribute msg

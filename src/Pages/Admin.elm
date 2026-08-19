@@ -138,7 +138,9 @@ type Msg
     | TypedInReadOnlyTextInput
     | PressedExportBackend
     | PressedExportSubsetBackend
+    | ToggledExportSubsetGuild (Id GuildId) Bool
     | ToggledExportSubsetDmChannel DmChannelId Bool
+    | ToggledExportSubsetDiscordGuild (Discord.Id Discord.GuildId) Bool
     | ToggledExportSubsetDiscordDmChannel (Discord.Id Discord.PrivateChannelId) Bool
     | PressedConfirmExportSubset
     | PressedCancelExportSubset
@@ -169,7 +171,9 @@ type ExportSubset
 
 
 type alias ExportSubsetSelection =
-    { dmChannels : SeqSet DmChannelId
+    { guilds : SeqSet (Id GuildId)
+    , dmChannels : SeqSet DmChannelId
+    , discordGuilds : SeqSet (Discord.Id Discord.GuildId)
     , discordDmChannels : SeqSet (Discord.Id Discord.PrivateChannelId)
     }
 
@@ -1197,7 +1201,25 @@ update navigationKey time adminData localState msg model =
         PressedExportSubsetBackend ->
             ( { model
                 | exportSubsetSelection =
-                    Just { dmChannels = SeqSet.empty, discordDmChannels = SeqSet.empty }
+                    Just
+                        { guilds = SeqSet.empty
+                        , dmChannels = SeqSet.empty
+                        , discordGuilds = SeqSet.empty
+                        , discordDmChannels = SeqSet.empty
+                        }
+              }
+            , Command.none
+            , NoOutMsg
+            )
+
+        ToggledExportSubsetGuild guildId isChecked ->
+            ( { model
+                | exportSubsetSelection =
+                    Maybe.map
+                        (\selection ->
+                            { selection | guilds = setMember isChecked guildId selection.guilds }
+                        )
+                        model.exportSubsetSelection
               }
             , Command.none
             , NoOutMsg
@@ -1209,6 +1231,19 @@ update navigationKey time adminData localState msg model =
                     Maybe.map
                         (\selection ->
                             { selection | dmChannels = setMember isChecked channelId selection.dmChannels }
+                        )
+                        model.exportSubsetSelection
+              }
+            , Command.none
+            , NoOutMsg
+            )
+
+        ToggledExportSubsetDiscordGuild guildId isChecked ->
+            ( { model
+                | exportSubsetSelection =
+                    Maybe.map
+                        (\selection ->
+                            { selection | discordGuilds = setMember isChecked guildId selection.discordGuilds }
                         )
                         model.exportSubsetSelection
               }
@@ -2625,7 +2660,10 @@ exportSubsetSelector adminData selection =
     let
         selectedCount : Int
         selectedCount =
-            SeqSet.size selection.dmChannels + SeqSet.size selection.discordDmChannels
+            SeqSet.size selection.guilds
+                + SeqSet.size selection.dmChannels
+                + SeqSet.size selection.discordGuilds
+                + SeqSet.size selection.discordDmChannels
     in
     Ui.column
         [ Ui.spacing 8
@@ -2634,89 +2672,189 @@ exportSubsetSelector adminData selection =
         , Ui.borderColor (Ui.rgb 100 100 100)
         , Ui.rounded 4
         ]
-        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text "Select channels to export")
-        , Ui.el [ Ui.Font.weight 600, Ui.Font.size 16 ] (Ui.text "DM channels")
-        , if SeqDict.isEmpty adminData.dmChannels then
-            Ui.text "No DM channels"
+        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text "Select what to export")
+        , MyUi.details
+            (selectionSummary "Guilds" (SeqSet.size selection.guilds) (SeqDict.size adminData.guilds))
+            (if SeqDict.isEmpty adminData.guilds then
+                Ui.text "No guilds"
 
-          else
-            Ui.column
-                [ Ui.spacing 4 ]
-                (List.map
-                    (\( channelId, channel ) ->
-                        let
-                            label : { element : Element msg, id : Ui.Input.Label }
-                            label =
-                                Ui.Input.label
-                                    ("admin_exportSubsetDmToggle_" ++ DmChannelId.toString channelId)
-                                    [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
-                                    (dmChannelParticipants adminData channelId)
-                        in
-                        Ui.row
-                            [ Ui.Font.size 14 ]
-                            [ Ui.Input.checkbox
+             else
+                Ui.column
+                    [ Ui.spacing 4 ]
+                    (List.map
+                        (\( guildId, guild ) ->
+                            let
+                                label : { element : Element msg, id : Ui.Input.Label }
+                                label =
+                                    Ui.Input.label
+                                        ("admin_exportSubsetGuildToggle_" ++ Id.toString guildId)
+                                        [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
+                                        (Ui.text (GuildName.toString guild.name))
+                            in
+                            Ui.row
                                 [ Ui.Font.size 14 ]
-                                { onChange = ToggledExportSubsetDmChannel channelId
-                                , icon = Nothing
-                                , checked = SeqSet.member channelId selection.dmChannels
-                                , label = label.id
-                                }
-                            , label.element
-                            , Ui.row
-                                [ Ui.spacing 8 ]
-                                [ Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
-                                , Ui.text ("Threads: " ++ String.fromInt channel.threadCount)
-                                ]
-                            ]
-                    )
-                    (SeqDict.toList adminData.dmChannels)
-                )
-        , Ui.el [ Ui.Font.weight 600, Ui.Font.size 16 ] (Ui.text "Discord DM channels")
-        , if SeqDict.isEmpty adminData.discordDmChannels then
-            Ui.text "No Discord DM channels"
-
-          else
-            Ui.column
-                [ Ui.spacing 4 ]
-                (List.map
-                    (\( channelId, channel ) ->
-                        let
-                            label : { element : Element msg, id : Ui.Input.Label }
-                            label =
-                                Ui.Input.label
-                                    ("admin_exportSubsetToggle_" ++ Discord.idToString channelId)
-                                    [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
-                                    (Ui.text (Discord.idToString channelId))
-                        in
-                        Ui.row
-                            [ Ui.Font.size 14 ]
-                            [ Ui.Input.checkbox
-                                [ Ui.Font.size 14 ]
-                                { onChange = ToggledExportSubsetDiscordDmChannel channelId
-                                , icon = Nothing
-                                , checked = SeqSet.member channelId selection.discordDmChannels
-                                , label = label.id
-                                }
-                            , label.element
-                            , Ui.row
-                                [ Ui.spacing 8 ]
-                                [ NonemptyDict.toList channel.members
-                                    |> List.map
-                                        (\( discordUserId, _ ) ->
-                                            case SeqDict.get discordUserId adminData.discordUsers of
-                                                Just discordUser ->
-                                                    discordUserLabel discordUserId discordUser
-
-                                                Nothing ->
-                                                    Ui.text (Discord.idToString discordUserId)
+                                [ Ui.Input.checkbox
+                                    [ Ui.Font.size 14 ]
+                                    { onChange = ToggledExportSubsetGuild guildId
+                                    , icon = Nothing
+                                    , checked = SeqSet.member guildId selection.guilds
+                                    , label = label.id
+                                    }
+                                , label.element
+                                , Ui.row
+                                    [ Ui.spacing 8 ]
+                                    [ Ui.text ("Channels: " ++ String.fromInt (SeqDict.size guild.channels))
+                                    , Ui.text
+                                        ("Messages: "
+                                            ++ String.fromInt
+                                                (SeqDict.foldl
+                                                    (\_ channel total -> total + channel.messageCount)
+                                                    0
+                                                    guild.channels
+                                                )
                                         )
-                                    |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
-                                , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                    ]
                                 ]
-                            ]
+                        )
+                        (SeqDict.toList adminData.guilds)
                     )
-                    (SeqDict.toList adminData.discordDmChannels)
-                )
+            )
+        , MyUi.details
+            (selectionSummary "DM channels" (SeqSet.size selection.dmChannels) (SeqDict.size adminData.dmChannels))
+            (if SeqDict.isEmpty adminData.dmChannels then
+                Ui.text "No DM channels"
+
+             else
+                Ui.column
+                    [ Ui.spacing 4 ]
+                    (List.map
+                        (\( channelId, channel ) ->
+                            let
+                                label : { element : Element msg, id : Ui.Input.Label }
+                                label =
+                                    Ui.Input.label
+                                        ("admin_exportSubsetDmToggle_" ++ DmChannelId.toString channelId)
+                                        [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
+                                        (dmChannelParticipants adminData channelId)
+                            in
+                            Ui.row
+                                [ Ui.Font.size 14 ]
+                                [ Ui.Input.checkbox
+                                    [ Ui.Font.size 14 ]
+                                    { onChange = ToggledExportSubsetDmChannel channelId
+                                    , icon = Nothing
+                                    , checked = SeqSet.member channelId selection.dmChannels
+                                    , label = label.id
+                                    }
+                                , label.element
+                                , Ui.row
+                                    [ Ui.spacing 8 ]
+                                    [ Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                    , Ui.text ("Threads: " ++ String.fromInt channel.threadCount)
+                                    ]
+                                ]
+                        )
+                        (SeqDict.toList adminData.dmChannels)
+                    )
+            )
+        , MyUi.details
+            (selectionSummary "Discord guilds" (SeqSet.size selection.discordGuilds) (SeqDict.size adminData.discordGuilds))
+            (if SeqDict.isEmpty adminData.discordGuilds then
+                Ui.text "No Discord guilds"
+
+             else
+                Ui.column
+                    [ Ui.spacing 4 ]
+                    (List.map
+                        (\( guildId, guild ) ->
+                            let
+                                label : { element : Element msg, id : Ui.Input.Label }
+                                label =
+                                    Ui.Input.label
+                                        ("admin_exportSubsetDiscordGuildToggle_" ++ Discord.idToString guildId)
+                                        [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
+                                        (Ui.text (GuildName.toString guild.name))
+                            in
+                            Ui.row
+                                [ Ui.Font.size 14 ]
+                                [ Ui.Input.checkbox
+                                    [ Ui.Font.size 14 ]
+                                    { onChange = ToggledExportSubsetDiscordGuild guildId
+                                    , icon = Nothing
+                                    , checked = SeqSet.member guildId selection.discordGuilds
+                                    , label = label.id
+                                    }
+                                , label.element
+                                , Ui.row
+                                    [ Ui.spacing 8 ]
+                                    [ Ui.text ("Channels: " ++ String.fromInt (SeqDict.size guild.channels))
+                                    , Ui.text
+                                        ("Messages: "
+                                            ++ String.fromInt
+                                                (SeqDict.foldl
+                                                    (\_ channel total -> total + channel.messageCount)
+                                                    0
+                                                    guild.channels
+                                                )
+                                        )
+                                    ]
+                                ]
+                        )
+                        (SeqDict.toList adminData.discordGuilds)
+                    )
+            )
+        , MyUi.details
+            (selectionSummary
+                "Discord DM channels"
+                (SeqSet.size selection.discordDmChannels)
+                (SeqDict.size adminData.discordDmChannels)
+            )
+            (if SeqDict.isEmpty adminData.discordDmChannels then
+                Ui.text "No Discord DM channels"
+
+             else
+                Ui.column
+                    [ Ui.spacing 4 ]
+                    (List.map
+                        (\( channelId, channel ) ->
+                            let
+                                label : { element : Element msg, id : Ui.Input.Label }
+                                label =
+                                    Ui.Input.label
+                                        ("admin_exportSubsetToggle_" ++ Discord.idToString channelId)
+                                        [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
+                                        (Ui.text (Discord.idToString channelId))
+                            in
+                            Ui.row
+                                [ Ui.Font.size 14 ]
+                                [ Ui.Input.checkbox
+                                    [ Ui.Font.size 14 ]
+                                    { onChange = ToggledExportSubsetDiscordDmChannel channelId
+                                    , icon = Nothing
+                                    , checked = SeqSet.member channelId selection.discordDmChannels
+                                    , label = label.id
+                                    }
+                                , label.element
+                                , Ui.row
+                                    [ Ui.spacing 8 ]
+                                    [ NonemptyDict.toList channel.members
+                                        |> List.map
+                                            (\( discordUserId, _ ) ->
+                                                case SeqDict.get discordUserId adminData.discordUsers of
+                                                    Just discordUser ->
+                                                        discordUserLabel discordUserId discordUser
+
+                                                    Nothing ->
+                                                        Ui.text (Discord.idToString discordUserId)
+                                            )
+                                        |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
+                                    , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                    ]
+                                ]
+                        )
+                        (SeqDict.toList adminData.discordDmChannels)
+                    )
+            )
         , Ui.row
             [ Ui.spacing 8 ]
             [ MyUi.simpleButton
@@ -2729,6 +2867,11 @@ exportSubsetSelector adminData selection =
                 "Cancel"
             ]
         ]
+
+
+selectionSummary : String -> Int -> Int -> String
+selectionSummary name selected total =
+    name ++ " (" ++ String.fromInt selected ++ "/" ++ String.fromInt total ++ " selected)"
 
 
 apiKeysSection : Bool -> LocalState -> BackendUser -> AdminData -> Model -> Element Msg
