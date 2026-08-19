@@ -4676,6 +4676,39 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                     |> Ui.map EmojiSelectorMsg
                 )
 
+        EmojiSelectorForSheepGameQuestion _ position _ ->
+            let
+                y =
+                    Coord.yRaw position - Emoji.selectorHeight - MyUi.channelHeaderHeight
+            in
+            Ui.inFront
+                (Emoji.selector
+                    model.startupData.scrollbarWidth
+                    x
+                    loggedIn.emojiSelector
+                    emojiConfig
+                    model.emojiData
+                    availableCustomEmojis
+                    local.localUser.customEmojis
+                    availableStickers
+                    local.localUser.stickers
+                    |> Ui.el
+                        [ Ui.paddingXY paddingX 0
+                        , Ui.move
+                            { x = 0
+                            , y =
+                                if y < 0 then
+                                    Coord.yRaw position
+
+                                else
+                                    y
+                            , z = 0
+                            }
+                        , emojiSelectorZIndex
+                        ]
+                    |> Ui.map EmojiSelectorMsg
+                )
+
 
 emojiSelectorZIndex : Ui.Attribute msg
 emojiSelectorZIndex =

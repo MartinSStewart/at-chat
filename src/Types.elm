@@ -115,6 +115,7 @@ import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import SheepGame
 import Slack
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
@@ -344,6 +345,7 @@ type EmojiSelector
     | EmojiSelectorForReaction AnyGuildOrDmId ThreadRouteWithMessage
     | EmojiSelectorForMessage (Maybe Range)
     | EmojiSelectorForEditMessage (Coord CssPixels) (Maybe Range)
+    | EmojiSelectorForSheepGameQuestion (Id SheepGame.QuestionId) (Coord CssPixels) (Maybe Range)
 
 
 type alias BackendModel =
@@ -566,7 +568,8 @@ type FrontendMsg_
     | EditMessage_MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
     | MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
     | GotEmojiData (Result Http.Error CachedEmojiData)
-    | GotEditMessageTextInputPositionForEmojiSelector (Result Dom.Error Dom.Element)
+    | GotPositionForEmojiSelector_EditMessage (Result Dom.Error Dom.Element)
+    | GotPositionForEmojiSelector_SheepGameQuestion (Id SheepGame.QuestionId) (Result Dom.Error Dom.Element)
     | EnableToFrontendLogging
     | TextSelectionChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )

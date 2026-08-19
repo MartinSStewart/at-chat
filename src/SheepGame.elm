@@ -5,7 +5,9 @@ module SheepGame exposing
     , GameMsg(..)
     , LocalChange(..)
     , LoggedIn
+    , OutMsg(..)
     , Phase(..)
+    , QuestionId
     , SetupModel
     , SetupMsg(..)
     , SetupOrGame(..)
@@ -17,6 +19,7 @@ module SheepGame exposing
     , initSetup
     , initSetupFromSavedQuestions
     , initShared
+    , questionInputId
     , scoresThroughQuestion
     , setupView
     , updateAction
@@ -40,6 +43,8 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Command exposing (Command, FrontendOnly)
+import Effect.Task as Task
 import Effect.Time as Time
 import Go
 import Html
@@ -66,6 +71,10 @@ type alias ValidatedSetup =
     { questions : Nonempty (Nonempty (RichText (Id UserId)))
     , createdBy : Id UserId
     }
+
+
+type QuestionId
+    = QuestionId Never
 
 
 type alias LoggedIn a =
@@ -104,9 +113,9 @@ type alias SetupModel =
 
 
 type SetupMsg
-    = TypedQuestion Int MessageInput.Msg
+    = TypedQuestion (Id QuestionId) MessageInput.Msg
     | PressedAddQuestion
-    | PressedRemoveQuestion Int
+    | PressedRemoveQuestion (Id QuestionId)
     | PressedStartGame
     | PressedCancel
     | SetupNoOp
@@ -274,27 +283,33 @@ validateSetup timezone users createdBy model =
             Err "Write at least one question before starting"
 
 
-updateSetup : LocalUser -> SetupMsg -> SetupModel -> ( SetupOrGame, Maybe ValidatedSetup )
+type OutMsg
+    = NoOutMsg
+    | FinishedSetup ValidatedSetup
+    | OpenEmojiSelector (Id QuestionId)
+
+
+updateSetup : LocalUser -> SetupMsg -> SetupModel -> ( SetupOrGame, OutMsg )
 updateSetup localUser msg model =
     case msg of
-        TypedQuestion index messageInputMsg ->
+        TypedQuestion questionId messageInputMsg ->
             case messageInputMsg of
                 MessageInput.PressedTextInput ->
                     -- Clicking the input is how the rich text drawn in front of it gets edited, but
                     -- the focus itself is handled by the port that watches the text selection.
-                    ( Setup model, Nothing )
+                    ( Setup model, NoOutMsg )
 
                 MessageInput.TypedMessage text ->
                     ( Setup
                         { model
-                            | questions = Array.set index text model.questions
+                            | questions = Array.set (Id.toInt questionId) text model.questions
                             , error = Nothing
                         }
-                    , Nothing
+                    , NoOutMsg
                     )
 
                 MessageInput.PressedSendMessage record ->
-                    ( Setup model, Nothing )
+                    ( Setup model, NoOutMsg )
 
                 MessageInput.TypedArrowInDropdown int ->
                     Debug.todo ""
@@ -312,22 +327,22 @@ updateSetup localUser msg model =
                     Debug.todo ""
 
                 MessageInput.PressedOpenEmojiSelector ->
-                    Debug.todo ""
+                    ( Setup model, OpenEmojiSelector questionId )
 
                 MessageInput.OnPasteFiles nonempty ->
                     Debug.todo ""
 
                 MessageInput.TypedPageUp ->
-                    ( Setup model, Nothing )
+                    ( Setup model, NoOutMsg )
 
                 MessageInput.TypedPageDown ->
-                    ( Setup model, Nothing )
+                    ( Setup model, NoOutMsg )
 
                 MessageInput.TypedTabInCodeBlock range ->
-                    ( Setup model, Nothing )
+                    ( Setup model, NoOutMsg )
 
                 MessageInput.IgnoredKeyPress ->
-                    ( Setup model, Nothing )
+                    ( Setup model, NoOutMsg )
 
         PressedAddQuestion ->
             ( Setup
@@ -340,7 +355,7 @@ updateSetup localUser msg model =
                             Array.push "" model.questions
                     , error = Nothing
                 }
-            , Nothing
+            , NoOutMsg
             )
 
         PressedRemoveQuestion index ->
@@ -348,26 +363,26 @@ updateSetup localUser msg model =
                 { model
                     | questions =
                         Array.toList model.questions
-                            |> List.Extra.removeAt index
+                            |> List.Extra.removeAt (Id.toInt index)
                             |> Array.fromList
                     , error = Nothing
                 }
-            , Nothing
+            , NoOutMsg
             )
 
         PressedStartGame ->
             case validateSetup localUser.timezone (allUsers localUser) localUser.session.userId model of
                 Ok setup ->
-                    ( Game (initGame localUser setup initShared), Just setup )
+                    ( Game (initGame localUser setup initShared), FinishedSetup setup )
 
                 Err error ->
-                    ( Setup { model | error = Just error }, Nothing )
+                    ( Setup { model | error = Just error }, NoOutMsg )
 
         SetupNoOp ->
-            ( Setup model, Nothing )
+            ( Setup model, NoOutMsg )
 
         PressedCancel ->
-            ( CancelSetup, Nothing )
+            ( CancelSetup, NoOutMsg )
 
 
 updateGame :
@@ -675,9 +690,9 @@ setupView time windowSize showMemberTab localUser loggedIn users model =
         ]
 
 
-questionInputId : Int -> HtmlId
+questionInputId : Id QuestionId -> HtmlId
 questionInputId index =
-    Dom.id ("sheepGame_question_" ++ String.fromInt index)
+    Dom.id ("sheepGame_question_" ++ Id.toString index)
 
 
 questionInput :
@@ -692,9 +707,13 @@ questionInput :
     -> Element SetupMsg
 questionInput time questionWidth isMobile localUser loggedIn users index question =
     let
+        questionId : Id QuestionId
+        questionId =
+            Id.fromInt index
+
         htmlId : HtmlId
         htmlId =
-            questionInputId index
+            questionInputId questionId
 
         isFocused : Bool
         isFocused =
@@ -725,7 +744,7 @@ questionInput time questionWidth isMobile localUser loggedIn users index questio
                 loggedIn
                 users
                 |> Ui.html
-                |> Ui.map (TypedQuestion index)
+                |> Ui.map (TypedQuestion questionId)
                 |> Ui.el
                     [ case ( isFocused, richText ) of
                         ( False, Just content ) ->
@@ -738,7 +757,7 @@ questionInput time questionWidth isMobile localUser loggedIn users index questio
             |> Ui.el []
         , MyUi.deleteButton
             (Dom.id ("sheepGame_removeQuestion_" ++ String.fromInt index))
-            (PressedRemoveQuestion index)
+            (PressedRemoveQuestion questionId)
         ]
 
 

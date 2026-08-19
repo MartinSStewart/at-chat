@@ -2249,7 +2249,7 @@ isPressMsg msg =
         GotEmojiData _ ->
             False
 
-        GotEditMessageTextInputPositionForEmojiSelector _ ->
+        GotPositionForEmojiSelector_EditMessage _ ->
             False
 
         MessageMenu_PressedReactionEmoji _ ->
@@ -2381,6 +2381,9 @@ isPressMsg msg =
 
         UnreadOverviewThreadMsg _ _ _ messageViewMsg ->
             MessageView.isPressMsg messageViewMsg
+
+        GotPositionForEmojiSelector_SheepGameQuestion _ result ->
+            False
 
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg_

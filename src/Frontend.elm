@@ -71,6 +71,7 @@ import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
+import SheepGame
 import Sticker
 import String.Extra
 import String.Nonempty
@@ -1400,12 +1401,19 @@ updateLoaded msg model =
                                                 { loggedIn | showEmojiSelector = EmojiSelectorHidden }
                                                 (Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition)
 
-                                --( loggedIn, Command.none )
                                 EmojiSelectorForMessage maybeSelection ->
                                     insertEmojiOrSticker Pages.Guild.channelTextInputId maybeSelection emojiOrSticker model loggedIn
 
                                 EmojiSelectorForEditMessage _ maybeSelection ->
                                     insertEmojiOrSticker MessageMenu.editMessageTextInputId maybeSelection emojiOrSticker model loggedIn
+
+                                EmojiSelectorForSheepGameQuestion questionId _ maybeSelection ->
+                                    insertEmojiOrSticker
+                                        (SheepGame.questionInputId questionId)
+                                        maybeSelection
+                                        emojiOrSticker
+                                        model
+                                        loggedIn
                         )
                         model
 
@@ -3647,7 +3655,7 @@ updateLoaded msg model =
                 MessageInput.PressedOpenEmojiSelector ->
                     ( model
                     , Dom.getElement MessageMenu.editMessageTextInputId
-                        |> Task.attempt GotEditMessageTextInputPositionForEmojiSelector
+                        |> Task.attempt GotPositionForEmojiSelector_EditMessage
                     )
 
                 MessageInput.TypedPageUp ->
@@ -3709,12 +3717,23 @@ updateLoaded msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        GotEditMessageTextInputPositionForEmojiSelector result ->
+        GotPositionForEmojiSelector_EditMessage result ->
             case result of
                 Ok ok ->
                     pressedOpenEmojiSelector
                         MessageMenu.editMessageTextInputId
                         (EmojiSelectorForEditMessage (Coord.xy (round ok.element.x) (round ok.element.y)))
+                        model
+
+                Err _ ->
+                    ( model, Command.none )
+
+        GotPositionForEmojiSelector_SheepGameQuestion questionId result ->
+            case result of
+                Ok ok ->
+                    pressedOpenEmojiSelector
+                        MessageMenu.editMessageTextInputId
+                        (EmojiSelectorForSheepGameQuestion questionId (Coord.xy (round ok.element.x) (round ok.element.y)))
                         model
 
                 Err _ ->
@@ -6374,6 +6393,9 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
 
                         EmojiSelectorForEditMessage _ _ ->
                             EmojiSelectorHidden
+
+                        EmojiSelectorForSheepGameQuestion _ coord maybeRange ->
+                            EmojiSelectorHidden
                 , emojiSelector = { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
               }
                 |> MessageMenu.close model
@@ -8147,6 +8169,14 @@ handleGameOutMsgs outMsgs model =
                                 )
                                 WordSpellingGame.decodeDefinition
                         }
+                        :: cmds
+                    )
+
+                Game.OpenSheepGameEmojiSelector questionId ->
+                    ( model
+                    , Task.attempt
+                        (GotPositionForEmojiSelector_SheepGameQuestion questionId)
+                        (Dom.getElement (SheepGame.questionInputId questionId))
                         :: cmds
                     )
         )

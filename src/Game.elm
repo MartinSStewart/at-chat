@@ -387,6 +387,7 @@ type OutMsg
       -- Ask to be sent `CheckedSheepGameQuestionsDebounce` once the host has stopped typing
       -- (see `Frontend.handleGameOutMsgs`).
     | SaveSheepGameQuestionsAfterDelay Int
+    | OpenSheepGameEmojiSelector (Id SheepGame.QuestionId)
 
 
 update :
@@ -608,32 +609,35 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                         _ ->
                             SheepGame.initSetup
 
-                ( gameOrSetup, maybeSetup ) =
+                ( gameOrSetup, outMsg ) =
                     SheepGame.updateSetup localUser sheepMsg oldSetup
 
-                startMatch : List OutMsg
-                startMatch =
-                    case maybeSetup of
-                        Just setup ->
+                outMsg2 : List OutMsg
+                outMsg2 =
+                    case outMsg of
+                        SheepGame.FinishedSetup setup ->
                             -- A brand new match takes the next message id, then we navigate to it.
                             [ OutLocalChange (LocalChange_SheepGame newMatchId (SheepGame.StartMatch time setup))
                             , OutSelectMatch (Just newMatchId)
                             ]
 
-                        Nothing ->
+                        SheepGame.NoOutMsg ->
                             []
+
+                        SheepGame.OpenEmojiSelector questionId ->
+                            [ OpenSheepGameEmojiSelector questionId ]
             in
             case gameOrSetup of
                 SheepGame.Setup setup ->
                     if setup.questions == oldSetup.questions then
-                        ( { model | setup = SheepGame_Setup setup }, startMatch )
+                        ( { model | setup = SheepGame_Setup setup }, outMsg2 )
 
                     else
                         ( { model
                             | setup = SheepGame_Setup setup
                             , sheepGameQuestionsCounter = model.sheepGameQuestionsCounter + 1
                           }
-                        , SaveSheepGameQuestionsAfterDelay (model.sheepGameQuestionsCounter + 1) :: startMatch
+                        , SaveSheepGameQuestionsAfterDelay (model.sheepGameQuestionsCounter + 1) :: outMsg2
                         )
 
                 SheepGame.Game game ->
@@ -644,7 +648,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                         | startedGames = SeqDict.insert newMatchId (SheepGame_Game game) model.startedGames
                         , sheepGameQuestionsCounter = model.sheepGameQuestionsCounter + 1
                       }
-                    , SaveSheepGameQuestions Array.empty :: startMatch
+                    , SaveSheepGameQuestions Array.empty :: outMsg2
                     )
 
                 SheepGame.CancelSetup ->
@@ -652,7 +656,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                         | setup = GameSelect
                         , sheepGameQuestionsCounter = model.sheepGameQuestionsCounter + 1
                       }
-                    , SaveSheepGameQuestions Array.empty :: startMatch
+                    , SaveSheepGameQuestions Array.empty :: outMsg2
                     )
 
         CheckedSheepGameQuestionsDebounce counter ->
