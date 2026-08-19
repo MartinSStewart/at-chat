@@ -30,7 +30,7 @@ playerB =
 {-| Plain text as a question or an answer. Nobody to mention and no timezone to show a
 timestamp in, which is all the parsing needs.
 -}
-content : String -> SheepGame.Content
+content : String -> Nonempty (RichText.RichText (Id UserId))
 content text =
     let
         ( first, rest ) =
