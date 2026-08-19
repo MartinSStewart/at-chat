@@ -1,7 +1,6 @@
 module SheepGame exposing
     ( Action(..)
     , ActionWithTime
-    , Content
     , GameData
     , GameMsg(..)
     , LocalChange(..)
@@ -61,15 +60,8 @@ import Ui.Prose
 import User exposing (FrontendUser, LocalUser)
 
 
-{-| A question or an answer. The same shape a message's text has, so questions and
-answers get the formatting, mentions and emoji that everything else here does.
--}
-type alias Content =
-    Nonempty (RichText (Id UserId))
-
-
 type alias ValidatedSetup =
-    { questions : Nonempty Content
+    { questions : Nonempty (Nonempty (RichText (Id UserId)))
     , createdBy : Id UserId
     }
 
@@ -96,7 +88,7 @@ no amount of string comparison is going to work that out.
 -}
 type alias Shared =
     { phase : Phase
-    , answers : SeqDict (Id UserId) (Array (Maybe Content))
+    , answers : SeqDict (Id UserId) (Array (Maybe (Nonempty (RichText (Id UserId)))))
     , groups : SeqDict ( Id UserId, Int ) String
     , notes : Dict Int String
     , questionsRevealed : Int
@@ -143,7 +135,7 @@ type GameMsg
 
 
 type Action
-    = SubmittedAnswers (Array (Maybe Content))
+    = SubmittedAnswers (Array (Maybe (Nonempty (RichText (Id UserId)))))
     | LockedAnswers
     | ChangedGroup (Id UserId) Int String
     | ChangedNotes Int String
@@ -203,7 +195,7 @@ allUsers localUser =
 
 {-| Turn typed text into a question or answer. Blank text isn't either of those.
 -}
-parseContent : Time.Zone -> SeqDict (Id UserId) FrontendUser -> String -> Maybe Content
+parseContent : Time.Zone -> SeqDict (Id UserId) FrontendUser -> String -> Maybe (Nonempty (RichText (Id UserId)))
 parseContent timezone users text =
     String.trim text
         |> String.Nonempty.fromString
@@ -213,7 +205,7 @@ parseContent timezone users text =
 {-| The text someone would have typed to write this, so that an answer can be put back in
 the box it came from.
 -}
-toSourceText : LocalUser -> Content -> String
+toSourceText : LocalUser -> Nonempty (RichText (Id UserId)) -> String
 toSourceText localUser content =
     RichText.toString localUser.timezone False (allUsers localUser) content
 
@@ -478,7 +470,7 @@ updateAction setup action shared =
 {-| Answers arrive from a client that might disagree with us about how many questions
 there are, so they're trimmed or padded to fit rather than trusted.
 -}
-padAnswers : Int -> Array (Maybe Content) -> Array (Maybe Content)
+padAnswers : Int -> Array (Maybe (Nonempty (RichText (Id UserId)))) -> Array (Maybe (Nonempty (RichText (Id UserId))))
 padAnswers questionCount answers =
     List.range 0 (questionCount - 1)
         |> List.map (\index -> Array.get index answers |> Maybe.withDefault Nothing)
@@ -489,7 +481,7 @@ padAnswers questionCount answers =
 no timezone and nobody's name keeps this identical everywhere it's worked out, which is
 what matters when the backend and every client have to reach the same grouping.
 -}
-answerKey : Content -> String
+answerKey : Nonempty (RichText (Id UserId)) -> String
 answerKey content =
     RichText.toString Time.utc False SeqDict.empty content
         |> String.trim
@@ -499,7 +491,7 @@ answerKey content =
 {-| The host's starting point for grouping: answers that already match once case and
 surrounding whitespace are ignored get the same label.
 -}
-autoGroup : ValidatedSetup -> SeqDict (Id UserId) (Array (Maybe Content)) -> SeqDict ( Id UserId, Int ) String
+autoGroup : ValidatedSetup -> SeqDict (Id UserId) (Array (Maybe (Nonempty (RichText (Id UserId))))) -> SeqDict ( Id UserId, Int ) String
 autoGroup setup answers =
     List.range 0 (List.Nonempty.length setup.questions - 1)
         |> List.concatMap
@@ -596,7 +588,7 @@ groupsForQuestion questionIndex shared =
             (\( ( group, userId ), rest ) -> ( group, userId :: List.map Tuple.second rest ))
 
 
-answerFor : Id UserId -> Int -> Shared -> Maybe Content
+answerFor : Id UserId -> Int -> Shared -> Maybe (Nonempty (RichText (Id UserId)))
 answerFor userId questionIndex shared =
     SeqDict.get userId shared.answers
         |> Maybe.andThen (Array.get questionIndex)
@@ -690,14 +682,14 @@ questionInput time questionWidth isMobile localUser loggedIn users index questio
                 Nothing ->
                     False
 
-        richText : Maybe Content
+        richText : Maybe (Nonempty (RichText (Id UserId)))
         richText =
             String.Nonempty.fromString question |> Maybe.map (RichText.fromNonemptyString localUser.timezone users)
     in
     Ui.row
-        [ Ui.spacing 8, Ui.height Ui.shrink ]
+        [ Ui.spacing 8 ]
         [ Ui.el
-            (Ui.heightMax 400 :: MessageInput.containerAttributes True)
+            (Ui.heightMax 300 :: MessageInput.containerAttributes True)
             (MessageInput.textarea
                 isMobile
                 htmlId
@@ -711,8 +703,6 @@ questionInput time questionWidth isMobile localUser loggedIn users index questio
                 users
                 |> Ui.html
                 |> Ui.map (TypedQuestion index)
-                -- The preview goes in front of the textarea itself rather than the box around
-                -- it, so that every part of it has the textarea underneath to click through to.
                 |> Ui.el
                     [ case ( isFocused, richText ) of
                         ( False, Just content ) ->
@@ -722,6 +712,7 @@ questionInput time questionWidth isMobile localUser loggedIn users index questio
                             Ui.noAttr
                     ]
             )
+            |> Ui.el []
         , MyUi.deleteButton
             (Dom.id ("sheepGame_removeQuestion_" ++ String.fromInt index))
             (PressedRemoveQuestion index)
@@ -735,7 +726,7 @@ It covers the textarea it's drawn in front of and ignores pointer events, so cli
 puts the caret in that textarea instead, which swaps this back for the markdown.
 
 -}
-questionPreview : Time.Posix -> Int -> LocalUser -> Int -> Content -> Element SetupMsg
+questionPreview : Time.Posix -> Int -> LocalUser -> Int -> Nonempty (RichText (Id UserId)) -> Element SetupMsg
 questionPreview time questionWidth localUser index content =
     RichText.view
         (Dom.id ("sheepGame_questionPreview_" ++ String.fromInt index))
@@ -764,12 +755,10 @@ questionPreview time questionWidth localUser index content =
         |> Html.div []
         |> Ui.html
         |> Ui.el
-            [ Ui.height Ui.fill
-            , Ui.padding 8
+            [ Ui.padding 8
             , Ui.background MyUi.background2
             , MyUi.prewrap
             , MyUi.noPointerEvents
-            , MyUi.htmlStyle "overflow-wrap" "anywhere"
             ]
 
 
@@ -806,7 +795,7 @@ gameView time windowSize localUser setup shared model =
 {-| Questions and answers are drawn the same way a message is, minus the parts a game has
 no use for: nothing here has attachments and there's nothing to reveal a spoiler with.
 -}
-contentView : Time.Posix -> LocalUser -> Content -> Element GameMsg
+contentView : Time.Posix -> LocalUser -> Nonempty (RichText (Id UserId)) -> Element GameMsg
 contentView time localUser content =
     RichText.preview
         (\_ -> NoOp)
@@ -931,7 +920,7 @@ groupingView time localUser setup shared =
         ]
 
 
-groupingQuestionView : Time.Posix -> LocalUser -> Shared -> Int -> Content -> Element GameMsg
+groupingQuestionView : Time.Posix -> LocalUser -> Shared -> Int -> Nonempty (RichText (Id UserId)) -> Element GameMsg
 groupingQuestionView time localUser shared questionIndex question =
     let
         notesLabel : { element : Element GameMsg, id : Ui.Input.Label }
@@ -973,7 +962,7 @@ groupingQuestionView time localUser shared questionIndex question =
         ]
 
 
-groupingAnswerView : Time.Posix -> LocalUser -> Int -> Id UserId -> Shared -> Content -> Element GameMsg
+groupingAnswerView : Time.Posix -> LocalUser -> Int -> Id UserId -> Shared -> Nonempty (RichText (Id UserId)) -> Element GameMsg
 groupingAnswerView time localUser questionIndex userId shared answer =
     let
         groupLabel2 : { element : Element GameMsg, id : Ui.Input.Label }
@@ -1074,7 +1063,7 @@ scoreboardView localUser scores =
         )
 
 
-revealedQuestionView : Time.Posix -> LocalUser -> Shared -> Int -> Content -> Element GameMsg
+revealedQuestionView : Time.Posix -> LocalUser -> Shared -> Int -> Nonempty (RichText (Id UserId)) -> Element GameMsg
 revealedQuestionView time localUser shared questionIndex question =
     Ui.column
         [ Ui.spacing 4 ]
