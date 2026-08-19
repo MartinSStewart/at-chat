@@ -2523,7 +2523,7 @@ exportProgressText progress =
                             " (1 channel remaining)"
 
                         _ ->
-                            " (" ++ String.fromInt channelsRemaining ++ ")"
+                            " (" ++ String.fromInt channelsRemaining ++ " channels remaining)"
                    )
 
         ExportingDmChannels { encoded, total } ->
@@ -2542,7 +2542,7 @@ exportProgressText progress =
                             " (1 channel remaining)"
 
                         _ ->
-                            " (" ++ String.fromInt channelsRemaining ++ ")"
+                            " (" ++ String.fromInt channelsRemaining ++ " channels remaining)"
                    )
 
         ExportingDiscordDmChannels { encoded, total } ->
