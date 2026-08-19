@@ -114,6 +114,7 @@ type SetupMsg
     | PressedRemoveQuestion Int
     | PressedStartGame
     | PressedCancel
+    | SetupNoOp
 
 
 type SetupOrGame
@@ -263,7 +264,9 @@ updateSetup localUser msg model =
         TypedQuestion index messageInputMsg ->
             case messageInputMsg of
                 MessageInput.PressedTextInput ->
-                    Debug.todo ""
+                    -- Clicking the input is how the rich text drawn in front of it gets edited, but
+                    -- the focus itself is handled by the port that watches the text selection.
+                    ( Setup model, Nothing )
 
                 MessageInput.TypedMessage text ->
                     ( Setup
@@ -343,6 +346,9 @@ updateSetup localUser msg model =
 
                 Err error ->
                     ( Setup { model | error = Just error }, Nothing )
+
+        SetupNoOp ->
+            ( Setup model, Nothing )
 
         PressedCancel ->
             ( CancelSetup, Nothing )
@@ -597,13 +603,14 @@ answerFor userId questionIndex shared =
 
 
 setupView :
-    Coord CssPixels
+    Time.Posix
+    -> Coord CssPixels
     -> LocalUser
     -> LoggedIn a
     -> SeqDict (Id UserId) FrontendUser
     -> SetupModel
     -> Element SetupMsg
-setupView windowSize localUser loggedIn users model =
+setupView time windowSize localUser loggedIn users model =
     let
         isMobile : Bool
         isMobile =
@@ -627,7 +634,7 @@ setupView windowSize localUser loggedIn users model =
             (Ui.column
                 [ Ui.spacing 8 ]
                 (List.indexedMap
-                    (questionInput isMobile localUser loggedIn users)
+                    (questionInput time isMobile localUser loggedIn users)
                     (Array.toList model.questions)
                     ++ [ MyUi.secondaryButton
                             (Dom.id "sheepGame_addQuestion")
@@ -652,15 +659,17 @@ questionInputId index =
 
 
 questionInput :
-    Bool
+    Time.Posix
+    -> Bool
     -> LocalUser
     -> LoggedIn a
     -> SeqDict (Id UserId) FrontendUser
     -> Int
     -> String
     -> Element SetupMsg
-questionInput isMobile localUser loggedIn users index question =
+questionInput time isMobile localUser loggedIn users index question =
     let
+        htmlId : HtmlId
         htmlId =
             questionInputId index
 
@@ -673,25 +682,12 @@ questionInput isMobile localUser loggedIn users index question =
                 Nothing ->
                     False
 
-        richText : Maybe (Nonempty (RichText (Id UserId)))
+        richText : Maybe Content
         richText =
             String.Nonempty.fromString question |> Maybe.map (RichText.fromNonemptyString localUser.timezone users)
     in
     Ui.row
-        [ Ui.spacing 8
-        , Ui.height Ui.shrink
-        , if isFocused then
-            Ui.inFront Ui.none
-
-          else
-            case richText of
-                Just richText2 ->
-                    RichText.view richText2
-                        |> Ui.inFront
-
-                Nothing ->
-                    Ui.inFront Ui.none
-        ]
+        [ Ui.spacing 8, Ui.height Ui.shrink ]
         [ Ui.el
             (Ui.heightMax 400 :: MessageInput.containerAttributes True)
             (MessageInput.textarea
@@ -707,30 +703,52 @@ questionInput isMobile localUser loggedIn users index question =
                 users
                 |> Ui.html
                 |> Ui.map (TypedQuestion index)
-            )
-            |> Ui.el []
+                -- The preview goes in front of the textarea itself rather than the box around
+                -- it, so that every part of it has the textarea underneath to click through to.
+                |> Ui.el
+                    [ case ( isFocused, richText ) of
+                        ( False, Just content ) ->
+                            Ui.inFront (questionPreview time localUser content)
 
-        --Ui.Input.text
-        --    [ Ui.border 1
-        --    , Ui.borderColor MyUi.inputBorder
-        --    , Ui.background MyUi.inputBackground
-        --    , Ui.rounded 4
-        --    , Ui.paddingXY 8 8
-        --    ]
-        --    { onChange = TypedQuestion index
-        --    , text = question
-        --    , placeholder =
-        --        if isMobile then
-        --            Nothing
-        --
-        --        else
-        --            Just "Pick a random number between 1 and 10"
-        --    , label = label.id
-        --    }
+                        _ ->
+                            Ui.noAttr
+                    ]
+            )
         , MyUi.deleteButton
             (Dom.id ("sheepGame_removeQuestion_" ++ String.fromInt index))
             (PressedRemoveQuestion index)
         ]
+
+
+{-| A question the host isn't editing right now, drawn the way it will look in the game so
+they see the formatting instead of the markdown they typed.
+
+It covers the textarea it's drawn in front of and ignores pointer events, so clicking it
+puts the caret in that textarea instead, which swaps this back for the markdown.
+
+-}
+questionPreview : Time.Posix -> LocalUser -> Content -> Element SetupMsg
+questionPreview time localUser content =
+    RichText.preview
+        (\_ -> SetupNoOp)
+        { revealedSpoilers = SeqSet.empty
+        , users = allUsers localUser
+        , attachedFiles = SeqDict.empty
+        , customEmojis = localUser.customEmojis
+        , domainWhitelist = localUser.user.domainWhitelist
+        , timezone = localUser.timezone
+        , time = time
+        }
+        content
+        |> Html.span []
+        |> Ui.html
+        |> Ui.el
+            [ Ui.height Ui.fill
+            , Ui.padding 8
+            , Ui.background MyUi.background2
+            , MyUi.noPointerEvents
+            , MyUi.htmlStyle "overflow-wrap" "anywhere"
+            ]
 
 
 gameView : Time.Posix -> Coord CssPixels -> LocalUser -> ValidatedSetup -> Shared -> GameData -> Element GameMsg

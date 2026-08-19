@@ -53,6 +53,7 @@ sheepGameDmTest normalConfig =
                         , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "sheepGame_start" ])
                         , admin.click 100 (Dom.id "game_select_Sheep Game (WIP)")
                         , admin.input 100 (Dom.id "sheepGame_question_0") "Name a **colour**"
+                        , admin.click 100 (Dom.id "sheepGame_addQuestion")
                         , admin.input 100 (Dom.id "sheepGame_question_1") "Name an animal"
                         , admin.click 100 (Dom.id "sheepGame_start")
 

@@ -841,7 +841,7 @@ view currentTime windowSize showMemberTab maybeDragging lastCopied localUser log
                         WordSpellingGame.setupView windowSize False setup |> Ui.map WordSpellingSetupMsg
 
                     SheepGame_Setup setup ->
-                        SheepGame.setupView windowSize localUser loggedIn (User.allUsers localUser) setup
+                        SheepGame.setupView currentTime windowSize localUser loggedIn (User.allUsers localUser) setup
                             |> Ui.map SheepSetupMsg
 
                     GameSelect ->
