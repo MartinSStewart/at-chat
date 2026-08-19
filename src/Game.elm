@@ -35,13 +35,15 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.File exposing (File)
 import Effect.Time as Time
+import FileStatus exposing (FileId)
 import Go
 import Html
 import Html.Attributes
 import Html.Events
 import Id exposing (ChannelMessageId, GamePublicId, GuildOrDmId(..), Id, UserId)
-import List.Nonempty
+import List.Nonempty exposing (Nonempty)
 import Message exposing (GameType(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -388,6 +390,10 @@ type OutMsg
       -- (see `Frontend.handleGameOutMsgs`).
     | SaveSheepGameQuestionsAfterDelay Int
     | OpenSheepGameEmojiSelector (Id SheepGame.QuestionId)
+      -- Ask for a file to attach to a sheep game question, then upload what comes back
+      -- (see `Frontend.handleGameOutMsgs`).
+    | SelectSheepGameFilesToAttach (Id SheepGame.QuestionId)
+    | UploadSheepGameAttachedFiles (Nonempty ( Id FileId, File ))
 
 
 update :
@@ -626,6 +632,12 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
 
                         SheepGame.OpenEmojiSelector questionId ->
                             [ OpenSheepGameEmojiSelector questionId ]
+
+                        SheepGame.SelectFilesToAttach questionId ->
+                            [ SelectSheepGameFilesToAttach questionId ]
+
+                        SheepGame.UploadAttachedFiles files ->
+                            [ UploadSheepGameAttachedFiles files ]
             in
             case gameOrSetup of
                 SheepGame.Setup setup ->

@@ -44,7 +44,11 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.File exposing (File)
+import Effect.Http as Http
 import Effect.Time as Time
+import FileName
+import FileStatus exposing (FileData, FileId, FileStatus)
 import Go
 import Html
 import Id exposing (Id, UserId)
@@ -69,6 +73,9 @@ import User exposing (FrontendUser, LocalUser)
 type alias ValidatedSetup =
     { questions : Nonempty (Nonempty (RichText (Id UserId)))
     , createdBy : Id UserId
+    , -- Files the questions refer to, carried along the way a message carries its own
+      -- attachments so that everyone in the match can resolve those references.
+      attachedFiles : SeqDict (Id FileId) FileData
     }
 
 
@@ -108,6 +115,9 @@ type alias Shared =
 type alias SetupModel =
     { questions : Array String
     , error : Maybe String
+    , -- Files the host has attached to their questions. The questions refer to these by id
+      -- in the same way a message's text refers to its attachments.
+      attachedFiles : SeqDict (Id FileId) FileStatus
     }
 
 
@@ -117,6 +127,8 @@ type SetupMsg
     | PressedRemoveQuestion (Id QuestionId)
     | PressedStartGame
     | PressedCancel
+    | GotFilesToAttach (Id QuestionId) (Nonempty File)
+    | GotAttachedFileUpload (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | SetupNoOp
 
 
@@ -164,7 +176,7 @@ type LocalChange
 
 initSetup : SetupModel
 initSetup =
-    { questions = Array.fromList [ "" ], error = Nothing }
+    { questions = Array.fromList [ "" ], error = Nothing, attachedFiles = SeqDict.empty }
 
 
 {-| The setup someone was part way through, rebuilt from the questions their session held
@@ -176,7 +188,33 @@ initSetupFromSavedQuestions questions =
         initSetup
 
     else
-        { questions = questions, error = Nothing }
+        { questions = questions, error = Nothing, attachedFiles = SeqDict.empty }
+
+
+{-| File ids start at 1. The backend throws away anything lower when it checks that the
+files a client named were really uploaded, so an empty dict can't start from `Id.nextId`.
+-}
+nextAttachedFileId : SeqDict (Id FileId) a -> Id FileId
+nextAttachedFileId attachedFiles =
+    Id.nextId attachedFiles |> Id.toInt |> max 1 |> Id.fromInt
+
+
+{-| Attaching a file adds a reference to it at the end of the question, the same text a
+message's draft gets when a file is attached to it.
+-}
+appendAttachedFiles : List (Id FileId) -> String -> String
+appendAttachedFiles fileIds question =
+    List.foldl
+        (\fileId text ->
+            text ++ RichText.attachedFilePrefix ++ Id.toString fileId ++ RichText.attachedFileSuffix
+        )
+        (if question == "" || String.endsWith " " question then
+            question
+
+         else
+            question ++ " "
+        )
+        fileIds
 
 
 {-| How much of what a session asks to save is worth keeping. Nothing stops a client from
@@ -276,7 +314,15 @@ validateSetup timezone users createdBy model =
             |> List.Nonempty.fromList
     of
         Just questions ->
-            Ok { questions = questions, createdBy = createdBy }
+            if FileStatus.hasUploadingFile model.attachedFiles then
+                Err "Wait for the attached files to finish uploading"
+
+            else
+                Ok
+                    { questions = questions
+                    , createdBy = createdBy
+                    , attachedFiles = FileStatus.onlyUploadedFiles model.attachedFiles
+                    }
 
         Nothing ->
             Err "Write at least one question before starting"
@@ -286,6 +332,8 @@ type OutMsg
     = NoOutMsg
     | FinishedSetup ValidatedSetup
     | OpenEmojiSelector (Id QuestionId)
+    | SelectFilesToAttach (Id QuestionId)
+    | UploadAttachedFiles (Nonempty ( Id FileId, File ))
 
 
 updateSetup : LocalUser -> SetupMsg -> SetupModel -> ( SetupOrGame, OutMsg )
@@ -323,7 +371,7 @@ updateSetup localUser msg model =
                     Debug.todo ""
 
                 MessageInput.PressedUploadFile ->
-                    Debug.todo ""
+                    ( Setup model, SelectFilesToAttach questionId )
 
                 MessageInput.PressedOpenEmojiSelector ->
                     ( Setup model, OpenEmojiSelector questionId )
@@ -376,6 +424,60 @@ updateSetup localUser msg model =
 
                 Err error ->
                     ( Setup { model | error = Just error }, NoOutMsg )
+
+        GotFilesToAttach questionId files ->
+            let
+                ( attachedFiles, toUpload ) =
+                    List.Nonempty.foldl
+                        (\file ( attachedFiles2, toUpload2 ) ->
+                            let
+                                fileId : Id FileId
+                                fileId =
+                                    nextAttachedFileId attachedFiles2
+                            in
+                            ( SeqDict.insert
+                                fileId
+                                (FileStatus.FileUploading
+                                    (Effect.File.name file |> FileName.fromString)
+                                    { sent = 0, size = Effect.File.size file }
+                                    (Effect.File.mime file |> FileStatus.contentType)
+                                )
+                                attachedFiles2
+                            , ( fileId, file ) :: toUpload2
+                            )
+                        )
+                        ( model.attachedFiles, [] )
+                        files
+            in
+            ( Setup
+                { model
+                    | attachedFiles = attachedFiles
+                    , questions =
+                        Array.set
+                            (Id.toInt questionId)
+                            (appendAttachedFiles
+                                (List.reverse toUpload |> List.map Tuple.first)
+                                (Array.get (Id.toInt questionId) model.questions |> Maybe.withDefault "")
+                            )
+                            model.questions
+                    , error = Nothing
+                }
+            , case List.reverse toUpload |> List.Nonempty.fromList of
+                Just nonempty ->
+                    UploadAttachedFiles nonempty
+
+                Nothing ->
+                    NoOutMsg
+            )
+
+        GotAttachedFileUpload fileId result ->
+            ( Setup
+                { model
+                    | attachedFiles =
+                        SeqDict.updateIfExists fileId (FileStatus.addFileHash result) model.attachedFiles
+                }
+            , NoOutMsg
+            )
 
         SetupNoOp ->
             ( Setup model, NoOutMsg )
@@ -670,7 +772,7 @@ setupView time windowSize showMemberTab localUser loggedIn users model =
             (Ui.column
                 [ Ui.spacing 8 ]
                 (List.indexedMap
-                    (questionInput time questionWidth isMobile localUser loggedIn users)
+                    (questionInput time questionWidth isMobile localUser loggedIn users model.attachedFiles)
                     (Array.toList model.questions)
                     ++ [ MyUi.secondaryButton
                             (Dom.id "sheepGame_addQuestion")
@@ -710,10 +812,11 @@ questionInput :
     -> LocalUser
     -> LoggedIn a
     -> SeqDict (Id UserId) FrontendUser
+    -> SeqDict (Id FileId) FileStatus
     -> Int
     -> String
     -> Element SetupMsg
-questionInput time questionWidth isMobile localUser loggedIn users index question =
+questionInput time questionWidth isMobile localUser loggedIn users attachedFiles index question =
     let
         questionId : Id QuestionId
         questionId =
@@ -738,7 +841,9 @@ questionInput time questionWidth isMobile localUser loggedIn users index questio
     in
     Ui.row
         [ Ui.spacing 8 ]
-        [ MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
+        [ MessageInput.attachmentButton (Dom.idToString htmlId)
+            |> Ui.map (TypedQuestion questionId)
+        , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
             |> Ui.map (TypedQuestion questionId)
         , Ui.el
             (Ui.heightMax 300
@@ -752,7 +857,7 @@ questionInput time questionWidth isMobile localUser loggedIn users index questio
                 (maxQuestionLength - String.length question)
                 question
                 richText
-                SeqDict.empty
+                attachedFiles
                 localUser
                 loggedIn
                 users
@@ -761,7 +866,8 @@ questionInput time questionWidth isMobile localUser loggedIn users index questio
                 |> Ui.el
                     [ case ( isFocused, richText ) of
                         ( False, Just content ) ->
-                            Ui.inFront (questionPreview time questionWidth localUser index content)
+                            Ui.inFront
+                                (questionPreview time questionWidth localUser attachedFiles index content)
 
                         _ ->
                             Ui.noAttr
@@ -781,8 +887,15 @@ It covers the textarea it's drawn in front of and ignores pointer events, so cli
 puts the caret in that textarea instead, which swaps this back for the markdown.
 
 -}
-questionPreview : Time.Posix -> Int -> LocalUser -> Int -> Nonempty (RichText (Id UserId)) -> Element SetupMsg
-questionPreview time questionWidth localUser index content =
+questionPreview :
+    Time.Posix
+    -> Int
+    -> LocalUser
+    -> SeqDict (Id FileId) FileStatus
+    -> Int
+    -> Nonempty (RichText (Id UserId))
+    -> Element SetupMsg
+questionPreview time questionWidth localUser attachedFiles index content =
     RichText.view
         (Dom.id ("sheepGame_questionPreview_" ++ String.fromInt index))
         questionWidth
@@ -792,7 +905,7 @@ questionPreview time questionWidth localUser index content =
         { domainWhitelist = localUser.user.domainWhitelist
         , revealedSpoilers = SeqSet.empty
         , users = allUsers localUser
-        , attachedFiles = SeqDict.empty
+        , attachedFiles = FileStatus.onlyUploadedFiles attachedFiles
         , stickers = localUser.stickers
         , customEmojis = localUser.customEmojis
         , animationMode = Sticker.LoopAFewTimesOnLoad

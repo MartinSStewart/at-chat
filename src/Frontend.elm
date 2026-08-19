@@ -8163,6 +8163,38 @@ handleGameOutMsgs outMsgs model =
                         :: cmds
                     )
 
+                Game.SelectSheepGameFilesToAttach questionId ->
+                    ( model2
+                    , Effect.File.Select.files
+                        []
+                        (\file files ->
+                            List.Nonempty.Nonempty file files
+                                |> SheepGame.GotFilesToAttach questionId
+                                |> Game.SheepSetupMsg
+                                |> GameMsg
+                        )
+                        :: cmds
+                    )
+
+                Game.UploadSheepGameAttachedFiles files ->
+                    ( model2
+                    , (List.Nonempty.toList files
+                        |> List.map
+                            (\( fileId, file ) ->
+                                FileStatus.uploadGameFile
+                                    (\result ->
+                                        SheepGame.GotAttachedFileUpload fileId result
+                                            |> Game.SheepSetupMsg
+                                            |> GameMsg
+                                    )
+                                    fileId
+                                    file
+                            )
+                        |> Command.batch
+                      )
+                        :: cmds
+                    )
+
                 Game.FetchWordDefinition word ->
                     ( model2
                     , Http.get

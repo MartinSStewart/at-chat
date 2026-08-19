@@ -3,6 +3,8 @@ module SheepGameTests exposing (tests)
 import Array
 import Effect.Time as Time
 import Expect
+import FileName
+import FileStatus
 import Id exposing (Id, UserId)
 import List.Nonempty exposing (Nonempty(..))
 import RichText
@@ -48,6 +50,7 @@ setup questionCount =
             (content "Q1")
             (List.range 2 questionCount |> List.map (\index -> content ("Q" ++ String.fromInt index)))
     , createdBy = host
+    , attachedFiles = SeqDict.empty
     }
 
 
@@ -221,16 +224,58 @@ tests =
             )
         , Test.test "A setup with nothing but blank questions is rejected"
             (\_ ->
-                SheepGame.validateSetup Time.utc SeqDict.empty host { questions = Array.fromList [ "", "   " ], error = Nothing }
+                SheepGame.validateSetup Time.utc SeqDict.empty host { questions = Array.fromList [ "", "   " ], error = Nothing, attachedFiles = SeqDict.empty }
                     |> Expect.err
             )
         , Test.test "Blank questions are dropped from a setup that has real ones too"
             (\_ ->
-                SheepGame.validateSetup Time.utc SeqDict.empty host { questions = Array.fromList [ "", "Name a colour", " " ], error = Nothing }
+                SheepGame.validateSetup Time.utc SeqDict.empty host { questions = Array.fromList [ "", "Name a colour", " " ], error = Nothing, attachedFiles = SeqDict.empty }
                     |> Result.map (\setup2 -> List.Nonempty.length setup2.questions)
                     |> Expect.equal (Ok 1)
             )
+        , Test.test "A match can't start while a file the questions refer to is still uploading"
+            (\_ ->
+                SheepGame.validateSetup
+                    Time.utc
+                    SeqDict.empty
+                    host
+                    { questions = Array.fromList [ "Name a colour" ]
+                    , error = Nothing
+                    , attachedFiles =
+                        SeqDict.singleton
+                            (Id.fromInt 1)
+                            (FileStatus.FileUploading
+                                (FileName.fromString "sheep.png")
+                                { sent = 0, size = 10 }
+                                FileStatus.pngContent
+                            )
+                    }
+                    |> Expect.err
+            )
+        , Test.test "Files that finished uploading are carried into the match"
+            (\_ ->
+                SheepGame.validateSetup
+                    Time.utc
+                    SeqDict.empty
+                    host
+                    { questions = Array.fromList [ "Name a colour" ]
+                    , error = Nothing
+                    , attachedFiles = SeqDict.singleton (Id.fromInt 1) (FileStatus.FileUploaded uploadedFile)
+                    }
+                    |> Result.map (\setup2 -> SeqDict.toList setup2.attachedFiles)
+                    |> Expect.equal (Ok [ ( Id.fromInt 1, uploadedFile ) ])
+            )
         ]
+
+
+uploadedFile : FileStatus.FileData
+uploadedFile =
+    { fileName = FileName.fromString "sheep.png"
+    , fileSize = 10
+    , metadata = Nothing
+    , contentType = FileStatus.pngContent
+    , fileHash = FileStatus.fileHash "abc"
+    }
 
 
 scoreList : Int -> SheepGame.Shared -> List ( Id UserId, Int )

@@ -6512,6 +6512,14 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
     case sheepChange of
         SheepGame.StartMatch _ setup ->
             let
+                setup2 : SheepGame.ValidatedSetup
+                setup2 =
+                    -- A client could name files it never uploaded, the same way it could when
+                    -- sending a message, so only the ones we actually hold are kept.
+                    { setup
+                        | attachedFiles = BackendExtra.validateAttachedFiles model.files setup.attachedFiles
+                    }
+
                 ( messageId, channel2 ) =
                     LocalState.createChannelMessageBackend
                         (GameStarted
@@ -6527,14 +6535,14 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
 
                 localMsg2 : Game.LocalChange
                 localMsg2 =
-                    Game.LocalChange_SheepGame messageId (SheepGame.StartMatch time setup)
+                    Game.LocalChange_SheepGame messageId (SheepGame.StartMatch time setup2)
             in
             ( setChannel
                 { channel2
                     | games =
                         SeqDict.insert
                             messageId
-                            (Game.GameData_SheepGame setup Array.empty SheepGame.initShared)
+                            (Game.GameData_SheepGame setup2 Array.empty SheepGame.initShared)
                             channel2.games
                 }
                 model

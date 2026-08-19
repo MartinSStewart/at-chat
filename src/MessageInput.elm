@@ -5,6 +5,7 @@ module MessageInput exposing
     , NameSoFarData
     , TextInputFocus
     , TimestampData(..)
+    , attachmentButton
     , containerAttributes
     , disabledView
     , editView
@@ -745,6 +746,7 @@ attachmentButton htmlIdPrefix =
         (Dom.id (htmlIdPrefix ++ "_uploadFile"))
         PressedUploadFile
         [ Ui.rounded 4
+        , Ui.width Ui.shrink
         , Ui.paddingXY 6 0
         , Ui.height (Ui.px 40)
         , Ui.background MyUi.buttonBackground
