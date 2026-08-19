@@ -5,6 +5,7 @@ module MessageInput exposing
     , NameSoFarData
     , TextInputFocus
     , TimestampData(..)
+    , containerAttributes
     , disabledView
     , editView
     , insertTab
@@ -576,22 +577,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
         loggedIn
         users
         |> Ui.html
-        |> Ui.el
-            [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
-            , Ui.scrollable
-            , Ui.border 1
-            , Ui.borderColor MyUi.border1
-            , if roundTopCorners then
-                Ui.rounded 8
-
-              else
-                Ui.roundedWith { topLeft = 0, topRight = 0, bottomLeft = 8, bottomRight = 8 }
-            , Ui.height (Ui.px height)
-            , Ui.heightMax height
-            , Ui.heightMin 0
-            , MyUi.htmlStyle "scrollbar-color" "black"
-            , Ui.background MyUi.background2
-            ]
+        |> Ui.el (Ui.height (Ui.px height) :: Ui.heightMax height :: containerAttributes roundTopCorners)
         |> Ui.el
             [ Ui.paddingWith { left = 80, right = 36, top = 0, bottom = 0 }
             , Ui.inFront
@@ -628,6 +614,23 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
                     (Ui.html Icons.sendMessage)
                 )
             ]
+
+
+containerAttributes : Bool -> List (Ui.Attribute msg)
+containerAttributes roundTopCorners =
+    [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
+    , Ui.scrollable
+    , Ui.border 1
+    , Ui.borderColor MyUi.border1
+    , if roundTopCorners then
+        Ui.rounded 8
+
+      else
+        Ui.roundedWith { topLeft = 0, topRight = 0, bottomLeft = 8, bottomRight = 8 }
+    , Ui.heightMin 0
+    , MyUi.htmlStyle "scrollbar-color" "black"
+    , Ui.background MyUi.background2
+    ]
 
 
 view :
@@ -668,21 +671,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
         loggedIn
         users
         |> Ui.html
-        |> Ui.el
-            [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
-            , Ui.scrollable
-            , Ui.border 1
-            , Ui.borderColor MyUi.border1
-            , if roundTopCorners then
-                Ui.rounded 8
-
-              else
-                Ui.roundedWith { topLeft = 0, topRight = 0, bottomLeft = 8, bottomRight = 8 }
-            , Ui.heightMin 0
-            , Ui.heightMax 400
-            , MyUi.htmlStyle "scrollbar-color" "black"
-            , Ui.background MyUi.background2
-            ]
+        |> Ui.el (Ui.heightMax 400 :: containerAttributes roundTopCorners)
         |> Ui.el
             [ Ui.paddingWith { left = 80, right = 36, top = 0, bottom = 0 }
             , Ui.inFront

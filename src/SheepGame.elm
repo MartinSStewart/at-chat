@@ -653,29 +653,25 @@ questionInput :
     -> String
     -> Element SetupMsg
 questionInput isMobile localUser loggedIn users index question =
-    --let
-    --    label : { element : Element SetupMsg, id : Ui.Input.Label }
-    --    label =
-    --        MyUi.label
-    --
-    --            []
-    --            (Ui.text ("Question " ++ String.fromInt (index + 1)))
-    --in
     Ui.row
-        [ Ui.spacing 8 ]
-        [ MessageInput.textarea
-            isMobile
-            (Dom.id ("sheepGame_question_" ++ String.fromInt index))
-            "Pick a random number between 1 and 10"
-            (maxQuestionLength - String.length question)
-            question
-            (String.Nonempty.fromString question |> Maybe.map (RichText.fromNonemptyString localUser.timezone users))
-            SeqDict.empty
-            localUser
-            loggedIn
-            users
-            |> Ui.html
-            |> Ui.map (TypedQuestion index)
+        [ Ui.spacing 8, Ui.height Ui.shrink ]
+        [ Ui.el
+            (Ui.heightMax 400 :: MessageInput.containerAttributes True)
+            (MessageInput.textarea
+                isMobile
+                (Dom.id ("sheepGame_question_" ++ String.fromInt index))
+                "Pick a random number between 1 and 10"
+                (maxQuestionLength - String.length question)
+                question
+                (String.Nonempty.fromString question |> Maybe.map (RichText.fromNonemptyString localUser.timezone users))
+                SeqDict.empty
+                localUser
+                loggedIn
+                users
+                |> Ui.html
+                |> Ui.map (TypedQuestion index)
+            )
+            |> Ui.el []
 
         --Ui.Input.text
         --    [ Ui.border 1
