@@ -50,11 +50,11 @@ tests =
                     -- counts are of guilds, so they don't move while the channels
                     -- of a guild are being encoded.
                     |> Expect.equal
-                        [ { channelsRemaining = 3, encoded = 1, total = 2 }
+                        [ { channelsRemaining = 0, encoded = 1, total = 2 }
                         , { channelsRemaining = 2, encoded = 1, total = 2 }
                         , { channelsRemaining = 1, encoded = 1, total = 2 }
                         , { channelsRemaining = 0, encoded = 1, total = 2 }
-                        , { channelsRemaining = 1, encoded = 2, total = 2 }
+                        , { channelsRemaining = 0, encoded = 2, total = 2 }
                         , { channelsRemaining = 0, encoded = 2, total = 2 }
                         ]
         , test "Each Discord guild takes one step for the guild and one step per channel" <|
@@ -71,7 +71,7 @@ tests =
                         )
                     -- The one Discord guild has two channels
                     |> Expect.equal
-                        [ { channelsRemaining = 2, encoded = 1, total = 1 }
+                        [ { channelsRemaining = 0, encoded = 1, total = 1 }
                         , { channelsRemaining = 1, encoded = 1, total = 1 }
                         , { channelsRemaining = 0, encoded = 1, total = 1 }
                         ]
