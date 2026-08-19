@@ -52,6 +52,7 @@ import Ports
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
+import Sticker
 import String.Nonempty
 import Ui exposing (Element)
 import Ui.Font
@@ -605,27 +606,33 @@ answerFor userId questionIndex shared =
 setupView :
     Time.Posix
     -> Coord CssPixels
+    -> Bool
     -> LocalUser
     -> LoggedIn a
     -> SeqDict (Id UserId) FrontendUser
     -> SetupModel
     -> Element SetupMsg
-setupView time windowSize localUser loggedIn users model =
+setupView time windowSize showMemberTab localUser loggedIn users model =
     let
         isMobile : Bool
         isMobile =
             MyUi.isMobileAlt windowSize
+
+        horizontalPadding : Int
+        horizontalPadding =
+            if isMobile then
+                8
+
+            else
+                16
+
+        questionWidth : Int
+        questionWidth =
+            MyUi.conversationWidthIgnoreScrollbar windowSize showMemberTab - horizontalPadding * 2
     in
     Ui.column
         [ Ui.spacing 16
-        , Ui.paddingXY
-            (if isMobile then
-                8
-
-             else
-                16
-            )
-            16
+        , Ui.paddingXY horizontalPadding 16
         , Ui.background MyUi.tabBackground
         ]
         [ Go.setupSection
@@ -634,7 +641,7 @@ setupView time windowSize localUser loggedIn users model =
             (Ui.column
                 [ Ui.spacing 8 ]
                 (List.indexedMap
-                    (questionInput time isMobile localUser loggedIn users)
+                    (questionInput time questionWidth isMobile localUser loggedIn users)
                     (Array.toList model.questions)
                     ++ [ MyUi.secondaryButton
                             (Dom.id "sheepGame_addQuestion")
@@ -660,6 +667,7 @@ questionInputId index =
 
 questionInput :
     Time.Posix
+    -> Int
     -> Bool
     -> LocalUser
     -> LoggedIn a
@@ -667,7 +675,7 @@ questionInput :
     -> Int
     -> String
     -> Element SetupMsg
-questionInput time isMobile localUser loggedIn users index question =
+questionInput time questionWidth isMobile localUser loggedIn users index question =
     let
         htmlId : HtmlId
         htmlId =
@@ -708,7 +716,7 @@ questionInput time isMobile localUser loggedIn users index question =
                 |> Ui.el
                     [ case ( isFocused, richText ) of
                         ( False, Just content ) ->
-                            Ui.inFront (questionPreview time localUser content)
+                            Ui.inFront (questionPreview time questionWidth localUser index content)
 
                         _ ->
                             Ui.noAttr
@@ -727,25 +735,39 @@ It covers the textarea it's drawn in front of and ignores pointer events, so cli
 puts the caret in that textarea instead, which swaps this back for the markdown.
 
 -}
-questionPreview : Time.Posix -> LocalUser -> Content -> Element SetupMsg
-questionPreview time localUser content =
-    RichText.preview
+questionPreview : Time.Posix -> Int -> LocalUser -> Int -> Content -> Element SetupMsg
+questionPreview time questionWidth localUser index content =
+    RichText.view
+        (Dom.id ("sheepGame_questionPreview_" ++ String.fromInt index))
+        questionWidth
         (\_ -> SetupNoOp)
-        { revealedSpoilers = SeqSet.empty
+        (\_ -> SetupNoOp)
+        (\_ -> SetupNoOp)
+        { domainWhitelist = localUser.user.domainWhitelist
+        , revealedSpoilers = SeqSet.empty
         , users = allUsers localUser
         , attachedFiles = SeqDict.empty
+        , stickers = localUser.stickers
         , customEmojis = localUser.customEmojis
-        , domainWhitelist = localUser.user.domainWhitelist
+        , animationMode = Sticker.LoopAFewTimesOnLoad
         , timezone = localUser.timezone
         , time = time
+        , drawings = SeqDict.empty
+        , embedDrawings = SeqDict.empty
+        , drawingUserColor = \_ -> ""
+        , isSelectingAnchor = False
+        , devicePixelRatio = localUser.devicePixelRatio
+        , isHovered = False
         }
+        Array.empty
         content
-        |> Html.span []
+        |> Html.div []
         |> Ui.html
         |> Ui.el
             [ Ui.height Ui.fill
             , Ui.padding 8
             , Ui.background MyUi.background2
+            , MyUi.prewrap
             , MyUi.noPointerEvents
             , MyUi.htmlStyle "overflow-wrap" "anywhere"
             ]
