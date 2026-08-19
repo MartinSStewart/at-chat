@@ -59,6 +59,7 @@ type ToBackendLog
     | ToBackendLog_Local_SetDiscordGuildNotificationLevel
     | ToBackendLog_Local_SetNotificationMode
     | ToBackendLog_Local_ExpandUserOptionSection
+    | ToBackendLog_Local_SetSheepGameQuestions
     | ToBackendLog_Local_CollapseUserOptionSection
     | ToBackendLog_Local_SetEmailNotifications
     | ToBackendLog_Local_RegisterPushSubscription
@@ -232,6 +233,9 @@ toBackendLogToString log =
 
         ToBackendLog_Local_ExpandUserOptionSection ->
             "Local_ExpandUserOptionSection"
+
+        ToBackendLog_Local_SetSheepGameQuestions ->
+            "Local_SetSheepGameQuestions"
 
         ToBackendLog_Local_CollapseUserOptionSection ->
             "Local_CollapseUserOptionSection"

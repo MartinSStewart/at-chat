@@ -11,9 +11,11 @@ module SheepGame exposing
     , SetupOrGame(..)
     , Shared
     , ValidatedSetup
+    , clampSavedQuestions
     , gameView
     , initGame
     , initSetup
+    , initSetupFromSavedQuestions
     , initShared
     , scoresThroughQuestion
     , setupView
@@ -155,6 +157,27 @@ type LocalChange
 initSetup : SetupModel
 initSetup =
     { questions = Array.fromList [ "" ], error = Nothing }
+
+
+{-| The setup someone was part way through, rebuilt from the questions their session held
+onto so that a refresh doesn't cost them what they'd written.
+-}
+initSetupFromSavedQuestions : Array String -> SetupModel
+initSetupFromSavedQuestions questions =
+    if Array.isEmpty questions then
+        initSetup
+
+    else
+        { questions = questions, error = Nothing }
+
+
+{-| How much of what a session asks to save is worth keeping. Nothing stops a client from
+sending more than the setup view lets anyone write, and this ends up in the backend's
+state, so it gets the same limits here.
+-}
+clampSavedQuestions : Array String -> Array String
+clampSavedQuestions questions =
+    Array.slice 0 maxQuestions questions |> Array.map (String.left maxQuestionLength)
 
 
 {-| Someone opening a match they've already answered gets their own answers back in the

@@ -18,6 +18,7 @@ tests normalConfig =
         "Sheep game"
         [ sheepGameDmTest normalConfig
         , setupNeedsAQuestionTest normalConfig
+        , questionsSurviveAReloadTest normalConfig
         ]
 
 
@@ -190,6 +191,82 @@ setupNeedsAQuestionTest normalConfig =
                 , admin.input 100 (Dom.id "sheepGame_question_0") "Name a colour"
                 , admin.click 100 (Dom.id "sheepGame_start")
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "sheepGame_submitAnswers" ])
+                ]
+            )
+        ]
+
+
+{-| Writing the questions for a sheep game takes a while, so they're kept in the host's
+session as they type. A page reload gets them back instead of landing on a blank form,
+and starting or cancelling the setup lets go of them again.
+-}
+questionsSurviveAReloadTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+questionsSurviveAReloadTest normalConfig =
+    E2EHelper.startTest
+        "Sheep game questions survive a page reload"
+        E2EHelper.startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.tallDesktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 1000 (Dom.id "guild_friendLabel_0")
+                , admin.click 100 (Dom.id "guild_openGamesTab")
+                , admin.click 100 (Dom.id "game_select_Sheep Game (WIP)")
+                , admin.input 100 (Dom.id "sheepGame_question_0") "Name a colour"
+                , admin.click 100 (Dom.id "sheepGame_addQuestion")
+                , admin.input 100 (Dom.id "sheepGame_question_1") "Name an animal"
+
+                -- The questions are only sent once the host has stopped typing for a moment,
+                -- so this waits out the debounce before the page is reloaded.
+                , admin.checkView
+                    2000
+                    (Test.Html.Query.has [ Test.Html.Selector.id "sheepGame_start" ])
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/"
+                    E2EHelper.tallDesktopWindow
+                    (\reloaded ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ reloaded.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , reloaded.click 100 (Dom.id "guild_friendLabel_0")
+                        , reloaded.click 100 (Dom.id "guild_openGamesTab")
+                        , reloaded.click 100 (Dom.id "game_select_Sheep Game (WIP)")
+                        , reloaded.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.attribute (Html.Attributes.value "Name a colour") ]
+                            )
+                        , reloaded.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.attribute (Html.Attributes.value "Name an animal") ]
+                            )
+
+                        -- Cancelling is the host saying they're done with these questions, so
+                        -- starting again gives them the blank form they asked for.
+                        , reloaded.click 100 (Dom.id "sheepGame_cancel")
+                        , reloaded.click 100 (Dom.id "game_select_Sheep Game (WIP)")
+                        , reloaded.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.attribute (Html.Attributes.value "Name a colour") ]
+                            )
+                        ]
+                    )
                 ]
             )
         ]

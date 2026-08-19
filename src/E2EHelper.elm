@@ -2324,6 +2324,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_ExpandUserOptionSection _ ->
                     False
 
+                Local_SetSheepGameQuestions _ ->
+                    False
+
                 Local_CollapseUserOptionSection _ ->
                     False
 
@@ -2814,6 +2817,7 @@ allAttackerLocalChanges =
     , Local_SetMuteThread legitGuildId channelId (Id.fromInt 0) MuteSettings.IsMuted
     , Local_SetName (Unsafe.personName "hacked")
     , Local_SetNotificationMode NoNotifications
+    , Local_SetSheepGameQuestions (Array.fromList [ "hacked" ])
     , Local_SetEmailNotifications User.NotifyMeWhenMentioned
     , Local_StartReloadingDiscordUser messageTime discordUserId
     , Local_TextEditor TextEditor.Local_Reset

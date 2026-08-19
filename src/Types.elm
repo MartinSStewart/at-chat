@@ -997,6 +997,7 @@ type LocalChange
     | Local_SetNotificationMode NotificationMode
     | Local_ExpandUserOptionSection UserOptionSection
     | Local_CollapseUserOptionSection UserOptionSection
+    | Local_SetSheepGameQuestions (Array String)
     | Local_SetEmailNotifications EmailNotifications
     | Local_RegisterPushSubscription Time.Posix RegisterPushSubscription
     | Local_TextEditor TextEditor.LocalChange

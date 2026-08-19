@@ -23,6 +23,7 @@ module Game exposing
     , isAnimating
     , pressedKey
     , routeRequest
+    , sheepGameQuestionsSaveDelay
     , update
     , view
     , wordSpellingScrollPosition
@@ -32,6 +33,7 @@ import Array exposing (Array)
 import Audio exposing (Audio)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Go
@@ -58,7 +60,13 @@ import WordSpellingGame
 
 
 type alias Model =
-    { startedGames : SeqDict (Id ChannelMessageId) Game, setup : Setup }
+    { startedGames : SeqDict (Id ChannelMessageId) Game
+    , setup : Setup
+    , -- Bumped every time the sheep game questions change. The save that runs a moment
+      -- later only goes ahead if the count still matches, so a burst of typing costs one
+      -- request instead of one per keystroke.
+      sheepGameQuestionsCounter : Int
+    }
 
 
 type Game
@@ -100,6 +108,7 @@ type Msg
     | SelectedMatch (Id ChannelMessageId)
     | PressedReset
     | PressedSelectGame GameType
+    | CheckedSheepGameQuestionsDebounce Int
     | NoOpMsg
 
 
@@ -187,6 +196,7 @@ initModel : Model
 initModel =
     { setup = GameSelect
     , startedGames = SeqDict.empty
+    , sheepGameQuestionsCounter = 0
     }
 
 
@@ -371,6 +381,12 @@ type OutMsg
       -- Fetch the dictionary definition for an English word the player clicked in a Word Spelling
       -- Game's Moves log. The frontend issues the HTTP request (see `Frontend.handleGameOutMsgs`).
     | FetchWordDefinition String
+      -- Hold onto the sheep game questions the host has written so far, so that a refresh
+      -- in the middle of setting a game up doesn't throw them away.
+    | SaveSheepGameQuestions (Array String)
+      -- Ask to be sent `CheckedSheepGameQuestionsDebounce` once the host has stopped typing
+      -- (see `Frontend.handleGameOutMsgs`).
+    | SaveSheepGameQuestionsAfterDelay Int
 
 
 update :
@@ -583,37 +599,71 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
 
         SheepSetupMsg sheepMsg ->
             let
-                ( gameOrSetup, maybeSetup ) =
-                    SheepGame.updateSetup
-                        localUser
-                        sheepMsg
-                        (case model.setup of
-                            SheepGame_Setup setup ->
-                                setup
+                oldSetup : SheepGame.SetupModel
+                oldSetup =
+                    case model.setup of
+                        SheepGame_Setup setup ->
+                            setup
 
-                            _ ->
-                                SheepGame.initSetup
-                        )
+                        _ ->
+                            SheepGame.initSetup
+
+                ( gameOrSetup, maybeSetup ) =
+                    SheepGame.updateSetup localUser sheepMsg oldSetup
+
+                startMatch : List OutMsg
+                startMatch =
+                    case maybeSetup of
+                        Just setup ->
+                            -- A brand new match takes the next message id, then we navigate to it.
+                            [ OutLocalChange (LocalChange_SheepGame newMatchId (SheepGame.StartMatch time setup))
+                            , OutSelectMatch (Just newMatchId)
+                            ]
+
+                        Nothing ->
+                            []
             in
-            ( case gameOrSetup of
+            case gameOrSetup of
                 SheepGame.Setup setup ->
-                    { model | setup = SheepGame_Setup setup }
+                    if setup.questions == oldSetup.questions then
+                        ( { model | setup = SheepGame_Setup setup }, startMatch )
+
+                    else
+                        ( { model
+                            | setup = SheepGame_Setup setup
+                            , sheepGameQuestionsCounter = model.sheepGameQuestionsCounter + 1
+                          }
+                        , SaveSheepGameQuestionsAfterDelay (model.sheepGameQuestionsCounter + 1) :: startMatch
+                        )
 
                 SheepGame.Game game ->
-                    { model | startedGames = SeqDict.insert newMatchId (SheepGame_Game game) model.startedGames }
+                    -- The questions are part of the match now, so the copy that was being held
+                    -- onto for the setup view isn't worth keeping. Bumping the counter stops a
+                    -- save that typing already scheduled from writing them back afterwards.
+                    ( { model
+                        | startedGames = SeqDict.insert newMatchId (SheepGame_Game game) model.startedGames
+                        , sheepGameQuestionsCounter = model.sheepGameQuestionsCounter + 1
+                      }
+                    , SaveSheepGameQuestions Array.empty :: startMatch
+                    )
 
                 SheepGame.CancelSetup ->
-                    { model | setup = GameSelect }
-            , case maybeSetup of
-                Just setup ->
-                    -- A brand new match takes the next message id, then we navigate to it.
-                    [ OutLocalChange (LocalChange_SheepGame newMatchId (SheepGame.StartMatch time setup))
-                    , OutSelectMatch (Just newMatchId)
-                    ]
+                    ( { model
+                        | setup = GameSelect
+                        , sheepGameQuestionsCounter = model.sheepGameQuestionsCounter + 1
+                      }
+                    , SaveSheepGameQuestions Array.empty :: startMatch
+                    )
 
-                Nothing ->
-                    []
-            )
+        CheckedSheepGameQuestionsDebounce counter ->
+            case ( counter == model.sheepGameQuestionsCounter, model.setup ) of
+                ( True, SheepGame_Setup setup ) ->
+                    ( model, [ SheepGame.clampSavedQuestions setup.questions |> SaveSheepGameQuestions ] )
+
+                _ ->
+                    -- More typing happened after this save was asked for, so the one that
+                    -- typing scheduled will cover it.
+                    ( model, [] )
 
         PressedSelectGame game ->
             case game of
@@ -624,7 +674,13 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                     ( { model | setup = WordSpellingGame_Setup WordSpellingGame.initSetup }, [] )
 
                 GameType_SheepGame ->
-                    ( { model | setup = SheepGame_Setup SheepGame.initSetup }, [] )
+                    ( { model
+                        | setup =
+                            SheepGame.initSetupFromSavedQuestions localUser.session.sheepGameQuestions
+                                |> SheepGame_Setup
+                      }
+                    , []
+                    )
 
         PressedReset ->
             ( { model | setup = GameSelect }, [ OutSelectMatch Nothing ] )
@@ -634,6 +690,13 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
 
         NoOpMsg ->
             ( model, [] )
+
+
+{-| How long the host has to stop typing for before their questions are sent to be saved.
+-}
+sheepGameQuestionsSaveDelay : Duration
+sheepGameQuestionsSaveDelay =
+    Duration.seconds 1
 
 
 dragStart :

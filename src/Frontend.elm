@@ -2180,6 +2180,13 @@ updateLoaded msg model =
                                                         accLoggedIn
                                                         accCmd
 
+                                                Game.SaveSheepGameQuestions questions ->
+                                                    FrontendExtra.handleLocalChange
+                                                        model.time
+                                                        (Just (Local_SetSheepGameQuestions questions))
+                                                        accLoggedIn
+                                                        accCmd
+
                                                 _ ->
                                                     ( accLoggedIn, accCmd )
                                         )
@@ -8116,6 +8123,18 @@ handleGameOutMsgs outMsgs model =
 
                 Game.ScrollToBottom htmlId ->
                     ( model2, Scroll.toBottomOfChannel htmlId SetScrollToBottom :: cmds )
+
+                Game.SaveSheepGameQuestions _ ->
+                    ( model2, cmds )
+
+                Game.SaveSheepGameQuestionsAfterDelay counter ->
+                    ( model2
+                    , (Process.sleep Game.sheepGameQuestionsSaveDelay
+                        |> Task.perform
+                            (\() -> GameMsg (Game.CheckedSheepGameQuestionsDebounce counter))
+                      )
+                        :: cmds
+                    )
 
                 Game.FetchWordDefinition word ->
                     ( model2

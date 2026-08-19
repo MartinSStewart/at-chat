@@ -5077,6 +5077,25 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_SetSheepGameQuestions questions ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\session _ ->
+                            ( { model
+                                | sessions =
+                                    SeqDict.insert
+                                        sessionId
+                                        (UserSession.setSheepGameQuestions
+                                            (SheepGame.clampSavedQuestions questions)
+                                            session
+                                        )
+                                        model.sessions
+                              }
+                            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                            )
+                        )
+
                 Local_SetEmailNotifications emailNotifications ->
                     BackendExtra.asUser
                         model

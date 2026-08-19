@@ -250,6 +250,9 @@ pendingChangesText localChange =
         Local_CollapseUserOptionSection _ ->
             "Collapsed a user options section"
 
+        Local_SetSheepGameQuestions _ ->
+            "Saved sheep game questions"
+
         Local_SetEmailNotifications _ ->
             "Set email notifications"
 
@@ -3439,6 +3442,17 @@ changeUpdate localMsg local =
                     { local
                         | localUser =
                             { localUser | session = UserSession.collapseUserOptionSection section localUser.session }
+                    }
+
+                Local_SetSheepGameQuestions questions ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser | session = UserSession.setSheepGameQuestions questions localUser.session }
                     }
 
                 Local_SetEmailNotifications emailNotifications ->

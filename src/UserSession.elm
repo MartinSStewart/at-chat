@@ -26,11 +26,13 @@ module UserSession exposing
     , isViewingGame
     , setPreviouslyLastViewedChannelMessage
     , setPreviouslyLastViewedThreadMessage
+    , setSheepGameQuestions
     , setViewingToCurrentlyViewing
     , toFrontend
     , unreadOverviewMessageLimit
     )
 
+import Array exposing (Array)
 import Discord
 import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId, SessionId)
@@ -54,6 +56,9 @@ type alias UserSession =
     , sessionIdHash : SessionIdHash
     , signedInAt : Time.Posix
     , expandedUserOptions : SeqSet UserOptionSection
+    , -- Setting a sheep game up takes a while, so the questions the host has written are
+      -- kept here. That way an accidental refresh doesn't cost them the lot.
+      sheepGameQuestions : Array String
     }
 
 
@@ -421,6 +426,7 @@ init time sessionId userId userAgent =
     , sessionIdHash = SessionIdHash.fromSessionId sessionId
     , signedInAt = time
     , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
+    , sheepGameQuestions = Array.empty
     }
 
 
@@ -432,6 +438,11 @@ expandUserOptionSection section session =
 collapseUserOptionSection : UserOptionSection -> UserSession -> UserSession
 collapseUserOptionSection section session =
     { session | expandedUserOptions = SeqSet.remove section session.expandedUserOptions }
+
+
+setSheepGameQuestions : Array String -> UserSession -> UserSession
+setSheepGameQuestions questions session =
+    { session | sheepGameQuestions = questions }
 
 
 toFrontend : Id UserId -> SeqDict ClientId Viewing -> UserSession -> Maybe FrontendUserSession

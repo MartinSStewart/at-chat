@@ -2312,6 +2312,9 @@ toBackendLog toBackend =
                 Local_ExpandUserOptionSection _ ->
                     ToBackendLog_Local_ExpandUserOptionSection
 
+                Local_SetSheepGameQuestions _ ->
+                    ToBackendLog_Local_SetSheepGameQuestions
+
                 Local_CollapseUserOptionSection _ ->
                     ToBackendLog_Local_CollapseUserOptionSection
 
