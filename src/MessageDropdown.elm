@@ -414,7 +414,7 @@ pressedDropdownItem setFocusMsg isMobile time nameSoFar guildOrDmId channelTextI
             ( Nothing, inputText, Command.none )
 
 
-dropdownView :
+view :
     Bool
     -> Time.Posix
     -> NameSoFar
@@ -425,7 +425,7 @@ dropdownView :
     -> (Int -> HtmlId)
     -> MentionUserDropdown
     -> Element Msg
-dropdownView isMobile time nameSoFar guildOrDmId skinTone emojiData local dropdownButtonId dropdown =
+view isMobile time nameSoFar guildOrDmId skinTone emojiData local dropdownButtonId dropdown =
     case nameSoFar of
         NameSoFar nameSoFarData ->
             let

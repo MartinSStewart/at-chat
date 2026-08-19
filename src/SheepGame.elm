@@ -34,10 +34,11 @@ before revealing the questions one at a time.
 -}
 
 import Array exposing (Array)
+import Array.Extra
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
-import Effect.Browser.Dom as Dom
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Go
 import Html
@@ -47,6 +48,7 @@ import List.Nonempty exposing (Nonempty)
 import MessageInput exposing (TextInputFocus)
 import MyUi
 import PersonName exposing (PersonName)
+import Ports
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
@@ -273,7 +275,7 @@ updateSetup localUser msg model =
                     )
 
                 MessageInput.PressedSendMessage record ->
-                    Debug.todo ""
+                    ( Setup model, Nothing )
 
                 MessageInput.TypedArrowInDropdown int ->
                     Debug.todo ""
@@ -297,13 +299,13 @@ updateSetup localUser msg model =
                     Debug.todo ""
 
                 MessageInput.TypedPageUp ->
-                    Debug.todo ""
+                    ( Setup model, Nothing )
 
                 MessageInput.TypedPageDown ->
-                    Debug.todo ""
+                    ( Setup model, Nothing )
 
                 MessageInput.TypedTabInCodeBlock range ->
-                    Debug.todo ""
+                    ( Setup model, Nothing )
 
                 MessageInput.IgnoredKeyPress ->
                     ( Setup model, Nothing )
@@ -644,6 +646,11 @@ setupView windowSize localUser loggedIn users model =
         ]
 
 
+questionInputId : Int -> HtmlId
+questionInputId index =
+    Dom.id ("sheepGame_question_" ++ String.fromInt index)
+
+
 questionInput :
     Bool
     -> LocalUser
@@ -653,17 +660,47 @@ questionInput :
     -> String
     -> Element SetupMsg
 questionInput isMobile localUser loggedIn users index question =
+    let
+        htmlId =
+            questionInputId index
+
+        isFocused : Bool
+        isFocused =
+            case loggedIn.textInputFocus of
+                Just textInputFocus ->
+                    textInputFocus.htmlId == htmlId
+
+                Nothing ->
+                    False
+
+        richText : Maybe (Nonempty (RichText (Id UserId)))
+        richText =
+            String.Nonempty.fromString question |> Maybe.map (RichText.fromNonemptyString localUser.timezone users)
+    in
     Ui.row
-        [ Ui.spacing 8, Ui.height Ui.shrink ]
+        [ Ui.spacing 8
+        , Ui.height Ui.shrink
+        , if isFocused then
+            Ui.inFront Ui.none
+
+          else
+            case richText of
+                Just richText2 ->
+                    RichText.view richText2
+                        |> Ui.inFront
+
+                Nothing ->
+                    Ui.inFront Ui.none
+        ]
         [ Ui.el
             (Ui.heightMax 400 :: MessageInput.containerAttributes True)
             (MessageInput.textarea
                 isMobile
-                (Dom.id ("sheepGame_question_" ++ String.fromInt index))
+                htmlId
                 "Pick a random number between 1 and 10"
                 (maxQuestionLength - String.length question)
                 question
-                (String.Nonempty.fromString question |> Maybe.map (RichText.fromNonemptyString localUser.timezone users))
+                richText
                 SeqDict.empty
                 localUser
                 loggedIn

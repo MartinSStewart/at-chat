@@ -398,7 +398,7 @@ layout model attributes child =
                                 of
                                     ( Just nameSoFar, Just dropdown ) ->
                                         if textInputFocus.htmlId == Pages.Guild.channelTextInputId then
-                                            MessageDropdown.dropdownView
+                                            MessageDropdown.view
                                                 isMobile
                                                 model.time
                                                 nameSoFar
@@ -412,7 +412,7 @@ layout model attributes child =
                                                 |> Ui.inFront
 
                                         else if textInputFocus.htmlId == MessageMenu.editMessageTextInputId then
-                                            MessageDropdown.dropdownView
+                                            MessageDropdown.view
                                                 isMobile
                                                 model.time
                                                 nameSoFar
