@@ -4678,8 +4678,15 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
 
         EmojiSelectorForSheepGameQuestion _ position _ ->
             let
+                y : Int
                 y =
-                    Coord.yRaw position - Emoji.selectorHeight - MyUi.channelHeaderHeight
+                    Coord.yRaw position
+                        - MyUi.channelHeaderHeight
+                        -- A question near the bottom of the window doesn't have the room to
+                        -- draw the whole selector underneath it, so it slides back up far
+                        -- enough to fit rather than running off the screen.
+                        |> min (Coord.yRaw model.windowSize - MyUi.channelHeaderHeight - Emoji.selectorHeight)
+                        |> max 0
             in
             Ui.inFront
                 (Emoji.selector
@@ -4694,16 +4701,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                     local.localUser.stickers
                     |> Ui.el
                         [ Ui.paddingXY paddingX 0
-                        , Ui.move
-                            { x = 0
-                            , y =
-                                if y < 0 then
-                                    Coord.yRaw position
-
-                                else
-                                    y
-                            , z = 0
-                            }
+                        , Ui.move { x = 0, y = y, z = 0 }
                         , emojiSelectorZIndex
                         ]
                     |> Ui.map EmojiSelectorMsg

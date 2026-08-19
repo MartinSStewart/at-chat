@@ -11,6 +11,7 @@ module MessageInput exposing
     , insertTab
     , isPress
     , largePastedText
+    , showEmojiSelectorButton
     , tabText
     , textarea
     , view
@@ -762,6 +763,7 @@ showEmojiSelectorButton : String -> Element Msg
 showEmojiSelectorButton htmlIdPrefix =
     Ui.el
         [ Ui.rounded 4
+        , Ui.width Ui.shrink
         , Ui.id (htmlIdPrefix ++ "_openEmojiSelector")
         , Ui.pointer
         , Ui.paddingXY 6 0

@@ -3732,8 +3732,13 @@ updateLoaded msg model =
             case result of
                 Ok ok ->
                     pressedOpenEmojiSelector
-                        MessageMenu.editMessageTextInputId
-                        (EmojiSelectorForSheepGameQuestion questionId (Coord.xy (round ok.element.x) (round ok.element.y)))
+                        (SheepGame.questionInputId questionId)
+                        -- The selector is drawn under the question, so what it's positioned
+                        -- against is the bottom of the input rather than the top.
+                        (EmojiSelectorForSheepGameQuestion
+                            questionId
+                            (Coord.xy (round ok.element.x) (round (ok.element.y + ok.element.height)))
+                        )
                         model
 
                 Err _ ->
@@ -6394,7 +6399,7 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
                         EmojiSelectorForEditMessage _ _ ->
                             EmojiSelectorHidden
 
-                        EmojiSelectorForSheepGameQuestion _ coord maybeRange ->
+                        EmojiSelectorForSheepGameQuestion _ _ _ ->
                             EmojiSelectorHidden
                 , emojiSelector = { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
               }
@@ -8173,10 +8178,10 @@ handleGameOutMsgs outMsgs model =
                     )
 
                 Game.OpenSheepGameEmojiSelector questionId ->
-                    ( model
+                    ( model2
                     , Task.attempt
                         (GotPositionForEmojiSelector_SheepGameQuestion questionId)
-                        (Dom.getElement (SheepGame.questionInputId questionId))
+                        (Dom.getElement (SheepGame.questionInputContainerId questionId))
                         :: cmds
                     )
         )

@@ -19,6 +19,7 @@ module SheepGame exposing
     , initSetup
     , initSetupFromSavedQuestions
     , initShared
+    , questionInputContainerId
     , questionInputId
     , scoresThroughQuestion
     , setupView
@@ -43,8 +44,6 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Effect.Command exposing (Command, FrontendOnly)
-import Effect.Task as Task
 import Effect.Time as Time
 import Go
 import Html
@@ -695,6 +694,15 @@ questionInputId index =
     Dom.id ("sheepGame_question_" ++ Id.toString index)
 
 
+{-| The box drawn around a question, rather than the textarea inside it. The emoji selector
+is placed against this so that it clears the whole input instead of overlapping the bottom
+of it.
+-}
+questionInputContainerId : Id QuestionId -> HtmlId
+questionInputContainerId index =
+    Dom.id ("sheepGame_questionContainer_" ++ Id.toString index)
+
+
 questionInput :
     Time.Posix
     -> Int
@@ -730,8 +738,13 @@ questionInput time questionWidth isMobile localUser loggedIn users index questio
     in
     Ui.row
         [ Ui.spacing 8 ]
-        [ Ui.el
-            (Ui.heightMax 300 :: MessageInput.containerAttributes True)
+        [ MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
+            |> Ui.map (TypedQuestion questionId)
+        , Ui.el
+            (Ui.heightMax 300
+                :: Ui.id (Dom.idToString (questionInputContainerId questionId))
+                :: MessageInput.containerAttributes True
+            )
             (MessageInput.textarea
                 isMobile
                 htmlId

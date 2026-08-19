@@ -2382,7 +2382,7 @@ isPressMsg msg =
         UnreadOverviewThreadMsg _ _ _ messageViewMsg ->
             MessageView.isPressMsg messageViewMsg
 
-        GotPositionForEmojiSelector_SheepGameQuestion _ result ->
+        GotPositionForEmojiSelector_SheepGameQuestion _ _ ->
             False
 
 

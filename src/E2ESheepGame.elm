@@ -218,6 +218,19 @@ questionsSurviveAReloadTest normalConfig =
                 , admin.click 1000 (Dom.id "guild_friendLabel_0")
                 , admin.click 100 (Dom.id "guild_openGamesTab")
                 , admin.click 100 (Dom.id "game_select_Sheep Game (WIP)")
+
+                -- The button beside a question opens the emoji picker for that question.
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "emoji_search_input" ])
+                , admin.click 100 (Dom.id "sheepGame_question_0_openEmojiSelector")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.id "emoji_search_input" ])
+                , admin.click 100 (Dom.id "sheepGame_question_0_openEmojiSelector")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "emoji_search_input" ])
                 , admin.input 100 (Dom.id "sheepGame_question_0") "Name a colour"
                 , admin.click 100 (Dom.id "sheepGame_addQuestion")
                 , admin.input 100 (Dom.id "sheepGame_question_1") "Name an animal"
