@@ -2675,10 +2675,10 @@ exportSubsetSelector adminData selection =
         [ Ui.el [ Ui.Font.weight 600 ] (Ui.text "Select what to export")
         , MyUi.details
             (selectionSummary "Guilds" (SeqSet.size selection.guilds) (SeqDict.size adminData.guilds))
-            [ if SeqDict.isEmpty adminData.guilds then
+            (if SeqDict.isEmpty adminData.guilds then
                 Ui.text "No guilds"
 
-              else
+             else
                 Ui.column
                     [ Ui.spacing 4 ]
                     (List.map
@@ -2718,13 +2718,13 @@ exportSubsetSelector adminData selection =
                         )
                         (SeqDict.toList adminData.guilds)
                     )
-            ]
+            )
         , MyUi.details
             (selectionSummary "DM channels" (SeqSet.size selection.dmChannels) (SeqDict.size adminData.dmChannels))
-            [ if SeqDict.isEmpty adminData.dmChannels then
+            (if SeqDict.isEmpty adminData.dmChannels then
                 Ui.text "No DM channels"
 
-              else
+             else
                 Ui.column
                     [ Ui.spacing 4 ]
                     (List.map
@@ -2756,13 +2756,13 @@ exportSubsetSelector adminData selection =
                         )
                         (SeqDict.toList adminData.dmChannels)
                     )
-            ]
+            )
         , MyUi.details
             (selectionSummary "Discord guilds" (SeqSet.size selection.discordGuilds) (SeqDict.size adminData.discordGuilds))
-            [ if SeqDict.isEmpty adminData.discordGuilds then
+            (if SeqDict.isEmpty adminData.discordGuilds then
                 Ui.text "No Discord guilds"
 
-              else
+             else
                 Ui.column
                     [ Ui.spacing 4 ]
                     (List.map
@@ -2802,17 +2802,17 @@ exportSubsetSelector adminData selection =
                         )
                         (SeqDict.toList adminData.discordGuilds)
                     )
-            ]
+            )
         , MyUi.details
             (selectionSummary
                 "Discord DM channels"
                 (SeqSet.size selection.discordDmChannels)
                 (SeqDict.size adminData.discordDmChannels)
             )
-            [ if SeqDict.isEmpty adminData.discordDmChannels then
+            (if SeqDict.isEmpty adminData.discordDmChannels then
                 Ui.text "No Discord DM channels"
 
-              else
+             else
                 Ui.column
                     [ Ui.spacing 4 ]
                     (List.map
@@ -2854,7 +2854,7 @@ exportSubsetSelector adminData selection =
                         )
                         (SeqDict.toList adminData.discordDmChannels)
                     )
-            ]
+            )
         , Ui.row
             [ Ui.spacing 8 ]
             [ MyUi.simpleButton

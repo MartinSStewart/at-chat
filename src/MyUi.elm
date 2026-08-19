@@ -855,22 +855,26 @@ touchPress onPress =
 {-| A section that starts collapsed and opens when the summary is clicked. The
 browser keeps track of whether it's open, so there's nothing to keep in the
 model.
+
+A `summary` only counts as the thing that opens a `details` while it's a direct
+child of it, and elm-ui has no way to write two children of a node, so this is
+written as plain html. That means `contents` has to be handed back to elm-ui,
+which starts a fresh layout that doesn't inherit anything, so the font the rest
+of the page is drawn with is set again here.
+
 -}
-details : String -> List (Element msg) -> Element msg
+details : String -> Element msg -> Element msg
 details summaryText contents =
-    Ui.nodeColumn
-        "details"
-        [ Ui.spacing 4 ]
-        (Ui.node "summary"
-            [ -- A summary only draws its disclosure triangle while it's a list
-              -- item, and elm-ui makes every element a flex container
-              htmlStyle "display" "list-item"
-            , Ui.pointer
-            , Ui.Font.bold
+    Html.details
+        []
+        [ Html.summary
+            [ Html.Attributes.style "cursor" "pointer"
+            , Html.Attributes.style "font-weight" "bold"
             ]
-            (Ui.text summaryText)
-            :: contents
-        )
+            [ Html.text summaryText ]
+        , Ui.embed [ notoSans, Ui.Font.size 16, Ui.Font.color font1 ] contents
+        ]
+        |> Ui.html
 
 
 htmlStyle : String -> String -> Ui.Attribute msg
