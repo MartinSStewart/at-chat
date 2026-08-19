@@ -1395,7 +1395,7 @@ channelHeaderHeight =
 
 matchSwitcherHeight : number
 matchSwitcherHeight =
-    60
+    40
 
 
 conversationWidthIgnoreScrollbar : Coord CssPixels -> Bool -> Int

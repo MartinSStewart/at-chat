@@ -5,6 +5,7 @@ module SheepGame exposing
     , GameData
     , GameMsg(..)
     , LocalChange(..)
+    , LoggedIn
     , Phase(..)
     , SetupModel
     , SetupMsg(..)
@@ -43,7 +44,9 @@ import Html
 import Id exposing (Id, UserId)
 import List.Extra
 import List.Nonempty exposing (Nonempty)
+import MessageInput exposing (TextInputFocus)
 import MyUi
+import PersonName exposing (PersonName)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
@@ -66,6 +69,10 @@ type alias ValidatedSetup =
     { questions : Nonempty Content
     , createdBy : Id UserId
     }
+
+
+type alias LoggedIn a =
+    { a | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
 
 
 {-| Which stage the match has reached. The host drives every transition.
@@ -100,7 +107,7 @@ type alias SetupModel =
 
 
 type SetupMsg
-    = TypedQuestion Int String
+    = TypedQuestion Int MessageInput.Msg
     | PressedAddQuestion
     | PressedRemoveQuestion Int
     | PressedStartGame
@@ -151,7 +158,7 @@ type LocalChange
 
 initSetup : SetupModel
 initSetup =
-    { questions = Array.fromList [ "", "" ], error = Nothing }
+    { questions = Array.fromList [ "" ], error = Nothing }
 
 
 {-| Someone opening a match they've already answered gets their own answers back in the
@@ -251,14 +258,55 @@ validateSetup timezone users createdBy model =
 updateSetup : LocalUser -> SetupMsg -> SetupModel -> ( SetupOrGame, Maybe ValidatedSetup )
 updateSetup localUser msg model =
     case msg of
-        TypedQuestion index text ->
-            ( Setup
-                { model
-                    | questions = Array.set index (String.left maxQuestionLength text) model.questions
-                    , error = Nothing
-                }
-            , Nothing
-            )
+        TypedQuestion index messageInputMsg ->
+            case messageInputMsg of
+                MessageInput.PressedTextInput ->
+                    Debug.todo ""
+
+                MessageInput.TypedMessage text ->
+                    ( Setup
+                        { model
+                            | questions = Array.set index text model.questions
+                            , error = Nothing
+                        }
+                    , Nothing
+                    )
+
+                MessageInput.PressedSendMessage record ->
+                    Debug.todo ""
+
+                MessageInput.TypedArrowInDropdown int ->
+                    Debug.todo ""
+
+                MessageInput.TypedArrowUpInEmptyInput ->
+                    Debug.todo ""
+
+                MessageInput.PressedDropdownItem int ->
+                    Debug.todo ""
+
+                MessageInput.PressedPingDropdownContainer ->
+                    Debug.todo ""
+
+                MessageInput.PressedUploadFile ->
+                    Debug.todo ""
+
+                MessageInput.PressedOpenEmojiSelector ->
+                    Debug.todo ""
+
+                MessageInput.OnPasteFiles nonempty ->
+                    Debug.todo ""
+
+                MessageInput.TypedPageUp ->
+                    Debug.todo ""
+
+                MessageInput.TypedPageDown ->
+                    Debug.todo ""
+
+                MessageInput.TypedTabInCodeBlock range ->
+                    Debug.todo ""
+
+                MessageInput.IgnoredKeyPress ->
+                    ( Setup model, Nothing )
 
         PressedAddQuestion ->
             ( Setup
@@ -546,8 +594,14 @@ answerFor userId questionIndex shared =
         |> Maybe.withDefault Nothing
 
 
-setupView : Coord CssPixels -> SetupModel -> Element SetupMsg
-setupView windowSize model =
+setupView :
+    Coord CssPixels
+    -> LocalUser
+    -> LoggedIn a
+    -> SeqDict (Id UserId) FrontendUser
+    -> SetupModel
+    -> Element SetupMsg
+setupView windowSize localUser loggedIn users model =
     let
         isMobile : Bool
         isMobile =
@@ -567,11 +621,11 @@ setupView windowSize model =
         ]
         [ Go.setupSection
             (Ui.text "Questions")
-            (Just " everyone answers these, so keep them open ended")
+            Nothing
             (Ui.column
                 [ Ui.spacing 8 ]
                 (List.indexedMap
-                    (questionInput isMobile)
+                    (questionInput isMobile localUser loggedIn users)
                     (Array.toList model.questions)
                     ++ [ MyUi.secondaryButton
                             (Dom.id "sheepGame_addQuestion")
@@ -590,39 +644,59 @@ setupView windowSize model =
         ]
 
 
-questionInput : Bool -> Int -> String -> Element SetupMsg
-questionInput isMobile index question =
-    let
-        label : { element : Element SetupMsg, id : Ui.Input.Label }
-        label =
-            MyUi.label
-                (Dom.id ("sheepGame_question_" ++ String.fromInt index))
-                []
-                (Ui.text ("Question " ++ String.fromInt (index + 1)))
-    in
+questionInput :
+    Bool
+    -> LocalUser
+    -> LoggedIn a
+    -> SeqDict (Id UserId) FrontendUser
+    -> Int
+    -> String
+    -> Element SetupMsg
+questionInput isMobile localUser loggedIn users index question =
+    --let
+    --    label : { element : Element SetupMsg, id : Ui.Input.Label }
+    --    label =
+    --        MyUi.label
+    --
+    --            []
+    --            (Ui.text ("Question " ++ String.fromInt (index + 1)))
+    --in
     Ui.row
         [ Ui.spacing 8 ]
-        [ Ui.Input.text
-            [ Ui.border 1
-            , Ui.borderColor MyUi.inputBorder
-            , Ui.background MyUi.inputBackground
-            , Ui.rounded 4
-            , Ui.paddingXY 8 8
-            ]
-            { onChange = TypedQuestion index
-            , text = question
-            , placeholder =
-                if isMobile then
-                    Nothing
+        [ MessageInput.textarea
+            isMobile
+            (Dom.id ("sheepGame_question_" ++ String.fromInt index))
+            "Pick a random number between 1 and 10"
+            (maxQuestionLength - String.length question)
+            question
+            (String.Nonempty.fromString question |> Maybe.map (RichText.fromNonemptyString localUser.timezone users))
+            SeqDict.empty
+            localUser
+            loggedIn
+            users
+            |> Ui.html
+            |> Ui.map (TypedQuestion index)
 
-                else
-                    Just "Name a colour"
-            , label = label.id
-            }
-        , MyUi.secondaryButton
+        --Ui.Input.text
+        --    [ Ui.border 1
+        --    , Ui.borderColor MyUi.inputBorder
+        --    , Ui.background MyUi.inputBackground
+        --    , Ui.rounded 4
+        --    , Ui.paddingXY 8 8
+        --    ]
+        --    { onChange = TypedQuestion index
+        --    , text = question
+        --    , placeholder =
+        --        if isMobile then
+        --            Nothing
+        --
+        --        else
+        --            Just "Pick a random number between 1 and 10"
+        --    , label = label.id
+        --    }
+        , MyUi.deleteButton
             (Dom.id ("sheepGame_removeQuestion_" ++ String.fromInt index))
             (PressedRemoveQuestion index)
-            "Remove"
         ]
 
 

@@ -849,6 +849,7 @@ gameTabBody guildOrDmId maybeMatchId local loggedIn matchData model =
         )
         model.lastCopied
         local.localUser
+        loggedIn
         guildOrDmId
         maybeMatchId
         matchData

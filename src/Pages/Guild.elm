@@ -407,7 +407,7 @@ unreadOverviewNotMobile local loggedIn model =
 
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers local.localUser
+            User.allUsers local.localUser
 
         containerWidth : Int
         containerWidth =
@@ -667,7 +667,7 @@ unreadOverviewChannels local allDiscordUsers =
 
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers local.localUser
+            User.allUsers local.localUser
     in
     List.concatMap
         (\( guildId, guild ) ->
@@ -1294,7 +1294,7 @@ dmChannelView dmRoute loggedIn local model =
                                     (PersonName.toString otherUser.name)
                                     (threadPreviewText
                                         local.localUser.timezone
-                                        (LocalState.allUsers local.localUser)
+                                        (User.allUsers local.localUser)
                                         threadMessageIndex
                                         dmChannel
                                     )
@@ -2565,7 +2565,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                     (ChannelName.toString channel.name)
                                     (threadPreviewText
                                         local.localUser.timezone
-                                        (LocalState.allUsers local.localUser)
+                                        (User.allUsers local.localUser)
                                         threadMessageIndex
                                         channel
                                     )
@@ -3421,7 +3421,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         messageHover2
                                         otherUserIsEditing
                                         local.localUser.session.userId
-                                        (LocalState.allUsers local.localUser)
+                                        (User.allUsers local.localUser)
                                         local.localUser
                                         maybeRepliedTo2
                                         (SeqDict.get threadId channel.threads)
@@ -3432,7 +3432,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                 else
                                     let
                                         allUsers =
-                                            LocalState.allUsers local.localUser
+                                            User.allUsers local.localUser
 
                                         editRichText : Maybe (Nonempty (RichText (Id UserId)))
                                         editRichText =
@@ -3479,7 +3479,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     messageHover2
                                                     otherUserIsEditing
                                                     local.localUser.session.userId
-                                                    (LocalState.allUsers local.localUser)
+                                                    (User.allUsers local.localUser)
                                                     local.localUser
                                                     maybeRepliedTo2
                                                     Nothing
@@ -3510,7 +3510,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     messageHover2
                                                     otherUserIsEditing
                                                     local.localUser.session.userId
-                                                    (LocalState.allUsers local.localUser)
+                                                    (User.allUsers local.localUser)
                                                     local.localUser
                                                     maybeRepliedTo2
                                                     (Just thread)
@@ -4068,7 +4068,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         highlight
                                         messageHover2
                                         otherUserIsEditing
-                                        (LocalState.allUsers local.localUser)
+                                        (User.allUsers local.localUser)
                                         local.localUser.session.userId
                                         local.localUser
                                         maybeRepliedTo2
@@ -4079,7 +4079,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                 else
                                     let
                                         allUsers =
-                                            LocalState.allUsers local.localUser
+                                            User.allUsers local.localUser
 
                                         editRichText : Maybe (Nonempty (RichText (Id UserId)))
                                         editRichText =
@@ -4119,7 +4119,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                             highlight
                                             messageHover2
                                             otherUserIsEditing
-                                            (LocalState.allUsers local.localUser)
+                                            (User.allUsers local.localUser)
                                             local.localUser.session.userId
                                             local.localUser
                                             maybeRepliedTo2
@@ -4863,7 +4863,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers local.localUser
+            User.allUsers local.localUser
 
         replyTo : Maybe (Id ChannelMessageId)
         replyTo =
@@ -5008,7 +5008,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 )
                 local.localUser
                 loggedIn
-                (LocalState.allUsers local.localUser)
+                (User.allUsers local.localUser)
                 |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) NoThread)
             , peopleAreTypingView allUsers channel local.localUser.session.userId model
             ]
@@ -5207,7 +5207,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                             Nothing ->
                                 SeqDict.empty
                         )
-                        local
+                        local.localUser
 
                 ( _, True ) ->
                     MessageInput.disabledView
@@ -5227,7 +5227,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                             Nothing ->
                                 SeqDict.empty
                         )
-                        local
+                        local.localUser
             , peopleAreTypingView allUsers channel currentDiscordUserId model
             ]
         ]
@@ -5321,7 +5321,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
 
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers local.localUser
+            User.allUsers local.localUser
 
         replyTo : Maybe (Id ChannelMessageId)
         replyTo =
@@ -5483,7 +5483,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 )
                 local.localUser
                 loggedIn
-                (LocalState.allUsers local.localUser)
+                (User.allUsers local.localUser)
                 |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
             , peopleAreTypingView allUsers channel local.localUser.session.userId model
             ]
@@ -5703,7 +5703,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                         let
                             allUsers : SeqDict (Id UserId) FrontendUser
                             allUsers =
-                                LocalState.allUsers local.localUser
+                                User.allUsers local.localUser
 
                             editRichText : Maybe (Nonempty (RichText (Id UserId)))
                             editRichText =
@@ -5746,7 +5746,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                             (messageHover guildOrDmIdNoThread threadRoute loggedIn model)
                             False
                             local.localUser.session.userId
-                            (LocalState.allUsers local.localUser)
+                            (User.allUsers local.localUser)
                             local.localUser
                             Nothing
                             Nothing
@@ -5765,7 +5765,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                         (messageHover guildOrDmIdNoThread threadRoute loggedIn model)
                         False
                         local.localUser.session.userId
-                        (LocalState.allUsers local.localUser)
+                        (User.allUsers local.localUser)
                         local.localUser
                         Nothing
                         Nothing
@@ -6598,7 +6598,7 @@ messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message
         isHovered
         isEditing
         localUser.session.userId
-        (LocalState.allUsers localUser)
+        (User.allUsers localUser)
         localUser
         Nothing
         Nothing
@@ -6667,7 +6667,7 @@ messageViewThreadStarter data revealedSpoilers localUser messageIndex thread mes
         isHovered
         isEditing
         localUser.session.userId
-        (LocalState.allUsers localUser)
+        (User.allUsers localUser)
         localUser
         Nothing
         (Just thread)
@@ -6726,7 +6726,7 @@ threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
         highlight
         isHovered
         isEditing
-        (LocalState.allUsers localUser)
+        (User.allUsers localUser)
         localUser.session.userId
         localUser
         Nothing
@@ -9293,7 +9293,7 @@ dmColumnThreads isMobile now threadRoute localUser otherUserId channel threads =
                     , channelsVisible = ChannelsHiddenOnMobile
                     }
                 )
-                (threadPreviewText localUser.timezone (LocalState.allUsers localUser) threadMessageIndex channel)
+                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex channel)
         )
         threads2
         |> Ui.column []
@@ -9378,7 +9378,7 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
                     (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideChannelSettings) Nothing)
                     ChannelsHiddenOnMobile
                 )
-                (threadPreviewText localUser.timezone (LocalState.allUsers localUser) threadMessageIndex channel)
+                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex channel)
         )
         threads2
         |> Ui.column []
@@ -10112,7 +10112,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers localUser
+            User.allUsers localUser
 
         message : Maybe (Message ChannelMessageId (Id UserId))
         message =

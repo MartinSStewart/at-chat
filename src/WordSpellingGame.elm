@@ -6104,7 +6104,7 @@ setupView windowSize isReadonly setup =
                     (List.map (\language -> ( language, languageToString language )) allLanguages)
             , Go.setupSection
                 (Ui.text "Attempts per turn")
-                (Just " (# of tries you get place a valid word)")
+                (Just " (# of tries to place a word)")
                 (Go.numberInput
                     { htmlId = "wsg_attemptsPerTurn"
                     , width = 60

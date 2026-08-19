@@ -13,6 +13,7 @@ module User exposing
     , addNewStickers
     , addRecentlyUsedEmoji
     , addRecentlyUsedEmojis
+    , allUsers
     , backendToFrontendCurrent
     , backendToFrontendForUser
     , commonlyUsedEmojis
@@ -784,6 +785,14 @@ type alias LocalUser =
     }
 
 
+allUsers : LocalUser -> SeqDict (Id UserId) FrontendUser
+allUsers localUser =
+    SeqDict.insert
+        localUser.session.userId
+        (backendToFrontendForUser localUser.user)
+        localUser.otherUsers
+
+
 discordFullDataUserToFrontendCurrentUser :
     Bool
     -> { a | user : Discord.User, icon : Maybe FileHash, linkedAt : Time.Posix }
@@ -866,8 +875,8 @@ backendToFrontendForUser user =
 
 
 toString : userId -> SeqDict userId { a | name : PersonName } -> String
-toString userId allUsers =
-    case SeqDict.get userId allUsers of
+toString userId allUsers2 =
+    case SeqDict.get userId allUsers2 of
         Just user ->
             PersonName.toString user.name
 

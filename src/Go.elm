@@ -1576,12 +1576,13 @@ startOrCancel domIdPrefix isMobile pressedCancel pressedStart =
                 ]
                 (Ui.text "Start game")
     in
-    (if isMobile then
-        Ui.column [ Ui.paddingXY 8 0, Ui.spacing 8 ]
+    Ui.row
+        (if isMobile then
+            [ Ui.paddingXY 8 0, Ui.spacing 8 ]
 
-     else
-        Ui.row [ Ui.paddingXY 16 0, Ui.spacing 16, Ui.width Ui.shrink ]
-    )
+         else
+            [ Ui.paddingXY 16 0, Ui.spacing 16, Ui.width Ui.shrink ]
+        )
         [ cancel
         , start
         ]

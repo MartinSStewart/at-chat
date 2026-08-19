@@ -1,5 +1,6 @@
 module MessageMenu exposing
-    ( close
+    ( availableCustomEmojisAndStickers
+    , close
     , editMessageTextInputId
     , messageMenuSpeed
     , mobileMenuMaxHeight
@@ -17,7 +18,7 @@ import Env
 import FileStatus
 import Html exposing (Html)
 import Icons
-import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, StickerId, ThreadRouteWithMessage(..), UserId)
 import LinkedAndOtherDiscordUsers
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
@@ -33,7 +34,7 @@ import PersonName exposing (PersonName)
 import Quantity exposing (Quantity, Rate)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
 import String.Nonempty
 import Types exposing (EditMessage, FrontendMsg_(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
@@ -285,7 +286,7 @@ viewMobile offset extraOptions loggedIn local model =
                             GuildOrDmId _ ->
                                 let
                                     allUsers =
-                                        LocalState.allUsers local.localUser
+                                        User.allUsers local.localUser
 
                                     richText : Maybe (Nonempty (RichText (Id UserId)))
                                     richText =
@@ -442,7 +443,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
                             _ ->
                                 False
-                    , text = LocalState.messageToString local.localUser.timezone (LocalState.allUsers local.localUser) message
+                    , text = LocalState.messageToString local.localUser.timezone (User.allUsers local.localUser) message
                     , messageCustomEmojiIdsList = messageCustomEmojiIds message
                     , openDm =
                         if isPrivateDm then
@@ -627,7 +628,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         commonEmojis : List (Element FrontendMsg_)
                         commonEmojis =
                             User.commonlyUsedEmojis
-                                (MessageInput.availableCustomEmojisAndStickers guildOrDmId local |> Tuple.first)
+                                (availableCustomEmojisAndStickers guildOrDmId local |> Tuple.first)
                                 local.localUser.user
                                 |> List.take 3
                                 |> List.indexedMap
@@ -771,6 +772,24 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
         Nothing ->
             { items = [], height = 0 }
+
+
+availableCustomEmojisAndStickers : AnyGuildOrDmId -> LocalState -> ( SeqSet (Id CustomEmojiId), SeqSet (Id StickerId) )
+availableCustomEmojisAndStickers guildOrDmId local =
+    case guildOrDmId of
+        GuildOrDmId _ ->
+            ( local.localUser.user.availableCustomEmojis, local.localUser.user.availableStickers )
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { guildId }) ->
+            case SeqDict.get guildId local.discordGuilds of
+                Just guild ->
+                    LocalState.discordGuildAvailableStickersAndCustomEmojis local.localUser guild
+
+                Nothing ->
+                    ( SeqSet.empty, SeqSet.empty )
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _) ->
+            ( SeqSet.empty, SeqSet.empty )
 
 
 menuItemsHelper : Bool -> List ContextMenuItem -> { items : List (Element FrontendMsg_), height : Int }

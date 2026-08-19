@@ -48,6 +48,7 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
+import MessageDropdown
 import MessageInput exposing (NameSoFar(..), TextInputFocus)
 import MessageMenu
 import MessageView
@@ -2234,7 +2235,7 @@ updateLoaded msg model =
                             Local.model loggedIn.localState
 
                         allUsers =
-                            LocalState.allUsers local.localUser
+                            User.allUsers local.localUser
                     in
                     ( { loggedIn
                         | filesToUpload =
@@ -2286,7 +2287,7 @@ updateLoaded msg model =
                             Local.model loggedIn.localState
 
                         allUsers =
-                            LocalState.allUsers local.localUser
+                            User.allUsers local.localUser
                     in
                     ( case SeqDict.get guildOrDmId loggedIn.editMessage of
                         Just edit ->
@@ -3438,7 +3439,7 @@ updateLoaded msg model =
                                                                 richText =
                                                                     RichText.fromNonemptyString
                                                                         local.localUser.timezone
-                                                                        (LocalState.allUsers local.localUser)
+                                                                        (User.allUsers local.localUser)
                                                                         nonempty
                                                             in
                                                             if message.content == richText then
@@ -3530,7 +3531,7 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageInput.PressedArrowInDropdown index ->
+                MessageInput.TypedArrowInDropdown index ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
@@ -3548,7 +3549,7 @@ updateLoaded msg model =
                                                 Just nameSoFar ->
                                                     { textInputFocus
                                                         | dropdown =
-                                                            MessageInput.pressedArrowInDropdown
+                                                            MessageDropdown.pressedArrowInDropdown
                                                                 (MyUi.isMobile model)
                                                                 model.timezone
                                                                 model.time
@@ -3573,7 +3574,7 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageInput.PressedArrowUpInEmptyInput ->
+                MessageInput.TypedArrowUpInEmptyInput ->
                     ( model, Command.none )
 
                 MessageInput.PressedDropdownItem dropdownIndex ->
@@ -3594,7 +3595,7 @@ updateLoaded msg model =
                                         ( Just nonempty, Just nameSoFar ) ->
                                             let
                                                 ( pingUser, text2, cmd ) =
-                                                    MessageInput.pressedDropdownItem
+                                                    MessageDropdown.pressedDropdownItem
                                                         SetFocus
                                                         (MyUi.isMobile model)
                                                         model.time
@@ -3879,7 +3880,7 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageInput.PressedArrowInDropdown index ->
+                MessageInput.TypedArrowInDropdown index ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
@@ -3897,7 +3898,7 @@ updateLoaded msg model =
                                                 Just nameSoFar ->
                                                     { textInputFocus
                                                         | dropdown =
-                                                            MessageInput.pressedArrowInDropdown
+                                                            MessageDropdown.pressedArrowInDropdown
                                                                 (MyUi.isMobile model)
                                                                 model.timezone
                                                                 model.time
@@ -3922,7 +3923,7 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageInput.PressedArrowUpInEmptyInput ->
+                MessageInput.TypedArrowUpInEmptyInput ->
                     FrontendExtra.handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute
 
                 MessageInput.PressedDropdownItem index ->
@@ -3941,7 +3942,7 @@ updateLoaded msg model =
                                         Just nameSoFar ->
                                             let
                                                 ( pingUser, text2, cmd ) =
-                                                    MessageInput.pressedDropdownItem
+                                                    MessageDropdown.pressedDropdownItem
                                                         SetFocus
                                                         (MyUi.isMobile model)
                                                         model.time
@@ -4112,7 +4113,7 @@ updateLoaded msg model =
                                     let
                                         allUsers : SeqDict (Id UserId) FrontendUser
                                         allUsers =
-                                            Local.model loggedIn.localState |> .localUser |> LocalState.allUsers
+                                            Local.model loggedIn.localState |> .localUser |> User.allUsers
 
                                         timezone : Time.Zone
                                         timezone =
@@ -4150,7 +4151,7 @@ updateLoaded msg model =
                                             let
                                                 allUsers : SeqDict (Id UserId) FrontendUser
                                                 allUsers =
-                                                    Local.model loggedIn.localState |> .localUser |> LocalState.allUsers
+                                                    Local.model loggedIn.localState |> .localUser |> User.allUsers
 
                                                 timezone2 : Time.Zone
                                                 timezone2 =
@@ -5809,7 +5810,7 @@ selectionChanged maybeHtmlId maybeRange model =
                                                 Just (NameSoFar nameSoFar) ->
                                                     case guildOrDmId of
                                                         GuildOrDmId guildOrDmId2 ->
-                                                            MessageInput.userDropdownList
+                                                            MessageDropdown.userDropdownList
                                                                 (MyUi.isMobile model)
                                                                 nameSoFar
                                                                 guildOrDmId2
@@ -5818,7 +5819,7 @@ selectionChanged maybeHtmlId maybeRange model =
                                                                 |> not
 
                                                         DiscordGuildOrDmId guildOrDmId2 ->
-                                                            MessageInput.discordUserDropdownList
+                                                            MessageDropdown.discordUserDropdownList
                                                                 (MyUi.isMobile model)
                                                                 nameSoFar
                                                                 guildOrDmId2
@@ -5831,11 +5832,11 @@ selectionChanged maybeHtmlId maybeRange model =
                                                         Just emojiData2 ->
                                                             let
                                                                 ( availableCustomEmojis, availableStickers ) =
-                                                                    MessageInput.availableCustomEmojisAndStickers
+                                                                    MessageMenu.availableCustomEmojisAndStickers
                                                                         guildOrDmId
                                                                         local
                                                             in
-                                                            MessageInput.emojiDropdownList
+                                                            MessageDropdown.emojiDropdownList
                                                                 (MyUi.isMobile model)
                                                                 emojiSoFar
                                                                 availableCustomEmojis
@@ -6271,7 +6272,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                         GuildOrDmId guildOrDmId2 ->
                             case LocalState.guildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
-                                    ( RichText.toString local.localUser.timezone False (LocalState.allUsers local.localUser) message.content
+                                    ( RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.content
                                     , message.attachedFiles
                                     )
                                         |> Just

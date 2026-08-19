@@ -40,6 +40,7 @@ import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelHeader
 import ChannelName
+import CustomEmoji
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
@@ -55,7 +56,7 @@ import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task
 import Effect.Time as Time
-import Emoji exposing (EmojiOrCustomEmoji)
+import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, EmojiOrSticker(..))
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import Game
@@ -63,7 +64,7 @@ import Go
 import Html exposing (Html)
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import ImageViewer
 import Json.Decode
@@ -77,7 +78,8 @@ import LoginForm
 import MembersAndOwner
 import Message exposing (ChangeAttachments(..), GameType(..), Message(..), MessageNoReply(..), UserTextMessageDataNoReply)
 import MessageArray exposing (MessageArray)
-import MessageInput exposing (NameSoFar(..))
+import MessageDropdown
+import MessageInput exposing (MentionUserDropdown, Msg(..), NameSoFar(..), NameSoFarData, TimestampData(..))
 import MessageMenu
 import MessageView
 import MuteSettings exposing (IsMuted)
@@ -98,9 +100,11 @@ import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SheepGame
+import Sticker
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import Thread exposing (FrontendGenericThread)
+import TimeInMinutes exposing (TimeInMinutes)
 import Touch
 import TwoFactorAuthentication
 import Types exposing (Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
@@ -394,7 +398,7 @@ layout model attributes child =
                                 of
                                     ( Just nameSoFar, Just dropdown ) ->
                                         if textInputFocus.htmlId == Pages.Guild.channelTextInputId then
-                                            MessageInput.dropdownView
+                                            MessageDropdown.dropdownView
                                                 isMobile
                                                 model.time
                                                 nameSoFar
@@ -408,7 +412,7 @@ layout model attributes child =
                                                 |> Ui.inFront
 
                                         else if textInputFocus.htmlId == MessageMenu.editMessageTextInputId then
-                                            MessageInput.dropdownView
+                                            MessageDropdown.dropdownView
                                                 isMobile
                                                 model.time
                                                 nameSoFar
@@ -1215,7 +1219,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                             let
                                 users : SeqDict (Id UserId) FrontendUser
                                 users =
-                                    LocalState.allUsers local.localUser
+                                    User.allUsers local.localUser
                             in
                             Ports.showNotification (User.toString senderId users) (RichText.toString local.localUser.timezone True users content)
 
@@ -2394,7 +2398,7 @@ textToRichText text memberIds local =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers local.localUser
+            User.allUsers local.localUser
     in
     RichText.fromNonemptyString
         local.localUser.timezone
@@ -6586,7 +6590,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                 ( GuildOrDmId guildOrDmId2, threadRoute )
                                                 { messageIndex = index
                                                 , text =
-                                                    RichText.toString local.localUser.timezone False (LocalState.allUsers local.localUser) message.content
+                                                    RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.content
                                                 , attachedFiles =
                                                     SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
                                                 }

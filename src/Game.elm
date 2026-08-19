@@ -52,7 +52,7 @@ import Ui exposing (Element)
 import Ui.Font
 import Ui.Lazy
 import Ui.Shadow
-import User exposing (LocalUser)
+import User exposing (FrontendUser, LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame
 
@@ -745,12 +745,13 @@ view :
     -> Maybe (NonemptyDict Int Touch)
     -> Maybe MyUi.LastCopy
     -> LocalUser
+    -> SheepGame.LoggedIn a
     -> GuildOrDmId
     -> Maybe (Id ChannelMessageId)
     -> SeqDict (Id ChannelMessageId) MatchData
     -> Model
     -> Element Msg
-view currentTime windowSize showMemberTab maybeDragging lastCopied localUser guildOrDmId maybeMatchId matches model =
+view currentTime windowSize showMemberTab maybeDragging lastCopied localUser loggedIn guildOrDmId maybeMatchId matches model =
     let
         isMobile : Bool
         isMobile =
@@ -840,7 +841,8 @@ view currentTime windowSize showMemberTab maybeDragging lastCopied localUser gui
                         WordSpellingGame.setupView windowSize False setup |> Ui.map WordSpellingSetupMsg
 
                     SheepGame_Setup setup ->
-                        SheepGame.setupView windowSize setup |> Ui.map SheepSetupMsg
+                        SheepGame.setupView windowSize localUser loggedIn (User.allUsers localUser) setup
+                            |> Ui.map SheepSetupMsg
 
                     GameSelect ->
                         Ui.row
@@ -901,13 +903,25 @@ gameToString : GameType -> String
 gameToString game =
     case game of
         GameType_Go ->
-            "Go (Baduk)"
+            goName
 
         GameType_WordSpellingGame ->
-            "Word Spelling Game"
+            wordSpellingGameName
 
         GameType_SheepGame ->
-            "Sheep Game (WIP)"
+            sheepGameName
+
+
+goName =
+    "Go (Baduk)"
+
+
+wordSpellingGameName =
+    "Word Spelling Game"
+
+
+sheepGameName =
+    "Sheep Game (WIP)"
 
 
 gameToPreviewUrl : GameType -> String
@@ -1012,73 +1026,76 @@ matchSwitcherView isMobile maybeMatchId matches =
                         Nothing ->
                             PressedReset
         in
-        Ui.column
+        Ui.el
             [ Ui.padding
                 (if isMobile then
                     8
 
                  else
-                    12
+                    8
                 )
-            , Ui.spacing 8
-            , Ui.height (Ui.px MyUi.matchSwitcherHeight)
             ]
-            [ Ui.row
-                [ Ui.spacing 8
-                ]
-                [ Ui.el [ Ui.Font.weight 600, Ui.width Ui.shrink ] (Ui.text "View match")
-                , Ui.html
-                    (Html.select
-                        [ Html.Attributes.id "go_matchSwitcher"
-                        , Html.Attributes.value currentValue
-                        , Html.Events.onInput onSelect
-                        , Html.Attributes.style "height" "100%"
-                        , Html.Attributes.attribute "aria-label" "View match"
-                        , Html.Attributes.style "padding"
-                            (if isMobile then
-                                "4px"
+            (Ui.html
+                (Html.select
+                    [ Html.Attributes.id "game_matchSwitcher"
+                    , Html.Attributes.value currentValue
+                    , Html.Events.onInput onSelect
+                    , Html.Attributes.style "width" "fit-content"
+                    , Html.Attributes.attribute "aria-label" "View match"
+                    , Html.Attributes.style "padding"
+                        (if isMobile then
+                            "4px"
 
-                             else
-                                "7px 8px"
-                            )
-                        , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
-                        , Html.Attributes.style "border-radius" "4px"
-                        , Html.Attributes.style "font-size"
-                            (if isMobile then
-                                "14px"
-
-                             else
-                                "16px"
-                            )
-                        , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
-                        , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.white)
-                        , Html.Attributes.style "cursor" "pointer"
-                        ]
-                        (Html.option
-                            [ Html.Attributes.value newMatchValue
-                            , Html.Attributes.selected (maybeMatchId == Nothing)
-                            ]
-                            [ Html.text "Setup new match" ]
-                            :: List.map
-                                (\( matchId, _ ) ->
-                                    let
-                                        value : String
-                                        value =
-                                            Id.toString matchId
-                                    in
-                                    Html.option
-                                        [ Html.Attributes.value value
-                                        , Html.Attributes.selected (Just matchId == maybeMatchId)
-                                        ]
-                                        [ Html.text ("Match #" ++ value) ]
-                                )
-                                (SeqDict.toList matches)
+                         else
+                            "7px 8px"
                         )
+                    , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
+                    , Html.Attributes.style "border-radius" "4px"
+                    , Html.Attributes.style "font-size"
+                        (if isMobile then
+                            "14px"
+
+                         else
+                            "16px"
+                        )
+                    , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
+                    , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.white)
+                    , Html.Attributes.style "cursor" "pointer"
+                    ]
+                    (Html.option
+                        [ Html.Attributes.value newMatchValue
+                        , Html.Attributes.selected (maybeMatchId == Nothing)
+                        ]
+                        [ Html.text "View existing match" ]
+                        :: List.map
+                            (\( matchId, MatchData match ) ->
+                                let
+                                    matchIdText : String
+                                    matchIdText =
+                                        Id.toString matchId
+
+                                    text : String
+                                    text =
+                                        case match.data of
+                                            FrontendGameData_Go setup _ _ ->
+                                                goName
+
+                                            FrontendGameData_WordSpellingGame setup array shared ->
+                                                wordSpellingGameName
+
+                                            FrontendGameData_SheepGame setup array shared ->
+                                                sheepGameName
+                                in
+                                Html.option
+                                    [ Html.Attributes.value matchIdText
+                                    , Html.Attributes.selected (Just matchId == maybeMatchId)
+                                    ]
+                                    [ Html.text ("#" ++ matchIdText ++ " " ++ text) ]
+                            )
+                            (SeqDict.toList matches)
                     )
-                , MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game")
-                ]
-            , Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border1 ] Ui.none
-            ]
+                )
+            )
 
 
 pressedKey : Id ChannelMessageId -> String -> MatchData -> Maybe Model -> Maybe Model
