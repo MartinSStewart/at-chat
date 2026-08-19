@@ -2304,10 +2304,14 @@ startExport time model =
         | scheduledExportState =
             { baseModel = Bytes.Encode.encode (WireHelper.encodeBackendModel baseModel)
             , remainingGuilds = SeqDict.toList model.guilds
+            , remainingGuildChannels = []
+            , encodedGuildCount = 0
             , encodedGuilds = []
             , remainingDmChannels = SeqDict.toList model.dmChannels
             , encodedDmChannels = []
             , remainingDiscordGuilds = SeqDict.toList model.discordGuilds
+            , remainingDiscordGuildChannels = []
+            , encodedDiscordGuildCount = 0
             , encodedDiscordGuilds = []
             , remainingDiscordDmChannels = SeqDict.toList model.discordDmChannels
             , encodedDiscordDmChannels = []
@@ -8318,10 +8322,14 @@ updateFromFrontendAdmin clientId toBackend model =
                     { progress =
                         { baseModel = Bytes.Encode.encode (WireHelper.encodeBackendModel baseModel)
                         , remainingGuilds = SeqDict.toList model.guilds |> partialList
+                        , remainingGuildChannels = []
+                        , encodedGuildCount = 0
                         , encodedGuilds = []
                         , remainingDmChannels = remainingDmChannels
                         , encodedDmChannels = []
                         , remainingDiscordGuilds = SeqDict.toList model.discordGuilds |> partialList
+                        , remainingDiscordGuildChannels = []
+                        , encodedDiscordGuildCount = 0
                         , encodedDiscordGuilds = []
                         , remainingDiscordDmChannels = remainingDiscordDmChannels
                         , encodedDiscordDmChannels = []
@@ -8356,25 +8364,39 @@ updateFromFrontendAdmin clientId toBackend model =
 
 handleExportBackendStep : ExportStateProgress -> ( Pages.Admin.ExportProgress, Maybe ExportStateProgress )
 handleExportBackendStep exportState =
-    case exportState.remainingGuilds of
-        entry :: rest ->
-            let
-                encodedCount : Int
-                encodedCount =
-                    List.length exportState.encodedGuilds
-            in
+    case ( exportState.remainingGuildChannels, exportState.remainingGuilds ) of
+        ( entry :: rest, _ ) ->
             ( Pages.Admin.ExportingGuilds
-                { encoded = encodedCount + 1
-                , total = encodedCount + List.length exportState.remainingGuilds
+                { channelsRemaining = List.length rest
+                , encoded = exportState.encodedGuildCount
+                , total = exportState.encodedGuildCount + List.length exportState.remainingGuilds
                 }
             , { exportState
-                | remainingGuilds = rest
-                , encodedGuilds = Bytes.Encode.encode (WireHelper.encodeGuild entry) :: exportState.encodedGuilds
+                | remainingGuildChannels = rest
+                , encodedGuilds =
+                    Bytes.Encode.encode (WireHelper.encodeGuildChannel entry) :: exportState.encodedGuilds
               }
                 |> Just
             )
 
-        [] ->
+        ( [], ( guildId, guild ) :: rest ) ->
+            ( Pages.Admin.ExportingGuilds
+                { channelsRemaining = 0
+                , encoded = exportState.encodedGuildCount + 1
+                , total = exportState.encodedGuildCount + 1 + List.length rest
+                }
+            , { exportState
+                | remainingGuilds = rest
+                , remainingGuildChannels = SeqDict.toList guild.channels
+                , encodedGuildCount = exportState.encodedGuildCount + 1
+                , encodedGuilds =
+                    Bytes.Encode.encode (WireHelper.encodeGuildHeader ( guildId, guild ))
+                        :: exportState.encodedGuilds
+              }
+                |> Just
+            )
+
+        ( [], [] ) ->
             case exportState.remainingDmChannels of
                 entry :: rest ->
                     let
@@ -8394,27 +8416,40 @@ handleExportBackendStep exportState =
                     )
 
                 [] ->
-                    case exportState.remainingDiscordGuilds of
-                        entry :: rest ->
-                            let
-                                encodedCount : Int
-                                encodedCount =
-                                    List.length exportState.encodedDiscordGuilds
-                            in
+                    case ( exportState.remainingDiscordGuildChannels, exportState.remainingDiscordGuilds ) of
+                        ( entry :: rest, _ ) ->
                             ( Pages.Admin.ExportingDiscordGuilds
-                                { encoded = encodedCount + 1
-                                , total = encodedCount + List.length exportState.remainingDiscordGuilds
+                                { channelsRemaining = List.length rest
+                                , encoded = exportState.encodedDiscordGuildCount
+                                , total = exportState.encodedDiscordGuildCount + List.length exportState.remainingDiscordGuilds
                                 }
                             , { exportState
-                                | remainingDiscordGuilds = rest
+                                | remainingDiscordGuildChannels = rest
                                 , encodedDiscordGuilds =
-                                    Bytes.Encode.encode (WireHelper.encodeDiscordGuild entry)
+                                    Bytes.Encode.encode (WireHelper.encodeDiscordGuildChannel entry)
                                         :: exportState.encodedDiscordGuilds
                               }
                                 |> Just
                             )
 
-                        [] ->
+                        ( [], ( guildId, guild ) :: rest ) ->
+                            ( Pages.Admin.ExportingDiscordGuilds
+                                { channelsRemaining = 0
+                                , encoded = exportState.encodedDiscordGuildCount + 1
+                                , total = exportState.encodedDiscordGuildCount + 1 + List.length rest
+                                }
+                            , { exportState
+                                | remainingDiscordGuilds = rest
+                                , remainingDiscordGuildChannels = SeqDict.toList guild.channels
+                                , encodedDiscordGuildCount = exportState.encodedDiscordGuildCount + 1
+                                , encodedDiscordGuilds =
+                                    Bytes.Encode.encode (WireHelper.encodeDiscordGuildHeader ( guildId, guild ))
+                                        :: exportState.encodedDiscordGuilds
+                              }
+                                |> Just
+                            )
+
+                        ( [], [] ) ->
                             case exportState.remainingDiscordDmChannels of
                                 entry :: rest ->
                                     let
@@ -8437,10 +8472,10 @@ handleExportBackendStep exportState =
 
                                 [] ->
                                     let
-                                        encodeItemList : List Bytes -> Bytes.Encode.Encoder
-                                        encodeItemList items =
+                                        encodeItemList : Int -> List Bytes -> Bytes.Encode.Encoder
+                                        encodeItemList count items =
                                             Bytes.Encode.sequence
-                                                (Bytes.Encode.unsignedInt32 Bytes.BE (List.length items)
+                                                (Bytes.Encode.unsignedInt32 Bytes.BE count
                                                     :: List.map Bytes.Encode.bytes (List.reverse items)
                                                 )
 
@@ -8449,10 +8484,10 @@ handleExportBackendStep exportState =
                                             Bytes.Encode.encode
                                                 (Bytes.Encode.sequence
                                                     [ Bytes.Encode.bytes exportState.baseModel
-                                                    , encodeItemList exportState.encodedGuilds
-                                                    , encodeItemList exportState.encodedDmChannels
-                                                    , encodeItemList exportState.encodedDiscordGuilds
-                                                    , encodeItemList exportState.encodedDiscordDmChannels
+                                                    , encodeItemList exportState.encodedGuildCount exportState.encodedGuilds
+                                                    , encodeItemList (List.length exportState.encodedDmChannels) exportState.encodedDmChannels
+                                                    , encodeItemList exportState.encodedDiscordGuildCount exportState.encodedDiscordGuilds
+                                                    , encodeItemList (List.length exportState.encodedDiscordDmChannels) exportState.encodedDiscordDmChannels
                                                     ]
                                                 )
                                     in

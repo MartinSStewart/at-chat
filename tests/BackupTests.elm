@@ -17,6 +17,7 @@ import DmChannelId exposing (DmChannelId)
 import Expect
 import Id
 import IdArray
+import LocalState
 import Message exposing (Message(..))
 import NonemptyDict
 import OneToOne
@@ -137,12 +138,31 @@ encodeStreamed : BackendModel -> Bytes
 encodeStreamed model =
     Bytes.Encode.sequence
         [ Bytes.Encode.bytes (Bytes.Encode.encode (WireHelper.encodeBackendModel model))
-        , lengthPrefixed WireHelper.encodeGuild (SeqDict.toList model.guilds)
+        , lengthPrefixed encodeGuild (SeqDict.toList model.guilds)
         , lengthPrefixed WireHelper.encodeDmChannel (SeqDict.toList model.dmChannels)
-        , lengthPrefixed WireHelper.encodeDiscordGuild (SeqDict.toList model.discordGuilds)
+        , lengthPrefixed encodeDiscordGuild (SeqDict.toList model.discordGuilds)
         , lengthPrefixed WireHelper.encodeDiscordDmChannel (SeqDict.toList model.discordDmChannels)
         ]
         |> Bytes.Encode.encode
+
+
+{-| A guild is written as a header and then one encoding per channel, the same
+way the export steps build it up.
+-}
+encodeGuild : ( Id.Id Id.GuildId, LocalState.BackendGuild ) -> Bytes.Encode.Encoder
+encodeGuild ( guildId, guild ) =
+    Bytes.Encode.sequence
+        (WireHelper.encodeGuildHeader ( guildId, guild )
+            :: List.map WireHelper.encodeGuildChannel (SeqDict.toList guild.channels)
+        )
+
+
+encodeDiscordGuild : ( Discord.Id Discord.GuildId, LocalState.DiscordBackendGuild ) -> Bytes.Encode.Encoder
+encodeDiscordGuild ( guildId, guild ) =
+    Bytes.Encode.sequence
+        (WireHelper.encodeDiscordGuildHeader ( guildId, guild )
+            :: List.map WireHelper.encodeDiscordGuildChannel (SeqDict.toList guild.channels)
+        )
 
 
 lengthPrefixed : (a -> Bytes.Encode.Encoder) -> List a -> Bytes.Encode.Encoder
