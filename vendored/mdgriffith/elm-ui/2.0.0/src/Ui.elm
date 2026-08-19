@@ -26,7 +26,7 @@ module Ui exposing
     , Color, rgb, rgba
     , above, below, onRight, onLeft, inFront, behindContent
     , map, mapAttribute
-    , html, htmlAttribute, node
+    , html, htmlAttribute, node, nodeColumn
     )
 
 {-|
@@ -213,7 +213,7 @@ This is very useful for things like dropdown menus or tooltips.
 
 # Compatibility
 
-@docs html, htmlAttribute, node
+@docs html, htmlAttribute, node, nodeColumn
 
 -}
 
@@ -417,6 +417,21 @@ node nodeName attrs child =
         Two.AsEl
         attrs
         [ child ]
+
+
+{-| A [`column`](#column) rendered as the node you name instead of a `div`.
+
+Use this for an element the browser only treats specially when its children are
+directly inside it, like a `details` element holding a `summary` and the content
+that `summary` reveals.
+
+-}
+nodeColumn : String -> List (Attribute msg) -> List (Element msg) -> Element msg
+nodeColumn nodeName attrs children =
+    Two.element (Two.NodeAs nodeName)
+        Two.AsColumn
+        (width fill :: attrs)
+        children
 
 
 {-| The basic building block of your layout.

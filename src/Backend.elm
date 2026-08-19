@@ -8288,14 +8288,25 @@ updateFromFrontendAdmin clientId toBackend model =
                         , scheduledExportState = Nothing
                     }
 
-                partialList : List a -> List a
-                partialList list =
+                remainingGuilds : List ( Id GuildId, BackendGuild )
+                remainingGuilds =
                     case isPartial of
-                        ExportSubset _ ->
-                            []
+                        ExportSubset selection ->
+                            SeqDict.toList model.guilds
+                                |> List.filter (\( guildId, _ ) -> SeqSet.member guildId selection.guilds)
 
                         ExportAll ->
-                            list
+                            SeqDict.toList model.guilds
+
+                remainingDiscordGuilds : List ( Discord.Id Discord.GuildId, DiscordBackendGuild )
+                remainingDiscordGuilds =
+                    case isPartial of
+                        ExportSubset selection ->
+                            SeqDict.toList model.discordGuilds
+                                |> List.filter (\( guildId, _ ) -> SeqSet.member guildId selection.discordGuilds)
+
+                        ExportAll ->
+                            SeqDict.toList model.discordGuilds
 
                 remainingDmChannels : List ( DmChannelId, DmChannel )
                 remainingDmChannels =
@@ -8321,13 +8332,13 @@ updateFromFrontendAdmin clientId toBackend model =
                 | exportState =
                     { progress =
                         { baseModel = Bytes.Encode.encode (WireHelper.encodeBackendModel baseModel)
-                        , remainingGuilds = SeqDict.toList model.guilds |> partialList
+                        , remainingGuilds = remainingGuilds
                         , remainingGuildChannels = []
                         , encodedGuildCount = 0
                         , encodedGuilds = []
                         , remainingDmChannels = remainingDmChannels
                         , encodedDmChannels = []
-                        , remainingDiscordGuilds = SeqDict.toList model.discordGuilds |> partialList
+                        , remainingDiscordGuilds = remainingDiscordGuilds
                         , remainingDiscordGuildChannels = []
                         , encodedDiscordGuildCount = 0
                         , encodedDiscordGuilds = []

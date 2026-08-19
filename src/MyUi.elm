@@ -30,6 +30,7 @@ module MyUi exposing
     , deleteButtonBackground
     , deleteButtonBorder
     , deleteButtonFont
+    , details
     , dimFont
     , disabledButtonBackground
     , disabledButtonBorder
@@ -849,6 +850,27 @@ simpleButton htmlId onPress content =
 touchPress : msg -> Ui.Attribute msg
 touchPress onPress =
     Html.Events.Extra.Touch.onStart (\_ -> onPress) |> Ui.htmlAttribute
+
+
+{-| A section that starts collapsed and opens when the summary is clicked. The
+browser keeps track of whether it's open, so there's nothing to keep in the
+model.
+-}
+details : String -> List (Element msg) -> Element msg
+details summaryText contents =
+    Ui.nodeColumn
+        "details"
+        [ Ui.spacing 4 ]
+        (Ui.node "summary"
+            [ -- A summary only draws its disclosure triangle while it's a list
+              -- item, and elm-ui makes every element a flex container
+              htmlStyle "display" "list-item"
+            , Ui.pointer
+            , Ui.Font.bold
+            ]
+            (Ui.text summaryText)
+            :: contents
+        )
 
 
 htmlStyle : String -> String -> Ui.Attribute msg

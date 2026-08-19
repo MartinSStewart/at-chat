@@ -47,8 +47,8 @@ tests =
                         )
                     -- The first guild has three channels and the second has one,
                     -- so the first guild takes four steps and the second two. The
-                    -- counts are of guilds, so they don't move while the channels
-                    -- of a guild are being encoded.
+                    -- encoded counts are of guilds, so they don't move while the
+                    -- channels of a guild are being encoded.
                     |> Expect.equal
                         [ { channelsRemaining = 0, encoded = 1, total = 2 }
                         , { channelsRemaining = 2, encoded = 1, total = 2 }
