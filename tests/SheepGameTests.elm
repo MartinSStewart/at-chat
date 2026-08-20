@@ -1,6 +1,5 @@
 module SheepGameTests exposing (tests)
 
-import Array
 import Effect.Time as Time
 import Expect
 import FileName
@@ -28,6 +27,11 @@ playerA =
 playerB : Id UserId
 playerB =
     Id.fromInt 2
+
+
+playerC : Id UserId
+playerC =
+    Id.fromInt 3
 
 
 {-| Plain text as a question or an answer. Nobody to mention and no timezone to show a
@@ -84,7 +88,7 @@ answers list =
                 Just (question (String.trim text))
         )
         list
-        |> Array.fromList
+        |> IdArray.fromList
         |> SubmittedAnswers
 
 
@@ -95,7 +99,7 @@ answerTexts userId shared =
     SeqDict.get userId shared.answers
         |> Maybe.map
             (\array ->
-                Array.toList array
+                IdArray.toList array
                     |> List.map
                         (\answer ->
                             case answer of
@@ -114,9 +118,9 @@ tests =
         [ Test.test "Everyone who wrote the same answer scores the size of their group"
             (\_ ->
                 apply (setup 1)
-                    [ action host (answers [ "Blue" ])
-                    , action playerA (answers [ "blue " ])
-                    , action playerB (answers [ "Red" ])
+                    [ action playerA (answers [ "Blue" ])
+                    , action playerB (answers [ "blue " ])
+                    , action playerC (answers [ "Red" ])
                     , action host LockedAnswers
                     , action host FinishedGrouping
                     , action host (ChangedQuestionsRevealed (Id.fromInt 1))
@@ -124,7 +128,7 @@ tests =
                     |> SheepGame.scoresThroughQuestion 1
                     |> SeqDict.toList
                     |> List.sortBy (\( userId, _ ) -> Id.toInt userId)
-                    |> Expect.equal [ ( host, 2 ), ( playerA, 2 ), ( playerB, 1 ) ]
+                    |> Expect.equal [ ( playerA, 2 ), ( playerB, 2 ), ( playerC, 1 ) ]
             )
         , Test.test "Only the questions revealed so far count towards the score"
             (\_ ->
@@ -132,14 +136,17 @@ tests =
                     shared : SheepGame.Shared
                     shared =
                         apply (setup 2)
-                            [ action host (answers [ "Blue", "Dog" ])
-                            , action playerA (answers [ "Blue", "Cat" ])
+                            [ action playerA (answers [ "Blue", "Dog" ])
+                            , action playerB (answers [ "Blue", "Cat" ])
                             , action host LockedAnswers
                             , action host FinishedGrouping
                             ]
                 in
                 Expect.equal
-                    ( [ ( host, 0 ), ( playerA, 0 ) ], [ ( host, 2 ), ( playerA, 2 ) ], [ ( host, 3 ), ( playerA, 3 ) ] )
+                    ( [ ( playerA, 0 ), ( playerB, 0 ) ]
+                    , [ ( playerA, 2 ), ( playerB, 2 ) ]
+                    , [ ( playerA, 3 ), ( playerB, 3 ) ]
+                    )
                     ( scoreList 0 shared, scoreList 1 shared, scoreList 2 shared )
             )
         , Test.test "The host can merge answers that don't match word for word"
@@ -148,52 +155,52 @@ tests =
                     grouped : SheepGame.Shared
                     grouped =
                         apply (setup 1)
-                            [ action host (answers [ "a dog" ])
-                            , action playerA (answers [ "dogs" ])
+                            [ action playerA (answers [ "a dog" ])
+                            , action playerB (answers [ "dogs" ])
                             , action host LockedAnswers
 
                             -- Auto-grouping can't see that these are the same answer, so the
                             -- host puts them in the same group by hand.
-                            , action host (ChangedGroup playerA (Id.fromInt 0) "a")
+                            , action host (ChangedGroup playerB (Id.fromInt 0) "a")
                             , action host FinishedGrouping
                             ]
                 in
-                Expect.equal [ ( host, 2 ), ( playerA, 2 ) ] (scoreList 1 grouped)
+                Expect.equal [ ( playerA, 2 ), ( playerB, 2 ) ] (scoreList 1 grouped)
             )
         , Test.test "Answers written with formatting group by what they say"
             (\_ ->
                 apply (setup 1)
-                    [ action host (answers [ "**blue**" ])
-                    , action playerA (answers [ "**Blue**" ])
+                    [ action playerA (answers [ "**blue**" ])
+                    , action playerB (answers [ "**Blue**" ])
                     , action host LockedAnswers
                     , action host FinishedGrouping
                     ]
                     |> scoreList 1
-                    |> Expect.equal [ ( host, 2 ), ( playerA, 2 ) ]
+                    |> Expect.equal [ ( playerA, 2 ), ( playerB, 2 ) ]
             )
         , Test.test "Formatting is part of the answer, so the host decides whether it matches"
             (\_ ->
                 -- Bold and plain are different answers as far as auto-grouping is concerned.
                 -- Merging them is exactly what the host's grouping pass is for.
                 apply (setup 1)
-                    [ action host (answers [ "**blue**" ])
-                    , action playerA (answers [ "blue" ])
+                    [ action playerA (answers [ "**blue**" ])
+                    , action playerB (answers [ "blue" ])
                     , action host LockedAnswers
                     , action host FinishedGrouping
                     ]
                     |> scoreList 1
-                    |> Expect.equal [ ( host, 1 ), ( playerA, 1 ) ]
+                    |> Expect.equal [ ( playerA, 1 ), ( playerB, 1 ) ]
             )
         , Test.test "A blank answer scores nothing and keeps the player off the scoreboard"
             (\_ ->
                 apply (setup 1)
-                    [ action host (answers [ "Blue" ])
-                    , action playerA (answers [ "  " ])
+                    [ action playerA (answers [ "Blue" ])
+                    , action playerB (answers [ "  " ])
                     , action host LockedAnswers
                     , action host FinishedGrouping
                     ]
                     |> scoreList 1
-                    |> Expect.equal [ ( host, 1 ) ]
+                    |> Expect.equal [ ( playerA, 1 ) ]
             )
         , Test.test "Only the host can lock the answers"
             (\_ ->
@@ -201,13 +208,35 @@ tests =
                     |> .phase
                     |> Expect.equal Answering
             )
+        , Test.test "Unlocking hands the answers back without losing them"
+            (\_ ->
+                let
+                    unlocked : SheepGame.Shared
+                    unlocked =
+                        apply (setup 1)
+                            [ action playerA (answers [ "Blue" ])
+                            , action host LockedAnswers
+                            , action host UnlockedAnswers
+                            ]
+                in
+                Expect.equal ( Answering, [ playerA ] ) ( unlocked.phase, SeqDict.keys unlocked.answers )
+            )
+        , Test.test "Only the host can unlock the answers"
+            (\_ ->
+                apply (setup 1)
+                    [ action host LockedAnswers
+                    , action playerA UnlockedAnswers
+                    ]
+                    |> .phase
+                    |> Expect.equal Grouping
+            )
         , Test.test "Only the host can move the reveal along"
             (\_ ->
                 apply (setup 2)
-                    [ action host (answers [ "Blue", "Dog" ])
+                    [ action playerA (answers [ "Blue", "Dog" ])
                     , action host LockedAnswers
                     , action host FinishedGrouping
-                    , action playerA (ChangedQuestionsRevealed (Id.fromInt 2))
+                    , action playerB (ChangedQuestionsRevealed (Id.fromInt 2))
                     ]
                     |> .questionsRevealed
                     |> Expect.equal 0
@@ -215,18 +244,18 @@ tests =
         , Test.test "Answers submitted after the host locked them are ignored"
             (\_ ->
                 apply (setup 1)
-                    [ action host (answers [ "Blue" ])
+                    [ action playerA (answers [ "Blue" ])
                     , action host LockedAnswers
-                    , action playerA (answers [ "Blue" ])
+                    , action playerB (answers [ "Blue" ])
                     ]
                     |> .answers
                     |> SeqDict.keys
-                    |> Expect.equal [ host ]
+                    |> Expect.equal [ playerA ]
             )
         , Test.test "Answers are padded and trimmed to the number of questions the host wrote"
             (\_ ->
-                apply (setup 2) [ action host (answers [ " Blue ", "Dog", "Extra" ]) ]
-                    |> answerTexts host
+                apply (setup 2) [ action playerA (answers [ " Blue ", "Dog", "Extra" ]) ]
+                    |> answerTexts playerA
                     |> Expect.equal (Just [ "Blue", "Dog" ])
             )
         , Test.test "A setup with nothing but blank questions is rejected"

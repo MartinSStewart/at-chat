@@ -22,8 +22,9 @@ tests normalConfig =
         ]
 
 
-{-| A whole match between two people: the host writes the questions, both answer, the host
-locks and reveals, and the score everyone can see reflects who wrote the same thing.
+{-| A whole match: the host writes the questions, everyone else answers them, and the host
+locks, groups and reveals. A DM only has room for one player besides the host, so this is
+the smallest match there is.
 -}
 sheepGameDmTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
@@ -54,7 +55,6 @@ sheepGameDmTest normalConfig =
                         , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "sheepGame_start" ])
                         , admin.click 100 (Dom.id "game_select_Sheep Game (WIP)")
                         , admin.input 100 (Dom.id "sheepGame_question_0") "Name a **colour**"
-                        , admin.click 100 (Dom.id "sheepGame_addQuestion")
                         , admin.input 100 (Dom.id "sheepGame_question_1") "Name an animal"
                         , admin.click 100 (Dom.id "sheepGame_start")
 
@@ -71,30 +71,29 @@ sheepGameDmTest normalConfig =
                                     |> Test.Html.Query.count (Expect.greaterThan 0)
                             )
 
+                        -- The host writes the questions rather than answering them, so they
+                        -- get no answer of their own to fill in.
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "sheepGame_answer_0" ])
+                        , user.click 100 (Dom.id "guild_gameStartedCard_0")
+
                         -- An answer is written in the same input a question is, buttons and
                         -- all.
-                        , admin.click 100 (Dom.id "sheepGame_answer_0_openEmojiSelector")
-                        , admin.checkView
+                        , user.click 100 (Dom.id "sheepGame_answer_0_openEmojiSelector")
+                        , user.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.id "emoji_search_input" ])
-                        , admin.click 100 (Dom.id "sheepGame_answer_0_openEmojiSelector")
-                        , admin.checkView
+                        , user.click 100 (Dom.id "sheepGame_answer_0_openEmojiSelector")
+                        , user.checkView
                             100
                             (Test.Html.Query.hasNot [ Test.Html.Selector.id "emoji_search_input" ])
-
-                        -- Both players answer. They agree about the colour and disagree about
-                        -- the animal, so the first question is worth 2 points each and the
-                        -- second is worth 1.
-                        , admin.input 100 (Dom.id "sheepGame_answer_0") "Blue"
-                        , admin.input 100 (Dom.id "sheepGame_answer_1") "Dog"
-                        , admin.click 100 (Dom.id "sheepGame_submitAnswers")
-                        , user.click 100 (Dom.id "guild_gameStartedCard_0")
                         , user.input 100 (Dom.id "sheepGame_answer_0") "blue"
                         , user.input 100 (Dom.id "sheepGame_answer_1") "Cat"
                         , user.click 100 (Dom.id "sheepGame_submitAnswers")
                         , admin.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text "2 players have answered so far" ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text "1 player has answered so far" ])
 
                         -- Opening the match fresh puts the answers already submitted back in
                         -- the boxes, so pressing the button again can't blank them out.
@@ -129,6 +128,16 @@ sheepGameDmTest normalConfig =
                         , user.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.text "The host is grouping the answers" ])
+
+                        -- Unlocking hands the answers back so that someone who was still
+                        -- typing gets to finish, and what they'd already sent is still there.
+                        , admin.click 100 (Dom.id "sheepGame_unlockAnswers")
+                        , user.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.attribute (Html.Attributes.value "blue") ]
+                            )
+                        , admin.click 100 (Dom.id "sheepGame_lockAnswers")
                         , admin.click 100 (Dom.id "sheepGame_revealScores")
 
                         -- Nothing is revealed until the host starts stepping through the
@@ -151,15 +160,16 @@ sheepGameDmTest normalConfig =
                             100
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.text "Scores after 1 of 2 questions"
-                                , Test.Html.Selector.text "Blue"
+                                , Test.Html.Selector.text "blue"
                                 ]
                             )
                         , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final scores" ])
                         , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final scores" ])
 
-                        -- Matching on the colour and going it alone on the animal is 3 points.
-                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "3" ])
+                        -- Nobody else is answering, so each question is worth the one point
+                        -- for matching yourself.
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "2" ])
 
                         -- Stepping back hides the last question again.
                         , admin.click 100 (Dom.id "sheepGame_hidePreviousQuestion")
@@ -193,15 +203,26 @@ setupNeedsAQuestionTest normalConfig =
                 , admin.click 1000 (Dom.id "guild_friendLabel_0")
                 , admin.click 100 (Dom.id "guild_openGamesTab")
                 , admin.click 100 (Dom.id "game_select_Sheep Game (WIP)")
+
+                -- The setup opens with questions already written in, so emptying them is what
+                -- it takes to have none.
+                , admin.input 100 (Dom.id "sheepGame_question_0") ""
+                , admin.input 100 (Dom.id "sheepGame_question_1") ""
                 , admin.click 100 (Dom.id "sheepGame_start")
                 , admin.checkView
                     100
                     (Test.Html.Query.has [ Test.Html.Selector.text "Write at least one question before starting" ])
 
-                -- Writing a question and starting leaves the setup view for the game itself.
+                -- A question left blank stops the rest from starting.
                 , admin.input 100 (Dom.id "sheepGame_question_0") "Name a colour"
                 , admin.click 100 (Dom.id "sheepGame_start")
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "sheepGame_submitAnswers" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Can't be empty" ])
+
+                -- Writing every question and starting leaves the setup view for the game
+                -- itself, where the host locks the answers rather than writing one.
+                , admin.input 100 (Dom.id "sheepGame_question_1") "Name an animal"
+                , admin.click 100 (Dom.id "sheepGame_start")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "sheepGame_lockAnswers" ])
                 ]
             )
         ]
