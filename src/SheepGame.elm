@@ -17,7 +17,6 @@ module SheepGame exposing
     , gameView
     , initGame
     , initSetup
-    , initSetupFromSavedQuestions
     , initShared
     , questionInputContainerId
     , questionInputId
@@ -71,11 +70,8 @@ import User exposing (FrontendUser, LocalUser)
 
 
 type alias ValidatedSetup =
-    { questions : Nonempty (Nonempty (RichText (Id UserId)))
+    { questions : Nonempty ValidatedQuestion
     , createdBy : Id UserId
-    , -- Files the questions refer to, carried along the way a message carries its own
-      -- attachments so that everyone in the match can resolve those references.
-      attachedFiles : SeqDict (Id FileId) FileData
     }
 
 
@@ -112,12 +108,17 @@ type alias Shared =
     }
 
 
+type alias SheepGameQuestion =
+    { text : String, attachedFiles : SeqDict (Id FileId) FileStatus }
+
+
+type alias ValidatedQuestion =
+    { text : Nonempty (RichText (Id UserId)), attachedFiles : SeqDict (Id FileId) FileData }
+
+
 type alias SetupModel =
-    { questions : Array String
+    { questions : Array SheepGameQuestion
     , error : Maybe String
-    , -- Files the host has attached to their questions. The questions refer to these by id
-      -- in the same way a message's text refers to its attachments.
-      attachedFiles : SeqDict (Id FileId) FileStatus
     }
 
 
@@ -176,19 +177,18 @@ type LocalChange
 
 initSetup : SetupModel
 initSetup =
-    { questions = Array.fromList [ "" ], error = Nothing, attachedFiles = SeqDict.empty }
+    { questions = Array.fromList [ { text = "", attachedFiles = SeqDict.empty } ]
+    , error = Nothing
+    }
 
 
-{-| The setup someone was part way through, rebuilt from the questions their session held
-onto so that a refresh doesn't cost them what they'd written.
--}
-initSetupFromSavedQuestions : Array String -> SetupModel
+initSetupFromSavedQuestions : Array SheepGameQuestion -> SetupModel
 initSetupFromSavedQuestions questions =
     if Array.isEmpty questions then
         initSetup
 
     else
-        { questions = questions, error = Nothing, attachedFiles = SeqDict.empty }
+        { questions = questions, error = Nothing }
 
 
 {-| File ids start at 1. The backend throws away anything lower when it checks that the
@@ -304,25 +304,34 @@ maxAnswerLength =
     100
 
 
+validateQuestion : Time.Zone -> SeqDict (Id UserId) FrontendUser -> SheepGameQuestion -> Result () ValidatedQuestion
+validateQuestion timezone users question =
+    case ( parseContent timezone users question.text, FileStatus.hasUploadingFile question.attachedFiles ) of
+        ( Just content, False ) ->
+            { text = content
+            , attachedFiles = FileStatus.onlyUploadedFiles question.attachedFiles
+            }
+                |> Ok
+
+        _ ->
+            Err ()
+
+
 {-| The host's questions, or a reason they can't be used yet.
 -}
 validateSetup : Time.Zone -> SeqDict (Id UserId) FrontendUser -> Id UserId -> SetupModel -> Result String ValidatedSetup
 validateSetup timezone users createdBy model =
     case
         Array.toList model.questions
-            |> List.filterMap (parseContent timezone users)
+            |> List.filterMap (\question -> validateQuestion timezone users question |> Result.toMaybe)
             |> List.Nonempty.fromList
     of
         Just questions ->
-            if FileStatus.hasUploadingFile model.attachedFiles then
-                Err "Wait for the attached files to finish uploading"
+            if Array.length model.questions == List.Nonempty.length questions then
+                Ok { questions = questions, createdBy = createdBy }
 
             else
-                Ok
-                    { questions = questions
-                    , createdBy = createdBy
-                    , attachedFiles = FileStatus.onlyUploadedFiles model.attachedFiles
-                    }
+                Err "Wait for the attached files to finish uploading"
 
         Nothing ->
             Err "Write at least one question before starting"
@@ -349,7 +358,11 @@ updateSetup localUser msg model =
                 MessageInput.TypedMessage text ->
                     ( Setup
                         { model
-                            | questions = Array.set (Id.toInt questionId) text model.questions
+                            | questions =
+                                Array.Extra.update
+                                    (Id.toInt questionId)
+                                    (\question -> { question | text = text })
+                                    model.questions
                             , error = Nothing
                         }
                     , NoOutMsg
@@ -399,7 +412,7 @@ updateSetup localUser msg model =
                             model.questions
 
                         else
-                            Array.push "" model.questions
+                            Array.push { text = "", attachedFiles = SeqDict.empty } model.questions
                     , error = Nothing
                 }
             , NoOutMsg

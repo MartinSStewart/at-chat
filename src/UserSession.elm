@@ -6,6 +6,7 @@ module UserSession exposing
     , PreviouslyLastViewedMessage(..)
     , PushSubscription(..)
     , SetViewing(..)
+    , SheepGameQuestion
     , ToBeFilledInByBackend(..)
     , UnreadOverviewData
     , UserOptionSection(..)
@@ -37,7 +38,7 @@ import Discord
 import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
-import FileStatus exposing (FileHash)
+import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_ChannelThreadId, Viewing_DiscordChannelId, Viewing_DiscordChannelThreadId, Viewing_DiscordDmId, Viewing_DmId, Viewing_DmThreadId)
 import Message exposing (Message)
 import PersonName exposing (PersonName)
@@ -56,10 +57,12 @@ type alias UserSession =
     , sessionIdHash : SessionIdHash
     , signedInAt : Time.Posix
     , expandedUserOptions : SeqSet UserOptionSection
-    , -- Setting a sheep game up takes a while, so the questions the host has written are
-      -- kept here. That way an accidental refresh doesn't cost them the lot.
-      sheepGameQuestions : Array String
+    , savedSheepGameQuestions : Array SheepGameQuestion
     }
+
+
+type alias SheepGameQuestion =
+    { text : String, attachedFiles : SeqDict (Id FileId) FileStatus }
 
 
 type UserOptionSection
@@ -426,7 +429,7 @@ init time sessionId userId userAgent =
     , sessionIdHash = SessionIdHash.fromSessionId sessionId
     , signedInAt = time
     , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
-    , sheepGameQuestions = Array.empty
+    , savedSheepGameQuestions = Array.empty
     }
 
 
@@ -440,9 +443,9 @@ collapseUserOptionSection section session =
     { session | expandedUserOptions = SeqSet.remove section session.expandedUserOptions }
 
 
-setSheepGameQuestions : Array String -> UserSession -> UserSession
+setSheepGameQuestions : Array SheepGameQuestion -> UserSession -> UserSession
 setSheepGameQuestions questions session =
-    { session | sheepGameQuestions = questions }
+    { session | savedSheepGameQuestions = questions }
 
 
 toFrontend : Id UserId -> SeqDict ClientId Viewing -> UserSession -> Maybe FrontendUserSession
