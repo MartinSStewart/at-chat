@@ -6,9 +6,10 @@ import Expect
 import FileName
 import FileStatus
 import Id exposing (Id, UserId)
+import IdArray
 import List.Nonempty exposing (Nonempty(..))
 import RichText
-import SeqDict
+import SeqDict exposing (SeqDict)
 import SheepGame exposing (Action(..), Phase(..))
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
@@ -41,16 +42,22 @@ content text =
     RichText.fromNonemptyString Time.utc SeqDict.empty (NonemptyString first rest)
 
 
+{-| A question, which unlike an answer can have files attached to it. None of these do.
+-}
+question : String -> SheepGame.ValidatedInput
+question text =
+    { text = content text, attachedFiles = SeqDict.empty }
+
+
 {-| A match with `questionCount` questions, whose wording never matters to these tests.
 -}
 setup : Int -> SheepGame.ValidatedSetup
 setup questionCount =
     { questions =
         Nonempty
-            (content "Q1")
-            (List.range 2 questionCount |> List.map (\index -> content ("Q" ++ String.fromInt index)))
+            (question "Q1")
+            (List.range 2 questionCount |> List.map (\index -> question ("Q" ++ String.fromInt index)))
     , createdBy = host
-    , attachedFiles = SeqDict.empty
     }
 
 
@@ -112,7 +119,7 @@ tests =
                     , action playerB (answers [ "Red" ])
                     , action host LockedAnswers
                     , action host FinishedGrouping
-                    , action host (ChangedQuestionsRevealed 1)
+                    , action host (ChangedQuestionsRevealed (Id.fromInt 1))
                     ]
                     |> SheepGame.scoresThroughQuestion 1
                     |> SeqDict.toList
@@ -147,7 +154,7 @@ tests =
 
                             -- Auto-grouping can't see that these are the same answer, so the
                             -- host puts them in the same group by hand.
-                            , action host (ChangedGroup playerA 0 "a")
+                            , action host (ChangedGroup playerA (Id.fromInt 0) "a")
                             , action host FinishedGrouping
                             ]
                 in
@@ -200,7 +207,7 @@ tests =
                     [ action host (answers [ "Blue", "Dog" ])
                     , action host LockedAnswers
                     , action host FinishedGrouping
-                    , action playerA (ChangedQuestionsRevealed 2)
+                    , action playerA (ChangedQuestionsRevealed (Id.fromInt 2))
                     ]
                     |> .questionsRevealed
                     |> Expect.equal 0
@@ -224,14 +231,19 @@ tests =
             )
         , Test.test "A setup with nothing but blank questions is rejected"
             (\_ ->
-                SheepGame.validateSetup Time.utc SeqDict.empty host { questions = Array.fromList [ "", "   " ], error = Nothing, attachedFiles = SeqDict.empty }
+                SheepGame.validateSetup Time.utc SeqDict.empty host (setupModel [ "", "   " ])
                     |> Expect.err
             )
-        , Test.test "Blank questions are dropped from a setup that has real ones too"
+        , Test.test "A blank question stops a setup that has real ones too from starting"
             (\_ ->
-                SheepGame.validateSetup Time.utc SeqDict.empty host { questions = Array.fromList [ "", "Name a colour", " " ], error = Nothing, attachedFiles = SeqDict.empty }
+                SheepGame.validateSetup Time.utc SeqDict.empty host (setupModel [ "", "Name a colour", " " ])
+                    |> Expect.err
+            )
+        , Test.test "A setup where every question was written can start"
+            (\_ ->
+                SheepGame.validateSetup Time.utc SeqDict.empty host (setupModel [ "Name a colour", "Name an animal" ])
                     |> Result.map (\setup2 -> List.Nonempty.length setup2.questions)
-                    |> Expect.equal (Ok 1)
+                    |> Expect.equal (Ok 2)
             )
         , Test.test "A match can't start while a file the questions refer to is still uploading"
             (\_ ->
@@ -239,17 +251,16 @@ tests =
                     Time.utc
                     SeqDict.empty
                     host
-                    { questions = Array.fromList [ "Name a colour" ]
-                    , error = Nothing
-                    , attachedFiles =
-                        SeqDict.singleton
+                    (setupModelWithFiles
+                        (SeqDict.singleton
                             (Id.fromInt 1)
                             (FileStatus.FileUploading
                                 (FileName.fromString "sheep.png")
                                 { sent = 0, size = 10 }
                                 FileStatus.pngContent
                             )
-                    }
+                        )
+                    )
                     |> Expect.err
             )
         , Test.test "Files that finished uploading are carried into the match"
@@ -258,14 +269,36 @@ tests =
                     Time.utc
                     SeqDict.empty
                     host
-                    { questions = Array.fromList [ "Name a colour" ]
-                    , error = Nothing
-                    , attachedFiles = SeqDict.singleton (Id.fromInt 1) (FileStatus.FileUploaded uploadedFile)
-                    }
-                    |> Result.map (\setup2 -> SeqDict.toList setup2.attachedFiles)
+                    (setupModelWithFiles
+                        (SeqDict.singleton (Id.fromInt 1) (FileStatus.FileUploaded uploadedFile))
+                    )
+                    |> Result.map
+                        (\setup2 ->
+                            List.Nonempty.head setup2.questions |> .attachedFiles |> SeqDict.toList
+                        )
                     |> Expect.equal (Ok [ ( Id.fromInt 1, uploadedFile ) ])
             )
         ]
+
+
+{-| A setup the host has typed questions into and attached nothing to.
+-}
+setupModel : List String -> SheepGame.SetupModel
+setupModel questions =
+    { questions =
+        List.map (\text -> { text = text, attachedFiles = SeqDict.empty }) questions
+            |> IdArray.fromList
+    , error = Nothing
+    }
+
+
+{-| A setup with a single question that has files attached to it.
+-}
+setupModelWithFiles : SeqDict (Id FileStatus.FileId) FileStatus.FileStatus -> SheepGame.SetupModel
+setupModelWithFiles attachedFiles =
+    { questions = IdArray.fromList [ { text = "Name a colour", attachedFiles = attachedFiles } ]
+    , error = Nothing
+    }
 
 
 uploadedFile : FileStatus.FileData

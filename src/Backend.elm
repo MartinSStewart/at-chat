@@ -6517,7 +6517,15 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
                     -- A client could name files it never uploaded, the same way it could when
                     -- sending a message, so only the ones we actually hold are kept.
                     { setup
-                        | attachedFiles = BackendExtra.validateAttachedFiles model.files setup.attachedFiles
+                        | questions =
+                            List.Nonempty.map
+                                (\question ->
+                                    { question
+                                        | attachedFiles =
+                                            BackendExtra.validateAttachedFiles model.files question.attachedFiles
+                                    }
+                                )
+                                setup.questions
                     }
 
                 ( messageId, channel2 ) =

@@ -12,11 +12,14 @@ module SheepGame exposing
     , SetupMsg(..)
     , SetupOrGame(..)
     , Shared
+    , UnvalidatedInput
+    , ValidatedInput
     , ValidatedSetup
     , clampSavedQuestions
     , gameView
     , initGame
     , initSetup
+    , initSetupFromSavedQuestions
     , initShared
     , questionInputContainerId
     , questionInputId
@@ -41,7 +44,6 @@ import Array exposing (Array)
 import Array.Extra
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Dict exposing (Dict)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.File exposing (File)
 import Effect.Http as Http
@@ -61,7 +63,6 @@ import Ports
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
-import Sticker
 import String.Nonempty
 import Ui exposing (Element)
 import Ui.Font
@@ -118,7 +119,7 @@ type alias ValidatedInput =
 
 
 type alias SetupModel =
-    { questions : IdArray (Id QuestionId) UnvalidatedInput
+    { questions : IdArray QuestionId UnvalidatedInput
     , error : Maybe String
     }
 
@@ -131,7 +132,6 @@ type SetupMsg
     | PressedCancel
     | GotFilesToAttach (Id QuestionId) (Nonempty File)
     | GotAttachedFileUpload (Id QuestionId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
-    | SetupNoOp
 
 
 type SetupOrGame
@@ -143,7 +143,7 @@ type SetupOrGame
 {-| View state that belongs to one player and never reaches anyone else.
 -}
 type alias GameData =
-    { answerDrafts : IdArray (Id QuestionId) UnvalidatedInput }
+    { answerDrafts : IdArray QuestionId UnvalidatedInput }
 
 
 type GameMsg
@@ -183,13 +183,16 @@ initSetup =
     }
 
 
-initSetupFromSavedQuestions : IdArray (Id QuestionId) UnvalidatedInput -> SetupModel
+{-| The setup someone was part way through, rebuilt from the questions their session held
+onto so that a refresh doesn't cost them what they'd written.
+-}
+initSetupFromSavedQuestions : Array UnvalidatedInput -> SetupModel
 initSetupFromSavedQuestions questions =
-    if IdArray.isEmpty questions then
+    if Array.isEmpty questions then
         initSetup
 
     else
-        { questions = questions, error = Nothing }
+        { questions = Array.toList questions |> IdArray.fromList, error = Nothing }
 
 
 {-| File ids start at 1. The backend throws away anything lower when it checks that the
@@ -222,9 +225,10 @@ appendAttachedFiles fileIds question =
 sending more than the setup view lets anyone write, and this ends up in the backend's
 state, so it gets the same limits here.
 -}
-clampSavedQuestions : Array String -> Array String
+clampSavedQuestions : Array UnvalidatedInput -> Array UnvalidatedInput
 clampSavedQuestions questions =
-    Array.slice 0 maxQuestions questions |> Array.map (String.left maxQuestionLength)
+    Array.slice 0 maxQuestions questions
+        |> Array.map (\question -> { question | text = String.left maxQuestionLength question.text })
 
 
 {-| Someone opening a match they've already answered gets their own answers back in the
@@ -235,21 +239,25 @@ is what the boxes take.
 initGame : LocalUser -> ValidatedSetup -> Shared -> GameData
 initGame localUser setup shared =
     { answerDrafts =
-        case SeqDict.get localUser.session.userId shared.answers of
+        (case SeqDict.get localUser.session.userId shared.answers of
             Just answers ->
-                Array.map
-                    (\answer ->
-                        case answer of
-                            Just answer2 ->
-                                toSourceText localUser answer2
+                Array.toList answers
+                    |> List.map
+                        (\answer ->
+                            case answer of
+                                Just answer2 ->
+                                    toSourceText localUser answer2
 
-                            Nothing ->
-                                ""
-                    )
-                    answers
+                                Nothing ->
+                                    ""
+                        )
 
             Nothing ->
-                Array.repeat (List.Nonempty.length setup.questions) ""
+                List.repeat (List.Nonempty.length setup.questions) ""
+        )
+            -- Answers are plain text, so there's never anything attached to one.
+            |> List.map (\text -> { text = text, attachedFiles = SeqDict.empty })
+            |> IdArray.fromList
     }
 
 
@@ -285,7 +293,7 @@ initShared =
     { phase = Answering
     , answers = SeqDict.empty
     , groups = SeqDict.empty
-    , notes = Dict.empty
+    , notes = SeqDict.empty
     , questionsRevealed = 0
     }
 
@@ -323,12 +331,12 @@ validateQuestion timezone users question =
 validateSetup : Time.Zone -> SeqDict (Id UserId) FrontendUser -> Id UserId -> SetupModel -> Result String ValidatedSetup
 validateSetup timezone users createdBy model =
     case
-        Array.toList model.questions
+        IdArray.toList model.questions
             |> List.filterMap (\question -> validateQuestion timezone users question |> Result.toMaybe)
             |> List.Nonempty.fromList
     of
         Just questions ->
-            if Array.length model.questions == List.Nonempty.length questions then
+            if IdArray.length model.questions == List.Nonempty.length questions then
                 Ok { questions = questions, createdBy = createdBy }
 
             else
@@ -343,7 +351,7 @@ type OutMsg
     | FinishedSetup ValidatedSetup
     | OpenEmojiSelector (Id QuestionId)
     | SelectFilesToAttach (Id QuestionId)
-    | UploadAttachedFiles (Nonempty ( Id FileId, File ))
+    | UploadAttachedFiles (Id QuestionId) (Nonempty ( Id FileId, File ))
 
 
 updateSetup : LocalUser -> SetupMsg -> SetupModel -> ( SetupOrGame, OutMsg )
@@ -360,10 +368,7 @@ updateSetup localUser msg model =
                     ( Setup
                         { model
                             | questions =
-                                Array.Extra.update
-                                    (Id.toInt questionId)
-                                    (\question -> { question | text = text })
-                                    model.questions
+                                IdArray.update questionId (\question -> { question | text = text }) model.questions
                             , error = Nothing
                         }
                     , NoOutMsg
@@ -409,11 +414,11 @@ updateSetup localUser msg model =
             ( Setup
                 { model
                     | questions =
-                        if Array.length model.questions >= maxQuestions then
+                        if IdArray.length model.questions >= maxQuestions then
                             model.questions
 
                         else
-                            Array.push { text = "", attachedFiles = SeqDict.empty } model.questions
+                            IdArray.push { text = "", attachedFiles = SeqDict.empty } model.questions
                     , error = Nothing
                 }
             , NoOutMsg
@@ -423,9 +428,9 @@ updateSetup localUser msg model =
             ( Setup
                 { model
                     | questions =
-                        Array.toList model.questions
+                        IdArray.toList model.questions
                             |> List.Extra.removeAt (Id.toInt index)
-                            |> Array.fromList
+                            |> IdArray.fromList
                     , error = Nothing
                 }
             , NoOutMsg
@@ -441,6 +446,15 @@ updateSetup localUser msg model =
 
         GotFilesToAttach questionId files ->
             let
+                existingFiles : SeqDict (Id FileId) FileStatus
+                existingFiles =
+                    case IdArray.get questionId model.questions of
+                        Just question ->
+                            question.attachedFiles
+
+                        Nothing ->
+                            SeqDict.empty
+
                 ( attachedFiles, toUpload ) =
                     List.Nonempty.foldl
                         (\file ( attachedFiles2, toUpload2 ) ->
@@ -460,25 +474,30 @@ updateSetup localUser msg model =
                             , ( fileId, file ) :: toUpload2
                             )
                         )
-                        ( model.attachedFiles, [] )
+                        ( existingFiles, [] )
                         files
+
+                added : List ( Id FileId, File )
+                added =
+                    List.reverse toUpload
             in
             ( Setup
                 { model
-                    | attachedFiles = attachedFiles
-                    , questions =
-                        Array.set
-                            (Id.toInt questionId)
-                            (appendAttachedFiles
-                                (List.reverse toUpload |> List.map Tuple.first)
-                                (Array.get (Id.toInt questionId) model.questions |> Maybe.withDefault "")
+                    | questions =
+                        IdArray.update
+                            questionId
+                            (\question ->
+                                { question
+                                    | attachedFiles = attachedFiles
+                                    , text = appendAttachedFiles (List.map Tuple.first added) question.text
+                                }
                             )
                             model.questions
                     , error = Nothing
                 }
-            , case List.reverse toUpload |> List.Nonempty.fromList of
+            , case List.Nonempty.fromList added of
                 Just nonempty ->
-                    UploadAttachedFiles nonempty
+                    UploadAttachedFiles questionId nonempty
 
                 Nothing ->
                     NoOutMsg
@@ -488,8 +507,8 @@ updateSetup localUser msg model =
             ( Setup
                 { model
                     | questions =
-                        Array.Extra.update
-                            (Id.toInt questionId)
+                        IdArray.update
+                            questionId
                             (\question ->
                                 { question
                                     | attachedFiles =
@@ -500,9 +519,6 @@ updateSetup localUser msg model =
                 }
             , NoOutMsg
             )
-
-        SetupNoOp ->
-            ( Setup model, NoOutMsg )
 
         PressedCancel ->
             ( CancelSetup, NoOutMsg )
@@ -517,16 +533,21 @@ updateGame :
     -> ( GameData, Maybe Action )
 updateGame localUser setup shared msg model =
     case msg of
-        TypedAnswer index text ->
-            ( { model | answerDrafts = Array.set index (String.left maxAnswerLength text) model.answerDrafts }
+        TypedAnswer questionId text ->
+            ( { model
+                | answerDrafts =
+                    IdArray.update
+                        questionId
+                        (\draft -> { draft | text = String.left maxAnswerLength text })
+                        model.answerDrafts
+              }
             , Nothing
             )
 
         PressedSubmitAnswers ->
             ( model
-            , Array.map
-                (parseContent localUser.timezone (allUsers localUser))
-                model.answerDrafts
+            , IdArray.toArray model.answerDrafts
+                |> Array.map (\draft -> parseContent localUser.timezone (allUsers localUser) draft.text)
                 |> SubmittedAnswers
                 |> Just
             )
@@ -546,13 +567,14 @@ updateGame localUser setup shared msg model =
         PressedShowNextQuestion ->
             ( model
             , min (List.Nonempty.length setup.questions) (shared.questionsRevealed + 1)
+                |> Id.fromInt
                 |> ChangedQuestionsRevealed
                 |> Just
             )
 
         PressedHidePreviousQuestion ->
             ( model
-            , max 0 (shared.questionsRevealed - 1) |> ChangedQuestionsRevealed |> Just
+            , max 0 (shared.questionsRevealed - 1) |> Id.fromInt |> ChangedQuestionsRevealed |> Just
             )
 
         NoOp ->
@@ -604,7 +626,7 @@ updateAction setup action shared =
         ChangedNotes questionIndex notes ->
             case ( shared.phase, isHost action.userId setup ) of
                 ( Grouping, True ) ->
-                    { shared | notes = Dict.insert questionIndex notes shared.notes }
+                    { shared | notes = SeqDict.insert questionIndex notes shared.notes }
 
                 _ ->
                     shared
@@ -621,7 +643,7 @@ updateAction setup action shared =
             case ( shared.phase, isHost action.userId setup ) of
                 ( Revealing, True ) ->
                     { shared
-                        | questionsRevealed = clamp 0 (List.Nonempty.length setup.questions) count
+                        | questionsRevealed = clamp 0 (List.Nonempty.length setup.questions) (Id.toInt count)
                     }
 
                 _ ->
@@ -652,7 +674,7 @@ answerKey content =
 {-| The host's starting point for grouping: answers that already match once case and
 surrounding whitespace are ignored get the same label.
 -}
-autoGroup : ValidatedSetup -> SeqDict (Id UserId) (Array (Maybe (Nonempty (RichText (Id UserId))))) -> SeqDict ( Id UserId, Int ) String
+autoGroup : ValidatedSetup -> SeqDict (Id UserId) (Array (Maybe (Nonempty (RichText (Id UserId))))) -> SeqDict ( Id UserId, Id QuestionId ) String
 autoGroup setup answers =
     List.range 0 (List.Nonempty.length setup.questions - 1)
         |> List.concatMap
@@ -671,7 +693,7 @@ autoGroup setup answers =
                     |> List.indexedMap
                         (\groupIndex ( first, rest ) ->
                             List.map
-                                (\( userId, _ ) -> ( ( userId, questionIndex ), groupLabel groupIndex ))
+                                (\( userId, _ ) -> ( ( userId, Id.fromInt questionIndex ), groupLabel groupIndex ))
                                 (first :: rest)
                         )
                     |> List.concat
@@ -722,22 +744,22 @@ scoresThroughQuestion questionCount shared =
                             group
                     )
                     scores
-                    (groupsForQuestion questionIndex shared)
+                    (groupsForQuestion (Id.fromInt questionIndex) shared)
             )
             (players shared |> List.map (\userId -> ( userId, 0 )) |> SeqDict.fromList)
 
 
 {-| The players who answered a question, bucketed by the label the host gave their answer.
 -}
-groupsForQuestion : Int -> Shared -> List ( String, List (Id UserId) )
-groupsForQuestion questionIndex shared =
+groupsForQuestion : Id QuestionId -> Shared -> List ( String, List (Id UserId) )
+groupsForQuestion questionId shared =
     players shared
         |> List.filterMap
             (\userId ->
-                case answerFor userId questionIndex shared of
+                case answerFor userId questionId shared of
                     Just _ ->
                         Just
-                            ( SeqDict.get ( userId, questionIndex ) shared.groups |> Maybe.withDefault ""
+                            ( SeqDict.get ( userId, questionId ) shared.groups |> Maybe.withDefault ""
                             , userId
                             )
 
@@ -749,23 +771,21 @@ groupsForQuestion questionIndex shared =
             (\( ( group, userId ), rest ) -> ( group, userId :: List.map Tuple.second rest ))
 
 
-answerFor : Id UserId -> Int -> Shared -> Maybe (Nonempty (RichText (Id UserId)))
-answerFor userId questionIndex shared =
+answerFor : Id UserId -> Id QuestionId -> Shared -> Maybe (Nonempty (RichText (Id UserId)))
+answerFor userId questionId shared =
     SeqDict.get userId shared.answers
-        |> Maybe.andThen (Array.get questionIndex)
+        |> Maybe.andThen (Array.get (Id.toInt questionId))
         |> Maybe.withDefault Nothing
 
 
 setupView :
-    Time.Posix
-    -> Coord CssPixels
-    -> Bool
+    Coord CssPixels
     -> LocalUser
     -> LoggedIn a
     -> SeqDict (Id UserId) FrontendUser
     -> SetupModel
     -> Element SetupMsg
-setupView time windowSize showMemberTab localUser loggedIn users model =
+setupView windowSize localUser loggedIn users model =
     let
         isMobile : Bool
         isMobile =
@@ -778,10 +798,6 @@ setupView time windowSize showMemberTab localUser loggedIn users model =
 
             else
                 16
-
-        questionWidth : Int
-        questionWidth =
-            MyUi.conversationWidthIgnoreScrollbar windowSize showMemberTab - horizontalPadding * 2
     in
     Ui.column
         [ Ui.spacing 16
@@ -794,8 +810,8 @@ setupView time windowSize showMemberTab localUser loggedIn users model =
             (Ui.column
                 [ Ui.spacing 8 ]
                 (List.indexedMap
-                    (questionInput time questionWidth isMobile localUser loggedIn users model.attachedFiles)
-                    (Array.toList model.questions)
+                    (questionInput isMobile localUser loggedIn users)
+                    (IdArray.toList model.questions)
                     ++ [ MyUi.secondaryButton
                             (Dom.id "sheepGame_addQuestion")
                             PressedAddQuestion
@@ -828,17 +844,14 @@ questionInputContainerId index =
 
 
 questionInput :
-    Time.Posix
-    -> Int
-    -> Bool
+    Bool
     -> LocalUser
     -> LoggedIn a
     -> SeqDict (Id UserId) FrontendUser
-    -> SeqDict (Id FileId) FileStatus
     -> Int
-    -> String
+    -> UnvalidatedInput
     -> Element SetupMsg
-questionInput time questionWidth isMobile localUser loggedIn users attachedFiles index question =
+questionInput isMobile localUser loggedIn users index question =
     let
         questionId : Id QuestionId
         questionId =
@@ -848,18 +861,10 @@ questionInput time questionWidth isMobile localUser loggedIn users attachedFiles
         htmlId =
             questionInputId questionId
 
-        isFocused : Bool
-        isFocused =
-            case loggedIn.textInputFocus of
-                Just textInputFocus ->
-                    textInputFocus.htmlId == htmlId
-
-                Nothing ->
-                    False
-
         richText : Maybe (Nonempty (RichText (Id UserId)))
         richText =
-            String.Nonempty.fromString question |> Maybe.map (RichText.fromNonemptyString localUser.timezone users)
+            String.Nonempty.fromString question.text
+                |> Maybe.map (RichText.fromNonemptyString localUser.timezone users)
     in
     Ui.row
         [ Ui.spacing 8 ]
@@ -871,10 +876,10 @@ questionInput time questionWidth isMobile localUser loggedIn users attachedFiles
             isMobile
             htmlId
             "Pick a random number between 1 and 10"
-            (maxQuestionLength - String.length question)
-            question
+            (maxQuestionLength - String.length question.text)
+            question.text
             richText
-            attachedFiles
+            question.attachedFiles
             localUser
             loggedIn
             users
@@ -890,56 +895,6 @@ questionInput time questionWidth isMobile localUser loggedIn users attachedFiles
             (Dom.id ("sheepGame_removeQuestion_" ++ String.fromInt index))
             (PressedRemoveQuestion questionId)
         ]
-
-
-{-| A question the host isn't editing right now, drawn the way it will look in the game so
-they see the formatting instead of the markdown they typed.
-
-It covers the textarea it's drawn in front of and ignores pointer events, so clicking it
-puts the caret in that textarea instead, which swaps this back for the markdown.
-
--}
-questionPreview :
-    Time.Posix
-    -> Int
-    -> LocalUser
-    -> SeqDict (Id FileId) FileStatus
-    -> Int
-    -> Nonempty (RichText (Id UserId))
-    -> Element SetupMsg
-questionPreview time questionWidth localUser attachedFiles index content =
-    RichText.view
-        (Dom.id ("sheepGame_questionPreview_" ++ String.fromInt index))
-        questionWidth
-        (\_ -> SetupNoOp)
-        (\_ -> SetupNoOp)
-        (\_ -> SetupNoOp)
-        { domainWhitelist = localUser.user.domainWhitelist
-        , revealedSpoilers = SeqSet.empty
-        , users = allUsers localUser
-        , attachedFiles = FileStatus.onlyUploadedFiles attachedFiles
-        , stickers = localUser.stickers
-        , customEmojis = localUser.customEmojis
-        , animationMode = Sticker.LoopAFewTimesOnLoad
-        , timezone = localUser.timezone
-        , time = time
-        , drawings = SeqDict.empty
-        , embedDrawings = SeqDict.empty
-        , drawingUserColor = \_ -> ""
-        , isSelectingAnchor = False
-        , devicePixelRatio = localUser.devicePixelRatio
-        , isHovered = False
-        }
-        Array.empty
-        content
-        |> Html.div []
-        |> Ui.html
-        |> Ui.el
-            [ Ui.padding 8
-            , Ui.background MyUi.background2
-            , MyUi.prewrap
-            , MyUi.noPointerEvents
-            ]
 
 
 gameView : Time.Posix -> Coord CssPixels -> LocalUser -> ValidatedSetup -> Shared -> GameData -> Element GameMsg
@@ -975,13 +930,13 @@ gameView time windowSize localUser setup shared model =
 {-| Questions and answers are drawn the same way a message is, minus the parts a game has
 no use for: nothing here has attachments and there's nothing to reveal a spoiler with.
 -}
-contentView : Time.Posix -> LocalUser -> Nonempty (RichText (Id UserId)) -> Element GameMsg
-contentView time localUser content =
+contentView : Time.Posix -> LocalUser -> SeqDict (Id FileId) FileData -> Nonempty (RichText (Id UserId)) -> Element GameMsg
+contentView time localUser attachedFiles content =
     RichText.preview
         (\_ -> NoOp)
         { revealedSpoilers = SeqSet.empty
         , users = allUsers localUser
-        , attachedFiles = SeqDict.empty
+        , attachedFiles = attachedFiles
         , customEmojis = localUser.customEmojis
         , domainWhitelist = localUser.user.domainWhitelist
         , timezone = localUser.timezone
@@ -1009,6 +964,10 @@ answeringView time localUser setup shared model =
             |> List.indexedMap
                 (\index question ->
                     let
+                        questionId : Id QuestionId
+                        questionId =
+                            Id.fromInt index
+
                         label : { element : Element GameMsg, id : Ui.Input.Label }
                         label =
                             MyUi.label
@@ -1018,7 +977,9 @@ answeringView time localUser setup shared model =
                     in
                     Ui.column
                         [ Ui.spacing 4 ]
-                        [ Ui.el [ Ui.Font.weight 600 ] (contentView time localUser question)
+                        [ Ui.el
+                            [ Ui.Font.weight 600 ]
+                            (contentView time localUser question.attachedFiles question.text)
                         , label.element
                         , Ui.Input.text
                             [ Ui.border 1
@@ -1027,8 +988,11 @@ answeringView time localUser setup shared model =
                             , Ui.rounded 4
                             , Ui.paddingXY 8 8
                             ]
-                            { onChange = TypedAnswer index
-                            , text = Array.get index model.answerDrafts |> Maybe.withDefault ""
+                            { onChange = TypedAnswer questionId
+                            , text =
+                                IdArray.get questionId model.answerDrafts
+                                    |> Maybe.map .text
+                                    |> Maybe.withDefault ""
                             , placeholder = Nothing
                             , label = label.id
                             }
@@ -1100,9 +1064,13 @@ groupingView time localUser setup shared =
         ]
 
 
-groupingQuestionView : Time.Posix -> LocalUser -> Shared -> Int -> Nonempty (RichText (Id UserId)) -> Element GameMsg
+groupingQuestionView : Time.Posix -> LocalUser -> Shared -> Int -> ValidatedInput -> Element GameMsg
 groupingQuestionView time localUser shared questionIndex question =
     let
+        questionId : Id QuestionId
+        questionId =
+            Id.fromInt questionIndex
+
         notesLabel : { element : Element GameMsg, id : Ui.Input.Label }
         notesLabel =
             MyUi.label
@@ -1112,15 +1080,15 @@ groupingQuestionView time localUser shared questionIndex question =
     in
     Ui.column
         [ Ui.spacing 8 ]
-        [ Ui.el [ Ui.Font.weight 600 ] (contentView time localUser question)
+        [ Ui.el [ Ui.Font.weight 600 ] (contentView time localUser question.attachedFiles question.text)
         , Ui.column
             [ Ui.spacing 4 ]
             (players shared
                 |> List.filterMap
                     (\userId ->
                         Maybe.map
-                            (groupingAnswerView time localUser questionIndex userId shared)
-                            (answerFor userId questionIndex shared)
+                            (groupingAnswerView time localUser questionId userId shared)
+                            (answerFor userId questionId shared)
                     )
             )
         , Ui.column
@@ -1133,8 +1101,8 @@ groupingQuestionView time localUser shared questionIndex question =
                 , Ui.rounded 4
                 , Ui.paddingXY 8 8
                 ]
-                { onChange = TypedNotes questionIndex
-                , text = Dict.get questionIndex shared.notes |> Maybe.withDefault ""
+                { onChange = TypedNotes questionId
+                , text = SeqDict.get questionId shared.notes |> Maybe.withDefault ""
                 , placeholder = Nothing
                 , label = notesLabel.id
                 }
@@ -1142,13 +1110,13 @@ groupingQuestionView time localUser shared questionIndex question =
         ]
 
 
-groupingAnswerView : Time.Posix -> LocalUser -> Int -> Id UserId -> Shared -> Nonempty (RichText (Id UserId)) -> Element GameMsg
-groupingAnswerView time localUser questionIndex userId shared answer =
+groupingAnswerView : Time.Posix -> LocalUser -> Id QuestionId -> Id UserId -> Shared -> Nonempty (RichText (Id UserId)) -> Element GameMsg
+groupingAnswerView time localUser questionId userId shared answer =
     let
         groupLabel2 : { element : Element GameMsg, id : Ui.Input.Label }
         groupLabel2 =
             MyUi.label
-                (Dom.id ("sheepGame_group_" ++ String.fromInt questionIndex ++ "_" ++ Id.toString userId))
+                (Dom.id ("sheepGame_group_" ++ Id.toString questionId ++ "_" ++ Id.toString userId))
                 []
                 (Ui.text "Group")
     in
@@ -1164,14 +1132,14 @@ groupingAnswerView time localUser questionIndex userId shared answer =
                 , Ui.rounded 4
                 , Ui.paddingXY 8 4
                 ]
-                { onChange = TypedGroup userId questionIndex
-                , text = SeqDict.get ( userId, questionIndex ) shared.groups |> Maybe.withDefault ""
+                { onChange = TypedGroup userId questionId
+                , text = SeqDict.get ( userId, questionId ) shared.groups |> Maybe.withDefault ""
                 , placeholder = Nothing
                 , label = groupLabel2.id
                 }
             )
         , Ui.el [ Ui.Font.weight 600 ] (Ui.text (User.toStringAlt userId localUser))
-        , contentView time localUser answer
+        , contentView time localUser SeqDict.empty answer
         ]
 
 
@@ -1243,14 +1211,19 @@ scoreboardView localUser scores =
         )
 
 
-revealedQuestionView : Time.Posix -> LocalUser -> Shared -> Int -> Nonempty (RichText (Id UserId)) -> Element GameMsg
+revealedQuestionView : Time.Posix -> LocalUser -> Shared -> Int -> ValidatedInput -> Element GameMsg
 revealedQuestionView time localUser shared questionIndex question =
+    let
+        questionId : Id QuestionId
+        questionId =
+            Id.fromInt questionIndex
+    in
     Ui.column
         [ Ui.spacing 4 ]
-        [ Ui.el [ Ui.Font.weight 600 ] (contentView time localUser question)
+        [ Ui.el [ Ui.Font.weight 600 ] (contentView time localUser question.attachedFiles question.text)
         , Ui.column
             [ Ui.spacing 2 ]
-            (groupsForQuestion questionIndex shared
+            (groupsForQuestion questionId shared
                 |> List.sortBy (\( _, group ) -> -(List.length group))
                 |> List.map
                     (\( _, group ) ->
@@ -1266,9 +1239,9 @@ revealedQuestionView time localUser shared questionIndex question =
                                         Ui.row
                                             [ Ui.spacing 4 ]
                                             [ Ui.text (User.toStringAlt userId localUser ++ ":")
-                                            , case answerFor userId questionIndex shared of
+                                            , case answerFor userId questionId shared of
                                                 Just answer ->
-                                                    contentView time localUser answer
+                                                    contentView time localUser SeqDict.empty answer
 
                                                 Nothing ->
                                                     Ui.none
@@ -1279,7 +1252,7 @@ revealedQuestionView time localUser shared questionIndex question =
                             ]
                     )
             )
-        , case Dict.get questionIndex shared.notes of
+        , case SeqDict.get questionId shared.notes of
             Just notes ->
                 if String.trim notes == "" then
                     Ui.none

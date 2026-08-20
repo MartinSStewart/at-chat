@@ -43,6 +43,7 @@ import Html
 import Html.Attributes
 import Html.Events
 import Id exposing (ChannelMessageId, GamePublicId, GuildOrDmId(..), Id, UserId)
+import IdArray
 import List.Nonempty exposing (Nonempty)
 import Message exposing (GameType(..))
 import MyUi
@@ -385,7 +386,7 @@ type OutMsg
     | FetchWordDefinition String
       -- Hold onto the sheep game questions the host has written so far, so that a refresh
       -- in the middle of setting a game up doesn't throw them away.
-    | SaveSheepGameQuestions (Array String)
+    | SaveSheepGameQuestions (Array UserSession.SheepGameQuestion)
       -- Ask to be sent `CheckedSheepGameQuestionsDebounce` once the host has stopped typing
       -- (see `Frontend.handleGameOutMsgs`).
     | SaveSheepGameQuestionsAfterDelay Int
@@ -393,7 +394,7 @@ type OutMsg
       -- Ask for a file to attach to a sheep game question, then upload what comes back
       -- (see `Frontend.handleGameOutMsgs`).
     | SelectSheepGameFilesToAttach (Id SheepGame.QuestionId)
-    | UploadSheepGameAttachedFiles (Nonempty ( Id FileId, File ))
+    | UploadSheepGameAttachedFiles (Id SheepGame.QuestionId) (Nonempty ( Id FileId, File ))
 
 
 update :
@@ -636,8 +637,8 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                         SheepGame.SelectFilesToAttach questionId ->
                             [ SelectSheepGameFilesToAttach questionId ]
 
-                        SheepGame.UploadAttachedFiles files ->
-                            [ UploadSheepGameAttachedFiles files ]
+                        SheepGame.UploadAttachedFiles questionId files ->
+                            [ UploadSheepGameAttachedFiles questionId files ]
             in
             case gameOrSetup of
                 SheepGame.Setup setup ->
@@ -674,7 +675,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
         CheckedSheepGameQuestionsDebounce counter ->
             case ( counter == model.sheepGameQuestionsCounter, model.setup ) of
                 ( True, SheepGame_Setup setup ) ->
-                    ( model, [ SheepGame.clampSavedQuestions setup.questions |> SaveSheepGameQuestions ] )
+                    ( model, [ IdArray.toArray setup.questions |> SheepGame.clampSavedQuestions |> SaveSheepGameQuestions ] )
 
                 _ ->
                     -- More typing happened after this save was asked for, so the one that
@@ -692,7 +693,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                 GameType_SheepGame ->
                     ( { model
                         | setup =
-                            SheepGame.initSetupFromSavedQuestions localUser.session.sheepGameQuestions
+                            SheepGame.initSetupFromSavedQuestions localUser.session.savedSheepGameQuestions
                                 |> SheepGame_Setup
                       }
                     , []
@@ -920,7 +921,7 @@ view currentTime windowSize showMemberTab maybeDragging lastCopied localUser log
                         WordSpellingGame.setupView windowSize False setup |> Ui.map WordSpellingSetupMsg
 
                     SheepGame_Setup setup ->
-                        SheepGame.setupView currentTime windowSize showMemberTab localUser loggedIn (User.allUsers localUser) setup
+                        SheepGame.setupView windowSize localUser loggedIn (User.allUsers localUser) setup
                             |> Ui.map SheepSetupMsg
 
                     GameSelect ->

@@ -8176,14 +8176,14 @@ handleGameOutMsgs outMsgs model =
                         :: cmds
                     )
 
-                Game.UploadSheepGameAttachedFiles files ->
+                Game.UploadSheepGameAttachedFiles questionId files ->
                     ( model2
                     , (List.Nonempty.toList files
                         |> List.map
                             (\( fileId, file ) ->
                                 FileStatus.uploadGameFile
                                     (\result ->
-                                        SheepGame.GotAttachedFileUpload fileId result
+                                        SheepGame.GotAttachedFileUpload questionId fileId result
                                             |> Game.SheepSetupMsg
                                             |> GameMsg
                                     )

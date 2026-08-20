@@ -12,12 +12,14 @@ module IdArray exposing
     , slice
     , toArray
     , toList
+    , update
     )
 
 {-| Just a normal array except you use an Id instead of a raw Int to access indices.
 -}
 
 import Array exposing (Array)
+import Array.Extra
 import Id exposing (Id)
 
 
@@ -35,6 +37,11 @@ get key (IdArray array) =
 set : Id k -> v -> IdArray k v -> IdArray k v
 set key value (IdArray array) =
     Array.set (Id.toInt key) value array |> IdArray
+
+
+update : Id k -> (v -> v) -> IdArray k v -> IdArray k v
+update key updateFunc (IdArray array) =
+    Array.Extra.update (Id.toInt key) updateFunc array |> IdArray
 
 
 foldl : (a -> b -> b) -> b -> IdArray k a -> b
