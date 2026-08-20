@@ -187,6 +187,7 @@ viewHelper emojiSize yOffset customEmoji animationMode =
                     [ Html.Attributes.style "width" emojiSize
                     , Html.Attributes.style "height" emojiSize
                     , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                    , MyUi.lazyLoading
                     , Html.Attributes.style "display" "inline-block"
                     , Html.Attributes.style "transform" ("translateY(" ++ yOffset ++ ")")
                     ]

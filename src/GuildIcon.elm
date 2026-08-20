@@ -336,6 +336,7 @@ iconView mode url =
             )
         , Html.Attributes.style "height" (String.fromInt size ++ "px")
         , Html.Attributes.src url
+        , MyUi.lazyLoading
         , Html.Attributes.style "display" "flex"
         , Html.Attributes.style "align-self" "center"
         , Html.Attributes.style "object-fit" "cover"

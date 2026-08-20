@@ -917,7 +917,7 @@ profileImage : Id UserId -> Maybe FileHash -> Element msg
 profileImage userId maybeFileHash =
     case maybeFileHash of
         Just fileHash ->
-            Ui.image
+            Ui.imageLazy
                 [ Ui.rounded profileImageRounding
                 , Ui.width (Ui.px profileImageSize)
                 , Ui.height (Ui.px profileImageSize)
@@ -943,6 +943,7 @@ profileImageHtml userId maybeFileHash =
                 , Html.Attributes.style "width" (String.fromInt profileImageSize ++ "px")
                 , Html.Attributes.style "height" (String.fromInt profileImageSize ++ "px")
                 , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                , MyUi.lazyLoading
                 ]
                 []
 
@@ -952,7 +953,7 @@ profileImageHtml userId maybeFileHash =
 
 discordProfileImage : Discord.Id Discord.UserId -> Maybe FileHash -> Element msg
 discordProfileImage userId maybeFileHash =
-    Ui.image
+    Ui.imageLazy
         [ Ui.rounded profileImageRounding
         , Ui.width (Ui.px profileImageSize)
         , Ui.height (Ui.px profileImageSize)
@@ -1055,7 +1056,7 @@ multipleProfileImages profileImages =
 
 smallProfileImage : ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
 smallProfileImage ( userId, maybeFileHash ) =
-    Ui.image
+    Ui.imageLazy
         [ Ui.rounded 8
         , Ui.width (Ui.px smallProfileImageSize)
         , Ui.height (Ui.px smallProfileImageSize)

@@ -4192,6 +4192,7 @@ imageView maybePressedSpoiler maybeOnPressImage containerWidth2 config imageSize
                 Html.img
                     (Html.Attributes.src thumbnailUrl
                         :: Html.Attributes.style "display" "block"
+                        :: MyUi.lazyLoading
                         :: MyUi.imagePlaceholderStyle
                         :: Html.Attributes.width (round width)
                         :: Html.Attributes.height (round height)
@@ -4423,6 +4424,7 @@ embedView timezone onPressLink maybeOnPressImage containerWidth domainWhitelist 
                                     , Html.Attributes.style "width" widthText
                                     , Html.Attributes.style "height" heightText
                                     , Html.Attributes.style "border-radius" "4px"
+                                    , MyUi.lazyLoading
                                     , Html.Attributes.style "display" "block"
                                     , MyUi.imagePlaceholderStyle
                                     , Html.Attributes.attribute "data-image-url" imageData.url
@@ -4566,6 +4568,7 @@ smallHyperlink onPressUrl domainWhitelist url =
             , Html.Attributes.style "height" "16px"
             , Html.Attributes.style "border-radius" "2px"
             , Html.Attributes.src (favicon url)
+            , MyUi.lazyLoading
             ]
             []
         , Html.span
@@ -4653,6 +4656,7 @@ inlineEmbedView showLargeContent onPressUrl domainWhitelist url =
             , Html.Attributes.style "transform" "translateY(0.125em)"
             , Html.Attributes.style "padding" "0 4px 0 4px"
             , Html.Attributes.src (favicon url)
+            , MyUi.lazyLoading
             ]
             []
         , if url.protocol == Http then
@@ -4719,6 +4723,13 @@ videoView maybeHtmlId maybeMetadata isSpoilered containerWidth fileData =
                 ++ [ idAttribute
                    , Html.Attributes.src (FileStatus.fileUrl fileData.contentType fileData.fileHash)
                    , Html.Attributes.controls True
+
+                   -- There's no lazy loading for videos (the loading attribute
+                   -- only works on images and iframes), so this is the closest
+                   -- equivalent: a video scrolled past only costs its header
+                   -- instead of the whole file, which is what Safari would
+                   -- otherwise download.
+                   , Html.Attributes.preload "metadata"
                    , Html.Attributes.style "display" "block"
                    , Html.Attributes.style "border-radius" "4px"
                    ]

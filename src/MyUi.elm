@@ -59,6 +59,7 @@ module MyUi exposing
     , isMobile
     , isMobileAlt
     , label
+    , lazyLoading
     , matchSwitcherHeight
     , memberColumnWidth
     , mentionColor
@@ -1520,6 +1521,17 @@ loads it paints over this placeholder.
 imagePlaceholderStyle : Html.Attribute msg
 imagePlaceholderStyle =
     Html.Attributes.style "background-color" (colorToStyle background3)
+
+
+{-| Tells the browser it can wait until an image is close to the viewport before
+downloading it. Only worth adding to images that can start off screen (messages
+that are scrolled past, guild icons further down the sidebar, and so on), and
+only safe when the image has an explicit size, otherwise the page reflows as
+each one arrives.
+-}
+lazyLoading : Html.Attribute msg
+lazyLoading =
+    Html.Attributes.attribute "loading" "lazy"
 
 
 colorWithAlpha : Float -> Color -> Color

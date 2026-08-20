@@ -1069,7 +1069,7 @@ gameSelectButton isMobile game =
                 ]
             |> Ui.inFront
         ]
-        (Ui.image [] { source = gameToPreviewUrl game, description = "", onLoad = Nothing })
+        (Ui.imageLazy [] { source = gameToPreviewUrl game, description = "", onLoad = Nothing })
 
 
 matchSwitcherView : Bool -> Maybe (Id ChannelMessageId) -> SeqDict (Id ChannelMessageId) MatchData -> Element Msg

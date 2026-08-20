@@ -22,7 +22,7 @@ module Ui exposing
     , clip, clipX, clipY, clipWithEllipsis
     , scrollable, scrollableAll, scrollableX
     , link, linkNewTab, download, downloadAs
-    , image, imageWithFallback
+    , image, imageLazy, imageWithFallback
     , Color, rgb, rgba
     , above, below, onRight, onLeft, inFront, behindContent
     , map, mapAttribute
@@ -172,7 +172,7 @@ Where there are two elements on the left, one on the right, and one in the cente
 
 # Images
 
-@docs image, imageWithFallback
+@docs image, imageLazy, imageWithFallback
 
 
 # Color
@@ -542,6 +542,51 @@ image attrs img =
             , Two.class Style.classes.imageContainer
             , htmlAttribute (Attr.src img.source)
             , htmlAttribute (Attr.alt img.description)
+            , case img.onLoad of
+                Just msg ->
+                    htmlAttribute (Event.on "load" (Decode.succeed msg))
+
+                Nothing ->
+                    noAttr
+            ]
+            []
+        ]
+
+
+{-| The same as `image`, except the browser is allowed to hold off on
+downloading it until it's near the viewport. Worth using for images that start
+off screen, like the avatars further down a message list.
+
+    Ui.imageLazy []
+        { source = "https://example.com/image.jpg"
+        , description = "A picture of my cat looking goofy."
+        , onLoad = Nothing
+        }
+
+-}
+imageLazy :
+    List (Attribute msg)
+    ->
+        { source : String
+        , description : String
+        , onLoad : Maybe msg
+        }
+    -> Element msg
+imageLazy attrs img =
+    Two.element Two.NodeAsDiv
+        Two.AsEl
+        (width fill
+            :: attrs
+        )
+        [ Two.element Two.NodeAsImage
+            Two.AsEl
+            [ width fill
+            , height fill
+            , clip
+            , Two.class Style.classes.imageContainer
+            , htmlAttribute (Attr.src img.source)
+            , htmlAttribute (Attr.alt img.description)
+            , htmlAttribute (Attr.attribute "loading" "lazy")
             , case img.onLoad of
                 Just msg ->
                     htmlAttribute (Event.on "load" (Decode.succeed msg))

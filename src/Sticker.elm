@@ -18,6 +18,7 @@ import FileStatus exposing (FileHash)
 import Html exposing (Html)
 import Html.Attributes
 import Id exposing (Id, StickerId)
+import MyUi
 import SeqDict exposing (SeqDict)
 
 
@@ -89,6 +90,7 @@ viewHelper stickerSize2 sticker animationMode =
                         [ Html.Attributes.style "width" stickerSize2
                         , Html.Attributes.style "height" stickerSize2
                         , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                        , MyUi.lazyLoading
                         , Html.Attributes.style "display" "block"
                         ]
                         []
