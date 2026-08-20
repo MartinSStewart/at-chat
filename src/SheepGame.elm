@@ -16,6 +16,8 @@ module SheepGame exposing
     , ValidatedInput
     , ValidatedSetup
     , clampSavedQuestions
+    , fileUploadPreview
+    , fileUploadPreviewSize
     , gameView
     , initGame
     , initSetup
@@ -49,15 +51,18 @@ import Effect.File exposing (File)
 import Effect.Http as Http
 import Effect.Time as Time
 import FileName
-import FileStatus exposing (FileData, FileId, FileStatus)
+import FileStatus exposing (FileData, FileId, FileMetadata(..), FileStatus)
 import Go
 import Html
+import Html.Attributes
+import Icons
 import Id exposing (Id, UserId)
 import IdArray exposing (IdArray)
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MessageInput exposing (TextInputFocus)
 import MyUi
+import NonemptyDict exposing (NonemptyDict)
 import PersonName exposing (PersonName)
 import Ports
 import RichText exposing (RichText)
@@ -68,6 +73,7 @@ import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
 import Ui.Prose
+import Ui.Shadow
 import User exposing (FrontendUser, LocalUser)
 
 
@@ -132,6 +138,9 @@ type SetupMsg
     | PressedCancel
     | GotFilesToAttach (Id QuestionId) (Nonempty File)
     | GotAttachedFileUpload (Id QuestionId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
+    | PressedDeleteAttachedFile (Id QuestionId) (Id FileId)
+    | PressedViewAttachedFileInfo (Id QuestionId) (Id FileId)
+    | PressedToggleAttachedFileSpoiler (Id QuestionId) { fileId : Id FileId, removeSpoiler : Bool }
 
 
 type SetupOrGame
@@ -523,6 +532,15 @@ updateSetup localUser msg model =
         PressedCancel ->
             ( CancelSetup, NoOutMsg )
 
+        PressedDeleteAttachedFile questionId fileId ->
+            Debug.todo ""
+
+        PressedViewAttachedFileInfo questionId fileId ->
+            Debug.todo ""
+
+        PressedToggleAttachedFileSpoiler questionId record ->
+            Debug.todo ""
+
 
 updateGame :
     LocalUser
@@ -866,34 +884,53 @@ questionInput isMobile localUser loggedIn users index question =
             String.Nonempty.fromString question.text
                 |> Maybe.map (RichText.fromNonemptyString localUser.timezone users)
     in
-    Ui.row
-        [ Ui.spacing 8 ]
-        [ MessageInput.attachmentButton (Dom.idToString htmlId)
-            |> Ui.map (TypedQuestion questionId)
-        , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
-            |> Ui.map (TypedQuestion questionId)
-        , MessageInput.textarea
-            isMobile
-            htmlId
-            "Pick a random number between 1 and 10"
-            (maxQuestionLength - String.length question.text)
-            question.text
-            richText
-            question.attachedFiles
-            localUser
-            loggedIn
-            users
-            |> Ui.html
-            |> Ui.map (TypedQuestion questionId)
-            |> Ui.el
-                (Ui.heightMax 300
-                    :: Ui.id (Dom.idToString (questionInputContainerId questionId))
-                    :: MessageInput.containerAttributes True
-                )
-            |> Ui.el []
-        , MyUi.deleteButton
-            (Dom.id ("sheepGame_removeQuestion_" ++ String.fromInt index))
-            (PressedRemoveQuestion questionId)
+    Ui.column
+        []
+        [ case NonemptyDict.fromSeqDict question.attachedFiles of
+            Just attachedFiles ->
+                fileUploadPreview
+                    (PressedDeleteAttachedFile questionId)
+                    (PressedViewAttachedFileInfo questionId)
+                    (PressedToggleAttachedFileSpoiler questionId)
+                    richText
+                    attachedFiles
+                    |> Ui.row
+                        [ Ui.spacing 2
+                        , Ui.width Ui.shrink
+                        , Ui.paddingXY 8 0
+                        ]
+
+            Nothing ->
+                Ui.el [] Ui.none
+        , Ui.row
+            [ Ui.spacing 8 ]
+            [ MessageInput.attachmentButton (Dom.idToString htmlId)
+                |> Ui.map (TypedQuestion questionId)
+            , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
+                |> Ui.map (TypedQuestion questionId)
+            , MessageInput.textarea
+                isMobile
+                htmlId
+                "Pick a random number between 1 and 10"
+                (maxQuestionLength - String.length question.text)
+                question.text
+                richText
+                question.attachedFiles
+                localUser
+                loggedIn
+                users
+                |> Ui.html
+                |> Ui.map (TypedQuestion questionId)
+                |> Ui.el
+                    (Ui.heightMax 300
+                        :: Ui.id (Dom.idToString (questionInputContainerId questionId))
+                        :: MessageInput.containerAttributes True
+                    )
+                |> Ui.el []
+            , MyUi.deleteButton
+                (Dom.id ("sheepGame_removeQuestion_" ++ String.fromInt index))
+                (PressedRemoveQuestion questionId)
+            ]
         ]
 
 
@@ -1263,3 +1300,274 @@ revealedQuestionView time localUser shared questionIndex question =
             Nothing ->
                 Ui.none
         ]
+
+
+fileUploadPreviewSize : number
+fileUploadPreviewSize =
+    150
+
+
+fileUploadPreview :
+    (Id FileId -> msg)
+    -> (Id FileId -> msg)
+    -> ({ fileId : Id FileId, removeSpoiler : Bool } -> msg)
+    -> Maybe (Nonempty (RichText userId))
+    -> NonemptyDict (Id FileId) FileStatus
+    -> List (Element msg)
+fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUpload2 =
+    let
+        isSpoilered : SeqDict (Id FileId) Bool
+        isSpoilered =
+            case richText of
+                Just richText2 ->
+                    RichText.attachments richText2
+                        |> List.map (\a -> ( a.attachmentId, a.isSpoilered ))
+                        |> SeqDict.fromList
+
+                Nothing ->
+                    SeqDict.empty
+    in
+    List.map
+        (\( fileStatusId, fileStatus ) ->
+            let
+                isSpoilered2 : Bool
+                isSpoilered2 =
+                    SeqDict.get fileStatusId isSpoilered |> Maybe.withDefault False
+            in
+            Ui.el
+                [ Ui.width (Ui.px fileUploadPreviewSize)
+                , Ui.height (Ui.px fileUploadPreviewSize)
+                , Ui.Shadow.shadows
+                    [ { x = 0
+                      , y = -2
+                      , size = 0
+                      , blur = 8
+                      , color = Ui.rgba 0 0 0 0.5
+                      }
+                    ]
+                , Ui.background MyUi.background1
+                , Ui.borderColor MyUi.background1
+                , Ui.border 1
+                , Ui.rounded 8
+                , MyUi.elButton
+                    (Dom.id ("fileStatus_delete_" ++ Id.toString fileStatusId))
+                    (onPressDelete fileStatusId)
+                    [ Ui.width (Ui.px 42)
+                    , Ui.height (Ui.px 42)
+                    , Ui.rounded 16
+                    , Ui.move { x = -3, y = -3, z = 0 }
+                    , MyUi.hoverText "Remove file"
+                    ]
+                    (Ui.el
+                        [ Ui.width (Ui.px 34)
+                        , Ui.height (Ui.px 34)
+                        , Ui.rounded 16
+                        , Ui.contentCenterX
+                        , Ui.contentCenterY
+                        , Ui.background MyUi.deleteButtonBackground
+                        , Ui.border 1
+                        , Ui.borderColor MyUi.deleteButtonBorder
+                        ]
+                        (Ui.html Icons.delete)
+                    )
+                    |> Ui.inFront
+                , MyUi.elButton
+                    (Dom.id ("fileStatus_spoiler_" ++ Id.toString fileStatusId))
+                    (onPressSpoiler { fileId = fileStatusId, removeSpoiler = isSpoilered2 })
+                    [ Ui.width (Ui.px 42)
+                    , Ui.height (Ui.px 42)
+                    , Ui.rounded 16
+                    , Ui.move { x = -3, y = 40, z = 0 }
+                    , MyUi.hoverText
+                        (if isSpoilered2 then
+                            "Remove spoiler"
+
+                         else
+                            "Mark as spoiler"
+                        )
+                    ]
+                    (Ui.el
+                        [ Ui.width (Ui.px 34)
+                        , Ui.height (Ui.px 34)
+                        , Ui.rounded 16
+                        , Ui.contentCenterX
+                        , Ui.contentCenterY
+                        , Ui.background MyUi.buttonBackground
+                        ]
+                        (Ui.html
+                            (if isSpoilered2 then
+                                Icons.closedEye
+
+                             else
+                                Icons.openEye
+                            )
+                        )
+                    )
+                    |> Ui.inFront
+                , case fileStatus of
+                    FileStatus.FileUploaded fileData ->
+                        case fileData.metadata of
+                            Just (FileMetadata_Image imageMetadata) ->
+                                if FileStatus.imageHasMetadata imageMetadata then
+                                    fileUploadInfoButton onPressInfo fileStatusId imageMetadata
+
+                                else
+                                    Ui.noAttr
+
+                            Just (FileMetadata_Video videoMetadata) ->
+                                if FileStatus.videoHasMetadata videoMetadata then
+                                    fileUploadInfoButton onPressInfo fileStatusId videoMetadata
+
+                                else
+                                    Ui.noAttr
+
+                            Nothing ->
+                                Ui.noAttr
+
+                    FileStatus.FileUploading _ _ _ ->
+                        Ui.noAttr
+
+                    FileStatus.FileError _ _ _ _ ->
+                        Ui.noAttr
+                , Ui.el
+                    [ Ui.alignBottom
+                    , Ui.padding 4
+                    , Ui.Font.bold
+                    , Ui.Shadow.font
+                        { offset = ( 0, 0 )
+                        , blur = 3
+                        , color = MyUi.black
+                        }
+                    ]
+                    (Ui.text ("[!" ++ Id.toString fileStatusId ++ "]"))
+                    |> Ui.inFront
+                , case fileStatus of
+                    FileStatus.FileUploading _ fileSize _ ->
+                        FileStatus.progressToString fileSize
+                            |> Ui.text
+                            |> Ui.el
+                                [ Ui.alignRight
+                                , Ui.Font.size 14
+                                , Ui.paddingRight 8
+                                , Ui.Shadow.font
+                                    { offset = ( 0, 0 )
+                                    , blur = 3
+                                    , color = MyUi.black
+                                    }
+                                ]
+                            |> Ui.inFront
+
+                    FileStatus.FileUploaded _ ->
+                        Ui.noAttr
+
+                    FileStatus.FileError _ _ _ _ ->
+                        Ui.noAttr
+                ]
+                (case fileStatus of
+                    FileStatus.FileUploading _ _ _ ->
+                        Ui.none
+
+                    FileStatus.FileUploaded fileData ->
+                        case FileStatus.contentTypeType fileData.contentType of
+                            FileStatus.Image ->
+                                Html.img
+                                    [ Html.Attributes.src
+                                        (case fileData.metadata of
+                                            Just (FileMetadata_Image metadata) ->
+                                                FileStatus.thumbnailUrl metadata.imageSize fileData.contentType fileData.fileHash
+
+                                            Just (FileMetadata_Video _) ->
+                                                FileStatus.fileUrl fileData.contentType fileData.fileHash
+
+                                            Nothing ->
+                                                FileStatus.fileUrl fileData.contentType fileData.fileHash
+                                        )
+                                    , Html.Attributes.style "object-fit" "cover"
+                                    , Html.Attributes.width (fileUploadPreviewSize - 2)
+                                    , Html.Attributes.height (fileUploadPreviewSize - 2)
+                                    , Html.Attributes.style "display" "flex"
+                                    , Html.Attributes.style "align-self" "center"
+                                    , Html.Attributes.style "border-radius" "8px"
+                                    ]
+                                    []
+                                    |> Ui.html
+
+                            FileStatus.Text ->
+                                Ui.el
+                                    [ Ui.width (Ui.px 42)
+                                    , Ui.centerX
+                                    , Ui.centerY
+                                    , Ui.Font.color MyUi.font3
+                                    ]
+                                    (Ui.html Icons.document)
+
+                            FileStatus.Video ->
+                                Ui.el
+                                    [ Ui.centerX
+                                    , Ui.centerY
+                                    , Ui.Font.color MyUi.font3
+                                    , Ui.move { x = 6, y = 0, z = 0 }
+                                    ]
+                                    (Ui.html (Icons.camera 42))
+
+                            FileStatus.Audio ->
+                                Ui.el
+                                    [ Ui.width (Ui.px 42)
+                                    , Ui.centerX
+                                    , Ui.centerY
+                                    , Ui.Font.color MyUi.font3
+                                    ]
+                                    (Ui.html Icons.volume)
+
+                            _ ->
+                                Ui.el
+                                    [ Ui.Font.bold
+                                    , Ui.Font.letterSpacing -1
+                                    , Ui.Font.lineHeight 1.1
+                                    , Ui.centerX
+                                    , Ui.centerY
+                                    , MyUi.prewrap
+                                    , Ui.Font.color MyUi.font3
+                                    ]
+                                    (Ui.text "0110\n0001")
+
+                    FileStatus.FileError _ _ _ _ ->
+                        Ui.el
+                            [ Ui.centerX
+                            , Ui.centerY
+                            , Ui.width Ui.shrink
+                            ]
+                            (Ui.html Icons.x)
+                )
+        )
+        (NonemptyDict.toList filesToUpload2)
+
+
+fileUploadInfoButton : (Id FileId -> msg) -> Id FileId -> { b | gpsLocation : Maybe FileStatus.Location } -> Ui.Attribute msg
+fileUploadInfoButton onPressInfo fileStatusId metadata =
+    MyUi.elButton
+        (Dom.id ("fileStatus_info_" ++ Id.toString fileStatusId))
+        (onPressInfo fileStatusId)
+        [ Ui.width (Ui.px 42)
+        , Ui.height (Ui.px 42)
+        , Ui.rounded 16
+        , Ui.move { x = -3, y = 77, z = 0 }
+        , MyUi.hoverText "Image info"
+        ]
+        (Ui.el
+            [ Ui.width (Ui.px 34)
+            , Ui.height (Ui.px 34)
+            , Ui.rounded 16
+            , Ui.contentCenterX
+            , Ui.contentCenterY
+            , Ui.background MyUi.buttonBackground
+            ]
+            (case metadata.gpsLocation of
+                Just _ ->
+                    Ui.html Icons.map
+
+                Nothing ->
+                    Ui.html Icons.info
+            )
+        )
+        |> Ui.inFront
