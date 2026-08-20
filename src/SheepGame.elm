@@ -845,34 +845,24 @@ questionInput time questionWidth isMobile localUser loggedIn users attachedFiles
             |> Ui.map (TypedQuestion questionId)
         , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
             |> Ui.map (TypedQuestion questionId)
-        , Ui.el
-            (Ui.heightMax 300
-                :: Ui.id (Dom.idToString (questionInputContainerId questionId))
-                :: MessageInput.containerAttributes True
-            )
-            (MessageInput.textarea
-                isMobile
-                htmlId
-                "Pick a random number between 1 and 10"
-                (maxQuestionLength - String.length question)
-                question
-                richText
-                attachedFiles
-                localUser
-                loggedIn
-                users
-                |> Ui.html
-                |> Ui.map (TypedQuestion questionId)
-                |> Ui.el
-                    [ case ( isFocused, richText ) of
-                        ( False, Just content ) ->
-                            Ui.inFront
-                                (questionPreview time questionWidth localUser attachedFiles index content)
-
-                        _ ->
-                            Ui.noAttr
-                    ]
-            )
+        , MessageInput.textarea
+            isMobile
+            htmlId
+            "Pick a random number between 1 and 10"
+            (maxQuestionLength - String.length question)
+            question
+            richText
+            attachedFiles
+            localUser
+            loggedIn
+            users
+            |> Ui.html
+            |> Ui.map (TypedQuestion questionId)
+            |> Ui.el
+                (Ui.heightMax 300
+                    :: Ui.id (Dom.idToString (questionInputContainerId questionId))
+                    :: MessageInput.containerAttributes True
+                )
             |> Ui.el []
         , MyUi.deleteButton
             (Dom.id ("sheepGame_removeQuestion_" ++ String.fromInt index))
