@@ -15,6 +15,7 @@ module SheepGame exposing
     , UnvalidatedInput
     , ValidatedInput
     , ValidatedSetup
+    , attachedFileTrackerId
     , clampSavedQuestions
     , fileUploadPreview
     , fileUploadPreviewSize
@@ -23,8 +24,10 @@ module SheepGame exposing
     , initSetup
     , initSetupFromSavedQuestions
     , initShared
+    , mapQuestionRichText
     , questionInputContainerId
     , questionInputId
+    , removeAttachedFileFromText
     , scoresThroughQuestion
     , setupView
     , updateAction
@@ -361,6 +364,8 @@ type OutMsg
     | OpenEmojiSelector (Id QuestionId)
     | SelectFilesToAttach (Id QuestionId)
     | UploadAttachedFiles (Id QuestionId) (Nonempty ( Id FileId, File ))
+    | CancelAttachedFileUpload (Id QuestionId) (Id FileId)
+    | ShowAttachedFileInfo FileStatus.FileDataWithImage
 
 
 updateSetup : LocalUser -> SetupMsg -> SetupModel -> ( SetupOrGame, OutMsg )
@@ -383,20 +388,25 @@ updateSetup localUser msg model =
                     , NoOutMsg
                     )
 
-                MessageInput.PressedSendMessage record ->
+                MessageInput.PressedSendMessage _ ->
                     ( Setup model, NoOutMsg )
 
-                MessageInput.TypedArrowInDropdown int ->
-                    Debug.todo ""
+                -- The mention and emoji dropdown never opens over a question. The frontend
+                -- only fills in `textInputFocus.dropdown` for the channel and edit message
+                -- inputs, and these three are the ones that need it to be open.
+                MessageInput.TypedArrowInDropdown _ ->
+                    ( Setup model, NoOutMsg )
 
+                -- Pressing up in an empty channel input starts editing the last message you
+                -- wrote. A question has nothing of the sort behind it.
                 MessageInput.TypedArrowUpInEmptyInput ->
-                    Debug.todo ""
+                    ( Setup model, NoOutMsg )
 
-                MessageInput.PressedDropdownItem int ->
-                    Debug.todo ""
+                MessageInput.PressedDropdownItem _ ->
+                    ( Setup model, NoOutMsg )
 
                 MessageInput.PressedPingDropdownContainer ->
-                    Debug.todo ""
+                    ( Setup model, NoOutMsg )
 
                 MessageInput.PressedUploadFile ->
                     ( Setup model, SelectFilesToAttach questionId )
@@ -404,8 +414,8 @@ updateSetup localUser msg model =
                 MessageInput.PressedOpenEmojiSelector ->
                     ( Setup model, OpenEmojiSelector questionId )
 
-                MessageInput.OnPasteFiles nonempty ->
-                    Debug.todo ""
+                MessageInput.OnPasteFiles files ->
+                    attachFiles questionId files model
 
                 MessageInput.TypedPageUp ->
                     ( Setup model, NoOutMsg )
@@ -413,7 +423,7 @@ updateSetup localUser msg model =
                 MessageInput.TypedPageDown ->
                     ( Setup model, NoOutMsg )
 
-                MessageInput.TypedTabInCodeBlock range ->
+                MessageInput.TypedTabInCodeBlock _ ->
                     ( Setup model, NoOutMsg )
 
                 MessageInput.IgnoredKeyPress ->
@@ -454,63 +464,7 @@ updateSetup localUser msg model =
                     ( Setup { model | error = Just error }, NoOutMsg )
 
         GotFilesToAttach questionId files ->
-            let
-                existingFiles : SeqDict (Id FileId) FileStatus
-                existingFiles =
-                    case IdArray.get questionId model.questions of
-                        Just question ->
-                            question.attachedFiles
-
-                        Nothing ->
-                            SeqDict.empty
-
-                ( attachedFiles, toUpload ) =
-                    List.Nonempty.foldl
-                        (\file ( attachedFiles2, toUpload2 ) ->
-                            let
-                                fileId : Id FileId
-                                fileId =
-                                    nextAttachedFileId attachedFiles2
-                            in
-                            ( SeqDict.insert
-                                fileId
-                                (FileStatus.FileUploading
-                                    (Effect.File.name file |> FileName.fromString)
-                                    { sent = 0, size = Effect.File.size file }
-                                    (Effect.File.mime file |> FileStatus.contentType)
-                                )
-                                attachedFiles2
-                            , ( fileId, file ) :: toUpload2
-                            )
-                        )
-                        ( existingFiles, [] )
-                        files
-
-                added : List ( Id FileId, File )
-                added =
-                    List.reverse toUpload
-            in
-            ( Setup
-                { model
-                    | questions =
-                        IdArray.update
-                            questionId
-                            (\question ->
-                                { question
-                                    | attachedFiles = attachedFiles
-                                    , text = appendAttachedFiles (List.map Tuple.first added) question.text
-                                }
-                            )
-                            model.questions
-                    , error = Nothing
-                }
-            , case List.Nonempty.fromList added of
-                Just nonempty ->
-                    UploadAttachedFiles questionId nonempty
-
-                Nothing ->
-                    NoOutMsg
-            )
+            attachFiles questionId files model
 
         GotAttachedFileUpload questionId fileId result ->
             ( Setup
@@ -533,13 +487,195 @@ updateSetup localUser msg model =
             ( CancelSetup, NoOutMsg )
 
         PressedDeleteAttachedFile questionId fileId ->
-            Debug.todo ""
+            ( Setup
+                { model
+                    | questions =
+                        IdArray.update
+                            questionId
+                            (\question ->
+                                { question
+                                    | attachedFiles = SeqDict.remove fileId question.attachedFiles
+                                    , text =
+                                        removeAttachedFileFromText
+                                            localUser.timezone
+                                            (allUsers localUser)
+                                            fileId
+                                            question.text
+                                }
+                            )
+                            model.questions
+                    , error = Nothing
+                }
+            , CancelAttachedFileUpload questionId fileId
+            )
 
         PressedViewAttachedFileInfo questionId fileId ->
-            Debug.todo ""
+            ( Setup model
+            , case attachedFile questionId fileId model of
+                Just (FileStatus.FileUploaded fileData) ->
+                    case fileData.metadata of
+                        Just metadata ->
+                            ShowAttachedFileInfo
+                                { fileName = fileData.fileName
+                                , fileSize = fileData.fileSize
+                                , metadata = metadata
+                                , contentType = fileData.contentType
+                                , fileHash = fileData.fileHash
+                                }
 
-        PressedToggleAttachedFileSpoiler questionId record ->
-            Debug.todo ""
+                        -- The button that sends this is only drawn for a file that has
+                        -- something to show, so there's nothing to do here.
+                        Nothing ->
+                            NoOutMsg
+
+                _ ->
+                    NoOutMsg
+            )
+
+        PressedToggleAttachedFileSpoiler questionId { fileId, removeSpoiler } ->
+            ( Setup
+                { model
+                    | questions =
+                        IdArray.update
+                            questionId
+                            (\question ->
+                                { question
+                                    | text =
+                                        mapQuestionRichText
+                                            localUser.timezone
+                                            (allUsers localUser)
+                                            (if removeSpoiler then
+                                                RichText.unspoilerAttachedFile fileId
+
+                                             else
+                                                RichText.spoilerAttachedFile fileId
+                                            )
+                                            question.text
+                                }
+                            )
+                            model.questions
+                    , error = Nothing
+                }
+            , NoOutMsg
+            )
+
+
+{-| Files someone picked or pasted, added to the question they were meant for. Each one
+gets a reference at the end of that question, the same text a message's draft gets when a
+file is attached to it.
+-}
+attachFiles : Id QuestionId -> Nonempty File -> SetupModel -> ( SetupOrGame, OutMsg )
+attachFiles questionId files model =
+    let
+        ( attachedFiles, toUpload ) =
+            List.Nonempty.foldl
+                (\file ( attachedFiles2, toUpload2 ) ->
+                    let
+                        fileId : Id FileId
+                        fileId =
+                            nextAttachedFileId attachedFiles2
+                    in
+                    ( SeqDict.insert
+                        fileId
+                        (FileStatus.FileUploading
+                            (Effect.File.name file |> FileName.fromString)
+                            { sent = 0, size = Effect.File.size file }
+                            (Effect.File.mime file |> FileStatus.contentType)
+                        )
+                        attachedFiles2
+                    , ( fileId, file ) :: toUpload2
+                    )
+                )
+                (case IdArray.get questionId model.questions of
+                    Just question ->
+                        ( question.attachedFiles, [] )
+
+                    Nothing ->
+                        ( SeqDict.empty, [] )
+                )
+                files
+
+        added : List ( Id FileId, File )
+        added =
+            List.reverse toUpload
+    in
+    ( Setup
+        { model
+            | questions =
+                IdArray.update
+                    questionId
+                    (\question ->
+                        { question
+                            | attachedFiles = attachedFiles
+                            , text = appendAttachedFiles (List.map Tuple.first added) question.text
+                        }
+                    )
+                    model.questions
+            , error = Nothing
+        }
+    , case List.Nonempty.fromList added of
+        Just nonempty ->
+            UploadAttachedFiles questionId nonempty
+
+        Nothing ->
+            NoOutMsg
+    )
+
+
+attachedFile : Id QuestionId -> Id FileId -> SetupModel -> Maybe FileStatus
+attachedFile questionId fileId model =
+    IdArray.get questionId model.questions
+        |> Maybe.andThen (\question -> SeqDict.get fileId question.attachedFiles)
+
+
+{-| File ids start again at 1 for every question, so an upload only tells itself apart from
+another question's by carrying the question in its tracker id too.
+-}
+attachedFileTrackerId : Id QuestionId -> Id FileId -> String
+attachedFileTrackerId questionId fileId =
+    "sheepGameAttachedFile-" ++ Id.toString questionId ++ "-" ++ Id.toString fileId
+
+
+{-| Rewrite a question by way of the rich text it produces and back into the text the input
+holds. Text that isn't rich text yet has nothing in it to change.
+-}
+mapQuestionRichText :
+    Time.Zone
+    -> SeqDict (Id UserId) FrontendUser
+    -> (Nonempty (RichText (Id UserId)) -> Nonempty (RichText (Id UserId)))
+    -> String
+    -> String
+mapQuestionRichText timezone users change text =
+    case String.Nonempty.fromString text of
+        Just nonempty ->
+            RichText.fromNonemptyString timezone users nonempty
+                |> change
+                |> RichText.toString timezone False users
+
+        Nothing ->
+            text
+
+
+{-| What a question is left with once one of its files is gone, so that it doesn't go on
+referring to a file nothing can resolve.
+-}
+removeAttachedFileFromText : Time.Zone -> SeqDict (Id UserId) FrontendUser -> Id FileId -> String -> String
+removeAttachedFileFromText timezone users fileId text =
+    case String.Nonempty.fromString text of
+        Just nonempty ->
+            case
+                RichText.fromNonemptyString timezone users nonempty
+                    |> RichText.removeAttachedFile (\a -> a == fileId)
+            of
+                Just richText ->
+                    RichText.toString timezone False users richText
+
+                -- The file was all the question had in it.
+                Nothing ->
+                    ""
+
+        Nothing ->
+            text
 
 
 updateGame :

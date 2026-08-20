@@ -278,6 +278,48 @@ tests =
                         )
                     |> Expect.equal (Ok [ ( Id.fromInt 1, uploadedFile ) ])
             )
+        , attachedFileTests
+        ]
+
+
+attachedFileTests : Test
+attachedFileTests =
+    Test.describe "Attached files"
+        [ Test.test "Deleting a file takes the reference to it out of the question"
+            (\_ ->
+                SheepGame.removeAttachedFileFromText Time.utc SeqDict.empty (Id.fromInt 1) "Name a colour [!1] [!2]"
+                    |> Expect.equal "Name a colour  [!2]"
+            )
+        , Test.test "A question that was nothing but the file it referred to is left empty"
+            (\_ ->
+                SheepGame.removeAttachedFileFromText Time.utc SeqDict.empty (Id.fromInt 1) "[!1]"
+                    |> Expect.equal ""
+            )
+        , Test.test "A file another question refers to is left alone"
+            (\_ ->
+                SheepGame.removeAttachedFileFromText Time.utc SeqDict.empty (Id.fromInt 3) "Name a colour [!1]"
+                    |> Expect.equal "Name a colour [!1]"
+            )
+        , Test.test "Marking a file as a spoiler and back leaves the question as it was"
+            (\_ ->
+                let
+                    spoilered : String
+                    spoilered =
+                        SheepGame.mapQuestionRichText
+                            Time.utc
+                            SeqDict.empty
+                            (RichText.spoilerAttachedFile (Id.fromInt 1))
+                            "Name a colour [!1]"
+                in
+                ( spoilered
+                , SheepGame.mapQuestionRichText
+                    Time.utc
+                    SeqDict.empty
+                    (RichText.unspoilerAttachedFile (Id.fromInt 1))
+                    spoilered
+                )
+                    |> Expect.equal ( "Name a colour ||[!1]||", "Name a colour [!1]" )
+            )
         ]
 
 

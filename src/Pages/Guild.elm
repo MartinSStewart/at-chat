@@ -38,7 +38,7 @@ import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (CachedEmojiData, EmojiConfig, EmojiOrCustomEmoji(..))
 import Env
-import FileStatus exposing (FileHash, FileId, FileMetadata(..), FileStatus)
+import FileStatus exposing (FileHash, FileId, FileStatus)
 import GuildColumn
 import GuildIcon exposing (ChannelNotificationType(..))
 import GuildName exposing (GuildName)

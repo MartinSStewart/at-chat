@@ -8187,13 +8187,27 @@ handleGameOutMsgs outMsgs model =
                                             |> Game.SheepSetupMsg
                                             |> GameMsg
                                     )
-                                    fileId
+                                    (SheepGame.attachedFileTrackerId questionId fileId)
                                     file
                             )
                         |> Command.batch
                       )
                         :: cmds
                     )
+
+                Game.CancelSheepGameAttachedFileUpload questionId fileId ->
+                    ( model2
+                    , Http.cancel (SheepGame.attachedFileTrackerId questionId fileId) :: cmds
+                    )
+
+                Game.ShowSheepGameAttachedFileInfo fileData ->
+                    let
+                        ( infoModel, infoCmd ) =
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn -> ( { loggedIn | showFileToUploadInfo = Just fileData }, Command.none ))
+                                model2
+                    in
+                    ( infoModel, infoCmd :: cmds )
 
                 Game.FetchWordDefinition word ->
                     ( model2

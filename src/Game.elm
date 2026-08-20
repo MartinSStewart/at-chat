@@ -395,6 +395,10 @@ type OutMsg
       -- (see `Frontend.handleGameOutMsgs`).
     | SelectSheepGameFilesToAttach (Id SheepGame.QuestionId)
     | UploadSheepGameAttachedFiles (Id SheepGame.QuestionId) (Nonempty ( Id FileId, File ))
+    | CancelSheepGameAttachedFileUpload (Id SheepGame.QuestionId) (Id FileId)
+      -- Show what a file the host attached to a sheep game question holds. Where that's
+      -- drawn belongs to the frontend rather than to the game.
+    | ShowSheepGameAttachedFileInfo FileStatus.FileDataWithImage
 
 
 update :
@@ -639,6 +643,12 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
 
                         SheepGame.UploadAttachedFiles questionId files ->
                             [ UploadSheepGameAttachedFiles questionId files ]
+
+                        SheepGame.CancelAttachedFileUpload questionId fileId ->
+                            [ CancelSheepGameAttachedFileUpload questionId fileId ]
+
+                        SheepGame.ShowAttachedFileInfo fileData ->
+                            [ ShowSheepGameAttachedFileInfo fileData ]
             in
             case gameOrSetup of
                 SheepGame.Setup setup ->

@@ -529,15 +529,15 @@ uploadFile onResult guildOrDmId fileId file2 =
 
 
 {-| A file being attached to a game rather than to a message. Games keep their attachments
-outside of `filesToUpload`, so these get their own tracker ids and nothing cancels the
-wrong upload.
+outside of `filesToUpload`, so the caller says what to track this upload as and nothing
+cancels the wrong one.
 -}
 uploadGameFile :
     (Result Http.Error UploadResponse -> msg)
-    -> Id FileId
+    -> String
     -> File
     -> Command restriction toFrontend msg
-uploadGameFile onResult fileId file2 =
+uploadGameFile onResult trackerId file2 =
     Http.riskyRequest
         { method = "POST"
         , headers = []
@@ -545,7 +545,7 @@ uploadGameFile onResult fileId file2 =
         , body = Http.fileBody file2
         , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
         , timeout = Just Duration.minute
-        , tracker = "game-file-upload-" ++ Id.toString fileId |> Just
+        , tracker = Just trackerId
         }
 
 
