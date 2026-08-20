@@ -538,6 +538,14 @@ textareaOverlayAttributes text =
     , Html.Attributes.style "overflow-wrap" "anywhere"
     , Html.Attributes.style "height" "fit-content"
     , Html.Attributes.style "min-height" "100%"
+
+    -- Without this the overlay is a flex item sized by its own max-content width. Custom emoji and
+    -- stickers are written with zero width spaces (see Sticker.toBase4) and Safari counts a zero
+    -- width space as a line break when it measures max-content, so the overlay ends up only as wide
+    -- as the widest piece of text between two of them. Text that fits on one line in the textarea
+    -- then wraps in the overlay and the two stop lining up. Filling the flex line instead makes the
+    -- overlay as wide as the textarea it's drawn behind, which is the width it should wrap at anyway.
+    , Html.Attributes.style "flex-grow" "1"
     ]
         ++ (if text == "" then
                 [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
