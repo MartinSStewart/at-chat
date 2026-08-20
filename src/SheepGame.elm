@@ -3,6 +3,7 @@ module SheepGame exposing
     , ActionWithTime
     , GameData
     , GameMsg(..)
+    , Input(..)
     , LocalChange(..)
     , LoggedIn
     , OutMsg(..)
@@ -24,9 +25,9 @@ module SheepGame exposing
     , initSetup
     , initSetupFromSavedQuestions
     , initShared
+    , inputContainerId
+    , inputId
     , mapQuestionRichText
-    , questionInputContainerId
-    , questionInputId
     , removeAttachedFileFromText
     , scoresThroughQuestion
     , setupView
@@ -111,7 +112,7 @@ no amount of string comparison is going to work that out.
 -}
 type alias Shared =
     { phase : Phase
-    , answers : SeqDict (Id UserId) (Array (Maybe (Nonempty (RichText (Id UserId)))))
+    , answers : SeqDict (Id UserId) (Array (Maybe ValidatedInput))
     , groups : SeqDict ( Id UserId, Id QuestionId ) String
     , notes : SeqDict (Id QuestionId) String
     , questionsRevealed : Int
@@ -160,6 +161,11 @@ type alias GameData =
 
 type GameMsg
     = TypedAnswer (Id QuestionId) MessageInput.Msg
+    | GotAnswerFiles (Id QuestionId) (Nonempty File)
+    | GotAnswerFileUpload (Id QuestionId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
+    | PressedDeleteAnswerFile (Id QuestionId) (Id FileId)
+    | PressedViewAnswerFileInfo (Id QuestionId) (Id FileId)
+    | PressedToggleAnswerFileSpoiler (Id QuestionId) { fileId : Id FileId, removeSpoiler : Bool }
     | PressedSubmitAnswers
     | PressedLockAnswers
     | TypedGroup (Id UserId) (Id QuestionId) String
@@ -171,7 +177,7 @@ type GameMsg
 
 
 type Action
-    = SubmittedAnswers (Array (Maybe (Nonempty (RichText (Id UserId)))))
+    = SubmittedAnswers (Array (Maybe ValidatedInput))
     | LockedAnswers
     | ChangedGroup (Id UserId) (Id QuestionId) String
     | ChangedNotes (Id QuestionId) String
@@ -263,17 +269,20 @@ initGame localUser setup shared =
                         (\answer ->
                             case answer of
                                 Just answer2 ->
-                                    toSourceText localUser answer2
+                                    { text = toSourceText localUser answer2.text
+                                    , attachedFiles =
+                                        SeqDict.map
+                                            (\_ fileData -> FileStatus.FileUploaded fileData)
+                                            answer2.attachedFiles
+                                    }
 
                                 Nothing ->
-                                    ""
+                                    emptyInput
                         )
 
             Nothing ->
-                List.repeat (List.Nonempty.length setup.questions) ""
+                List.repeat (List.Nonempty.length setup.questions) emptyInput
         )
-            -- Answers are plain text, so there's never anything attached to one.
-            |> List.map (\text -> { text = text, attachedFiles = SeqDict.empty })
             |> IdArray.fromList
     }
 
@@ -286,15 +295,6 @@ allUsers localUser =
         localUser.session.userId
         (User.backendToFrontendForUser localUser.user)
         localUser.otherUsers
-
-
-{-| Turn typed text into a question or answer. Blank text isn't either of those.
--}
-parseContent : Time.Zone -> SeqDict (Id UserId) FrontendUser -> String -> Maybe (Nonempty (RichText (Id UserId)))
-parseContent timezone users text =
-    String.trim text
-        |> String.Nonempty.fromString
-        |> Maybe.map (RichText.fromNonemptyString timezone users)
 
 
 {-| The text someone would have typed to write this, so that an answer can be put back in
@@ -315,6 +315,11 @@ initShared =
     }
 
 
+emptyInput : UnvalidatedInput
+emptyInput =
+    { text = "", attachedFiles = SeqDict.empty }
+
+
 maxQuestions : Int
 maxQuestions =
     30
@@ -330,8 +335,12 @@ maxAnswerLength =
     100
 
 
-validateQuestion : Time.Zone -> SeqDict (Id UserId) FrontendUser -> UnvalidatedInput -> Result String (() -> ValidatedInput)
-validateQuestion timezone users question =
+{-| A question or an answer, ready to go to everyone else, or why it isn't. Blank text is
+how an answer says the player hasn't written one yet, so the setup is the only place that
+shows these.
+-}
+validateInput : Time.Zone -> SeqDict (Id UserId) FrontendUser -> UnvalidatedInput -> Result String (() -> ValidatedInput)
+validateInput timezone users question =
     case
         ( String.trim question.text |> String.Nonempty.fromString
         , FileStatus.hasUploadingFile question.attachedFiles
@@ -347,7 +356,7 @@ validateQuestion timezone users question =
                 |> Ok
 
         ( Nothing, _ ) ->
-            Err "Question can't be empty"
+            Err "Can't be empty"
 
         ( _, True ) ->
             Err "Attached files not finished uploading"
@@ -359,7 +368,7 @@ validateSetup : Time.Zone -> SeqDict (Id UserId) FrontendUser -> Id UserId -> Se
 validateSetup timezone users createdBy model =
     case
         IdArray.toList model.questions
-            |> List.filterMap (\question -> validateQuestion timezone users question |> Result.toMaybe)
+            |> List.filterMap (\question -> validateInput timezone users question |> Result.toMaybe)
             |> List.Nonempty.fromList
     of
         Just questions ->
@@ -373,13 +382,17 @@ validateSetup timezone users createdBy model =
             Err "Write at least one question before starting"
 
 
+{-| What the setup and the game can't do for themselves. Everything about an input works
+the same whether it holds a question or an answer, so these say which input rather than
+which of the two it is.
+-}
 type OutMsg
     = NoOutMsg
     | FinishedSetup ValidatedSetup
-    | OpenEmojiSelector (Id QuestionId)
-    | SelectFilesToAttach (Id QuestionId)
-    | UploadAttachedFiles (Id QuestionId) (Nonempty ( Id FileId, File ))
-    | CancelAttachedFileUpload (Id QuestionId) (Id FileId)
+    | OpenEmojiSelector Input
+    | SelectFilesToAttach Input
+    | UploadAttachedFiles Input (Nonempty ( Id FileId, File ))
+    | CancelAttachedFileUpload Input (Id FileId)
     | ShowAttachedFileInfo FileStatus.FileDataWithImage
 
 
@@ -424,13 +437,13 @@ updateSetup localUser msg model =
                     ( Setup model, NoOutMsg )
 
                 MessageInput.PressedUploadFile ->
-                    ( Setup model, SelectFilesToAttach questionId )
+                    ( Setup model, SelectFilesToAttach (QuestionInput questionId) )
 
                 MessageInput.PressedOpenEmojiSelector ->
-                    ( Setup model, OpenEmojiSelector questionId )
+                    ( Setup model, OpenEmojiSelector (QuestionInput questionId) )
 
                 MessageInput.OnPasteFiles files ->
-                    attachFiles questionId files model
+                    attachQuestionFiles questionId files model
 
                 MessageInput.TypedPageUp ->
                     ( Setup model, NoOutMsg )
@@ -479,7 +492,7 @@ updateSetup localUser msg model =
                     ( Setup { model | error = Just error, pressedSubmit = True }, NoOutMsg )
 
         GotFilesToAttach questionId files ->
-            attachFiles questionId files model
+            attachQuestionFiles questionId files model
 
         GotAttachedFileUpload questionId fileId result ->
             ( Setup
@@ -521,7 +534,7 @@ updateSetup localUser msg model =
                             model.questions
                     , error = Nothing
                 }
-            , CancelAttachedFileUpload questionId fileId
+            , CancelAttachedFileUpload (QuestionInput questionId) fileId
             )
 
         PressedViewAttachedFileInfo questionId fileId ->
@@ -575,13 +588,21 @@ updateSetup localUser msg model =
             )
 
 
-{-| Files someone picked or pasted, added to the question they were meant for. Each one
-gets a reference at the end of that question, the same text a message's draft gets when a
-file is attached to it.
+{-| Files someone picked or pasted, added to the input they were meant for. Each one gets a
+reference at the end of that input's text, the same text a message's draft gets when a file
+is attached to it.
 -}
-attachFiles : Id QuestionId -> Nonempty File -> SetupModel -> ( SetupOrGame, OutMsg )
-attachFiles questionId files model =
+attachFiles :
+    Input
+    -> Nonempty File
+    -> IdArray QuestionId UnvalidatedInput
+    -> ( IdArray QuestionId UnvalidatedInput, OutMsg )
+attachFiles input files inputs =
     let
+        questionId : Id QuestionId
+        questionId =
+            inputQuestionId input
+
         ( attachedFiles, toUpload ) =
             List.Nonempty.foldl
                 (\file ( attachedFiles2, toUpload2 ) ->
@@ -601,9 +622,9 @@ attachFiles questionId files model =
                     , ( fileId, file ) :: toUpload2
                     )
                 )
-                (case IdArray.get questionId model.questions of
-                    Just question ->
-                        ( question.attachedFiles, [] )
+                (case IdArray.get questionId inputs of
+                    Just input2 ->
+                        ( input2.attachedFiles, [] )
 
                     Nothing ->
                         ( SeqDict.empty, [] )
@@ -614,27 +635,50 @@ attachFiles questionId files model =
         added =
             List.reverse toUpload
     in
-    ( Setup
-        { model
-            | questions =
-                IdArray.update
-                    questionId
-                    (\question ->
-                        { question
-                            | attachedFiles = attachedFiles
-                            , text = appendAttachedFiles (List.map Tuple.first added) question.text
-                        }
-                    )
-                    model.questions
-            , error = Nothing
-        }
+    ( IdArray.update
+        questionId
+        (\input2 ->
+            { input2
+                | attachedFiles = attachedFiles
+                , text = appendAttachedFiles (List.map Tuple.first added) input2.text
+            }
+        )
+        inputs
     , case List.Nonempty.fromList added of
         Just nonempty ->
-            UploadAttachedFiles questionId nonempty
+            UploadAttachedFiles input nonempty
 
         Nothing ->
             NoOutMsg
     )
+
+
+inputQuestionId : Input -> Id QuestionId
+inputQuestionId input =
+    case input of
+        QuestionInput questionId ->
+            questionId
+
+        AnswerInput questionId ->
+            questionId
+
+
+attachAnswerFiles : Id QuestionId -> Nonempty File -> GameData -> ( GameData, Maybe Action, OutMsg )
+attachAnswerFiles questionId files model =
+    let
+        ( answerDrafts, outMsg ) =
+            attachFiles (AnswerInput questionId) files model.answerDrafts
+    in
+    ( { model | answerDrafts = answerDrafts }, Nothing, outMsg )
+
+
+attachQuestionFiles : Id QuestionId -> Nonempty File -> SetupModel -> ( SetupOrGame, OutMsg )
+attachQuestionFiles questionId files model =
+    let
+        ( questions, outMsg ) =
+            attachFiles (QuestionInput questionId) files model.questions
+    in
+    ( Setup { model | questions = questions, error = Nothing }, outMsg )
 
 
 attachedFile : Id QuestionId -> Id FileId -> SetupModel -> Maybe FileStatus
@@ -643,12 +687,12 @@ attachedFile questionId fileId model =
         |> Maybe.andThen (\question -> SeqDict.get fileId question.attachedFiles)
 
 
-{-| File ids start again at 1 for every question, so an upload only tells itself apart from
-another question's by carrying the question in its tracker id too.
+{-| File ids start again at 1 for every input, so an upload only tells itself apart from
+another input's by carrying that input in its tracker id too.
 -}
-attachedFileTrackerId : Id QuestionId -> Id FileId -> String
-attachedFileTrackerId questionId fileId =
-    "sheepGameAttachedFile-" ++ Id.toString questionId ++ "-" ++ Id.toString fileId
+attachedFileTrackerId : Input -> Id FileId -> String
+attachedFileTrackerId input fileId =
+    "sheepGameAttachedFile-" ++ Dom.idToString (inputId input) ++ "-" ++ Id.toString fileId
 
 
 {-| Rewrite a question by way of the rich text it produces and back into the text the input
@@ -699,7 +743,7 @@ updateGame :
     -> Shared
     -> GameMsg
     -> GameData
-    -> ( GameData, Maybe Action )
+    -> ( GameData, Maybe Action, OutMsg )
 updateGame localUser setup shared msg model =
     case msg of
         TypedAnswer questionId messageInputMsg ->
@@ -713,35 +757,142 @@ updateGame localUser setup shared msg model =
                                 model.answerDrafts
                       }
                     , Nothing
+                    , NoOutMsg
                     )
 
-                -- An answer is written in the same input a message is, but none of the rest of
-                -- what that input can ask for reaches anything here. The buttons that upload a
-                -- file or open the emoji picker aren't drawn beside an answer, the mention and
-                -- emoji dropdown only ever opens over the channel and edit message inputs, and
-                -- there's no last message behind an answer to start editing.
+                MessageInput.PressedUploadFile ->
+                    ( model, Nothing, SelectFilesToAttach (AnswerInput questionId) )
+
+                MessageInput.PressedOpenEmojiSelector ->
+                    ( model, Nothing, OpenEmojiSelector (AnswerInput questionId) )
+
+                MessageInput.OnPasteFiles files ->
+                    attachAnswerFiles questionId files model
+
+                -- The mention and emoji dropdown never opens over an answer, the frontend only
+                -- fills it in for the channel and edit message inputs, and there's no last
+                -- message behind an answer to start editing.
                 _ ->
-                    ( model, Nothing )
+                    ( model, Nothing, NoOutMsg )
+
+        GotAnswerFiles questionId files ->
+            attachAnswerFiles questionId files model
+
+        GotAnswerFileUpload questionId fileId result ->
+            ( { model
+                | answerDrafts =
+                    IdArray.update
+                        questionId
+                        (\draft ->
+                            { draft
+                                | attachedFiles =
+                                    SeqDict.updateIfExists fileId (FileStatus.addFileHash result) draft.attachedFiles
+                            }
+                        )
+                        model.answerDrafts
+              }
+            , Nothing
+            , NoOutMsg
+            )
+
+        PressedDeleteAnswerFile questionId fileId ->
+            ( { model
+                | answerDrafts =
+                    IdArray.update
+                        questionId
+                        (\draft ->
+                            { draft
+                                | attachedFiles = SeqDict.remove fileId draft.attachedFiles
+                                , text =
+                                    removeAttachedFileFromText
+                                        localUser.timezone
+                                        (allUsers localUser)
+                                        fileId
+                                        draft.text
+                            }
+                        )
+                        model.answerDrafts
+              }
+            , Nothing
+            , CancelAttachedFileUpload (AnswerInput questionId) fileId
+            )
+
+        PressedViewAnswerFileInfo questionId fileId ->
+            ( model
+            , Nothing
+            , case
+                IdArray.get questionId model.answerDrafts
+                    |> Maybe.andThen (\draft -> SeqDict.get fileId draft.attachedFiles)
+              of
+                Just (FileStatus.FileUploaded fileData) ->
+                    case fileData.metadata of
+                        Just metadata ->
+                            ShowAttachedFileInfo
+                                { fileName = fileData.fileName
+                                , fileSize = fileData.fileSize
+                                , metadata = metadata
+                                , contentType = fileData.contentType
+                                , fileHash = fileData.fileHash
+                                }
+
+                        Nothing ->
+                            NoOutMsg
+
+                _ ->
+                    NoOutMsg
+            )
+
+        PressedToggleAnswerFileSpoiler questionId { fileId, removeSpoiler } ->
+            ( { model
+                | answerDrafts =
+                    IdArray.update
+                        questionId
+                        (\draft ->
+                            { draft
+                                | text =
+                                    mapQuestionRichText
+                                        localUser.timezone
+                                        (allUsers localUser)
+                                        (if removeSpoiler then
+                                            RichText.unspoilerAttachedFile fileId
+
+                                         else
+                                            RichText.spoilerAttachedFile fileId
+                                        )
+                                        draft.text
+                            }
+                        )
+                        model.answerDrafts
+              }
+            , Nothing
+            , NoOutMsg
+            )
 
         PressedSubmitAnswers ->
             ( model
             , IdArray.toArray model.answerDrafts
-                |> Array.map (\draft -> parseContent localUser.timezone (allUsers localUser) draft.text)
+                |> Array.map
+                    (\draft ->
+                        validateInput localUser.timezone (allUsers localUser) draft
+                            |> Result.toMaybe
+                            |> Maybe.map (\answer -> answer ())
+                    )
                 |> SubmittedAnswers
                 |> Just
+            , NoOutMsg
             )
 
         PressedLockAnswers ->
-            ( model, Just LockedAnswers )
+            ( model, Just LockedAnswers, NoOutMsg )
 
         TypedGroup userId questionIndex group ->
-            ( model, Just (ChangedGroup userId questionIndex (String.left 1 group)) )
+            ( model, Just (ChangedGroup userId questionIndex (String.left 1 group)), NoOutMsg )
 
         TypedNotes questionIndex notes ->
-            ( model, Just (ChangedNotes questionIndex (String.left maxAnswerLength notes)) )
+            ( model, Just (ChangedNotes questionIndex (String.left maxAnswerLength notes)), NoOutMsg )
 
         PressedRevealScores ->
-            ( model, Just FinishedGrouping )
+            ( model, Just FinishedGrouping, NoOutMsg )
 
         PressedShowNextQuestion ->
             ( model
@@ -749,15 +900,17 @@ updateGame localUser setup shared msg model =
                 |> Id.fromInt
                 |> ChangedQuestionsRevealed
                 |> Just
+            , NoOutMsg
             )
 
         PressedHidePreviousQuestion ->
             ( model
             , max 0 (shared.questionsRevealed - 1) |> Id.fromInt |> ChangedQuestionsRevealed |> Just
+            , NoOutMsg
             )
 
         NoOp ->
-            ( model, Nothing )
+            ( model, Nothing, NoOutMsg )
 
 
 {-| Everything the host is allowed to do and nobody else is. The backend replays the same
@@ -832,7 +985,7 @@ updateAction setup action shared =
 {-| Answers arrive from a client that might disagree with us about how many questions
 there are, so they're trimmed or padded to fit rather than trusted.
 -}
-padAnswers : Int -> Array (Maybe (Nonempty (RichText (Id UserId)))) -> Array (Maybe (Nonempty (RichText (Id UserId))))
+padAnswers : Int -> Array (Maybe ValidatedInput) -> Array (Maybe ValidatedInput)
 padAnswers questionCount answers =
     List.range 0 (questionCount - 1)
         |> List.map (\index -> Array.get index answers |> Maybe.withDefault Nothing)
@@ -843,9 +996,9 @@ padAnswers questionCount answers =
 no timezone and nobody's name keeps this identical everywhere it's worked out, which is
 what matters when the backend and every client have to reach the same grouping.
 -}
-answerKey : Nonempty (RichText (Id UserId)) -> String
-answerKey content =
-    RichText.toString Time.utc False SeqDict.empty content
+answerKey : ValidatedInput -> String
+answerKey answer =
+    RichText.toString Time.utc False SeqDict.empty answer.text
         |> String.trim
         |> String.toLower
 
@@ -853,7 +1006,7 @@ answerKey content =
 {-| The host's starting point for grouping: answers that already match once case and
 surrounding whitespace are ignored get the same label.
 -}
-autoGroup : ValidatedSetup -> SeqDict (Id UserId) (Array (Maybe (Nonempty (RichText (Id UserId))))) -> SeqDict ( Id UserId, Id QuestionId ) String
+autoGroup : ValidatedSetup -> SeqDict (Id UserId) (Array (Maybe ValidatedInput)) -> SeqDict ( Id UserId, Id QuestionId ) String
 autoGroup setup answers =
     List.range 0 (List.Nonempty.length setup.questions - 1)
         |> List.concatMap
@@ -950,7 +1103,7 @@ groupsForQuestion questionId shared =
             (\( ( group, userId ), rest ) -> ( group, userId :: List.map Tuple.second rest ))
 
 
-answerFor : Id UserId -> Id QuestionId -> Shared -> Maybe (Nonempty (RichText (Id UserId)))
+answerFor : Id UserId -> Id QuestionId -> Shared -> Maybe ValidatedInput
 answerFor userId questionId shared =
     SeqDict.get userId shared.answers
         |> Maybe.andThen (Array.get (Id.toInt questionId))
@@ -993,7 +1146,7 @@ setupView windowSize localUser loggedIn users model =
                         Ui.column
                             []
                             [ Ui.Lazy.lazy6 questionInput isMobile localUser loggedIn users index question
-                            , case ( model.pressedSubmit, validateQuestion localUser.timezone users question ) of
+                            , case ( model.pressedSubmit, validateInput localUser.timezone users question ) of
                                 ( True, Err error ) ->
                                     Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
 
@@ -1019,18 +1172,37 @@ setupView windowSize localUser loggedIn users model =
         ]
 
 
-questionInputId : Id QuestionId -> HtmlId
-questionInputId index =
-    Dom.id ("sheepGame_question_" ++ Id.toString index)
-
-
-{-| The box drawn around a question, rather than the textarea inside it. The emoji selector
-is placed against this so that it clears the whole input instead of overlapping the bottom
-of it.
+{-| One of the text inputs a sheep game draws. Which one it is says where the emoji picker
+opens and which input an emoji or a file reference is put into, which is all the frontend
+needs to know about either of them.
 -}
-questionInputContainerId : Id QuestionId -> HtmlId
-questionInputContainerId index =
-    Dom.id ("sheepGame_questionContainer_" ++ Id.toString index)
+type Input
+    = QuestionInput (Id QuestionId)
+    | AnswerInput (Id QuestionId)
+
+
+inputId : Input -> HtmlId
+inputId input =
+    case input of
+        QuestionInput questionId ->
+            Dom.id ("sheepGame_question_" ++ Id.toString questionId)
+
+        AnswerInput questionId ->
+            Dom.id ("sheepGame_answer_" ++ Id.toString questionId)
+
+
+{-| The box drawn around an input, rather than the textarea inside it. The emoji selector is
+placed against this so that it clears the whole input instead of overlapping the bottom of
+it.
+-}
+inputContainerId : Input -> HtmlId
+inputContainerId input =
+    case input of
+        QuestionInput questionId ->
+            Dom.id ("sheepGame_questionContainer_" ++ Id.toString questionId)
+
+        AnswerInput questionId ->
+            Dom.id ("sheepGame_answerContainer_" ++ Id.toString questionId)
 
 
 questionInput :
@@ -1049,7 +1221,7 @@ questionInput isMobile localUser loggedIn users index question =
 
         htmlId : HtmlId
         htmlId =
-            questionInputId questionId
+            inputId (QuestionInput questionId)
 
         richText : Maybe (Nonempty (RichText (Id UserId)))
         richText =
@@ -1094,7 +1266,7 @@ questionInput isMobile localUser loggedIn users index question =
                 |> Ui.map (TypedQuestion questionId)
                 |> Ui.el
                     (Ui.heightMax 300
-                        :: Ui.id (Dom.idToString (questionInputContainerId questionId))
+                        :: Ui.id (Dom.idToString (inputContainerId (QuestionInput questionId)))
                         :: MessageInput.containerAttributes True
                     )
                 |> Ui.el []
@@ -1279,32 +1451,69 @@ answeringView time contentWidth isMobile localUser loggedIn setup shared model =
     ]
 
 
-answerInputId : Id QuestionId -> HtmlId
-answerInputId questionId =
-    Dom.id ("sheepGame_answer_" ++ Id.toString questionId)
-
-
 {-| An answer is written in the same input a message is, so that what someone types is
 drawn the way it will be once everyone's answers are compared.
 -}
 answerInput : Bool -> LocalUser -> LoggedIn a -> Id QuestionId -> UnvalidatedInput -> Element GameMsg
 answerInput isMobile localUser loggedIn questionId answer =
-    MessageInput.textarea
-        isMobile
-        (answerInputId questionId)
-        ""
-        (maxAnswerLength - String.length answer.text)
-        answer.text
-        (String.Nonempty.fromString answer.text
-            |> Maybe.map (RichText.fromNonemptyString localUser.timezone (allUsers localUser))
-        )
-        answer.attachedFiles
-        localUser
-        loggedIn
-        (allUsers localUser)
-        |> Ui.html
-        |> Ui.map (TypedAnswer questionId)
-        |> Ui.el (Ui.heightMax 200 :: MessageInput.containerAttributes True)
+    let
+        htmlId : HtmlId
+        htmlId =
+            inputId (AnswerInput questionId)
+
+        users : SeqDict (Id UserId) FrontendUser
+        users =
+            allUsers localUser
+
+        richText : Maybe (Nonempty (RichText (Id UserId)))
+        richText =
+            String.Nonempty.fromString answer.text
+                |> Maybe.map (RichText.fromNonemptyString localUser.timezone users)
+    in
+    Ui.column
+        [ Ui.spacing 4 ]
+        [ case NonemptyDict.fromSeqDict answer.attachedFiles of
+            Just attachedFiles ->
+                fileUploadPreview
+                    (PressedDeleteAnswerFile questionId)
+                    (PressedViewAnswerFileInfo questionId)
+                    (PressedToggleAnswerFileSpoiler questionId)
+                    richText
+                    attachedFiles
+                    |> Ui.row
+                        [ Ui.spacing 2
+                        , Ui.width Ui.shrink
+                        ]
+
+            Nothing ->
+                Ui.none
+        , Ui.row
+            [ Ui.spacing 8 ]
+            [ MessageInput.attachmentButton (Dom.idToString htmlId)
+                |> Ui.map (TypedAnswer questionId)
+            , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
+                |> Ui.map (TypedAnswer questionId)
+            , MessageInput.textarea
+                isMobile
+                htmlId
+                ""
+                (maxAnswerLength - String.length answer.text)
+                answer.text
+                richText
+                answer.attachedFiles
+                localUser
+                loggedIn
+                users
+                |> Ui.html
+                |> Ui.map (TypedAnswer questionId)
+                |> Ui.el
+                    (Ui.heightMax 200
+                        :: Ui.id (Dom.idToString (inputContainerId (AnswerInput questionId)))
+                        :: MessageInput.containerAttributes True
+                    )
+                |> Ui.el []
+            ]
+        ]
 
 
 answeredCountText : Int -> String
@@ -1406,7 +1615,7 @@ groupingAnswerView :
     -> Id QuestionId
     -> Id UserId
     -> Shared
-    -> Nonempty (RichText (Id UserId))
+    -> ValidatedInput
     -> Element GameMsg
 groupingAnswerView time contentWidth localUser questionId userId shared answer =
     let
@@ -1441,8 +1650,8 @@ groupingAnswerView time contentWidth localUser questionId userId shared answer =
             contentWidth
             localUser
             (Dom.id ("sheepGame_groupingAnswer_" ++ Id.toString questionId ++ "_" ++ Id.toString userId))
-            SeqDict.empty
-            answer
+            answer.attachedFiles
+            answer.text
         ]
 
 
@@ -1564,8 +1773,8 @@ revealedQuestionView time contentWidth localUser shared questionIndex question =
                                                                 ++ Id.toString userId
                                                             )
                                                         )
-                                                        SeqDict.empty
-                                                        answer
+                                                        answer.attachedFiles
+                                                        answer.text
 
                                                 Nothing ->
                                                     Ui.none

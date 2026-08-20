@@ -4677,7 +4677,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                     |> Ui.map EmojiSelectorMsg
                 )
 
-        EmojiSelectorForSheepGameQuestion _ position _ ->
+        EmojiSelectorForSheepGameInput _ position _ ->
             let
                 y : Int
                 y =

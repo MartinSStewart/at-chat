@@ -71,6 +71,17 @@ sheepGameDmTest normalConfig =
                                     |> Test.Html.Query.count (Expect.greaterThan 0)
                             )
 
+                        -- An answer is written in the same input a question is, buttons and
+                        -- all.
+                        , admin.click 100 (Dom.id "sheepGame_answer_0_openEmojiSelector")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.id "emoji_search_input" ])
+                        , admin.click 100 (Dom.id "sheepGame_answer_0_openEmojiSelector")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "emoji_search_input" ])
+
                         -- Both players answer. They agree about the colour and disagree about
                         -- the animal, so the first question is worth 2 points each and the
                         -- second is worth 1.

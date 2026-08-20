@@ -23,6 +23,8 @@ module Game exposing
     , isAnimating
     , pressedKey
     , routeRequest
+    , sheepGameFileUploaded
+    , sheepGameFilesToAttach
     , sheepGameQuestionsSaveDelay
     , update
     , view
@@ -36,6 +38,7 @@ import CssPixels exposing (CssPixels)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.File exposing (File)
+import Effect.Http as Http
 import Effect.Time as Time
 import FileStatus exposing (FileId)
 import Go
@@ -390,12 +393,12 @@ type OutMsg
       -- Ask to be sent `CheckedSheepGameQuestionsDebounce` once the host has stopped typing
       -- (see `Frontend.handleGameOutMsgs`).
     | SaveSheepGameQuestionsAfterDelay Int
-    | OpenSheepGameEmojiSelector (Id SheepGame.QuestionId)
+    | OpenSheepGameEmojiSelector SheepGame.Input
       -- Ask for a file to attach to a sheep game question, then upload what comes back
       -- (see `Frontend.handleGameOutMsgs`).
-    | SelectSheepGameFilesToAttach (Id SheepGame.QuestionId)
-    | UploadSheepGameAttachedFiles (Id SheepGame.QuestionId) (Nonempty ( Id FileId, File ))
-    | CancelSheepGameAttachedFileUpload (Id SheepGame.QuestionId) (Id FileId)
+    | SelectSheepGameFilesToAttach SheepGame.Input
+    | UploadSheepGameAttachedFiles SheepGame.Input (Nonempty ( Id FileId, File ))
+    | CancelSheepGameAttachedFileUpload SheepGame.Input (Id FileId)
       -- Show what a file the host attached to a sheep game question holds. Where that's
       -- drawn belongs to the frontend rather than to the game.
     | ShowSheepGameAttachedFileInfo FileStatus.FileDataWithImage
@@ -586,11 +589,11 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                     case ( matchData.data, SeqDict.get matchId model.startedGames ) of
                         ( FrontendGameData_SheepGame setup _ cache, Just (SheepGame_Game game) ) ->
                             let
-                                ( game2, maybeAction ) =
+                                ( game2, maybeAction, outMsg ) =
                                     SheepGame.updateGame localUser setup cache sheepMsg game
                             in
                             ( { model | startedGames = SeqDict.insert matchId (SheepGame_Game game2) model.startedGames }
-                            , case maybeAction of
+                            , (case maybeAction of
                                 Just action ->
                                     [ OutLocalChange
                                         (LocalChange_SheepGame
@@ -601,6 +604,8 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
 
                                 Nothing ->
                                     []
+                              )
+                                ++ sheepGameOutMsgs time newMatchId outMsg
                             )
 
                         _ ->
@@ -625,30 +630,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
 
                 outMsg2 : List OutMsg
                 outMsg2 =
-                    case outMsg of
-                        SheepGame.FinishedSetup setup ->
-                            -- A brand new match takes the next message id, then we navigate to it.
-                            [ OutLocalChange (LocalChange_SheepGame newMatchId (SheepGame.StartMatch time setup))
-                            , OutSelectMatch (Just newMatchId)
-                            ]
-
-                        SheepGame.NoOutMsg ->
-                            []
-
-                        SheepGame.OpenEmojiSelector questionId ->
-                            [ OpenSheepGameEmojiSelector questionId ]
-
-                        SheepGame.SelectFilesToAttach questionId ->
-                            [ SelectSheepGameFilesToAttach questionId ]
-
-                        SheepGame.UploadAttachedFiles questionId files ->
-                            [ UploadSheepGameAttachedFiles questionId files ]
-
-                        SheepGame.CancelAttachedFileUpload questionId fileId ->
-                            [ CancelSheepGameAttachedFileUpload questionId fileId ]
-
-                        SheepGame.ShowAttachedFileInfo fileData ->
-                            [ ShowSheepGameAttachedFileInfo fileData ]
+                    sheepGameOutMsgs time newMatchId outMsg
             in
             case gameOrSetup of
                 SheepGame.Setup setup ->
@@ -717,6 +699,64 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
 
         NoOpMsg ->
             ( model, [] )
+
+
+{-| What the sheep game asks of whatever is drawing it. The setup and the game both ask for
+the same things about an input, so both go through here.
+-}
+sheepGameOutMsgs : Time.Posix -> Id ChannelMessageId -> SheepGame.OutMsg -> List OutMsg
+sheepGameOutMsgs time newMatchId outMsg =
+    case outMsg of
+        SheepGame.FinishedSetup setup ->
+            -- A brand new match takes the next message id, then we navigate to it.
+            [ OutLocalChange (LocalChange_SheepGame newMatchId (SheepGame.StartMatch time setup))
+            , OutSelectMatch (Just newMatchId)
+            ]
+
+        SheepGame.NoOutMsg ->
+            []
+
+        SheepGame.OpenEmojiSelector input ->
+            [ OpenSheepGameEmojiSelector input ]
+
+        SheepGame.SelectFilesToAttach input ->
+            [ SelectSheepGameFilesToAttach input ]
+
+        SheepGame.UploadAttachedFiles input files ->
+            [ UploadSheepGameAttachedFiles input files ]
+
+        SheepGame.CancelAttachedFileUpload input fileId ->
+            [ CancelSheepGameAttachedFileUpload input fileId ]
+
+        SheepGame.ShowAttachedFileInfo fileData ->
+            [ ShowSheepGameAttachedFileInfo fileData ]
+
+
+{-| Files someone picked for one of the sheep game's inputs, on their way back to whichever
+of the setup and the game holds that input.
+-}
+sheepGameFilesToAttach : SheepGame.Input -> Nonempty File -> Msg
+sheepGameFilesToAttach input files =
+    case input of
+        SheepGame.QuestionInput questionId ->
+            SheepSetupMsg (SheepGame.GotFilesToAttach questionId files)
+
+        SheepGame.AnswerInput questionId ->
+            SheepGameMsg (SheepGame.GotAnswerFiles questionId files)
+
+
+sheepGameFileUploaded :
+    SheepGame.Input
+    -> Id FileId
+    -> Result Http.Error FileStatus.UploadResponse
+    -> Msg
+sheepGameFileUploaded input fileId result =
+    case input of
+        SheepGame.QuestionInput questionId ->
+            SheepSetupMsg (SheepGame.GotAttachedFileUpload questionId fileId result)
+
+        SheepGame.AnswerInput questionId ->
+            SheepGameMsg (SheepGame.GotAnswerFileUpload questionId fileId result)
 
 
 {-| How long the host has to stop typing for before their questions are sent to be saved.

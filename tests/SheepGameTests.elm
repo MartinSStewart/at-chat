@@ -81,7 +81,7 @@ answers list =
                 Nothing
 
             else
-                Just (content (String.trim text))
+                Just (question (String.trim text))
         )
         list
         |> Array.fromList
@@ -100,7 +100,7 @@ answerTexts userId shared =
                         (\answer ->
                             case answer of
                                 Just answer2 ->
-                                    RichText.toString Time.utc False SeqDict.empty answer2
+                                    RichText.toString Time.utc False SeqDict.empty answer2.text
 
                                 Nothing ->
                                     ""

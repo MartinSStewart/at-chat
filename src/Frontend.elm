@@ -1407,9 +1407,9 @@ updateLoaded msg model =
                                 EmojiSelectorForEditMessage _ maybeSelection ->
                                     insertEmojiOrSticker MessageMenu.editMessageTextInputId maybeSelection emojiOrSticker model loggedIn
 
-                                EmojiSelectorForSheepGameQuestion questionId _ maybeSelection ->
+                                EmojiSelectorForSheepGameInput input _ maybeSelection ->
                                     insertEmojiOrSticker
-                                        (SheepGame.questionInputId questionId)
+                                        (SheepGame.inputId input)
                                         maybeSelection
                                         emojiOrSticker
                                         model
@@ -3728,15 +3728,15 @@ updateLoaded msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        GotPositionForEmojiSelector_SheepGameQuestion questionId result ->
+        GotPositionForEmojiSelector_SheepGameInput input result ->
             case result of
                 Ok ok ->
                     pressedOpenEmojiSelector
-                        (SheepGame.questionInputId questionId)
-                        -- The selector is drawn under the question, so what it's positioned
-                        -- against is the bottom of the input rather than the top.
-                        (EmojiSelectorForSheepGameQuestion
-                            questionId
+                        (SheepGame.inputId input)
+                        -- The selector is drawn under the input, so what it's positioned
+                        -- against is the bottom of it rather than the top.
+                        (EmojiSelectorForSheepGameInput
+                            input
                             (Coord.xy (round ok.element.x) (round (ok.element.y + ok.element.height)))
                         )
                         model
@@ -6399,7 +6399,7 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
                         EmojiSelectorForEditMessage _ _ ->
                             EmojiSelectorHidden
 
-                        EmojiSelectorForSheepGameQuestion _ _ _ ->
+                        EmojiSelectorForSheepGameInput _ _ _ ->
                             EmojiSelectorHidden
                 , emojiSelector = { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
               }
@@ -8163,31 +8163,26 @@ handleGameOutMsgs outMsgs model =
                         :: cmds
                     )
 
-                Game.SelectSheepGameFilesToAttach questionId ->
+                Game.SelectSheepGameFilesToAttach input ->
                     ( model2
                     , Effect.File.Select.files
                         []
                         (\file files ->
                             List.Nonempty.Nonempty file files
-                                |> SheepGame.GotFilesToAttach questionId
-                                |> Game.SheepSetupMsg
+                                |> Game.sheepGameFilesToAttach input
                                 |> GameMsg
                         )
                         :: cmds
                     )
 
-                Game.UploadSheepGameAttachedFiles questionId files ->
+                Game.UploadSheepGameAttachedFiles input files ->
                     ( model2
                     , (List.Nonempty.toList files
                         |> List.map
                             (\( fileId, file ) ->
                                 FileStatus.uploadGameFile
-                                    (\result ->
-                                        SheepGame.GotAttachedFileUpload questionId fileId result
-                                            |> Game.SheepSetupMsg
-                                            |> GameMsg
-                                    )
-                                    (SheepGame.attachedFileTrackerId questionId fileId)
+                                    (\result -> Game.sheepGameFileUploaded input fileId result |> GameMsg)
+                                    (SheepGame.attachedFileTrackerId input fileId)
                                     file
                             )
                         |> Command.batch
@@ -8195,9 +8190,9 @@ handleGameOutMsgs outMsgs model =
                         :: cmds
                     )
 
-                Game.CancelSheepGameAttachedFileUpload questionId fileId ->
+                Game.CancelSheepGameAttachedFileUpload input fileId ->
                     ( model2
-                    , Http.cancel (SheepGame.attachedFileTrackerId questionId fileId) :: cmds
+                    , Http.cancel (SheepGame.attachedFileTrackerId input fileId) :: cmds
                     )
 
                 Game.ShowSheepGameAttachedFileInfo fileData ->
@@ -8223,11 +8218,11 @@ handleGameOutMsgs outMsgs model =
                         :: cmds
                     )
 
-                Game.OpenSheepGameEmojiSelector questionId ->
+                Game.OpenSheepGameEmojiSelector input ->
                     ( model2
                     , Task.attempt
-                        (GotPositionForEmojiSelector_SheepGameQuestion questionId)
-                        (Dom.getElement (SheepGame.questionInputContainerId questionId))
+                        (GotPositionForEmojiSelector_SheepGameInput input)
+                        (Dom.getElement (SheepGame.inputContainerId input))
                         :: cmds
                     )
         )

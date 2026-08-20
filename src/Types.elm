@@ -345,7 +345,7 @@ type EmojiSelector
     | EmojiSelectorForReaction AnyGuildOrDmId ThreadRouteWithMessage
     | EmojiSelectorForMessage (Maybe Range)
     | EmojiSelectorForEditMessage (Coord CssPixels) (Maybe Range)
-    | EmojiSelectorForSheepGameQuestion (Id SheepGame.QuestionId) (Coord CssPixels) (Maybe Range)
+    | EmojiSelectorForSheepGameInput SheepGame.Input (Coord CssPixels) (Maybe Range)
 
 
 type alias BackendModel =
@@ -569,7 +569,7 @@ type FrontendMsg_
     | MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
     | GotEmojiData (Result Http.Error CachedEmojiData)
     | GotPositionForEmojiSelector_EditMessage (Result Dom.Error Dom.Element)
-    | GotPositionForEmojiSelector_SheepGameQuestion (Id SheepGame.QuestionId) (Result Dom.Error Dom.Element)
+    | GotPositionForEmojiSelector_SheepGameInput SheepGame.Input (Result Dom.Error Dom.Element)
     | EnableToFrontendLogging
     | TextSelectionChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )

@@ -6569,9 +6569,36 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
             case ( action.userId == session.userId, SeqDict.get matchId channel.games ) of
                 ( True, Just (Game.GameData_SheepGame setup actions shared) ) ->
                     let
+                        action2 : SheepGame.ActionWithTime
+                        action2 =
+                            case action.change of
+                                -- An answer names the files attached to it the way a message
+                                -- does, so it gets the same check that we're actually holding
+                                -- the ones it names.
+                                SheepGame.SubmittedAnswers answers ->
+                                    { action
+                                        | change =
+                                            Array.map
+                                                (Maybe.map
+                                                    (\answer ->
+                                                        { answer
+                                                            | attachedFiles =
+                                                                BackendExtra.validateAttachedFiles
+                                                                    model.files
+                                                                    answer.attachedFiles
+                                                        }
+                                                    )
+                                                )
+                                                answers
+                                                |> SheepGame.SubmittedAnswers
+                                    }
+
+                                _ ->
+                                    action
+
                         localMsg2 : Game.LocalChange
                         localMsg2 =
-                            Game.LocalChange_SheepGame matchId (SheepGame.Action action)
+                            Game.LocalChange_SheepGame matchId (SheepGame.Action action2)
                     in
                     ( setChannel
                         { channel
@@ -6580,8 +6607,8 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
                                     matchId
                                     (Game.GameData_SheepGame
                                         setup
-                                        (Array.push action actions)
-                                        (SheepGame.updateAction setup action shared)
+                                        (Array.push action2 actions)
+                                        (SheepGame.updateAction setup action2 shared)
                                     )
                                     channel.games
                         }
