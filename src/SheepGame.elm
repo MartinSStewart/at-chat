@@ -51,6 +51,7 @@ import FileStatus exposing (FileData, FileId, FileStatus)
 import Go
 import Html
 import Id exposing (Id, UserId)
+import IdArray exposing (IdArray)
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MessageInput exposing (TextInputFocus)
@@ -70,7 +71,7 @@ import User exposing (FrontendUser, LocalUser)
 
 
 type alias ValidatedSetup =
-    { questions : Nonempty ValidatedQuestion
+    { questions : Nonempty ValidatedInput
     , createdBy : Id UserId
     }
 
@@ -102,22 +103,22 @@ no amount of string comparison is going to work that out.
 type alias Shared =
     { phase : Phase
     , answers : SeqDict (Id UserId) (Array (Maybe (Nonempty (RichText (Id UserId)))))
-    , groups : SeqDict ( Id UserId, Int ) String
-    , notes : Dict Int String
+    , groups : SeqDict ( Id UserId, Id QuestionId ) String
+    , notes : SeqDict (Id QuestionId) String
     , questionsRevealed : Int
     }
 
 
-type alias SheepGameQuestion =
+type alias UnvalidatedInput =
     { text : String, attachedFiles : SeqDict (Id FileId) FileStatus }
 
 
-type alias ValidatedQuestion =
+type alias ValidatedInput =
     { text : Nonempty (RichText (Id UserId)), attachedFiles : SeqDict (Id FileId) FileData }
 
 
 type alias SetupModel =
-    { questions : Array SheepGameQuestion
+    { questions : IdArray (Id QuestionId) UnvalidatedInput
     , error : Maybe String
     }
 
@@ -129,7 +130,7 @@ type SetupMsg
     | PressedStartGame
     | PressedCancel
     | GotFilesToAttach (Id QuestionId) (Nonempty File)
-    | GotAttachedFileUpload (Id FileId) (Result Http.Error FileStatus.UploadResponse)
+    | GotAttachedFileUpload (Id QuestionId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | SetupNoOp
 
 
@@ -142,15 +143,15 @@ type SetupOrGame
 {-| View state that belongs to one player and never reaches anyone else.
 -}
 type alias GameData =
-    { answerDrafts : Array String }
+    { answerDrafts : IdArray (Id QuestionId) UnvalidatedInput }
 
 
 type GameMsg
-    = TypedAnswer Int String
+    = TypedAnswer (Id QuestionId) String
     | PressedSubmitAnswers
     | PressedLockAnswers
-    | TypedGroup (Id UserId) Int String
-    | TypedNotes Int String
+    | TypedGroup (Id UserId) (Id QuestionId) String
+    | TypedNotes (Id QuestionId) String
     | PressedRevealScores
     | PressedShowNextQuestion
     | PressedHidePreviousQuestion
@@ -160,10 +161,10 @@ type GameMsg
 type Action
     = SubmittedAnswers (Array (Maybe (Nonempty (RichText (Id UserId)))))
     | LockedAnswers
-    | ChangedGroup (Id UserId) Int String
-    | ChangedNotes Int String
+    | ChangedGroup (Id UserId) (Id QuestionId) String
+    | ChangedNotes (Id QuestionId) String
     | FinishedGrouping
-    | ChangedQuestionsRevealed Int
+    | ChangedQuestionsRevealed (Id QuestionId)
 
 
 type alias ActionWithTime =
@@ -177,14 +178,14 @@ type LocalChange
 
 initSetup : SetupModel
 initSetup =
-    { questions = Array.fromList [ { text = "", attachedFiles = SeqDict.empty } ]
+    { questions = IdArray.fromList [ { text = "", attachedFiles = SeqDict.empty } ]
     , error = Nothing
     }
 
 
-initSetupFromSavedQuestions : Array SheepGameQuestion -> SetupModel
+initSetupFromSavedQuestions : IdArray (Id QuestionId) UnvalidatedInput -> SetupModel
 initSetupFromSavedQuestions questions =
-    if Array.isEmpty questions then
+    if IdArray.isEmpty questions then
         initSetup
 
     else
@@ -304,7 +305,7 @@ maxAnswerLength =
     100
 
 
-validateQuestion : Time.Zone -> SeqDict (Id UserId) FrontendUser -> SheepGameQuestion -> Result () ValidatedQuestion
+validateQuestion : Time.Zone -> SeqDict (Id UserId) FrontendUser -> UnvalidatedInput -> Result () ValidatedInput
 validateQuestion timezone users question =
     case ( parseContent timezone users question.text, FileStatus.hasUploadingFile question.attachedFiles ) of
         ( Just content, False ) ->
@@ -483,11 +484,19 @@ updateSetup localUser msg model =
                     NoOutMsg
             )
 
-        GotAttachedFileUpload fileId result ->
+        GotAttachedFileUpload questionId fileId result ->
             ( Setup
                 { model
-                    | attachedFiles =
-                        SeqDict.updateIfExists fileId (FileStatus.addFileHash result) model.attachedFiles
+                    | questions =
+                        Array.Extra.update
+                            (Id.toInt questionId)
+                            (\question ->
+                                { question
+                                    | attachedFiles =
+                                        SeqDict.updateIfExists fileId (FileStatus.addFileHash result) question.attachedFiles
+                                }
+                            )
+                            model.questions
                 }
             , NoOutMsg
             )
