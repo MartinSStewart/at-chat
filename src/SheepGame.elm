@@ -46,7 +46,6 @@ before revealing the questions one at a time.
 -}
 
 import Array exposing (Array)
-import Array.Extra
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -66,8 +65,6 @@ import List.Nonempty exposing (Nonempty)
 import MessageInput exposing (TextInputFocus)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import PersonName exposing (PersonName)
-import Ports
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
@@ -75,6 +72,7 @@ import String.Nonempty
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
+import Ui.Lazy
 import Ui.Prose
 import Ui.Shadow
 import User exposing (FrontendUser, LocalUser)
@@ -130,6 +128,7 @@ type alias ValidatedInput =
 type alias SetupModel =
     { questions : IdArray QuestionId UnvalidatedInput
     , error : Maybe String
+    , pressedSubmit : Bool
     }
 
 
@@ -190,8 +189,13 @@ type LocalChange
 
 initSetup : SetupModel
 initSetup =
-    { questions = IdArray.fromList [ { text = "", attachedFiles = SeqDict.empty } ]
+    { questions =
+        IdArray.fromList
+            [ { text = "Pick a random number between 1 and 10", attachedFiles = SeqDict.empty }
+            , { text = "What's your favorite color?", attachedFiles = SeqDict.empty }
+            ]
     , error = Nothing
+    , pressedSubmit = False
     }
 
 
@@ -204,7 +208,7 @@ initSetupFromSavedQuestions questions =
         initSetup
 
     else
-        { questions = Array.toList questions |> IdArray.fromList, error = Nothing }
+        { questions = Array.toList questions |> IdArray.fromList, error = Nothing, pressedSubmit = False }
 
 
 {-| File ids start at 1. The backend throws away anything lower when it checks that the
@@ -325,17 +329,27 @@ maxAnswerLength =
     100
 
 
-validateQuestion : Time.Zone -> SeqDict (Id UserId) FrontendUser -> UnvalidatedInput -> Result () ValidatedInput
+validateQuestion : Time.Zone -> SeqDict (Id UserId) FrontendUser -> UnvalidatedInput -> Result String (() -> ValidatedInput)
 validateQuestion timezone users question =
-    case ( parseContent timezone users question.text, FileStatus.hasUploadingFile question.attachedFiles ) of
+    case
+        ( String.trim question.text |> String.Nonempty.fromString
+        , FileStatus.hasUploadingFile question.attachedFiles
+        )
+    of
         ( Just content, False ) ->
-            { text = content
-            , attachedFiles = FileStatus.onlyUploadedFiles question.attachedFiles
-            }
+            -- Lazy so we can show error messages without having to parse everything
+            (\() ->
+                { text = RichText.fromNonemptyString timezone users content
+                , attachedFiles = FileStatus.onlyUploadedFiles question.attachedFiles
+                }
+            )
                 |> Ok
 
-        _ ->
-            Err ()
+        ( Nothing, _ ) ->
+            Err "Question can't be empty"
+
+        ( _, True ) ->
+            Err "Attached files not finished uploading"
 
 
 {-| The host's questions, or a reason they can't be used yet.
@@ -349,10 +363,10 @@ validateSetup timezone users createdBy model =
     of
         Just questions ->
             if IdArray.length model.questions == List.Nonempty.length questions then
-                Ok { questions = questions, createdBy = createdBy }
+                Ok { questions = List.Nonempty.map (\a -> a ()) questions, createdBy = createdBy }
 
             else
-                Err "Wait for the attached files to finish uploading"
+                Err ""
 
         Nothing ->
             Err "Write at least one question before starting"
@@ -461,7 +475,7 @@ updateSetup localUser msg model =
                     ( Game (initGame localUser setup initShared), FinishedSetup setup )
 
                 Err error ->
-                    ( Setup { model | error = Just error }, NoOutMsg )
+                    ( Setup { model | error = Just error, pressedSubmit = True }, NoOutMsg )
 
         GotFilesToAttach questionId files ->
             attachFiles questionId files model
@@ -964,7 +978,18 @@ setupView windowSize localUser loggedIn users model =
             (Ui.column
                 [ Ui.spacing 8 ]
                 (List.indexedMap
-                    (questionInput isMobile localUser loggedIn users)
+                    (\index question ->
+                        Ui.column
+                            []
+                            [ Ui.Lazy.lazy6 questionInput isMobile localUser loggedIn users index question
+                            , case ( model.pressedSubmit, validateQuestion localUser.timezone users question ) of
+                                ( True, Err error ) ->
+                                    Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
+
+                                _ ->
+                                    Ui.none
+                            ]
+                    )
                     (IdArray.toList model.questions)
                     ++ [ MyUi.secondaryButton
                             (Dom.id "sheepGame_addQuestion")
@@ -1021,7 +1046,7 @@ questionInput isMobile localUser loggedIn users index question =
                 |> Maybe.map (RichText.fromNonemptyString localUser.timezone users)
     in
     Ui.column
-        []
+        [ Ui.spacing 4 ]
         [ case NonemptyDict.fromSeqDict question.attachedFiles of
             Just attachedFiles ->
                 fileUploadPreview
@@ -1033,11 +1058,10 @@ questionInput isMobile localUser loggedIn users index question =
                     |> Ui.row
                         [ Ui.spacing 2
                         , Ui.width Ui.shrink
-                        , Ui.paddingXY 8 0
                         ]
 
             Nothing ->
-                Ui.el [] Ui.none
+                Ui.none
         , Ui.row
             [ Ui.spacing 8 ]
             [ MessageInput.attachmentButton (Dom.idToString htmlId)
@@ -1047,7 +1071,7 @@ questionInput isMobile localUser loggedIn users index question =
             , MessageInput.textarea
                 isMobile
                 htmlId
-                "Pick a random number between 1 and 10"
+                ""
                 (maxQuestionLength - String.length question.text)
                 question.text
                 richText
@@ -1087,6 +1111,7 @@ gameView time windowSize localUser setup shared model =
                 16
             )
             16
+        , Ui.background MyUi.background1
         ]
         (case shared.phase of
             Answering ->
@@ -1473,16 +1498,8 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
             Ui.el
                 [ Ui.width (Ui.px fileUploadPreviewSize)
                 , Ui.height (Ui.px fileUploadPreviewSize)
-                , Ui.Shadow.shadows
-                    [ { x = 0
-                      , y = -2
-                      , size = 0
-                      , blur = 8
-                      , color = Ui.rgba 0 0 0 0.5
-                      }
-                    ]
                 , Ui.background MyUi.background1
-                , Ui.borderColor MyUi.background1
+                , Ui.borderColor (Ui.rgb 150 150 160)
                 , Ui.border 1
                 , Ui.rounded 8
                 , MyUi.elButton

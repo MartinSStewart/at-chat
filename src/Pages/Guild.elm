@@ -10656,7 +10656,7 @@ fileUploadPreview :
     -> Element msg
 fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUpload2 =
     Ui.row
-        [ Ui.spacing 2
+        [ Ui.spacing 4
         , Ui.move { x = 0, y = -SheepGame.fileUploadPreviewSize, z = 0 }
         , Ui.width Ui.shrink
         , Ui.paddingXY 8 0
