@@ -4723,13 +4723,6 @@ videoView maybeHtmlId maybeMetadata isSpoilered containerWidth fileData =
                 ++ [ idAttribute
                    , Html.Attributes.src (FileStatus.fileUrl fileData.contentType fileData.fileHash)
                    , Html.Attributes.controls True
-
-                   -- There's no lazy loading for videos (the loading attribute
-                   -- only works on images and iframes), so this is the closest
-                   -- equivalent: a video scrolled past only costs its header
-                   -- instead of the whole file, which is what Safari would
-                   -- otherwise download.
-                   , Html.Attributes.preload "metadata"
                    , Html.Attributes.style "display" "block"
                    , Html.Attributes.style "border-radius" "4px"
                    ]
