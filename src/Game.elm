@@ -904,7 +904,7 @@ view currentTime windowSize showMemberTab maybeDragging lastCopied localUser log
                         FrontendGameData_SheepGame setup _ cache ->
                             case game of
                                 SheepGame_Game game2 ->
-                                    SheepGame.gameView currentTime windowSize localUser loggedIn setup cache game2
+                                    SheepGame.gameView currentTime windowSize showMemberTab localUser loggedIn setup cache game2
                                         |> Ui.map SheepGameMsg
 
                                 _ ->

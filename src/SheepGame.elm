@@ -68,6 +68,7 @@ import NonemptyDict exposing (NonemptyDict)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
+import Sticker
 import String.Nonempty
 import Ui exposing (Element)
 import Ui.Font
@@ -1104,59 +1105,99 @@ questionInput isMobile localUser loggedIn users index question =
         ]
 
 
-gameView : Time.Posix -> Coord CssPixels -> LocalUser -> LoggedIn a -> ValidatedSetup -> Shared -> GameData -> Element GameMsg
-gameView time windowSize localUser loggedIn setup shared model =
+gameView :
+    Time.Posix
+    -> Coord CssPixels
+    -> Bool
+    -> LocalUser
+    -> LoggedIn a
+    -> ValidatedSetup
+    -> Shared
+    -> GameData
+    -> Element GameMsg
+gameView time windowSize showMemberTab localUser loggedIn setup shared model =
     let
         isMobile : Bool
         isMobile =
             MyUi.isMobileAlt windowSize
+
+        horizontalPadding : Int
+        horizontalPadding =
+            if isMobile then
+                8
+
+            else
+                16
+
+        contentWidth : Int
+        contentWidth =
+            MyUi.conversationWidthIgnoreScrollbar windowSize showMemberTab - horizontalPadding * 2
     in
     Ui.column
         [ Ui.spacing 16
-        , Ui.paddingXY
-            (if isMobile then
-                8
-
-             else
-                16
-            )
-            16
+        , Ui.paddingXY horizontalPadding 16
         , Ui.background MyUi.background1
         ]
         (case shared.phase of
             Answering ->
-                answeringView time isMobile localUser loggedIn setup shared model
+                answeringView time contentWidth isMobile localUser loggedIn setup shared model
 
             Grouping ->
-                groupingView time localUser setup shared
+                groupingView time contentWidth localUser setup shared
 
             Revealing ->
-                revealingView time localUser setup shared
+                revealingView time contentWidth localUser setup shared
         )
 
 
-{-| Questions and answers are drawn the same way a message is, minus the parts a game has
-no use for: nothing here has attachments and there's nothing to reveal a spoiler with.
+{-| Questions and answers are drawn the same way a message is, so that a file attached to a
+question shows up as the image or video it is rather than as a placeholder.
+
+Nothing here is clickable yet. Revealing a spoiler and opening an image both need somewhere
+to keep what's been revealed and what's open, which is the frontend's rather than the
+game's.
+
 -}
-contentView : Time.Posix -> LocalUser -> SeqDict (Id FileId) FileData -> Nonempty (RichText (Id UserId)) -> Element GameMsg
-contentView time localUser attachedFiles content =
-    RichText.preview
+contentView :
+    Time.Posix
+    -> Int
+    -> LocalUser
+    -> HtmlId
+    -> SeqDict (Id FileId) FileData
+    -> Nonempty (RichText (Id UserId))
+    -> Element GameMsg
+contentView time contentWidth localUser htmlId attachedFiles content =
+    RichText.view
+        htmlId
+        contentWidth
         (\_ -> NoOp)
-        { revealedSpoilers = SeqSet.empty
+        (\_ -> NoOp)
+        (\_ -> NoOp)
+        { domainWhitelist = localUser.user.domainWhitelist
+        , revealedSpoilers = SeqSet.empty
         , users = allUsers localUser
         , attachedFiles = attachedFiles
+        , stickers = localUser.stickers
         , customEmojis = localUser.customEmojis
-        , domainWhitelist = localUser.user.domainWhitelist
+        , animationMode = Sticker.LoopAFewTimesOnLoad
         , timezone = localUser.timezone
         , time = time
+        , drawings = SeqDict.empty
+        , embedDrawings = SeqDict.empty
+        , drawingUserColor = \_ -> ""
+        , isSelectingAnchor = False
+        , devicePixelRatio = localUser.devicePixelRatio
+        , isHovered = False
         }
+        Array.empty
         content
-        |> Html.span []
+        |> Html.div [ Html.Attributes.style "white-space" "pre-wrap" ]
         |> Ui.html
 
 
 answeringView :
     Time.Posix
+    -> Int
     -> Bool
     -> LocalUser
     -> LoggedIn a
@@ -1164,7 +1205,7 @@ answeringView :
     -> Shared
     -> GameData
     -> List (Element GameMsg)
-answeringView time isMobile localUser loggedIn setup shared model =
+answeringView time contentWidth isMobile localUser loggedIn setup shared model =
     let
         currentUserId : Id UserId
         currentUserId =
@@ -1188,7 +1229,14 @@ answeringView time isMobile localUser loggedIn setup shared model =
                         [ Ui.spacing 4 ]
                         [ Ui.el
                             [ Ui.Font.weight 600 ]
-                            (contentView time localUser question.attachedFiles question.text)
+                            (contentView
+                                time
+                                contentWidth
+                                localUser
+                                (Dom.id ("sheepGame_answeringQuestion_" ++ Id.toString questionId))
+                                question.attachedFiles
+                                question.text
+                            )
                         , Ui.el
                             [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
                             (Ui.text "Your answer")
@@ -1270,8 +1318,8 @@ answeredCountText count =
 
 {-| The host decides which answers count as the same thing. Everyone else waits.
 -}
-groupingView : Time.Posix -> LocalUser -> ValidatedSetup -> Shared -> List (Element GameMsg)
-groupingView time localUser setup shared =
+groupingView : Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Shared -> List (Element GameMsg)
+groupingView time contentWidth localUser setup shared =
     if isHost localUser.session.userId setup then
         [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Group the answers")
         , Ui.Prose.paragraph
@@ -1280,7 +1328,7 @@ groupingView time localUser setup shared =
         , Ui.column
             [ Ui.spacing 16 ]
             (List.Nonempty.toList setup.questions
-                |> List.indexedMap (groupingQuestionView time localUser shared)
+                |> List.indexedMap (groupingQuestionView time contentWidth localUser shared)
             )
         , MyUi.simpleButton
             (Dom.id "sheepGame_revealScores")
@@ -1296,8 +1344,8 @@ groupingView time localUser setup shared =
         ]
 
 
-groupingQuestionView : Time.Posix -> LocalUser -> Shared -> Int -> ValidatedInput -> Element GameMsg
-groupingQuestionView time localUser shared questionIndex question =
+groupingQuestionView : Time.Posix -> Int -> LocalUser -> Shared -> Int -> ValidatedInput -> Element GameMsg
+groupingQuestionView time contentWidth localUser shared questionIndex question =
     let
         questionId : Id QuestionId
         questionId =
@@ -1312,14 +1360,23 @@ groupingQuestionView time localUser shared questionIndex question =
     in
     Ui.column
         [ Ui.spacing 8 ]
-        [ Ui.el [ Ui.Font.weight 600 ] (contentView time localUser question.attachedFiles question.text)
+        [ Ui.el
+            [ Ui.Font.weight 600 ]
+            (contentView
+                time
+                contentWidth
+                localUser
+                (Dom.id ("sheepGame_groupingQuestion_" ++ Id.toString questionId))
+                question.attachedFiles
+                question.text
+            )
         , Ui.column
             [ Ui.spacing 4 ]
             (players shared
                 |> List.filterMap
                     (\userId ->
                         Maybe.map
-                            (groupingAnswerView time localUser questionId userId shared)
+                            (groupingAnswerView time contentWidth localUser questionId userId shared)
                             (answerFor userId questionId shared)
                     )
             )
@@ -1342,8 +1399,16 @@ groupingQuestionView time localUser shared questionIndex question =
         ]
 
 
-groupingAnswerView : Time.Posix -> LocalUser -> Id QuestionId -> Id UserId -> Shared -> Nonempty (RichText (Id UserId)) -> Element GameMsg
-groupingAnswerView time localUser questionId userId shared answer =
+groupingAnswerView :
+    Time.Posix
+    -> Int
+    -> LocalUser
+    -> Id QuestionId
+    -> Id UserId
+    -> Shared
+    -> Nonempty (RichText (Id UserId))
+    -> Element GameMsg
+groupingAnswerView time contentWidth localUser questionId userId shared answer =
     let
         groupLabel2 : { element : Element GameMsg, id : Ui.Input.Label }
         groupLabel2 =
@@ -1371,12 +1436,18 @@ groupingAnswerView time localUser questionId userId shared answer =
                 }
             )
         , Ui.el [ Ui.Font.weight 600 ] (Ui.text (User.toStringAlt userId localUser))
-        , contentView time localUser SeqDict.empty answer
+        , contentView
+            time
+            contentWidth
+            localUser
+            (Dom.id ("sheepGame_groupingAnswer_" ++ Id.toString questionId ++ "_" ++ Id.toString userId))
+            SeqDict.empty
+            answer
         ]
 
 
-revealingView : Time.Posix -> LocalUser -> ValidatedSetup -> Shared -> List (Element GameMsg)
-revealingView time localUser setup shared =
+revealingView : Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Shared -> List (Element GameMsg)
+revealingView time contentWidth localUser setup shared =
     let
         questionCount : Int
         questionCount =
@@ -1420,7 +1491,7 @@ revealingView time localUser setup shared =
         [ Ui.spacing 16 ]
         (List.Nonempty.toList setup.questions
             |> List.take shared.questionsRevealed
-            |> List.indexedMap (revealedQuestionView time localUser shared)
+            |> List.indexedMap (revealedQuestionView time contentWidth localUser shared)
             |> List.reverse
         )
     ]
@@ -1443,8 +1514,8 @@ scoreboardView localUser scores =
         )
 
 
-revealedQuestionView : Time.Posix -> LocalUser -> Shared -> Int -> ValidatedInput -> Element GameMsg
-revealedQuestionView time localUser shared questionIndex question =
+revealedQuestionView : Time.Posix -> Int -> LocalUser -> Shared -> Int -> ValidatedInput -> Element GameMsg
+revealedQuestionView time contentWidth localUser shared questionIndex question =
     let
         questionId : Id QuestionId
         questionId =
@@ -1452,7 +1523,16 @@ revealedQuestionView time localUser shared questionIndex question =
     in
     Ui.column
         [ Ui.spacing 4 ]
-        [ Ui.el [ Ui.Font.weight 600 ] (contentView time localUser question.attachedFiles question.text)
+        [ Ui.el
+            [ Ui.Font.weight 600 ]
+            (contentView
+                time
+                contentWidth
+                localUser
+                (Dom.id ("sheepGame_revealedQuestion_" ++ Id.toString questionId))
+                question.attachedFiles
+                question.text
+            )
         , Ui.column
             [ Ui.spacing 2 ]
             (groupsForQuestion questionId shared
@@ -1473,7 +1553,19 @@ revealedQuestionView time localUser shared questionIndex question =
                                             [ Ui.text (User.toStringAlt userId localUser ++ ":")
                                             , case answerFor userId questionId shared of
                                                 Just answer ->
-                                                    contentView time localUser SeqDict.empty answer
+                                                    contentView
+                                                        time
+                                                        contentWidth
+                                                        localUser
+                                                        (Dom.id
+                                                            ("sheepGame_revealedAnswer_"
+                                                                ++ Id.toString questionId
+                                                                ++ "_"
+                                                                ++ Id.toString userId
+                                                            )
+                                                        )
+                                                        SeqDict.empty
+                                                        answer
 
                                                 Nothing ->
                                                     Ui.none
