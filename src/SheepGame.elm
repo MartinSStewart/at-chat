@@ -112,7 +112,7 @@ no amount of string comparison is going to work that out.
 -}
 type alias Shared =
     { phase : Phase
-    , answers : SeqDict (Id UserId) (Array (Maybe ValidatedInput))
+    , answers : SeqDict (Id UserId) (IdArray QuestionId (Maybe ValidatedInput))
     , groups : SeqDict ( Id UserId, Id QuestionId ) String
     , notes : SeqDict (Id QuestionId) String
     , questionsRevealed : Int
@@ -168,6 +168,7 @@ type GameMsg
     | PressedToggleAnswerFileSpoiler (Id QuestionId) { fileId : Id FileId, removeSpoiler : Bool }
     | PressedSubmitAnswers
     | PressedLockAnswers
+    | PressedUnlockAnswers
     | TypedGroup (Id UserId) (Id QuestionId) String
     | TypedNotes (Id QuestionId) String
     | PressedRevealScores
@@ -177,8 +178,9 @@ type GameMsg
 
 
 type Action
-    = SubmittedAnswers (Array (Maybe ValidatedInput))
+    = SubmittedAnswers (IdArray QuestionId (Maybe ValidatedInput))
     | LockedAnswers
+    | UnlockedAnswers
     | ChangedGroup (Id UserId) (Id QuestionId) String
     | ChangedNotes (Id QuestionId) String
     | FinishedGrouping
@@ -264,7 +266,7 @@ initGame localUser setup shared =
     { answerDrafts =
         (case SeqDict.get localUser.session.userId shared.answers of
             Just answers ->
-                Array.toList answers
+                IdArray.toList answers
                     |> List.map
                         (\answer ->
                             case answer of
@@ -870,13 +872,13 @@ updateGame localUser setup shared msg model =
 
         PressedSubmitAnswers ->
             ( model
-            , IdArray.toArray model.answerDrafts
-                |> Array.map
-                    (\draft ->
-                        validateInput localUser.timezone (allUsers localUser) draft
-                            |> Result.toMaybe
-                            |> Maybe.map (\answer -> answer ())
-                    )
+            , IdArray.map
+                (\_ draft ->
+                    validateInput localUser.timezone (allUsers localUser) draft
+                        |> Result.toMaybe
+                        |> Maybe.map (\answer -> answer ())
+                )
+                model.answerDrafts
                 |> SubmittedAnswers
                 |> Just
             , NoOutMsg
@@ -884,6 +886,9 @@ updateGame localUser setup shared msg model =
 
         PressedLockAnswers ->
             ( model, Just LockedAnswers, NoOutMsg )
+
+        PressedUnlockAnswers ->
+            ( model, Just UnlockedAnswers, NoOutMsg )
 
         TypedGroup userId questionIndex group ->
             ( model, Just (ChangedGroup userId questionIndex (String.left 1 group)), NoOutMsg )
@@ -947,6 +952,14 @@ updateAction setup action shared =
                 _ ->
                     shared
 
+        UnlockedAnswers ->
+            case ( shared.phase, isHost action.userId setup ) of
+                ( Grouping, True ) ->
+                    { shared | phase = Answering }
+
+                _ ->
+                    shared
+
         ChangedGroup userId questionIndex group ->
             case ( shared.phase, isHost action.userId setup ) of
                 ( Grouping, True ) ->
@@ -985,11 +998,11 @@ updateAction setup action shared =
 {-| Answers arrive from a client that might disagree with us about how many questions
 there are, so they're trimmed or padded to fit rather than trusted.
 -}
-padAnswers : Int -> Array (Maybe ValidatedInput) -> Array (Maybe ValidatedInput)
+padAnswers : Int -> IdArray QuestionId (Maybe ValidatedInput) -> IdArray QuestionId (Maybe ValidatedInput)
 padAnswers questionCount answers =
     List.range 0 (questionCount - 1)
-        |> List.map (\index -> Array.get index answers |> Maybe.withDefault Nothing)
-        |> Array.fromList
+        |> List.map (\index -> IdArray.get (Id.fromInt index) answers |> Maybe.withDefault Nothing)
+        |> IdArray.fromList
 
 
 {-| What two answers have to share to count as the same answer. Rendering the text with
@@ -1006,26 +1019,34 @@ answerKey answer =
 {-| The host's starting point for grouping: answers that already match once case and
 surrounding whitespace are ignored get the same label.
 -}
-autoGroup : ValidatedSetup -> SeqDict (Id UserId) (Array (Maybe ValidatedInput)) -> SeqDict ( Id UserId, Id QuestionId ) String
+autoGroup :
+    ValidatedSetup
+    -> SeqDict (Id UserId) (IdArray QuestionId (Maybe ValidatedInput))
+    -> SeqDict ( Id UserId, Id QuestionId ) String
 autoGroup setup answers =
     List.range 0 (List.Nonempty.length setup.questions - 1)
         |> List.concatMap
             (\questionIndex ->
+                let
+                    questionId : Id QuestionId
+                    questionId =
+                        Id.fromInt questionIndex
+                in
                 SeqDict.toList answers
                     |> List.filterMap
                         (\( userId, userAnswers ) ->
-                            case Array.get questionIndex userAnswers |> Maybe.withDefault Nothing of
-                                Just answer ->
+                            case IdArray.get questionId userAnswers of
+                                Just (Just answer) ->
                                     Just ( userId, answerKey answer )
 
-                                Nothing ->
+                                _ ->
                                     Nothing
                         )
                     |> List.Extra.gatherEqualsBy Tuple.second
                     |> List.indexedMap
                         (\groupIndex ( first, rest ) ->
                             List.map
-                                (\( userId, _ ) -> ( ( userId, Id.fromInt questionIndex ), groupLabel groupIndex ))
+                                (\( userId, _ ) -> ( ( userId, questionId ), groupLabel groupIndex ))
                                 (first :: rest)
                         )
                     |> List.concat
@@ -1046,7 +1067,7 @@ players shared =
     SeqDict.toList shared.answers
         |> List.filterMap
             (\( userId, answers ) ->
-                if List.any (\answer -> answer /= Nothing) (Array.toList answers) then
+                if List.any (\answer -> answer /= Nothing) (IdArray.toList answers) then
                     Just userId
 
                 else
@@ -1105,9 +1126,17 @@ groupsForQuestion questionId shared =
 
 answerFor : Id UserId -> Id QuestionId -> Shared -> Maybe ValidatedInput
 answerFor userId questionId shared =
-    SeqDict.get userId shared.answers
-        |> Maybe.andThen (Array.get (Id.toInt questionId))
-        |> Maybe.withDefault Nothing
+    case SeqDict.get userId shared.answers of
+        Just answers ->
+            case IdArray.get questionId answers of
+                Just answer ->
+                    answer
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
 
 
 setupView :
@@ -1409,23 +1438,66 @@ answeringView time contentWidth isMobile localUser loggedIn setup shared model =
                                 question.attachedFiles
                                 question.text
                             )
-                        , Ui.el
-                            [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
-                            (Ui.text "Your answer")
-                        , answerInput
-                            isMobile
-                            localUser
-                            loggedIn
-                            questionId
-                            (IdArray.get questionId model.answerDrafts
-                                |> Maybe.withDefault { text = "", attachedFiles = SeqDict.empty }
-                            )
+                        , if isHost localUser.session.userId setup then
+                            let
+                                answers : List (Element GameMsg)
+                                answers =
+                                    List.map
+                                        (\( userId, answers2 ) ->
+                                            case IdArray.get questionId answers2 of
+                                                Just (Just answer) ->
+                                                    contentView
+                                                        time
+                                                        contentWidth
+                                                        localUser
+                                                        (Dom.id
+                                                            ("sheepGame_answerPreview_"
+                                                                ++ Id.toString questionId
+                                                                ++ "_"
+                                                                ++ Id.toString userId
+                                                            )
+                                                        )
+                                                        answer.attachedFiles
+                                                        answer.text
+
+                                                _ ->
+                                                    Ui.el [ Ui.Font.italic ] (Ui.text "No answered")
+                                        )
+                                        (SeqDict.toList shared.answers)
+                            in
+                            case answers of
+                                [] ->
+                                    Ui.el [ Ui.Font.italic, Ui.Font.color MyUi.font3 ] (Ui.text "No answers yet")
+
+                                _ ->
+                                    Ui.column [] answers
+
+                          else
+                            Ui.column
+                                [ Ui.spacing 4 ]
+                                [ Ui.el
+                                    [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
+                                    (Ui.text "Your answer")
+                                , answerInput
+                                    isMobile
+                                    localUser
+                                    loggedIn
+                                    questionId
+                                    (IdArray.get questionId model.answerDrafts
+                                        |> Maybe.withDefault { text = "", attachedFiles = SeqDict.empty }
+                                    )
+                                ]
                         ]
                 )
         )
-    , Ui.row
-        [ Ui.spacing 8 ]
-        [ MyUi.simpleButton
+    , if isHost currentUserId setup then
+        MyUi.secondaryButton
+            (Dom.id "sheepGame_lockAnswers")
+            PressedLockAnswers
+            "Lock answers and tally score"
+
+      else
+        MyUi.simpleButton
             (Dom.id "sheepGame_submitAnswers")
             PressedSubmitAnswers
             (Ui.text
@@ -1436,15 +1508,6 @@ answeringView time contentWidth isMobile localUser loggedIn setup shared model =
                     "Submit answers"
                 )
             )
-        , if isHost currentUserId setup then
-            MyUi.secondaryButton
-                (Dom.id "sheepGame_lockAnswers")
-                PressedLockAnswers
-                "Lock answers and tally score"
-
-          else
-            Ui.none
-        ]
     , Ui.el
         [ Ui.Font.color MyUi.font3 ]
         (Ui.text (answeredCountText (players shared |> List.length)))
@@ -1539,10 +1602,17 @@ groupingView time contentWidth localUser setup shared =
             (List.Nonempty.toList setup.questions
                 |> List.indexedMap (groupingQuestionView time contentWidth localUser shared)
             )
-        , MyUi.simpleButton
-            (Dom.id "sheepGame_revealScores")
-            PressedRevealScores
-            (Ui.text "Reveal scores")
+        , Ui.row
+            [ Ui.spacing 8 ]
+            [ MyUi.secondaryButtonTall
+                (Dom.id "sheepGame_unlockAnswers")
+                PressedUnlockAnswers
+                "Unlock answers"
+            , MyUi.simpleButton
+                (Dom.id "sheepGame_revealScores")
+                PressedRevealScores
+                (Ui.text "Reveal scores")
+            ]
         ]
 
     else

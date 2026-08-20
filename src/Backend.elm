@@ -6578,16 +6578,20 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
                                 SheepGame.SubmittedAnswers answers ->
                                     { action
                                         | change =
-                                            Array.map
-                                                (Maybe.map
-                                                    (\answer ->
-                                                        { answer
-                                                            | attachedFiles =
-                                                                BackendExtra.validateAttachedFiles
-                                                                    model.files
-                                                                    answer.attachedFiles
-                                                        }
-                                                    )
+                                            IdArray.map
+                                                (\_ maybeAnswer ->
+                                                    case maybeAnswer of
+                                                        Just answer ->
+                                                            { answer
+                                                                | attachedFiles =
+                                                                    BackendExtra.validateAttachedFiles
+                                                                        model.files
+                                                                        answer.attachedFiles
+                                                            }
+                                                                |> Just
+
+                                                        Nothing ->
+                                                            maybeAnswer
                                                 )
                                                 answers
                                                 |> SheepGame.SubmittedAnswers

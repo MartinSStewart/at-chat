@@ -7,6 +7,7 @@ module IdArray exposing
     , isEmpty
     , last
     , length
+    , map
     , push
     , set
     , slice
@@ -37,6 +38,11 @@ get key (IdArray array) =
 set : Id k -> v -> IdArray k v -> IdArray k v
 set key value (IdArray array) =
     Array.set (Id.toInt key) value array |> IdArray
+
+
+map : (Id k -> v1 -> v2) -> IdArray k v1 -> IdArray k v2
+map mapFunc (IdArray array) =
+    Array.indexedMap (\index value -> mapFunc (Id.fromInt index) value) array |> IdArray
 
 
 update : Id k -> (v -> v) -> IdArray k v -> IdArray k v
