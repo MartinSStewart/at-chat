@@ -158,7 +158,7 @@ type alias GameData =
 
 
 type GameMsg
-    = TypedAnswer (Id QuestionId) String
+    = TypedAnswer (Id QuestionId) MessageInput.Msg
     | PressedSubmitAnswers
     | PressedLockAnswers
     | TypedGroup (Id UserId) (Id QuestionId) String
@@ -701,16 +701,26 @@ updateGame :
     -> ( GameData, Maybe Action )
 updateGame localUser setup shared msg model =
     case msg of
-        TypedAnswer questionId text ->
-            ( { model
-                | answerDrafts =
-                    IdArray.update
-                        questionId
-                        (\draft -> { draft | text = String.left maxAnswerLength text })
-                        model.answerDrafts
-              }
-            , Nothing
-            )
+        TypedAnswer questionId messageInputMsg ->
+            case messageInputMsg of
+                MessageInput.TypedMessage text ->
+                    ( { model
+                        | answerDrafts =
+                            IdArray.update
+                                questionId
+                                (\draft -> { draft | text = String.left maxAnswerLength text })
+                                model.answerDrafts
+                      }
+                    , Nothing
+                    )
+
+                -- An answer is written in the same input a message is, but none of the rest of
+                -- what that input can ask for reaches anything here. The buttons that upload a
+                -- file or open the emoji picker aren't drawn beside an answer, the mention and
+                -- emoji dropdown only ever opens over the channel and edit message inputs, and
+                -- there's no last message behind an answer to start editing.
+                _ ->
+                    ( model, Nothing )
 
         PressedSubmitAnswers ->
             ( model
@@ -1094,8 +1104,8 @@ questionInput isMobile localUser loggedIn users index question =
         ]
 
 
-gameView : Time.Posix -> Coord CssPixels -> LocalUser -> ValidatedSetup -> Shared -> GameData -> Element GameMsg
-gameView time windowSize localUser setup shared model =
+gameView : Time.Posix -> Coord CssPixels -> LocalUser -> LoggedIn a -> ValidatedSetup -> Shared -> GameData -> Element GameMsg
+gameView time windowSize localUser loggedIn setup shared model =
     let
         isMobile : Bool
         isMobile =
@@ -1115,7 +1125,7 @@ gameView time windowSize localUser setup shared model =
         ]
         (case shared.phase of
             Answering ->
-                answeringView time localUser setup shared model
+                answeringView time isMobile localUser loggedIn setup shared model
 
             Grouping ->
                 groupingView time localUser setup shared
@@ -1145,8 +1155,16 @@ contentView time localUser attachedFiles content =
         |> Ui.html
 
 
-answeringView : Time.Posix -> LocalUser -> ValidatedSetup -> Shared -> GameData -> List (Element GameMsg)
-answeringView time localUser setup shared model =
+answeringView :
+    Time.Posix
+    -> Bool
+    -> LocalUser
+    -> LoggedIn a
+    -> ValidatedSetup
+    -> Shared
+    -> GameData
+    -> List (Element GameMsg)
+answeringView time isMobile localUser loggedIn setup shared model =
     let
         currentUserId : Id UserId
         currentUserId =
@@ -1165,35 +1183,23 @@ answeringView time localUser setup shared model =
                         questionId : Id QuestionId
                         questionId =
                             Id.fromInt index
-
-                        label : { element : Element GameMsg, id : Ui.Input.Label }
-                        label =
-                            MyUi.label
-                                (Dom.id ("sheepGame_answer_" ++ String.fromInt index))
-                                [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
-                                (Ui.text "Your answer")
                     in
                     Ui.column
                         [ Ui.spacing 4 ]
                         [ Ui.el
                             [ Ui.Font.weight 600 ]
                             (contentView time localUser question.attachedFiles question.text)
-                        , label.element
-                        , Ui.Input.text
-                            [ Ui.border 1
-                            , Ui.borderColor MyUi.inputBorder
-                            , Ui.background MyUi.inputBackground
-                            , Ui.rounded 4
-                            , Ui.paddingXY 8 8
-                            ]
-                            { onChange = TypedAnswer questionId
-                            , text =
-                                IdArray.get questionId model.answerDrafts
-                                    |> Maybe.map .text
-                                    |> Maybe.withDefault ""
-                            , placeholder = Nothing
-                            , label = label.id
-                            }
+                        , Ui.el
+                            [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
+                            (Ui.text "Your answer")
+                        , answerInput
+                            isMobile
+                            localUser
+                            loggedIn
+                            questionId
+                            (IdArray.get questionId model.answerDrafts
+                                |> Maybe.withDefault { text = "", attachedFiles = SeqDict.empty }
+                            )
                         ]
                 )
         )
@@ -1223,6 +1229,34 @@ answeringView time localUser setup shared model =
         [ Ui.Font.color MyUi.font3 ]
         (Ui.text (answeredCountText (players shared |> List.length)))
     ]
+
+
+answerInputId : Id QuestionId -> HtmlId
+answerInputId questionId =
+    Dom.id ("sheepGame_answer_" ++ Id.toString questionId)
+
+
+{-| An answer is written in the same input a message is, so that what someone types is
+drawn the way it will be once everyone's answers are compared.
+-}
+answerInput : Bool -> LocalUser -> LoggedIn a -> Id QuestionId -> UnvalidatedInput -> Element GameMsg
+answerInput isMobile localUser loggedIn questionId answer =
+    MessageInput.textarea
+        isMobile
+        (answerInputId questionId)
+        ""
+        (maxAnswerLength - String.length answer.text)
+        answer.text
+        (String.Nonempty.fromString answer.text
+            |> Maybe.map (RichText.fromNonemptyString localUser.timezone (allUsers localUser))
+        )
+        answer.attachedFiles
+        localUser
+        loggedIn
+        (allUsers localUser)
+        |> Ui.html
+        |> Ui.map (TypedAnswer questionId)
+        |> Ui.el (Ui.heightMax 200 :: MessageInput.containerAttributes True)
 
 
 answeredCountText : Int -> String

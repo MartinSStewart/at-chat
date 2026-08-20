@@ -331,6 +331,7 @@ setupModel questions =
         List.map (\text -> { text = text, attachedFiles = SeqDict.empty }) questions
             |> IdArray.fromList
     , error = Nothing
+    , pressedSubmit = False
     }
 
 
@@ -340,6 +341,7 @@ setupModelWithFiles : SeqDict (Id FileStatus.FileId) FileStatus.FileStatus -> Sh
 setupModelWithFiles attachedFiles =
     { questions = IdArray.fromList [ { text = "Name a colour", attachedFiles = attachedFiles } ]
     , error = Nothing
+    , pressedSubmit = False
     }
 
 
