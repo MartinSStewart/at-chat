@@ -93,13 +93,15 @@ sheepGameDmTest normalConfig =
                             (Test.Html.Query.hasNot [ Test.Html.Selector.id "emoji_search_input" ])
                         , user.input 100 (Dom.id "sheepGame_answer_0") "blue"
                         , user.input 100 (Dom.id "sheepGame_answer_1") "Cat"
-                        , user.click 100 (Dom.id "sheepGame_submitAnswers")
+
+                        -- There's no button to press: an answer saves itself once the player
+                        -- has stopped typing it for a moment, which is what this waits out.
                         , admin.checkView
-                            100
+                            2000
                             (Test.Html.Query.has [ Test.Html.Selector.text "1 player has answered so far" ])
 
-                        -- Opening the match fresh puts the answers already submitted back in
-                        -- the boxes, so pressing the button again can't blank them out.
+                        -- Saving as they're typed is what makes a refresh survivable, so
+                        -- opening the match fresh puts them back in the boxes.
                         , T.connectFrontend
                             100
                             E2EHelper.sessionId1
@@ -381,25 +383,25 @@ threePlayerMatchTest normalConfig =
                                 , stevie.input 100 (Dom.id "sheepGame_answer_0") "Blue"
                                 , stevie.input 100 (Dom.id "sheepGame_answer_1") "Cat"
                                 , stevie.input 100 (Dom.id "sheepGame_answer_2") "Apple"
-                                , stevie.click 100 (Dom.id "sheepGame_submitAnswers")
+
+                                -- Answers save themselves a moment after the typing stops,
+                                -- so there's no button to press here either.
                                 , admin.checkView
-                                    100
+                                    2000
                                     (Test.Html.Query.has [ Test.Html.Selector.text "1 player has answered so far" ])
 
                                 -- Case doesn't matter to the grouping, so blue scores together with Blue.
                                 , joe.input 100 (Dom.id "sheepGame_answer_0") "blue"
                                 , joe.input 100 (Dom.id "sheepGame_answer_1") "Dog"
                                 , joe.input 100 (Dom.id "sheepGame_answer_2") "apple"
-                                , joe.click 100 (Dom.id "sheepGame_submitAnswers")
 
                                 -- Wanda can't think of a fruit and submits with that box left empty.
                                 , wanda.input 100 (Dom.id "sheepGame_answer_0") "Red"
                                 , wanda.input 100 (Dom.id "sheepGame_answer_1") "Dog"
-                                , wanda.click 100 (Dom.id "sheepGame_submitAnswers")
 
                                 -- Answering two of the three questions still counts as playing.
                                 , admin.checkView
-                                    100
+                                    2000
                                     (Test.Html.Query.has [ Test.Html.Selector.text "3 players have answered so far" ])
                                 , admin.click 100 (Dom.id "sheepGame_lockAnswers")
 

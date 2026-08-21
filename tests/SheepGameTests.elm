@@ -65,31 +65,38 @@ setup questionCount =
     }
 
 
-action : Id UserId -> Action -> SheepGame.ActionWithTime
+{-| One thing someone did. Actions come in lists so that the answers a player wrote, which
+save a question at a time, sit in the same list as everything else.
+-}
+action : Id UserId -> Action -> List SheepGame.ActionWithTime
 action userId change =
-    { userId = userId, time = Time.millisToPosix 0, change = change }
+    [ { userId = userId, time = Time.millisToPosix 0, change = change } ]
 
 
 {-| Replay a list of actions the way the backend and every client do.
 -}
-apply : SheepGame.ValidatedSetup -> List SheepGame.ActionWithTime -> SheepGame.Shared
+apply : SheepGame.ValidatedSetup -> List (List SheepGame.ActionWithTime) -> SheepGame.Shared
 apply setup2 actions =
-    List.foldl (SheepGame.updateAction setup2) SheepGame.initShared actions
+    List.foldl (SheepGame.updateAction setup2) SheepGame.initShared (List.concat actions)
 
 
-answers : List String -> Action
-answers list =
-    List.map
-        (\text ->
-            if String.trim text == "" then
+{-| Everything one player wrote, as the separate actions saving each box produces.
+-}
+answers : Id UserId -> List String -> List SheepGame.ActionWithTime
+answers userId list =
+    List.indexedMap
+        (\index text ->
+            (if String.trim text == "" then
                 Nothing
 
-            else
+             else
                 Just (question (String.trim text))
+            )
+                |> SubmittedAnswer (Id.fromInt index)
+                |> action userId
         )
         list
-        |> IdArray.fromList
-        |> SubmittedAnswers
+        |> List.concat
 
 
 {-| The answers someone submitted, back as plain text.
@@ -118,9 +125,9 @@ tests =
         [ Test.test "Everyone who wrote the same answer scores the size of their group"
             (\_ ->
                 apply (setup 1)
-                    [ action playerA (answers [ "Blue" ])
-                    , action playerB (answers [ "blue " ])
-                    , action playerC (answers [ "Red" ])
+                    [ answers playerA [ "Blue" ]
+                    , answers playerB [ "blue " ]
+                    , answers playerC [ "Red" ]
                     , action host LockedAnswers
                     , action host FinishedGrouping
                     , action host (ChangedQuestionsRevealed (Id.fromInt 1))
@@ -136,8 +143,8 @@ tests =
                     shared : SheepGame.Shared
                     shared =
                         apply (setup 2)
-                            [ action playerA (answers [ "Blue", "Dog" ])
-                            , action playerB (answers [ "Blue", "Cat" ])
+                            [ answers playerA [ "Blue", "Dog" ]
+                            , answers playerB [ "Blue", "Cat" ]
                             , action host LockedAnswers
                             , action host FinishedGrouping
                             ]
@@ -155,8 +162,8 @@ tests =
                     grouped : SheepGame.Shared
                     grouped =
                         apply (setup 1)
-                            [ action playerA (answers [ "a dog" ])
-                            , action playerB (answers [ "dogs" ])
+                            [ answers playerA [ "a dog" ]
+                            , answers playerB [ "dogs" ]
                             , action host LockedAnswers
 
                             -- Auto-grouping can't see that these are the same answer, so the
@@ -170,8 +177,8 @@ tests =
         , Test.test "Answers written with formatting group by what they say"
             (\_ ->
                 apply (setup 1)
-                    [ action playerA (answers [ "**blue**" ])
-                    , action playerB (answers [ "**Blue**" ])
+                    [ answers playerA [ "**blue**" ]
+                    , answers playerB [ "**Blue**" ]
                     , action host LockedAnswers
                     , action host FinishedGrouping
                     ]
@@ -183,8 +190,8 @@ tests =
                 -- Bold and plain are different answers as far as auto-grouping is concerned.
                 -- Merging them is exactly what the host's grouping pass is for.
                 apply (setup 1)
-                    [ action playerA (answers [ "**blue**" ])
-                    , action playerB (answers [ "blue" ])
+                    [ answers playerA [ "**blue**" ]
+                    , answers playerB [ "blue" ]
                     , action host LockedAnswers
                     , action host FinishedGrouping
                     ]
@@ -194,8 +201,8 @@ tests =
         , Test.test "A blank answer scores nothing and keeps the player off the scoreboard"
             (\_ ->
                 apply (setup 1)
-                    [ action playerA (answers [ "Blue" ])
-                    , action playerB (answers [ "  " ])
+                    [ answers playerA [ "Blue" ]
+                    , answers playerB [ "  " ]
                     , action host LockedAnswers
                     , action host FinishedGrouping
                     ]
@@ -214,7 +221,7 @@ tests =
                     unlocked : SheepGame.Shared
                     unlocked =
                         apply (setup 1)
-                            [ action playerA (answers [ "Blue" ])
+                            [ answers playerA [ "Blue" ]
                             , action host LockedAnswers
                             , action host UnlockedAnswers
                             ]
@@ -233,7 +240,7 @@ tests =
         , Test.test "Only the host can move the reveal along"
             (\_ ->
                 apply (setup 2)
-                    [ action playerA (answers [ "Blue", "Dog" ])
+                    [ answers playerA [ "Blue", "Dog" ]
                     , action host LockedAnswers
                     , action host FinishedGrouping
                     , action playerB (ChangedQuestionsRevealed (Id.fromInt 2))
@@ -244,19 +251,37 @@ tests =
         , Test.test "Answers submitted after the host locked them are ignored"
             (\_ ->
                 apply (setup 1)
-                    [ action playerA (answers [ "Blue" ])
+                    [ answers playerA [ "Blue" ]
                     , action host LockedAnswers
-                    , action playerB (answers [ "Blue" ])
+                    , answers playerB [ "Blue" ]
                     ]
                     |> .answers
                     |> SeqDict.keys
                     |> Expect.equal [ playerA ]
             )
-        , Test.test "Answers are padded and trimmed to the number of questions the host wrote"
+        , Test.test "Answers are fitted to the number of questions the host wrote"
             (\_ ->
-                apply (setup 2) [ action playerA (answers [ " Blue ", "Dog", "Extra" ]) ]
+                apply (setup 2) [ answers playerA [ " Blue ", "Dog", "Extra" ] ]
                     |> answerTexts playerA
                     |> Expect.equal (Just [ "Blue", "Dog" ])
+            )
+        , Test.test "Each box saves on its own, so writing one answer doesn't blank the rest"
+            (\_ ->
+                apply (setup 3)
+                    [ answers playerA [ "Blue" ]
+                    , action playerA (SubmittedAnswer (Id.fromInt 2) (Just (question "Apple")))
+                    ]
+                    |> answerTexts playerA
+                    |> Expect.equal (Just [ "Blue", "", "Apple" ])
+            )
+        , Test.test "Emptying a box that was saved takes that answer back off again"
+            (\_ ->
+                apply (setup 2)
+                    [ answers playerA [ "Blue", "Dog" ]
+                    , action playerA (SubmittedAnswer (Id.fromInt 0) Nothing)
+                    ]
+                    |> answerTexts playerA
+                    |> Expect.equal (Just [ "", "Dog" ])
             )
         , Test.test "A setup with nothing but blank questions is rejected"
             (\_ ->
@@ -324,9 +349,9 @@ resultsTests =
         results : { maxPoints : Int, questions : List SheepGame.QuestionResult, winners : List (Id UserId) }
         results =
             apply (setup 2)
-                [ action playerA (answers [ "Blue", "Dog" ])
-                , action playerB (answers [ "Red", "Dog" ])
-                , action playerC (answers [ "Red", "Cat" ])
+                [ answers playerA [ "Blue", "Dog" ]
+                , answers playerB [ "Red", "Dog" ]
+                , answers playerC [ "Red", "Cat" ]
                 , action host LockedAnswers
                 , action host FinishedGrouping
                 ]

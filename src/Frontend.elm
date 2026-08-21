@@ -8163,6 +8163,15 @@ handleGameOutMsgs outMsgs model =
                         :: cmds
                     )
 
+                Game.SaveSheepGameAnswerAfterDelay matchId questionId counter ->
+                    ( model2
+                    , (Process.sleep Game.sheepGameAnswerSaveDelay
+                        |> Task.perform
+                            (\() -> GameMsg (Game.CheckedSheepGameAnswerDebounce matchId questionId counter))
+                      )
+                        :: cmds
+                    )
+
                 Game.SelectSheepGameFilesToAttach input ->
                     ( model2
                     , Effect.File.Select.files

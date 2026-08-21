@@ -20,6 +20,7 @@ module SheepGame exposing
     , ValidatedInput
     , ValidatedSetup
     , attachedFileTrackerId
+    , changedAnswers
     , clampSavedQuestions
     , fileUploadPreview
     , fileUploadPreviewSize
@@ -33,6 +34,7 @@ module SheepGame exposing
     , mapQuestionRichText
     , removeAttachedFileFromText
     , resultsData
+    , saveAnswerAction
     , scoresThroughQuestion
     , setupView
     , updateAction
@@ -118,7 +120,7 @@ no amount of string comparison is going to work that out.
 -}
 type alias Shared =
     { phase : Phase
-    , answers : SeqDict (Id UserId) (IdArray QuestionId UnvalidatedInput)
+    , answers : SeqDict (Id UserId) (IdArray QuestionId (Maybe ValidatedInput))
     , groups : SeqDict ( Id UserId, Id QuestionId ) String
     , notes : SeqDict (Id QuestionId) String
     , questionsRevealed : Int
@@ -162,7 +164,12 @@ type SetupOrGame
 {-| View state that belongs to one player and never reaches anyone else.
 -}
 type alias GameData =
-    { gridHovered : Maybe ( Id UserId, Id UserId )
+    { -- What's in each answer box right now. Saving happens on a delay, so this is ahead
+      -- of what everyone else has been told until the typing stops.
+      answerDrafts : IdArray QuestionId UnvalidatedInput
+    , -- Which pair of players the cursor is over in the results grid, so their row and
+      -- column light up and how much they matched is spelled out beside it.
+      gridHovered : Maybe ( Id UserId, Id UserId )
     }
 
 
@@ -265,13 +272,35 @@ clampSavedQuestions questions =
 
 
 {-| Someone opening a match they've already answered gets their own answers back in the
-boxes, so that reloading the page and pressing the button again doesn't replace them with
-a screen full of blanks. They come back as the text that was typed to produce them, which
-is what the boxes take.
+boxes rather than a screen full of blanks. They come back as the text that was typed to
+produce them, which is what the boxes take.
 -}
 initGame : LocalUser -> ValidatedSetup -> Shared -> GameData
 initGame localUser setup shared =
-    { gridHovered = Nothing
+    { answerDrafts =
+        (case SeqDict.get localUser.session.userId shared.answers of
+            Just answers ->
+                IdArray.toList answers
+                    |> List.map
+                        (\answer ->
+                            case answer of
+                                Just answer2 ->
+                                    { text = toSourceText localUser answer2.text
+                                    , attachedFiles =
+                                        SeqDict.map
+                                            (\_ fileData -> FileStatus.FileUploaded fileData)
+                                            answer2.attachedFiles
+                                    }
+
+                                Nothing ->
+                                    emptyInput
+                        )
+
+            Nothing ->
+                List.repeat (List.Nonempty.length setup.questions) emptyInput
+        )
+            |> IdArray.fromList
+    , gridHovered = Nothing
     }
 
 
@@ -846,20 +875,6 @@ updateGame localUser setup shared msg model =
             , NoOutMsg
             )
 
-        PressedSubmitAnswers ->
-            ( model
-            , IdArray.map
-                (\_ draft ->
-                    validateInput localUser.timezone (User.allUsers localUser) draft
-                        |> Result.toMaybe
-                        |> Maybe.map (\answer -> answer ())
-                )
-                model.answerDrafts
-                |> SubmittedAnswers
-                |> Just
-            , NoOutMsg
-            )
-
         PressedLockAnswers ->
             ( model, Just LockedAnswers, NoOutMsg )
 
@@ -908,6 +923,43 @@ updateGame localUser setup shared msg model =
 
         NoOp ->
             ( model, Nothing, NoOutMsg )
+
+
+{-| The answer boxes whose contents changed, so that typing in one doesn't schedule a save
+for every other answer as well.
+-}
+changedAnswers : GameData -> GameData -> List (Id QuestionId)
+changedAnswers before after =
+    IdArray.map
+        (\questionId draft ->
+            if IdArray.get questionId before.answerDrafts == Just draft then
+                Nothing
+
+            else
+                Just questionId
+        )
+        after.answerDrafts
+        |> IdArray.toList
+        |> List.filterMap identity
+
+
+{-| What one answer box is worth saving as, once the player has stopped typing in it. A box
+with nothing in it yet, or one naming a file that hasn't finished uploading, saves as no
+answer at all rather than holding the save up.
+-}
+saveAnswerAction : LocalUser -> Id QuestionId -> GameData -> Action
+saveAnswerAction localUser questionId model =
+    SubmittedAnswer
+        questionId
+        (case IdArray.get questionId model.answerDrafts of
+            Just draft ->
+                validateInput localUser.timezone (User.allUsers localUser) draft
+                    |> Result.toMaybe
+                    |> Maybe.map (\answer -> answer ())
+
+            Nothing ->
+                Nothing
+        )
 
 
 {-| Everything the host is allowed to do and nobody else is. The backend replays the same
@@ -993,16 +1045,6 @@ updateAction setup action shared =
 
                 _ ->
                     shared
-
-
-{-| Answers arrive from a client that might disagree with us about how many questions
-there are, so they're trimmed or padded to fit rather than trusted.
--}
-padAnswers : Int -> IdArray QuestionId (Maybe ValidatedInput) -> IdArray QuestionId (Maybe ValidatedInput)
-padAnswers questionCount answers =
-    List.range 0 (questionCount - 1)
-        |> List.map (\index -> IdArray.get (Id.fromInt index) answers |> Maybe.withDefault Nothing)
-        |> IdArray.fromList
 
 
 {-| What two answers have to share to count as the same answer. Rendering the text with

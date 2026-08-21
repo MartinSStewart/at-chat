@@ -6575,26 +6575,19 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
                                 -- An answer names the files attached to it the way a message
                                 -- does, so it gets the same check that we're actually holding
                                 -- the ones it names.
-                                SheepGame.SubmittedAnswers answers ->
+                                SheepGame.SubmittedAnswer questionId (Just answer) ->
                                     { action
                                         | change =
-                                            IdArray.map
-                                                (\_ maybeAnswer ->
-                                                    case maybeAnswer of
-                                                        Just answer ->
-                                                            { answer
-                                                                | attachedFiles =
-                                                                    BackendExtra.validateAttachedFiles
-                                                                        model.files
-                                                                        answer.attachedFiles
-                                                            }
-                                                                |> Just
-
-                                                        Nothing ->
-                                                            maybeAnswer
+                                            SheepGame.SubmittedAnswer
+                                                questionId
+                                                (Just
+                                                    { answer
+                                                        | attachedFiles =
+                                                            BackendExtra.validateAttachedFiles
+                                                                model.files
+                                                                answer.attachedFiles
+                                                    }
                                                 )
-                                                answers
-                                                |> SheepGame.SubmittedAnswers
                                     }
 
                                 _ ->
