@@ -5,6 +5,8 @@ import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Expect
 import Html.Attributes
+import Id exposing (ChannelMessageId, Id)
+import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
@@ -19,6 +21,7 @@ tests normalConfig =
         [ sheepGameDmTest normalConfig
         , setupNeedsAQuestionTest normalConfig
         , questionsSurviveAReloadTest normalConfig
+        , threePlayerMatchTest normalConfig
         ]
 
 
@@ -179,10 +182,14 @@ sheepGameDmTest normalConfig =
                             (Test.Html.Query.has [ Test.Html.Selector.text "And the winner is" ])
                         , user.checkView
                             100
-                            (Test.Html.Query.has
-                                [ Test.Html.Selector.text "And the winner is"
-                                , Test.Html.Selector.text "Which players think most alike"
-                                ]
+                            (Test.Html.Query.has [ Test.Html.Selector.text "And the winner is" ])
+
+                        -- One player is nobody to compare against, so the grid of who thinks
+                        -- alike is left out of a match this small.
+                        , user.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.text "Which players think most alike" ]
                             )
 
                         -- Nobody else is answering, so each question is worth the one point
@@ -334,3 +341,140 @@ questionsSurviveAReloadTest normalConfig =
                 ]
             )
         ]
+
+
+{-| A guild channel has room for more than the one player a DM does. Three of them is
+enough for the scoreboard to reorder itself as the questions are revealed, and for the
+grid at the end to have pairs to compare. One player submits with a question left blank,
+so they score nothing for it while everyone else moves on.
+-}
+threePlayerMatchTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+threePlayerMatchTest normalConfig =
+    E2EHelper.startTest
+        "Three players play a sheep game in a guild channel"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectFourUsersAndJoinNewGuild
+            E2EHelper.tallDesktopWindow
+            (\admin stevie joe wanda ->
+                [ admin.click 100 (Dom.id "guild_openGamesTab")
+                , admin.click 100 (Dom.id "game_select_Sheep Game (WIP)")
+
+                -- The setup opens with two questions written in, so a third is added.
+                , admin.input 100 (Dom.id "sheepGame_question_0") "Name a colour"
+                , admin.input 100 (Dom.id "sheepGame_question_1") "Name an animal"
+                , admin.click 100 (Dom.id "sheepGame_addQuestion")
+                , admin.input 100 (Dom.id "sheepGame_question_2") "Name a fruit"
+                , admin.click 100 (Dom.id "sheepGame_start")
+
+                -- Everyone else opens the match from the card it wrote to the channel.
+                , T.andThen
+                    100
+                    (\state ->
+                        case guildChannelGameId state.backend of
+                            Just messageId ->
+                                [ stevie.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
+                                , joe.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
+                                , wanda.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
+                                , stevie.input 100 (Dom.id "sheepGame_answer_0") "Blue"
+                                , stevie.input 100 (Dom.id "sheepGame_answer_1") "Cat"
+                                , stevie.input 100 (Dom.id "sheepGame_answer_2") "Apple"
+                                , stevie.click 100 (Dom.id "sheepGame_submitAnswers")
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "1 player has answered so far" ])
+
+                                -- Case doesn't matter to the grouping, so blue scores together with Blue.
+                                , joe.input 100 (Dom.id "sheepGame_answer_0") "blue"
+                                , joe.input 100 (Dom.id "sheepGame_answer_1") "Dog"
+                                , joe.input 100 (Dom.id "sheepGame_answer_2") "apple"
+                                , joe.click 100 (Dom.id "sheepGame_submitAnswers")
+
+                                -- Wanda can't think of a fruit and submits with that box left empty.
+                                , wanda.input 100 (Dom.id "sheepGame_answer_0") "Red"
+                                , wanda.input 100 (Dom.id "sheepGame_answer_1") "Dog"
+                                , wanda.click 100 (Dom.id "sheepGame_submitAnswers")
+
+                                -- Answering two of the three questions still counts as playing.
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "3 players have answered so far" ])
+                                , admin.click 100 (Dom.id "sheepGame_lockAnswers")
+
+                                -- The host writes a comment on the first question, which the results screen
+                                -- shows under it.
+                                , admin.input 100 (Dom.id "sheepGame_notes_0") "Nobody said green"
+                                , admin.click 100 (Dom.id "sheepGame_revealScores")
+
+                                -- Everyone scores the size of the group their answer landed in, so the first
+                                -- question leaves Stevie and Joe on 2 apiece and Wanda on 1. Nobody has
+                                -- passed anyone yet, so no arrows are drawn.
+                                , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
+                                , wanda.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text "Name a colour"
+                                        , Test.Html.Selector.text "Nobody said green"
+                                        ]
+                                    )
+                                , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Name an animal" ])
+                                , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "▲" ])
+                                , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "▼" ])
+
+                                -- Dog is worth two points to Joe and Wanda while Cat is worth one to Stevie,
+                                -- which puts Joe past Stevie: one arrow up and one arrow down.
+                                , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
+                                , wanda.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text "Cat"
+                                        , Test.Html.Selector.text "Dog"
+                                        , Test.Html.Selector.text "▲"
+                                        , Test.Html.Selector.text "▼"
+                                        ]
+                                    )
+
+                                -- The last question is only worth something to the two who answered it, so
+                                -- Stevie finishes on 5 and Joe on 6 while Wanda stays on the 3 she had.
+                                , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
+                                , wanda.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.exactText "5"
+                                        , Test.Html.Selector.exactText "6"
+                                        , Test.Html.Selector.exactText "3"
+                                        ]
+                                    )
+                                , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "7" ])
+
+                                -- And with three players there are pairs to compare, so the grid turns up
+                                -- alongside the winner.
+                                , wanda.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text "And the winner is"
+                                        , Test.Html.Selector.text "Which players think most alike"
+                                        , Test.Html.Selector.text "Move your cursor over a grid square"
+                                        ]
+                                    )
+                                ]
+
+                            Nothing ->
+                                [ T.checkState 0 (\_ -> Err "Expected a sheep game in the guild channel") ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| The channel message the sheep game was started from, which is what the card that opens
+the match is named after.
+-}
+guildChannelGameId : E2EHelper.BackendModel2 -> Maybe (Id ChannelMessageId)
+guildChannelGameId backend =
+    SeqDict.values (E2EHelper.unwrapBackend backend).guilds
+        |> List.concatMap (\guild -> SeqDict.values guild.channels)
+        |> List.concatMap (\channel -> SeqDict.keys channel.games)
+        |> List.head
