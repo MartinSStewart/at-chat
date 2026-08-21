@@ -1,6 +1,7 @@
 module SheepGame exposing
     ( Action(..)
     , ActionWithTime
+    , AnswerResult
     , GameData
     , GameMsg(..)
     , Input(..)
