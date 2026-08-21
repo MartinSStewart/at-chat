@@ -118,7 +118,7 @@ no amount of string comparison is going to work that out.
 -}
 type alias Shared =
     { phase : Phase
-    , answers : SeqDict (Id UserId) (IdArray QuestionId (Maybe ValidatedInput))
+    , answers : SeqDict (Id UserId) (IdArray QuestionId UnvalidatedInput)
     , groups : SeqDict ( Id UserId, Id QuestionId ) String
     , notes : SeqDict (Id QuestionId) String
     , questionsRevealed : Int
@@ -162,10 +162,7 @@ type SetupOrGame
 {-| View state that belongs to one player and never reaches anyone else.
 -}
 type alias GameData =
-    { answerDrafts : IdArray QuestionId UnvalidatedInput
-    , -- Which pair of players the cursor is over in the results grid, so their row and
-      -- column light up and how much they matched is spelled out beside it.
-      gridHovered : Maybe ( Id UserId, Id UserId )
+    { gridHovered : Maybe ( Id UserId, Id UserId )
     }
 
 
@@ -176,7 +173,6 @@ type GameMsg
     | PressedDeleteAnswerFile (Id QuestionId) (Id FileId)
     | PressedViewAnswerFileInfo (Id QuestionId) (Id FileId)
     | PressedToggleAnswerFileSpoiler (Id QuestionId) { fileId : Id FileId, removeSpoiler : Bool }
-    | PressedSubmitAnswers
     | PressedLockAnswers
     | PressedUnlockAnswers
     | TypedGroup (Id UserId) (Id QuestionId) String
@@ -190,7 +186,7 @@ type GameMsg
 
 
 type Action
-    = SubmittedAnswers (IdArray QuestionId (Maybe ValidatedInput))
+    = SubmittedAnswer (Id QuestionId) (Maybe ValidatedInput)
     | LockedAnswers
     | UnlockedAnswers
     | ChangedGroup (Id UserId) (Id QuestionId) String
@@ -275,30 +271,7 @@ is what the boxes take.
 -}
 initGame : LocalUser -> ValidatedSetup -> Shared -> GameData
 initGame localUser setup shared =
-    { answerDrafts =
-        (case SeqDict.get localUser.session.userId shared.answers of
-            Just answers ->
-                IdArray.toList answers
-                    |> List.map
-                        (\answer ->
-                            case answer of
-                                Just answer2 ->
-                                    { text = toSourceText localUser answer2.text
-                                    , attachedFiles =
-                                        SeqDict.map
-                                            (\_ fileData -> FileStatus.FileUploaded fileData)
-                                            answer2.attachedFiles
-                                    }
-
-                                Nothing ->
-                                    emptyInput
-                        )
-
-            Nothing ->
-                List.repeat (List.Nonempty.length setup.questions) emptyInput
-        )
-            |> IdArray.fromList
-    , gridHovered = Nothing
+    { gridHovered = Nothing
     }
 
 
@@ -949,14 +922,22 @@ isHost userId setup =
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
 updateAction setup action shared =
     case action.change of
-        SubmittedAnswers answers ->
+        SubmittedAnswer questionId answer ->
             case shared.phase of
                 Answering ->
                     { shared
                         | answers =
-                            SeqDict.insert
+                            SeqDict.update
                                 action.userId
-                                (padAnswers (List.Nonempty.length setup.questions) answers)
+                                (\answers ->
+                                    Maybe.withDefault
+                                        (Array.initialize (List.Nonempty.length setup.questions) (\_ -> Nothing)
+                                            |> IdArray.fromArray
+                                        )
+                                        answers
+                                        |> IdArray.set questionId answer
+                                        |> Just
+                                )
                                 shared.answers
                     }
 
@@ -1538,17 +1519,7 @@ answeringView time contentWidth isMobile localUser loggedIn setup shared model =
             "Lock answers and tally score"
 
       else
-        MyUi.simpleButton
-            (Dom.id "sheepGame_submitAnswers")
-            PressedSubmitAnswers
-            (Ui.text
-                (if SeqDict.member currentUserId shared.answers then
-                    "Update answers"
-
-                 else
-                    "Submit answers"
-                )
-            )
+        Ui.text "Your answers are saved automatically!"
     , Ui.el
         [ Ui.Font.color MyUi.font3 ]
         (Ui.text (answeredCountText (players shared |> List.length)))

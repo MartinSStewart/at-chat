@@ -2,6 +2,7 @@ module IdArray exposing
     ( IdArray(..)
     , empty
     , foldl
+    , fromArray
     , fromList
     , get
     , isEmpty
@@ -83,6 +84,11 @@ toList (IdArray array) =
 toArray : IdArray k v -> Array v
 toArray (IdArray array) =
     array
+
+
+fromArray : Array v -> IdArray k v
+fromArray =
+    IdArray
 
 
 fromList : List v -> IdArray k v
