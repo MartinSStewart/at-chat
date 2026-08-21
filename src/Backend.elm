@@ -5337,6 +5337,23 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_SetUserColor color ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\{ userId } user ->
+                            ( { model | users = NonemptyDict.insert userId { user | color = color } model.users }
+                            , Command.batch
+                                [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                                , Broadcast.toEveryoneWhoCanSeeUser
+                                    clientId
+                                    userId
+                                    (ServerChange (Server_SetUserColor userId color))
+                                    model
+                                ]
+                            )
+                        )
+
                 Local_AddCustomEmojisToUser customEmojiIds ->
                     BackendExtra.asUser
                         model

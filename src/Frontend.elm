@@ -3271,6 +3271,42 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedSubmitUserColor ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_SetUserColor userOptions.color |> Just)
+                                loggedIn
+                                Command.none
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+        PressedResetUserColor ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            ( { loggedIn
+                                | userOptions =
+                                    Just
+                                        { userOptions
+                                            | color = (Local.model loggedIn.localState).localUser.user.color
+                                        }
+                              }
+                            , Command.none
+                            )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
         PressedSaveDomainWhitelist ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->

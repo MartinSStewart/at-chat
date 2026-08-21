@@ -1,6 +1,7 @@
 module E2EMisc exposing
     ( channelSearchTest
     , codeBlockInputTest
+    , colorPickerTest
     , dmThreadsTest
     , emojiSuggestionTest
     , exportChannelTest
@@ -24,6 +25,7 @@ module E2EMisc exposing
     )
 
 import Audio
+import Broadcast
 import DmChannel
 import DmChannelId
 import Duration
@@ -42,6 +44,8 @@ import Local
 import LocalState exposing (LocalState)
 import MembersAndOwner
 import Message
+import MyUi
+import NonemptyDict
 import Pages.Guild
 import RichText
 import Route exposing (ChannelsVisibleOnMobile(..))
@@ -51,6 +55,7 @@ import Test.Html.Query
 import Test.Html.Selector
 import TimeInMinutes
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import UserColor
 import UserSession
 
 
@@ -1830,3 +1835,104 @@ checkGuildMemberCount guildId expected backend =
 
         Nothing ->
             Err "The guild should still exist after a member leaves"
+
+
+{-| The colour picker in the user options. The preview message is drawn on with the colour
+that's selected, and nothing is saved until the submit button that turns up alongside it is
+pressed.
+-}
+colorPickerTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+colorPickerTest config =
+    E2EHelper.startTest
+        "Pick a user colour"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.tallDesktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 1000 (Dom.id "guild_showUserOptions")
+
+                -- The example message is scrawled on in whatever colour is selected, which
+                -- starts out as the one the user already has.
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Hello" ])
+                , admin.checkView 100 (hasStrokeColored UserColor.default)
+
+                -- Nothing to submit until the colour actually changes.
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "userOptions_submitColor" ])
+                , admin.input 100 (Dom.id "userColor_lightness") "5"
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.id "userOptions_submitColor"
+                        , Test.Html.Selector.id "userOptions_resetColor"
+                        ]
+                    )
+                , admin.checkView 100 (Test.Html.Query.hasNot [ hasStrokeSelector UserColor.default ])
+
+                -- Resetting puts the colour they had back and takes the buttons away with it.
+                , admin.click 100 (Dom.id "userOptions_resetColor")
+                , admin.checkView 100 (hasStrokeColored UserColor.default)
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "userOptions_submitColor" ])
+                , T.checkState 100 (checkSavedColorIs UserColor.default)
+
+                -- Submitting saves it, so there's nothing left to submit.
+                , admin.input 100 (Dom.id "userColor_lightness") "5"
+                , admin.click 100 (Dom.id "userOptions_submitColor")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "userOptions_submitColor" ])
+                , T.checkState 100 (checkSavedColorIsNot UserColor.default)
+                ]
+            )
+        ]
+
+
+hasStrokeSelector : UserColor.UserColor -> Test.Html.Selector.Selector
+hasStrokeSelector color =
+    Test.Html.Selector.attribute
+        (Html.Attributes.attribute "stroke" (MyUi.colorToStyle (UserColor.toColor color)))
+
+
+hasStrokeColored : UserColor.UserColor -> Test.Html.Query.Single msg -> Expect.Expectation
+hasStrokeColored color view =
+    Test.Html.Query.findAll [ hasStrokeSelector color ] view
+        |> Test.Html.Query.count (Expect.greaterThan 0)
+
+
+checkSavedColorIs : UserColor.UserColor -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkSavedColorIs expected state =
+    if savedColor state == Just expected then
+        Ok ()
+
+    else
+        Err "The colour the backend has saved isn't the one it should be"
+
+
+checkSavedColorIsNot : UserColor.UserColor -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkSavedColorIsNot unexpected state =
+    case savedColor state of
+        Just color ->
+            if color == unexpected then
+                Err "The backend is still holding the colour the user started with"
+
+            else
+                Ok ()
+
+        Nothing ->
+            Err "Expected the admin to exist on the backend"
+
+
+savedColor : T.Data FrontendModel E2EHelper.BackendModel2 -> Maybe UserColor.UserColor
+savedColor state =
+    NonemptyDict.get Broadcast.adminUserId (E2EHelper.unwrapBackend state.backend).users
+        |> Maybe.map .color

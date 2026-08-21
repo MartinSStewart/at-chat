@@ -2344,6 +2344,9 @@ toBackendLog toBackend =
                 Local_SetEmojiSkinTone _ ->
                     ToBackendLog_Local_SetEmojiSkinTone
 
+                Local_SetUserColor _ ->
+                    ToBackendLog_Local_SetUserColor
+
                 Local_AddCustomEmojisToUser _ ->
                     ToBackendLog_Local_AddCustomEmojisToUser
 

@@ -31,6 +31,7 @@ module User exposing
     , profileImageRounding
     , profileImageSize
     , sectionToString
+    , setColor
     , setDiscordGuildNotificationLevel
     , setDomainWhitelist
     , setEmailNotifications
@@ -634,6 +635,11 @@ setLastDiscordDmViewed currentUserId channelId maybeMessageId user =
 setName : PersonName -> { b | name : PersonName } -> { b | name : PersonName }
 setName name user =
     { user | name = name }
+
+
+setColor : UserColor -> { b | color : UserColor } -> { b | color : UserColor }
+setColor color user =
+    { user | color = color }
 
 
 setIcon : Maybe FileHash -> { b | icon : Maybe FileHash } -> { b | icon : Maybe FileHash }

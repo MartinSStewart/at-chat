@@ -10,9 +10,10 @@ import Effect.Lamdera exposing (ClientId)
 import EmailAddress
 import Env
 import Icons
-import Id exposing (Id, UserId)
+import Id exposing (ChannelMessageId, Id, UserId)
 import ImageEditor
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
+import List.Nonempty
 import LocalState exposing (AdminStatus(..), LocalState)
 import Log
 import Message
@@ -293,28 +294,23 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         [ Ui.spacing 8 ]
                         [ Ui.el [ Ui.Font.bold ] (Ui.text "Color")
                         , Ui.text "This is the color used when you use the drawing tool or to represent you in some games."
-                        , Pages.Guild.userTextMessageContent
-                            time
-                            (Dom.id "spoiler")
-                            200
-                            False
-                            isMobile
-                            Nothing
-                            local.localUser
-                            SeqDict.empty
-                            allUsers
-                            IsNotHovered
-                            (Id.fromInt 0)
-                            (Message.userTextMessageNoEmbeds
-                                time
-                                local.localUser.session.userId
-                                (NonemptyString 'H' "ello" |> RichText.fromNonemptyString local.localUser.timezone allUsers)
-                                SeqDict.empty
-                                Nothing
-                                SeqDict.empty
-                            )
-                            |> Ui.map (\_ -> FrontendNoOp)
+                        , colorPreview time isMobile local allUsers model.color
                         , UserColor.picker model.color SelectedUserColor
+                        , if model.color == local.localUser.user.color then
+                            Ui.none
+
+                          else
+                            Ui.row
+                                [ Ui.spacing 8 ]
+                                [ MyUi.simpleButton
+                                    (Dom.id "userOptions_submitColor")
+                                    PressedSubmitUserColor
+                                    (Ui.text "Submit")
+                                , MyUi.secondaryButton
+                                    (Dom.id "userOptions_resetColor")
+                                    PressedResetUserColor
+                                    "Reset"
+                                ]
                         ]
                     , Ui.column
                         [ Ui.spacing 8 ]
@@ -816,3 +812,173 @@ bookmarklet =
         |> String.replace "  " " "
         |> String.replace "  " " "
         |> String.replace "  " " "
+
+
+{-| A message with the colour drawn on it the way the drawing tool would leave it, so that
+the picker shows what a colour is actually going to look like rather than just a square of
+it.
+-}
+colorPreview :
+    Time.Posix
+    -> Bool
+    -> LocalState
+    -> SeqDict (Id UserId) FrontendUser
+    -> UserColor
+    -> Element FrontendMsg_
+colorPreview time isMobile local allUsers color =
+    let
+        message : Message.UserTextMessageData ChannelMessageId (Id UserId)
+        message =
+            Message.userTextMessageNoEmbeds
+                time
+                local.localUser.session.userId
+                (NonemptyString 'H' "ello" |> RichText.fromNonemptyString local.localUser.timezone allUsers)
+                SeqDict.empty
+                Nothing
+                SeqDict.empty
+    in
+    Pages.Guild.userTextMessageContent
+        time
+        (Dom.id "userOptions_colorPreviewSpoiler")
+        200
+        False
+        isMobile
+        Nothing
+        local.localUser
+        SeqDict.empty
+        allUsers
+        (\_ -> MyUi.colorToStyle (UserColor.toColor color))
+        IsNotHovered
+        (Id.fromInt 0)
+        { message | userIconDrawings = exampleDrawing local.localUser.session.userId }
+        |> Ui.map (\_ -> FrontendNoOp)
+
+
+{-| "at-chat!" scrawled beside the message. The points are measured from the top left corner
+of the profile image, which is the anchor these strokes hang off, so they're offset to land
+just after the "Hello".
+-}
+exampleDrawing : Id UserId -> Drawing.Drawing (Id UserId)
+exampleDrawing userId =
+    { finished =
+        List.foldl
+            (\glyph ( x, strokes ) ->
+                ( x + (glyph.width + exampleLetterSpacing) * exampleTextSize
+                , strokes
+                    ++ List.filterMap
+                        (\points ->
+                            List.map
+                                (\( pointX, pointY ) ->
+                                    ( x + pointX * exampleTextSize
+                                    , exampleTextTop + pointY * exampleTextSize
+                                    )
+                                )
+                                points
+                                |> List.Nonempty.fromList
+                                |> Maybe.map (\points2 -> { createdBy = userId, points = points2 })
+                        )
+                        glyph.strokes
+                )
+            )
+            ( exampleTextLeft, [] )
+            [ letterA, letterT, hyphen, letterC, letterH, letterA, letterT, exclamationMark ]
+            |> Tuple.second
+    , inProgress = SeqDict.empty
+    , undone = SeqDict.empty
+    }
+
+
+{-| How tall the scrawl is, and where it starts. The message text begins a profile image plus
+its padding in from the anchor, and "Hello" takes up roughly another forty pixels.
+-}
+exampleTextSize : Float
+exampleTextSize =
+    18
+
+
+exampleTextLeft : Float
+exampleTextLeft =
+    User.profileImageSize + Pages.Guild.profileImagePaddingRight + 40
+
+
+exampleTextTop : Float
+exampleTextTop =
+    18
+
+
+exampleLetterSpacing : Float
+exampleLetterSpacing =
+    0.1
+
+
+{-| One letter of the scrawl. Coordinates run from 0 at the top of an ascender to 1 at the
+baseline, and are scaled and shifted into place by `exampleDrawing`.
+-}
+type alias Glyph =
+    { width : Float, strokes : List (List ( Float, Float )) }
+
+
+letterA : Glyph
+letterA =
+    { width = 0.62
+    , strokes =
+        [ arc ( 0.31, 0.72 ) ( 0.27, 0.27 ) 0 1
+        , [ ( 0.58, 0.45 ), ( 0.58, 1 ) ]
+        ]
+    }
+
+
+letterT : Glyph
+letterT =
+    { width = 0.5
+    , strokes =
+        [ [ ( 0.24, 0.12 ), ( 0.24, 0.86 ), ( 0.3, 0.98 ), ( 0.42, 1 ) ]
+        , [ ( 0.04, 0.45 ), ( 0.46, 0.45 ) ]
+        ]
+    }
+
+
+hyphen : Glyph
+hyphen =
+    { width = 0.44, strokes = [ [ ( 0.04, 0.72 ), ( 0.4, 0.72 ) ] ] }
+
+
+letterC : Glyph
+letterC =
+    { width = 0.58, strokes = [ arc ( 0.31, 0.72 ) ( 0.27, 0.27 ) 0.12 0.88 ] }
+
+
+letterH : Glyph
+letterH =
+    { width = 0.62
+    , strokes =
+        [ [ ( 0.06, 0.08 ), ( 0.06, 1 ) ]
+        , arc ( 0.32, 0.66 ) ( 0.26, 0.21 ) 0.5 1 ++ [ ( 0.58, 1 ) ]
+        ]
+    }
+
+
+exclamationMark : Glyph
+exclamationMark =
+    { width = 0.26
+    , strokes =
+        [ [ ( 0.12, 0.1 ), ( 0.1, 0.72 ) ]
+
+        -- A stroke of a single point is drawn as a dot.
+        , [ ( 0.1, 0.95 ) ]
+        ]
+    }
+
+
+arc : ( Float, Float ) -> ( Float, Float ) -> Float -> Float -> List ( Float, Float )
+arc ( centerX, centerY ) ( radiusX, radiusY ) startTurns endTurns =
+    List.map
+        (\step ->
+            let
+                angle : Float
+                angle =
+                    turns (startTurns + (endTurns - startTurns) * toFloat step / 16)
+            in
+            ( centerX + radiusX * cos angle, centerY + radiusY * sin angle )
+        )
+        (List.range 0 16)

@@ -566,6 +566,8 @@ type FrontendMsg_
     | PressedAddDomainToWhitelist Bool
     | TypedDomainWhitelist String
     | SelectedUserColor UserColor
+    | PressedSubmitUserColor
+    | PressedResetUserColor
     | PressedSaveDomainWhitelist
     | PressedResetDomainWhitelist
     | PressedContinueToSite
@@ -914,6 +916,7 @@ type ServerChange
     | Server_DiscordForumPostDeleted (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId)
     | Server_DiscordDeleteDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId)
     | Server_SetName (Id UserId) PersonName
+    | Server_SetUserColor (Id UserId) UserColor
     | Server_SetUserIcon (Id UserId) (Maybe FileHash)
     | Server_SetGuildIcon (Id GuildId) (Maybe FileHash)
     | Server_PushNotificationsReset String
@@ -1013,6 +1016,7 @@ type LocalChange
     | Local_LinkDiscordAcknowledgementIsChecked Bool
     | Local_SetDomainWhitelist Bool Domain
     | Local_SetEmojiSkinTone (Maybe SkinTone)
+    | Local_SetUserColor UserColor
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange Call.LocalChange
     | Local_Game GuildOrDmId Game.LocalChange

@@ -1,4 +1,4 @@
-module UserColor exposing (UserColor, default, picker)
+module UserColor exposing (UserColor, default, picker, toColor)
 
 import Color
 import Color.Convert

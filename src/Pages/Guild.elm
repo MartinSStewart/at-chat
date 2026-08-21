@@ -17,6 +17,7 @@ module Pages.Guild exposing
     , newGuildFormView
     , newMessagesId
     , profileImageButtonId
+    , profileImagePaddingRight
     , threadMessageHtmlId
     , typingDebouncerDelay
     , userTextMessageContent
@@ -6880,6 +6881,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                     localUser
                     revealedSpoilers
                     allUsers
+                    Drawing.userColor
                     isHovered
                     messageId
                     data
@@ -7272,6 +7274,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                     localUser
                     revealedSpoilers
                     allUsers
+                    Drawing.userColor
                     isHovered
                     messageId
                     message2
@@ -7609,11 +7612,12 @@ userTextMessageContent :
     -> LocalUser
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id UserId) FrontendUser
+    -> (Id UserId -> String)
     -> IsHovered
     -> Id messageId
     -> UserTextMessageData messageId (Id UserId)
     -> Element MessageViewMsg
-userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId message2 =
+userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId message2 =
     Ui.row
         []
         [ (case SeqDict.get message2.createdBy allUsers of
@@ -7626,7 +7630,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
             |> Ui.el
                 (Drawing.anchorHighlight
                     (Drawing.profileImageAnchorId messageId)
-                    Drawing.userColor
+                    drawingColor
                     MessageView_PressedUserIconAnchor
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     message2.userIconDrawings
@@ -7670,7 +7674,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold ]
                 , messageTimestamp
-                    Drawing.userColor
+                    drawingColor
                     message2.timestampDrawings
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     messageId
@@ -7703,7 +7707,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                     , time = time
                     , drawings = message2.imageAttachmentDrawings
                     , embedDrawings = message2.embedDrawings
-                    , drawingUserColor = Drawing.userColor
+                    , drawingUserColor = drawingColor
                     , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
                     , devicePixelRatio = localUser.devicePixelRatio
                     , isHovered =

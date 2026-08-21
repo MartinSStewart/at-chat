@@ -276,6 +276,9 @@ pendingChangesText localChange =
         Local_SetEmojiSkinTone _ ->
             "Selected emoji skin tone"
 
+        Local_SetUserColor _ ->
+            "Picked a colour"
+
         Local_AddCustomEmojisToUser _ ->
             "Add custom emojis to user"
 
@@ -2260,6 +2263,12 @@ isPressMsg msg =
         SelectedUserColor _ ->
             False
 
+        PressedSubmitUserColor ->
+            True
+
+        PressedResetUserColor ->
+            True
+
         PressedSaveDomainWhitelist ->
             True
 
@@ -3576,6 +3585,14 @@ changeUpdate localMsg local =
                     in
                     { local | localUser = { localUser | user = User.setEmojiSkinTone maybeSkinTone localUser.user } }
 
+                Local_SetUserColor color ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local | localUser = { localUser | user = User.setColor color localUser.user } }
+
                 Local_AddCustomEmojisToUser customEmojiIds ->
                     let
                         localUser : LocalUser
@@ -4312,6 +4329,20 @@ changeUpdate localMsg local =
                             { localUser
                                 | otherUsers =
                                     SeqDict.updateIfExists userId (User.setName name) localUser.otherUsers
+                            }
+                    }
+
+                Server_SetUserColor userId color ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | otherUsers =
+                                    SeqDict.updateIfExists userId (User.setColor color) localUser.otherUsers
                             }
                     }
 
