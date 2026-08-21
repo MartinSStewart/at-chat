@@ -1,30 +1,29 @@
-module MessageDropdown exposing (..)
+module MessageDropdown exposing (discordUserDropdownList, emojiDropdownList, pressedArrowInDropdown, pressedDropdownItem, userDropdownList, view)
 
 import Array
 import CustomEmoji
 import Discord
-import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Task as Task
 import Effect.Time as Time
-import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, EmojiOrSticker(..), SkinTone)
+import Emoji exposing (CachedEmojiData, EmojiOrSticker(..), SkinTone)
 import Html.Events
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, StickerId, UserId)
 import Json.Decode
 import LinkedAndOtherDiscordUsers
 import List.Extra
-import List.Nonempty exposing (Nonempty)
-import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
+import List.Nonempty
+import LocalState exposing (LocalState)
 import MembersAndOwner
 import MessageInput exposing (MentionUserDropdown, Msg(..), NameSoFar(..), NameSoFarData, TimestampData(..))
 import MessageMenu
 import MyUi
 import NonemptyDict
 import PersonName
-import Ports exposing (RegisterPushSubscription(..))
+import Ports
 import Range exposing (Range)
-import RichText exposing (Domain, RichText)
+import RichText
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker
@@ -34,8 +33,8 @@ import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
 import Ui.Font
-import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
-import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import User exposing (FrontendUser, LocalUser)
+import UserSession exposing (DiscordFrontendUser)
 
 
 pressedArrowInDropdown :

@@ -1460,14 +1460,14 @@ answeringView time contentWidth isMobile localUser loggedIn setup shared model =
     [ Ui.el
         [ Ui.Font.bold, Ui.Font.size 20 ]
         (if isHost localUser.session.userId setup then
-            Ui.text "Answer like everyone else"
+            Ui.text "Waiting on people's answers"
 
          else
             Ui.text "Answer like everyone else"
         )
     , Ui.Prose.paragraph
         [ Ui.Font.color MyUi.font3 ]
-        [ Ui.text "You score a point for every player who wrote the same answer as you, yourself included." ]
+        [ Ui.text "You score a point for every player who wrote the same answer as you (including yourself)." ]
     , Ui.column
         [ Ui.spacing 8 ]
         (List.Nonempty.toList setup.questions

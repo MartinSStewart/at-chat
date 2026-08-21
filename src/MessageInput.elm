@@ -27,7 +27,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, UserId)
+import Id exposing (CustomEmojiId, Id, StickerId, UserId)
 import Json.Decode
 import Json.Decode.Extra
 import List.Nonempty exposing (Nonempty)
@@ -37,13 +37,12 @@ import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import Sticker exposing (StickerData)
-import String.Nonempty exposing (NonemptyString)
+import String.Nonempty
 import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
 import User exposing (FrontendUser, LocalUser)
 import UserAgent exposing (Browser(..), UserAgent)
-import UserSession exposing (DiscordFrontendUser)
 
 
 type alias MentionUserDropdown =

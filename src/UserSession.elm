@@ -38,7 +38,7 @@ import Discord
 import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
-import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
+import FileStatus exposing (FileHash, FileId, FileStatus)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_ChannelThreadId, Viewing_DiscordChannelId, Viewing_DiscordChannelThreadId, Viewing_DiscordDmId, Viewing_DmId, Viewing_DmThreadId)
 import Message exposing (Message)
 import PersonName exposing (PersonName)

@@ -60,7 +60,6 @@ module MyUi exposing
     , isMobileAlt
     , label
     , lazyLoading
-    , matchSwitcherHeight
     , memberColumnWidth
     , mentionColor
     , monospace
@@ -1392,11 +1391,6 @@ channelAndGuildColumnWidth windowSize =
 channelHeaderHeight : number
 channelHeaderHeight =
     38
-
-
-matchSwitcherHeight : number
-matchSwitcherHeight =
-    40
 
 
 conversationWidthIgnoreScrollbar : Coord CssPixels -> Bool -> Int

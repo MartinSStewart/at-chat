@@ -184,7 +184,7 @@ import ToBackendLog exposing (ToBackendLogData)
 import UInt64
 import Unsafe
 import Url exposing (Url)
-import User exposing (BackendUser, FrontendCurrentUser, FrontendUser, LocalUser)
+import User exposing (BackendUser, FrontendCurrentUser, LocalUser)
 import UserSession exposing (ChannelHeaderTab, FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
 

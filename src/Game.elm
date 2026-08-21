@@ -64,7 +64,7 @@ import Ui exposing (Element)
 import Ui.Font
 import Ui.Lazy
 import Ui.Shadow
-import User exposing (FrontendUser, LocalUser)
+import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame
 
@@ -1324,12 +1324,7 @@ matchSwitcherView isMobile maybeMatchId matches =
         in
         Ui.el
             [ Ui.padding
-                (if isMobile then
-                    8
-
-                 else
-                    8
-                )
+                8
             ]
             (Ui.html
                 (Html.select
