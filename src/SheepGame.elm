@@ -20,7 +20,7 @@ module SheepGame exposing
     , ValidatedInput
     , ValidatedSetup
     , attachedFileTrackerId
-    , changedAnswers
+    , changedInputs
     , clampSavedQuestions
     , fileUploadPreview
     , fileUploadPreviewSize
@@ -34,7 +34,7 @@ module SheepGame exposing
     , mapQuestionRichText
     , removeAttachedFileFromText
     , resultsData
-    , saveAnswerAction
+    , saveInputAction
     , scoresThroughQuestion
     , setupView
     , updateAction
@@ -122,7 +122,7 @@ type alias Shared =
     { phase : Phase
     , answers : SeqDict (Id UserId) (IdArray QuestionId (Maybe ValidatedInput))
     , groups : SeqDict ( Id UserId, Id QuestionId ) String
-    , notes : SeqDict (Id QuestionId) UnvalidatedInput
+    , notes : SeqDict (Id QuestionId) (Maybe ValidatedInput)
     , questionsRevealed : Int
     }
 
@@ -167,6 +167,9 @@ type alias GameData =
     { -- What's in each answer box right now. Saving happens on a delay, so this is ahead
       -- of what everyone else has been told until the typing stops.
       answerDrafts : IdArray QuestionId UnvalidatedInput
+    , -- What the host has written about each question so far, saved the same way an answer
+      -- is.
+      noteDrafts : IdArray QuestionId UnvalidatedInput
     , -- Which pair of players the cursor is over in the results grid, so their row and
       -- column light up and how much they matched is spelled out beside it.
       gridHovered : Maybe ( Id UserId, Id UserId )
@@ -183,7 +186,12 @@ type GameMsg
     | PressedLockAnswers
     | PressedUnlockAnswers
     | TypedGroup (Id UserId) (Id QuestionId) String
-    | TypedNotes (Id QuestionId) String
+    | TypedNotes (Id QuestionId) MessageInput.Msg
+    | GotNotesFiles (Id QuestionId) (Nonempty File)
+    | GotNotesFileUpload (Id QuestionId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
+    | PressedDeleteNotesFile (Id QuestionId) (Id FileId)
+    | PressedViewNotesFileInfo (Id QuestionId) (Id FileId)
+    | PressedToggleNotesFileSpoiler (Id QuestionId) { fileId : Id FileId, removeSpoiler : Bool }
     | PressedRevealScores
     | PressedShowNextQuestion
     | PressedHidePreviousQuestion
@@ -197,7 +205,7 @@ type Action
     | LockedAnswers
     | UnlockedAnswers
     | ChangedGroup (Id UserId) (Id QuestionId) String
-    | ChangedNotes (Id QuestionId) String
+    | ChangedNotes (Id QuestionId) (Maybe ValidatedInput)
     | FinishedGrouping
     | ChangedQuestionsRevealed (Id QuestionId)
 
@@ -280,28 +288,34 @@ initGame localUser setup shared =
     { answerDrafts =
         (case SeqDict.get localUser.session.userId shared.answers of
             Just answers ->
-                IdArray.toList answers
-                    |> List.map
-                        (\answer ->
-                            case answer of
-                                Just answer2 ->
-                                    { text = toSourceText localUser answer2.text
-                                    , attachedFiles =
-                                        SeqDict.map
-                                            (\_ fileData -> FileStatus.FileUploaded fileData)
-                                            answer2.attachedFiles
-                                    }
-
-                                Nothing ->
-                                    emptyInput
-                        )
+                IdArray.toList answers |> List.map (toDraft localUser)
 
             Nothing ->
                 List.repeat (List.Nonempty.length setup.questions) emptyInput
         )
             |> IdArray.fromList
+    , noteDrafts =
+        List.range 0 (List.Nonempty.length setup.questions - 1)
+            |> List.map
+                (\index -> SeqDict.get (Id.fromInt index) shared.notes |> Maybe.withDefault Nothing |> toDraft localUser)
+            |> IdArray.fromList
     , gridHovered = Nothing
     }
+
+
+{-| Something already saved, back as the text that was typed to produce it, which is what
+the box it came from takes.
+-}
+toDraft : LocalUser -> Maybe ValidatedInput -> UnvalidatedInput
+toDraft localUser saved =
+    case saved of
+        Just saved2 ->
+            { text = toSourceText localUser saved2.text
+            , attachedFiles = SeqDict.map (\_ fileData -> FileStatus.FileUploaded fileData) saved2.attachedFiles
+            }
+
+        Nothing ->
+            emptyInput
 
 
 {-| The text someone would have typed to write this, so that an answer can be put back in
@@ -669,6 +683,9 @@ inputQuestionId input =
         AnswerInput questionId ->
             questionId
 
+        NotesInput questionId ->
+            questionId
+
 
 attachAnswerFiles : Id QuestionId -> Nonempty File -> GameData -> ( GameData, Maybe Action, OutMsg )
 attachAnswerFiles questionId files model =
@@ -677,6 +694,15 @@ attachAnswerFiles questionId files model =
             attachFiles (AnswerInput questionId) files model.answerDrafts
     in
     ( { model | answerDrafts = answerDrafts }, Nothing, outMsg )
+
+
+attachNotesFiles : Id QuestionId -> Nonempty File -> GameData -> ( GameData, Maybe Action, OutMsg )
+attachNotesFiles questionId files model =
+    let
+        ( noteDrafts, outMsg ) =
+            attachFiles (NotesInput questionId) files model.noteDrafts
+    in
+    ( { model | noteDrafts = noteDrafts }, Nothing, outMsg )
 
 
 attachQuestionFiles : Id QuestionId -> Nonempty File -> SetupModel -> ( SetupOrGame, OutMsg )
@@ -884,8 +910,127 @@ updateGame localUser setup shared msg model =
         TypedGroup userId questionIndex group ->
             ( model, Just (ChangedGroup userId questionIndex (String.left 1 group)), NoOutMsg )
 
-        TypedNotes questionIndex notes ->
-            ( model, Just (ChangedNotes questionIndex (String.left maxAnswerLength notes)), NoOutMsg )
+        TypedNotes questionId messageInputMsg ->
+            case messageInputMsg of
+                MessageInput.TypedMessage text ->
+                    ( { model
+                        | noteDrafts =
+                            IdArray.update
+                                questionId
+                                (\draft -> { draft | text = String.left maxAnswerLength text })
+                                model.noteDrafts
+                      }
+                    , Nothing
+                    , NoOutMsg
+                    )
+
+                MessageInput.PressedUploadFile ->
+                    ( model, Nothing, SelectFilesToAttach (NotesInput questionId) )
+
+                MessageInput.PressedOpenEmojiSelector ->
+                    ( model, Nothing, OpenEmojiSelector (NotesInput questionId) )
+
+                MessageInput.OnPasteFiles files ->
+                    attachNotesFiles questionId files model
+
+                -- The mention and emoji dropdown never opens over a note, the frontend only
+                -- fills it in for the channel and edit message inputs, and there's no last
+                -- message behind a note to start editing.
+                _ ->
+                    ( model, Nothing, NoOutMsg )
+
+        GotNotesFiles questionId files ->
+            attachNotesFiles questionId files model
+
+        GotNotesFileUpload questionId fileId result ->
+            ( { model
+                | noteDrafts =
+                    IdArray.update
+                        questionId
+                        (\draft ->
+                            { draft
+                                | attachedFiles =
+                                    SeqDict.updateIfExists fileId (FileStatus.addFileHash result) draft.attachedFiles
+                            }
+                        )
+                        model.noteDrafts
+              }
+            , Nothing
+            , NoOutMsg
+            )
+
+        PressedDeleteNotesFile questionId fileId ->
+            ( { model
+                | noteDrafts =
+                    IdArray.update
+                        questionId
+                        (\draft ->
+                            { draft
+                                | attachedFiles = SeqDict.remove fileId draft.attachedFiles
+                                , text =
+                                    removeAttachedFileFromText
+                                        localUser.timezone
+                                        (User.allUsers localUser)
+                                        fileId
+                                        draft.text
+                            }
+                        )
+                        model.noteDrafts
+              }
+            , Nothing
+            , CancelAttachedFileUpload (NotesInput questionId) fileId
+            )
+
+        PressedViewNotesFileInfo questionId fileId ->
+            ( model
+            , Nothing
+            , case
+                IdArray.get questionId model.noteDrafts
+                    |> Maybe.andThen (\draft -> SeqDict.get fileId draft.attachedFiles)
+              of
+                Just (FileStatus.FileUploaded fileData) ->
+                    case fileData.metadata of
+                        Just metadata ->
+                            ShowAttachedFileInfo
+                                { fileName = fileData.fileName
+                                , fileSize = fileData.fileSize
+                                , metadata = metadata
+                                , contentType = fileData.contentType
+                                , fileHash = fileData.fileHash
+                                }
+
+                        Nothing ->
+                            NoOutMsg
+
+                _ ->
+                    NoOutMsg
+            )
+
+        PressedToggleNotesFileSpoiler questionId { fileId, removeSpoiler } ->
+            ( { model
+                | noteDrafts =
+                    IdArray.update
+                        questionId
+                        (\draft ->
+                            { draft
+                                | text =
+                                    mapQuestionRichText
+                                        localUser.timezone
+                                        (User.allUsers localUser)
+                                        (if removeSpoiler then
+                                            RichText.unspoilerAttachedFile fileId
+
+                                         else
+                                            RichText.spoilerAttachedFile fileId
+                                        )
+                                        draft.text
+                            }
+                        )
+                        model.noteDrafts
+              }
+            , Nothing
+            , NoOutMsg
+            )
 
         PressedRevealScores ->
             ( model, Just FinishedGrouping, NoOutMsg )
@@ -928,38 +1073,66 @@ updateGame localUser setup shared msg model =
 {-| The answer boxes whose contents changed, so that typing in one doesn't schedule a save
 for every other answer as well.
 -}
-changedAnswers : GameData -> GameData -> List (Id QuestionId)
-changedAnswers before after =
+changedInputs : GameData -> GameData -> List Input
+changedInputs before after =
+    changedDrafts AnswerInput before.answerDrafts after.answerDrafts
+        ++ changedDrafts NotesInput before.noteDrafts after.noteDrafts
+
+
+changedDrafts :
+    (Id QuestionId -> Input)
+    -> IdArray QuestionId UnvalidatedInput
+    -> IdArray QuestionId UnvalidatedInput
+    -> List Input
+changedDrafts toInput before after =
     IdArray.map
         (\questionId draft ->
-            if IdArray.get questionId before.answerDrafts == Just draft then
+            if IdArray.get questionId before == Just draft then
                 Nothing
 
             else
-                Just questionId
+                Just (toInput questionId)
         )
-        after.answerDrafts
+        after
         |> IdArray.toList
         |> List.filterMap identity
 
 
-{-| What one answer box is worth saving as, once the player has stopped typing in it. A box
-with nothing in it yet, or one naming a file that hasn't finished uploading, saves as no
-answer at all rather than holding the save up.
--}
-saveAnswerAction : LocalUser -> Id QuestionId -> GameData -> Action
-saveAnswerAction localUser questionId model =
-    SubmittedAnswer
-        questionId
-        (case IdArray.get questionId model.answerDrafts of
-            Just draft ->
-                validateInput localUser.timezone (User.allUsers localUser) draft
-                    |> Result.toMaybe
-                    |> Maybe.map (\answer -> answer ())
+{-| What one box is worth saving as, once whoever is writing in it has stopped typing. A box
+with nothing in it yet, or one naming a file that hasn't finished uploading, saves as
+nothing at all rather than holding the save up.
 
-            Nothing ->
-                Nothing
-        )
+Questions belong to the setup rather than to a match in progress, so there's nothing to save
+for one of those.
+
+-}
+saveInputAction : LocalUser -> Input -> GameData -> Maybe Action
+saveInputAction localUser input model =
+    case input of
+        QuestionInput _ ->
+            Nothing
+
+        AnswerInput questionId ->
+            validatedDraft localUser questionId model.answerDrafts
+                |> SubmittedAnswer questionId
+                |> Just
+
+        NotesInput questionId ->
+            validatedDraft localUser questionId model.noteDrafts
+                |> ChangedNotes questionId
+                |> Just
+
+
+validatedDraft : LocalUser -> Id QuestionId -> IdArray QuestionId UnvalidatedInput -> Maybe ValidatedInput
+validatedDraft localUser questionId drafts =
+    case IdArray.get questionId drafts of
+        Just draft ->
+            validateInput localUser.timezone (User.allUsers localUser) draft
+                |> Result.toMaybe
+                |> Maybe.map (\validated -> validated ())
+
+        Nothing ->
+            Nothing
 
 
 {-| Everything the host is allowed to do and nobody else is. The backend replays the same
@@ -1020,12 +1193,18 @@ updateAction setup action shared =
                 _ ->
                     shared
 
-        ChangedNotes questionIndex notes ->
+        ChangedNotes questionId notes ->
             case ( shared.phase, isHost action.userId setup ) of
-                ( Grouping, True ) ->
-                    { shared | notes = SeqDict.insert questionIndex notes shared.notes }
+                -- Notes are saved a moment after the host stops typing, so one they were still
+                -- writing when they pressed reveal arrives once the reveal has started. There's
+                -- nowhere to write one after that, so taking it is better than dropping it.
+                ( Answering, _ ) ->
+                    shared
 
-                _ ->
+                ( _, True ) ->
+                    { shared | notes = SeqDict.insert questionId notes shared.notes }
+
+                ( _, False ) ->
                     shared
 
         FinishedGrouping ->
@@ -1250,6 +1429,7 @@ needs to know about either of them.
 type Input
     = QuestionInput (Id QuestionId)
     | AnswerInput (Id QuestionId)
+    | NotesInput (Id QuestionId)
 
 
 inputId : Input -> HtmlId
@@ -1260,6 +1440,9 @@ inputId input =
 
         AnswerInput questionId ->
             Dom.id ("sheepGame_answer_" ++ Id.toString questionId)
+
+        NotesInput questionId ->
+            Dom.id ("sheepGame_notes_" ++ Id.toString questionId)
 
 
 {-| The box drawn around an input, rather than the textarea inside it. The emoji selector is
@@ -1274,6 +1457,9 @@ inputContainerId input =
 
         AnswerInput questionId ->
             Dom.id ("sheepGame_answerContainer_" ++ Id.toString questionId)
+
+        NotesInput questionId ->
+            Dom.id ("sheepGame_notesContainer_" ++ Id.toString questionId)
 
 
 questionInput :
@@ -1388,7 +1574,7 @@ gameView time windowSize showMemberTab localUser loggedIn setup shared model =
                 answeringView time contentWidth isMobile localUser loggedIn setup shared model
 
             Grouping ->
-                groupingView time contentWidth localUser setup shared
+                groupingView time contentWidth isMobile localUser loggedIn setup shared model
 
             Revealing ->
                 revealingView time contentWidth localUser setup shared model
@@ -1440,6 +1626,9 @@ contentView time contentWidth localUser htmlId attachedFiles content =
         |> Ui.html
 
 
+{-| Something someone wrote, with their name and picture beside it the way a message has.
+-}
+messageWithProfile : Id UserId -> LocalUser -> Element msg -> Element msg
 messageWithProfile userId localUser content =
     Ui.row
         [ Ui.spacing 8 ]
@@ -1656,8 +1845,17 @@ answeredCountText count =
 
 {-| The host decides which answers count as the same thing. Everyone else waits.
 -}
-groupingView : Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Shared -> List (Element GameMsg)
-groupingView time contentWidth localUser setup shared =
+groupingView :
+    Time.Posix
+    -> Int
+    -> Bool
+    -> LocalUser
+    -> LoggedIn a
+    -> ValidatedSetup
+    -> Shared
+    -> GameData
+    -> List (Element GameMsg)
+groupingView time contentWidth isMobile localUser loggedIn setup shared model =
     if isHost localUser.session.userId setup then
         [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Group the answers")
         , Ui.Prose.paragraph
@@ -1666,7 +1864,7 @@ groupingView time contentWidth localUser setup shared =
         , Ui.column
             [ Ui.spacing 16 ]
             (List.Nonempty.toList setup.questions
-                |> List.indexedMap (groupingQuestionView time contentWidth localUser shared)
+                |> List.indexedMap (groupingQuestionView time contentWidth isMobile localUser loggedIn shared model)
             )
         , Ui.row
             [ Ui.spacing 8 ]
@@ -1689,19 +1887,22 @@ groupingView time contentWidth localUser setup shared =
         ]
 
 
-groupingQuestionView : Time.Posix -> Int -> LocalUser -> Shared -> Int -> ValidatedInput -> Element GameMsg
-groupingQuestionView time contentWidth localUser shared questionIndex question =
+groupingQuestionView :
+    Time.Posix
+    -> Int
+    -> Bool
+    -> LocalUser
+    -> LoggedIn a
+    -> Shared
+    -> GameData
+    -> Int
+    -> ValidatedInput
+    -> Element GameMsg
+groupingQuestionView time contentWidth isMobile localUser loggedIn shared model questionIndex question =
     let
         questionId : Id QuestionId
         questionId =
             Id.fromInt questionIndex
-
-        notesLabel : { element : Element GameMsg, id : Ui.Input.Label }
-        notesLabel =
-            MyUi.label
-                (Dom.id ("sheepGame_notes_" ++ String.fromInt questionIndex))
-                [ Ui.Font.color MyUi.font3 ]
-                (Ui.text "Notes")
     in
     Ui.column
         [ Ui.spacing 8 ]
@@ -1727,19 +1928,80 @@ groupingQuestionView time contentWidth localUser shared questionIndex question =
             )
         , Ui.column
             [ Ui.spacing 2 ]
-            [ notesLabel.element
-            , Ui.Input.text
-                [ Ui.border 1
-                , Ui.borderColor MyUi.inputBorder
-                , Ui.background MyUi.inputBackground
-                , Ui.rounded 4
-                , Ui.paddingXY 8 8
-                ]
-                { onChange = TypedNotes questionId
-                , text = SeqDict.get questionId shared.notes |> Maybe.withDefault ""
-                , placeholder = Nothing
-                , label = notesLabel.id
-                }
+            [ Ui.el
+                [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
+                (Ui.text "Notes")
+            , notesInput
+                isMobile
+                localUser
+                loggedIn
+                questionId
+                (IdArray.get questionId model.noteDrafts |> Maybe.withDefault emptyInput)
+            ]
+        ]
+
+
+{-| The host's comment on a question, written in the same input an answer is so that it can
+say the same kinds of things.
+-}
+notesInput : Bool -> LocalUser -> LoggedIn a -> Id QuestionId -> UnvalidatedInput -> Element GameMsg
+notesInput isMobile localUser loggedIn questionId notes =
+    let
+        htmlId : HtmlId
+        htmlId =
+            inputId (NotesInput questionId)
+
+        users : SeqDict (Id UserId) FrontendUser
+        users =
+            User.allUsers localUser
+
+        richText : Maybe (Nonempty (RichText (Id UserId)))
+        richText =
+            String.Nonempty.fromString notes.text
+                |> Maybe.map (RichText.fromNonemptyString localUser.timezone users)
+    in
+    Ui.column
+        [ Ui.spacing 4 ]
+        [ case NonemptyDict.fromSeqDict notes.attachedFiles of
+            Just attachedFiles ->
+                fileUploadPreview
+                    (PressedDeleteNotesFile questionId)
+                    (PressedViewNotesFileInfo questionId)
+                    (PressedToggleNotesFileSpoiler questionId)
+                    richText
+                    attachedFiles
+                    |> Ui.row
+                        [ Ui.spacing 2
+                        , Ui.width Ui.shrink
+                        ]
+
+            Nothing ->
+                Ui.none
+        , Ui.row
+            [ Ui.spacing 8 ]
+            [ MessageInput.attachmentButton (Dom.idToString htmlId)
+                |> Ui.map (TypedNotes questionId)
+            , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
+                |> Ui.map (TypedNotes questionId)
+            , MessageInput.textarea
+                isMobile
+                htmlId
+                ""
+                (maxAnswerLength - String.length notes.text)
+                notes.text
+                richText
+                notes.attachedFiles
+                localUser
+                loggedIn
+                users
+                |> Ui.html
+                |> Ui.map (TypedNotes questionId)
+                |> Ui.el
+                    (Ui.heightMax 200
+                        :: Ui.id (Dom.idToString (inputContainerId (NotesInput questionId)))
+                        :: MessageInput.containerAttributes True
+                    )
+                |> Ui.el []
             ]
         ]
 

@@ -248,6 +248,41 @@ tests =
                     |> .questionsRevealed
                     |> Expect.equal 0
             )
+        , Test.test "The host's note on a question is kept as the rich text they wrote"
+            (\_ ->
+                apply (setup 2)
+                    [ answers playerA [ "Blue", "Dog" ]
+                    , action host LockedAnswers
+                    , action host (ChangedNotes (Id.fromInt 0) (Just (question "Nobody said **green**")))
+                    ]
+                    |> .notes
+                    |> SeqDict.get (Id.fromInt 0)
+                    |> Maybe.andThen (Maybe.map (\notes -> RichText.toString Time.utc False SeqDict.empty notes.text))
+                    |> Expect.equal (Just "Nobody said **green**")
+            )
+        , Test.test "Only the host can write notes"
+            (\_ ->
+                apply (setup 2)
+                    [ answers playerA [ "Blue", "Dog" ]
+                    , action host LockedAnswers
+                    , action playerA (ChangedNotes (Id.fromInt 0) (Just (question "Mine now")))
+                    ]
+                    |> .notes
+                    |> Expect.equal SeqDict.empty
+            )
+        , Test.test "A note the host was still typing when they pressed reveal still counts"
+            (\_ ->
+                apply (setup 2)
+                    [ answers playerA [ "Blue", "Dog" ]
+                    , action host LockedAnswers
+                    , action host FinishedGrouping
+                    , action host (ChangedNotes (Id.fromInt 0) (Just (question "Only just made it")))
+                    ]
+                    |> SheepGame.resultsData (setup 2)
+                    |> .questions
+                    |> List.map (\result -> Maybe.map (\notes -> RichText.toString Time.utc False SeqDict.empty notes.text) result.notes)
+                    |> Expect.equal [ Just "Only just made it", Nothing ]
+            )
         , Test.test "Answers submitted after the host locked them are ignored"
             (\_ ->
                 apply (setup 1)

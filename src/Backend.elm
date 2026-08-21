@@ -6644,6 +6644,22 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
                                                 )
                                     }
 
+                                -- And so does a note the host wrote about a question.
+                                SheepGame.ChangedNotes questionId (Just notes) ->
+                                    { action
+                                        | change =
+                                            SheepGame.ChangedNotes
+                                                questionId
+                                                (Just
+                                                    { notes
+                                                        | attachedFiles =
+                                                            BackendExtra.validateAttachedFiles
+                                                                model.files
+                                                                notes.attachedFiles
+                                                    }
+                                                )
+                                    }
+
                                 _ ->
                                     action
 

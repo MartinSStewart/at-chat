@@ -8180,11 +8180,11 @@ handleGameOutMsgs outMsgs model =
                         :: cmds
                     )
 
-                Game.SaveSheepGameAnswerAfterDelay matchId questionId counter ->
+                Game.SaveSheepGameInputAfterDelay matchId input counter ->
                     ( model2
-                    , (Process.sleep Game.sheepGameAnswerSaveDelay
+                    , (Process.sleep Game.sheepGameInputSaveDelay
                         |> Task.perform
-                            (\() -> GameMsg (Game.CheckedSheepGameAnswerDebounce matchId questionId counter))
+                            (\() -> GameMsg (Game.CheckedSheepGameSaveDebounce matchId input counter))
                       )
                         :: cmds
                     )

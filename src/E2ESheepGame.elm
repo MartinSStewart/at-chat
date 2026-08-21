@@ -405,9 +405,14 @@ threePlayerMatchTest normalConfig =
                                     (Test.Html.Query.has [ Test.Html.Selector.text "3 players have answered so far" ])
                                 , admin.click 100 (Dom.id "sheepGame_lockAnswers")
 
-                                -- The host writes a comment on the first question, which the results screen
-                                -- shows under it.
-                                , admin.input 100 (Dom.id "sheepGame_notes_0") "Nobody said green"
+                                -- The host writes a comment on the first question, which the results
+                                -- screen shows under it. Notes are rich text like everything else
+                                -- here, and save on the same delay, so this waits that out before
+                                -- the grouping view goes away.
+                                , admin.input 100 (Dom.id "sheepGame_notes_0") "Nobody said **green**"
+                                , admin.checkView
+                                    2000
+                                    (Test.Html.Query.has [ Test.Html.Selector.id "sheepGame_revealScores" ])
                                 , admin.click 100 (Dom.id "sheepGame_revealScores")
 
                                 -- Everyone scores the size of the group their answer landed in, so the first
@@ -418,8 +423,21 @@ threePlayerMatchTest normalConfig =
                                     100
                                     (Test.Html.Query.has
                                         [ Test.Html.Selector.text "Name a colour"
-                                        , Test.Html.Selector.text "Nobody said green"
+                                        , Test.Html.Selector.text "Nobody said"
                                         ]
+                                    )
+
+                                -- The host's comment is drawn as the rich text they wrote, so the
+                                -- word they put in asterisks comes out bold.
+                                , wanda.checkView
+                                    100
+                                    (\view ->
+                                        Test.Html.Query.findAll
+                                            [ Test.Html.Selector.style "font-weight" "700"
+                                            , Test.Html.Selector.text "green"
+                                            ]
+                                            view
+                                            |> Test.Html.Query.count (Expect.greaterThan 0)
                                     )
                                 , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Name an animal" ])
                                 , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "▲" ])

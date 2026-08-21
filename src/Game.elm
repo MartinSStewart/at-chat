@@ -26,9 +26,9 @@ module Game exposing
     , matchNotLoaded
     , pressedKey
     , routeRequest
-    , sheepGameAnswerSaveDelay
     , sheepGameFileUploaded
     , sheepGameFilesToAttach
+    , sheepGameInputSaveDelay
     , sheepGameQuestionsSaveDelay
     , update
     , view
@@ -76,9 +76,9 @@ type alias Model =
       -- later only goes ahead if the count still matches, so a burst of typing costs one
       -- request instead of one per keystroke.
       sheepGameQuestionsCounter : Int
-    , -- The same idea, one count per answer box, so that typing an answer to one question
-      -- doesn't cancel the save another question's answer was waiting on.
-      sheepGameAnswerCounters : SeqDict ( Id ChannelMessageId, Id SheepGame.QuestionId ) Int
+    , -- The same idea, one count per box, so that typing in one doesn't cancel the save
+      -- another box was waiting on.
+      sheepGameSaveCounters : SeqDict ( Id ChannelMessageId, SheepGame.Input ) Int
     }
 
 
@@ -122,7 +122,7 @@ type Msg
     | PressedReset
     | PressedSelectGame GameType
     | CheckedSheepGameQuestionsDebounce Int
-    | CheckedSheepGameAnswerDebounce (Id ChannelMessageId) (Id SheepGame.QuestionId) Int
+    | CheckedSheepGameSaveDebounce (Id ChannelMessageId) SheepGame.Input Int
     | NoOpMsg
 
 
@@ -232,7 +232,7 @@ initModel =
     { setup = GameSelect
     , startedGames = SeqDict.empty
     , sheepGameQuestionsCounter = 0
-    , sheepGameAnswerCounters = SeqDict.empty
+    , sheepGameSaveCounters = SeqDict.empty
     }
 
 
@@ -478,9 +478,9 @@ type OutMsg
       -- Ask to be sent `CheckedSheepGameQuestionsDebounce` once the host has stopped typing
       -- (see `Frontend.handleGameOutMsgs`).
     | SaveSheepGameQuestionsAfterDelay Int
-      -- Ask to be sent `CheckedSheepGameAnswerDebounce` once the player has stopped typing
-      -- their answer to that question (see `Frontend.handleGameOutMsgs`).
-    | SaveSheepGameAnswerAfterDelay (Id ChannelMessageId) (Id SheepGame.QuestionId) Int
+      -- Ask to be sent `CheckedSheepGameSaveDebounce` once whoever is writing in that box
+      -- has stopped typing (see `Frontend.handleGameOutMsgs`).
+    | SaveSheepGameInputAfterDelay (Id ChannelMessageId) SheepGame.Input Int
     | OpenSheepGameEmojiSelector SheepGame.Input
       -- Ask for a file to attach to a sheep game question, then upload what comes back
       -- (see `Frontend.handleGameOutMsgs`).
@@ -686,27 +686,28 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                                 ( game, maybeAction, outMsg ) =
                                     SheepGame.updateGame localUser setup cache sheepMsg oldGame
 
-                                -- An answer is saved a moment after the player stops typing it,
-                                -- so nothing is lost to a refresh and there's no button to press.
-                                changed : List (Id SheepGame.QuestionId)
+                                -- A box is saved a moment after whoever is writing in it stops
+                                -- typing, so nothing is lost to a refresh and there's no button
+                                -- to press.
+                                changed : List SheepGame.Input
                                 changed =
-                                    SheepGame.changedAnswers oldGame game
+                                    SheepGame.changedInputs oldGame game
 
-                                counters : SeqDict ( Id ChannelMessageId, Id SheepGame.QuestionId ) Int
+                                counters : SeqDict ( Id ChannelMessageId, SheepGame.Input ) Int
                                 counters =
                                     List.foldl
-                                        (\questionId dict ->
+                                        (\input dict ->
                                             SeqDict.update
-                                                ( matchId, questionId )
+                                                ( matchId, input )
                                                 (\count -> Maybe.withDefault 0 count + 1 |> Just)
                                                 dict
                                         )
-                                        model.sheepGameAnswerCounters
+                                        model.sheepGameSaveCounters
                                         changed
                             in
                             ( { model
                                 | startedGames = SeqDict.insert matchId (SheepGame_Game game) model.startedGames
-                                , sheepGameAnswerCounters = counters
+                                , sheepGameSaveCounters = counters
                               }
                             , (case maybeAction of
                                 Just action ->
@@ -721,10 +722,10 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                                     []
                               )
                                 ++ List.map
-                                    (\questionId ->
-                                        SeqDict.get ( matchId, questionId ) counters
+                                    (\input ->
+                                        SeqDict.get ( matchId, input ) counters
                                             |> Maybe.withDefault 0
-                                            |> SaveSheepGameAnswerAfterDelay matchId questionId
+                                            |> SaveSheepGameInputAfterDelay matchId input
                                     )
                                     changed
                                 ++ sheepGameOutMsgs time newMatchId outMsg
@@ -789,20 +790,24 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                     , SaveSheepGameQuestions Array.empty :: outMsg2
                     )
 
-        CheckedSheepGameAnswerDebounce matchId questionId counter ->
+        CheckedSheepGameSaveDebounce matchId input counter ->
             case
-                ( SeqDict.get ( matchId, questionId ) model.sheepGameAnswerCounters == Just counter
+                ( SeqDict.get ( matchId, input ) model.sheepGameSaveCounters == Just counter
                 , SeqDict.get matchId model.startedGames
                 )
             of
                 ( True, Just (SheepGame_Game game) ) ->
                     ( model
-                    , [ SheepGame.saveAnswerAction localUser questionId game
-                            |> (\action -> { userId = currentUserId, time = time, change = action })
-                            |> SheepGame.Action
-                            |> LocalChange_SheepGame matchId
-                            |> OutLocalChange
-                      ]
+                    , case SheepGame.saveInputAction localUser input game of
+                        Just action ->
+                            [ { userId = currentUserId, time = time, change = action }
+                                |> SheepGame.Action
+                                |> LocalChange_SheepGame matchId
+                                |> OutLocalChange
+                            ]
+
+                        Nothing ->
+                            []
                     )
 
                 _ ->
@@ -890,6 +895,9 @@ sheepGameFilesToAttach input files =
         SheepGame.AnswerInput questionId ->
             SheepGameMsg (SheepGame.GotAnswerFiles questionId files)
 
+        SheepGame.NotesInput questionId ->
+            SheepGameMsg (SheepGame.GotNotesFiles questionId files)
+
 
 sheepGameFileUploaded :
     SheepGame.Input
@@ -904,6 +912,9 @@ sheepGameFileUploaded input fileId result =
         SheepGame.AnswerInput questionId ->
             SheepGameMsg (SheepGame.GotAnswerFileUpload questionId fileId result)
 
+        SheepGame.NotesInput questionId ->
+            SheepGameMsg (SheepGame.GotNotesFileUpload questionId fileId result)
+
 
 {-| How long the host has to stop typing for before their questions are sent to be saved.
 -}
@@ -912,10 +923,11 @@ sheepGameQuestionsSaveDelay =
     Duration.seconds 1
 
 
-{-| How long a player has to stop typing an answer for before it's sent to be saved.
+{-| How long whoever is writing an answer or a note has to stop typing for before it's sent
+to be saved.
 -}
-sheepGameAnswerSaveDelay : Duration
-sheepGameAnswerSaveDelay =
+sheepGameInputSaveDelay : Duration
+sheepGameInputSaveDelay =
     Duration.seconds 1
 
 
@@ -1208,14 +1220,17 @@ gameToString game =
             sheepGameName
 
 
+goName : String
 goName =
     "Go (Baduk)"
 
 
+wordSpellingGameName : String
 wordSpellingGameName =
     "Word Spelling Game"
 
 
+sheepGameName : String
 sheepGameName =
     "Sheep Game (WIP)"
 
