@@ -141,15 +141,17 @@ sheepGameDmTest normalConfig =
                         , admin.click 100 (Dom.id "sheepGame_revealScores")
 
                         -- Nothing is revealed until the host starts stepping through the
-                        -- questions, so both players are on nothing to begin with.
+                        -- questions.
                         , admin.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text "Scores after 0 of 2 questions" ])
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.text "The results will be revealed shortly" ]
+                            )
                         , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
                         , admin.checkView
                             100
                             (Test.Html.Query.has
-                                [ Test.Html.Selector.text "Scores after 1 of 2 questions"
+                                [ Test.Html.Selector.text "Scoring"
                                 , Test.Html.Selector.text "colour"
                                 ]
                             )
@@ -159,23 +161,40 @@ sheepGameDmTest normalConfig =
                         , user.checkView
                             100
                             (Test.Html.Query.has
-                                [ Test.Html.Selector.text "Scores after 1 of 2 questions"
+                                [ Test.Html.Selector.text "Scoring"
                                 , Test.Html.Selector.text "blue"
                                 ]
                             )
+
+                        -- The question that hasn't been revealed yet isn't given away.
+                        , user.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Cat" ])
                         , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
-                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final scores" ])
-                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final scores" ])
+
+                        -- Everything revealed, so the match is summed up: who won, and how
+                        -- alike everyone answered.
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "And the winner is" ])
+                        , user.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.text "And the winner is"
+                                , Test.Html.Selector.text "Which players think most alike"
+                                ]
+                            )
 
                         -- Nobody else is answering, so each question is worth the one point
                         -- for matching yourself.
                         , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "2" ])
 
-                        -- Stepping back hides the last question again.
+                        -- Stepping back hides the last question again, and the summing up
+                        -- with it.
                         , admin.click 100 (Dom.id "sheepGame_hidePreviousQuestion")
                         , user.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text "Scores after 1 of 2 questions" ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "And the winner is" ])
                         ]
                     )
                 ]

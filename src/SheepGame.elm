@@ -9,6 +9,8 @@ module SheepGame exposing
     , OutMsg(..)
     , Phase(..)
     , QuestionId
+    , QuestionResult
+    , RankChange(..)
     , SetupModel
     , SetupMsg(..)
     , SetupOrGame(..)
@@ -29,6 +31,7 @@ module SheepGame exposing
     , inputId
     , mapQuestionRichText
     , removeAttachedFileFromText
+    , resultsData
     , scoresThroughQuestion
     , setupView
     , updateAction
@@ -49,6 +52,7 @@ before revealing the questions one at a time.
 import Array exposing (Array)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Drawing
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.File exposing (File)
 import Effect.Http as Http
@@ -72,6 +76,7 @@ import SeqSet
 import Sticker
 import String.Nonempty
 import Ui exposing (Element)
+import Ui.Events
 import Ui.Font
 import Ui.Input
 import Ui.Lazy
@@ -156,7 +161,11 @@ type SetupOrGame
 {-| View state that belongs to one player and never reaches anyone else.
 -}
 type alias GameData =
-    { answerDrafts : IdArray QuestionId UnvalidatedInput }
+    { answerDrafts : IdArray QuestionId UnvalidatedInput
+    , -- Which pair of players the cursor is over in the results grid, so their row and
+      -- column light up and how much they matched is spelled out beside it.
+      gridHovered : Maybe ( Id UserId, Id UserId )
+    }
 
 
 type GameMsg
@@ -174,6 +183,8 @@ type GameMsg
     | PressedRevealScores
     | PressedShowNextQuestion
     | PressedHidePreviousQuestion
+    | HoveredResultsGrid ( Id UserId, Id UserId )
+    | ExitedResultsGrid ( Id UserId, Id UserId )
     | NoOp
 
 
@@ -286,6 +297,7 @@ initGame localUser setup shared =
                 List.repeat (List.Nonempty.length setup.questions) emptyInput
         )
             |> IdArray.fromList
+    , gridHovered = Nothing
     }
 
 
@@ -914,6 +926,22 @@ updateGame localUser setup shared msg model =
             , NoOutMsg
             )
 
+        HoveredResultsGrid userPair ->
+            ( { model | gridHovered = Just userPair }, Nothing, NoOutMsg )
+
+        ExitedResultsGrid userPair ->
+            ( { model
+                | gridHovered =
+                    if model.gridHovered == Just userPair then
+                        Nothing
+
+                    else
+                        model.gridHovered
+              }
+            , Nothing
+            , NoOutMsg
+            )
+
         NoOp ->
             ( model, Nothing, NoOutMsg )
 
@@ -1347,7 +1375,7 @@ gameView time windowSize showMemberTab localUser loggedIn setup shared model =
                 groupingView time contentWidth localUser setup shared
 
             Revealing ->
-                revealingView time contentWidth localUser setup shared
+                revealingView time contentWidth localUser setup shared model
         )
 
 
@@ -1725,32 +1753,146 @@ groupingAnswerView time contentWidth localUser questionId userId shared answer =
         ]
 
 
-revealingView : Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Shared -> List (Element GameMsg)
-revealingView time contentWidth localUser setup shared =
+{-| Which way someone moved on the scoreboard when a question was revealed.
+-}
+type RankChange
+    = RankUp
+    | RankDown
+    | RankUnchanged
+
+
+type alias AnswerResult =
+    { userId : Id UserId
+    , answer : Maybe ValidatedInput
+    , group : String
+    , score : Int
+    , rankChange : RankChange
+    }
+
+
+type alias QuestionResult =
+    { question : ValidatedInput
+    , notes : String
+    , answers : List AnswerResult
+    }
+
+
+{-| Everything the results screen has to say about a match: what everyone answered to each
+question, where that left them on the scoreboard, and who ends up on top.
+
+Scores are the running totals as each question is revealed, so the bars grow through the
+reveal. They're all measured against the score the winner finishes on, which is why the
+last question's bar is the only one that reaches the end.
+
+-}
+resultsData :
+    ValidatedSetup
+    -> Shared
+    -> { maxPoints : Int, questions : List QuestionResult, winners : List (Id UserId) }
+resultsData setup shared =
+    let
+        finalScores : SeqDict (Id UserId) Int
+        finalScores =
+            scoresThroughQuestion (List.Nonempty.length setup.questions) shared
+
+        maxPoints : Int
+        maxPoints =
+            SeqDict.values finalScores |> List.maximum |> Maybe.withDefault 0
+
+        everyone : List (Id UserId)
+        everyone =
+            players shared
+    in
+    { maxPoints = maxPoints
+    , winners =
+        SeqDict.toList finalScores
+            |> List.filterMap
+                (\( userId, score ) ->
+                    if score == maxPoints then
+                        Just userId
+
+                    else
+                        Nothing
+                )
+    , questions =
+        List.Nonempty.toList setup.questions
+            |> List.indexedMap
+                (\index question ->
+                    let
+                        questionId : Id QuestionId
+                        questionId =
+                            Id.fromInt index
+
+                        before : SeqDict (Id UserId) Int
+                        before =
+                            scoresThroughQuestion index shared
+
+                        after : SeqDict (Id UserId) Int
+                        after =
+                            scoresThroughQuestion (index + 1) shared
+                    in
+                    { question = question
+                    , notes = SeqDict.get questionId shared.notes |> Maybe.withDefault ""
+                    , answers =
+                        List.map
+                            (\userId ->
+                                { userId = userId
+                                , answer = answerFor userId questionId shared
+                                , group = SeqDict.get ( userId, questionId ) shared.groups |> Maybe.withDefault ""
+                                , score = SeqDict.get userId after |> Maybe.withDefault 0
+                                , rankChange =
+                                    if index == 0 then
+                                        RankUnchanged
+
+                                    else
+                                        case compare (placeIn userId before) (placeIn userId after) of
+                                            LT ->
+                                                RankUp
+
+                                            GT ->
+                                                RankDown
+
+                                            EQ ->
+                                                RankUnchanged
+                                }
+                            )
+                            everyone
+                    }
+                )
+    }
+
+
+{-| How many players someone is ahead of. Two players on the same score are put in a fixed
+order rather than sharing a place, so that nobody's rank appears to move when it didn't.
+-}
+placeIn : Id UserId -> SeqDict (Id UserId) Int -> Int
+placeIn userId scores =
+    let
+        score : Int
+        score =
+            SeqDict.get userId scores |> Maybe.withDefault 0
+    in
+    SeqDict.toList scores
+        |> List.filter
+            (\( otherId, otherScore ) ->
+                (otherScore < score)
+                    || (otherScore == score && Id.toInt userId < Id.toInt otherId)
+            )
+        |> List.length
+
+
+revealingView : Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Shared -> GameData -> List (Element GameMsg)
+revealingView time contentWidth localUser setup shared model =
     let
         questionCount : Int
         questionCount =
             List.Nonempty.length setup.questions
 
-        scores : SeqDict (Id UserId) Int
-        scores =
-            scoresThroughQuestion shared.questionsRevealed shared
+        results : { maxPoints : Int, questions : List QuestionResult, winners : List (Id UserId) }
+        results =
+            resultsData setup shared
     in
-    [ Ui.el
-        [ Ui.Font.bold, Ui.Font.size 20 ]
-        (Ui.text
-            (if shared.questionsRevealed >= questionCount then
-                "Final scores"
-
-             else
-                "Scores after "
-                    ++ String.fromInt shared.questionsRevealed
-                    ++ " of "
-                    ++ String.fromInt questionCount
-                    ++ " questions"
-            )
-        )
-    , scoreboardView localUser scores
+    [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Sheep game results")
     , if isHost localUser.session.userId setup then
         Ui.row
             [ Ui.spacing 8 ]
@@ -1766,106 +1908,492 @@ revealingView time contentWidth localUser setup shared =
 
       else
         Ui.none
-    , Ui.column
-        [ Ui.spacing 16 ]
-        (List.Nonempty.toList setup.questions
-            |> List.take shared.questionsRevealed
-            |> List.indexedMap (revealedQuestionView time contentWidth localUser shared)
-            |> List.reverse
-        )
+    , if shared.questionsRevealed == 0 then
+        Ui.Prose.paragraph
+            [ Ui.Font.size 20, Ui.Font.center, Ui.padding 16 ]
+            [ Ui.text "Stay tuned. The results will be revealed shortly." ]
+
+      else
+        Ui.column
+            [ Ui.spacing 16 ]
+            (scoringExplanation
+                :: (List.take shared.questionsRevealed results.questions
+                        |> List.indexedMap (resultsQuestionView time contentWidth localUser results.maxPoints)
+                   )
+            )
+    , if shared.questionsRevealed >= questionCount then
+        Ui.column
+            [ Ui.spacing 32, Ui.paddingWith { left = 0, right = 0, top = 32, bottom = 0 } ]
+            [ Ui.el
+                [ Ui.height (Ui.px 2), Ui.background MyUi.border1 ]
+                Ui.none
+            , finalResultsView localUser results.winners
+            , Ui.column
+                [ Ui.spacing 16 ]
+                [ Ui.Prose.paragraph
+                    [ Ui.Font.size 20, Ui.Font.bold, Ui.Font.center ]
+                    [ Ui.text "Statistics: Which players think most alike?" ]
+                , resultsGridView localUser setup shared model.gridHovered
+                ]
+            , Ui.Prose.paragraph
+                [ Ui.Font.size 14, Ui.Font.center, Ui.opacity 0.5 ]
+                [ Ui.text "No sheep were impersonated in the playing of this game." ]
+            ]
+
+      else
+        Ui.none
     ]
 
 
-scoreboardView : LocalUser -> SeqDict (Id UserId) Int -> Element msg
-scoreboardView localUser scores =
+scoringExplanation : Element msg
+scoringExplanation =
     Ui.column
-        [ Ui.spacing 4 ]
-        (SeqDict.toList scores
-            |> List.sortBy (\( _, score ) -> -score)
-            |> List.map
-                (\( userId, score ) ->
-                    Ui.row
-                        [ Ui.spacing 8 ]
-                        [ Ui.el [ Ui.width (Ui.px 40), Ui.Font.bold ] (Ui.text (String.fromInt score))
-                        , Ui.text (User.toStringAlt userId localUser)
-                        ]
-                )
-        )
+        [ Ui.spacing 8 ]
+        [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Scoring")
+        , Ui.column
+            [ Ui.spacing 8, Ui.padding 8, Ui.Font.color MyUi.font3 ]
+            [ Ui.Prose.paragraph
+                []
+                [ Ui.text "For each question you get points equal to the number of people who picked the same answer as you (including yourself). For example, if you pick a unique answer, you get 1 point. If you and two others pick the same answer, you three get 3 points." ]
+            , Ui.Prose.paragraph [] [ Ui.text "The person with the most points at the end wins!" ]
+            ]
+        ]
 
 
-revealedQuestionView : Time.Posix -> Int -> LocalUser -> Shared -> Int -> ValidatedInput -> Element GameMsg
-revealedQuestionView time contentWidth localUser shared questionIndex question =
-    let
-        questionId : Id QuestionId
-        questionId =
-            Id.fromInt questionIndex
-    in
+resultsQuestionView : Time.Posix -> Int -> LocalUser -> Int -> Int -> QuestionResult -> Element GameMsg
+resultsQuestionView time contentWidth localUser maxPoints index result =
     Ui.column
-        [ Ui.spacing 4 ]
-        [ Ui.el
-            [ Ui.Font.weight 600 ]
-            (contentView
+        [ Ui.spacing 8, Ui.paddingXY 0 16 ]
+        [ Ui.row
+            [ Ui.Font.size 20, Ui.Font.bold ]
+            [ Ui.el
+                [ Ui.width Ui.shrink, Ui.alignTop ]
+                (Ui.text (String.fromInt (index + 1) ++ ". "))
+            , contentView
                 time
                 contentWidth
                 localUser
-                (Dom.id ("sheepGame_revealedQuestion_" ++ Id.toString questionId))
-                question.attachedFiles
-                question.text
-            )
+                (Dom.id ("sheepGame_revealedQuestion_" ++ String.fromInt index))
+                result.question.attachedFiles
+                result.question.text
+            ]
         , Ui.column
-            [ Ui.spacing 2 ]
-            (groupsForQuestion questionId shared
-                |> List.sortBy (\( _, group ) -> -(List.length group))
-                |> List.map
-                    (\( _, group ) ->
-                        Ui.row
-                            [ Ui.spacing 8 ]
-                            [ Ui.el
-                                [ Ui.width (Ui.px 40), Ui.Font.bold ]
-                                (Ui.text ("+" ++ String.fromInt (List.length group)))
-                            , Ui.column
-                                [ Ui.spacing 2 ]
-                                (List.map
-                                    (\userId ->
-                                        Ui.row
-                                            [ Ui.spacing 4 ]
-                                            [ Ui.text (User.toStringAlt userId localUser ++ ":")
-                                            , case answerFor userId questionId shared of
-                                                Just answer ->
-                                                    contentView
-                                                        time
-                                                        contentWidth
-                                                        localUser
-                                                        (Dom.id
-                                                            ("sheepGame_revealedAnswer_"
-                                                                ++ Id.toString questionId
-                                                                ++ "_"
-                                                                ++ Id.toString userId
-                                                            )
-                                                        )
-                                                        answer.attachedFiles
-                                                        answer.text
+            [ Ui.spacing 16, Ui.padding 8 ]
+            [ answerGroupsView localUser result.answers
+            , scoreTableView localUser maxPoints result.answers
+            , if String.trim result.notes == "" then
+                Ui.none
 
-                                                Nothing ->
-                                                    Ui.none
-                                            ]
-                                    )
-                                    group
-                                )
+              else
+                Ui.column
+                    [ Ui.spacing 8 ]
+                    [ Ui.el
+                        [ Ui.Font.bold ]
+                        (Ui.text "Host's comment")
+                    , Ui.el [ MyUi.prewrap ] (Ui.text result.notes)
+                    ]
+            ]
+        ]
+
+
+{-| Answers that scored together, drawn together. The biggest group is last, so that the
+answer everyone landed on is what the eye finishes on.
+-}
+answerGroupsView : LocalUser -> List AnswerResult -> Element msg
+answerGroupsView localUser answers =
+    List.filterMap
+        (\answerResult ->
+            Maybe.map (\answer -> ( answerResult.userId, answerResult.group, answer )) answerResult.answer
+        )
+        answers
+        |> List.Extra.gatherEqualsBy (\( _, group, _ ) -> group)
+        |> List.sortBy (\( _, rest ) -> List.length rest)
+        |> List.map
+            (\( first, rest ) ->
+                List.map
+                    (\( userId, _, answer ) ->
+                        Ui.row
+                            [ Ui.spacing 16 ]
+                            [ Ui.el
+                                [ Ui.width Ui.shrink
+                                , Ui.Font.bold
+                                , MyUi.htmlStyle "color" (Drawing.userColor userId)
+                                ]
+                                (Ui.text (User.toStringAlt userId localUser))
+
+                            -- Answers are still drawn as the text they were typed as. Giving
+                            -- them the treatment the questions get comes later.
+                            , Ui.Prose.paragraph [] [ Ui.text (toSourceText localUser answer.text) ]
                             ]
                     )
+                    (first :: rest)
+                    |> Ui.column
+                        [ Ui.spacing 8
+                        , Ui.padding 8
+                        , Ui.border 2
+                        , Ui.borderColor MyUi.border1
+                        , Ui.rounded 3
+                        , Ui.background MyUi.background1
+                        ]
             )
-        , case SeqDict.get questionId shared.notes of
-            Just notes ->
-                if String.trim notes == "" then
-                    Ui.none
+        |> Ui.column [ Ui.spacing 8 ]
 
-                else
-                    Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text notes)
+
+{-| Where everyone stands once this question has been counted, as a bar each measured
+against what the winner finishes on.
+-}
+scoreTableView : LocalUser -> Int -> List AnswerResult -> Element msg
+scoreTableView localUser maxPoints answers =
+    List.sortWith
+        (\a b ->
+            case compare b.score a.score of
+                EQ ->
+                    compare (Id.toInt a.userId) (Id.toInt b.userId)
+
+                order ->
+                    order
+        )
+        answers
+        |> List.map (scoreRowView localUser maxPoints)
+        |> Ui.column [ Ui.spacing 2, Ui.Font.bold ]
+
+
+scoreRowView : LocalUser -> Int -> AnswerResult -> Element msg
+scoreRowView localUser maxPoints answerResult =
+    let
+        { userId, score, rankChange } =
+            answerResult
+
+        filled : Int
+        filled =
+            if maxPoints <= 0 then
+                0
+
+            else
+                round (toFloat score / toFloat maxPoints * 1000)
+    in
+    Ui.row
+        [ Ui.spacing 4 ]
+        [ Ui.el
+            [ Ui.width (Ui.px 90)
+            , Ui.Font.size 14
+            , Ui.Font.alignRight
+            , Ui.clipWithEllipsis
+            , MyUi.htmlStyle "color" (Drawing.userColor userId)
+            ]
+            (Ui.text (User.toStringAlt userId localUser))
+        , Ui.row
+            []
+            [ Ui.el
+                [ Ui.width (Ui.portion filled)
+                , Ui.height (Ui.px 20)
+                , Ui.rounded 2
+                , MyUi.htmlStyle "background-color" (Drawing.userColor userId)
+                , Ui.onRight
+                    (Ui.row
+                        [ Ui.width Ui.shrink, Ui.move (Ui.right 8), Ui.centerY, Ui.spacing 4 ]
+                        [ Ui.text (String.fromInt score)
+                        , case rankChange of
+                            RankUp ->
+                                Ui.el [ Ui.Font.color (Ui.rgb 25 230 25) ] (Ui.text "▲")
+
+                            RankDown ->
+                                Ui.el [ Ui.Font.color (Ui.rgb 230 25 25) ] (Ui.text "▼")
+
+                            RankUnchanged ->
+                                Ui.none
+                        ]
+                    )
+                ]
+                Ui.none
+            , Ui.el [ Ui.width (Ui.portion (1000 - filled)) ] Ui.none
+            ]
+        , Ui.el [ Ui.width (Ui.px 40) ] Ui.none
+        ]
+
+
+finalResultsView : LocalUser -> List (Id UserId) -> Element msg
+finalResultsView localUser winners =
+    Ui.column
+        [ Ui.spacing 16 ]
+        [ Ui.Prose.paragraph
+            [ Ui.Font.size 20, Ui.Font.center ]
+            (Ui.text "🐑 And the winner is "
+                :: (case winners of
+                        [] ->
+                            [ Ui.text "...no one?" ]
+
+                        _ ->
+                            List.map
+                                (\userId ->
+                                    Ui.el
+                                        [ Ui.width Ui.shrink
+                                        , Ui.Font.bold
+                                        , MyUi.htmlStyle "color" (Drawing.userColor userId)
+                                        ]
+                                        (Ui.text (User.toStringAlt userId localUser))
+                                )
+                                winners
+                                |> List.intersperse (Ui.text ", ")
+                   )
+                ++ [ Ui.text " 🐑" ]
+            )
+        , Ui.Prose.paragraph [ Ui.Font.center ] [ Ui.text "Thanks for playing!" ]
+        ]
+
+
+{-| A square for every pair of players, shaded by how often they answered the same thing.
+It's turned on its side so that the diagonal runs along the bottom and each player's name
+sits at the end of their own row and column.
+-}
+resultsGridView :
+    LocalUser
+    -> ValidatedSetup
+    -> Shared
+    -> Maybe ( Id UserId, Id UserId )
+    -> Element GameMsg
+resultsGridView localUser setup shared gridHovered =
+    let
+        everyone : List (Id UserId)
+        everyone =
+            players shared
+
+        overlap : SeqDict ( Id UserId, Id UserId ) Int
+        overlap =
+            matchingAnswerCounts setup shared
+
+        highestMatchCount : Int
+        highestMatchCount =
+            SeqDict.values overlap |> List.maximum |> Maybe.withDefault 0
+    in
+    Ui.row
+        [ Ui.spacing 16 ]
+        [ Ui.column
+            [ Ui.width Ui.shrink
+            , Ui.Font.bold
+            , Ui.rotate (Ui.radians (pi / 4))
+            , Ui.move (Ui.left (List.length everyone * gridCellSize // 2))
+            ]
+            (List.indexedMap
+                (\columnIndex userId ->
+                    List.indexedMap
+                        (\rowIndex otherUserId ->
+                            resultsGridCell
+                                localUser
+                                gridHovered
+                                overlap
+                                highestMatchCount
+                                { columnIndex = columnIndex, rowIndex = rowIndex }
+                                ( userId, otherUserId )
+                        )
+                        everyone
+                        |> Ui.row
+                            [ Ui.width Ui.shrink
+                            , if columnIndex < List.length everyone - 1 then
+                                Ui.onRight (resultsGridLabel localUser gridHovered Tuple.first userId)
+
+                              else
+                                Ui.noAttr
+                            ]
+                )
+                everyone
+            )
+        , case gridHovered |> Maybe.andThen (\pair -> SeqDict.get pair overlap |> Maybe.map (Tuple.pair pair)) of
+            Just ( ( userIdA, userIdB ), count ) ->
+                Ui.column
+                    [ Ui.spacing 16, Ui.Font.size 16 ]
+                    [ Ui.Prose.paragraph
+                        []
+                        [ Ui.text (User.toStringAlt userIdA localUser)
+                        , Ui.text " and "
+                        , Ui.text (User.toStringAlt userIdB localUser)
+                        , Ui.text " have "
+                        , Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.text (String.fromInt count))
+                        , Ui.text
+                            (if count == 1 then
+                                " matching answer."
+
+                             else
+                                " matching answers."
+                            )
+                        ]
+                    , if count == highestMatchCount && count > 0 then
+                        Ui.Prose.paragraph
+                            []
+                            [ Ui.text "🐑 This is the highest number of matching answers! 🐑" ]
+
+                      else
+                        Ui.none
+                    ]
 
             Nothing ->
-                Ui.none
+                Ui.Prose.paragraph
+                    [ Ui.widthMax 400, Ui.Font.size 16, Ui.Font.color MyUi.font3 ]
+                    [ Ui.text "Move your cursor over a grid square to see how many matching answers two players got." ]
         ]
+
+
+gridCellSize : number
+gridCellSize =
+    30
+
+
+resultsGridCell :
+    LocalUser
+    -> Maybe ( Id UserId, Id UserId )
+    -> SeqDict ( Id UserId, Id UserId ) Int
+    -> Int
+    -> { columnIndex : Int, rowIndex : Int }
+    -> ( Id UserId, Id UserId )
+    -> Element GameMsg
+resultsGridCell localUser gridHovered overlap highestMatchCount { columnIndex, rowIndex } ( userId, otherUserId ) =
+    let
+        -- Only half of the grid says anything. The other half is the same pairs the other
+        -- way around, and the diagonal is everyone against themselves.
+        isFilled : Bool
+        isFilled =
+            columnIndex < rowIndex
+
+        highlight : Int
+        highlight =
+            case gridHovered of
+                Just ( hoveredColumn, hoveredRow ) ->
+                    if hoveredRow == otherUserId || hoveredColumn == userId then
+                        50
+
+                    else
+                        0
+
+                Nothing ->
+                    0
+
+        matched : Int
+        matched =
+            if highestMatchCount <= 0 then
+                0
+
+            else
+                SeqDict.get ( userId, otherUserId ) overlap
+                    |> Maybe.withDefault 0
+                    |> (\count -> round (toFloat count / toFloat highestMatchCount * 255))
+    in
+    Ui.el
+        ([ Ui.width (Ui.px gridCellSize)
+         , Ui.height (Ui.px gridCellSize)
+         , Ui.background
+            (if isFilled then
+                Ui.rgb highlight matched highlight
+
+             else
+                Ui.rgba 0 0 0 0
+            )
+         , if columnIndex == 0 && rowIndex > 0 then
+            Ui.above (resultsGridLabel localUser gridHovered Tuple.second otherUserId)
+
+           else
+            Ui.noAttr
+         ]
+            ++ (if isFilled then
+                    [ Ui.Events.onMouseEnter (HoveredResultsGrid ( userId, otherUserId ))
+                    , Ui.Events.onMouseLeave (ExitedResultsGrid ( userId, otherUserId ))
+                    ]
+
+                else
+                    []
+               )
+        )
+        Ui.none
+
+
+{-| A player's name at the end of their row or column. The grid is rotated, so these are
+turned back the other way to read straight.
+-}
+resultsGridLabel :
+    LocalUser
+    -> Maybe ( Id UserId, Id UserId )
+    -> (( Id UserId, Id UserId ) -> Id UserId)
+    -> Id UserId
+    -> Element msg
+resultsGridLabel localUser gridHovered hoveredSide userId =
+    Ui.el
+        [ Ui.width Ui.shrink
+        , Ui.height (Ui.px gridCellSize)
+        , Ui.paddingXY 8 0
+        , Ui.contentCenterY
+        , MyUi.noPointerEvents
+        , MyUi.htmlStyle "color" (Drawing.userColor userId)
+        , if Maybe.map hoveredSide gridHovered == Just userId then
+            Ui.background (Ui.rgba 255 255 255 0.1)
+
+          else
+            Ui.noAttr
+        ]
+        (Ui.text (User.toStringAlt userId localUser))
+
+
+{-| How many questions each pair of players landed in the same group on. Both orderings of
+a pair are counted so that either half of the grid can look one up.
+-}
+matchingAnswerCounts : ValidatedSetup -> Shared -> SeqDict ( Id UserId, Id UserId ) Int
+matchingAnswerCounts setup shared =
+    let
+        everyone : List (Id UserId)
+        everyone =
+            players shared
+    in
+    List.range 0 (List.Nonempty.length setup.questions - 1)
+        |> List.concatMap
+            (\index ->
+                let
+                    questionId : Id QuestionId
+                    questionId =
+                        Id.fromInt index
+
+                    groupOf : Id UserId -> Maybe String
+                    groupOf userId =
+                        case answerFor userId questionId shared of
+                            Just _ ->
+                                SeqDict.get ( userId, questionId ) shared.groups |> Maybe.withDefault "" |> Just
+
+                            Nothing ->
+                                Nothing
+                in
+                List.concatMap
+                    (\userId ->
+                        List.filterMap
+                            (\otherUserId ->
+                                if userId == otherUserId then
+                                    Nothing
+
+                                else
+                                    case ( groupOf userId, groupOf otherUserId ) of
+                                        ( Just group, Just otherGroup ) ->
+                                            Just ( ( userId, otherUserId ), group == otherGroup )
+
+                                        _ ->
+                                            Nothing
+                            )
+                            everyone
+                    )
+                    everyone
+            )
+        |> List.foldl
+            (\( pair, matched ) counts ->
+                SeqDict.update
+                    pair
+                    (\maybe ->
+                        Maybe.withDefault 0 maybe
+                            + (if matched then
+                                1
+
+                               else
+                                0
+                              )
+                            |> Just
+                    )
+                    counts
+            )
+            SeqDict.empty
 
 
 fileUploadPreviewSize : number

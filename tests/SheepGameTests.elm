@@ -308,6 +308,67 @@ tests =
                     |> Expect.equal (Ok [ ( Id.fromInt 1, uploadedFile ) ])
             )
         , attachedFileTests
+        , resultsTests
+        ]
+
+
+{-| Three players, where the second question moves two of them past each other.
+
+    Q1  playerA "Blue"  playerB "Red"  playerC "Red"   ->  1, 2, 2
+    Q2  playerA "Dog"   playerB "Dog"  playerC "Cat"   ->  3, 4, 3
+
+-}
+resultsTests : Test
+resultsTests =
+    let
+        results : { maxPoints : Int, questions : List SheepGame.QuestionResult, winners : List (Id UserId) }
+        results =
+            apply (setup 2)
+                [ action playerA (answers [ "Blue", "Dog" ])
+                , action playerB (answers [ "Red", "Dog" ])
+                , action playerC (answers [ "Red", "Cat" ])
+                , action host LockedAnswers
+                , action host FinishedGrouping
+                ]
+                |> SheepGame.resultsData (setup 2)
+
+        rankChanges : Int -> List ( Id UserId, SheepGame.RankChange )
+        rankChanges questionIndex =
+            case List.drop questionIndex results.questions |> List.head of
+                Just result ->
+                    List.map (\answer -> ( answer.userId, answer.rankChange )) result.answers
+
+                Nothing ->
+                    []
+    in
+    Test.describe "Results"
+        [ Test.test "The winner is whoever ends on the most points"
+            (\_ ->
+                Expect.equal ( 4, [ playerB ] ) ( results.maxPoints, results.winners )
+            )
+        , Test.test "Scores are the running total as each question is revealed"
+            (\_ ->
+                List.map (\result -> List.map .score result.answers) results.questions
+                    |> Expect.equal [ [ 1, 2, 2 ], [ 3, 4, 3 ] ]
+            )
+        , Test.test "Nobody has moved anywhere on the first question"
+            (\_ ->
+                rankChanges 0
+                    |> Expect.equal
+                        [ ( playerA, SheepGame.RankUnchanged )
+                        , ( playerB, SheepGame.RankUnchanged )
+                        , ( playerC, SheepGame.RankUnchanged )
+                        ]
+            )
+        , Test.test "Passing someone counts as moving up, and being passed as moving down"
+            (\_ ->
+                rankChanges 1
+                    |> Expect.equal
+                        [ ( playerA, SheepGame.RankUp )
+                        , ( playerB, SheepGame.RankUnchanged )
+                        , ( playerC, SheepGame.RankDown )
+                        ]
+            )
         ]
 
 
