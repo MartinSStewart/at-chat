@@ -301,22 +301,12 @@ initGame localUser setup shared =
     }
 
 
-{-| Everyone whose name a mention could be written with.
--}
-allUsers : LocalUser -> SeqDict (Id UserId) FrontendUser
-allUsers localUser =
-    SeqDict.insert
-        localUser.session.userId
-        (User.backendToFrontendForUser localUser.user)
-        localUser.otherUsers
-
-
 {-| The text someone would have typed to write this, so that an answer can be put back in
 the box it came from.
 -}
 toSourceText : LocalUser -> Nonempty (RichText (Id UserId)) -> String
 toSourceText localUser content =
-    RichText.toString localUser.timezone False (allUsers localUser) content
+    RichText.toString localUser.timezone False (User.allUsers localUser) content
 
 
 initShared : Shared
@@ -498,7 +488,7 @@ updateSetup localUser msg model =
             )
 
         PressedStartGame ->
-            case validateSetup localUser.timezone (allUsers localUser) localUser.session.userId model of
+            case validateSetup localUser.timezone (User.allUsers localUser) localUser.session.userId model of
                 Ok setup ->
                     ( Game (initGame localUser setup initShared), FinishedSetup setup )
 
@@ -540,7 +530,7 @@ updateSetup localUser msg model =
                                     , text =
                                         removeAttachedFileFromText
                                             localUser.timezone
-                                            (allUsers localUser)
+                                            (User.allUsers localUser)
                                             fileId
                                             question.text
                                 }
@@ -585,7 +575,7 @@ updateSetup localUser msg model =
                                     | text =
                                         mapQuestionRichText
                                             localUser.timezone
-                                            (allUsers localUser)
+                                            (User.allUsers localUser)
                                             (if removeSpoiler then
                                                 RichText.unspoilerAttachedFile fileId
 
@@ -820,7 +810,7 @@ updateGame localUser setup shared msg model =
                                 , text =
                                     removeAttachedFileFromText
                                         localUser.timezone
-                                        (allUsers localUser)
+                                        (User.allUsers localUser)
                                         fileId
                                         draft.text
                             }
@@ -866,7 +856,7 @@ updateGame localUser setup shared msg model =
                                 | text =
                                     mapQuestionRichText
                                         localUser.timezone
-                                        (allUsers localUser)
+                                        (User.allUsers localUser)
                                         (if removeSpoiler then
                                             RichText.unspoilerAttachedFile fileId
 
@@ -886,7 +876,7 @@ updateGame localUser setup shared msg model =
             ( model
             , IdArray.map
                 (\_ draft ->
-                    validateInput localUser.timezone (allUsers localUser) draft
+                    validateInput localUser.timezone (User.allUsers localUser) draft
                         |> Result.toMaybe
                         |> Maybe.map (\answer -> answer ())
                 )
@@ -1404,7 +1394,7 @@ contentView time contentWidth localUser htmlId attachedFiles content =
         (\_ -> NoOp)
         { domainWhitelist = localUser.user.domainWhitelist
         , revealedSpoilers = SeqSet.empty
-        , users = allUsers localUser
+        , users = User.allUsers localUser
         , attachedFiles = attachedFiles
         , stickers = localUser.stickers
         , customEmojis = localUser.customEmojis
@@ -1439,8 +1429,18 @@ answeringView time contentWidth isMobile localUser loggedIn setup shared model =
         currentUserId : Id UserId
         currentUserId =
             localUser.session.userId
+
+        answerContentWidth =
+            contentWidth - (User.profileImageSize + 8)
     in
-    [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Answer like everyone else")
+    [ Ui.el
+        [ Ui.Font.bold, Ui.Font.size 20 ]
+        (if isHost localUser.session.userId setup then
+            Ui.text "Answer like everyone else"
+
+         else
+            Ui.text "Answer like everyone else"
+        )
     , Ui.Prose.paragraph
         [ Ui.Font.color MyUi.font3 ]
         [ Ui.text "You score a point for every player who wrote the same answer as you, yourself included." ]
@@ -1456,37 +1456,49 @@ answeringView time contentWidth isMobile localUser loggedIn setup shared model =
                     in
                     Ui.column
                         [ Ui.spacing 4 ]
-                        [ Ui.el
-                            [ Ui.Font.weight 600 ]
-                            (contentView
-                                time
-                                contentWidth
-                                localUser
-                                (Dom.id ("sheepGame_answeringQuestion_" ++ Id.toString questionId))
-                                question.attachedFiles
-                                question.text
-                            )
+                        [ contentView
+                            time
+                            contentWidth
+                            localUser
+                            (Dom.id ("sheepGame_answeringQuestion_" ++ Id.toString questionId))
+                            question.attachedFiles
+                            question.text
                         , if isHost localUser.session.userId setup then
                             let
                                 answers : List (Element GameMsg)
                                 answers =
                                     List.map
-                                        (\( userId, answers2 ) ->
+                                        (\( answeredBy, answers2 ) ->
                                             case IdArray.get questionId answers2 of
                                                 Just (Just answer) ->
-                                                    contentView
-                                                        time
-                                                        contentWidth
-                                                        localUser
-                                                        (Dom.id
-                                                            ("sheepGame_answerPreview_"
-                                                                ++ Id.toString questionId
-                                                                ++ "_"
-                                                                ++ Id.toString userId
-                                                            )
-                                                        )
-                                                        answer.attachedFiles
-                                                        answer.text
+                                                    Ui.row
+                                                        [ Ui.spacing 8 ]
+                                                        [ case User.getUser answeredBy localUser of
+                                                            Just user ->
+                                                                User.profileImage answeredBy user.icon
+
+                                                            Nothing ->
+                                                                User.profileImage answeredBy Nothing
+                                                        , Ui.column
+                                                            [ Ui.spacing 2 ]
+                                                            [ User.toStringAlt answeredBy localUser
+                                                                |> Ui.text
+                                                                |> Ui.el [ Ui.Font.bold ]
+                                                            , contentView
+                                                                time
+                                                                answerContentWidth
+                                                                localUser
+                                                                (Dom.id
+                                                                    ("sheepGame_answerPreview_"
+                                                                        ++ Id.toString questionId
+                                                                        ++ "_"
+                                                                        ++ Id.toString answeredBy
+                                                                    )
+                                                                )
+                                                                answer.attachedFiles
+                                                                answer.text
+                                                            ]
+                                                        ]
 
                                                 _ ->
                                                     Ui.el [ Ui.Font.italic ] (Ui.text "No answered")
@@ -1554,7 +1566,7 @@ answerInput isMobile localUser loggedIn questionId answer =
 
         users : SeqDict (Id UserId) FrontendUser
         users =
-            allUsers localUser
+            User.allUsers localUser
 
         richText : Maybe (Nonempty (RichText (Id UserId)))
         richText =
@@ -1928,13 +1940,17 @@ revealingView time contentWidth localUser setup shared model =
                 [ Ui.height (Ui.px 2), Ui.background MyUi.border1 ]
                 Ui.none
             , finalResultsView localUser results.winners
-            , Ui.column
-                [ Ui.spacing 16 ]
-                [ Ui.Prose.paragraph
-                    [ Ui.Font.size 20, Ui.Font.bold, Ui.Font.center ]
-                    [ Ui.text "Statistics: Which players think most alike?" ]
-                , resultsGridView localUser setup shared model.gridHovered
-                ]
+            , if SeqDict.size shared.answers > 2 then
+                Ui.column
+                    [ Ui.spacing 16 ]
+                    [ Ui.Prose.paragraph
+                        [ Ui.Font.size 20, Ui.Font.bold, Ui.Font.center ]
+                        [ Ui.text "Statistics: Which players think most alike?" ]
+                    , resultsGridView localUser setup shared model.gridHovered
+                    ]
+
+              else
+                Ui.none
             , Ui.Prose.paragraph
                 [ Ui.Font.size 14, Ui.Font.center, Ui.opacity 0.5 ]
                 [ Ui.text "No sheep were impersonated in the playing of this game." ]

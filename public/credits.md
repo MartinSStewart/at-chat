@@ -31,3 +31,4 @@ Ascii art from https://ascii-collab.app:
 * ascii-snail.png: Martin
 * ascii-squirrel.png: Martin
 * ascii-sw-home.png: SW
+* ascii-man-on-moon.png: Martin

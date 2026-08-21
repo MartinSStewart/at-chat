@@ -100,4 +100,8 @@ art =
           , coordinates = Coord.xy -169 -176
           , size = Coord.xy 303 198
           }
+        , { url = "ascii-man-on-moon"
+          , coordinates = Coord.xy 89 -243
+          , size = Coord.xy 765 401
+          }
         ]
