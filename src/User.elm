@@ -77,6 +77,7 @@ import Sticker exposing (StickerData)
 import Ui exposing (Element)
 import Ui.Font
 import UserAgent exposing (UserAgent)
+import UserColor exposing (UserColor)
 import UserSession exposing (DiscordFrontendUser, UserSession)
 
 
@@ -84,6 +85,7 @@ import UserSession exposing (DiscordFrontendUser, UserSession)
 -}
 type alias BackendUser =
     { name : PersonName
+    , color : UserColor
     , isAdmin : Bool
     , email : EmailAddress
     , recentLoginEmails : List Time.Posix
@@ -275,6 +277,7 @@ type NotificationLevel
 init : Time.Posix -> PersonName -> EmailAddress -> Bool -> BackendUser
 init createdAt name email userIsAdmin =
     { name = name
+    , color = UserColor.default
     , isAdmin = userIsAdmin
     , email = email
     , recentLoginEmails = []
@@ -745,6 +748,7 @@ sectionToString section2 =
 -}
 type alias FrontendUser =
     { name : PersonName
+    , color : UserColor
     , isAdmin : Bool
     , icon : Maybe FileHash
     }
@@ -822,6 +826,7 @@ discordFullDataUserToFrontendCurrentUser needsAuthAgain data isLoadingData =
 backendToFrontendCurrent : BackendUser -> FrontendCurrentUser
 backendToFrontendCurrent user =
     { name = user.name
+    , color = user.color
     , isAdmin = user.isAdmin
     , email = user.email
     , recentLoginEmails = user.recentLoginEmails
@@ -857,6 +862,7 @@ backendToFrontendCurrent user =
 backendToFrontend : FrontendCurrentUser -> FrontendUser
 backendToFrontend user =
     { name = user.name
+    , color = user.color
     , isAdmin = user.isAdmin
     , icon = user.icon
     }
@@ -865,10 +871,11 @@ backendToFrontend user =
 {-| Convert a BackendUser to a FrontendUser while only including data the current user has permission to see
 -}
 backendToFrontendForUser :
-    { a | name : PersonName, isAdmin : Bool, icon : Maybe FileHash }
+    { a | name : PersonName, color : UserColor, isAdmin : Bool, icon : Maybe FileHash }
     -> FrontendUser
 backendToFrontendForUser user =
     { name = user.name
+    , color = user.color
     , isAdmin = user.isAdmin
     , icon = user.icon
     }

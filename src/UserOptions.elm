@@ -1,6 +1,8 @@
 module UserOptions exposing (discordBookmarkletId, domainWhitelistToString, init, view)
 
 import Codec
+import Color
+import Color.Convert
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
 import Editable
@@ -32,6 +34,7 @@ import Ui.Input
 import Ui.Prose
 import User
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
+import UserColor
 import UserSession exposing (NotificationMode(..), PushSubscription(..), UserOptionSection(..))
 
 
@@ -277,6 +280,11 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         UserNameEditableMsg
                         (PersonName.toString local.localUser.user.name)
                         model.name
+                    , Ui.column
+                        [ Ui.spacing 8 ]
+                        [ Ui.el [ Ui.Font.bold ] (Ui.text "Color")
+                        , UserColor.picker
+                        ]
                     , Ui.column
                         [ Ui.spacing 8 ]
                         [ Ui.el [ Ui.Font.bold ] (Ui.text "Email")

@@ -86,6 +86,7 @@ import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, Expo
 import Unsafe
 import Untrusted
 import User exposing (BackendUser)
+import UserColor
 import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession, Viewing)
 import VisibleMessages
 import WireHelper
@@ -6148,6 +6149,7 @@ handleGoMatchRequest messageId channel model =
 
                         Nothing ->
                             { name = PersonName.fromStringLossy "<missing>"
+                            , color = UserColor.default
                             , isAdmin = False
                             , icon = Nothing
                             }
