@@ -152,7 +152,7 @@ import Effect.Websocket as Websocket
 import Embed exposing (EmbedData)
 import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileHash)
-import Game exposing (BackendGameData(..), MatchData(..))
+import Game
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId)
 import IdArray exposing (IdArray)
@@ -162,7 +162,7 @@ import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (ChangeAttachments, GameType(..), Message(..), MessageNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments, Message(..), MessageNoReply(..), UserTextMessageDataNoReply)
 import MessageArray exposing (MessageArray)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
@@ -185,7 +185,7 @@ import UInt64
 import Unsafe
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendCurrentUser, FrontendUser, LocalUser)
-import UserSession exposing (ChannelHeaderTab(..), FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (ChannelHeaderTab, FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 

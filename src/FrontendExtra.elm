@@ -2,6 +2,7 @@ module FrontendExtra exposing
     ( audio
     , canDropFiles
     , changeUpdate
+    , channelGames
     , currentGame
     , currentGamesTab
     , drawingRedo
@@ -293,6 +294,9 @@ pendingChangesText localChange =
             case change of
                 Game.CreatePublicLink _ _ ->
                     "Shared match"
+
+                Game.LoadMatch _ _ ->
+                    "Opened match"
 
                 Game.LocalChange_Go _ goChange ->
                     case goChange of
@@ -1792,120 +1796,141 @@ routeRequestChannelHelper :
     -> LoadedFrontend
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn model3 =
-    ( case guildOrDmId of
-        GuildOrDmId guildOrDmId2 ->
-            case tab of
-                Just (ChannelHeaderTab_Games (Just messageId)) ->
-                    case guildOrDmId2 of
-                        GuildOrDmId_Dm { otherUserId } ->
-                            case SeqDict.get otherUserId local.dmChannels of
-                                Just dmChannel ->
-                                    { loggedIn
-                                        | games =
-                                            Game.routeRequest
-                                                model3.time
-                                                local.localUser
-                                                guildOrDmId2
-                                                messageId
-                                                dmChannel.games
-                                                loggedIn.games
-                                    }
-
-                                Nothing ->
-                                    loggedIn
-
-                        GuildOrDmId_Guild id ->
-                            case LocalState.getGuildAndChannel id local of
-                                Just ( _, channel ) ->
-                                    { loggedIn
-                                        | games =
-                                            Game.routeRequest
-                                                model3.time
-                                                local.localUser
-                                                guildOrDmId2
-                                                messageId
-                                                channel.games
-                                                loggedIn.games
-                                    }
-
-                                Nothing ->
-                                    loggedIn
-
-                _ ->
-                    loggedIn
-
-        DiscordGuildOrDmId _ ->
-            loggedIn
-    , Command.batch
-        [ if sameChannel then
-            -- Staying in the same channel but pointing at a message means the user followed a
-            -- reply header or a link to it, so bring that message into view instead of sticking
-            -- to the bottom of the conversation.
-            case threadRoute of
-                ViewThreadWithFriends _ (Just messageIndex) _ ->
-                    Scroll.smoothScrollTo
-                        Pages.Guild.conversationContainerId
-                        (Pages.Guild.threadMessageHtmlId messageIndex)
-                        |> Task.attempt (\_ -> ScrolledToMessage)
-
-                ViewThreadWithFriends _ Nothing _ ->
-                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
-
-                NoThreadWithFriends (Just messageIndex) _ ->
-                    Scroll.smoothScrollTo
-                        Pages.Guild.conversationContainerId
-                        (Pages.Guild.channelMessageHtmlId messageIndex)
-                        |> Task.attempt (\_ -> ScrolledToMessage)
-
-                NoThreadWithFriends Nothing _ ->
-                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
-
-          else
+    (case ( guildOrDmId, tab ) of
+        ( GuildOrDmId guildOrDmId2, Just (ChannelHeaderTab_Games (Just messageId)) ) ->
             let
-                scrollToBottom : Command FrontendOnly ToBackend FrontendMsg_
-                scrollToBottom =
-                    Process.sleep Duration.millisecond
-                        |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
-                        |> Task.attempt (\_ -> SetScrollToBottom)
+                games : SeqDict (Id ChannelMessageId) Game.MatchData
+                games =
+                    channelGames guildOrDmId2 local
             in
-            Command.batch
-                [ setFocus model3 Pages.Guild.channelTextInputId
-                , case threadRoute of
-                    ViewThreadWithFriends _ maybeMessageIndex _ ->
-                        case maybeMessageIndex of
-                            Just messageIndex ->
-                                Scroll.smoothScroll
-                                    Pages.Guild.conversationContainerId
-                                    (Pages.Guild.threadMessageHtmlId messageIndex)
-                                    |> Task.attempt (\_ -> ScrolledToMessage)
+            handleLocalChange
+                model3.time
+                (case SeqDict.get messageId games of
+                    Just match ->
+                        -- The backend only told us this match exists, so ask it for the rest.
+                        if Game.isNotLoaded match then
+                            Game.LoadMatch messageId EmptyPlaceholder
+                                |> Local_Game guildOrDmId2
+                                |> Just
 
-                            Nothing ->
-                                scrollToBottom
+                        else
+                            Nothing
 
-                    NoThreadWithFriends maybeMessageIndex _ ->
-                        case maybeMessageIndex of
-                            Just messageIndex ->
-                                Scroll.smoothScroll
-                                    Pages.Guild.conversationContainerId
-                                    (Pages.Guild.channelMessageHtmlId messageIndex)
-                                    |> Task.attempt (\_ -> ScrolledToMessage)
-
-                            Nothing ->
-                                scrollToBottom
-                ]
-
-        -- Opening the games tab shows the Past moves list scrolled to the bottom. The sleep lets the
-        -- list render first (its container may not be in the DOM yet on this frame).
-        , case tab of
-            Just (ChannelHeaderTab_Games _) ->
-                Process.sleep Duration.millisecond
-                    |> Task.andThen (\() -> Dom.setViewportOf WordSpellingGame.pastWordsContainerId 0 9999999)
-                    |> Task.attempt (\_ -> SetScrollToBottom)
-
-            _ ->
+                    Nothing ->
+                        Nothing
+                )
+                { loggedIn
+                    | games =
+                        Game.routeRequest
+                            model3.time
+                            local.localUser
+                            guildOrDmId2
+                            messageId
+                            games
+                            loggedIn.games
+                }
                 Command.none
-        ]
+
+        _ ->
+            ( loggedIn, Command.none )
     )
+        |> Tuple.mapSecond
+            (\loadCmd ->
+                Command.batch
+                    [ loadCmd
+                    , Command.batch
+                        [ if sameChannel then
+                            -- Staying in the same channel but pointing at a message means the user followed a
+                            -- reply header or a link to it, so bring that message into view instead of sticking
+                            -- to the bottom of the conversation.
+                            case threadRoute of
+                                ViewThreadWithFriends _ (Just messageIndex) _ ->
+                                    Scroll.smoothScrollTo
+                                        Pages.Guild.conversationContainerId
+                                        (Pages.Guild.threadMessageHtmlId messageIndex)
+                                        |> Task.attempt (\_ -> ScrolledToMessage)
+
+                                ViewThreadWithFriends _ Nothing _ ->
+                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                NoThreadWithFriends (Just messageIndex) _ ->
+                                    Scroll.smoothScrollTo
+                                        Pages.Guild.conversationContainerId
+                                        (Pages.Guild.channelMessageHtmlId messageIndex)
+                                        |> Task.attempt (\_ -> ScrolledToMessage)
+
+                                NoThreadWithFriends Nothing _ ->
+                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                          else
+                            let
+                                scrollToBottom : Command FrontendOnly ToBackend FrontendMsg_
+                                scrollToBottom =
+                                    Process.sleep Duration.millisecond
+                                        |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
+                                        |> Task.attempt (\_ -> SetScrollToBottom)
+                            in
+                            Command.batch
+                                [ setFocus model3 Pages.Guild.channelTextInputId
+                                , case threadRoute of
+                                    ViewThreadWithFriends _ maybeMessageIndex _ ->
+                                        case maybeMessageIndex of
+                                            Just messageIndex ->
+                                                Scroll.smoothScroll
+                                                    Pages.Guild.conversationContainerId
+                                                    (Pages.Guild.threadMessageHtmlId messageIndex)
+                                                    |> Task.attempt (\_ -> ScrolledToMessage)
+
+                                            Nothing ->
+                                                scrollToBottom
+
+                                    NoThreadWithFriends maybeMessageIndex _ ->
+                                        case maybeMessageIndex of
+                                            Just messageIndex ->
+                                                Scroll.smoothScroll
+                                                    Pages.Guild.conversationContainerId
+                                                    (Pages.Guild.channelMessageHtmlId messageIndex)
+                                                    |> Task.attempt (\_ -> ScrolledToMessage)
+
+                                            Nothing ->
+                                                scrollToBottom
+                                ]
+
+                        -- Opening the games tab shows the Past moves list scrolled to the bottom. The sleep lets the
+                        -- list render first (its container may not be in the DOM yet on this frame).
+                        , case tab of
+                            Just (ChannelHeaderTab_Games _) ->
+                                Process.sleep Duration.millisecond
+                                    |> Task.andThen (\() -> Dom.setViewportOf WordSpellingGame.pastWordsContainerId 0 9999999)
+                                    |> Task.attempt (\_ -> SetScrollToBottom)
+
+                            _ ->
+                                Command.none
+                        ]
+                    ]
+            )
+
+
+{-| The matches in a channel, whichever kind of channel it is.
+-}
+channelGames : GuildOrDmId -> LocalState -> SeqDict (Id ChannelMessageId) Game.MatchData
+channelGames guildOrDmId local =
+    case guildOrDmId of
+        GuildOrDmId_Dm { otherUserId } ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just dmChannel ->
+                    dmChannel.games
+
+                Nothing ->
+                    SeqDict.empty
+
+        GuildOrDmId_Guild id ->
+            case LocalState.getGuildAndChannel id local of
+                Just ( _, channel ) ->
+                    channel.games
+
+                Nothing ->
+                    SeqDict.empty
 
 
 isPressMsg : FrontendMsg_ -> Bool
@@ -5345,6 +5370,21 @@ gameChangeUpdateChannel changeBy gameChange channel =
                                 channel.games
                     }
 
+                EmptyPlaceholder ->
+                    channel
+
+        Game.LoadMatch matchId data ->
+            case data of
+                FilledInByBackend loaded ->
+                    { channel
+                        | games =
+                            SeqDict.updateIfExists
+                                matchId
+                                (\_ -> Game.initMatchData loaded.gameData loaded.publicLink)
+                                channel.games
+                    }
+
+                -- Nothing has arrived yet, so the match stays as the placeholder it was.
                 EmptyPlaceholder ->
                     channel
 

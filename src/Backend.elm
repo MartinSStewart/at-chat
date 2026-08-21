@@ -5436,6 +5436,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 Nothing ->
                                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
+                                        Game.LoadMatch matchId _ ->
+                                            ( model
+                                            , loadMatchResponse
+                                                clientId
+                                                changeId
+                                                guildOrDmId
+                                                (GuildOrFullDmId_Dm dmChannelId)
+                                                matchId
+                                                dmChannel
+                                                model
+                                            )
+
                                         Game.LocalChange_WordSpellingGame matchId wsChange ->
                                             let
                                                 ( model2, cmd ) =
@@ -5686,6 +5698,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                         Nothing ->
                                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                                Game.LoadMatch matchId _ ->
+                                                    ( model
+                                                    , loadMatchResponse
+                                                        clientId
+                                                        changeId
+                                                        guildOrDmId
+                                                        (GuildOrFullDmId_Guild id.guildId id.channelId)
+                                                        matchId
+                                                        channel
+                                                        model
+                                                    )
 
                                         Nothing ->
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
@@ -6143,6 +6167,36 @@ handleGoMatchRequest messageId channel model =
 
         _ ->
             Err ()
+
+
+{-| Hand one match over to the client that asked for it. Nothing about the match changes,
+so this goes to that client alone rather than being broadcast.
+-}
+loadMatchResponse :
+    ClientId
+    -> ChangeId
+    -> GuildOrDmId
+    -> GuildOrFullDmId
+    -> Id ChannelMessageId
+    -> { a | games : SeqDict (Id ChannelMessageId) Game.BackendGameData }
+    -> BackendModel
+    -> Command BackendOnly ToFrontend BackendMsg
+loadMatchResponse clientId changeId guildOrDmId guildOrFullDmId matchId channel model =
+    case SeqDict.get matchId channel.games of
+        Just gameData ->
+            Game.LoadMatch
+                matchId
+                (FilledInByBackend
+                    { gameData = gameData
+                    , publicLink = OneToOne.first ( guildOrFullDmId, matchId ) model.goMatchPublicIds
+                    }
+                )
+                |> Local_Game guildOrDmId
+                |> LocalChangeResponse changeId
+                |> Lamdera.sendToFrontend clientId
+
+        Nothing ->
+            BackendExtra.invalidChangeResponse changeId clientId
 
 
 createGamePublicLinkHelper :
@@ -7735,7 +7789,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model session use
                                 guildId
                                 (Just ( LocalState.announcementChannel guild2, ( NoThread, Nothing ) ))
                                 session.userId
-                                model.goMatchPublicIds
+                                model2.goMatchPublicIds
                                 guild2
                             )
                           of

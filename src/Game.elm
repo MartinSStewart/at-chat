@@ -2,6 +2,7 @@ module Game exposing
     ( BackendGameData(..)
     , FrontendGameData(..)
     , Game(..)
+    , LoadedMatch
     , LocalChange(..)
     , MatchData(..)
     , Model
@@ -21,6 +22,7 @@ module Game exposing
     , initModel
     , insideBoard
     , isAnimating
+    , isNotLoaded
     , matchNotLoaded
     , pressedKey
     , routeRequest
@@ -140,7 +142,7 @@ addPublicLink publicLink matchData =
         MatchData matchData2 ->
             { matchData2 | publicLink = Just publicLink } |> MatchData
 
-        MatchNotLoaded gameType ->
+        MatchNotLoaded _ ->
             matchData
 
 
@@ -168,7 +170,7 @@ audio popSound currentUserId matchId matchData model =
                 FrontendGameData_SheepGame _ _ _ ->
                     Audio.silence
 
-        MatchNotLoaded gameType ->
+        MatchNotLoaded _ ->
             Audio.silence
 
 
@@ -194,7 +196,7 @@ isAnimating time windowSize matchId matchData model =
                 FrontendGameData_SheepGame _ _ _ ->
                     False
 
-        MatchNotLoaded gameType ->
+        MatchNotLoaded _ ->
             False
 
 
@@ -221,7 +223,7 @@ insideBoard windowSize coord guildOrDmId matchId matchData games =
                 FrontendGameData_SheepGame _ _ _ ->
                     False
 
-        MatchNotLoaded gameType ->
+        MatchNotLoaded _ ->
             False
 
 
@@ -251,6 +253,12 @@ initMatchData gameData publicLink =
         |> MatchData
 
 
+{-| Everything the frontend needs to show a match it has just asked for.
+-}
+type alias LoadedMatch =
+    { gameData : BackendGameData, publicLink : Maybe (SecretId GamePublicId) }
+
+
 matchNotLoaded : BackendGameData -> MatchData
 matchNotLoaded gameData =
     MatchNotLoaded
@@ -258,12 +266,24 @@ matchNotLoaded gameData =
             GameData_Go _ _ ->
                 GameType_Go
 
-            GameData_WordSpellingGame validatedSetup array shared ->
+            GameData_WordSpellingGame _ _ _ ->
                 GameType_WordSpellingGame
 
-            GameData_SheepGame validatedSetup array shared ->
+            GameData_SheepGame _ _ _ ->
                 GameType_SheepGame
         )
+
+
+{-| Whether the backend has only told us this match exists, rather than sending it.
+-}
+isNotLoaded : MatchData -> Bool
+isNotLoaded matchData =
+    case matchData of
+        MatchData _ ->
+            False
+
+        MatchNotLoaded _ ->
+            True
 
 
 addGoAction : Go.ActionWithTime -> MatchData -> MatchData
@@ -281,7 +301,7 @@ addGoAction action matchData =
             }
                 |> MatchData
 
-        MatchNotLoaded gameType ->
+        MatchNotLoaded _ ->
             matchData
 
 
@@ -407,7 +427,7 @@ addWordSpellingGameAction action matchData =
             }
                 |> MatchData
 
-        MatchNotLoaded gameType ->
+        MatchNotLoaded _ ->
             matchData
 
 
@@ -429,12 +449,16 @@ addSheepGameAction action matchData =
             }
                 |> MatchData
 
-        MatchNotLoaded gameType ->
+        MatchNotLoaded _ ->
             matchData
 
 
 type LocalChange
     = CreatePublicLink (Id ChannelMessageId) (ToBeFilledInByBackend (SecretId GamePublicId))
+      -- Ask the backend for a match it only told us the existence of. Matches are sent as
+      -- `MatchNotLoaded` until someone opens one, so that a channel with a lot of finished
+      -- games costs nothing to load.
+    | LoadMatch (Id ChannelMessageId) (ToBeFilledInByBackend LoadedMatch)
     | LocalChange_Go (Id ChannelMessageId) Go.LocalChange
     | LocalChange_WordSpellingGame (Id ChannelMessageId) WordSpellingGame.LocalChange
     | LocalChange_SheepGame (Id ChannelMessageId) SheepGame.LocalChange
@@ -524,7 +548,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                         _ ->
                             ( model, [] )
 
-                Just ( matchId, MatchNotLoaded _ ) ->
+                Just ( _, MatchNotLoaded _ ) ->
                     ( model, [] )
 
                 Nothing ->
@@ -612,7 +636,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                         _ ->
                             ( model, [] )
 
-                Just ( matchId, MatchNotLoaded _ ) ->
+                Just ( _, MatchNotLoaded _ ) ->
                     ( model, [] )
 
                 Nothing ->
@@ -709,7 +733,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                         _ ->
                             ( model, [] )
 
-                Just ( matchId, MatchNotLoaded _ ) ->
+                Just ( _, MatchNotLoaded _ ) ->
                     ( model, [] )
 
                 Nothing ->
@@ -1031,6 +1055,11 @@ view currentTime windowSize showMemberTab maybeDragging lastCopied localUser log
     case maybeMatchId of
         Just matchId ->
             case ( SeqDict.get matchId matches, SeqDict.get matchId model.startedGames ) of
+                ( Just (MatchNotLoaded _), _ ) ->
+                    Ui.el
+                        [ Ui.centerX, Ui.centerY, Ui.Font.bold, Ui.Font.size 20 ]
+                        (Ui.text "Loading match")
+
                 ( Just (MatchData match), Just game ) ->
                     case match.data of
                         FrontendGameData_Go setup _ cache ->
@@ -1346,13 +1375,13 @@ matchSwitcherView isMobile maybeMatchId matches =
                                         case matchData of
                                             MatchData matchData2 ->
                                                 case matchData2.data of
-                                                    FrontendGameData_Go setup _ _ ->
+                                                    FrontendGameData_Go _ _ _ ->
                                                         goName
 
-                                                    FrontendGameData_WordSpellingGame setup array shared ->
+                                                    FrontendGameData_WordSpellingGame _ _ _ ->
                                                         wordSpellingGameName
 
-                                                    FrontendGameData_SheepGame setup array shared ->
+                                                    FrontendGameData_SheepGame _ _ _ ->
                                                         sheepGameName
 
                                             MatchNotLoaded gameType ->
@@ -1410,7 +1439,7 @@ pressedKey matchId key matchData maybeGameModel =
             }
                 |> Just
 
-        MatchNotLoaded gameType ->
+        MatchNotLoaded _ ->
             Nothing
 
 
@@ -1477,6 +1506,9 @@ gameChangeFromServer time localUser gameChange maybeModel =
                         model
 
         CreatePublicLink _ _ ->
+            model
+
+        LoadMatch _ _ ->
             model
 
         LocalChange_WordSpellingGame matchId wordSpellinGameChange ->

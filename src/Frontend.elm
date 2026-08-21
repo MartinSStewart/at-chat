@@ -7121,7 +7121,24 @@ updateLoadedFromBackend msg model =
                         local =
                             Local.model localState
                     in
-                    ( { loggedIn | localState = localState }
+                    ( { loggedIn
+                        | localState = localState
+                        , games =
+                            case localChange of
+                                -- The match has arrived, so there's finally something for the
+                                -- view state that goes with it to be built from.
+                                Local_Game guildOrDmId (Game.LoadMatch matchId (FilledInByBackend _)) ->
+                                    Game.routeRequest
+                                        model.time
+                                        local.localUser
+                                        guildOrDmId
+                                        matchId
+                                        (FrontendExtra.channelGames guildOrDmId local)
+                                        loggedIn.games
+
+                                _ ->
+                                    loggedIn.games
+                      }
                     , case localChange of
                         Local_VoiceChatChange callChange ->
                             case callChange of
