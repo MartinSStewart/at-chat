@@ -143,7 +143,7 @@ import Date exposing (Date)
 import Discord exposing (OptionalData)
 import DiscordUserData exposing (DiscordUserLoadingData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
-import DmChannelId exposing (DmChannelId)
+import DmChannelId exposing (DmChannelId, GuildOrFullDmId(..))
 import Drawing exposing (Drawing)
 import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId)
@@ -152,9 +152,9 @@ import Effect.Websocket as Websocket
 import Embed exposing (EmbedData)
 import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileHash)
-import Game
+import Game exposing (BackendGameData(..), MatchData(..))
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId)
 import IdArray exposing (IdArray)
 import LinkedAndOtherDiscordUsers
 import List.Extra
@@ -162,7 +162,7 @@ import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (ChangeAttachments, Message(..), MessageNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments, GameType(..), Message(..), MessageNoReply(..), UserTextMessageDataNoReply)
 import MessageArray exposing (MessageArray)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
@@ -185,7 +185,7 @@ import UInt64
 import Unsafe
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendCurrentUser, FrontendUser, LocalUser)
-import UserSession exposing (FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (ChannelHeaderTab(..), FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -264,8 +264,14 @@ type alias DiscordRole =
     }
 
 
-guildToFrontendForUser : Maybe ( Id ChannelId, ThreadRoute ) -> Id UserId -> BackendGuild -> Maybe FrontendGuild
-guildToFrontendForUser requestMessagesFor userId guild =
+guildToFrontendForUser :
+    Id GuildId
+    -> Maybe ( Id ChannelId, ( ThreadRoute, Maybe ChannelHeaderTab ) )
+    -> Id UserId
+    -> OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
+    -> BackendGuild
+    -> Maybe FrontendGuild
+guildToFrontendForUser guildId requestMessagesFor userId goMatchPublicIds guild =
     case MembersAndOwner.isMember userId guild.membersAndOwner of
         IsNotMember ->
             Nothing
@@ -279,6 +285,8 @@ guildToFrontendForUser requestMessagesFor userId guild =
                 SeqDict.filterMap
                     (\channelId channel ->
                         channelToFrontend
+                            guildId
+                            channelId
                             (case requestMessagesFor of
                                 Just ( channelIdB, threadRoute ) ->
                                     if channelId == channelIdB then
@@ -290,6 +298,7 @@ guildToFrontendForUser requestMessagesFor userId guild =
                                 _ ->
                                     Nothing
                             )
+                            goMatchPublicIds
                             channel
                     )
                     guild.channels
@@ -299,8 +308,13 @@ guildToFrontendForUser requestMessagesFor userId guild =
                 |> Just
 
 
-guildToFrontend : Maybe ( Id ChannelId, ThreadRoute ) -> BackendGuild -> FrontendGuild
-guildToFrontend requestMessagesFor guild =
+guildToFrontend :
+    Id GuildId
+    -> Maybe ( Id ChannelId, ( ThreadRoute, Maybe ChannelHeaderTab ) )
+    -> OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
+    -> BackendGuild
+    -> FrontendGuild
+guildToFrontend guildId requestMessagesFor goMatchPublicIds guild =
     { createdAt = guild.createdAt
     , createdBy = guild.createdBy
     , name = guild.name
@@ -309,6 +323,8 @@ guildToFrontend requestMessagesFor guild =
         SeqDict.filterMap
             (\channelId channel ->
                 channelToFrontend
+                    guildId
+                    channelId
                     (case requestMessagesFor of
                         Just ( channelIdB, threadRoute ) ->
                             if channelId == channelIdB then
@@ -320,6 +336,7 @@ guildToFrontend requestMessagesFor guild =
                         _ ->
                             Nothing
                     )
+                    goMatchPublicIds
                     channel
             )
             guild.channels
@@ -486,13 +503,19 @@ messageDeleted =
     "Message deleted"
 
 
-channelToFrontend : Maybe ThreadRoute -> BackendChannel -> Maybe FrontendChannel
-channelToFrontend threadRoute channel =
+channelToFrontend :
+    Id GuildId
+    -> Id ChannelId
+    -> Maybe ( ThreadRoute, Maybe ChannelHeaderTab )
+    -> OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
+    -> BackendChannel
+    -> Maybe FrontendChannel
+channelToFrontend guildId channelId threadRoute goMatchPublicIds channel =
     case channel.status of
         ChannelActive ->
             let
                 preloadMessages =
-                    Just NoThread == threadRoute
+                    Just NoThread == Maybe.map Tuple.first threadRoute
             in
             { createdAt = channel.createdAt
             , createdBy = channel.createdBy
@@ -504,12 +527,17 @@ channelToFrontend threadRoute channel =
             , lastTypedAt = channel.lastTypedAt
             , threads =
                 SeqDict.map
-                    (\threadId thread -> Thread.toFrontend (Just (ViewThread threadId) == threadRoute) thread)
+                    (\threadId thread ->
+                        Thread.toFrontend (Just (ViewThread threadId) == Maybe.map Tuple.first threadRoute) thread
+                    )
                     channel.threads
             , dateDividerDrawings = channel.dateDividerDrawings
             , games =
-                -- Guild matches never have public links (those are Go-only, and Go is DM-only)
-                SeqDict.map (\_ gameData -> Game.initMatchData gameData Nothing) channel.games
+                DmChannel.gamesToFrontend
+                    (GuildOrFullDmId_Guild guildId channelId)
+                    threadRoute
+                    goMatchPublicIds
+                    channel
             }
                 |> Just
 

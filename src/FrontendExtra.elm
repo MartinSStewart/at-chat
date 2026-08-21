@@ -86,6 +86,7 @@ import MuteSettings exposing (IsMuted)
 import MyUi
 import NonemptyDict
 import NonemptySet
+import OneToOne
 import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
@@ -2770,7 +2771,12 @@ changeUpdate localMsg local =
                                 | guilds =
                                     SeqDict.insert
                                         guildId
-                                        (LocalState.guildToFrontend (Just ( LocalState.announcementChannel guild, NoThread )) guild)
+                                        (LocalState.guildToFrontend
+                                            guildId
+                                            (Just ( LocalState.announcementChannel guild, ( NoThread, Nothing ) ))
+                                            OneToOne.empty
+                                            guild
+                                        )
                                         local.guilds
                             }
 

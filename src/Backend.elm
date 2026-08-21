@@ -7732,8 +7732,10 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model session use
                         , case
                             ( NonemptyDict.get (MembersAndOwner.owner guild2.membersAndOwner) model2.users
                             , LocalState.guildToFrontendForUser
-                                (Just ( LocalState.announcementChannel guild2, NoThread ))
+                                guildId
+                                (Just ( LocalState.announcementChannel guild2, ( NoThread, Nothing ) ))
                                 session.userId
+                                model.goMatchPublicIds
                                 guild2
                             )
                           of

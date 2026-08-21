@@ -895,10 +895,11 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
             SeqDict.filterMap
                 (\guildId guild ->
                     LocalState.guildToFrontendForUser
+                        guildId
                         (case requestMessagesFor of
-                            InitialLoadRequested_Guild guildIdB channelId threadRoute _ ->
+                            InitialLoadRequested_Guild guildIdB channelId threadRoute channelHeaderTab ->
                                 if guildId == guildIdB then
-                                    Just ( channelId, threadRoute )
+                                    Just ( channelId, ( threadRoute, channelHeaderTab ) )
 
                                 else
                                     Nothing
@@ -907,6 +908,7 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
                                 Nothing
                         )
                         session.userId
+                        model.goMatchPublicIds
                         guild
                 )
                 model.guilds
@@ -920,9 +922,9 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
                             SeqDict.insert otherUserId
                                 (DmChannel.toFrontend
                                     (case requestMessagesFor of
-                                        InitialLoadRequested_Dm dmChannelIdB threadRoute _ ->
+                                        InitialLoadRequested_Dm dmChannelIdB threadRoute channelHeaderTab ->
                                             if dmChannelId == dmChannelIdB then
-                                                Just threadRoute
+                                                Just ( threadRoute, channelHeaderTab )
 
                                             else
                                                 Nothing
