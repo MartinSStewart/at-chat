@@ -87,7 +87,7 @@ userTextMessageNoEmbeds :
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> Maybe (Id messageId)
     -> SeqDict (Id FileId) FileData
-    -> Message messageId userId
+    -> UserTextMessageData messageId userId
 userTextMessageNoEmbeds createdAt2 createdBy content reactions repliedTo attachedFiles =
     { createdAt = createdAt2
     , createdBy = createdBy
@@ -102,7 +102,6 @@ userTextMessageNoEmbeds createdAt2 createdBy content reactions repliedTo attache
     , imageAttachmentDrawings = SeqDict.empty
     , embedDrawings = SeqDict.empty
     }
-        |> UserTextMessage
 
 
 userTextMessageBackend :

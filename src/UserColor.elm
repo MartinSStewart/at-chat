@@ -10,29 +10,23 @@ import Ui.Font
 import Ui.Input
 
 
-{-| Which square of the picker's grid someone chose, and how far up the brightness slider it
-sits. Kept as one number so that it's cheap to store and to send.
--}
 type UserColor
     = UserColor Int
 
 
-{-| How many hues the grid runs across, how many steps of colourfulness it runs down, and how
-many stops the brightness slider has.
--}
-hueCount : Int
+hueCount : number
 hueCount =
-    10
+    16
 
 
-saturationCount : Int
+saturationCount : number
 saturationCount =
-    10
+    16
 
 
-brightnessCount : Int
-brightnessCount =
-    10
+lightnessCount : number
+lightnessCount =
+    16
 
 
 swatchSize : Int
@@ -42,53 +36,66 @@ swatchSize =
 
 default : UserColor
 default =
-    fromParts { hue = 0, saturation = saturationCount - 1, brightness = brightnessCount // 2 }
+    let
+        { hue, saturation, lightness } =
+            Color.toHsla MyUi.font1
+    in
+    fromParts
+        { hue = round (hueCount * hue)
+        , saturation = round (saturationCount * saturation)
+        , lightness = round (lightnessCount * lightness)
+        }
 
 
-fromParts : { hue : Int, saturation : Int, brightness : Int } -> UserColor
+fromParts : { hue : Int, saturation : Int, lightness : Int } -> UserColor
 fromParts parts =
     modBy hueCount parts.hue
         + (modBy saturationCount parts.saturation * hueCount)
-        + (modBy brightnessCount parts.brightness * hueCount * saturationCount)
+        + (modBy lightnessCount parts.lightness * hueCount * saturationCount)
         |> UserColor
 
 
 {-| Nothing stops a client from sending a number that isn't a colour, so this wraps rather
 than trusting what it's given.
 -}
-toParts : UserColor -> { hue : Int, saturation : Int, brightness : Int }
+toParts : UserColor -> { hue : Int, saturation : Int, lightness : Int }
 toParts (UserColor index) =
     let
         wrapped : Int
         wrapped =
-            modBy (hueCount * saturationCount * brightnessCount) index
+            modBy (hueCount * saturationCount * lightnessCount) index
     in
     { hue = modBy hueCount wrapped
     , saturation = modBy saturationCount (wrapped // hueCount)
-    , brightness = wrapped // (hueCount * saturationCount)
+    , lightness = wrapped // (hueCount * saturationCount)
     }
 
 
 {-| The grid never offers pure black or pure white, and never a colour with no colour left in
-it, since none of those are much use for telling players apart. The ends of the brightness
+it, since none of those are much use for telling players apart. The ends of the lightness
 slider stop short of both for the same reason: past them every square fails the readability
 check below and the grid comes out empty.
 -}
 toColor : UserColor -> Ui.Color
 toColor userColor =
     let
-        parts : { hue : Int, saturation : Int, brightness : Int }
+        parts : { hue : Int, saturation : Int, lightness : Int }
         parts =
             toParts userColor
     in
     Color.hsl
         (toFloat parts.hue / toFloat hueCount)
-        (0.5 + 0.5 * toFloat parts.saturation / toFloat (saturationCount - 1))
-        (0.35 + 0.4 * toFloat parts.brightness / toFloat (brightnessCount - 1))
+        (toFloat parts.saturation / toFloat (saturationCount - 1))
+        (toFloat parts.lightness / toFloat (lightnessCount - 1))
 
 
-contrastColor : { l : Float, a : Float, b : Float }
-contrastColor =
+background2 : { l : Float, a : Float, b : Float }
+background2 =
+    Color.Convert.colorToLab MyUi.background2
+
+
+background3 : { l : Float, a : Float, b : Float }
+background3 =
     Color.Convert.colorToLab MyUi.background2
 
 
@@ -97,19 +104,16 @@ distance labA labB =
     (labA.l - labB.l) ^ 2 + (labA.a - labB.a) ^ 2 + (labA.b - labB.b) ^ 2 |> sqrt
 
 
-{-| A colour too close to what it's drawn against can't be read, so the grid leaves those
-squares empty instead of offering them. Which squares those are depends on the brightness,
-so the grid is redrawn as the slider moves.
--}
 isReadable : Ui.Color -> Bool
 isReadable color =
-    distance (Color.Convert.colorToLab color) contrastColor >= 100
+    (distance (Color.Convert.colorToLab color) background2 >= 60)
+        && (distance (Color.Convert.colorToLab color) background3 >= 60)
 
 
 picker : UserColor -> (UserColor -> msg) -> Ui.Element msg
 picker selected onChange =
     let
-        parts : { hue : Int, saturation : Int, brightness : Int }
+        parts : { hue : Int, saturation : Int, lightness : Int }
         parts =
             toParts selected
     in
@@ -118,7 +122,7 @@ picker selected onChange =
         [ Ui.row
             [ Ui.wrap ]
             (List.map (swatchView parts onChange) (List.range 0 (hueCount * saturationCount - 1)))
-        , brightnessSlider parts onChange
+        , lightnessSlider parts onChange
         ]
 
 
@@ -127,7 +131,7 @@ swatchId index =
     Dom.id ("userColor_swatch_" ++ String.fromInt index)
 
 
-swatchView : { hue : Int, saturation : Int, brightness : Int } -> (UserColor -> msg) -> Int -> Ui.Element msg
+swatchView : { hue : Int, saturation : Int, lightness : Int } -> (UserColor -> msg) -> Int -> Ui.Element msg
 swatchView selected onChange index =
     let
         hue : Int
@@ -140,7 +144,7 @@ swatchView selected onChange index =
 
         color : Ui.Color
         color =
-            toColor (fromParts { hue = hue, saturation = saturation, brightness = selected.brightness })
+            toColor (fromParts { hue = hue, saturation = saturation, lightness = selected.lightness })
     in
     Ui.el
         (Ui.id (Dom.idToString (swatchId index))
@@ -151,7 +155,7 @@ swatchView selected onChange index =
                     , Ui.Events.onClick
                         (onChange
                             (fromParts
-                                { hue = hue, saturation = saturation, brightness = selected.brightness }
+                                { hue = hue, saturation = saturation, lightness = selected.lightness }
                             )
                         )
                     , MyUi.htmlStyle "cursor" "pointer"
@@ -176,13 +180,13 @@ swatchView selected onChange index =
         Ui.none
 
 
-brightnessSlider : { hue : Int, saturation : Int, brightness : Int } -> (UserColor -> msg) -> Ui.Element msg
-brightnessSlider parts onChange =
+lightnessSlider : { hue : Int, saturation : Int, lightness : Int } -> (UserColor -> msg) -> Ui.Element msg
+lightnessSlider parts onChange =
     let
         sliderLabel : { element : Ui.Element msg, id : Ui.Input.Label }
         sliderLabel =
             MyUi.label
-                (Dom.id "userColor_brightness")
+                (Dom.id "userColor_lightness")
                 [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
                 (Ui.text "Brightness")
     in
@@ -194,10 +198,10 @@ brightnessSlider parts onChange =
             , Ui.rounded 4
             ]
             { label = sliderLabel.id
-            , onChange = \value -> onChange (fromParts { parts | brightness = round value })
-            , min = 0
-            , max = toFloat (brightnessCount - 1)
-            , value = toFloat parts.brightness
+            , onChange = \value -> onChange (fromParts { parts | lightness = round value })
+            , min = 3
+            , max = toFloat (lightnessCount - 1)
+            , value = toFloat parts.lightness
             , thumb = Nothing
             , step = Just 1
             }

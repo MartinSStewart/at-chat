@@ -19,6 +19,7 @@ module Pages.Guild exposing
     , profileImageButtonId
     , threadMessageHtmlId
     , typingDebouncerDelay
+    , userTextMessageContent
     )
 
 import AsciiArt exposing (AsciiArt)

@@ -848,6 +848,7 @@ messagesAndLinks existingChannelOrThread messages customEmojis discordStickers d
                         Nothing
                 )
                 (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
+                |> UserTextMessage
         )
         messages2
         |> IdArray.fromList
@@ -1652,6 +1653,7 @@ addForumPost authentication post guild channel model =
         message : Message ChannelMessageId (Discord.Id Discord.UserId)
         message =
             Message.userTextMessageNoEmbeds createdAt post.ownerId richText SeqDict.empty Nothing SeqDict.empty
+                |> UserTextMessage
     in
     -- A forum post's thread has the same id as the message the post hangs off of, the same
     -- as every other thread

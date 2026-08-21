@@ -3,17 +3,21 @@ module UserOptions exposing (discordBookmarkletId, domainWhitelistToString, init
 import Codec
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
+import Drawing
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Lamdera exposing (ClientId)
 import EmailAddress
 import Env
 import Icons
+import Id exposing (Id, UserId)
 import ImageEditor
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
 import LocalState exposing (AdminStatus(..), LocalState)
 import Log
+import Message
 import MyUi
+import Pages.Guild exposing (IsHovered(..))
 import PersonName
 import Ports
 import Range exposing (Range)
@@ -22,6 +26,7 @@ import Route
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import String.Nonempty exposing (NonemptyString(..))
 import Time
 import TwoFactorAuthentication
 import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
@@ -30,7 +35,7 @@ import Ui.Anim
 import Ui.Font
 import Ui.Input
 import Ui.Prose
-import User
+import User exposing (FrontendUser)
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
 import UserColor exposing (UserColor)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), UserOptionSection(..))
@@ -186,6 +191,11 @@ view :
     -> UserOptionsModel
     -> Element FrontendMsg_
 view isMobile textInputFocus time local loggedIn loaded model =
+    let
+        allUsers : SeqDict (Id UserId) FrontendUser
+        allUsers =
+            User.allUsers local.localUser
+    in
     Ui.el
         [ Ui.height Ui.fill
         , Ui.heightMin 0
@@ -282,6 +292,28 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     , Ui.column
                         [ Ui.spacing 8 ]
                         [ Ui.el [ Ui.Font.bold ] (Ui.text "Color")
+                        , Ui.text "This is the color used when you use the drawing tool or to represent you in some games."
+                        , Pages.Guild.userTextMessageContent
+                            time
+                            (Dom.id "spoiler")
+                            200
+                            False
+                            isMobile
+                            Nothing
+                            local.localUser
+                            SeqDict.empty
+                            allUsers
+                            IsNotHovered
+                            (Id.fromInt 0)
+                            (Message.userTextMessageNoEmbeds
+                                time
+                                local.localUser.session.userId
+                                (NonemptyString 'H' "ello" |> RichText.fromNonemptyString local.localUser.timezone allUsers)
+                                SeqDict.empty
+                                Nothing
+                                SeqDict.empty
+                            )
+                            |> Ui.map (\_ -> FrontendNoOp)
                         , UserColor.picker model.color SelectedUserColor
                         ]
                     , Ui.column
