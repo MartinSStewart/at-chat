@@ -915,7 +915,7 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, width ) 
                 )
             , Html.Attributes.style "pointer-events" "none"
             ]
-            [ User.profileImageHtml userId (User.getUser userId localUser |> Maybe.andThen .icon) ]
+            [ User.profileImageHtml (User.getUser userId localUser) ]
         , -- Our own camera is a live MediaStream, so it plays in a <video>. A peer
           -- arrives as encoded frames over the room socket, and a decoded
           -- VideoFrame can only be drawn, so peers get a <canvas> instead.

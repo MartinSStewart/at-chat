@@ -1632,12 +1632,7 @@ messageWithProfile : Id UserId -> LocalUser -> Element msg -> Element msg
 messageWithProfile userId localUser content =
     Ui.row
         [ Ui.spacing 8 ]
-        [ case User.getUser userId localUser of
-            Just user ->
-                User.profileImage userId user.icon
-
-            Nothing ->
-                User.profileImage userId Nothing
+        [ User.profileImage (User.getUser userId localUser)
         , Ui.column
             [ Ui.spacing 2 ]
             [ User.toStringAlt userId localUser

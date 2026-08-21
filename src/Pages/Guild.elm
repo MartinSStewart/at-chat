@@ -109,7 +109,7 @@ loggedInAsView localUser =
         , Ui.spacing 8
         , Ui.clipWithEllipsis
         ]
-        [ User.profileImageNoRounding localUser.session.userId localUser.user.icon
+        [ User.profileImageNoRounding (Just localUser.user)
         , Ui.text (PersonName.toString localUser.user.name)
         , MyUi.elButton
             (Dom.id "guild_showUserOptions")
@@ -2446,7 +2446,7 @@ memberLabel isMobile localUser userId =
         ]
         (case User.getUser userId localUser of
             Just user ->
-                [ User.profileImage userId user.icon, Ui.text (PersonName.toString user.name) ]
+                [ User.profileImage (Just user), Ui.text (PersonName.toString user.name) ]
 
             Nothing ->
                 []
@@ -7620,13 +7620,7 @@ userTextMessageContent :
 userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId message2 =
     Ui.row
         []
-        [ (case SeqDict.get message2.createdBy allUsers of
-            Just user ->
-                User.profileImage message2.createdBy user.icon
-
-            Nothing ->
-                User.profileImage message2.createdBy Nothing
-          )
+        [ User.profileImage (SeqDict.get message2.createdBy allUsers)
             |> Ui.el
                 (Drawing.anchorHighlight
                     (Drawing.profileImageAnchorId messageId)
@@ -10216,7 +10210,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
         , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
         , Ui.attrIf isSelected (Ui.background MyUi.selectedHighlight)
         ]
-        [ User.profileImage otherUserId otherUser.icon
+        [ User.profileImage (Just otherUser)
         , Ui.column
             []
             [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString otherUser.name))

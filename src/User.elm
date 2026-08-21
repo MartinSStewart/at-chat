@@ -755,7 +755,6 @@ sectionToString section2 =
 type alias FrontendUser =
     { name : PersonName
     , color : UserColor
-    , isAdmin : Bool
     , icon : Maybe FileHash
     }
 
@@ -869,7 +868,6 @@ backendToFrontend : FrontendCurrentUser -> FrontendUser
 backendToFrontend user =
     { name = user.name
     , color = user.color
-    , isAdmin = user.isAdmin
     , icon = user.icon
     }
 
@@ -877,12 +875,11 @@ backendToFrontend user =
 {-| Convert a BackendUser to a FrontendUser while only including data the current user has permission to see
 -}
 backendToFrontendForUser :
-    { a | name : PersonName, color : UserColor, isAdmin : Bool, icon : Maybe FileHash }
+    { a | name : PersonName, color : UserColor, icon : Maybe FileHash }
     -> FrontendUser
 backendToFrontendForUser user =
     { name = user.name
     , color = user.color
-    , isAdmin = user.isAdmin
     , icon = user.icon
     }
 
@@ -926,42 +923,52 @@ profileImageRounding =
     8
 
 
-profileImage : Id UserId -> Maybe FileHash -> Element msg
-profileImage userId maybeFileHash =
-    case maybeFileHash of
-        Just fileHash ->
-            Ui.imageLazy
-                [ Ui.rounded profileImageRounding
-                , Ui.width (Ui.px profileImageSize)
-                , Ui.height (Ui.px profileImageSize)
-                , Ui.clip
-                , -- We need no pointer events here so drawing anchoring gets the offset of the parent
-                  MyUi.noPointerEvents
-                ]
-                { source = FileStatus.fileUrl FileStatus.pngContent fileHash
-                , description = ""
-                , onLoad = Nothing
-                }
+profileImage : Maybe { a | color : UserColor, icon : Maybe FileHash } -> Element msg
+profileImage user =
+    case user of
+        Just user2 ->
+            case user2.icon of
+                Just fileHash ->
+                    Ui.imageLazy
+                        [ Ui.rounded profileImageRounding
+                        , Ui.width (Ui.px profileImageSize)
+                        , Ui.height (Ui.px profileImageSize)
+                        , Ui.clip
+                        , -- We need no pointer events here so drawing anchoring gets the offset of the parent
+                          MyUi.noPointerEvents
+                        ]
+                        { source = FileStatus.fileUrl FileStatus.pngContent fileHash
+                        , description = ""
+                        , onLoad = Nothing
+                        }
+
+                Nothing ->
+                    GuildIcon.defaultUser False profileImageSize 8 user2.color
 
         Nothing ->
-            GuildIcon.defaultUser False profileImageSize 8 userId
+            GuildIcon.defaultUser False profileImageSize 8 UserColor.default
 
 
-profileImageHtml : Id UserId -> Maybe FileHash -> Html msg
-profileImageHtml userId maybeFileHash =
-    case maybeFileHash of
-        Just fileHash ->
-            Html.img
-                [ Html.Attributes.style "border-radius" (String.fromInt profileImageRounding ++ "px")
-                , Html.Attributes.style "width" (String.fromInt profileImageSize ++ "px")
-                , Html.Attributes.style "height" (String.fromInt profileImageSize ++ "px")
-                , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
-                , MyUi.lazyLoading
-                ]
-                []
+profileImageHtml : Maybe FrontendUser -> Html msg
+profileImageHtml user =
+    case user of
+        Just user2 ->
+            case user2.icon of
+                Just fileHash ->
+                    Html.img
+                        [ Html.Attributes.style "border-radius" (String.fromInt profileImageRounding ++ "px")
+                        , Html.Attributes.style "width" (String.fromInt profileImageSize ++ "px")
+                        , Html.Attributes.style "height" (String.fromInt profileImageSize ++ "px")
+                        , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                        , MyUi.lazyLoading
+                        ]
+                        []
+
+                Nothing ->
+                    GuildIcon.defaultUserHtml profileImageSize 8 user2.color
 
         Nothing ->
-            GuildIcon.defaultUserHtml profileImageSize 8 userId
+            GuildIcon.defaultUserHtml profileImageSize 8 UserColor.default
 
 
 discordProfileImage : Discord.Id Discord.UserId -> Maybe FileHash -> Element msg
@@ -984,21 +991,26 @@ discordProfileImage userId maybeFileHash =
         }
 
 
-profileImageNoRounding : Id UserId -> Maybe FileHash -> Element msg
-profileImageNoRounding userId maybeFileHash =
-    case maybeFileHash of
-        Just fileHash ->
-            Ui.image
-                [ Ui.width (Ui.px profileImageSize)
-                , Ui.height (Ui.px profileImageSize)
-                ]
-                { source = FileStatus.fileUrl FileStatus.pngContent fileHash
-                , description = ""
-                , onLoad = Nothing
-                }
+profileImageNoRounding : Maybe { a | color : UserColor, icon : Maybe FileHash } -> Element msg
+profileImageNoRounding user =
+    case user of
+        Just user2 ->
+            case user2.icon of
+                Just fileHash ->
+                    Ui.image
+                        [ Ui.width (Ui.px profileImageSize)
+                        , Ui.height (Ui.px profileImageSize)
+                        ]
+                        { source = FileStatus.fileUrl FileStatus.pngContent fileHash
+                        , description = ""
+                        , onLoad = Nothing
+                        }
+
+                Nothing ->
+                    GuildIcon.defaultUser False profileImageSize 0 user2.color
 
         Nothing ->
-            GuildIcon.defaultUser False profileImageSize 0 userId
+            GuildIcon.defaultUser False profileImageSize 0 UserColor.default
 
 
 multipleProfileImages : List ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg

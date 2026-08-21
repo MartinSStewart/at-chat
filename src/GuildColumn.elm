@@ -36,6 +36,7 @@ import Ui exposing (Element)
 import Ui.Gradient
 import Ui.Lazy
 import User exposing (FrontendCurrentUser, LocalUser)
+import UserColor
 
 
 canScroll : Bool -> Drag -> Bool
@@ -319,10 +320,10 @@ dmGuildIcon route localUser otherUserId dmChannel =
                         []
                         (case User.getUser otherUserId localUser of
                             Just otherUser ->
-                                GuildIcon.userView (NewMessageForUser count) otherUser.icon otherUserId
+                                GuildIcon.userView (NewMessageForUser count) otherUser.icon otherUser.color
 
                             Nothing ->
-                                GuildIcon.userView (NewMessageForUser count) Nothing otherUserId
+                                GuildIcon.userView (NewMessageForUser count) Nothing UserColor.default
                         )
 
                 Nothing ->

@@ -3879,10 +3879,10 @@ playerRow localUser userId highlight isSelected suffix =
         , Ui.clip
         ]
         [ if highlight then
-            User.profileImageNoRounding userId (Maybe.andThen .icon maybeUser)
+            User.profileImageNoRounding maybeUser
 
           else
-            User.profileImage userId (Maybe.andThen .icon maybeUser)
+            User.profileImage maybeUser
         , Ui.row
             [ MyUi.prewrap ]
             [ Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt userId localUser))

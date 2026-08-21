@@ -99,6 +99,11 @@ background3 =
     Color.Convert.colorToLab MyUi.background2
 
 
+alertColor : { l : Float, a : Float, b : Float }
+alertColor =
+    Color.Convert.colorToLab MyUi.alertColor
+
+
 distance : { l : Float, a : Float, b : Float } -> { l : Float, a : Float, b : Float } -> Float
 distance labA labB =
     (labA.l - labB.l) ^ 2 + (labA.a - labB.a) ^ 2 + (labA.b - labB.b) ^ 2 |> sqrt
@@ -106,8 +111,9 @@ distance labA labB =
 
 isReadable : Ui.Color -> Bool
 isReadable color =
-    (distance (Color.Convert.colorToLab color) background2 >= 60)
-        && (distance (Color.Convert.colorToLab color) background3 >= 60)
+    (distance (Color.Convert.colorToLab color) background2 >= 80)
+        && (distance (Color.Convert.colorToLab color) background3 >= 80)
+        && (distance (Color.Convert.colorToLab color) alertColor >= 20)
 
 
 picker : UserColor -> (UserColor -> msg) -> Ui.Element msg
@@ -199,8 +205,8 @@ lightnessSlider parts onChange =
             ]
             { label = sliderLabel.id
             , onChange = \value -> onChange (fromParts { parts | lightness = round value })
-            , min = 3
-            , max = toFloat (lightnessCount - 1)
+            , min = 7
+            , max = toFloat (lightnessCount - 1) - 5
             , value = toFloat parts.lightness
             , thumb = Nothing
             , step = Just 1

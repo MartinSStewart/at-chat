@@ -1893,17 +1893,7 @@ clockChip maybeUser maybeTimeLeft isActive stone score =
           else
             Ui.noAttr
         ]
-        [ (case maybeUser of
-            Just ( userId, user ) ->
-                User.profileImageNoRounding userId user.icon
-
-            Nothing ->
-                Ui.el
-                    [ Ui.width (Ui.px User.profileImageSize)
-                    , Ui.height (Ui.px User.profileImageSize)
-                    ]
-                    Ui.none
-          )
+        [ User.profileImageNoRounding (Maybe.map Tuple.second maybeUser)
             |> Ui.el [ Ui.move { x = -1, y = 0, z = 0 }, Ui.width Ui.shrink ]
         , Ui.row
             [ Ui.spacing 20, Ui.alignRight, Ui.Font.size 20, Ui.Font.color colorB ]

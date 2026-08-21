@@ -3151,7 +3151,7 @@ guildsSection isMobile user adminData =
                                     [ Ui.text "Owner:"
                                     , case NonemptyDict.get guild.owner adminData.users of
                                         Just user2 ->
-                                            userLabel guild.owner user2
+                                            userLabel user2
 
                                         Nothing ->
                                             Ui.text (Id.toString guild.owner)
@@ -3206,7 +3206,7 @@ deletedGuildsSection isMobile user adminData =
                                 [ Ui.text "Owner:"
                                 , case NonemptyDict.get deletedGuild.owner adminData.users of
                                     Just user2 ->
-                                        userLabel deletedGuild.owner user2
+                                        userLabel user2
 
                                     Nothing ->
                                         Ui.text (Id.toString deletedGuild.owner)
@@ -3585,7 +3585,7 @@ dmChannelParticipants adminData channelId =
             (\userId ->
                 case NonemptyDict.get userId adminData.users of
                     Just user ->
-                        userLabel userId user
+                        userLabel user
 
                     Nothing ->
                         Ui.text (Id.toString userId)
@@ -3737,11 +3737,11 @@ discordUsersSection isMobile user adminData =
         ]
 
 
-userLabel : Id UserId -> BackendUser -> Element msg
-userLabel userId user =
+userLabel : BackendUser -> Element msg
+userLabel user =
     Ui.row
         [ Ui.spacing 8, Ui.width Ui.shrink ]
-        [ User.profileImage userId user.icon
+        [ User.profileImage (Just user)
         , Ui.el
             [ Ui.width Ui.shrink ]
             (Ui.text (PersonName.toString user.name))
@@ -3785,7 +3785,7 @@ linkedToView adminData userId =
         Just user ->
             Ui.row
                 [ Ui.spacing 8, Ui.width Ui.shrink ]
-                [ User.profileImage userId user.icon, Ui.text (PersonName.toString user.name) ]
+                [ User.profileImage (Just user), Ui.text (PersonName.toString user.name) ]
 
         Nothing ->
             Ui.none

@@ -322,7 +322,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         [ Ui.el [ Ui.Font.bold ] (Ui.text "Profile Picture")
                         , Ui.row
                             [ Ui.spacing 12, Ui.alignLeft ]
-                            [ User.profileImage local.localUser.session.userId local.localUser.user.icon
+                            [ User.profileImage (Just local.localUser.user)
                             , ImageEditor.view
                                 loaded.windowSize
                                 (local.localUser.user.icon /= Nothing)
@@ -846,7 +846,12 @@ colorPreview time isMobile local allUsers color =
         Nothing
         local.localUser
         SeqDict.empty
-        allUsers
+        (SeqDict.fromList
+            [ ( local.localUser.session.userId
+              , { color = color, name = local.localUser.user.name, icon = local.localUser.user.icon }
+              )
+            ]
+        )
         (\_ -> MyUi.colorToStyle (UserColor.toColor color))
         IsNotHovered
         (Id.fromInt 0)

@@ -6167,7 +6167,6 @@ handleGoMatchRequest messageId channel model =
                         Nothing ->
                             { name = PersonName.fromStringLossy "<missing>"
                             , color = UserColor.default
-                            , isAdmin = False
                             , icon = Nothing
                             }
             in
