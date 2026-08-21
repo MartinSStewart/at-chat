@@ -598,21 +598,25 @@ radioOption htmlId value text =
         )
 
 
+radioFillColor =
+    white
+
+
 radioCircle : Ui.Input.OptionState -> Element msg
 radioCircle option =
     Ui.el
         [ Ui.width (Ui.px 23)
         , Ui.height (Ui.px 23)
-        , Ui.background (Ui.rgb 250 250 255)
+        , Ui.background background1
         , Ui.rounded 99
         , Ui.border 2
         , Ui.borderColor
             (case option of
                 Ui.Input.Selected ->
-                    background1
+                    radioFillColor
 
                 Ui.Input.Idle ->
-                    background1
+                    radioFillColor
 
                 Ui.Input.Focused ->
                     white
@@ -625,12 +629,12 @@ radioCircle option =
                     , Ui.height (Ui.px 15)
                     , Ui.centerX
                     , Ui.centerY
-                    , Ui.background background1
+                    , Ui.background radioFillColor
                     , Ui.rounded 99
                     , Ui.el
                         [ Ui.width (Ui.px 3)
                         , Ui.height (Ui.px 3)
-                        , Ui.background white
+                        , Ui.background background1
                         , Ui.rounded 99
                         , Ui.centerX
                         , Ui.centerY

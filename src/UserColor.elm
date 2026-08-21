@@ -16,7 +16,7 @@ type UserColor
 
 hueCount : number
 hueCount =
-    16
+    32
 
 
 saturationCount : number
@@ -104,16 +104,72 @@ alertColor =
     Color.Convert.colorToLab MyUi.alertColor
 
 
-distance : { l : Float, a : Float, b : Float } -> { l : Float, a : Float, b : Float } -> Float
-distance labA labB =
-    (labA.l - labB.l) ^ 2 + (labA.a - labB.a) ^ 2 + (labA.b - labB.b) ^ 2 |> sqrt
-
-
 isReadable : Ui.Color -> Bool
 isReadable color =
-    (distance (Color.Convert.colorToLab color) background2 >= 80)
-        && (distance (Color.Convert.colorToLab color) background3 >= 80)
-        && (distance (Color.Convert.colorToLab color) alertColor >= 20)
+    isFontColorReadable color MyUi.background3
+
+
+{-| APCA Lc 60 is roughly the perceptual equivalent of WCAG 2's 4.5:1 for body text.
+Use 75 if you want comfortable reading, 45 for large or bold text.
+-}
+isFontColorReadable : Ui.Color -> Ui.Color -> Bool
+isFontColorReadable fontColor backgroundColor =
+    abs (apcaContrast fontColor backgroundColor) >= 30
+
+
+{-| Lightness contrast (Lc), roughly -108 to 106.
+Positive means dark text on a light background, negative the reverse.
+-}
+apcaContrast : Ui.Color -> Ui.Color -> Float
+apcaContrast fontColor backgroundColor =
+    let
+        yText =
+            screenLuminance fontColor
+
+        yBg =
+            screenLuminance backgroundColor
+    in
+    if abs (yBg - yText) < 0.0005 then
+        0
+
+    else if yBg > yText then
+        let
+            sapc =
+                (yBg ^ 0.56 - yText ^ 0.57) * 1.14
+        in
+        if sapc < 0.1 then
+            0
+
+        else
+            (sapc - 0.027) * 100
+
+    else
+        let
+            sapc =
+                (yBg ^ 0.65 - yText ^ 0.62) * 1.14
+        in
+        if sapc > -0.1 then
+            0
+
+        else
+            (sapc + 0.027) * 100
+
+
+screenLuminance : Ui.Color -> Float
+screenLuminance color =
+    let
+        { red, green, blue } =
+            Color.toRgba color
+
+        y =
+            0.2126729 * (red ^ 2.4) + 0.7151522 * (green ^ 2.4) + 0.072175 * (blue ^ 2.4)
+    in
+    -- Soft clamp near black, since dark colors compress perceptually
+    if y < 0.022 then
+        y + (0.022 - y) ^ 1.414
+
+    else
+        y
 
 
 picker : UserColor -> (UserColor -> msg) -> Ui.Element msg
@@ -205,8 +261,8 @@ lightnessSlider parts onChange =
             ]
             { label = sliderLabel.id
             , onChange = \value -> onChange (fromParts { parts | lightness = round value })
-            , min = 7
-            , max = toFloat (lightnessCount - 1) - 5
+            , min = 3
+            , max = toFloat (lightnessCount - 1) - 2
             , value = toFloat parts.lightness
             , thumb = Nothing
             , step = Just 1
