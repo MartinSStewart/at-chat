@@ -128,6 +128,7 @@ import Untrusted exposing (Untrusted)
 import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
+import UserColor exposing (UserColor)
 import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, FrontendUserSession, NotificationMode, SetViewing, ToBeFilledInByBackend, UserOptionSection, UserSession)
 import WordSpellingGame exposing (WordList)
 
@@ -283,6 +284,8 @@ type alias UserOptionsModel =
     { name : Editable.Model
     , domainWhitelistInput : String
     , debugData : Maybe { data : String, loadedAt : Time.Posix }
+    , -- What the colour picker is pointing at. Nothing sends it anywhere yet.
+      color : UserColor
     }
 
 
@@ -562,6 +565,7 @@ type FrontendMsg_
     | PressedCloseExternalLinkWarning
     | PressedAddDomainToWhitelist Bool
     | TypedDomainWhitelist String
+    | SelectedUserColor UserColor
     | PressedSaveDomainWhitelist
     | PressedResetDomainWhitelist
     | PressedContinueToSite

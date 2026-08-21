@@ -2093,7 +2093,11 @@ updateLoaded msg model =
                 (\loggedIn ->
                     ( { loggedIn
                         | userOptions =
-                            Just (UserOptions.init (Local.model loggedIn.localState).localUser.user.domainWhitelist)
+                            Just
+                                (UserOptions.init
+                                    (Local.model loggedIn.localState).localUser.user.domainWhitelist
+                                    (Local.model loggedIn.localState).localUser.user.color
+                                )
                       }
                     , Command.none
                     )
@@ -3245,6 +3249,20 @@ updateLoaded msg model =
                                 | userOptions =
                                     Just { userOptions | domainWhitelistInput = newText }
                               }
+                            , Command.none
+                            )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+        SelectedUserColor color ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            ( { loggedIn | userOptions = Just { userOptions | color = color } }
                             , Command.none
                             )
 

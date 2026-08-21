@@ -1,8 +1,6 @@
 module UserOptions exposing (discordBookmarkletId, domainWhitelistToString, init, view)
 
 import Codec
-import Color
-import Color.Convert
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
 import Editable
@@ -34,15 +32,16 @@ import Ui.Input
 import Ui.Prose
 import User
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
-import UserColor
+import UserColor exposing (UserColor)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), UserOptionSection(..))
 
 
-init : SeqSet RichText.Domain -> UserOptionsModel
-init domainWhitelist =
+init : SeqSet RichText.Domain -> UserColor -> UserOptionsModel
+init domainWhitelist color =
     { name = Editable.init
     , domainWhitelistInput = domainWhitelistToString domainWhitelist
     , debugData = Nothing
+    , color = color
     }
 
 
@@ -283,7 +282,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     , Ui.column
                         [ Ui.spacing 8 ]
                         [ Ui.el [ Ui.Font.bold ] (Ui.text "Color")
-                        , UserColor.picker
+                        , UserColor.picker model.color SelectedUserColor
                         ]
                     , Ui.column
                         [ Ui.spacing 8 ]
