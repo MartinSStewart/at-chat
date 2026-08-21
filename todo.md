@@ -25,6 +25,7 @@
 * "add to home screen" is called "install and create shortcut" on Android (Chrome)
 * Clicking/pressing outside of an image (when viewing it in the image viewer) should close it
 * Add unread overview to mobile
+* Figure out why messages can be sent before files have loaded
 
 Requested features:
 

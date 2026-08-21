@@ -122,7 +122,7 @@ type alias Shared =
     { phase : Phase
     , answers : SeqDict (Id UserId) (IdArray QuestionId (Maybe ValidatedInput))
     , groups : SeqDict ( Id UserId, Id QuestionId ) String
-    , notes : SeqDict (Id QuestionId) String
+    , notes : SeqDict (Id QuestionId) UnvalidatedInput
     , questionsRevealed : Int
     }
 
@@ -1380,6 +1380,8 @@ gameView time windowSize showMemberTab localUser loggedIn setup shared model =
         [ Ui.spacing 16
         , Ui.paddingXY horizontalPadding 16
         , Ui.background MyUi.background1
+        , Ui.scrollable
+        , Ui.height (Ui.px 500)
         ]
         (case shared.phase of
             Answering ->
@@ -1438,6 +1440,25 @@ contentView time contentWidth localUser htmlId attachedFiles content =
         |> Ui.html
 
 
+messageWithProfile userId localUser content =
+    Ui.row
+        [ Ui.spacing 8 ]
+        [ case User.getUser userId localUser of
+            Just user ->
+                User.profileImage userId user.icon
+
+            Nothing ->
+                User.profileImage userId Nothing
+        , Ui.column
+            [ Ui.spacing 2 ]
+            [ User.toStringAlt userId localUser
+                |> Ui.text
+                |> Ui.el [ Ui.Font.bold ]
+            , content
+            ]
+        ]
+
+
 answeringView :
     Time.Posix
     -> Int
@@ -1465,9 +1486,11 @@ answeringView time contentWidth isMobile localUser loggedIn setup shared model =
          else
             Ui.text "Answer like everyone else"
         )
-    , Ui.Prose.paragraph
-        [ Ui.Font.color MyUi.font3 ]
-        [ Ui.text "You score a point for every player who wrote the same answer as you (including yourself)." ]
+    , Ui.column
+        [ Ui.spacing 8 ]
+        [ Ui.text "You score a point for every player who writes a sufficiently* similar answer to you."
+        , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text "*The game host decides what counts as sufficiently similar.")
+        ]
     , Ui.column
         [ Ui.spacing 8 ]
         (List.Nonempty.toList setup.questions
@@ -1495,34 +1518,23 @@ answeringView time contentWidth isMobile localUser loggedIn setup shared model =
                                         (\( answeredBy, answers2 ) ->
                                             case IdArray.get questionId answers2 of
                                                 Just (Just answer) ->
-                                                    Ui.row
-                                                        [ Ui.spacing 8 ]
-                                                        [ case User.getUser answeredBy localUser of
-                                                            Just user ->
-                                                                User.profileImage answeredBy user.icon
-
-                                                            Nothing ->
-                                                                User.profileImage answeredBy Nothing
-                                                        , Ui.column
-                                                            [ Ui.spacing 2 ]
-                                                            [ User.toStringAlt answeredBy localUser
-                                                                |> Ui.text
-                                                                |> Ui.el [ Ui.Font.bold ]
-                                                            , contentView
-                                                                time
-                                                                answerContentWidth
-                                                                localUser
-                                                                (Dom.id
-                                                                    ("sheepGame_answerPreview_"
-                                                                        ++ Id.toString questionId
-                                                                        ++ "_"
-                                                                        ++ Id.toString answeredBy
-                                                                    )
+                                                    messageWithProfile
+                                                        answeredBy
+                                                        localUser
+                                                        (contentView
+                                                            time
+                                                            answerContentWidth
+                                                            localUser
+                                                            (Dom.id
+                                                                ("sheepGame_answerPreview_"
+                                                                    ++ Id.toString questionId
+                                                                    ++ "_"
+                                                                    ++ Id.toString answeredBy
                                                                 )
-                                                                answer.attachedFiles
-                                                                answer.text
-                                                            ]
-                                                        ]
+                                                            )
+                                                            answer.attachedFiles
+                                                            answer.text
+                                                        )
 
                                                 _ ->
                                                     Ui.el [ Ui.Font.italic ] (Ui.text "No answered")
@@ -1798,7 +1810,7 @@ type alias AnswerResult =
 
 type alias QuestionResult =
     { question : ValidatedInput
-    , notes : String
+    , notes : Maybe ValidatedInput
     , answers : List AnswerResult
     }
 
@@ -1858,7 +1870,7 @@ resultsData setup shared =
                             scoresThroughQuestion (index + 1) shared
                     in
                     { question = question
-                    , notes = SeqDict.get questionId shared.notes |> Maybe.withDefault ""
+                    , notes = SeqDict.get questionId shared.notes |> Maybe.withDefault Nothing
                     , answers =
                         List.map
                             (\userId ->
@@ -1944,7 +1956,7 @@ revealingView time contentWidth localUser setup shared model =
             [ Ui.spacing 16 ]
             (scoringExplanation
                 :: (List.take shared.questionsRevealed results.questions
-                        |> List.indexedMap (resultsQuestionView time contentWidth localUser results.maxPoints)
+                        |> List.indexedMap (resultsQuestionView time contentWidth localUser setup results.maxPoints)
                    )
             )
     , if shared.questionsRevealed >= questionCount then
@@ -1981,7 +1993,7 @@ scoringExplanation =
         [ Ui.spacing 8 ]
         [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Scoring")
         , Ui.column
-            [ Ui.spacing 8, Ui.padding 8, Ui.Font.color MyUi.font3 ]
+            [ Ui.spacing 16, Ui.padding 8, Ui.Font.color MyUi.font3 ]
             [ Ui.Prose.paragraph
                 []
                 [ Ui.text "For each question you get points equal to the number of people who picked the same answer as you (including yourself). For example, if you pick a unique answer, you get 1 point. If you and two others pick the same answer, you three get 3 points." ]
@@ -1990,8 +2002,8 @@ scoringExplanation =
         ]
 
 
-resultsQuestionView : Time.Posix -> Int -> LocalUser -> Int -> Int -> QuestionResult -> Element GameMsg
-resultsQuestionView time contentWidth localUser maxPoints index result =
+resultsQuestionView : Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Int -> Int -> QuestionResult -> Element GameMsg
+resultsQuestionView time contentWidth localUser setup maxPoints index result =
     Ui.column
         [ Ui.spacing 8, Ui.paddingXY 0 16 ]
         [ Ui.row
@@ -2011,17 +2023,25 @@ resultsQuestionView time contentWidth localUser maxPoints index result =
             [ Ui.spacing 16, Ui.padding 8 ]
             [ answerGroupsView localUser result.answers
             , scoreTableView localUser maxPoints result.answers
-            , if String.trim result.notes == "" then
-                Ui.none
+            , case result.notes of
+                Nothing ->
+                    Ui.none
 
-              else
-                Ui.column
-                    [ Ui.spacing 8 ]
-                    [ Ui.el
-                        [ Ui.Font.bold ]
-                        (Ui.text "Host's comment")
-                    , Ui.el [ MyUi.prewrap ] (Ui.text result.notes)
-                    ]
+                Just notes ->
+                    Ui.column
+                        [ Ui.spacing 8 ]
+                        [ messageWithProfile
+                            setup.createdBy
+                            localUser
+                            (contentView
+                                time
+                                contentWidth
+                                localUser
+                                (Dom.id ("sheepGame_questionNotes_" ++ String.fromInt index))
+                                notes.attachedFiles
+                                notes.text
+                            )
+                        ]
             ]
         ]
 
