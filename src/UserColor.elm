@@ -1,4 +1,4 @@
-module UserColor exposing (Selection, UserColor, default, picked, picker, startPicking, toColor, toStyle)
+module UserColor exposing (Selection, UserColor(..), default, picked, picker, startPicking, toColor, toStyle)
 
 import Color
 import Effect.Browser.Dom as Dom
@@ -9,6 +9,8 @@ import Ui.Font
 import Ui.Input
 
 
+{-| OpaqueVariants
+-}
 type UserColor
     = UserColor Int
 
