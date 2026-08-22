@@ -42,6 +42,7 @@ import Ui.Font
 import Unsafe
 import Url
 import UserAgent
+import UserColor
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame exposing (Letter(..), LetterOrWildcard(..))
 
@@ -96,7 +97,7 @@ main =
                     , time = Time.millisToPosix 0
                     , drawings = SeqDict.empty
                     , embedDrawings = SeqDict.empty
-                    , drawingUserColor = \_ -> ""
+                    , drawingUserColor = \_ -> UserColor.default
                     , isSelectingAnchor = False
                     , devicePixelRatio = 1
                     , isHovered = True
@@ -158,7 +159,7 @@ main =
                                             GuildIcon.NewMessageForUser count
                                         )
                                         Nothing
-                                        (Id.fromInt index)
+                                        UserColor.default
                                     )
                                     :: items
                                 )
@@ -202,7 +203,7 @@ stickersSection =
             , time = Time.millisToPosix 0
             , drawings = SeqDict.empty
             , embedDrawings = SeqDict.empty
-            , drawingUserColor = \_ -> ""
+            , drawingUserColor = \_ -> UserColor.default
             , isSelectingAnchor = False
             , devicePixelRatio = 1
             , isHovered = True
@@ -573,7 +574,7 @@ embedExamples whitelistedDomains =
                 , time = Time.millisToPosix 0
                 , drawings = SeqDict.empty
                 , embedDrawings = SeqDict.empty
-                , drawingUserColor = \_ -> ""
+                , drawingUserColor = \_ -> UserColor.default
                 , isSelectingAnchor = False
                 , devicePixelRatio = 1
                 , isHovered = True

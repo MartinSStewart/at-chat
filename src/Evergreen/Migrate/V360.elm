@@ -188,7 +188,6 @@ import Quantity
 import Result
 import SeqDict
 import SeqSet
-import UserColor
 
 
 frontendModel : Evergreen.V359.Types.FrontendModel -> ModelMigration Evergreen.V360.Types.FrontendModel Evergreen.V360.Types.FrontendMsg
