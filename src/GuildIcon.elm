@@ -358,7 +358,7 @@ guild/user tiles
 -}
 iconFontColor : Ui.Color
 iconFontColor =
-    Ui.rgba 10 10 10 0.8
+    Ui.rgba 0 0 0 0.8
 
 
 size : number
