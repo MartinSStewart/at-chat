@@ -61,6 +61,7 @@ import Effect.Time as Time
 import FileName
 import FileStatus exposing (FileData, FileId, FileMetadata(..), FileStatus)
 import Go
+import GuildIcon
 import Html
 import Html.Attributes
 import Icons
@@ -2259,9 +2260,9 @@ resultsQuestionView time contentWidth localUser setup maxPoints index result =
     Ui.column
         [ Ui.spacing 8, Ui.paddingXY 0 16 ]
         [ Ui.row
-            [ Ui.Font.size 20, Ui.Font.bold ]
+            [ Ui.Font.size 20, Ui.spacing 6 ]
             [ Ui.el
-                [ Ui.width Ui.shrink, Ui.alignTop ]
+                [ Ui.width Ui.shrink, Ui.alignTop, Ui.Font.bold ]
                 (Ui.text (String.fromInt (index + 1) ++ ". "))
             , contentView
                 time
@@ -2272,7 +2273,7 @@ resultsQuestionView time contentWidth localUser setup maxPoints index result =
                 result.question.text
             ]
         , Ui.column
-            [ Ui.spacing 16, Ui.padding 8 ]
+            [ Ui.spacing 16 ]
             [ answerGroupsView localUser result.answers
             , scoreTableView localUser maxPoints result.answers
             , case result.notes of
@@ -2385,32 +2386,40 @@ scoreRowView localUser maxPoints answerResult =
                 round (toFloat score / toFloat maxPoints * 1000)
     in
     Ui.row
-        [ Ui.spacing 4 ]
-        [ User.profileImage (User.getUser userId localUser)
+        [ Ui.spacing 2 ]
+        [ User.smallProfileImage (User.getUser userId localUser)
         , Ui.row
             [ Ui.height Ui.fill ]
             [ Ui.el
                 [ Ui.width (Ui.portion filled)
                 , Ui.height Ui.fill
-                , Ui.rounded 2
+                , Ui.paddingWith { left = 6, right = 4, top = 0, bottom = 0 }
+                , Ui.Font.color GuildIcon.iconFontColor
+                , Ui.roundedWith
+                    { topLeft = 0
+                    , topRight = User.smallProfileImageRounding
+                    , bottomLeft = 0
+                    , bottomRight = User.smallProfileImageRounding
+                    }
                 , Ui.background (userColor userId localUser)
                 , Ui.onRight
                     (Ui.row
-                        [ Ui.width Ui.shrink, Ui.move (Ui.right 8), Ui.centerY, Ui.spacing 4 ]
+                        [ Ui.width Ui.shrink, Ui.move (Ui.right 8), Ui.centerY, Ui.spacing 4, Ui.Font.color MyUi.font1 ]
                         [ Ui.text (String.fromInt score)
                         , case rankChange of
                             RankUp ->
-                                Ui.el [ Ui.Font.color (Ui.rgb 25 230 25) ] (Ui.text "▲")
+                                Ui.el [ Ui.Font.color (Ui.rgb 25 230 25), Ui.move { x = 0, y = -1, z = 0 } ] (Ui.text "▲")
 
                             RankDown ->
-                                Ui.el [ Ui.Font.color (Ui.rgb 230 25 25) ] (Ui.text "▼")
+                                Ui.el [ Ui.Font.color (Ui.rgb 230 25 25), Ui.move { x = 0, y = -1, z = 0 } ] (Ui.text "▼")
 
                             RankUnchanged ->
                                 Ui.none
                         ]
                     )
+                , Ui.clipWithEllipsis
                 ]
-                Ui.none
+                (Ui.text (User.toStringAlt userId localUser))
             , Ui.el [ Ui.width (Ui.portion (1000 - filled)) ] Ui.none
             ]
         , Ui.el [ Ui.width (Ui.px 40) ] Ui.none

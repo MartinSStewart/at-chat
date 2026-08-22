@@ -9,6 +9,7 @@ module GuildIcon exposing
     , discordNotificationView
     , discordUserView
     , discordView
+    , iconFontColor
     , notificationHelper
     , notificationView
     , showFriendsButton
@@ -270,7 +271,7 @@ userView notification maybeIcon color =
                 iconView (Normal notification) (FileStatus.fileUrl FileStatus.pngContent icon)
 
             Nothing ->
-                defaultUser True size (round (toFloat size * 8 / 50)) color
+                defaultUser True size (Ui.rounded (round (toFloat size * 8 / 50))) color
         )
 
 
@@ -287,11 +288,11 @@ discordUserView notification maybeIcon userId =
         |> Ui.el [ discordNotificationView 0 -3 notification ]
 
 
-defaultUser : Bool -> Int -> Int -> UserColor -> Element msg
-defaultUser centerX size2 rounded color =
+defaultUser : Bool -> Int -> Ui.Attribute msg -> UserColor -> Element msg
+defaultUser centerX size2 rounding color =
     Ui.el
         [ Ui.contentCenterY
-        , Ui.rounded rounded
+        , rounding
         , Ui.background (UserColor.toColor color)
         , if centerX then
             Ui.centerX

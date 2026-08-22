@@ -1245,7 +1245,7 @@ gameToPreviewUrl game =
             "/word-spelling-game-preview.webp"
 
         GameType_SheepGame ->
-            "/sheep-game-preview.jpg"
+            "/sheep-game-preview.webp"
 
 
 gameSelectButton : Bool -> GameType -> Element Msg
