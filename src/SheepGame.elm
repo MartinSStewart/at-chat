@@ -1381,6 +1381,9 @@ setupView windowSize localUser loggedIn users model =
         [ Ui.spacing 16
         , Ui.paddingXY horizontalPadding 16
         , Ui.background MyUi.tabBackground
+        , Ui.heightMax (tabBodyHeight windowSize)
+        , Ui.scrollable
+        , Ui.heightMin 0
         ]
         [ Go.setupSection
             (Ui.text "Questions")
@@ -1530,6 +1533,11 @@ questionInput isMobile localUser loggedIn users index question =
         ]
 
 
+tabBodyHeight : Coord units -> Int
+tabBodyHeight windowSize =
+    round (toFloat (Coord.yRaw windowSize) * 0.8) - MyUi.channelHeaderHeight
+
+
 gameView :
     Time.Posix
     -> Coord CssPixels
@@ -1563,7 +1571,7 @@ gameView time windowSize showMemberTab localUser loggedIn setup shared model =
         , Ui.paddingXY horizontalPadding 16
         , Ui.background MyUi.background1
         , Ui.scrollable
-        , Ui.height (Ui.px 500)
+        , Ui.height (Ui.px (tabBodyHeight windowSize))
         ]
         (case shared.phase of
             Answering ->
