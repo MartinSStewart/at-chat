@@ -934,6 +934,12 @@ dropPrefix prefix text =
 
 {-| Like `connectTwoUsersAndJoinNewGuild` but two more people join the guild: a third user who
 can also join games, and a fourth who can watch them.
+
+Everyone except the admin picks their own colour, so the four of them are told apart by
+colour wherever that's used (the drawing tool, player names in games) instead of everyone
+being the same default grey. The three picks are hues 4, 12 and 22 of the 32 the grid
+offers, which is far enough apart to tell them apart at a glance.
+
 -}
 connectFourUsersAndJoinNewGuild :
     { width : Int, height : Int }
@@ -981,21 +987,24 @@ connectFourUsersAndJoinNewGuild windowSize continueFunc =
                                 userEmail
                                 "Stevie Steve"
                                 (\userA ->
-                                    [ joinGuildFromInvite
+                                    [ pickUserColor 260 userA
+                                    , joinGuildFromInvite
                                         inviteUrl
                                         windowSize
                                         sessionId2
                                         joeEmail
                                         "Joe"
                                         (\userB ->
-                                            [ joinGuildFromInvite
+                                            [ pickUserColor 268 userB
+                                            , joinGuildFromInvite
                                                 inviteUrl
                                                 windowSize
                                                 sessionId4
                                                 wandaEmail
                                                 "Wanda"
                                                 (\userC ->
-                                                    [ admin.click 100 (Dom.id "guild_openChannel_0")
+                                                    [ pickUserColor 278 userC
+                                                    , admin.click 100 (Dom.id "guild_openChannel_0")
                                                     , T.group (continueFunc admin userA userB userC)
                                                     ]
                                                 )
@@ -1010,6 +1019,27 @@ connectFourUsersAndJoinNewGuild windowSize continueFunc =
                 )
             ]
         )
+
+
+{-| Open the user options, pick a colour out of the swatch grid and save it.
+
+On desktop the grid is laid out with one column per hue and one row per saturation, so the
+swatch to click is `saturation * 32 + hue`. Every swatch can be picked at the default
+brightness, so any index in the grid works.
+
+-}
+pickUserColor :
+    Int
+    -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+pickUserColor swatchIndex user =
+    T.group
+        [ user.click 100 (Dom.id "guild_showUserOptions")
+        , user.click 100 (Dom.id "userOptions_selectColor")
+        , user.click 100 (UserColor.swatchId swatchIndex)
+        , user.click 100 (Dom.id "userOptions_submitColor")
+        , user.click 100 (Dom.id "userOptions_closeUserOptions")
+        ]
 
 
 {-| Connect a brand new user and have them join an existing guild via an invite link, ending up
