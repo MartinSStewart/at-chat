@@ -2855,7 +2855,7 @@ allAttackerLocalChanges =
     , Local_SetMuteThread legitGuildId channelId (Id.fromInt 0) MuteSettings.IsMuted
     , Local_SetName (Unsafe.personName "hacked")
     , Local_SetNotificationMode NoNotifications
-    , Local_SetSheepGameQuestions (Array.fromList [ { text = "hacked", attachedFiles = SeqDict.empty } ])
+    , Local_SetSheepGameQuestions (IdArray.fromList [ { text = "hacked", attachedFiles = SeqDict.empty } ])
     , Local_SetEmailNotifications User.NotifyMeWhenMentioned
     , Local_StartReloadingDiscordUser messageTime discordUserId
     , Local_TextEditor TextEditor.Local_Reset

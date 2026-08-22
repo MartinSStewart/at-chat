@@ -33,13 +33,13 @@ module UserSession exposing
     , unreadOverviewMessageLimit
     )
 
-import Array exposing (Array)
 import Discord
 import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import FileStatus exposing (FileHash, FileId, FileStatus)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_ChannelThreadId, Viewing_DiscordChannelId, Viewing_DiscordChannelThreadId, Viewing_DiscordDmId, Viewing_DmId, Viewing_DmThreadId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, QuestionId, ThreadMessageId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_ChannelThreadId, Viewing_DiscordChannelId, Viewing_DiscordChannelThreadId, Viewing_DiscordDmId, Viewing_DmId, Viewing_DmThreadId)
+import IdArray exposing (IdArray)
 import Message exposing (Message)
 import PersonName exposing (PersonName)
 import Ports exposing (SubscribeData)
@@ -58,7 +58,7 @@ type alias UserSession =
     , sessionIdHash : SessionIdHash
     , signedInAt : Time.Posix
     , expandedUserOptions : SeqSet UserOptionSection
-    , savedSheepGameQuestions : Array SheepGameQuestion
+    , savedSheepGameQuestions : IdArray QuestionId SheepGameQuestion
     }
 
 
@@ -431,7 +431,7 @@ init time sessionId userId userAgent =
     , sessionIdHash = SessionIdHash.fromSessionId sessionId
     , signedInAt = time
     , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
-    , savedSheepGameQuestions = Array.empty
+    , savedSheepGameQuestions = IdArray.empty
     }
 
 
@@ -445,7 +445,7 @@ collapseUserOptionSection section session =
     { session | expandedUserOptions = SeqSet.remove section session.expandedUserOptions }
 
 
-setSheepGameQuestions : Array SheepGameQuestion -> UserSession -> UserSession
+setSheepGameQuestions : IdArray QuestionId SheepGameQuestion -> UserSession -> UserSession
 setSheepGameQuestions questions session =
     { session | savedSheepGameQuestions = questions }
 

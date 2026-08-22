@@ -10,6 +10,7 @@ module Id exposing
     , GuildOrDmId(..)
     , Id(..)
     , InviteLinkId(..)
+    , QuestionId(..)
     , StickerId(..)
     , ThreadMessageId(..)
     , ThreadRoute(..)
@@ -188,6 +189,10 @@ type ThreadMessageId
 
 type InviteLinkId
     = InviteLinkId Never
+
+
+type QuestionId
+    = QuestionId Never
 
 
 type StickerId

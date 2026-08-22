@@ -49,8 +49,8 @@ import Go
 import Html
 import Html.Attributes
 import Html.Events
-import Id exposing (ChannelMessageId, GamePublicId, GuildOrDmId(..), Id, UserId)
-import IdArray
+import Id exposing (ChannelMessageId, GamePublicId, GuildOrDmId(..), Id, QuestionId, UserId)
+import IdArray exposing (IdArray)
 import List.Nonempty exposing (Nonempty)
 import Message exposing (GameType(..))
 import MyUi
@@ -474,7 +474,7 @@ type OutMsg
     | FetchWordDefinition String
       -- Hold onto the sheep game questions the host has written so far, so that a refresh
       -- in the middle of setting a game up doesn't throw them away.
-    | SaveSheepGameQuestions (Array UserSession.SheepGameQuestion)
+    | SaveSheepGameQuestions (IdArray QuestionId UserSession.SheepGameQuestion)
       -- Ask to be sent `CheckedSheepGameQuestionsDebounce` once the host has stopped typing
       -- (see `Frontend.handleGameOutMsgs`).
     | SaveSheepGameQuestionsAfterDelay Int
@@ -779,7 +779,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                         | startedGames = SeqDict.insert newMatchId (SheepGame_Game game) model.startedGames
                         , sheepGameQuestionsCounter = model.sheepGameQuestionsCounter + 1
                       }
-                    , SaveSheepGameQuestions Array.empty :: outMsg2
+                    , SaveSheepGameQuestions IdArray.empty :: outMsg2
                     )
 
                 SheepGame.CancelSetup ->
@@ -787,7 +787,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                         | setup = GameSelect
                         , sheepGameQuestionsCounter = model.sheepGameQuestionsCounter + 1
                       }
-                    , SaveSheepGameQuestions Array.empty :: outMsg2
+                    , SaveSheepGameQuestions IdArray.empty :: outMsg2
                     )
 
         CheckedSheepGameSaveDebounce matchId input counter ->
@@ -818,7 +818,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
         CheckedSheepGameQuestionsDebounce counter ->
             case ( counter == model.sheepGameQuestionsCounter, model.setup ) of
                 ( True, SheepGame_Setup setup ) ->
-                    ( model, [ IdArray.toArray setup.questions |> SheepGame.clampSavedQuestions |> SaveSheepGameQuestions ] )
+                    ( model, [ SheepGame.clampSavedQuestions setup.questions |> SaveSheepGameQuestions ] )
 
                 _ ->
                     -- More typing happened after this save was asked for, so the one that
