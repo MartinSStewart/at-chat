@@ -1858,9 +1858,25 @@ colorPickerTest config =
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
                 , admin.click 1000 (Dom.id "guild_showUserOptions")
 
-                -- The example message is scrawled on in whatever colour is selected, which
-                -- starts out as the one the user already has.
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Hello" ])
+                -- The grid is a lot of squares, so it stays put away until asked for.
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.id "userOptions_selectColor" ])
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "userColor_lightness" ])
+                , admin.click 100 (Dom.id "userOptions_selectColor")
+
+                -- Out comes the picker, the colour they already have to compare against, and
+                -- an example message scrawled on in whatever is selected.
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.id "userColor_lightness"
+                        , Test.Html.Selector.id "userOptions_currentColor"
+                        , Test.Html.Selector.text "Hello"
+                        ]
+                    )
                 , admin.checkView 100 (hasStrokeColored UserColor.default)
 
                 -- Nothing to submit until the colour actually changes.
@@ -1870,27 +1886,23 @@ colorPickerTest config =
                 , admin.input 100 (Dom.id "userColor_lightness") "5"
                 , admin.checkView
                     100
-                    (Test.Html.Query.has
-                        [ Test.Html.Selector.id "userOptions_submitColor"
-                        , Test.Html.Selector.id "userOptions_resetColor"
-                        ]
-                    )
+                    (Test.Html.Query.has [ Test.Html.Selector.id "userOptions_submitColor" ])
                 , admin.checkView 100 (Test.Html.Query.hasNot [ hasStrokeSelector UserColor.default ])
 
-                -- Resetting puts the colour they had back and takes the buttons away with it.
+                -- Resetting puts the grid away without having saved anything.
                 , admin.click 100 (Dom.id "userOptions_resetColor")
-                , admin.checkView 100 (hasStrokeColored UserColor.default)
                 , admin.checkView
                     100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "userOptions_submitColor" ])
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "userColor_lightness" ])
                 , T.checkState 100 (checkSavedColorIs UserColor.default)
 
-                -- Submitting saves it, so there's nothing left to submit.
+                -- Submitting saves it and puts the grid away too.
+                , admin.click 100 (Dom.id "userOptions_selectColor")
                 , admin.input 100 (Dom.id "userColor_lightness") "5"
                 , admin.click 100 (Dom.id "userOptions_submitColor")
                 , admin.checkView
                     100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "userOptions_submitColor" ])
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "userColor_lightness" ])
                 , T.checkState 100 (checkSavedColorIsNot UserColor.default)
                 ]
             )

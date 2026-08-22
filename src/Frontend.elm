@@ -2096,7 +2096,6 @@ updateLoaded msg model =
                             Just
                                 (UserOptions.init
                                     (Local.model loggedIn.localState).localUser.user.domainWhitelist
-                                    (Local.model loggedIn.localState).localUser.user.color
                                 )
                       }
                     , Command.none
@@ -3257,12 +3256,33 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedSelectNewColor ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            ( { loggedIn
+                                | userOptions =
+                                    Just
+                                        { userOptions
+                                            | color =
+                                                Just (Local.model loggedIn.localState).localUser.user.color
+                                        }
+                              }
+                            , Command.none
+                            )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
         SelectedUserColor color ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     case loggedIn.userOptions of
                         Just userOptions ->
-                            ( { loggedIn | userOptions = Just { userOptions | color = color } }
+                            ( { loggedIn | userOptions = Just { userOptions | color = Just color } }
                             , Command.none
                             )
 
@@ -3276,10 +3296,11 @@ updateLoaded msg model =
                 (\loggedIn ->
                     case loggedIn.userOptions of
                         Just userOptions ->
+                            -- Saving is the end of picking, so the grid goes away again.
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Local_SetUserColor userOptions.color |> Just)
-                                loggedIn
+                                (Maybe.map Local_SetUserColor userOptions.color)
+                                { loggedIn | userOptions = Just { userOptions | color = Nothing } }
                                 Command.none
 
                         Nothing ->
@@ -3292,13 +3313,7 @@ updateLoaded msg model =
                 (\loggedIn ->
                     case loggedIn.userOptions of
                         Just userOptions ->
-                            ( { loggedIn
-                                | userOptions =
-                                    Just
-                                        { userOptions
-                                            | color = (Local.model loggedIn.localState).localUser.user.color
-                                        }
-                              }
+                            ( { loggedIn | userOptions = Just { userOptions | color = Nothing } }
                             , Command.none
                             )
 

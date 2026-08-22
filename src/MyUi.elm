@@ -598,6 +598,7 @@ radioOption htmlId value text =
         )
 
 
+radioFillColor : Ui.Color
 radioFillColor =
     white
 

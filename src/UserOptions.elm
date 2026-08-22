@@ -42,12 +42,12 @@ import UserColor exposing (UserColor)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), UserOptionSection(..))
 
 
-init : SeqSet RichText.Domain -> UserColor -> UserOptionsModel
-init domainWhitelist color =
+init : SeqSet RichText.Domain -> UserOptionsModel
+init domainWhitelist =
     { name = Editable.init
     , domainWhitelistInput = domainWhitelistToString domainWhitelist
     , debugData = Nothing
-    , color = color
+    , color = Nothing
     }
 
 
@@ -292,26 +292,41 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         model.name
                     , Ui.column
                         [ Ui.spacing 8 ]
-                        [ Ui.el [ Ui.Font.bold ] (Ui.text "Color")
-                        , Ui.text "This is the color used when you use the drawing tool or to represent you in some games."
-                        , colorPreview time isMobile local allUsers model.color
-                        , UserColor.picker model.color SelectedUserColor
-                        , if model.color == local.localUser.user.color then
-                            Ui.none
+                        (Ui.el [ Ui.Font.bold ] (Ui.text "Color")
+                            :: Ui.text "This is the color used when you use the drawing tool or to represent you in some games."
+                            :: (case model.color of
+                                    Nothing ->
+                                        [ MyUi.secondaryButton
+                                            (Dom.id "userOptions_selectColor")
+                                            PressedSelectNewColor
+                                            "Select new color"
+                                        ]
 
-                          else
-                            Ui.row
-                                [ Ui.spacing 8 ]
-                                [ MyUi.simpleButton
-                                    (Dom.id "userOptions_submitColor")
-                                    PressedSubmitUserColor
-                                    (Ui.text "Submit")
-                                , MyUi.secondaryButton
-                                    (Dom.id "userOptions_resetColor")
-                                    PressedResetUserColor
-                                    "Reset"
-                                ]
-                        ]
+                                    Just color ->
+                                        [ colorPreview time isMobile local allUsers color
+                                        , Ui.row
+                                            [ Ui.spacing 8 ]
+                                            [ currentColorSquare local.localUser.user.color
+                                            , UserColor.picker color SelectedUserColor
+                                            ]
+                                        , Ui.row
+                                            [ Ui.spacing 8 ]
+                                            [ if color == local.localUser.user.color then
+                                                Ui.none
+
+                                              else
+                                                MyUi.simpleButton
+                                                    (Dom.id "userOptions_submitColor")
+                                                    PressedSubmitUserColor
+                                                    (Ui.text "Submit")
+                                            , MyUi.secondaryButton
+                                                (Dom.id "userOptions_resetColor")
+                                                PressedResetUserColor
+                                                "Reset"
+                                            ]
+                                        ]
+                               )
+                        )
                     , Ui.column
                         [ Ui.spacing 8 ]
                         [ Ui.el [ Ui.Font.bold ] (Ui.text "Email")
@@ -814,6 +829,23 @@ bookmarklet =
         |> String.replace "  " " "
 
 
+{-| The colour the user has now, next to the grid of ones they could have instead.
+-}
+currentColorSquare : UserColor -> Element FrontendMsg_
+currentColorSquare color =
+    Ui.el
+        [ Ui.id (Dom.idToString (Dom.id "userOptions_currentColor"))
+        , Ui.width (Ui.px 40)
+        , Ui.height (Ui.px 40)
+        , Ui.alignTop
+        , Ui.rounded 3
+        , Ui.border 1
+        , Ui.borderColor MyUi.border1
+        , Ui.background (UserColor.toColor color)
+        ]
+        Ui.none
+
+
 {-| A message with the colour drawn on it the way the drawing tool would leave it, so that
 the picker shows what a colour is actually going to look like rather than just a square of
 it.
@@ -880,17 +912,3 @@ exampleDrawing userId =
     , inProgress = SeqDict.empty
     , undone = SeqDict.empty
     }
-
-
-arc : ( Float, Float ) -> ( Float, Float ) -> Float -> Float -> List ( Float, Float )
-arc ( centerX, centerY ) ( radiusX, radiusY ) startTurns endTurns =
-    List.map
-        (\step ->
-            let
-                angle : Float
-                angle =
-                    turns (startTurns + (endTurns - startTurns) * toFloat step / 16)
-            in
-            ( centerX + radiusX * cos angle, centerY + radiusY * sin angle )
-        )
-        (List.range 0 16)

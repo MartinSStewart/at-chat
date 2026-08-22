@@ -2260,6 +2260,9 @@ isPressMsg msg =
         -- Dragging the brightness slider is a drag, so counting this as a press would make
         -- the slider unusable on mobile. Brushing past a swatch only changes which colour is
         -- highlighted, which is cheap to undo.
+        PressedSelectNewColor ->
+            True
+
         SelectedUserColor _ ->
             False
 

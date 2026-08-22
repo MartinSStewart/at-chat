@@ -284,8 +284,9 @@ type alias UserOptionsModel =
     { name : Editable.Model
     , domainWhitelistInput : String
     , debugData : Maybe { data : String, loadedAt : Time.Posix }
-    , -- What the colour picker is pointing at. Nothing sends it anywhere yet.
-      color : UserColor
+    , -- What the colour picker is pointing at, or Nothing while it's put away. The grid
+      -- takes up a lot of room, so it stays hidden until asked for.
+      color : Maybe UserColor
     }
 
 
@@ -565,6 +566,7 @@ type FrontendMsg_
     | PressedCloseExternalLinkWarning
     | PressedAddDomainToWhitelist Bool
     | TypedDomainWhitelist String
+    | PressedSelectNewColor
     | SelectedUserColor UserColor
     | PressedSubmitUserColor
     | PressedResetUserColor

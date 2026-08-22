@@ -17,7 +17,6 @@ module Pages.Guild exposing
     , newGuildFormView
     , newMessagesId
     , profileImageButtonId
-    , profileImagePaddingRight
     , threadMessageHtmlId
     , typingDebouncerDelay
     , userTextMessageContent

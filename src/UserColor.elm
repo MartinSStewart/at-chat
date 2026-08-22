@@ -1,7 +1,6 @@
 module UserColor exposing (UserColor, default, picker, toColor)
 
 import Color
-import Color.Convert
 import Effect.Browser.Dom as Dom
 import MyUi
 import Ui
@@ -42,8 +41,12 @@ default =
     in
     fromParts
         { hue = round (hueCount * hue)
-        , saturation = round (saturationCount * saturation)
-        , lightness = round (lightnessCount * lightness)
+
+        -- Hue is a circle so it wraps, but these two run from the first step to the last,
+        -- which is one fewer gap than there are steps. Multiplying by the count instead
+        -- sends white's lightness of 1 round to 0, making the default colour black.
+        , saturation = round ((saturationCount - 1) * saturation)
+        , lightness = round ((lightnessCount - 1) * lightness)
         }
 
 
@@ -87,21 +90,6 @@ toColor userColor =
         (toFloat parts.hue / toFloat hueCount)
         (toFloat parts.saturation / toFloat (saturationCount - 1))
         (toFloat parts.lightness / toFloat (lightnessCount - 1))
-
-
-background2 : { l : Float, a : Float, b : Float }
-background2 =
-    Color.Convert.colorToLab MyUi.background2
-
-
-background3 : { l : Float, a : Float, b : Float }
-background3 =
-    Color.Convert.colorToLab MyUi.background2
-
-
-alertColor : { l : Float, a : Float, b : Float }
-alertColor =
-    Color.Convert.colorToLab MyUi.alertColor
 
 
 isReadable : Ui.Color -> Bool
