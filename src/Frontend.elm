@@ -456,7 +456,6 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , toFrontendLogs = Nothing
             , popSound = loading.popSound
             , startupData = startupData
-            , routeRequestCausedByPressingLink = False
             }
 
         ( model2, cmdA ) =
@@ -932,7 +931,7 @@ updateLoaded msg model =
             ( { model | elmUiState = Ui.Anim.update ElmUiMsg elmUiMsg model.elmUiState }, Command.none )
 
         PressedLink route ->
-            FrontendExtra.routePush { model | routeRequestCausedByPressingLink = True } route
+            FrontendExtra.routePush model route
 
         DebouncedTyping ->
             FrontendExtra.updateLoggedIn

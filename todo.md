@@ -21,7 +21,6 @@
   user saw duplicated messages for both themselves and the other user.
 * Scroll down warning is shown on iphone in DMs when the user is already scrolled down and writes a message.
 * Emoji in reaction emoji tooltip gets horizontally swished if there are many names (maybe MyUi.noShrinking is needed)
-* Modify pushRoute to require the caller to specify if this was triggered by a user click (for purposes of set viewing)
 * "add to home screen" is called "install and create shortcut" on Android (Chrome)
 * Add unread overview to mobile
 * Figure out why messages can be sent before files have loaded
