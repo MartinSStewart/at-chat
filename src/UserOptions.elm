@@ -292,43 +292,6 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         model.name
                     , Ui.column
                         [ Ui.spacing 8 ]
-                        (Ui.el [ Ui.Font.bold ] (Ui.text "Color")
-                            :: Ui.text "This is the color used when you use the drawing tool or to represent you in some games."
-                            :: (case model.color of
-                                    Nothing ->
-                                        [ Ui.row
-                                            [ Ui.spacing 8 ]
-                                            [ currentColorSquare local.localUser.user.color
-                                            , MyUi.secondaryButtonTall
-                                                (Dom.id "userOptions_selectColor")
-                                                PressedSelectNewColor
-                                                "Select new color"
-                                            ]
-                                        ]
-
-                                    Just color ->
-                                        [ colorPreview time isMobile local allUsers color
-                                        , UserColor.picker color SelectedUserColor
-                                        , Ui.row
-                                            [ Ui.spacing 8 ]
-                                            [ if color == local.localUser.user.color then
-                                                Ui.none
-
-                                              else
-                                                MyUi.simpleButton
-                                                    (Dom.id "userOptions_submitColor")
-                                                    PressedSubmitUserColor
-                                                    (Ui.text "Submit")
-                                            , MyUi.secondaryButtonTall
-                                                (Dom.id "userOptions_resetColor")
-                                                PressedResetUserColor
-                                                "Reset"
-                                            ]
-                                        ]
-                               )
-                        )
-                    , Ui.column
-                        [ Ui.spacing 8 ]
                         [ Ui.el [ Ui.Font.bold ] (Ui.text "Email")
                         , Ui.text (EmailAddress.toString local.localUser.user.email)
                         ]
@@ -398,6 +361,43 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         [ ( User.NeverNotifyMe, "No email notifications" )
                         , ( User.NotifyMeWhenMentioned, "Send me email notifications" )
                         ]
+                    , Ui.column
+                        [ Ui.spacing 8 ]
+                        (Ui.el [ Ui.Font.bold ] (Ui.text "Color")
+                            :: Ui.text "This is the color used when you use the drawing tool or to represent you in some games."
+                            :: (case model.color of
+                                    Nothing ->
+                                        [ Ui.row
+                                            [ Ui.spacing 8 ]
+                                            [ currentColorSquare local.localUser.user.color
+                                            , MyUi.secondaryButtonTall
+                                                (Dom.id "userOptions_selectColor")
+                                                PressedSelectNewColor
+                                                "Select new color"
+                                            ]
+                                        ]
+
+                                    Just color ->
+                                        [ colorPreview time isMobile local allUsers color
+                                        , UserColor.picker isMobile color SelectedUserColor
+                                        , Ui.row
+                                            [ Ui.spacing 8 ]
+                                            [ if color == local.localUser.user.color then
+                                                Ui.none
+
+                                              else
+                                                MyUi.simpleButton
+                                                    (Dom.id "userOptions_submitColor")
+                                                    PressedSubmitUserColor
+                                                    (Ui.text "Submit")
+                                            , MyUi.secondaryButtonTall
+                                                (Dom.id "userOptions_resetColor")
+                                                PressedResetUserColor
+                                                "Reset"
+                                            ]
+                                        ]
+                               )
+                        )
 
                     --, Ui.el
                     --    [ Ui.linkNewTab

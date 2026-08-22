@@ -20,7 +20,7 @@ hueCount =
 
 saturationCount : number
 saturationCount =
-    16
+    12
 
 
 lightnessCount : number
@@ -28,25 +28,21 @@ lightnessCount =
     16
 
 
-swatchSize : Int
-swatchSize =
-    20
+swatchSize : Bool -> Int
+swatchSize isMobile =
+    if isMobile then
+        18
+
+    else
+        20
 
 
 default : UserColor
 default =
-    let
-        { hue, saturation, lightness } =
-            Color.toHsla MyUi.font1
-    in
     fromParts
-        { hue = round (hueCount * hue)
-
-        -- Hue is a circle so it wraps, but these two run from the first step to the last,
-        -- which is one fewer gap than there are steps. Multiplying by the count instead
-        -- sends white's lightness of 1 round to 0, making the default colour black.
-        , saturation = round ((saturationCount - 1) * saturation)
-        , lightness = round ((lightnessCount - 1) * lightness)
+        { hue = 0
+        , saturation = 0
+        , lightness = 11
         }
 
 
@@ -175,20 +171,41 @@ screenLuminance color =
         y
 
 
-picker : UserColor -> (UserColor -> msg) -> Ui.Element msg
-picker selected onChange =
+picker : Bool -> UserColor -> (UserColor -> msg) -> Ui.Element msg
+picker isMobile selected onChange =
     let
         parts : { hue : Int, saturation : Int, lightness : Int }
         parts =
             toParts selected
+
+        swatchView2 : Ui.Element msg
+        swatchView2 =
+            Ui.row
+                [ Ui.wrap ]
+                (List.map (swatchView isMobile parts onChange) (List.range 0 (hueCount * saturationCount - 1)))
     in
     Ui.column
-        [ Ui.spacing 8, Ui.width (Ui.px (swatchSize * hueCount)) ]
-        [ Ui.row
-            [ Ui.wrap ]
-            (List.map (swatchView parts onChange) (List.range 0 (hueCount * saturationCount - 1)))
-        , lightnessSlider parts onChange
+        [ Ui.spacing 8
+        , Ui.width
+            (Ui.px
+                (if isMobile then
+                    swatchSize isMobile * saturationCount
+
+                 else
+                    swatchSize isMobile * hueCount
+                )
+            )
         ]
+        (if isMobile then
+            [ lightnessSlider parts onChange
+            , swatchView2
+            ]
+
+         else
+            [ swatchView2
+            , lightnessSlider parts onChange
+            ]
+        )
 
 
 swatchId : Int -> Dom.HtmlId
@@ -196,33 +213,42 @@ swatchId index =
     Dom.id ("userColor_swatch_" ++ String.fromInt index)
 
 
-swatchView : { hue : Int, saturation : Int, lightness : Int } -> (UserColor -> msg) -> Int -> Ui.Element msg
-swatchView selected onChange index =
+swatchView : Bool -> { hue : Int, saturation : Int, lightness : Int } -> (UserColor -> msg) -> Int -> Ui.Element msg
+swatchView isMobile selected onChange index =
     let
         hue : Int
         hue =
-            modBy hueCount index
+            if isMobile then
+                index // saturationCount
+
+            else
+                modBy hueCount index
 
         saturation : Int
         saturation =
-            index // hueCount
+            if isMobile then
+                modBy saturationCount index
+
+            else
+                index // hueCount
+
+        userColor =
+            fromParts { hue = hue, saturation = saturation, lightness = selected.lightness }
 
         color : Ui.Color
         color =
-            toColor (fromParts { hue = hue, saturation = saturation, lightness = selected.lightness })
+            toColor userColor
+
+        swatchSize2 =
+            swatchSize isMobile |> Ui.px
     in
     Ui.el
         (Ui.id (Dom.idToString (swatchId index))
-            :: Ui.width (Ui.px swatchSize)
-            :: Ui.height (Ui.px swatchSize)
+            :: Ui.width swatchSize2
+            :: Ui.height swatchSize2
             :: (if isReadable color then
                     [ Ui.background color
-                    , Ui.Events.onClick
-                        (onChange
-                            (fromParts
-                                { hue = hue, saturation = saturation, lightness = selected.lightness }
-                            )
-                        )
+                    , Ui.Events.onClick (onChange userColor)
                     , MyUi.htmlStyle "cursor" "pointer"
                     , if hue == selected.hue && saturation == selected.saturation then
                         Ui.inFront
