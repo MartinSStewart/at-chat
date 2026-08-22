@@ -13,7 +13,6 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import FileStatus exposing (FileHash)
 import Id exposing (Id, UserId)
-import UserColor exposing (UserColor)
 
 
 type DiscordUserData

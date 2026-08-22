@@ -55,7 +55,6 @@ before revealing the questions one at a time.
 import Array exposing (Array)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Drawing
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.File exposing (File)
 import Effect.Http as Http

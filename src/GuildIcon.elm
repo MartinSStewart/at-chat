@@ -24,8 +24,6 @@ import GuildName exposing (GuildName)
 import Html exposing (Html)
 import Html.Attributes
 import Icons
-import Id exposing (Id, UserId)
-import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import OneOrGreater exposing (OneOrGreater)
 import Ui exposing (Element)

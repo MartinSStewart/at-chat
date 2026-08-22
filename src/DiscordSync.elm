@@ -1294,7 +1294,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                         Nothing ->
                                                                             UserColor.default
 
-                                                                BasicData discordBasicUserData ->
+                                                                BasicData _ ->
                                                                     UserColor.default
 
                                                                 NeedsAuthAgain data ->

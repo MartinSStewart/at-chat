@@ -38,7 +38,7 @@ import FileStatus exposing (FileId)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (AnyGuildOrDmId, Id, ThreadRoute, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmId, Id, ThreadRoute, ThreadRouteWithMessage)
 import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))

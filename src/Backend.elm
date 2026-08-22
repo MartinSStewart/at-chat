@@ -606,7 +606,7 @@ update msg model =
                                                     { name = DiscordUserData.username user2 |> PersonName.fromStringLossy
                                                     , icon = fileHash
                                                     , color =
-                                                        case user of
+                                                        case user2 of
                                                             FullData data ->
                                                                 case NonemptyDict.get data.linkedTo model.users of
                                                                     Just linkedUser ->
@@ -615,7 +615,7 @@ update msg model =
                                                                     Nothing ->
                                                                         UserColor.default
 
-                                                            BasicData data ->
+                                                            BasicData _ ->
                                                                 UserColor.default
 
                                                             NeedsAuthAgain data ->
