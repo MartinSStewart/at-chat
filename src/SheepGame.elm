@@ -9,7 +9,6 @@ module SheepGame exposing
     , LoggedIn
     , OutMsg(..)
     , Phase(..)
-    , QuestionId
     , QuestionResult
     , RankChange(..)
     , SetupModel
@@ -52,7 +51,7 @@ before revealing the questions one at a time.
 
 -}
 
-import Array exposing (Array)
+import Array
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -65,7 +64,7 @@ import Go
 import Html
 import Html.Attributes
 import Icons
-import Id exposing (Id, UserId)
+import Id exposing (Id, QuestionId, UserId)
 import IdArray exposing (IdArray)
 import List.Extra
 import List.Nonempty exposing (Nonempty)
@@ -92,10 +91,6 @@ type alias ValidatedSetup =
     { questions : Nonempty ValidatedInput
     , createdBy : Id UserId
     }
-
-
-type QuestionId
-    = QuestionId Never
 
 
 type alias LoggedIn a =
@@ -234,13 +229,13 @@ initSetup =
 {-| The setup someone was part way through, rebuilt from the questions their session held
 onto so that a refresh doesn't cost them what they'd written.
 -}
-initSetupFromSavedQuestions : Array UnvalidatedInput -> SetupModel
+initSetupFromSavedQuestions : IdArray QuestionId UnvalidatedInput -> SetupModel
 initSetupFromSavedQuestions questions =
-    if Array.isEmpty questions then
+    if IdArray.isEmpty questions then
         initSetup
 
     else
-        { questions = Array.toList questions |> IdArray.fromList, error = Nothing, pressedSubmit = False }
+        { questions = questions, error = Nothing, pressedSubmit = False }
 
 
 {-| File ids start at 1. The backend throws away anything lower when it checks that the
@@ -273,10 +268,10 @@ appendAttachedFiles fileIds question =
 sending more than the setup view lets anyone write, and this ends up in the backend's
 state, so it gets the same limits here.
 -}
-clampSavedQuestions : Array UnvalidatedInput -> Array UnvalidatedInput
+clampSavedQuestions : IdArray QuestionId UnvalidatedInput -> IdArray QuestionId UnvalidatedInput
 clampSavedQuestions questions =
-    Array.slice 0 maxQuestions questions
-        |> Array.map (\question -> { question | text = String.left maxQuestionLength question.text })
+    IdArray.slice (Id.fromInt 0) (Id.fromInt maxQuestions) questions
+        |> IdArray.map (\_ question -> { question | text = String.left maxQuestionLength question.text })
 
 
 {-| Someone opening a match they've already answered gets their own answers back in the
