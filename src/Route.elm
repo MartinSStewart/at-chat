@@ -15,7 +15,9 @@ module Route exposing
     , linkDiscordPath
     , linkDiscordQueryParam
     , requiresLogin
+    , routeChangeCountsAsMessageView
     , sameChannelHeaderTab
+    , sameThread
     , setChannelHeaderTab
     , setChannelsVisible
     , setShowMembers
@@ -1040,6 +1042,70 @@ requiresLogin route =
             False
 
         PublicGoMatchRoute _ ->
+            False
+
+
+{-| Whether moving between these two routes leaves the reader looking at a conversation they
+weren't already looking at, which is what counts as having seen the messages waiting in it.
+
+The rest of a route names the conversation it was already naming: opening a tab, jumping to
+a message or showing the channel settings isn't arriving anywhere. Coming back out of the
+channel list on mobile is, since that was covering the conversation.
+
+Nothing is being marked as read on a route with no messages in it, so the answer for those
+doesn't mean anything.
+
+-}
+routeChangeCountsAsMessageView : Route -> Route -> Bool
+routeChangeCountsAsMessageView old new =
+    not (sameConversation old new)
+
+
+sameConversation : Route -> Route -> Bool
+sameConversation old new =
+    case ( old, new ) of
+        ( GuildRoute oldGuildId (ChannelRoute oldChannelId oldThreadRoute _) oldChannelsVisible, GuildRoute newGuildId (ChannelRoute newChannelId newThreadRoute _) newChannelsVisible ) ->
+            (oldGuildId == newGuildId)
+                && (oldChannelId == newChannelId)
+                && sameThread oldThreadRoute newThreadRoute
+                && (oldChannelsVisible == newChannelsVisible)
+
+        ( DiscordGuildRoute oldData, DiscordGuildRoute newData ) ->
+            case ( oldData.channelRoute, newData.channelRoute ) of
+                ( DiscordChannel_ChannelRoute oldChannelId oldThreadRoute _, DiscordChannel_ChannelRoute newChannelId newThreadRoute _ ) ->
+                    (oldData.currentDiscordUserId == newData.currentDiscordUserId)
+                        && (oldData.guildId == newData.guildId)
+                        && (oldChannelId == newChannelId)
+                        && sameThread oldThreadRoute newThreadRoute
+                        && (oldData.channelsVisible == newData.channelsVisible)
+
+                _ ->
+                    False
+
+        ( DmRoute oldData, DmRoute newData ) ->
+            (oldData.channelId == newData.channelId)
+                && sameThread oldData.threadRoute newData.threadRoute
+                && (oldData.channelsVisible == newData.channelsVisible)
+
+        ( DiscordDmRoute oldData, DiscordDmRoute newData ) ->
+            (oldData.currentDiscordUserId == newData.currentDiscordUserId)
+                && (oldData.channelId == newData.channelId)
+                && (oldData.channelsVisible == newData.channelsVisible)
+
+        _ ->
+            False
+
+
+sameThread : ThreadRouteWithFriends -> ThreadRouteWithFriends -> Bool
+sameThread threadRoute previousThreadRoute =
+    case ( threadRoute, previousThreadRoute ) of
+        ( NoThreadWithFriends _ _, NoThreadWithFriends _ _ ) ->
+            True
+
+        ( ViewThreadWithFriends threadId _ _, ViewThreadWithFriends previousThreadId _ _ ) ->
+            threadId == previousThreadId
+
+        _ ->
             False
 
 

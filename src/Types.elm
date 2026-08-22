@@ -196,7 +196,6 @@ type alias LoadedFrontend =
       toFrontendLogs : Maybe (Array ToFrontend)
     , popSound : Result Audio.LoadError Audio.Source
     , startupData : Ports.StartupData
-    , routeRequestCausedByPressingLink : Bool
     }
 
 

@@ -1347,7 +1347,7 @@ handleLocalChange time maybeLocalChange loggedIn cmds =
 
 
 routeViewingLocalChange : Bool -> Bool -> LocalState -> Route -> Maybe LocalChange
-routeViewingLocalChange isMobile routeRequestCausedByPressingLink local route =
+routeViewingLocalChange isMobile markMessagesAsViewed local route =
     let
         localChange : SetViewing
         localChange =
@@ -1357,7 +1357,7 @@ routeViewingLocalChange isMobile routeRequestCausedByPressingLink local route =
         Nothing
 
     else
-        Just (Local_CurrentlyViewing { markMessagesAsViewed = routeRequestCausedByPressingLink } localChange)
+        Just (Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed } localChange)
 
 
 clearRevealedSpoilers : LoadedFrontend -> LoadedFrontend
@@ -1397,22 +1397,20 @@ enterChannelRoute guildOrDmId tab threadRoute sameChannel viewCmd model =
         model
 
 
-sameThread : ThreadRouteWithFriends -> ThreadRouteWithFriends -> Bool
-sameThread threadRoute previousThreadRoute =
-    case ( threadRoute, previousThreadRoute ) of
-        ( NoThreadWithFriends _ _, NoThreadWithFriends _ _ ) ->
-            True
-
-        ( ViewThreadWithFriends threadId _ _, ViewThreadWithFriends previousThreadId _ _ ) ->
-            threadId == previousThreadId
-
-        _ ->
-            False
-
-
 routeRequest : Maybe Route -> Route -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 routeRequest previousRoute newRoute model =
     let
+        markMessagesAsViewed : Bool
+        markMessagesAsViewed =
+            case previousRoute of
+                Just oldRoute ->
+                    Route.routeChangeCountsAsMessageView oldRoute newRoute
+
+                Nothing ->
+                    -- The route a session starts on isn't one the reader navigated to, so
+                    -- whatever is waiting in it stays unread until they've looked at it.
+                    False
+
         ( model2, viewCmd ) =
             updateLoggedIn
                 (\loggedIn ->
@@ -1420,7 +1418,7 @@ routeRequest previousRoute newRoute model =
                         model.time
                         (routeViewingLocalChange
                             (MyUi.isMobile model)
-                            model.routeRequestCausedByPressingLink
+                            markMessagesAsViewed
                             (Local.model loggedIn.localState)
                             newRoute
                         )
@@ -1437,7 +1435,7 @@ routeRequest previousRoute newRoute model =
                         }
                         Command.none
                 )
-                { model | route = newRoute, routeRequestCausedByPressingLink = False }
+                { model | route = newRoute }
     in
     (case newRoute of
         HomePageRoute ->
@@ -1502,7 +1500,7 @@ routeRequest previousRoute newRoute model =
                             Just (GuildRoute previousGuildId (ChannelRoute previousChannelId previousThreadRoute _) _) ->
                                 (guildId == previousGuildId)
                                     && (channelId == previousChannelId)
-                                    && sameThread threadRoute previousThreadRoute
+                                    && Route.sameThread threadRoute previousThreadRoute
 
                             _ ->
                                 False
@@ -1573,7 +1571,7 @@ routeRequest previousRoute newRoute model =
                                         (currentDiscordUserId == guildData.currentDiscordUserId)
                                             && (guildId == guildData.guildId)
                                             && (channelId == previousChannelId)
-                                            && sameThread threadRoute previousThreadRoute
+                                            && Route.sameThread threadRoute previousThreadRoute
 
                                     _ ->
                                         False

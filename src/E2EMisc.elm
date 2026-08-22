@@ -17,6 +17,7 @@ module E2EMisc exposing
     , noTimestampSuggestionTest
     , profileImageOpensDm
     , reactionPopupNamesEmojiTest
+    , reloadingAConversationLeavesItUnreadTest
     , startingACallOrGameStaysReadTest
     , staysReadWhileViewingTest
     , swipedAwayConversationStopsBeingViewedTest
@@ -695,12 +696,81 @@ staysReadWhileViewingTest config =
                 , user.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
                 , E2EHelper.tallSnapshot user 100 { name = "Unread divider stays put while viewing" }
 
+                -- Opening one of the channel's tabs isn't arriving in a conversation they
+                -- weren't already in, so that leaves the mark where it is too
+                , user.click 100 (Dom.id "guild_openGamesTab")
+                , user.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
+
                 -- Which is what the unread overview shows once they leave: everything from
                 -- the message they marked onwards, and nothing from before it
                 , user.click 100 (Dom.id "guildIcon_showFriends")
                 , E2EHelper.hasExactText user [ "While away", "After the mark" ]
                 , E2EHelper.hasNotExactText user [ "In the channel" ]
                 , E2EHelper.tallSnapshot user 100 { name = "Unread overview after a message marked as unread" }
+                ]
+            )
+        ]
+
+
+{-| Landing in a conversation because the page was loaded on its url isn't the reader having
+read what turned up while they were away. The unread divider is still there for them to look
+at rather than the messages being marked as read on their behalf as the page loads.
+-}
+reloadingAConversationLeavesItUnreadTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+reloadingAConversationLeavesItUnreadTest config =
+    E2EHelper.startTest
+        "Loading the url of a conversation leaves what's unread in it unread"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.writeMessage admin 100 "In the channel"
+                , checkChannelIsCaughtUp guildChannelId user
+
+                -- The reader goes elsewhere and a message turns up without them
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.writeMessage admin 100 "While away"
+                , E2EHelper.hasNotExactText user [ "You have no unread messages!" ]
+
+                -- Loading the channel's url puts them back in it with that message still
+                -- unread, so the divider above it is what they see
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    (Route.encode
+                        (Route.GuildRoute
+                            (Id.fromInt 1)
+                            (Route.ChannelRoute
+                                (Id.fromInt 0)
+                                (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
+                                Nothing
+                            )
+                            ChannelsHiddenOnMobile
+                        )
+                    )
+                    E2EHelper.desktopWindow
+                    (\reloaded ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ reloaded.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , reloaded.checkView
+                            500
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "While away" ])
+                        , reloaded.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "new" ])
+                        , reloaded.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
+                        ]
+                    )
                 ]
             )
         ]
