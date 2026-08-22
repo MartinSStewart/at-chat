@@ -1203,7 +1203,7 @@ voiceChatControlButton htmlId title iconHtml isEnabled onPress =
             )
         , Ui.background
             (if isEnabled then
-                Ui.rgb 60 70 100
+                Ui.rgb 42 50 78
 
              else
                 red

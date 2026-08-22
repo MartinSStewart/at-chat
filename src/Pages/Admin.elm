@@ -4019,7 +4019,7 @@ cellBackgroundColor userTableId state =
 
 newRowColor : Ui.Color
 newRowColor =
-    Ui.rgb 63 89 63
+    Ui.rgb 45 69 41
 
 
 localChangeToText : UserColumn -> EditedBackendUser -> String
@@ -4034,12 +4034,12 @@ localChangeToText column localChange =
 
 editColor : Ui.Color
 editColor =
-    Ui.rgb 122 115 87
+    Ui.rgb 104 95 65
 
 
 deleteColor : Ui.Color
 deleteColor =
-    Ui.rgb 126 90 90
+    Ui.rgb 108 70 68
 
 
 type RowButtonType

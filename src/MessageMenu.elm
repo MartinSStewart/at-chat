@@ -248,7 +248,7 @@ viewMobile offset extraOptions loggedIn local model =
             MessageMenu_PressedClose
             [ Ui.height (Ui.px mobileCloseButton) ]
             (Ui.el
-                [ Ui.background (Ui.rgb 40 50 60)
+                [ Ui.background (Ui.rgb 22 30 38)
                 , Ui.rounded 99
                 , Ui.width (Ui.px 40)
                 , Ui.height (Ui.px 4)
