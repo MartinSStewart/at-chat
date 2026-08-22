@@ -1549,17 +1549,17 @@ tabBackground =
 
 background1 : Ui.Color
 background1 =
-    Ui.rgb 14 20 40
+    Ui.rgb 0 6 20
 
 
 background2 : Ui.Color
 background2 =
-    Ui.rgb 32 40 70
+    Ui.rgb 14 20 40
 
 
 background3 : Ui.Color
 background3 =
-    Ui.rgb 50 60 90
+    Ui.rgb 32 40 70
 
 
 inputBackground : Ui.Color
@@ -1629,12 +1629,12 @@ font3 =
 
 border1 : Ui.Color
 border1 =
-    Ui.rgb 60 70 100
+    Ui.rgb 34 39 56
 
 
 border2 : Ui.Color
 border2 =
-    Ui.rgb 34 39 56
+    Ui.rgb 17 20 28
 
 
 highlightedBorder : Ui.Color
