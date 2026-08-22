@@ -348,7 +348,8 @@ questionsSurviveAReloadTest normalConfig =
 {-| A guild channel has room for more than the one player a DM does. Three of them is
 enough for the scoreboard to reorder itself as the questions are revealed, and for the
 grid at the end to have pairs to compare. One player submits with a question left blank,
-so they score nothing for it while everyone else moves on.
+so they score nothing for it while everyone else moves on. That player is also the one on
+a phone, so the answering and results views are checked at a mobile size as well.
 -}
 threePlayerMatchTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
@@ -361,7 +362,10 @@ threePlayerMatchTest normalConfig =
         [ E2EHelper.connectFourUsersAndJoinNewGuild
             E2EHelper.tallDesktopWindow
             (\admin stevie joe wanda ->
-                [ admin.click 100 (Dom.id "guild_openGamesTab")
+                [ -- Wanda plays along on a phone, so the answering and results views are
+                  -- rendered at a mobile size here rather than everyone being on desktop.
+                  wanda.resizeWindow 0 E2EHelper.iphone14Window
+                , admin.click 100 (Dom.id "guild_openGamesTab")
                 , admin.click 100 (Dom.id "game_select_Sheep Game (WIP)")
 
                 -- The setup opens with two questions written in, so a third is added.
@@ -398,6 +402,7 @@ threePlayerMatchTest normalConfig =
                                 -- Wanda can't think of a fruit and submits with that box left empty.
                                 , wanda.input 100 (Dom.id "sheepGame_answer_0") "Red"
                                 , wanda.input 100 (Dom.id "sheepGame_answer_1") "Dog"
+                                , wanda.snapshotView 100 { name = "Sheep game answers on mobile" }
 
                                 -- Answering two of the three questions still counts as playing.
                                 , admin.checkView
@@ -479,6 +484,7 @@ threePlayerMatchTest normalConfig =
                                         , Test.Html.Selector.text "Move your cursor over a grid square"
                                         ]
                                     )
+                                , wanda.snapshotView 100 { name = "Sheep game results on mobile" }
                                 ]
 
                             Nothing ->
