@@ -1,4 +1,4 @@
-module UserColor exposing (UserColor, default, picker, toColor, toStyle)
+module UserColor exposing (Selection, UserColor, default, picked, picker, startPicking, toColor, toStyle)
 
 import Color
 import Effect.Browser.Dom as Dom
@@ -171,18 +171,57 @@ screenLuminance color =
         y
 
 
-picker : Bool -> UserColor -> (UserColor -> msg) -> Ui.Element msg
-picker isMobile selected onChange =
+{-| Where the brightness slider is, and the last colour it passed over that could actually be
+used.
+
+Those come apart when the slider is taken past the point where the chosen square stops being
+readable. The square is struck out to say so, and `lastValid` is what carries on being
+previewed and saved, so nobody ends up with a colour they can't see.
+
+-}
+type alias Selection =
+    { selected : UserColor, lastValid : UserColor }
+
+
+startPicking : UserColor -> Selection
+startPicking color =
+    { selected = color, lastValid = color }
+
+
+{-| The colour a selection actually stands for, which is the last usable one it landed on.
+-}
+picked : Selection -> UserColor
+picked selection =
+    selection.lastValid
+
+
+select : Selection -> UserColor -> Selection
+select selection color =
+    { selected = color
+    , lastValid =
+        if isReadable (toColor color) then
+            color
+
+        else
+            selection.lastValid
+    }
+
+
+picker : Bool -> Selection -> (Selection -> msg) -> Ui.Element msg
+picker isMobile selection onChange =
     let
         parts : { hue : Int, saturation : Int, lightness : Int }
         parts =
-            toParts selected
+            toParts selection.selected
 
         swatchView2 : Ui.Element msg
         swatchView2 =
             Ui.row
                 [ Ui.wrap ]
-                (List.map (swatchView isMobile parts onChange) (List.range 0 (hueCount * saturationCount - 1)))
+                (List.map
+                    (swatchView isMobile selection parts onChange)
+                    (List.range 0 (hueCount * saturationCount - 1))
+                )
     in
     Ui.column
         [ Ui.spacing 8
@@ -197,13 +236,13 @@ picker isMobile selected onChange =
             )
         ]
         (if isMobile then
-            [ lightnessSlider parts onChange
+            [ lightnessSlider selection parts onChange
             , swatchView2
             ]
 
          else
             [ swatchView2
-            , lightnessSlider parts onChange
+            , lightnessSlider selection parts onChange
             ]
         )
 
@@ -213,8 +252,14 @@ swatchId index =
     Dom.id ("userColor_swatch_" ++ String.fromInt index)
 
 
-swatchView : Bool -> { hue : Int, saturation : Int, lightness : Int } -> (UserColor -> msg) -> Int -> Ui.Element msg
-swatchView isMobile selected onChange index =
+swatchView :
+    Bool
+    -> Selection
+    -> { hue : Int, saturation : Int, lightness : Int }
+    -> (Selection -> msg)
+    -> Int
+    -> Ui.Element msg
+swatchView isMobile selection selected onChange index =
     let
         hue : Int
         hue =
@@ -241,28 +286,26 @@ swatchView isMobile selected onChange index =
 
         swatchSize2 =
             swatchSize isMobile |> Ui.px
+
+        usable : Bool
+        usable =
+            isReadable color
     in
     Ui.el
         (Ui.id (Dom.idToString (swatchId index))
             :: Ui.width swatchSize2
             :: Ui.height swatchSize2
-            :: (if isReadable color then
+            :: (if usable then
                     [ Ui.background color
-                    , Ui.Events.onClick (onChange userColor)
+                    , Ui.Events.onClick (onChange (select selection userColor))
                     , MyUi.htmlStyle "cursor" "pointer"
-                    , if hue == selected.hue && saturation == selected.saturation then
-                        Ui.inFront
-                            (Ui.el
-                                [ Ui.border 2
-                                , Ui.borderColor MyUi.font1
-                                , Ui.height Ui.fill
-                                ]
-                                Ui.none
-                            )
-
-                      else
-                        Ui.noAttr
                     ]
+
+                else
+                    []
+               )
+            ++ (if hue == selected.hue && saturation == selected.saturation then
+                    [ Ui.inFront (selectionOutline usable) ]
 
                 else
                     []
@@ -271,8 +314,51 @@ swatchView isMobile selected onChange index =
         Ui.none
 
 
-lightnessSlider : { hue : Int, saturation : Int, lightness : Int } -> (UserColor -> msg) -> Ui.Element msg
-lightnessSlider parts onChange =
+{-| The ring around the square the picker is pointing at. Black reads against every colour
+the grid offers, since they all have to be light enough to be used in the first place.
+
+A square the brightness slider has taken out of reach has nothing drawn in it, so there the
+ring has to stand out against the panel behind it instead, and a line struck across says the
+square isn't on offer at this brightness.
+
+-}
+selectionOutline : Bool -> Ui.Element msg
+selectionOutline usable =
+    Ui.el
+        (Ui.border 2
+            :: Ui.height Ui.fill
+            :: (if usable then
+                    [ Ui.borderColor MyUi.black ]
+
+                else
+                    [ Ui.borderColor MyUi.white
+                    , MyUi.htmlStyle "background-image" struckOutLine
+                    ]
+               )
+        )
+        Ui.none
+
+
+struckOutLine : String
+struckOutLine =
+    let
+        line : String
+        line =
+            MyUi.colorToStyle MyUi.white
+    in
+    "linear-gradient(to top right, transparent calc(50% - 1px), "
+        ++ line
+        ++ " calc(50% - 1px), "
+        ++ line
+        ++ " calc(50% + 1px), transparent calc(50% + 1px))"
+
+
+lightnessSlider :
+    Selection
+    -> { hue : Int, saturation : Int, lightness : Int }
+    -> (Selection -> msg)
+    -> Ui.Element msg
+lightnessSlider selection parts onChange =
     let
         sliderLabel : { element : Ui.Element msg, id : Ui.Input.Label }
         sliderLabel =
@@ -289,7 +375,8 @@ lightnessSlider parts onChange =
             , Ui.rounded 4
             ]
             { label = sliderLabel.id
-            , onChange = \value -> onChange (fromParts { parts | lightness = round value })
+            , onChange =
+                \value -> select selection (fromParts { parts | lightness = round value }) |> onChange
             , min = 3
             , max = toFloat (lightnessCount - 1) - 2
             , value = toFloat parts.lightness

@@ -286,7 +286,7 @@ type alias UserOptionsModel =
     , debugData : Maybe { data : String, loadedAt : Time.Posix }
     , -- What the colour picker is pointing at, or Nothing while it's put away. The grid
       -- takes up a lot of room, so it stays hidden until asked for.
-      color : Maybe UserColor
+      color : Maybe UserColor.Selection
     }
 
 
@@ -567,7 +567,7 @@ type FrontendMsg_
     | PressedAddDomainToWhitelist Bool
     | TypedDomainWhitelist String
     | PressedSelectNewColor
-    | SelectedUserColor UserColor
+    | SelectedUserColor UserColor.Selection
     | PressedSubmitUserColor
     | PressedResetUserColor
     | PressedSaveDomainWhitelist

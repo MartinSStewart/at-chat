@@ -44,7 +44,6 @@ import Local
 import LocalState exposing (LocalState)
 import MembersAndOwner
 import Message
-import MyUi
 import NonemptyDict
 import Pages.Guild
 import RichText
@@ -1858,22 +1857,26 @@ colorPickerTest config =
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
                 , admin.click 1000 (Dom.id "guild_showUserOptions")
 
-                -- The grid is a lot of squares, so it stays put away until asked for.
+                -- The grid is a lot of squares, so it stays put away until asked for, with
+                -- the colour they already have shown beside the button.
                 , admin.checkView
                     100
-                    (Test.Html.Query.has [ Test.Html.Selector.id "userOptions_selectColor" ])
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.id "userOptions_selectColor"
+                        , Test.Html.Selector.id "userOptions_currentColor"
+                        ]
+                    )
                 , admin.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.id "userColor_lightness" ])
                 , admin.click 100 (Dom.id "userOptions_selectColor")
 
-                -- Out comes the picker, the colour they already have to compare against, and
-                -- an example message scrawled on in whatever is selected.
+                -- Out come the picker and an example message scrawled on in whatever is
+                -- selected.
                 , admin.checkView
                     100
                     (Test.Html.Query.has
                         [ Test.Html.Selector.id "userColor_lightness"
-                        , Test.Html.Selector.id "userOptions_currentColor"
                         , Test.Html.Selector.text "Hello"
                         ]
                     )
@@ -1883,7 +1886,18 @@ colorPickerTest config =
                 , admin.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.id "userOptions_submitColor" ])
-                , admin.input 100 (Dom.id "userColor_lightness") "5"
+
+                -- Turning the brightness right down leaves the chosen square too dark to be
+                -- used, so the preview holds onto the last colour that could be and there's
+                -- still nothing to submit.
+                , admin.input 100 (Dom.id "userColor_lightness") "3"
+                , admin.checkView 100 (hasStrokeColored UserColor.default)
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "userOptions_submitColor" ])
+
+                -- Back to a brightness that works and the colour moves again.
+                , admin.input 100 (Dom.id "userColor_lightness") "10"
                 , admin.checkView
                     100
                     (Test.Html.Query.has [ Test.Html.Selector.id "userOptions_submitColor" ])
@@ -1898,7 +1912,7 @@ colorPickerTest config =
 
                 -- Submitting saves it and puts the grid away too.
                 , admin.click 100 (Dom.id "userOptions_selectColor")
-                , admin.input 100 (Dom.id "userColor_lightness") "5"
+                , admin.input 100 (Dom.id "userColor_lightness") "10"
                 , admin.click 100 (Dom.id "userOptions_submitColor")
                 , admin.checkView
                     100
@@ -1912,7 +1926,7 @@ colorPickerTest config =
 hasStrokeSelector : UserColor.UserColor -> Test.Html.Selector.Selector
 hasStrokeSelector color =
     Test.Html.Selector.attribute
-        (Html.Attributes.attribute "stroke" (MyUi.colorToStyle (UserColor.toColor color)))
+        (Html.Attributes.attribute "stroke" (UserColor.toStyle color))
 
 
 hasStrokeColored : UserColor.UserColor -> Test.Html.Query.Single msg -> Expect.Expectation

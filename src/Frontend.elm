@@ -89,6 +89,7 @@ import Untrusted
 import Url exposing (Url)
 import User exposing (FrontendUser)
 import UserAgent
+import UserColor
 import UserOptions
 import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
@@ -3266,7 +3267,9 @@ updateLoaded msg model =
                                     Just
                                         { userOptions
                                             | color =
-                                                Just (Local.model loggedIn.localState).localUser.user.color
+                                                (Local.model loggedIn.localState).localUser.user.color
+                                                    |> UserColor.startPicking
+                                                    |> Just
                                         }
                               }
                             , Command.none
@@ -3277,12 +3280,12 @@ updateLoaded msg model =
                 )
                 model
 
-        SelectedUserColor color ->
+        SelectedUserColor selection ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     case loggedIn.userOptions of
                         Just userOptions ->
-                            ( { loggedIn | userOptions = Just { userOptions | color = Just color } }
+                            ( { loggedIn | userOptions = Just { userOptions | color = Just selection } }
                             , Command.none
                             )
 
@@ -3299,7 +3302,7 @@ updateLoaded msg model =
                             -- Saving is the end of picking, so the grid goes away again.
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Maybe.map Local_SetUserColor userOptions.color)
+                                (Maybe.map (\selection -> Local_SetUserColor (UserColor.picked selection)) userOptions.color)
                                 { loggedIn | userOptions = Just { userOptions | color = Nothing } }
                                 Command.none
 

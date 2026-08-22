@@ -377,12 +377,12 @@ view isMobile textInputFocus time local loggedIn loaded model =
                                             ]
                                         ]
 
-                                    Just color ->
-                                        [ colorPreview time isMobile local allUsers color
-                                        , UserColor.picker isMobile color SelectedUserColor
+                                    Just selection ->
+                                        [ colorPreview time isMobile local allUsers (UserColor.picked selection)
+                                        , UserColor.picker isMobile selection SelectedUserColor
                                         , Ui.row
                                             [ Ui.spacing 8 ]
-                                            [ if color == local.localUser.user.color then
+                                            [ if UserColor.picked selection == local.localUser.user.color then
                                                 Ui.none
 
                                               else
