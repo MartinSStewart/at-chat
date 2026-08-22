@@ -1,4 +1,4 @@
-module UserColor exposing (Selection, UserColor(..), default, picked, picker, startPicking, toColor, toStyle)
+module UserColor exposing (Selection, UserColor(..), default, picked, picker, startPicking, swatchId, toColor, toStyle)
 
 import Color
 import Effect.Browser.Dom as Dom
