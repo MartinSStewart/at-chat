@@ -80,7 +80,8 @@ import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileS
 import Game
 import Go
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, ExportChannelId, GamePublicId, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId, Viewing_DiscordDmId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, ExportChannelId, GamePublicId, GuildId, GuildOrDmId, Id, InviteLinkId, QuestionId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId, Viewing_DiscordDmId)
+import IdArray exposing (IdArray)
 import ImageEditor
 import ImageViewer
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
@@ -1009,7 +1010,7 @@ type LocalChange
     | Local_SetNotificationMode NotificationMode
     | Local_ExpandUserOptionSection UserOptionSection
     | Local_CollapseUserOptionSection UserOptionSection
-    | Local_SetSheepGameQuestions (Array UserSession.SheepGameQuestion)
+    | Local_SetSheepGameQuestions (IdArray QuestionId UserSession.SheepGameQuestion)
     | Local_SetEmailNotifications EmailNotifications
     | Local_RegisterPushSubscription Time.Posix RegisterPushSubscription
     | Local_TextEditor TextEditor.LocalChange
