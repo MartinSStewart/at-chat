@@ -19,6 +19,7 @@ module User exposing
     , commonlyUsedEmojis
     , discordFullDataUserToFrontendCurrentUser
     , discordProfileImage
+    , discordUserColor
     , discordUserDataToFrontendUser
     , getDiscordUser
     , getUser
@@ -46,6 +47,7 @@ module User exposing
     , setName
     , toString
     , toStringAlt
+    , userColor
     )
 
 import Array
@@ -759,22 +761,37 @@ type alias FrontendUser =
     }
 
 
-discordUserDataToFrontendUser : DiscordUserData -> DiscordFrontendUser
-discordUserDataToFrontendUser discordUserData =
+discordUserDataToFrontendUser : NonemptyDict (Id UserId) BackendUser -> DiscordUserData -> DiscordFrontendUser
+discordUserDataToFrontendUser users discordUserData =
     case discordUserData of
         DiscordUserData.BasicData data ->
             { name = PersonName.fromStringLossy data.user.username
             , icon = data.icon
+            , color = UserColor.default
             }
 
         DiscordUserData.FullData data ->
             { name = PersonName.fromStringLossy data.user.username
             , icon = data.icon
+            , color =
+                case NonemptyDict.get data.linkedTo users of
+                    Just linkedUser ->
+                        linkedUser.color
+
+                    Nothing ->
+                        UserColor.default
             }
 
         DiscordUserData.NeedsAuthAgain data ->
             { name = PersonName.fromStringLossy data.user.username
             , icon = data.icon
+            , color =
+                case NonemptyDict.get data.linkedTo users of
+                    Just linkedUser ->
+                        linkedUser.color
+
+                    Nothing ->
+                        UserColor.default
             }
 
 
@@ -803,13 +820,21 @@ allUsers localUser =
 
 
 discordFullDataUserToFrontendCurrentUser :
-    Bool
-    -> { a | user : Discord.User, icon : Maybe FileHash, linkedAt : Time.Posix }
+    NonemptyDict (Id UserId) BackendUser
+    -> Bool
+    -> { a | user : Discord.User, icon : Maybe FileHash, linkedAt : Time.Posix, linkedTo : Id UserId }
     -> DiscordUserLoadingData
     -> DiscordFrontendCurrentUser
-discordFullDataUserToFrontendCurrentUser needsAuthAgain data isLoadingData =
+discordFullDataUserToFrontendCurrentUser users needsAuthAgain data isLoadingData =
     { name = PersonName.fromStringLossy data.user.username
     , icon = data.icon
+    , color =
+        case NonemptyDict.get data.linkedTo users of
+            Just linkedUser ->
+                linkedUser.color
+
+            Nothing ->
+                UserColor.default
     , email =
         case data.user.email of
             Included maybeText ->
@@ -921,6 +946,26 @@ smallProfileImageSize =
 profileImageRounding : Int
 profileImageRounding =
     8
+
+
+userColor : LocalUser -> Id UserId -> UserColor
+userColor localUser userId =
+    case getUser userId localUser of
+        Just user ->
+            user.color
+
+        Nothing ->
+            UserColor.default
+
+
+discordUserColor : LocalUser -> Discord.Id Discord.UserId -> UserColor
+discordUserColor localUser userId =
+    case getDiscordUser userId localUser of
+        Just user ->
+            user.color
+
+        Nothing ->
+            UserColor.default
 
 
 profileImage : Maybe { a | color : UserColor, icon : Maybe FileHash } -> Element msg

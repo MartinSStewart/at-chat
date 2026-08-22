@@ -47,6 +47,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import UserAgent exposing (UserAgent)
+import UserColor exposing (UserColor)
 
 
 type alias UserSession =
@@ -236,6 +237,7 @@ type alias ViewDiscordGuildData messageId =
 type alias DiscordFrontendUser =
     { name : PersonName
     , icon : Maybe FileHash
+    , color : UserColor
     }
 
 

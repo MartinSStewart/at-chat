@@ -93,6 +93,7 @@ import Ui.Lazy
 import Ui.Prose
 import Ui.Shadow
 import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
+import UserColor exposing (UserColor)
 import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, PreviouslyLastViewedMessage(..), Viewing(..))
 import VisibleMessages exposing (VisibleMessages)
 
@@ -3536,7 +3537,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                     :: List.map
                                         (Tuple.mapSecond (Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)))
                                         (newMessageLine
-                                            Drawing.userColor
+                                            (User.userColor local.localUser)
                                             isSelectingAnchor
                                             channel.dateDividerDrawings
                                             maybeLastDate
@@ -3833,7 +3834,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                     :: List.map
                                         (Tuple.mapSecond (Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)))
                                         (newMessageLine
-                                            Drawing.discordUserColor
+                                            (User.discordUserColor local.localUser)
                                             isSelectingAnchor
                                             channel.dateDividerDrawings
                                             maybeLastDate
@@ -3856,7 +3857,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
 
 
 newMessageLine :
-    (userId -> String)
+    (userId -> UserColor)
     -> Bool
     -> SeqDict Date (Drawing userId)
     -> Maybe Date
@@ -4142,7 +4143,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                         :: List.map
                             (Tuple.mapSecond (Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)))
                             (newMessageLine
-                                Drawing.userColor
+                                (User.userColor local.localUser)
                                 isSelectingAnchor
                                 thread.dateDividerDrawings
                                 maybeLastDate
@@ -4355,7 +4356,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                         :: List.map
                             (Tuple.mapSecond (Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)))
                             (newMessageLine
-                                Drawing.discordUserColor
+                                (User.discordUserColor local.localUser)
                                 isSelectingAnchor
                                 thread.dateDividerDrawings
                                 maybeLastDate
@@ -4386,7 +4387,7 @@ unloadedMessageView index =
         (Ui.text ("Something went wrong when loading message " ++ String.fromInt index))
 
 
-dateDivider : (userId -> String) -> Bool -> SeqDict Date (Drawing userId) -> Date -> Date -> Ui.Attribute MessageViewMsg
+dateDivider : (userId -> UserColor) -> Bool -> SeqDict Date (Drawing userId) -> Date -> Date -> Ui.Attribute MessageViewMsg
 dateDivider userIdToColor isSelectingAnchor dateDividerDrawings laterDate newDate =
     Ui.inFront
         (Ui.column
@@ -6880,7 +6881,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                     localUser
                     revealedSpoilers
                     allUsers
-                    Drawing.userColor
+                    (User.userColor localUser)
                     isHovered
                     messageId
                     data
@@ -6908,7 +6909,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                     []
                     [ userJoinedContent userId allUsers
                     , messageTimestamp
-                        Drawing.userColor
+                        (User.userColor localUser)
                         drawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -6965,7 +6966,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 (Ui.row
                     [ Ui.contentTop ]
                     [ callStartedCard
-                        Drawing.userColor
+                        (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
                         callStartedData.cardDrawings
@@ -6974,7 +6975,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                         callStartedData.endedAt
                         allUsers
                     , messageTimestamp
-                        Drawing.userColor
+                        (User.userColor localUser)
                         callStartedData.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7005,7 +7006,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 (Ui.row
                     [ Ui.contentTop ]
                     [ goMatchStartedCard
-                        Drawing.userColor
+                        (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
                         messageId
@@ -7013,7 +7014,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                         allUsers
                         gameStarted.gameType
                     , messageTimestamp
-                        Drawing.userColor
+                        (User.userColor localUser)
                         gameStarted.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7106,7 +7107,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                     []
                     [ userJoinedContent userId allUsers
                     , messageTimestamp
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         drawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7163,7 +7164,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 (Ui.row
                     [ Ui.contentTop ]
                     [ callStartedCard
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
                         callStartedData.cardDrawings
@@ -7172,7 +7173,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                         callStartedData.endedAt
                         allUsers
                     , messageTimestamp
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         callStartedData.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7203,7 +7204,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 (Ui.row
                     [ Ui.contentTop ]
                     [ goMatchStartedCard
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
                         messageId
@@ -7211,7 +7212,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                         allUsers
                         gameStarted.gameType
                     , messageTimestamp
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         gameStarted.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7273,7 +7274,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                     localUser
                     revealedSpoilers
                     allUsers
-                    Drawing.userColor
+                    (User.userColor localUser)
                     isHovered
                     messageId
                     message2
@@ -7297,7 +7298,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                     []
                     [ userJoinedContent userId allUsers
                     , messageTimestamp
-                        Drawing.userColor
+                        (User.userColor localUser)
                         drawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7345,7 +7346,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 (Ui.row
                     []
                     [ callStartedCard
-                        Drawing.userColor
+                        (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
                         callStartedData.cardDrawings
@@ -7354,7 +7355,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                         callStartedData.endedAt
                         allUsers
                     , messageTimestamp
-                        Drawing.userColor
+                        (User.userColor localUser)
                         callStartedData.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7380,7 +7381,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 (Ui.row
                     []
                     [ goMatchStartedCard
-                        Drawing.userColor
+                        (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
                         messageId
@@ -7388,7 +7389,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                         allUsers
                         gameStarted.gameType
                     , messageTimestamp
-                        Drawing.userColor
+                        (User.userColor localUser)
                         gameStarted.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7470,7 +7471,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                     []
                     [ userJoinedContent userId allUsers
                     , messageTimestamp
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         drawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7518,7 +7519,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 (Ui.row
                     []
                     [ callStartedCard
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
                         callStartedData.cardDrawings
@@ -7527,7 +7528,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                         callStartedData.endedAt
                         allUsers
                     , messageTimestamp
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         callStartedData.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7553,7 +7554,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 (Ui.row
                     []
                     [ goMatchStartedCard
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
                         messageId
@@ -7561,7 +7562,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                         allUsers
                         gameStarted.gameType
                     , messageTimestamp
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         gameStarted.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7611,7 +7612,7 @@ userTextMessageContent :
     -> LocalUser
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id UserId) FrontendUser
-    -> (Id UserId -> String)
+    -> (Id UserId -> UserColor)
     -> IsHovered
     -> Id messageId
     -> UserTextMessageData messageId (Id UserId)
@@ -7773,7 +7774,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
             |> Ui.el
                 (Drawing.anchorHighlight
                     (Drawing.profileImageAnchorId messageId)
-                    Drawing.discordUserColor
+                    (User.discordUserColor localUser)
                     MessageView_PressedUserIconAnchor
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     message2.userIconDrawings
@@ -7817,7 +7818,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold ]
                 , messageTimestamp
-                    Drawing.discordUserColor
+                    (User.discordUserColor localUser)
                     message2.timestampDrawings
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     messageId
@@ -7850,7 +7851,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                     , time = time
                     , drawings = message2.imageAttachmentDrawings
                     , embedDrawings = message2.embedDrawings
-                    , drawingUserColor = Drawing.discordUserColor
+                    , drawingUserColor = User.discordUserColor localUser
                     , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
                     , devicePixelRatio = localUser.devicePixelRatio
                     , isHovered =
@@ -7923,11 +7924,11 @@ deletedMessageContent messageId isSelectingAnchor highlight createdAt timezone =
                     Ui.background MyUi.hoverAndReplyToColor
             ]
             (Ui.text LocalState.messageDeleted)
-        , messageTimestamp (\_ -> "") Drawing.emptyDrawing isSelectingAnchor messageId createdAt timezone
+        , messageTimestamp (\_ -> UserColor.default) Drawing.emptyDrawing isSelectingAnchor messageId createdAt timezone
         ]
 
 
-messageTimestamp : (userId -> String) -> Drawing userId -> Bool -> Id messageId -> Time.Posix -> Time.Zone -> Element MessageViewMsg
+messageTimestamp : (userId -> UserColor) -> Drawing userId -> Bool -> Id messageId -> Time.Posix -> Time.Zone -> Element MessageViewMsg
 messageTimestamp userIdToColor drawings isSelectingAnchor messageId createdAt timezone =
     Ui.el
         ([ Ui.Font.size 14
@@ -8111,7 +8112,7 @@ goMatchStarted userId allUsers =
 
 
 callStartedCard :
-    (userId -> String)
+    (userId -> UserColor)
     -> Bool
     -> Id messageId
     -> Drawing userId
@@ -8134,7 +8135,7 @@ callStartedCard userIdToColor isSelectingAnchor messageId drawings userId starte
 
 
 goMatchStartedCard :
-    (userId -> String)
+    (userId -> UserColor)
     -> Bool
     -> Drawing userId
     -> Id messageId
@@ -8182,7 +8183,7 @@ goMatchStartedCard userIdToColor isSelectingAnchor drawings messageId userId all
 
 
 eventCard :
-    (userId -> String)
+    (userId -> UserColor)
     -> Bool
     -> Id messageId
     -> Drawing userId

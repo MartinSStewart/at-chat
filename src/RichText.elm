@@ -85,6 +85,7 @@ import TimeInMinutes exposing (TimeInMinutes)
 import Touch exposing (ScreenCoordinate)
 import UInt64
 import Url exposing (Protocol(..), Url)
+import UserColor exposing (UserColor)
 
 
 {-| CSS background that hides spoilered content until it's revealed
@@ -3360,7 +3361,7 @@ preview onPressLink config nonempty =
         , time = config.time
         , drawings = SeqDict.empty
         , embedDrawings = SeqDict.empty
-        , drawingUserColor = always ""
+        , drawingUserColor = \_ -> UserColor.default
         , isSelectingAnchor = False
         , -- Previews replace code blocks with a placeholder, so no ascii art is drawn here
           devicePixelRatio = 1
@@ -3386,7 +3387,7 @@ type alias Config a userId =
       time : Time.Posix
     , drawings : SeqDict (Id FileId) (Drawing userId)
     , embedDrawings : SeqDict Int (Drawing userId)
-    , drawingUserColor : userId -> String
+    , drawingUserColor : userId -> UserColor
     , isSelectingAnchor : Bool
     , devicePixelRatio : Float
     , isHovered : Bool

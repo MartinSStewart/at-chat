@@ -296,19 +296,19 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             :: Ui.text "This is the color used when you use the drawing tool or to represent you in some games."
                             :: (case model.color of
                                     Nothing ->
-                                        [ MyUi.secondaryButton
-                                            (Dom.id "userOptions_selectColor")
-                                            PressedSelectNewColor
-                                            "Select new color"
+                                        [ Ui.row
+                                            [ Ui.spacing 8 ]
+                                            [ currentColorSquare local.localUser.user.color
+                                            , MyUi.secondaryButtonTall
+                                                (Dom.id "userOptions_selectColor")
+                                                PressedSelectNewColor
+                                                "Select new color"
+                                            ]
                                         ]
 
                                     Just color ->
                                         [ colorPreview time isMobile local allUsers color
-                                        , Ui.row
-                                            [ Ui.spacing 8 ]
-                                            [ currentColorSquare local.localUser.user.color
-                                            , UserColor.picker color SelectedUserColor
-                                            ]
+                                        , UserColor.picker color SelectedUserColor
                                         , Ui.row
                                             [ Ui.spacing 8 ]
                                             [ if color == local.localUser.user.color then
@@ -319,7 +319,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                                                     (Dom.id "userOptions_submitColor")
                                                     PressedSubmitUserColor
                                                     (Ui.text "Submit")
-                                            , MyUi.secondaryButton
+                                            , MyUi.secondaryButtonTall
                                                 (Dom.id "userOptions_resetColor")
                                                 PressedResetUserColor
                                                 "Reset"
@@ -884,7 +884,7 @@ colorPreview time isMobile local allUsers color =
               )
             ]
         )
-        (\_ -> MyUi.colorToStyle (UserColor.toColor color))
+        (\_ -> color)
         IsNotHovered
         (Id.fromInt 0)
         { message | userIconDrawings = exampleDrawing local.localUser.session.userId }

@@ -4866,7 +4866,7 @@ changeUpdate localMsg local =
                                 local.discordGuilds
                     }
 
-                Server_DiscordGuildMemberJoined time guildId channelId userJoinedId name ->
+                Server_DiscordGuildMemberJoined time guildId channelId userJoinedId name color ->
                     let
                         localUser =
                             local.localUser
@@ -4909,7 +4909,7 @@ changeUpdate localMsg local =
                                                     { user | name = name }
 
                                                 Nothing ->
-                                                    { name = name, icon = Nothing }
+                                                    { name = name, icon = Nothing, color = color }
                                         )
                                         localUser.discordUsers
                             }

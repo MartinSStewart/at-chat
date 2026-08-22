@@ -1,4 +1,4 @@
-module UserColor exposing (UserColor, default, picker, toColor)
+module UserColor exposing (UserColor, default, picker, toColor, toStyle)
 
 import Color
 import Effect.Browser.Dom as Dom
@@ -72,6 +72,21 @@ toParts (UserColor index) =
     , saturation = modBy saturationCount (wrapped // hueCount)
     , lightness = wrapped // (hueCount * saturationCount)
     }
+
+
+toStyle : UserColor -> String
+toStyle userColor =
+    let
+        parts =
+            toParts userColor
+    in
+    "hsl("
+        ++ String.fromFloat (360 * toFloat parts.hue / toFloat hueCount)
+        ++ " "
+        ++ String.fromFloat (100 * toFloat parts.saturation / toFloat (saturationCount - 1))
+        ++ " "
+        ++ String.fromFloat (100 * toFloat parts.lightness / toFloat (lightnessCount - 1))
+        ++ ")"
 
 
 {-| The grid never offers pure black or pure white, and never a colour with no colour left in

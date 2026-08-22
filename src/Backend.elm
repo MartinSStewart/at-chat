@@ -605,6 +605,26 @@ update msg model =
                                                     discordUserId
                                                     { name = DiscordUserData.username user2 |> PersonName.fromStringLossy
                                                     , icon = fileHash
+                                                    , color =
+                                                        case user of
+                                                            FullData data ->
+                                                                case NonemptyDict.get data.linkedTo model.users of
+                                                                    Just linkedUser ->
+                                                                        linkedUser.color
+
+                                                                    Nothing ->
+                                                                        UserColor.default
+
+                                                            BasicData data ->
+                                                                UserColor.default
+
+                                                            NeedsAuthAgain data ->
+                                                                case NonemptyDict.get data.linkedTo model.users of
+                                                                    Just linkedUser ->
+                                                                        linkedUser.color
+
+                                                                    Nothing ->
+                                                                        UserColor.default
                                                     }
                                                 )
                                                 model
@@ -723,7 +743,7 @@ update msg model =
                             userId
                             (Server_LinkDiscordUser
                                 discordUser.id
-                                (User.discordFullDataUserToFrontendCurrentUser False backendUser backendUser.isLoadingData)
+                                (User.discordFullDataUserToFrontendCurrentUser model.users False backendUser backendUser.isLoadingData)
                                 |> ServerChange
                             )
                             model
@@ -762,7 +782,7 @@ update msg model =
                             userId
                             (Server_LinkDiscordUser
                                 discordUserId
-                                (User.discordFullDataUserToFrontendCurrentUser False discordUser2 discordUser2.isLoadingData)
+                                (User.discordFullDataUserToFrontendCurrentUser model.users False discordUser2 discordUser2.isLoadingData)
                                 |> ServerChange
                             )
                             model
@@ -4472,7 +4492,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         Just member ->
                                             SeqDict.insert
                                                 memberId
-                                                (User.discordUserDataToFrontendUser member)
+                                                (User.discordUserDataToFrontendUser model.users member)
                                                 dict
 
                                         Nothing ->
@@ -5341,14 +5361,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     BackendExtra.asUser
                         model
                         sessionId
-                        (\{ userId } user ->
-                            ( { model | users = NonemptyDict.insert userId { user | color = color } model.users }
+                        (\session user ->
+                            ( { model | users = NonemptyDict.insert session.userId { user | color = color } model.users }
                             , Command.batch
                                 [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
                                 , Broadcast.toEveryoneWhoCanSeeUser
                                     clientId
-                                    userId
-                                    (ServerChange (Server_SetUserColor userId color))
+                                    session.userId
+                                    (ServerChange (Server_SetUserColor session.userId color))
                                     model
                                 ]
                             )

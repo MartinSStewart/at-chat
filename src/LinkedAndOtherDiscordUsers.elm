@@ -23,6 +23,7 @@ import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
+import UserColor exposing (UserColor)
 import UserSession exposing (DiscordFrontendUser)
 
 
@@ -32,6 +33,7 @@ type LinkedAndOtherDiscordUsers
 
 type alias DiscordFrontendCurrentUser =
     { name : PersonName
+    , color : UserColor
     , icon : Maybe FileHash
     , email : Maybe EmailAddress
     , needsAuthAgain : Bool
@@ -111,6 +113,7 @@ discordCurrentUserToFrontend : DiscordFrontendCurrentUser -> DiscordFrontendUser
 discordCurrentUserToFrontend user =
     { name = user.name
     , icon = user.icon
+    , color = user.color
     }
 
 

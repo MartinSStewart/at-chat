@@ -69,6 +69,7 @@ import Thread exposing (DiscordBackendThread)
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, LocalChange(..), LocalMsg(..), MessageFromGuildOrDm(..), ServerChange(..), ToFrontend(..))
 import UInt64
 import User
+import UserColor
 import UserSession exposing (DiscordFrontendUser, UserSession)
 
 
@@ -354,10 +355,10 @@ messageSender : Discord.User -> BackendModel -> DiscordFrontendUser
 messageSender author model =
     case SeqDict.get author.id model.discordUsers of
         Just discordUser ->
-            User.discordUserDataToFrontendUser discordUser
+            User.discordUserDataToFrontendUser model.users discordUser
 
         Nothing ->
-            { name = PersonName.fromStringLossy author.username, icon = Nothing }
+            { name = PersonName.fromStringLossy author.username, icon = Nothing, color = UserColor.default }
 
 
 discordChannelIdToChannelIdNoMessage :
@@ -1282,6 +1283,31 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                     discordMessage.channelId
                                                     discordMessage.author.id
                                                     (PersonName.fromStringLossy discordMessage.author.username)
+                                                    (case SeqDict.get discordMessage.author.id model2.discordUsers of
+                                                        Just discordUser ->
+                                                            case discordUser of
+                                                                FullData data ->
+                                                                    case NonemptyDict.get data.linkedTo model2.users of
+                                                                        Just user ->
+                                                                            user.color
+
+                                                                        Nothing ->
+                                                                            UserColor.default
+
+                                                                BasicData discordBasicUserData ->
+                                                                    UserColor.default
+
+                                                                NeedsAuthAgain data ->
+                                                                    case NonemptyDict.get data.linkedTo model2.users of
+                                                                        Just user ->
+                                                                            user.color
+
+                                                                        Nothing ->
+                                                                            UserColor.default
+
+                                                        Nothing ->
+                                                            UserColor.default
+                                                    )
                                                     |> ServerChange
                                                 )
                                                 model2
@@ -1886,10 +1912,10 @@ forumPostSender : Discord.Id Discord.UserId -> BackendModel -> DiscordFrontendUs
 forumPostSender userId model =
     case SeqDict.get userId model.discordUsers of
         Just discordUser ->
-            User.discordUserDataToFrontendUser discordUser
+            User.discordUserDataToFrontendUser model.users discordUser
 
         Nothing ->
-            { name = PersonName.fromStringLossy "Missing", icon = Nothing }
+            { name = PersonName.fromStringLossy "Missing", icon = Nothing, color = UserColor.default }
 
 
 {-| When a snowflake id was created. The top bits of the id hold the number of milliseconds
