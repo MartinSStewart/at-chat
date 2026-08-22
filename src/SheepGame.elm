@@ -86,6 +86,7 @@ import Ui.Lazy
 import Ui.Prose
 import Ui.Shadow
 import User exposing (FrontendUser, LocalUser)
+import UserColor
 
 
 type alias ValidatedSetup =
@@ -2303,6 +2304,16 @@ resultsQuestionView time contentWidth localUser setup maxPoints index result =
         ]
 
 
+userColor : Id UserId -> LocalUser -> Ui.Color
+userColor userId local =
+    case User.getUser userId local of
+        Just user ->
+            UserColor.toColor user.color
+
+        Nothing ->
+            UserColor.toColor UserColor.default
+
+
 {-| Answers that scored together, drawn together. The biggest group is last, so that the
 answer everyone landed on is what the eye finishes on.
 -}
@@ -2324,7 +2335,7 @@ answerGroupsView localUser answers =
                             [ Ui.el
                                 [ Ui.width Ui.shrink
                                 , Ui.Font.bold
-                                , MyUi.htmlStyle "color" (Drawing.userColor userId)
+                                , Ui.Font.color (userColor userId localUser)
                                 ]
                                 (Ui.text (User.toStringAlt userId localUser))
 
@@ -2381,21 +2392,14 @@ scoreRowView localUser maxPoints answerResult =
     in
     Ui.row
         [ Ui.spacing 4 ]
-        [ Ui.el
-            [ Ui.width (Ui.px 90)
-            , Ui.Font.size 14
-            , Ui.Font.alignRight
-            , Ui.clipWithEllipsis
-            , MyUi.htmlStyle "color" (Drawing.userColor userId)
-            ]
-            (Ui.text (User.toStringAlt userId localUser))
+        [ User.profileImage (User.getUser userId localUser)
         , Ui.row
-            []
+            [ Ui.height Ui.fill ]
             [ Ui.el
                 [ Ui.width (Ui.portion filled)
-                , Ui.height (Ui.px 20)
+                , Ui.height Ui.fill
                 , Ui.rounded 2
-                , MyUi.htmlStyle "background-color" (Drawing.userColor userId)
+                , Ui.background (userColor userId localUser)
                 , Ui.onRight
                     (Ui.row
                         [ Ui.width Ui.shrink, Ui.move (Ui.right 8), Ui.centerY, Ui.spacing 4 ]
@@ -2436,7 +2440,7 @@ finalResultsView localUser winners =
                                     Ui.el
                                         [ Ui.width Ui.shrink
                                         , Ui.Font.bold
-                                        , MyUi.htmlStyle "color" (Drawing.userColor userId)
+                                        , Ui.Font.color (userColor userId localUser)
                                         ]
                                         (Ui.text (User.toStringAlt userId localUser))
                                 )
@@ -2628,7 +2632,7 @@ resultsGridLabel localUser gridHovered hoveredSide userId =
         , Ui.paddingXY 8 0
         , Ui.contentCenterY
         , MyUi.noPointerEvents
-        , MyUi.htmlStyle "color" (Drawing.userColor userId)
+        , Ui.Font.color (userColor userId localUser)
         , if Maybe.map hoveredSide gridHovered == Just userId then
             Ui.background (Ui.rgba 255 255 255 0.1)
 
