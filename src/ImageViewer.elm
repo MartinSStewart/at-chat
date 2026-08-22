@@ -14,6 +14,9 @@ On mobile those buttons are hidden (taps on them are swallowed by the touch
 handlers used for dragging); instead you pinch to zoom and drag the image off
 the edge of the screen to dismiss it.
 
+Clicking or tapping the backdrop (anywhere outside of the image) also closes the
+viewer.
+
 -}
 
 import Coord exposing (Coord)
@@ -82,6 +85,7 @@ type Msg
     = PressedClose
     | PressedZoomIn
     | PressedZoomOut
+    | PressStartedOnButton
     | MouseDown Float Float
     | MouseMove Float Float
     | MouseUp
@@ -146,6 +150,9 @@ update windowSize msg model =
 
         PressedZoomOut ->
             Just (zoomTowards (centerX windowSize) (centerY windowSize) (model.targetScale / 1.25) model)
+
+        PressStartedOnButton ->
+            Just model
 
         MouseDown x y ->
             Just (beginDrag x y model)
@@ -432,15 +439,59 @@ applyZoomEasing windowSize frames model =
 
 
 {-| When an interaction ends, close the viewer if the image has been dragged
-entirely off the screen, otherwise keep whatever fling velocity was built up.
+entirely off the screen or if the backdrop was pressed, otherwise keep whatever
+fling velocity was built up.
 -}
 endInteraction : Coord CssPixels -> Model -> Maybe Model
 endInteraction windowSize model =
-    if isOffScreen windowSize model then
+    if isOffScreen windowSize model || pressedBackdrop windowSize model then
         Nothing
 
     else
         Just { model | interaction = NoInteraction }
+
+
+{-| True if this was a press that stayed put (so it was a click or a tap rather
+than a drag) and started on the backdrop instead of on the image.
+-}
+pressedBackdrop : Coord CssPixels -> Model -> Bool
+pressedBackdrop windowSize model =
+    case model.interaction of
+        Dragging drag ->
+            (abs (model.offsetX - drag.offsetStartX) < pressMaxMovement)
+                && (abs (model.offsetY - drag.offsetStartY) < pressMaxMovement)
+                && not (isOverImage windowSize drag.startX drag.startY model)
+
+        Pinching _ ->
+            False
+
+        NoInteraction ->
+            False
+
+
+{-| How far the image is allowed to move before a press counts as a drag
+instead. Taps in particular tend to wobble by a pixel or two.
+-}
+pressMaxMovement : Float
+pressMaxMovement =
+    10
+
+
+isOverImage : Coord CssPixels -> Float -> Float -> Model -> Bool
+isOverImage windowSize x y model =
+    let
+        ( imageWidth, imageHeight ) =
+            displayedSize windowSize model
+
+        imageCenterX : Float
+        imageCenterX =
+            toFloat (Coord.xRaw windowSize) / 2 + model.offsetX
+
+        imageCenterY : Float
+        imageCenterY =
+            toFloat (Coord.yRaw windowSize) / 2 + model.offsetY
+    in
+    (abs (x - imageCenterX) <= imageWidth / 2) && (abs (y - imageCenterY) <= imageHeight / 2)
 
 
 {-| The size the image fits into before zooming, accounting for the
@@ -635,6 +686,9 @@ isPressMsg msg =
         PressedZoomOut ->
             True
 
+        PressStartedOnButton ->
+            False
+
         MouseDown _ _ ->
             False
 
@@ -798,19 +852,34 @@ view isMobile windowSize model =
         )
 
 
+{-| A press on one of the overlay buttons mustn't reach the overlay itself: it
+would start a drag and, since the buttons sit on the backdrop outside the image,
+releasing would then close the viewer.
+-}
+stopPressPropagation : List (Ui.Attribute Msg)
+stopPressPropagation =
+    [ Html.Events.stopPropagationOn "mousedown" (Json.Decode.succeed ( PressStartedOnButton, True ))
+        |> Ui.htmlAttribute
+    , Html.Events.stopPropagationOn "touchstart" (Json.Decode.succeed ( PressStartedOnButton, True ))
+        |> Ui.htmlAttribute
+    ]
+
+
 closeButton : Element Msg
 closeButton =
     MyUi.elButton
         (Dom.id "imageViewer_close")
         PressedClose
-        [ Ui.alignRight
-        , Ui.alignTop
-        , Ui.paddingXY 16 16
-        , Ui.Font.color MyUi.white
-        , MyUi.htmlStyle "transform" ("translateY(" ++ MyUi.insetTop ++ ")")
-        , Ui.background MyUi.scrim
-        , MyUi.hoverText "Close"
-        ]
+        ([ Ui.alignRight
+         , Ui.alignTop
+         , Ui.paddingXY 16 16
+         , Ui.Font.color MyUi.white
+         , MyUi.htmlStyle "transform" ("translateY(" ++ MyUi.insetTop ++ ")")
+         , Ui.background MyUi.scrim
+         , MyUi.hoverText "Close"
+         ]
+            ++ stopPressPropagation
+        )
         (Ui.html Icons.x)
 
 
@@ -835,13 +904,15 @@ zoomButton htmlId onPress title label =
 zoomButtons : Element Msg
 zoomButtons =
     Ui.row
-        [ Ui.alignBottom
-        , Ui.centerX
-        , Ui.width Ui.shrink
-        , Ui.spacing 16
-        , Ui.paddingXY 16 24
-        , MyUi.htmlStyle "transform" ("translateY(-" ++ MyUi.insetBottom ++ ")")
-        ]
+        ([ Ui.alignBottom
+         , Ui.centerX
+         , Ui.width Ui.shrink
+         , Ui.spacing 16
+         , Ui.paddingXY 16 24
+         , MyUi.htmlStyle "transform" ("translateY(-" ++ MyUi.insetBottom ++ ")")
+         ]
+            ++ stopPressPropagation
+        )
         [ zoomButton (Dom.id "imageViewer_zoomOut") PressedZoomOut "Zoom out" "−"
         , zoomButton (Dom.id "imageViewer_zoomIn") PressedZoomIn "Zoom in" "+"
         ]
