@@ -169,6 +169,7 @@ import Untrusted
 import Url exposing (Protocol(..), Url)
 import User
 import UserAgent
+import UserColor
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import WordSpellingGame
 
@@ -2324,6 +2325,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_ExpandUserOptionSection _ ->
                     False
 
+                Local_SetSheepGameQuestions _ ->
+                    False
+
                 Local_CollapseUserOptionSection _ ->
                     False
 
@@ -2349,6 +2353,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                     False
 
                 Local_SetEmojiSkinTone _ ->
+                    False
+
+                Local_SetUserColor _ ->
                     False
 
                 Local_VoiceChatChange _ ->
@@ -2484,6 +2491,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetName _ _ ->
                             True
 
+                        Types.Server_SetUserColor _ _ ->
+                            True
+
                         Types.Server_SetUserIcon _ _ ->
                             False
 
@@ -2574,7 +2584,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_UpdateDiscordMembers _ _ ->
                             True
 
-                        Types.Server_DiscordGuildMemberJoined _ _ _ _ _ ->
+                        Types.Server_DiscordGuildMemberJoined _ _ _ _ _ _ ->
                             True
 
                         Types.Server_LinkedDiscordUserStickersLoaded _ ->
@@ -2805,6 +2815,7 @@ allAttackerLocalChanges =
     , Local_SetDiscordGuildNotificationLevel discordUserId discordGuildId User.NotifyOnEveryMessage
     , Local_SetDomainWhitelist True (Domain "example.com")
     , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)
+    , Local_SetUserColor UserColor.default
     , Local_SetGuildNotificationLevel legitGuildId User.NotifyOnEveryMessage
     , Local_SetLastViewed guildOrDmId_guild threadRouteWithMessage
     , Local_SetLastViewed guildOrDmId_dm threadRouteWithMessage
@@ -2814,6 +2825,7 @@ allAttackerLocalChanges =
     , Local_SetMuteThread legitGuildId channelId (Id.fromInt 0) MuteSettings.IsMuted
     , Local_SetName (Unsafe.personName "hacked")
     , Local_SetNotificationMode NoNotifications
+    , Local_SetSheepGameQuestions (Array.fromList [ { text = "hacked", attachedFiles = SeqDict.empty } ])
     , Local_SetEmailNotifications User.NotifyMeWhenMentioned
     , Local_StartReloadingDiscordUser messageTime discordUserId
     , Local_TextEditor TextEditor.Local_Reset

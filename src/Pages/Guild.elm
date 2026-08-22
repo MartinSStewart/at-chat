@@ -19,6 +19,7 @@ module Pages.Guild exposing
     , profileImageButtonId
     , threadMessageHtmlId
     , typingDebouncerDelay
+    , userTextMessageContent
     )
 
 import AsciiArt exposing (AsciiArt)
@@ -38,7 +39,7 @@ import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (CachedEmojiData, EmojiConfig, EmojiOrCustomEmoji(..))
 import Env
-import FileStatus exposing (FileHash, FileId, FileMetadata(..), FileStatus)
+import FileStatus exposing (FileHash, FileId, FileStatus)
 import GuildColumn
 import GuildIcon exposing (ChannelNotificationType(..))
 import GuildName exposing (GuildName)
@@ -75,6 +76,7 @@ import Scroll
 import SecretId
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import SheepGame
 import Sticker exposing (AnimationMode(..))
 import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
@@ -91,6 +93,7 @@ import Ui.Lazy
 import Ui.Prose
 import Ui.Shadow
 import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
+import UserColor exposing (UserColor)
 import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, PreviouslyLastViewedMessage(..), Viewing(..))
 import VisibleMessages exposing (VisibleMessages)
 
@@ -106,7 +109,7 @@ loggedInAsView localUser =
         , Ui.spacing 8
         , Ui.clipWithEllipsis
         ]
-        [ User.profileImageNoRounding localUser.session.userId localUser.user.icon
+        [ User.profileImageNoRounding (Just localUser.user)
         , Ui.text (PersonName.toString localUser.user.name)
         , MyUi.elButton
             (Dom.id "guild_showUserOptions")
@@ -407,7 +410,7 @@ unreadOverviewNotMobile local loggedIn model =
 
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers local.localUser
+            User.allUsers local.localUser
 
         containerWidth : Int
         containerWidth =
@@ -667,7 +670,7 @@ unreadOverviewChannels local allDiscordUsers =
 
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers local.localUser
+            User.allUsers local.localUser
     in
     List.concatMap
         (\( guildId, guild ) ->
@@ -1294,7 +1297,7 @@ dmChannelView dmRoute loggedIn local model =
                                     (PersonName.toString otherUser.name)
                                     (threadPreviewText
                                         local.localUser.timezone
-                                        (LocalState.allUsers local.localUser)
+                                        (User.allUsers local.localUser)
                                         threadMessageIndex
                                         dmChannel
                                     )
@@ -2443,7 +2446,7 @@ memberLabel isMobile localUser userId =
         ]
         (case User.getUser userId localUser of
             Just user ->
-                [ User.profileImage userId user.icon, Ui.text (PersonName.toString user.name) ]
+                [ User.profileImage (Just user), Ui.text (PersonName.toString user.name) ]
 
             Nothing ->
                 []
@@ -2565,7 +2568,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                     (ChannelName.toString channel.name)
                                     (threadPreviewText
                                         local.localUser.timezone
-                                        (LocalState.allUsers local.localUser)
+                                        (User.allUsers local.localUser)
                                         threadMessageIndex
                                         channel
                                     )
@@ -3421,7 +3424,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         messageHover2
                                         otherUserIsEditing
                                         local.localUser.session.userId
-                                        (LocalState.allUsers local.localUser)
+                                        (User.allUsers local.localUser)
                                         local.localUser
                                         maybeRepliedTo2
                                         (SeqDict.get threadId channel.threads)
@@ -3432,7 +3435,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                 else
                                     let
                                         allUsers =
-                                            LocalState.allUsers local.localUser
+                                            User.allUsers local.localUser
 
                                         editRichText : Maybe (Nonempty (RichText (Id UserId)))
                                         editRichText =
@@ -3479,7 +3482,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     messageHover2
                                                     otherUserIsEditing
                                                     local.localUser.session.userId
-                                                    (LocalState.allUsers local.localUser)
+                                                    (User.allUsers local.localUser)
                                                     local.localUser
                                                     maybeRepliedTo2
                                                     Nothing
@@ -3510,7 +3513,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     messageHover2
                                                     otherUserIsEditing
                                                     local.localUser.session.userId
-                                                    (LocalState.allUsers local.localUser)
+                                                    (User.allUsers local.localUser)
                                                     local.localUser
                                                     maybeRepliedTo2
                                                     (Just thread)
@@ -3534,7 +3537,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                     :: List.map
                                         (Tuple.mapSecond (Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)))
                                         (newMessageLine
-                                            Drawing.userColor
+                                            (User.userColor local.localUser)
                                             isSelectingAnchor
                                             channel.dateDividerDrawings
                                             maybeLastDate
@@ -3831,7 +3834,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                     :: List.map
                                         (Tuple.mapSecond (Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)))
                                         (newMessageLine
-                                            Drawing.discordUserColor
+                                            (User.discordUserColor local.localUser)
                                             isSelectingAnchor
                                             channel.dateDividerDrawings
                                             maybeLastDate
@@ -3854,7 +3857,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
 
 
 newMessageLine :
-    (userId -> String)
+    (userId -> UserColor)
     -> Bool
     -> SeqDict Date (Drawing userId)
     -> Maybe Date
@@ -4068,7 +4071,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         highlight
                                         messageHover2
                                         otherUserIsEditing
-                                        (LocalState.allUsers local.localUser)
+                                        (User.allUsers local.localUser)
                                         local.localUser.session.userId
                                         local.localUser
                                         maybeRepliedTo2
@@ -4079,7 +4082,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                 else
                                     let
                                         allUsers =
-                                            LocalState.allUsers local.localUser
+                                            User.allUsers local.localUser
 
                                         editRichText : Maybe (Nonempty (RichText (Id UserId)))
                                         editRichText =
@@ -4119,7 +4122,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                             highlight
                                             messageHover2
                                             otherUserIsEditing
-                                            (LocalState.allUsers local.localUser)
+                                            (User.allUsers local.localUser)
                                             local.localUser.session.userId
                                             local.localUser
                                             maybeRepliedTo2
@@ -4140,7 +4143,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                         :: List.map
                             (Tuple.mapSecond (Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)))
                             (newMessageLine
-                                Drawing.userColor
+                                (User.userColor local.localUser)
                                 isSelectingAnchor
                                 thread.dateDividerDrawings
                                 maybeLastDate
@@ -4353,7 +4356,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                         :: List.map
                             (Tuple.mapSecond (Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)))
                             (newMessageLine
-                                Drawing.discordUserColor
+                                (User.discordUserColor local.localUser)
                                 isSelectingAnchor
                                 thread.dateDividerDrawings
                                 maybeLastDate
@@ -4384,7 +4387,7 @@ unloadedMessageView index =
         (Ui.text ("Something went wrong when loading message " ++ String.fromInt index))
 
 
-dateDivider : (userId -> String) -> Bool -> SeqDict Date (Drawing userId) -> Date -> Date -> Ui.Attribute MessageViewMsg
+dateDivider : (userId -> UserColor) -> Bool -> SeqDict Date (Drawing userId) -> Date -> Date -> Ui.Attribute MessageViewMsg
 dateDivider userIdToColor isSelectingAnchor dateDividerDrawings laterDate newDate =
     Ui.inFront
         (Ui.column
@@ -4676,6 +4679,37 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                     |> Ui.map EmojiSelectorMsg
                 )
 
+        EmojiSelectorForSheepGameInput _ position _ ->
+            let
+                y : Int
+                y =
+                    Coord.yRaw position
+                        - MyUi.channelHeaderHeight
+                        -- A question near the bottom of the window doesn't have the room to
+                        -- draw the whole selector underneath it, so it slides back up far
+                        -- enough to fit rather than running off the screen.
+                        |> min (Coord.yRaw model.windowSize - MyUi.channelHeaderHeight - Emoji.selectorHeight)
+                        |> max 0
+            in
+            Ui.inFront
+                (Emoji.selector
+                    model.startupData.scrollbarWidth
+                    x
+                    loggedIn.emojiSelector
+                    emojiConfig
+                    model.emojiData
+                    availableCustomEmojis
+                    local.localUser.customEmojis
+                    availableStickers
+                    local.localUser.stickers
+                    |> Ui.el
+                        [ Ui.paddingXY paddingX 0
+                        , Ui.move { x = 0, y = y, z = 0 }
+                        , emojiSelectorZIndex
+                        ]
+                    |> Ui.map EmojiSelectorMsg
+                )
+
 
 emojiSelectorZIndex : Ui.Attribute msg
 emojiSelectorZIndex =
@@ -4863,7 +4897,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers local.localUser
+            User.allUsers local.localUser
 
         replyTo : Maybe (Id ChannelMessageId)
         replyTo =
@@ -5008,7 +5042,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 )
                 local.localUser
                 loggedIn
-                (LocalState.allUsers local.localUser)
+                (User.allUsers local.localUser)
                 |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) NoThread)
             , peopleAreTypingView allUsers channel local.localUser.session.userId model
             ]
@@ -5207,7 +5241,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                             Nothing ->
                                 SeqDict.empty
                         )
-                        local
+                        local.localUser
 
                 ( _, True ) ->
                     MessageInput.disabledView
@@ -5227,7 +5261,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                             Nothing ->
                                 SeqDict.empty
                         )
-                        local
+                        local.localUser
             , peopleAreTypingView allUsers channel currentDiscordUserId model
             ]
         ]
@@ -5321,7 +5355,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
 
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers local.localUser
+            User.allUsers local.localUser
 
         replyTo : Maybe (Id ChannelMessageId)
         replyTo =
@@ -5483,7 +5517,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 )
                 local.localUser
                 loggedIn
-                (LocalState.allUsers local.localUser)
+                (User.allUsers local.localUser)
                 |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
             , peopleAreTypingView allUsers channel local.localUser.session.userId model
             ]
@@ -5703,7 +5737,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                         let
                             allUsers : SeqDict (Id UserId) FrontendUser
                             allUsers =
-                                LocalState.allUsers local.localUser
+                                User.allUsers local.localUser
 
                             editRichText : Maybe (Nonempty (RichText (Id UserId)))
                             editRichText =
@@ -5746,7 +5780,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                             (messageHover guildOrDmIdNoThread threadRoute loggedIn model)
                             False
                             local.localUser.session.userId
-                            (LocalState.allUsers local.localUser)
+                            (User.allUsers local.localUser)
                             local.localUser
                             Nothing
                             Nothing
@@ -5765,7 +5799,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                         (messageHover guildOrDmIdNoThread threadRoute loggedIn model)
                         False
                         local.localUser.session.userId
-                        (LocalState.allUsers local.localUser)
+                        (User.allUsers local.localUser)
                         local.localUser
                         Nothing
                         Nothing
@@ -6598,7 +6632,7 @@ messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message
         isHovered
         isEditing
         localUser.session.userId
-        (LocalState.allUsers localUser)
+        (User.allUsers localUser)
         localUser
         Nothing
         Nothing
@@ -6667,7 +6701,7 @@ messageViewThreadStarter data revealedSpoilers localUser messageIndex thread mes
         isHovered
         isEditing
         localUser.session.userId
-        (LocalState.allUsers localUser)
+        (User.allUsers localUser)
         localUser
         Nothing
         (Just thread)
@@ -6726,7 +6760,7 @@ threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
         highlight
         isHovered
         isEditing
-        (LocalState.allUsers localUser)
+        (User.allUsers localUser)
         localUser.session.userId
         localUser
         Nothing
@@ -6847,6 +6881,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                     localUser
                     revealedSpoilers
                     allUsers
+                    (User.userColor localUser)
                     isHovered
                     messageId
                     data
@@ -6874,7 +6909,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                     []
                     [ userJoinedContent userId allUsers
                     , messageTimestamp
-                        Drawing.userColor
+                        (User.userColor localUser)
                         drawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -6931,7 +6966,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 (Ui.row
                     [ Ui.contentTop ]
                     [ callStartedCard
-                        Drawing.userColor
+                        (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
                         callStartedData.cardDrawings
@@ -6940,7 +6975,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                         callStartedData.endedAt
                         allUsers
                     , messageTimestamp
-                        Drawing.userColor
+                        (User.userColor localUser)
                         callStartedData.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -6971,7 +7006,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 (Ui.row
                     [ Ui.contentTop ]
                     [ goMatchStartedCard
-                        Drawing.userColor
+                        (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
                         messageId
@@ -6979,7 +7014,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                         allUsers
                         gameStarted.gameType
                     , messageTimestamp
-                        Drawing.userColor
+                        (User.userColor localUser)
                         gameStarted.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7072,7 +7107,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                     []
                     [ userJoinedContent userId allUsers
                     , messageTimestamp
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         drawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7129,7 +7164,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 (Ui.row
                     [ Ui.contentTop ]
                     [ callStartedCard
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
                         callStartedData.cardDrawings
@@ -7138,7 +7173,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                         callStartedData.endedAt
                         allUsers
                     , messageTimestamp
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         callStartedData.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7169,7 +7204,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 (Ui.row
                     [ Ui.contentTop ]
                     [ goMatchStartedCard
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
                         messageId
@@ -7177,7 +7212,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                         allUsers
                         gameStarted.gameType
                     , messageTimestamp
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         gameStarted.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7239,6 +7274,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                     localUser
                     revealedSpoilers
                     allUsers
+                    (User.userColor localUser)
                     isHovered
                     messageId
                     message2
@@ -7262,7 +7298,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                     []
                     [ userJoinedContent userId allUsers
                     , messageTimestamp
-                        Drawing.userColor
+                        (User.userColor localUser)
                         drawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7310,7 +7346,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 (Ui.row
                     []
                     [ callStartedCard
-                        Drawing.userColor
+                        (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
                         callStartedData.cardDrawings
@@ -7319,7 +7355,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                         callStartedData.endedAt
                         allUsers
                     , messageTimestamp
-                        Drawing.userColor
+                        (User.userColor localUser)
                         callStartedData.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7345,7 +7381,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 (Ui.row
                     []
                     [ goMatchStartedCard
-                        Drawing.userColor
+                        (User.userColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
                         messageId
@@ -7353,7 +7389,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                         allUsers
                         gameStarted.gameType
                     , messageTimestamp
-                        Drawing.userColor
+                        (User.userColor localUser)
                         gameStarted.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7435,7 +7471,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                     []
                     [ userJoinedContent userId allUsers
                     , messageTimestamp
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         drawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7483,7 +7519,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 (Ui.row
                     []
                     [ callStartedCard
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
                         callStartedData.cardDrawings
@@ -7492,7 +7528,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                         callStartedData.endedAt
                         allUsers
                     , messageTimestamp
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         callStartedData.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7518,7 +7554,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 (Ui.row
                     []
                     [ goMatchStartedCard
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         gameStarted.cardDrawings
                         messageId
@@ -7526,7 +7562,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                         allUsers
                         gameStarted.gameType
                     , messageTimestamp
-                        Drawing.discordUserColor
+                        (User.discordUserColor localUser)
                         gameStarted.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
@@ -7576,24 +7612,19 @@ userTextMessageContent :
     -> LocalUser
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id UserId) FrontendUser
+    -> (Id UserId -> UserColor)
     -> IsHovered
     -> Id messageId
     -> UserTextMessageData messageId (Id UserId)
     -> Element MessageViewMsg
-userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId message2 =
+userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId message2 =
     Ui.row
         []
-        [ (case SeqDict.get message2.createdBy allUsers of
-            Just user ->
-                User.profileImage message2.createdBy user.icon
-
-            Nothing ->
-                User.profileImage message2.createdBy Nothing
-          )
+        [ User.profileImage (SeqDict.get message2.createdBy allUsers)
             |> Ui.el
                 (Drawing.anchorHighlight
                     (Drawing.profileImageAnchorId messageId)
-                    Drawing.userColor
+                    drawingColor
                     MessageView_PressedUserIconAnchor
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     message2.userIconDrawings
@@ -7637,7 +7668,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold ]
                 , messageTimestamp
-                    Drawing.userColor
+                    drawingColor
                     message2.timestampDrawings
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     messageId
@@ -7670,7 +7701,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                     , time = time
                     , drawings = message2.imageAttachmentDrawings
                     , embedDrawings = message2.embedDrawings
-                    , drawingUserColor = Drawing.userColor
+                    , drawingUserColor = drawingColor
                     , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
                     , devicePixelRatio = localUser.devicePixelRatio
                     , isHovered =
@@ -7743,7 +7774,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
             |> Ui.el
                 (Drawing.anchorHighlight
                     (Drawing.profileImageAnchorId messageId)
-                    Drawing.discordUserColor
+                    (User.discordUserColor localUser)
                     MessageView_PressedUserIconAnchor
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     message2.userIconDrawings
@@ -7787,7 +7818,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold ]
                 , messageTimestamp
-                    Drawing.discordUserColor
+                    (User.discordUserColor localUser)
                     message2.timestampDrawings
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     messageId
@@ -7820,7 +7851,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                     , time = time
                     , drawings = message2.imageAttachmentDrawings
                     , embedDrawings = message2.embedDrawings
-                    , drawingUserColor = Drawing.discordUserColor
+                    , drawingUserColor = User.discordUserColor localUser
                     , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
                     , devicePixelRatio = localUser.devicePixelRatio
                     , isHovered =
@@ -7893,11 +7924,11 @@ deletedMessageContent messageId isSelectingAnchor highlight createdAt timezone =
                     Ui.background MyUi.hoverAndReplyToColor
             ]
             (Ui.text LocalState.messageDeleted)
-        , messageTimestamp (\_ -> "") Drawing.emptyDrawing isSelectingAnchor messageId createdAt timezone
+        , messageTimestamp (\_ -> UserColor.default) Drawing.emptyDrawing isSelectingAnchor messageId createdAt timezone
         ]
 
 
-messageTimestamp : (userId -> String) -> Drawing userId -> Bool -> Id messageId -> Time.Posix -> Time.Zone -> Element MessageViewMsg
+messageTimestamp : (userId -> UserColor) -> Drawing userId -> Bool -> Id messageId -> Time.Posix -> Time.Zone -> Element MessageViewMsg
 messageTimestamp userIdToColor drawings isSelectingAnchor messageId createdAt timezone =
     Ui.el
         ([ Ui.Font.size 14
@@ -8081,7 +8112,7 @@ goMatchStarted userId allUsers =
 
 
 callStartedCard :
-    (userId -> String)
+    (userId -> UserColor)
     -> Bool
     -> Id messageId
     -> Drawing userId
@@ -8104,7 +8135,7 @@ callStartedCard userIdToColor isSelectingAnchor messageId drawings userId starte
 
 
 goMatchStartedCard :
-    (userId -> String)
+    (userId -> UserColor)
     -> Bool
     -> Drawing userId
     -> Id messageId
@@ -8152,7 +8183,7 @@ goMatchStartedCard userIdToColor isSelectingAnchor drawings messageId userId all
 
 
 eventCard :
-    (userId -> String)
+    (userId -> UserColor)
     -> Bool
     -> Id messageId
     -> Drawing userId
@@ -9293,7 +9324,7 @@ dmColumnThreads isMobile now threadRoute localUser otherUserId channel threads =
                     , channelsVisible = ChannelsHiddenOnMobile
                     }
                 )
-                (threadPreviewText localUser.timezone (LocalState.allUsers localUser) threadMessageIndex channel)
+                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex channel)
         )
         threads2
         |> Ui.column []
@@ -9378,7 +9409,7 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
                     (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideChannelSettings) Nothing)
                     ChannelsHiddenOnMobile
                 )
-                (threadPreviewText localUser.timezone (LocalState.allUsers localUser) threadMessageIndex channel)
+                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex channel)
         )
         threads2
         |> Ui.column []
@@ -10112,7 +10143,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers localUser
+            User.allUsers localUser
 
         message : Maybe (Message ChannelMessageId (Id UserId))
         message =
@@ -10179,7 +10210,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
         , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
         , Ui.attrIf isSelected (Ui.background MyUi.selectedHighlight)
         ]
-        [ User.profileImage otherUserId otherUser.icon
+        [ User.profileImage (Just otherUser)
         , Ui.column
             []
             [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString otherUser.name))
@@ -10623,270 +10654,10 @@ fileUploadPreview :
     -> NonemptyDict (Id FileId) FileStatus
     -> Element msg
 fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUpload2 =
-    let
-        previewSize : number
-        previewSize =
-            150
-
-        isSpoilered : SeqDict (Id FileId) Bool
-        isSpoilered =
-            case richText of
-                Just richText2 ->
-                    RichText.attachments richText2
-                        |> List.map (\a -> ( a.attachmentId, a.isSpoilered ))
-                        |> SeqDict.fromList
-
-                Nothing ->
-                    SeqDict.empty
-    in
     Ui.row
-        [ Ui.spacing 2
-        , Ui.move { x = 0, y = -previewSize, z = 0 }
+        [ Ui.spacing 4
+        , Ui.move { x = 0, y = -SheepGame.fileUploadPreviewSize, z = 0 }
         , Ui.width Ui.shrink
         , Ui.paddingXY 8 0
         ]
-        (List.map
-            (\( fileStatusId, fileStatus ) ->
-                let
-                    isSpoilered2 : Bool
-                    isSpoilered2 =
-                        SeqDict.get fileStatusId isSpoilered |> Maybe.withDefault False
-                in
-                Ui.el
-                    [ Ui.width (Ui.px previewSize)
-                    , Ui.height (Ui.px previewSize)
-                    , Ui.Shadow.shadows
-                        [ { x = 0
-                          , y = -2
-                          , size = 0
-                          , blur = 8
-                          , color = Ui.rgba 0 0 0 0.5
-                          }
-                        ]
-                    , Ui.background MyUi.background1
-                    , Ui.borderColor MyUi.background1
-                    , Ui.border 1
-                    , Ui.rounded 8
-                    , MyUi.elButton
-                        (Dom.id ("fileStatus_delete_" ++ Id.toString fileStatusId))
-                        (onPressDelete fileStatusId)
-                        [ Ui.width (Ui.px 42)
-                        , Ui.height (Ui.px 42)
-                        , Ui.rounded 16
-                        , Ui.move { x = -3, y = -3, z = 0 }
-                        , MyUi.hoverText "Remove file"
-                        ]
-                        (Ui.el
-                            [ Ui.width (Ui.px 34)
-                            , Ui.height (Ui.px 34)
-                            , Ui.rounded 16
-                            , Ui.contentCenterX
-                            , Ui.contentCenterY
-                            , Ui.background MyUi.deleteButtonBackground
-                            , Ui.border 1
-                            , Ui.borderColor MyUi.deleteButtonBorder
-                            ]
-                            (Ui.html Icons.delete)
-                        )
-                        |> Ui.inFront
-                    , MyUi.elButton
-                        (Dom.id ("fileStatus_spoiler_" ++ Id.toString fileStatusId))
-                        (onPressSpoiler { fileId = fileStatusId, removeSpoiler = isSpoilered2 })
-                        [ Ui.width (Ui.px 42)
-                        , Ui.height (Ui.px 42)
-                        , Ui.rounded 16
-                        , Ui.move { x = -3, y = 40, z = 0 }
-                        , MyUi.hoverText
-                            (if isSpoilered2 then
-                                "Remove spoiler"
-
-                             else
-                                "Mark as spoiler"
-                            )
-                        ]
-                        (Ui.el
-                            [ Ui.width (Ui.px 34)
-                            , Ui.height (Ui.px 34)
-                            , Ui.rounded 16
-                            , Ui.contentCenterX
-                            , Ui.contentCenterY
-                            , Ui.background MyUi.buttonBackground
-                            ]
-                            (Ui.html
-                                (if isSpoilered2 then
-                                    Icons.closedEye
-
-                                 else
-                                    Icons.openEye
-                                )
-                            )
-                        )
-                        |> Ui.inFront
-                    , case fileStatus of
-                        FileStatus.FileUploaded fileData ->
-                            case fileData.metadata of
-                                Just (FileMetadata_Image imageMetadata) ->
-                                    if FileStatus.imageHasMetadata imageMetadata then
-                                        fileUploadInfoButton onPressInfo fileStatusId imageMetadata
-
-                                    else
-                                        Ui.noAttr
-
-                                Just (FileMetadata_Video videoMetadata) ->
-                                    if FileStatus.videoHasMetadata videoMetadata then
-                                        fileUploadInfoButton onPressInfo fileStatusId videoMetadata
-
-                                    else
-                                        Ui.noAttr
-
-                                Nothing ->
-                                    Ui.noAttr
-
-                        FileStatus.FileUploading _ _ _ ->
-                            Ui.noAttr
-
-                        FileStatus.FileError _ _ _ _ ->
-                            Ui.noAttr
-                    , Ui.el
-                        [ Ui.alignBottom
-                        , Ui.padding 4
-                        , Ui.Font.bold
-                        , Ui.Shadow.font
-                            { offset = ( 0, 0 )
-                            , blur = 3
-                            , color = MyUi.black
-                            }
-                        ]
-                        (Ui.text ("[!" ++ Id.toString fileStatusId ++ "]"))
-                        |> Ui.inFront
-                    , case fileStatus of
-                        FileStatus.FileUploading _ fileSize _ ->
-                            FileStatus.progressToString fileSize
-                                |> Ui.text
-                                |> Ui.el
-                                    [ Ui.alignRight
-                                    , Ui.Font.size 14
-                                    , Ui.paddingRight 8
-                                    , Ui.Shadow.font
-                                        { offset = ( 0, 0 )
-                                        , blur = 3
-                                        , color = MyUi.black
-                                        }
-                                    ]
-                                |> Ui.inFront
-
-                        FileStatus.FileUploaded _ ->
-                            Ui.noAttr
-
-                        FileStatus.FileError _ _ _ _ ->
-                            Ui.noAttr
-                    ]
-                    (case fileStatus of
-                        FileStatus.FileUploading _ _ _ ->
-                            Ui.none
-
-                        FileStatus.FileUploaded fileData ->
-                            case FileStatus.contentTypeType fileData.contentType of
-                                FileStatus.Image ->
-                                    Html.img
-                                        [ Html.Attributes.src
-                                            (case fileData.metadata of
-                                                Just (FileMetadata_Image metadata) ->
-                                                    FileStatus.thumbnailUrl metadata.imageSize fileData.contentType fileData.fileHash
-
-                                                Just (FileMetadata_Video _) ->
-                                                    FileStatus.fileUrl fileData.contentType fileData.fileHash
-
-                                                Nothing ->
-                                                    FileStatus.fileUrl fileData.contentType fileData.fileHash
-                                            )
-                                        , Html.Attributes.style "object-fit" "cover"
-                                        , Html.Attributes.width (previewSize - 2)
-                                        , Html.Attributes.height (previewSize - 2)
-                                        , Html.Attributes.style "display" "flex"
-                                        , Html.Attributes.style "align-self" "center"
-                                        , Html.Attributes.style "border-radius" "8px"
-                                        ]
-                                        []
-                                        |> Ui.html
-
-                                FileStatus.Text ->
-                                    Ui.el
-                                        [ Ui.width (Ui.px 42)
-                                        , Ui.centerX
-                                        , Ui.centerY
-                                        , Ui.Font.color MyUi.font3
-                                        ]
-                                        (Ui.html Icons.document)
-
-                                FileStatus.Video ->
-                                    Ui.el
-                                        [ Ui.centerX
-                                        , Ui.centerY
-                                        , Ui.Font.color MyUi.font3
-                                        , Ui.move { x = 6, y = 0, z = 0 }
-                                        ]
-                                        (Ui.html (Icons.camera 42))
-
-                                FileStatus.Audio ->
-                                    Ui.el
-                                        [ Ui.width (Ui.px 42)
-                                        , Ui.centerX
-                                        , Ui.centerY
-                                        , Ui.Font.color MyUi.font3
-                                        ]
-                                        (Ui.html Icons.volume)
-
-                                _ ->
-                                    Ui.el
-                                        [ Ui.Font.bold
-                                        , Ui.Font.letterSpacing -1
-                                        , Ui.Font.lineHeight 1.1
-                                        , Ui.centerX
-                                        , Ui.centerY
-                                        , MyUi.prewrap
-                                        , Ui.Font.color MyUi.font3
-                                        ]
-                                        (Ui.text "0110\n0001")
-
-                        FileStatus.FileError _ _ _ _ ->
-                            Ui.el
-                                [ Ui.centerX
-                                , Ui.centerY
-                                , Ui.width Ui.shrink
-                                ]
-                                (Ui.html Icons.x)
-                    )
-            )
-            (NonemptyDict.toList filesToUpload2)
-        )
-
-
-fileUploadInfoButton : (Id FileId -> msg) -> Id FileId -> { b | gpsLocation : Maybe FileStatus.Location } -> Ui.Attribute msg
-fileUploadInfoButton onPressInfo fileStatusId metadata =
-    MyUi.elButton
-        (Dom.id ("fileStatus_info_" ++ Id.toString fileStatusId))
-        (onPressInfo fileStatusId)
-        [ Ui.width (Ui.px 42)
-        , Ui.height (Ui.px 42)
-        , Ui.rounded 16
-        , Ui.move { x = -3, y = 77, z = 0 }
-        , MyUi.hoverText "Image info"
-        ]
-        (Ui.el
-            [ Ui.width (Ui.px 34)
-            , Ui.height (Ui.px 34)
-            , Ui.rounded 16
-            , Ui.contentCenterX
-            , Ui.contentCenterY
-            , Ui.background MyUi.buttonBackground
-            ]
-            (case metadata.gpsLocation of
-                Just _ ->
-                    Ui.html Icons.map
-
-                Nothing ->
-                    Ui.html Icons.info
-            )
-        )
-        |> Ui.inFront
+        (SheepGame.fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUpload2)

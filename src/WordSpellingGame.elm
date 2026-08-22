@@ -3879,10 +3879,10 @@ playerRow localUser userId highlight isSelected suffix =
         , Ui.clip
         ]
         [ if highlight then
-            User.profileImageNoRounding userId (Maybe.andThen .icon maybeUser)
+            User.profileImageNoRounding maybeUser
 
           else
-            User.profileImage userId (Maybe.andThen .icon maybeUser)
+            User.profileImage maybeUser
         , Ui.row
             [ MyUi.prewrap ]
             [ Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt userId localUser))
@@ -6104,7 +6104,7 @@ setupView windowSize isReadonly setup =
                     (List.map (\language -> ( language, languageToString language )) allLanguages)
             , Go.setupSection
                 (Ui.text "Attempts per turn")
-                (Just " (# of tries you get place a valid word)")
+                (Just " (# of tries to place a word)")
                 (Go.numberInput
                     { htmlId = "wsg_attemptsPerTurn"
                     , width = 60

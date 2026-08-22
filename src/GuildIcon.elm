@@ -24,13 +24,12 @@ import GuildName exposing (GuildName)
 import Html exposing (Html)
 import Html.Attributes
 import Icons
-import Id exposing (Id, UserId)
-import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import OneOrGreater exposing (OneOrGreater)
 import Ui exposing (Element)
 import Ui.Accessibility
 import Ui.Font
+import UserColor exposing (UserColor)
 
 
 type Mode
@@ -261,8 +260,8 @@ guildIcon guild mode name =
                     ]
 
 
-userView : ChannelNotificationType -> Maybe FileHash -> Id UserId -> Element msg
-userView notification maybeIcon userId =
+userView : ChannelNotificationType -> Maybe FileHash -> UserColor -> Element msg
+userView notification maybeIcon color =
     Ui.el
         [ notificationView 0 -3 MyUi.background1 notification
         ]
@@ -271,7 +270,7 @@ userView notification maybeIcon userId =
                 iconView (Normal notification) (FileStatus.fileUrl FileStatus.pngContent icon)
 
             Nothing ->
-                defaultUser True size (round (toFloat size * 8 / 50)) userId
+                defaultUser True size (round (toFloat size * 8 / 50)) color
         )
 
 
@@ -288,12 +287,12 @@ discordUserView notification maybeIcon userId =
         |> Ui.el [ discordNotificationView 0 -3 notification ]
 
 
-defaultUser : Bool -> Int -> Int -> Id UserId -> Element msg
-defaultUser centerX size2 rounded userId =
+defaultUser : Bool -> Int -> Int -> UserColor -> Element msg
+defaultUser centerX size2 rounded color =
     Ui.el
         [ Ui.contentCenterY
         , Ui.rounded rounded
-        , Ui.background (userDefaultColor userId)
+        , Ui.background (UserColor.toColor color)
         , if centerX then
             Ui.centerX
 
@@ -309,11 +308,11 @@ defaultUser centerX size2 rounded userId =
         (Ui.html Icons.person)
 
 
-defaultUserHtml : Int -> Int -> Id UserId -> Html msg
-defaultUserHtml size2 rounded userId =
+defaultUserHtml : Int -> Int -> UserColor -> Html msg
+defaultUserHtml size2 rounded color =
     Html.div
         [ Html.Attributes.style "border-radius" (String.fromInt rounded ++ "px")
-        , Html.Attributes.style "background-color" (userDefaultColor userId |> MyUi.colorToStyle)
+        , Html.Attributes.style "background-color" (UserColor.toColor color |> MyUi.colorToStyle)
         , Html.Attributes.style "width" (String.fromInt (size2 - 8) ++ "px")
         , Html.Attributes.style "height" (String.fromInt (size2 - 8) ++ "px")
         , Html.Attributes.style "padding" "4px"
@@ -336,6 +335,7 @@ iconView mode url =
             )
         , Html.Attributes.style "height" (String.fromInt size ++ "px")
         , Html.Attributes.src url
+        , MyUi.lazyLoading
         , Html.Attributes.style "display" "flex"
         , Html.Attributes.style "align-self" "center"
         , Html.Attributes.style "object-fit" "cover"
@@ -358,24 +358,7 @@ guild/user tiles
 -}
 iconFontColor : Ui.Color
 iconFontColor =
-    Ui.rgb 20 20 20
-
-
-userDefaultColor : Id UserId -> Ui.Color
-userDefaultColor userId =
-    List.Nonempty.get (Id.toInt userId) userColors
-
-
-userColors : Nonempty Ui.Color
-userColors =
-    Nonempty
-        (Ui.rgb 232 134 170)
-        [ Ui.rgb 235 179 142
-        , Ui.rgb 232 215 139
-        , Ui.rgb 188 244 155
-        , Ui.rgb 172 246 228
-        , Ui.rgb 198 150 232
-        ]
+    Ui.rgba 10 10 10 0.8
 
 
 size : number

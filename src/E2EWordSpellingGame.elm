@@ -139,7 +139,7 @@ tests normalConfig =
                     -- The other user opens the same match and joins it.
                     , E2EHelper.openDm user 2000 "0"
                     , user.click 100 (Dom.id "guild_openGamesTab")
-                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.input 100 (Dom.id "game_matchSwitcher") "0"
                     , user.click 100 (Dom.id "wordSpellingGame_joinGame")
                     , T.collapsableGroup
                         "Place \"rot\""
@@ -246,7 +246,7 @@ tests normalConfig =
                     -- The other user opens the same match and joins it.
                     , E2EHelper.openDm user 2000 "0"
                     , user.click 100 (Dom.id "guild_openGamesTab")
-                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.input 100 (Dom.id "game_matchSwitcher") "0"
                     , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "wordSpellingGame_joinGame" ])
                     , admin.click 100 (Dom.id "wordSpellingGame_replaceTray")
                     , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "wordSpellingGame_joinGame" ])
@@ -323,7 +323,7 @@ tests normalConfig =
                     -- emptying the bag.
                     , E2EHelper.openDm user 2000 "0"
                     , user.click 100 (Dom.id "guild_openGamesTab")
-                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.input 100 (Dom.id "game_matchSwitcher") "0"
                     , user.click 100 (Dom.id "wordSpellingGame_joinGame")
 
                     -- Admin plays both tiles as "AA" through the centre square: (1+1)*2 = 4. Their
@@ -470,7 +470,7 @@ tests normalConfig =
                     -- two players.
                     , E2EHelper.openDm user 2000 "0"
                     , user.click 100 (Dom.id "guild_openGamesTab")
-                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.input 100 (Dom.id "game_matchSwitcher") "0"
                     , user.click 100 (Dom.id "wordSpellingGame_joinGame")
 
                     -- It starts on the admin's turn with both attempts available.
@@ -590,7 +590,7 @@ tests normalConfig =
                     , admin.click 100 (Dom.id "wsg_start")
                     , E2EHelper.openDm user 2100 "0"
                     , user.click 100 (Dom.id "guild_openGamesTab")
-                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.input 100 (Dom.id "game_matchSwitcher") "0"
                     , user.click 100 (Dom.id "wordSpellingGame_joinGame")
                     , -- Admin's fresh tray is "A O A L D O M" (slots 3,1,0,4 = L,O,A,D). LOAD covers the
                       -- centre and scores 10. After the first tile the board zooms, so tiles 2..4 use
@@ -813,7 +813,7 @@ tests normalConfig =
                     -- The other user opens the match, joins it, and then navigates away.
                     , E2EHelper.openDm user 2000 "0"
                     , user.click 100 (Dom.id "guild_openGamesTab")
-                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.input 100 (Dom.id "game_matchSwitcher") "0"
                     , user.click 100 (Dom.id "wordSpellingGame_joinGame")
                     , user.click 100 (Dom.id "guildIcon_showFriends")
 
@@ -830,7 +830,7 @@ tests normalConfig =
                     -- original notification exists.
                     , user.click 100 (Dom.id "guild_friendLabel_0")
                     , user.click 100 (Dom.id "guild_openGamesTab")
-                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.input 100 (Dom.id "game_matchSwitcher") "0"
                     , user.click 100 (Dom.id "wordSpellingGame_replaceTray")
                     , admin.click 100 (Dom.id "wordSpellingGame_replaceTray")
                     , E2EHelper.checkNotification "Your turn!" "AT swapped their tiles. It's your turn in the Word Spelling Game."
@@ -1499,7 +1499,7 @@ wordSpellingGamePremove normalConfig =
                 -- The other user opens the same match and joins it.
                 , E2EHelper.openDm user 2000 "0"
                 , user.click 100 (Dom.id "guild_openGamesTab")
-                , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                , user.input 100 (Dom.id "game_matchSwitcher") "0"
                 , user.click 100 (Dom.id "wordSpellingGame_joinGame")
                 , T.collapsableGroup
                     "Place \"rot\""
@@ -1611,7 +1611,7 @@ wordSpellingGamePremove normalConfig =
                     , -- The user comes back to the game for the snapshot.
                       user.click 100 (Dom.id "guild_friendLabel_0")
                     , user.click 100 (Dom.id "guild_openGamesTab")
-                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.input 100 (Dom.id "game_matchSwitcher") "0"
                     , user.snapshotView 100 { name = "Premove cancelled" }
                     ]
                 ]

@@ -48,6 +48,7 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
+import MessageDropdown
 import MessageInput exposing (NameSoFar(..), TextInputFocus)
 import MessageMenu
 import MessageView
@@ -70,6 +71,7 @@ import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
+import SheepGame
 import Sticker
 import String.Extra
 import String.Nonempty
@@ -87,6 +89,7 @@ import Untrusted
 import Url exposing (Url)
 import User exposing (FrontendUser)
 import UserAgent
+import UserColor
 import UserOptions
 import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
@@ -1399,12 +1402,19 @@ updateLoaded msg model =
                                                 { loggedIn | showEmojiSelector = EmojiSelectorHidden }
                                                 (Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition)
 
-                                --( loggedIn, Command.none )
                                 EmojiSelectorForMessage maybeSelection ->
                                     insertEmojiOrSticker Pages.Guild.channelTextInputId maybeSelection emojiOrSticker model loggedIn
 
                                 EmojiSelectorForEditMessage _ maybeSelection ->
                                     insertEmojiOrSticker MessageMenu.editMessageTextInputId maybeSelection emojiOrSticker model loggedIn
+
+                                EmojiSelectorForSheepGameInput input _ maybeSelection ->
+                                    insertEmojiOrSticker
+                                        (SheepGame.inputId input)
+                                        maybeSelection
+                                        emojiOrSticker
+                                        model
+                                        loggedIn
                         )
                         model
 
@@ -2084,7 +2094,10 @@ updateLoaded msg model =
                 (\loggedIn ->
                     ( { loggedIn
                         | userOptions =
-                            Just (UserOptions.init (Local.model loggedIn.localState).localUser.user.domainWhitelist)
+                            Just
+                                (UserOptions.init
+                                    (Local.model loggedIn.localState).localUser.user.domainWhitelist
+                                )
                       }
                     , Command.none
                     )
@@ -2179,6 +2192,13 @@ updateLoaded msg model =
                                                         accLoggedIn
                                                         accCmd
 
+                                                Game.SaveSheepGameQuestions questions ->
+                                                    FrontendExtra.handleLocalChange
+                                                        model.time
+                                                        (Just (Local_SetSheepGameQuestions questions))
+                                                        accLoggedIn
+                                                        accCmd
+
                                                 _ ->
                                                     ( accLoggedIn, accCmd )
                                         )
@@ -2234,7 +2254,7 @@ updateLoaded msg model =
                             Local.model loggedIn.localState
 
                         allUsers =
-                            LocalState.allUsers local.localUser
+                            User.allUsers local.localUser
                     in
                     ( { loggedIn
                         | filesToUpload =
@@ -2286,7 +2306,7 @@ updateLoaded msg model =
                             Local.model loggedIn.localState
 
                         allUsers =
-                            LocalState.allUsers local.localUser
+                            User.allUsers local.localUser
                     in
                     ( case SeqDict.get guildOrDmId loggedIn.editMessage of
                         Just edit ->
@@ -3237,6 +3257,74 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedSelectNewColor ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            ( { loggedIn
+                                | userOptions =
+                                    Just
+                                        { userOptions
+                                            | color =
+                                                (Local.model loggedIn.localState).localUser.user.color
+                                                    |> UserColor.startPicking
+                                                    |> Just
+                                        }
+                              }
+                            , Command.none
+                            )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+        SelectedUserColor selection ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            ( { loggedIn | userOptions = Just { userOptions | color = Just selection } }
+                            , Command.none
+                            )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+        PressedSubmitUserColor ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            -- Saving is the end of picking, so the grid goes away again.
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Maybe.map (\selection -> Local_SetUserColor (UserColor.picked selection)) userOptions.color)
+                                { loggedIn | userOptions = Just { userOptions | color = Nothing } }
+                                Command.none
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+        PressedResetUserColor ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            ( { loggedIn | userOptions = Just { userOptions | color = Nothing } }
+                            , Command.none
+                            )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
         PressedSaveDomainWhitelist ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -3438,7 +3526,7 @@ updateLoaded msg model =
                                                                 richText =
                                                                     RichText.fromNonemptyString
                                                                         local.localUser.timezone
-                                                                        (LocalState.allUsers local.localUser)
+                                                                        (User.allUsers local.localUser)
                                                                         nonempty
                                                             in
                                                             if message.content == richText then
@@ -3530,7 +3618,7 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageInput.PressedArrowInDropdown index ->
+                MessageInput.TypedArrowInDropdown index ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
@@ -3548,7 +3636,7 @@ updateLoaded msg model =
                                                 Just nameSoFar ->
                                                     { textInputFocus
                                                         | dropdown =
-                                                            MessageInput.pressedArrowInDropdown
+                                                            MessageDropdown.pressedArrowInDropdown
                                                                 (MyUi.isMobile model)
                                                                 model.timezone
                                                                 model.time
@@ -3573,7 +3661,7 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageInput.PressedArrowUpInEmptyInput ->
+                MessageInput.TypedArrowUpInEmptyInput ->
                     ( model, Command.none )
 
                 MessageInput.PressedDropdownItem dropdownIndex ->
@@ -3594,7 +3682,7 @@ updateLoaded msg model =
                                         ( Just nonempty, Just nameSoFar ) ->
                                             let
                                                 ( pingUser, text2, cmd ) =
-                                                    MessageInput.pressedDropdownItem
+                                                    MessageDropdown.pressedDropdownItem
                                                         SetFocus
                                                         (MyUi.isMobile model)
                                                         model.time
@@ -3639,7 +3727,7 @@ updateLoaded msg model =
                 MessageInput.PressedOpenEmojiSelector ->
                     ( model
                     , Dom.getElement MessageMenu.editMessageTextInputId
-                        |> Task.attempt GotEditMessageTextInputPositionForEmojiSelector
+                        |> Task.attempt GotPositionForEmojiSelector_EditMessage
                     )
 
                 MessageInput.TypedPageUp ->
@@ -3701,12 +3789,28 @@ updateLoaded msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        GotEditMessageTextInputPositionForEmojiSelector result ->
+        GotPositionForEmojiSelector_EditMessage result ->
             case result of
                 Ok ok ->
                     pressedOpenEmojiSelector
                         MessageMenu.editMessageTextInputId
                         (EmojiSelectorForEditMessage (Coord.xy (round ok.element.x) (round ok.element.y)))
+                        model
+
+                Err _ ->
+                    ( model, Command.none )
+
+        GotPositionForEmojiSelector_SheepGameInput input result ->
+            case result of
+                Ok ok ->
+                    pressedOpenEmojiSelector
+                        (SheepGame.inputId input)
+                        -- The selector is drawn under the input, so what it's positioned
+                        -- against is the bottom of it rather than the top.
+                        (EmojiSelectorForSheepGameInput
+                            input
+                            (Coord.xy (round ok.element.x) (round (ok.element.y + ok.element.height)))
+                        )
                         model
 
                 Err _ ->
@@ -3879,7 +3983,7 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageInput.PressedArrowInDropdown index ->
+                MessageInput.TypedArrowInDropdown index ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
@@ -3897,7 +4001,7 @@ updateLoaded msg model =
                                                 Just nameSoFar ->
                                                     { textInputFocus
                                                         | dropdown =
-                                                            MessageInput.pressedArrowInDropdown
+                                                            MessageDropdown.pressedArrowInDropdown
                                                                 (MyUi.isMobile model)
                                                                 model.timezone
                                                                 model.time
@@ -3922,7 +4026,7 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageInput.PressedArrowUpInEmptyInput ->
+                MessageInput.TypedArrowUpInEmptyInput ->
                     FrontendExtra.handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute
 
                 MessageInput.PressedDropdownItem index ->
@@ -3941,7 +4045,7 @@ updateLoaded msg model =
                                         Just nameSoFar ->
                                             let
                                                 ( pingUser, text2, cmd ) =
-                                                    MessageInput.pressedDropdownItem
+                                                    MessageDropdown.pressedDropdownItem
                                                         SetFocus
                                                         (MyUi.isMobile model)
                                                         model.time
@@ -4112,7 +4216,7 @@ updateLoaded msg model =
                                     let
                                         allUsers : SeqDict (Id UserId) FrontendUser
                                         allUsers =
-                                            Local.model loggedIn.localState |> .localUser |> LocalState.allUsers
+                                            Local.model loggedIn.localState |> .localUser |> User.allUsers
 
                                         timezone : Time.Zone
                                         timezone =
@@ -4150,7 +4254,7 @@ updateLoaded msg model =
                                             let
                                                 allUsers : SeqDict (Id UserId) FrontendUser
                                                 allUsers =
-                                                    Local.model loggedIn.localState |> .localUser |> LocalState.allUsers
+                                                    Local.model loggedIn.localState |> .localUser |> User.allUsers
 
                                                 timezone2 : Time.Zone
                                                 timezone2 =
@@ -5809,7 +5913,7 @@ selectionChanged maybeHtmlId maybeRange model =
                                                 Just (NameSoFar nameSoFar) ->
                                                     case guildOrDmId of
                                                         GuildOrDmId guildOrDmId2 ->
-                                                            MessageInput.userDropdownList
+                                                            MessageDropdown.userDropdownList
                                                                 (MyUi.isMobile model)
                                                                 nameSoFar
                                                                 guildOrDmId2
@@ -5818,7 +5922,7 @@ selectionChanged maybeHtmlId maybeRange model =
                                                                 |> not
 
                                                         DiscordGuildOrDmId guildOrDmId2 ->
-                                                            MessageInput.discordUserDropdownList
+                                                            MessageDropdown.discordUserDropdownList
                                                                 (MyUi.isMobile model)
                                                                 nameSoFar
                                                                 guildOrDmId2
@@ -5831,11 +5935,11 @@ selectionChanged maybeHtmlId maybeRange model =
                                                         Just emojiData2 ->
                                                             let
                                                                 ( availableCustomEmojis, availableStickers ) =
-                                                                    MessageInput.availableCustomEmojisAndStickers
+                                                                    MessageMenu.availableCustomEmojisAndStickers
                                                                         guildOrDmId
                                                                         local
                                                             in
-                                                            MessageInput.emojiDropdownList
+                                                            MessageDropdown.emojiDropdownList
                                                                 (MyUi.isMobile model)
                                                                 emojiSoFar
                                                                 availableCustomEmojis
@@ -6271,7 +6375,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                         GuildOrDmId guildOrDmId2 ->
                             case LocalState.guildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
-                                    ( RichText.toString local.localUser.timezone False (LocalState.allUsers local.localUser) message.content
+                                    ( RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.content
                                     , message.attachedFiles
                                     )
                                         |> Just
@@ -6365,6 +6469,9 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
                             EmojiSelectorHidden
 
                         EmojiSelectorForEditMessage _ _ ->
+                            EmojiSelectorHidden
+
+                        EmojiSelectorForSheepGameInput _ _ _ ->
                             EmojiSelectorHidden
                 , emojiSelector = { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
               }
@@ -7086,7 +7193,24 @@ updateLoadedFromBackend msg model =
                         local =
                             Local.model localState
                     in
-                    ( { loggedIn | localState = localState }
+                    ( { loggedIn
+                        | localState = localState
+                        , games =
+                            case localChange of
+                                -- The match has arrived, so there's finally something for the
+                                -- view state that goes with it to be built from.
+                                Local_Game guildOrDmId (Game.LoadMatch matchId (FilledInByBackend _)) ->
+                                    Game.routeRequest
+                                        model.time
+                                        local.localUser
+                                        guildOrDmId
+                                        matchId
+                                        (FrontendExtra.channelGames guildOrDmId local)
+                                        loggedIn.games
+
+                                _ ->
+                                    loggedIn.games
+                      }
                     , case localChange of
                         Local_VoiceChatChange callChange ->
                             case callChange of
@@ -8116,6 +8240,68 @@ handleGameOutMsgs outMsgs model =
                 Game.ScrollToBottom htmlId ->
                     ( model2, Scroll.toBottomOfChannel htmlId SetScrollToBottom :: cmds )
 
+                Game.SaveSheepGameQuestions _ ->
+                    ( model2, cmds )
+
+                Game.SaveSheepGameQuestionsAfterDelay counter ->
+                    ( model2
+                    , (Process.sleep Game.sheepGameQuestionsSaveDelay
+                        |> Task.perform
+                            (\() -> GameMsg (Game.CheckedSheepGameQuestionsDebounce counter))
+                      )
+                        :: cmds
+                    )
+
+                Game.SaveSheepGameInputAfterDelay matchId input counter ->
+                    ( model2
+                    , (Process.sleep Game.sheepGameInputSaveDelay
+                        |> Task.perform
+                            (\() -> GameMsg (Game.CheckedSheepGameSaveDebounce matchId input counter))
+                      )
+                        :: cmds
+                    )
+
+                Game.SelectSheepGameFilesToAttach input ->
+                    ( model2
+                    , Effect.File.Select.files
+                        []
+                        (\file files ->
+                            List.Nonempty.Nonempty file files
+                                |> Game.sheepGameFilesToAttach input
+                                |> GameMsg
+                        )
+                        :: cmds
+                    )
+
+                Game.UploadSheepGameAttachedFiles input files ->
+                    ( model2
+                    , (List.Nonempty.toList files
+                        |> List.map
+                            (\( fileId, file ) ->
+                                FileStatus.uploadGameFile
+                                    (\result -> Game.sheepGameFileUploaded input fileId result |> GameMsg)
+                                    (SheepGame.attachedFileTrackerId input fileId)
+                                    file
+                            )
+                        |> Command.batch
+                      )
+                        :: cmds
+                    )
+
+                Game.CancelSheepGameAttachedFileUpload input fileId ->
+                    ( model2
+                    , Http.cancel (SheepGame.attachedFileTrackerId input fileId) :: cmds
+                    )
+
+                Game.ShowSheepGameAttachedFileInfo fileData ->
+                    let
+                        ( infoModel, infoCmd ) =
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn -> ( { loggedIn | showFileToUploadInfo = Just fileData }, Command.none ))
+                                model2
+                    in
+                    ( infoModel, infoCmd :: cmds )
+
                 Game.FetchWordDefinition word ->
                     ( model2
                     , Http.get
@@ -8127,6 +8313,14 @@ handleGameOutMsgs outMsgs model =
                                 )
                                 WordSpellingGame.decodeDefinition
                         }
+                        :: cmds
+                    )
+
+                Game.OpenSheepGameEmojiSelector input ->
+                    ( model2
+                    , Task.attempt
+                        (GotPositionForEmojiSelector_SheepGameInput input)
+                        (Dom.getElement (SheepGame.inputContainerId input))
                         :: cmds
                     )
         )

@@ -14,7 +14,6 @@ module Drawing exposing
     , canRedo
     , canUndo
     , decodeWithTargetScreenPosition
-    , discordUserColor
     , emptyDrawing
     , handleLocalChange
     , imageAttachmentOverlays
@@ -26,7 +25,6 @@ module Drawing exposing
     , redoButtonId
     , resetAnchor
     , undoButtonId
-    , userColor
     , zoomButtonId
     , zoomCssOrigin
     , zoomLevel
@@ -35,13 +33,12 @@ module Drawing exposing
 
 import CssPixels exposing (CssPixels)
 import Date exposing (Date)
-import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import FileStatus exposing (FileId)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (AnyGuildOrDmId, Id, ThreadRoute, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmId, Id, ThreadRoute, ThreadRouteWithMessage)
 import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -56,6 +53,7 @@ import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Lazy
+import UserColor exposing (UserColor)
 
 
 type AnchorType
@@ -370,40 +368,6 @@ profileImageAnchorId messageId =
     Dom.id ("drawAnchorProfile_" ++ Id.toString messageId)
 
 
-userColors : List String
-userColors =
-    [ "#ff5252"
-    , "#40c4ff"
-    , "#69f0ae"
-    , "#ffd740"
-    , "#e040fb"
-    , "#ffab40"
-    , "#64ffda"
-    , "#ff80ab"
-    ]
-
-
-userColorHelper : Int -> String
-userColorHelper hash =
-    let
-        index : Int
-        index =
-            modBy (List.length userColors) hash
-    in
-    List.drop index userColors |> List.head |> Maybe.withDefault "#ff5252"
-
-
-userColor : Id UserId -> String
-userColor userId =
-    userColorHelper (Id.toInt userId * 31)
-
-
-discordUserColor : Discord.Id Discord.UserId -> String
-discordUserColor userId =
-    userColorHelper
-        (String.foldl (\char total -> total * 31 + Char.toCode char) 0 (Discord.idToString userId))
-
-
 {-| Finished and in-progress strokes that are attached to the given anchor type.
 -}
 strokesFor : Drawing userId -> List ( userId, Nonempty ( Float, Float ) )
@@ -412,14 +376,14 @@ strokesFor drawing =
         ++ List.map (\( createdBy, stroke ) -> ( createdBy, stroke.points )) (SeqDict.toList drawing.inProgress)
 
 
-overlayAttribute : (userId -> String) -> Drawing userId -> Element msg
+overlayAttribute : (userId -> UserColor) -> Drawing userId -> Element msg
 overlayAttribute getColor drawing =
     case strokesFor drawing of
         [] ->
             Ui.none
 
         strokes ->
-            List.map (\( createdBy, points ) -> strokeSvg 1 (getColor createdBy) points) strokes
+            List.map (\( createdBy, points ) -> strokeSvg 1 (getColor createdBy |> UserColor.toStyle) points) strokes
                 |> Html.div []
                 |> Ui.html
                 |> Ui.el
@@ -434,10 +398,10 @@ the points are stored in the image's full resolution coordinates so this is
 displayedWidth / fullResolutionWidth, which keeps drawings aligned with the
 image when it's scaled down to fit smaller screens.
 -}
-imageAttachmentOverlays : Float -> (userId -> String) -> Drawing userId -> List (Html msg)
+imageAttachmentOverlays : Float -> (userId -> UserColor) -> Drawing userId -> List (Html msg)
 imageAttachmentOverlays scale getColor drawing =
     List.map
-        (\( createdBy, points ) -> strokeSvg scale (getColor createdBy) points)
+        (\( createdBy, points ) -> strokeSvg scale (getColor createdBy |> UserColor.toStyle) points)
         (strokesFor drawing)
 
 
@@ -572,7 +536,7 @@ decodePointerPosition toMsg =
 
 anchorHighlight :
     HtmlId
-    -> (userId -> String)
+    -> (userId -> UserColor)
     -> (Point2d CssPixels ScreenCoordinate -> ( Float, Float ) -> msg)
     -> Bool
     -> Drawing userId

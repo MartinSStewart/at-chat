@@ -2,6 +2,7 @@ module FrontendExtra exposing
     ( audio
     , canDropFiles
     , changeUpdate
+    , channelGames
     , currentGame
     , currentGamesTab
     , drawingRedo
@@ -77,13 +78,15 @@ import LoginForm
 import MembersAndOwner
 import Message exposing (ChangeAttachments(..), GameType(..), Message(..), MessageNoReply(..), UserTextMessageDataNoReply)
 import MessageArray exposing (MessageArray)
-import MessageInput exposing (NameSoFar(..))
+import MessageDropdown
+import MessageInput exposing (NameSoFar(..), TimestampData)
 import MessageMenu
 import MessageView
 import MuteSettings exposing (IsMuted)
 import MyUi
 import NonemptyDict
 import NonemptySet
+import OneToOne
 import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
@@ -246,6 +249,9 @@ pendingChangesText localChange =
         Local_CollapseUserOptionSection _ ->
             "Collapsed a user options section"
 
+        Local_SetSheepGameQuestions _ ->
+            "Saved sheep game questions"
+
         Local_SetEmailNotifications _ ->
             "Set email notifications"
 
@@ -270,6 +276,9 @@ pendingChangesText localChange =
         Local_SetEmojiSkinTone _ ->
             "Selected emoji skin tone"
 
+        Local_SetUserColor _ ->
+            "Picked a colour"
+
         Local_AddCustomEmojisToUser _ ->
             "Add custom emojis to user"
 
@@ -285,6 +294,9 @@ pendingChangesText localChange =
             case change of
                 Game.CreatePublicLink _ _ ->
                     "Shared match"
+
+                Game.LoadMatch _ _ ->
+                    "Opened match"
 
                 Game.LocalChange_Go _ goChange ->
                     case goChange of
@@ -394,7 +406,7 @@ layout model attributes child =
                                 of
                                     ( Just nameSoFar, Just dropdown ) ->
                                         if textInputFocus.htmlId == Pages.Guild.channelTextInputId then
-                                            MessageInput.dropdownView
+                                            MessageDropdown.view
                                                 isMobile
                                                 model.time
                                                 nameSoFar
@@ -408,7 +420,7 @@ layout model attributes child =
                                                 |> Ui.inFront
 
                                         else if textInputFocus.htmlId == MessageMenu.editMessageTextInputId then
-                                            MessageInput.dropdownView
+                                            MessageDropdown.view
                                                 isMobile
                                                 model.time
                                                 nameSoFar
@@ -1215,7 +1227,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                             let
                                 users : SeqDict (Id UserId) FrontendUser
                                 users =
-                                    LocalState.allUsers local.localUser
+                                    User.allUsers local.localUser
                             in
                             Ports.showNotification (User.toString senderId users) (RichText.toString local.localUser.timezone True users content)
 
@@ -1784,120 +1796,141 @@ routeRequestChannelHelper :
     -> LoadedFrontend
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn model3 =
-    ( case guildOrDmId of
-        GuildOrDmId guildOrDmId2 ->
-            case tab of
-                Just (ChannelHeaderTab_Games (Just messageId)) ->
-                    case guildOrDmId2 of
-                        GuildOrDmId_Dm { otherUserId } ->
-                            case SeqDict.get otherUserId local.dmChannels of
-                                Just dmChannel ->
-                                    { loggedIn
-                                        | games =
-                                            Game.routeRequest
-                                                model3.time
-                                                local.localUser
-                                                guildOrDmId2
-                                                messageId
-                                                dmChannel.games
-                                                loggedIn.games
-                                    }
-
-                                Nothing ->
-                                    loggedIn
-
-                        GuildOrDmId_Guild id ->
-                            case LocalState.getGuildAndChannel id local of
-                                Just ( _, channel ) ->
-                                    { loggedIn
-                                        | games =
-                                            Game.routeRequest
-                                                model3.time
-                                                local.localUser
-                                                guildOrDmId2
-                                                messageId
-                                                channel.games
-                                                loggedIn.games
-                                    }
-
-                                Nothing ->
-                                    loggedIn
-
-                _ ->
-                    loggedIn
-
-        DiscordGuildOrDmId _ ->
-            loggedIn
-    , Command.batch
-        [ if sameChannel then
-            -- Staying in the same channel but pointing at a message means the user followed a
-            -- reply header or a link to it, so bring that message into view instead of sticking
-            -- to the bottom of the conversation.
-            case threadRoute of
-                ViewThreadWithFriends _ (Just messageIndex) _ ->
-                    Scroll.smoothScrollTo
-                        Pages.Guild.conversationContainerId
-                        (Pages.Guild.threadMessageHtmlId messageIndex)
-                        |> Task.attempt (\_ -> ScrolledToMessage)
-
-                ViewThreadWithFriends _ Nothing _ ->
-                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
-
-                NoThreadWithFriends (Just messageIndex) _ ->
-                    Scroll.smoothScrollTo
-                        Pages.Guild.conversationContainerId
-                        (Pages.Guild.channelMessageHtmlId messageIndex)
-                        |> Task.attempt (\_ -> ScrolledToMessage)
-
-                NoThreadWithFriends Nothing _ ->
-                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
-
-          else
+    (case ( guildOrDmId, tab ) of
+        ( GuildOrDmId guildOrDmId2, Just (ChannelHeaderTab_Games (Just messageId)) ) ->
             let
-                scrollToBottom : Command FrontendOnly ToBackend FrontendMsg_
-                scrollToBottom =
-                    Process.sleep Duration.millisecond
-                        |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
-                        |> Task.attempt (\_ -> SetScrollToBottom)
+                games : SeqDict (Id ChannelMessageId) Game.MatchData
+                games =
+                    channelGames guildOrDmId2 local
             in
-            Command.batch
-                [ setFocus model3 Pages.Guild.channelTextInputId
-                , case threadRoute of
-                    ViewThreadWithFriends _ maybeMessageIndex _ ->
-                        case maybeMessageIndex of
-                            Just messageIndex ->
-                                Scroll.smoothScroll
-                                    Pages.Guild.conversationContainerId
-                                    (Pages.Guild.threadMessageHtmlId messageIndex)
-                                    |> Task.attempt (\_ -> ScrolledToMessage)
+            handleLocalChange
+                model3.time
+                (case SeqDict.get messageId games of
+                    Just match ->
+                        -- The backend only told us this match exists, so ask it for the rest.
+                        if Game.isNotLoaded match then
+                            Game.LoadMatch messageId EmptyPlaceholder
+                                |> Local_Game guildOrDmId2
+                                |> Just
 
-                            Nothing ->
-                                scrollToBottom
+                        else
+                            Nothing
 
-                    NoThreadWithFriends maybeMessageIndex _ ->
-                        case maybeMessageIndex of
-                            Just messageIndex ->
-                                Scroll.smoothScroll
-                                    Pages.Guild.conversationContainerId
-                                    (Pages.Guild.channelMessageHtmlId messageIndex)
-                                    |> Task.attempt (\_ -> ScrolledToMessage)
-
-                            Nothing ->
-                                scrollToBottom
-                ]
-
-        -- Opening the games tab shows the Past moves list scrolled to the bottom. The sleep lets the
-        -- list render first (its container may not be in the DOM yet on this frame).
-        , case tab of
-            Just (ChannelHeaderTab_Games _) ->
-                Process.sleep Duration.millisecond
-                    |> Task.andThen (\() -> Dom.setViewportOf WordSpellingGame.pastWordsContainerId 0 9999999)
-                    |> Task.attempt (\_ -> SetScrollToBottom)
-
-            _ ->
+                    Nothing ->
+                        Nothing
+                )
+                { loggedIn
+                    | games =
+                        Game.routeRequest
+                            model3.time
+                            local.localUser
+                            guildOrDmId2
+                            messageId
+                            games
+                            loggedIn.games
+                }
                 Command.none
-        ]
+
+        _ ->
+            ( loggedIn, Command.none )
     )
+        |> Tuple.mapSecond
+            (\loadCmd ->
+                Command.batch
+                    [ loadCmd
+                    , Command.batch
+                        [ if sameChannel then
+                            -- Staying in the same channel but pointing at a message means the user followed a
+                            -- reply header or a link to it, so bring that message into view instead of sticking
+                            -- to the bottom of the conversation.
+                            case threadRoute of
+                                ViewThreadWithFriends _ (Just messageIndex) _ ->
+                                    Scroll.smoothScrollTo
+                                        Pages.Guild.conversationContainerId
+                                        (Pages.Guild.threadMessageHtmlId messageIndex)
+                                        |> Task.attempt (\_ -> ScrolledToMessage)
+
+                                ViewThreadWithFriends _ Nothing _ ->
+                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                NoThreadWithFriends (Just messageIndex) _ ->
+                                    Scroll.smoothScrollTo
+                                        Pages.Guild.conversationContainerId
+                                        (Pages.Guild.channelMessageHtmlId messageIndex)
+                                        |> Task.attempt (\_ -> ScrolledToMessage)
+
+                                NoThreadWithFriends Nothing _ ->
+                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                          else
+                            let
+                                scrollToBottom : Command FrontendOnly ToBackend FrontendMsg_
+                                scrollToBottom =
+                                    Process.sleep Duration.millisecond
+                                        |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
+                                        |> Task.attempt (\_ -> SetScrollToBottom)
+                            in
+                            Command.batch
+                                [ setFocus model3 Pages.Guild.channelTextInputId
+                                , case threadRoute of
+                                    ViewThreadWithFriends _ maybeMessageIndex _ ->
+                                        case maybeMessageIndex of
+                                            Just messageIndex ->
+                                                Scroll.smoothScroll
+                                                    Pages.Guild.conversationContainerId
+                                                    (Pages.Guild.threadMessageHtmlId messageIndex)
+                                                    |> Task.attempt (\_ -> ScrolledToMessage)
+
+                                            Nothing ->
+                                                scrollToBottom
+
+                                    NoThreadWithFriends maybeMessageIndex _ ->
+                                        case maybeMessageIndex of
+                                            Just messageIndex ->
+                                                Scroll.smoothScroll
+                                                    Pages.Guild.conversationContainerId
+                                                    (Pages.Guild.channelMessageHtmlId messageIndex)
+                                                    |> Task.attempt (\_ -> ScrolledToMessage)
+
+                                            Nothing ->
+                                                scrollToBottom
+                                ]
+
+                        -- Opening the games tab shows the Past moves list scrolled to the bottom. The sleep lets the
+                        -- list render first (its container may not be in the DOM yet on this frame).
+                        , case tab of
+                            Just (ChannelHeaderTab_Games _) ->
+                                Process.sleep Duration.millisecond
+                                    |> Task.andThen (\() -> Dom.setViewportOf WordSpellingGame.pastWordsContainerId 0 9999999)
+                                    |> Task.attempt (\_ -> SetScrollToBottom)
+
+                            _ ->
+                                Command.none
+                        ]
+                    ]
+            )
+
+
+{-| The matches in a channel, whichever kind of channel it is.
+-}
+channelGames : GuildOrDmId -> LocalState -> SeqDict (Id ChannelMessageId) Game.MatchData
+channelGames guildOrDmId local =
+    case guildOrDmId of
+        GuildOrDmId_Dm { otherUserId } ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just dmChannel ->
+                    dmChannel.games
+
+                Nothing ->
+                    SeqDict.empty
+
+        GuildOrDmId_Guild id ->
+            case LocalState.getGuildAndChannel id local of
+                Just ( _, channel ) ->
+                    channel.games
+
+                Nothing ->
+                    SeqDict.empty
 
 
 isPressMsg : FrontendMsg_ -> Bool
@@ -2224,6 +2257,21 @@ isPressMsg msg =
         TypedDomainWhitelist _ ->
             False
 
+        -- Dragging the brightness slider is a drag, so counting this as a press would make
+        -- the slider unusable on mobile. Brushing past a swatch only changes which colour is
+        -- highlighted, which is cheap to undo.
+        PressedSelectNewColor ->
+            True
+
+        SelectedUserColor _ ->
+            False
+
+        PressedSubmitUserColor ->
+            True
+
+        PressedResetUserColor ->
+            True
+
         PressedSaveDomainWhitelist ->
             True
 
@@ -2242,7 +2290,7 @@ isPressMsg msg =
         GotEmojiData _ ->
             False
 
-        GotEditMessageTextInputPositionForEmojiSelector _ ->
+        GotPositionForEmojiSelector_EditMessage _ ->
             False
 
         MessageMenu_PressedReactionEmoji _ ->
@@ -2375,6 +2423,9 @@ isPressMsg msg =
         UnreadOverviewThreadMsg _ _ _ messageViewMsg ->
             MessageView.isPressMsg messageViewMsg
 
+        GotPositionForEmojiSelector_SheepGameInput _ _ ->
+            False
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg_
 setFocus model htmlId =
@@ -2394,7 +2445,7 @@ textToRichText text memberIds local =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers local.localUser
+            User.allUsers local.localUser
     in
     RichText.fromNonemptyString
         local.localUser.timezone
@@ -2760,7 +2811,12 @@ changeUpdate localMsg local =
                                 | guilds =
                                     SeqDict.insert
                                         guildId
-                                        (LocalState.guildToFrontend (Just ( LocalState.announcementChannel guild, NoThread )) guild)
+                                        (LocalState.guildToFrontend
+                                            guildId
+                                            (Just ( LocalState.announcementChannel guild, ( NoThread, Nothing ) ))
+                                            OneToOne.empty
+                                            guild
+                                        )
                                         local.guilds
                             }
 
@@ -3437,6 +3493,17 @@ changeUpdate localMsg local =
                             { localUser | session = UserSession.collapseUserOptionSection section localUser.session }
                     }
 
+                Local_SetSheepGameQuestions questions ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser | session = UserSession.setSheepGameQuestions questions localUser.session }
+                    }
+
                 Local_SetEmailNotifications emailNotifications ->
                     let
                         localUser : LocalUser
@@ -3520,6 +3587,14 @@ changeUpdate localMsg local =
                             local.localUser
                     in
                     { local | localUser = { localUser | user = User.setEmojiSkinTone maybeSkinTone localUser.user } }
+
+                Local_SetUserColor color ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local | localUser = { localUser | user = User.setColor color localUser.user } }
 
                 Local_AddCustomEmojisToUser customEmojiIds ->
                     let
@@ -4260,6 +4335,20 @@ changeUpdate localMsg local =
                             }
                     }
 
+                Server_SetUserColor userId color ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | otherUsers =
+                                    SeqDict.updateIfExists userId (User.setColor color) localUser.otherUsers
+                            }
+                    }
+
                 Server_SetUserIcon userId icon ->
                     let
                         localUser : LocalUser
@@ -4777,7 +4866,7 @@ changeUpdate localMsg local =
                                 local.discordGuilds
                     }
 
-                Server_DiscordGuildMemberJoined time guildId channelId userJoinedId name ->
+                Server_DiscordGuildMemberJoined time guildId channelId userJoinedId name color ->
                     let
                         localUser =
                             local.localUser
@@ -4820,7 +4909,7 @@ changeUpdate localMsg local =
                                                     { user | name = name }
 
                                                 Nothing ->
-                                                    { name = name, icon = Nothing }
+                                                    { name = name, icon = Nothing, color = color }
                                         )
                                         localUser.discordUsers
                             }
@@ -5318,6 +5407,21 @@ gameChangeUpdateChannel changeBy gameChange channel =
                                 channel.games
                     }
 
+                EmptyPlaceholder ->
+                    channel
+
+        Game.LoadMatch matchId data ->
+            case data of
+                FilledInByBackend loaded ->
+                    { channel
+                        | games =
+                            SeqDict.updateIfExists
+                                matchId
+                                (\_ -> Game.initMatchData loaded.gameData loaded.publicLink)
+                                channel.games
+                    }
+
+                -- Nothing has arrived yet, so the match stays as the placeholder it was.
                 EmptyPlaceholder ->
                     channel
 
@@ -6100,7 +6204,7 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
         timeOffsetSoFar : Int -> String -> Maybe NameSoFar
         timeOffsetSoFar caret text =
             let
-                timeOffsetHelper : String -> String -> (Float -> MessageInput.TimestampData) -> Maybe NameSoFar
+                timeOffsetHelper : String -> String -> (Float -> TimestampData) -> Maybe NameSoFar
                 timeOffsetHelper valueText unit offsetType =
                     case String.toFloat valueText of
                         Just value ->
@@ -6586,7 +6690,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                 ( GuildOrDmId guildOrDmId2, threadRoute )
                                                 { messageIndex = index
                                                 , text =
-                                                    RichText.toString local.localUser.timezone False (LocalState.allUsers local.localUser) message.content
+                                                    RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.content
                                                 , attachedFiles =
                                                     SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
                                                 }

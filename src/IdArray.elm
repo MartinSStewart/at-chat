@@ -2,22 +2,26 @@ module IdArray exposing
     ( IdArray(..)
     , empty
     , foldl
+    , fromArray
     , fromList
     , get
     , isEmpty
     , last
     , length
+    , map
     , push
     , set
     , slice
     , toArray
     , toList
+    , update
     )
 
 {-| Just a normal array except you use an Id instead of a raw Int to access indices.
 -}
 
 import Array exposing (Array)
+import Array.Extra
 import Id exposing (Id)
 
 
@@ -35,6 +39,16 @@ get key (IdArray array) =
 set : Id k -> v -> IdArray k v -> IdArray k v
 set key value (IdArray array) =
     Array.set (Id.toInt key) value array |> IdArray
+
+
+map : (Id k -> v1 -> v2) -> IdArray k v1 -> IdArray k v2
+map mapFunc (IdArray array) =
+    Array.indexedMap (\index value -> mapFunc (Id.fromInt index) value) array |> IdArray
+
+
+update : Id k -> (v -> v) -> IdArray k v -> IdArray k v
+update key updateFunc (IdArray array) =
+    Array.Extra.update (Id.toInt key) updateFunc array |> IdArray
 
 
 foldl : (a -> b -> b) -> b -> IdArray k a -> b
@@ -70,6 +84,11 @@ toList (IdArray array) =
 toArray : IdArray k v -> Array v
 toArray (IdArray array) =
     array
+
+
+fromArray : Array v -> IdArray k v
+fromArray =
+    IdArray
 
 
 fromList : List v -> IdArray k v

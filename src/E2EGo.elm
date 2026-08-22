@@ -106,7 +106,7 @@ goMatchTest normalConfig =
                                 , user2.click 100 (Dom.id "guild_friendLabel_0")
                                 , user2.click 100 (Dom.id "guild_openGamesTab")
                                 , user2.click 100 (Dom.id "game_select_Go (Baduk)")
-                                , user2.input 100 (Dom.id "go_matchSwitcher") "0"
+                                , user2.input 100 (Dom.id "game_matchSwitcher") "0"
 
                                 -- A few more moves to confirm the state persisted
                                 , admin.click 100 (Dom.id "go_cell_3_3")

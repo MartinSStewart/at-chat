@@ -59,6 +59,7 @@ type ToBackendLog
     | ToBackendLog_Local_SetDiscordGuildNotificationLevel
     | ToBackendLog_Local_SetNotificationMode
     | ToBackendLog_Local_ExpandUserOptionSection
+    | ToBackendLog_Local_SetSheepGameQuestions
     | ToBackendLog_Local_CollapseUserOptionSection
     | ToBackendLog_Local_SetEmailNotifications
     | ToBackendLog_Local_RegisterPushSubscription
@@ -68,6 +69,7 @@ type ToBackendLog
     | ToBackendLog_Local_LinkDiscordAcknowledgementIsChecked
     | ToBackendLog_Local_SetDomainWhitelist
     | ToBackendLog_Local_SetEmojiSkinTone
+    | ToBackendLog_Local_SetUserColor
     | ToBackendLog_Local_AddCustomEmojisToUser
     | ToBackendLog_Local_VoiceChatChange
     | ToBackendLog_Local_Game
@@ -233,6 +235,9 @@ toBackendLogToString log =
         ToBackendLog_Local_ExpandUserOptionSection ->
             "Local_ExpandUserOptionSection"
 
+        ToBackendLog_Local_SetSheepGameQuestions ->
+            "Local_SetSheepGameQuestions"
+
         ToBackendLog_Local_CollapseUserOptionSection ->
             "Local_CollapseUserOptionSection"
 
@@ -259,6 +264,9 @@ toBackendLogToString log =
 
         ToBackendLog_Local_SetEmojiSkinTone ->
             "Local_SetEmojiSkinTone"
+
+        ToBackendLog_Local_SetUserColor ->
+            "Local_SetUserColor"
 
         ToBackendLog_Local_AddCustomEmojisToUser ->
             "Local_AddCustomEmojisToUser"

@@ -3,17 +3,22 @@ module UserOptions exposing (discordBookmarkletId, domainWhitelistToString, init
 import Codec
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
+import Drawing exposing (Drawing)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Lamdera exposing (ClientId)
 import EmailAddress
 import Env
 import Icons
+import Id exposing (ChannelMessageId, Id, UserId)
 import ImageEditor
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
+import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (AdminStatus(..), LocalState)
 import Log
+import Message
 import MyUi
+import Pages.Guild exposing (IsHovered(..))
 import PersonName
 import Ports
 import Range exposing (Range)
@@ -22,6 +27,7 @@ import Route
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import String.Nonempty exposing (NonemptyString(..))
 import Time
 import TwoFactorAuthentication
 import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
@@ -30,8 +36,9 @@ import Ui.Anim
 import Ui.Font
 import Ui.Input
 import Ui.Prose
-import User
+import User exposing (FrontendUser)
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
+import UserColor exposing (UserColor)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), UserOptionSection(..))
 
 
@@ -40,6 +47,7 @@ init domainWhitelist =
     { name = Editable.init
     , domainWhitelistInput = domainWhitelistToString domainWhitelist
     , debugData = Nothing
+    , color = Nothing
     }
 
 
@@ -184,6 +192,11 @@ view :
     -> UserOptionsModel
     -> Element FrontendMsg_
 view isMobile textInputFocus time local loggedIn loaded model =
+    let
+        allUsers : SeqDict (Id UserId) FrontendUser
+        allUsers =
+            User.allUsers local.localUser
+    in
     Ui.el
         [ Ui.height Ui.fill
         , Ui.heightMin 0
@@ -287,7 +300,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         [ Ui.el [ Ui.Font.bold ] (Ui.text "Profile Picture")
                         , Ui.row
                             [ Ui.spacing 12, Ui.alignLeft ]
-                            [ User.profileImage local.localUser.session.userId local.localUser.user.icon
+                            [ User.profileImage (Just local.localUser.user)
                             , ImageEditor.view
                                 loaded.windowSize
                                 (local.localUser.user.icon /= Nothing)
@@ -348,6 +361,43 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         [ ( User.NeverNotifyMe, "No email notifications" )
                         , ( User.NotifyMeWhenMentioned, "Send me email notifications" )
                         ]
+                    , Ui.column
+                        [ Ui.spacing 8 ]
+                        (Ui.el [ Ui.Font.bold ] (Ui.text "Color")
+                            :: Ui.text "This is the color used when you use the drawing tool or to represent you in some games."
+                            :: (case model.color of
+                                    Nothing ->
+                                        [ Ui.row
+                                            [ Ui.spacing 8 ]
+                                            [ currentColorSquare local.localUser.user.color
+                                            , MyUi.secondaryButtonTall
+                                                (Dom.id "userOptions_selectColor")
+                                                PressedSelectNewColor
+                                                "Select new color"
+                                            ]
+                                        ]
+
+                                    Just selection ->
+                                        [ colorPreview time isMobile local allUsers (UserColor.picked selection)
+                                        , UserColor.picker isMobile selection SelectedUserColor
+                                        , Ui.row
+                                            [ Ui.spacing 8 ]
+                                            [ if UserColor.picked selection == local.localUser.user.color then
+                                                Ui.none
+
+                                              else
+                                                MyUi.simpleButton
+                                                    (Dom.id "userOptions_submitColor")
+                                                    PressedSubmitUserColor
+                                                    (Ui.text "Submit")
+                                            , MyUi.secondaryButtonTall
+                                                (Dom.id "userOptions_resetColor")
+                                                PressedResetUserColor
+                                                "Reset"
+                                            ]
+                                        ]
+                               )
+                        )
 
                     --, Ui.el
                     --    [ Ui.linkNewTab
@@ -777,3 +827,88 @@ bookmarklet =
         |> String.replace "  " " "
         |> String.replace "  " " "
         |> String.replace "  " " "
+
+
+{-| The colour the user has now, next to the grid of ones they could have instead.
+-}
+currentColorSquare : UserColor -> Element FrontendMsg_
+currentColorSquare color =
+    Ui.el
+        [ Ui.id (Dom.idToString (Dom.id "userOptions_currentColor"))
+        , Ui.width (Ui.px 40)
+        , Ui.height (Ui.px 40)
+        , Ui.alignTop
+        , Ui.rounded 3
+        , Ui.border 1
+        , Ui.borderColor MyUi.border1
+        , Ui.background (UserColor.toColor color)
+        ]
+        Ui.none
+
+
+{-| A message with the colour drawn on it the way the drawing tool would leave it, so that
+the picker shows what a colour is actually going to look like rather than just a square of
+it.
+-}
+colorPreview :
+    Time.Posix
+    -> Bool
+    -> LocalState
+    -> SeqDict (Id UserId) FrontendUser
+    -> UserColor
+    -> Element FrontendMsg_
+colorPreview time isMobile local allUsers color =
+    let
+        message : Message.UserTextMessageData ChannelMessageId (Id UserId)
+        message =
+            Message.userTextMessageNoEmbeds
+                time
+                local.localUser.session.userId
+                (NonemptyString '#' "# Hello" |> RichText.fromNonemptyString local.localUser.timezone allUsers)
+                SeqDict.empty
+                Nothing
+                SeqDict.empty
+    in
+    Pages.Guild.userTextMessageContent
+        time
+        (Dom.id "userOptions_colorPreviewSpoiler")
+        200
+        False
+        isMobile
+        Nothing
+        local.localUser
+        SeqDict.empty
+        (SeqDict.fromList
+            [ ( local.localUser.session.userId
+              , { color = color, name = local.localUser.user.name, icon = local.localUser.user.icon }
+              )
+            ]
+        )
+        (\_ -> color)
+        IsNotHovered
+        (Id.fromInt 0)
+        { message | userIconDrawings = exampleDrawing local.localUser.session.userId }
+        |> Ui.map (\_ -> FrontendNoOp)
+        |> Ui.el [ Ui.background MyUi.background3, Ui.widthMax 400, Ui.paddingXY 8 4 ]
+
+
+exampleDrawing : Id UserId -> Drawing (Id UserId)
+exampleDrawing userId =
+    { finished =
+        [ Nonempty ( 205, 28.503 ) [ ( 205, 28.503 ), ( 205, 27.5 ), ( 205, 25.5 ), ( 205, 22.497 ), ( 205, 19.503 ), ( 205, 16.5 ), ( 205, 13.501 ), ( 205, 11.501 ), ( 205, 10.499 ) ]
+        , Nonempty ( 204.4, 35.5 ) [ ( 204.4, 34.5 ), ( 204.4, 34.5 ), ( 204.4, 34.5 ), ( 204.4, 34.5 ), ( 204.6, 34.5 ), ( 204.6, 34.5 ), ( 204.6, 34.5 ), ( 204.6, 34.5 ), ( 204.6, 34.5 ), ( 204.6, 33.5 ), ( 204.6, 33.5 ), ( 204.6, 33.5 ), ( 204.6, 33.5 ), ( 204.6, 33.5 ), ( 204.6, 33.5 ), ( 204.6, 33.5 ), ( 204.6, 33.5 ) ]
+        , Nonempty ( 184.2, 17.5 ) [ ( 184.4, 17.5 ), ( 184.6, 17.5 ), ( 185.6, 17.5 ), ( 187.2, 17.5 ), ( 189, 17.5 ), ( 190.8, 17.5 ), ( 192.2, 17.5 ), ( 193.8, 17.5 ), ( 194.6, 17.5 ), ( 195.2, 17.5 ), ( 195.4, 17.5 ), ( 195.6, 17.5 ), ( 195.6, 17.5 ) ]
+        , Nonempty ( 190.4, 35.5 ) [ ( 190.4, 35.5 ), ( 190.4, 34.5 ), ( 190.4, 33.5 ), ( 190.4, 31.503 ), ( 190.4, 29.5 ), ( 190.4, 27.503 ), ( 190.4, 25.5 ), ( 190.4, 24.5 ), ( 190.4, 22.497 ), ( 190.4, 21.5 ), ( 190.4, 20.5 ), ( 190.4, 19.503 ), ( 190.4, 17.497 ), ( 190.4, 16.5 ), ( 190.4, 15.497 ), ( 190.4, 15.499 ), ( 190.4, 15.503 ), ( 190.4, 15.503 ), ( 190.4, 15.5 ), ( 190.4, 15.5 ), ( 190.4, 14.497 ), ( 190.4, 14.503 ), ( 190.4, 13.501 ), ( 190.4, 13.503 ), ( 190.4, 13.5 ), ( 190.4, 12.497 ), ( 190.4, 12.497 ) ]
+        , Nonempty ( 182, 35.5 ) [ ( 182, 35.5 ), ( 182, 34.5 ), ( 182, 34.5 ), ( 182, 33.5 ), ( 182, 32.5 ), ( 182, 31.503 ), ( 182, 30.503 ), ( 181.8, 29.5 ), ( 181.6, 28.5 ), ( 181.4, 27.5 ), ( 181.2, 26.497 ), ( 180.8, 26.503 ), ( 180.6, 25.497 ), ( 180.4, 25.5 ), ( 180.2, 25.5 ), ( 180, 24.5 ), ( 180, 24.503 ), ( 179.8, 24.5 ), ( 179.4, 23.497 ), ( 179, 23.5 ), ( 178.6, 23.503 ), ( 177.8, 22.497 ), ( 177.6, 22.5 ), ( 176.8, 22.5 ), ( 176.8, 22.5 ), ( 176.6, 22.5 ), ( 176.2, 22.5 ), ( 176, 22.5 ), ( 175.8, 22.5 ), ( 175.4, 22.5 ), ( 175.2, 22.5 ), ( 175, 22.497 ), ( 174.8, 23.503 ), ( 174.8, 23.503 ), ( 174.6, 23.5 ), ( 174.6, 23.5 ), ( 174.4, 24.5 ), ( 174.2, 24.5 ), ( 174, 25.5 ), ( 173.8, 25.5 ), ( 173.6, 26.503 ), ( 173.6, 26.5 ), ( 173.6, 27.503 ), ( 173.4, 28.5 ), ( 173.4, 28.5 ), ( 173.4, 29.503 ), ( 173.4, 29.5 ), ( 173.4, 30.503 ), ( 173.4, 30.5 ), ( 173.4, 30.497 ), ( 173.4, 31.503 ), ( 173.4, 31.5 ), ( 173.4, 31.5 ), ( 173.4, 31.497 ), ( 173.4, 32.5 ), ( 173.6, 32.5 ), ( 173.6, 32.5 ), ( 173.8, 32.5 ), ( 174.2, 32.5 ), ( 174.4, 32.5 ), ( 174.8, 33.5 ), ( 175, 33.5 ), ( 175.2, 33.5 ), ( 175.4, 33.5 ), ( 175.6, 33.5 ), ( 176, 33.5 ), ( 176.4, 33.5 ), ( 176.8, 33.5 ), ( 177.2, 33.5 ), ( 177.6, 33.5 ), ( 178, 33.5 ), ( 178.2, 33.5 ), ( 178.6, 33.5 ), ( 178.8, 33.5 ), ( 179, 33.5 ), ( 179.2, 33.5 ), ( 179.4, 33.5 ), ( 179.6, 32.5 ), ( 179.8, 32.5 ), ( 180, 32.5 ), ( 180.4, 32.5 ), ( 180.4, 32.5 ), ( 180.4, 32.5 ), ( 180.6, 32.5 ), ( 180.6, 32.5 ), ( 180.8, 32.5 ), ( 180.8, 32.5 ), ( 180.8, 32.5 ), ( 181, 32.5 ), ( 181, 31.497 ) ]
+        , Nonempty ( 157.8, 35.5 ) [ ( 157.8, 35.5 ), ( 157.8, 34.5 ), ( 157.8, 33.5 ), ( 157.8, 32.5 ), ( 157.6, 31.5 ), ( 157.8, 30.503 ), ( 158.2, 29.503 ), ( 158.4, 28.5 ), ( 158.8, 28.5 ), ( 159.4, 27.503 ), ( 160, 26.5 ), ( 160.4, 25.497 ), ( 160.8, 25.503 ), ( 161, 24.5 ), ( 161.4, 24.5 ), ( 161.6, 24.5 ), ( 161.8, 23.497 ), ( 162, 23.5 ), ( 162.2, 23.5 ), ( 162.4, 23.5 ), ( 162.6, 23.5 ), ( 162.8, 23.5 ), ( 163.2, 23.5 ), ( 163.6, 23.5 ), ( 163.8, 23.5 ), ( 164.2, 23.5 ), ( 164.4, 23.5 ), ( 164.6, 23.5 ), ( 164.8, 23.5 ), ( 165, 23.5 ), ( 165.2, 23.497 ), ( 165.4, 24.503 ), ( 165.8, 24.5 ), ( 166.2, 25.5 ), ( 166.4, 25.5 ), ( 166.8, 26.5 ), ( 167.2, 26.5 ), ( 167.6, 27.5 ), ( 168, 27.5 ), ( 168.2, 28.5 ), ( 168.4, 28.5 ), ( 168.8, 29.5 ), ( 168.8, 29.5 ), ( 169, 30.503 ), ( 169.2, 30.497 ), ( 169.2, 31.503 ), ( 169.4, 31.497 ), ( 169.4, 32.5 ), ( 169.4, 32.5 ), ( 169.4, 32.5 ), ( 169.4, 33.5 ), ( 169.4, 33.5 ), ( 169.4, 33.5 ), ( 169.4, 33.5 ), ( 169.4, 33.5 ), ( 169.4, 33.5 ), ( 169.4, 34.5 ), ( 169.4, 34.5 ) ]
+        , Nonempty ( 157.6, 35.5 ) [ ( 157.6, 35.5 ), ( 157.6, 35.5 ), ( 157.6, 33.5 ), ( 157.6, 31.5 ), ( 157.6, 27.503 ), ( 157.6, 22.5 ), ( 157.6, 18.5 ), ( 157.6, 15.497 ), ( 157.6, 14.5 ), ( 157.6, 13.503 ), ( 157.6, 12.497 ), ( 157.6, 12.501 ), ( 157.6, 12.499 ), ( 157.6, 12.503 ), ( 157.6, 12.5 ), ( 157.6, 11.497 ), ( 157.8, 11.501 ), ( 157.8, 11.499 ), ( 157.8, 11.499 ) ]
+        , Nonempty ( 151.2, 37.5 ) [ ( 151, 37.5 ), ( 150.6, 37.5 ), ( 150, 37.5 ), ( 149.2, 37.5 ), ( 148.2, 37.5 ), ( 147.4, 37.5 ), ( 146.8, 37.5 ), ( 146.4, 37.5 ), ( 145.8, 37.5 ), ( 145.4, 37.5 ), ( 144.8, 36.5 ), ( 144, 36.5 ), ( 143.4, 35.5 ), ( 142.8, 35.5 ), ( 142.4, 34.5 ), ( 142, 34.5 ), ( 141.6, 34.5 ), ( 141.4, 33.5 ), ( 141.2, 33.5 ), ( 141.2, 33.5 ), ( 141, 32.5 ), ( 141, 32.5 ), ( 141, 31.5 ), ( 141, 31.503 ), ( 141, 30.5 ), ( 141.2, 30.503 ), ( 141.4, 29.497 ), ( 141.8, 29.5 ), ( 142.6, 29.5 ), ( 143.4, 28.5 ), ( 144.2, 28.5 ), ( 145.2, 27.5 ), ( 146.6, 26.5 ), ( 147.2, 26.503 ), ( 147.6, 26.503 ), ( 148.2, 26.5 ), ( 149.4, 25.497 ), ( 150, 25.5 ), ( 150.8, 25.5 ), ( 151.2, 25.5 ), ( 151.6, 25.5 ), ( 151.8, 25.5 ), ( 152, 25.5 ) ]
+        , Nonempty ( 126.6, 28.503 ) [ ( 126.6, 28.503 ), ( 126.01, 28.503 ), ( 127.99, 28.503 ), ( 127.01, 28.503 ), ( 128.8, 28.503 ), ( 129.6, 28.503 ), ( 130.2, 28.503 ), ( 131.6, 28.503 ), ( 132, 28.503 ), ( 132.4, 28.503 ), ( 132.6, 28.503 ), ( 132.6, 28.503 ) ]
+        , Nonempty ( 109.6, 22.497 ) [ ( 109.8, 22.497 ), ( 111, 22.497 ), ( 112.8, 22.497 ), ( 115.2, 22.497 ), ( 117.6, 22.497 ), ( 119.2, 22.497 ), ( 120.6, 22.497 ), ( 122, 22.497 ), ( 122.01, 22.497 ), ( 123.4, 22.497 ), ( 123.01, 22.497 ), ( 123.01, 22.497 ), ( 124, 22.497 ), ( 124.99, 22.497 ) ]
+        , Nonempty ( 117.4, 17.503 ) [ ( 117.4, 17.5 ), ( 117.4, 18.5 ), ( 117.4, 20.5 ), ( 117.4, 21.5 ), ( 117.4, 22.497 ), ( 117.4, 25.5 ), ( 117.4, 26.5 ), ( 117.4, 27.503 ), ( 117.4, 28.5 ), ( 117.4, 30.5 ), ( 117.4, 31.5 ), ( 117.4, 32.5 ), ( 117.6, 34.5 ), ( 117.6, 35.5 ), ( 117.8, 36.5 ), ( 118, 36.5 ), ( 118, 37.5 ), ( 118, 37.5 ), ( 118.2, 37.5 ), ( 118.2, 37.5 ), ( 118.2, 37.5 ) ]
+        , Nonempty ( 111, 37.5 ) [ ( 111, 37.5 ), ( 111, 37.5 ), ( 111, 36.5 ), ( 111, 35.5 ), ( 110.6, 35.5 ), ( 110, 34.5 ), ( 109.4, 33.5 ), ( 108.8, 32.5 ), ( 108.2, 31.503 ), ( 107.6, 30.5 ), ( 107.2, 30.5 ), ( 107, 29.5 ), ( 106.6, 29.5 ), ( 106.4, 28.5 ), ( 106.2, 28.5 ), ( 105.8, 27.5 ), ( 105.4, 27.503 ), ( 105, 26.5 ), ( 104.6, 26.5 ), ( 104, 25.5 ), ( 103.6, 25.503 ), ( 103.2, 25.5 ), ( 102.6, 24.497 ), ( 102.2, 24.5 ), ( 101.6, 24.5 ), ( 101.2, 24.5 ), ( 100.8, 24.5 ), ( 100.4, 24.5 ), ( 100.2, 24.5 ), ( 100, 24.5 ), ( 99.4, 24.497 ), ( 99, 25.5 ), ( 98.8, 25.5 ), ( 98.4, 26.5 ), ( 98.4, 26.5 ), ( 98.2, 27.503 ), ( 98, 27.497 ), ( 98, 28.5 ), ( 97.8, 29.5 ), ( 97.8, 30.503 ), ( 97.8, 31.5 ), ( 97.8, 31.497 ), ( 97.8, 32.5 ), ( 97.8, 33.5 ), ( 97.8, 33.5 ), ( 98, 34.5 ), ( 98, 34.5 ), ( 98, 34.5 ), ( 98.2, 35.5 ), ( 98.4, 35.5 ), ( 98.6, 36.5 ), ( 98.8, 36.5 ), ( 99, 36.5 ), ( 99.2, 37.5 ), ( 99.6, 37.5 ), ( 99.8, 37.5 ), ( 100.2, 37.5 ), ( 100.6, 37.5 ), ( 101.2, 37.5 ), ( 101.8, 37.5 ), ( 102.2, 37.5 ), ( 102.8, 37.5 ), ( 103.2, 37.5 ), ( 103.8, 37.5 ), ( 104.2, 36.5 ), ( 104.8, 36.5 ), ( 105.4, 36.5 ), ( 106, 35.5 ), ( 106.4, 35.5 ), ( 106.8, 35.5 ), ( 107.2, 34.5 ), ( 107.4, 34.5 ), ( 107.6, 34.5 ), ( 107.8, 34.5 ), ( 108, 34.5 ), ( 108, 33.5 ), ( 108.2, 33.5 ), ( 108.4, 33.5 ), ( 108.4, 33.5 ), ( 108.6, 33.5 ), ( 108.6, 33.5 ), ( 108.6, 33.5 ), ( 108.6, 33.5 ), ( 108.6, 33.5 ), ( 108.6, 33.5 ), ( 108.6, 33.5 ) ]
+        ]
+            |> List.map (\points -> { createdBy = userId, points = List.Nonempty.map (\( x, y ) -> ( x + 20, y + 10 )) points })
+    , inProgress = SeqDict.empty
+    , undone = SeqDict.empty
+    }

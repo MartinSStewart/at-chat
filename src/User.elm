@@ -13,11 +13,13 @@ module User exposing
     , addNewStickers
     , addRecentlyUsedEmoji
     , addRecentlyUsedEmojis
+    , allUsers
     , backendToFrontendCurrent
     , backendToFrontendForUser
     , commonlyUsedEmojis
     , discordFullDataUserToFrontendCurrentUser
     , discordProfileImage
+    , discordUserColor
     , discordUserDataToFrontendUser
     , getDiscordUser
     , getUser
@@ -30,6 +32,7 @@ module User exposing
     , profileImageRounding
     , profileImageSize
     , sectionToString
+    , setColor
     , setDiscordGuildNotificationLevel
     , setDomainWhitelist
     , setEmailNotifications
@@ -44,6 +47,7 @@ module User exposing
     , setName
     , toString
     , toStringAlt
+    , userColor
     )
 
 import Array
@@ -76,6 +80,7 @@ import Sticker exposing (StickerData)
 import Ui exposing (Element)
 import Ui.Font
 import UserAgent exposing (UserAgent)
+import UserColor exposing (UserColor)
 import UserSession exposing (DiscordFrontendUser, UserSession)
 
 
@@ -83,6 +88,7 @@ import UserSession exposing (DiscordFrontendUser, UserSession)
 -}
 type alias BackendUser =
     { name : PersonName
+    , color : UserColor
     , isAdmin : Bool
     , email : EmailAddress
     , recentLoginEmails : List Time.Posix
@@ -274,6 +280,7 @@ type NotificationLevel
 init : Time.Posix -> PersonName -> EmailAddress -> Bool -> BackendUser
 init createdAt name email userIsAdmin =
     { name = name
+    , color = UserColor.default
     , isAdmin = userIsAdmin
     , email = email
     , recentLoginEmails = []
@@ -632,6 +639,11 @@ setName name user =
     { user | name = name }
 
 
+setColor : UserColor -> { b | color : UserColor } -> { b | color : UserColor }
+setColor color user =
+    { user | color = color }
+
+
 setIcon : Maybe FileHash -> { b | icon : Maybe FileHash } -> { b | icon : Maybe FileHash }
 setIcon icon user =
     { user | icon = icon }
@@ -744,27 +756,42 @@ sectionToString section2 =
 -}
 type alias FrontendUser =
     { name : PersonName
-    , isAdmin : Bool
+    , color : UserColor
     , icon : Maybe FileHash
     }
 
 
-discordUserDataToFrontendUser : DiscordUserData -> DiscordFrontendUser
-discordUserDataToFrontendUser discordUserData =
+discordUserDataToFrontendUser : NonemptyDict (Id UserId) BackendUser -> DiscordUserData -> DiscordFrontendUser
+discordUserDataToFrontendUser users discordUserData =
     case discordUserData of
         DiscordUserData.BasicData data ->
             { name = PersonName.fromStringLossy data.user.username
             , icon = data.icon
+            , color = UserColor.default
             }
 
         DiscordUserData.FullData data ->
             { name = PersonName.fromStringLossy data.user.username
             , icon = data.icon
+            , color =
+                case NonemptyDict.get data.linkedTo users of
+                    Just linkedUser ->
+                        linkedUser.color
+
+                    Nothing ->
+                        UserColor.default
             }
 
         DiscordUserData.NeedsAuthAgain data ->
             { name = PersonName.fromStringLossy data.user.username
             , icon = data.icon
+            , color =
+                case NonemptyDict.get data.linkedTo users of
+                    Just linkedUser ->
+                        linkedUser.color
+
+                    Nothing ->
+                        UserColor.default
             }
 
 
@@ -784,14 +811,30 @@ type alias LocalUser =
     }
 
 
+allUsers : LocalUser -> SeqDict (Id UserId) FrontendUser
+allUsers localUser =
+    SeqDict.insert
+        localUser.session.userId
+        (backendToFrontendForUser localUser.user)
+        localUser.otherUsers
+
+
 discordFullDataUserToFrontendCurrentUser :
-    Bool
-    -> { a | user : Discord.User, icon : Maybe FileHash, linkedAt : Time.Posix }
+    NonemptyDict (Id UserId) BackendUser
+    -> Bool
+    -> { a | user : Discord.User, icon : Maybe FileHash, linkedAt : Time.Posix, linkedTo : Id UserId }
     -> DiscordUserLoadingData
     -> DiscordFrontendCurrentUser
-discordFullDataUserToFrontendCurrentUser needsAuthAgain data isLoadingData =
+discordFullDataUserToFrontendCurrentUser users needsAuthAgain data isLoadingData =
     { name = PersonName.fromStringLossy data.user.username
     , icon = data.icon
+    , color =
+        case NonemptyDict.get data.linkedTo users of
+            Just linkedUser ->
+                linkedUser.color
+
+            Nothing ->
+                UserColor.default
     , email =
         case data.user.email of
             Included maybeText ->
@@ -813,6 +856,7 @@ discordFullDataUserToFrontendCurrentUser needsAuthAgain data isLoadingData =
 backendToFrontendCurrent : BackendUser -> FrontendCurrentUser
 backendToFrontendCurrent user =
     { name = user.name
+    , color = user.color
     , isAdmin = user.isAdmin
     , email = user.email
     , recentLoginEmails = user.recentLoginEmails
@@ -848,7 +892,7 @@ backendToFrontendCurrent user =
 backendToFrontend : FrontendCurrentUser -> FrontendUser
 backendToFrontend user =
     { name = user.name
-    , isAdmin = user.isAdmin
+    , color = user.color
     , icon = user.icon
     }
 
@@ -856,18 +900,18 @@ backendToFrontend user =
 {-| Convert a BackendUser to a FrontendUser while only including data the current user has permission to see
 -}
 backendToFrontendForUser :
-    { a | name : PersonName, isAdmin : Bool, icon : Maybe FileHash }
+    { a | name : PersonName, color : UserColor, icon : Maybe FileHash }
     -> FrontendUser
 backendToFrontendForUser user =
     { name = user.name
-    , isAdmin = user.isAdmin
+    , color = user.color
     , icon = user.icon
     }
 
 
 toString : userId -> SeqDict userId { a | name : PersonName } -> String
-toString userId allUsers =
-    case SeqDict.get userId allUsers of
+toString userId allUsers2 =
+    case SeqDict.get userId allUsers2 of
         Just user ->
             PersonName.toString user.name
 
@@ -904,46 +948,77 @@ profileImageRounding =
     8
 
 
-profileImage : Id UserId -> Maybe FileHash -> Element msg
-profileImage userId maybeFileHash =
-    case maybeFileHash of
-        Just fileHash ->
-            Ui.image
-                [ Ui.rounded profileImageRounding
-                , Ui.width (Ui.px profileImageSize)
-                , Ui.height (Ui.px profileImageSize)
-                , Ui.clip
-                , -- We need no pointer events here so drawing anchoring gets the offset of the parent
-                  MyUi.noPointerEvents
-                ]
-                { source = FileStatus.fileUrl FileStatus.pngContent fileHash
-                , description = ""
-                , onLoad = Nothing
-                }
+userColor : LocalUser -> Id UserId -> UserColor
+userColor localUser userId =
+    case getUser userId localUser of
+        Just user ->
+            user.color
 
         Nothing ->
-            GuildIcon.defaultUser False profileImageSize 8 userId
+            UserColor.default
 
 
-profileImageHtml : Id UserId -> Maybe FileHash -> Html msg
-profileImageHtml userId maybeFileHash =
-    case maybeFileHash of
-        Just fileHash ->
-            Html.img
-                [ Html.Attributes.style "border-radius" (String.fromInt profileImageRounding ++ "px")
-                , Html.Attributes.style "width" (String.fromInt profileImageSize ++ "px")
-                , Html.Attributes.style "height" (String.fromInt profileImageSize ++ "px")
-                , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
-                ]
-                []
+discordUserColor : LocalUser -> Discord.Id Discord.UserId -> UserColor
+discordUserColor localUser userId =
+    case getDiscordUser userId localUser of
+        Just user ->
+            user.color
 
         Nothing ->
-            GuildIcon.defaultUserHtml profileImageSize 8 userId
+            UserColor.default
+
+
+profileImage : Maybe { a | color : UserColor, icon : Maybe FileHash } -> Element msg
+profileImage user =
+    case user of
+        Just user2 ->
+            case user2.icon of
+                Just fileHash ->
+                    Ui.imageLazy
+                        [ Ui.rounded profileImageRounding
+                        , Ui.width (Ui.px profileImageSize)
+                        , Ui.height (Ui.px profileImageSize)
+                        , Ui.clip
+                        , -- We need no pointer events here so drawing anchoring gets the offset of the parent
+                          MyUi.noPointerEvents
+                        ]
+                        { source = FileStatus.fileUrl FileStatus.pngContent fileHash
+                        , description = ""
+                        , onLoad = Nothing
+                        }
+
+                Nothing ->
+                    GuildIcon.defaultUser False profileImageSize 8 user2.color
+
+        Nothing ->
+            GuildIcon.defaultUser False profileImageSize 8 UserColor.default
+
+
+profileImageHtml : Maybe FrontendUser -> Html msg
+profileImageHtml user =
+    case user of
+        Just user2 ->
+            case user2.icon of
+                Just fileHash ->
+                    Html.img
+                        [ Html.Attributes.style "border-radius" (String.fromInt profileImageRounding ++ "px")
+                        , Html.Attributes.style "width" (String.fromInt profileImageSize ++ "px")
+                        , Html.Attributes.style "height" (String.fromInt profileImageSize ++ "px")
+                        , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                        , MyUi.lazyLoading
+                        ]
+                        []
+
+                Nothing ->
+                    GuildIcon.defaultUserHtml profileImageSize 8 user2.color
+
+        Nothing ->
+            GuildIcon.defaultUserHtml profileImageSize 8 UserColor.default
 
 
 discordProfileImage : Discord.Id Discord.UserId -> Maybe FileHash -> Element msg
 discordProfileImage userId maybeFileHash =
-    Ui.image
+    Ui.imageLazy
         [ Ui.rounded profileImageRounding
         , Ui.width (Ui.px profileImageSize)
         , Ui.height (Ui.px profileImageSize)
@@ -961,21 +1036,26 @@ discordProfileImage userId maybeFileHash =
         }
 
 
-profileImageNoRounding : Id UserId -> Maybe FileHash -> Element msg
-profileImageNoRounding userId maybeFileHash =
-    case maybeFileHash of
-        Just fileHash ->
-            Ui.image
-                [ Ui.width (Ui.px profileImageSize)
-                , Ui.height (Ui.px profileImageSize)
-                ]
-                { source = FileStatus.fileUrl FileStatus.pngContent fileHash
-                , description = ""
-                , onLoad = Nothing
-                }
+profileImageNoRounding : Maybe { a | color : UserColor, icon : Maybe FileHash } -> Element msg
+profileImageNoRounding user =
+    case user of
+        Just user2 ->
+            case user2.icon of
+                Just fileHash ->
+                    Ui.image
+                        [ Ui.width (Ui.px profileImageSize)
+                        , Ui.height (Ui.px profileImageSize)
+                        ]
+                        { source = FileStatus.fileUrl FileStatus.pngContent fileHash
+                        , description = ""
+                        , onLoad = Nothing
+                        }
+
+                Nothing ->
+                    GuildIcon.defaultUser False profileImageSize 0 user2.color
 
         Nothing ->
-            GuildIcon.defaultUser False profileImageSize 0 userId
+            GuildIcon.defaultUser False profileImageSize 0 UserColor.default
 
 
 multipleProfileImages : List ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
@@ -1046,7 +1126,7 @@ multipleProfileImages profileImages =
 
 smallProfileImage : ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
 smallProfileImage ( userId, maybeFileHash ) =
-    Ui.image
+    Ui.imageLazy
         [ Ui.rounded 8
         , Ui.width (Ui.px smallProfileImageSize)
         , Ui.height (Ui.px smallProfileImageSize)

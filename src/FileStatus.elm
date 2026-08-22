@@ -40,6 +40,7 @@ module FileStatus exposing
     , uploadBackup
     , uploadBytes
     , uploadFile
+    , uploadGameFile
     , uploadResponseCodec
     , uploadResponseMetadata
     , uploadString
@@ -524,6 +525,27 @@ uploadFile onResult guildOrDmId fileId file2 =
         , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
         , timeout = Just Duration.minute
         , tracker = uploadTrackerId guildOrDmId fileId |> Just
+        }
+
+
+{-| A file being attached to a game rather than to a message. Games keep their attachments
+outside of `filesToUpload`, so the caller says what to track this upload as and nothing
+cancels the wrong one.
+-}
+uploadGameFile :
+    (Result Http.Error UploadResponse -> msg)
+    -> String
+    -> File
+    -> Command restriction toFrontend msg
+uploadGameFile onResult trackerId file2 =
+    Http.riskyRequest
+        { method = "POST"
+        , headers = []
+        , url = domain ++ "/file/upload"
+        , body = Http.fileBody file2
+        , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
+        , timeout = Just Duration.minute
+        , tracker = Just trackerId
         }
 
 

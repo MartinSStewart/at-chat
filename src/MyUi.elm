@@ -59,7 +59,7 @@ module MyUi exposing
     , isMobile
     , isMobileAlt
     , label
-    , matchSwitcherHeight
+    , lazyLoading
     , memberColumnWidth
     , mentionColor
     , monospace
@@ -598,21 +598,26 @@ radioOption htmlId value text =
         )
 
 
+radioFillColor : Ui.Color
+radioFillColor =
+    white
+
+
 radioCircle : Ui.Input.OptionState -> Element msg
 radioCircle option =
     Ui.el
         [ Ui.width (Ui.px 23)
         , Ui.height (Ui.px 23)
-        , Ui.background (Ui.rgb 250 250 255)
+        , Ui.background background1
         , Ui.rounded 99
         , Ui.border 2
         , Ui.borderColor
             (case option of
                 Ui.Input.Selected ->
-                    background1
+                    radioFillColor
 
                 Ui.Input.Idle ->
-                    background1
+                    radioFillColor
 
                 Ui.Input.Focused ->
                     white
@@ -625,12 +630,12 @@ radioCircle option =
                     , Ui.height (Ui.px 15)
                     , Ui.centerX
                     , Ui.centerY
-                    , Ui.background background1
+                    , Ui.background radioFillColor
                     , Ui.rounded 99
                     , Ui.el
                         [ Ui.width (Ui.px 3)
                         , Ui.height (Ui.px 3)
-                        , Ui.background white
+                        , Ui.background background1
                         , Ui.rounded 99
                         , Ui.centerX
                         , Ui.centerY
@@ -1393,11 +1398,6 @@ channelHeaderHeight =
     38
 
 
-matchSwitcherHeight : number
-matchSwitcherHeight =
-    60
-
-
 conversationWidthIgnoreScrollbar : Coord CssPixels -> Bool -> Int
 conversationWidthIgnoreScrollbar windowSize showMembersTab =
     if isMobileAlt windowSize then
@@ -1520,6 +1520,17 @@ loads it paints over this placeholder.
 imagePlaceholderStyle : Html.Attribute msg
 imagePlaceholderStyle =
     Html.Attributes.style "background-color" (colorToStyle background3)
+
+
+{-| Tells the browser it can wait until an image is close to the viewport before
+downloading it. Only worth adding to images that can start off screen (messages
+that are scrolled past, guild icons further down the sidebar, and so on), and
+only safe when the image has an explicit size, otherwise the page reflows as
+each one arrives.
+-}
+lazyLoading : Html.Attribute msg
+lazyLoading =
+    Html.Attributes.attribute "loading" "lazy"
 
 
 colorWithAlpha : Float -> Color -> Color

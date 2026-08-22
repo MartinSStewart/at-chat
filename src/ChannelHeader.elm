@@ -570,7 +570,7 @@ voiceChatButton isMobile currentTab roomId localUser calls =
                                     , Html.Attributes.attribute "aria-label" (PersonName.toString user.name ++ " is in a call")
                                         |> Ui.htmlAttribute
                                     ]
-                                    (User.profileImage userId user.icon)
+                                    (User.profileImage (Just user))
 
                             Nothing ->
                                 Ui.none
@@ -849,6 +849,7 @@ gameTabBody guildOrDmId maybeMatchId local loggedIn matchData model =
         )
         model.lastCopied
         local.localUser
+        loggedIn
         guildOrDmId
         maybeMatchId
         matchData

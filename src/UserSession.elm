@@ -6,6 +6,7 @@ module UserSession exposing
     , PreviouslyLastViewedMessage(..)
     , PushSubscription(..)
     , SetViewing(..)
+    , SheepGameQuestion
     , ToBeFilledInByBackend(..)
     , UnreadOverviewData
     , UserOptionSection(..)
@@ -26,16 +27,18 @@ module UserSession exposing
     , isViewingGame
     , setPreviouslyLastViewedChannelMessage
     , setPreviouslyLastViewedThreadMessage
+    , setSheepGameQuestions
     , setViewingToCurrentlyViewing
     , toFrontend
     , unreadOverviewMessageLimit
     )
 
+import Array exposing (Array)
 import Discord
 import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
-import FileStatus exposing (FileHash)
+import FileStatus exposing (FileHash, FileId, FileStatus)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_ChannelThreadId, Viewing_DiscordChannelId, Viewing_DiscordChannelThreadId, Viewing_DiscordDmId, Viewing_DmId, Viewing_DmThreadId)
 import Message exposing (Message)
 import PersonName exposing (PersonName)
@@ -44,6 +47,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import UserAgent exposing (UserAgent)
+import UserColor exposing (UserColor)
 
 
 type alias UserSession =
@@ -54,7 +58,12 @@ type alias UserSession =
     , sessionIdHash : SessionIdHash
     , signedInAt : Time.Posix
     , expandedUserOptions : SeqSet UserOptionSection
+    , savedSheepGameQuestions : Array SheepGameQuestion
     }
+
+
+type alias SheepGameQuestion =
+    { text : String, attachedFiles : SeqDict (Id FileId) FileStatus }
 
 
 type UserOptionSection
@@ -228,6 +237,7 @@ type alias ViewDiscordGuildData messageId =
 type alias DiscordFrontendUser =
     { name : PersonName
     , icon : Maybe FileHash
+    , color : UserColor
     }
 
 
@@ -421,6 +431,7 @@ init time sessionId userId userAgent =
     , sessionIdHash = SessionIdHash.fromSessionId sessionId
     , signedInAt = time
     , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
+    , savedSheepGameQuestions = Array.empty
     }
 
 
@@ -432,6 +443,11 @@ expandUserOptionSection section session =
 collapseUserOptionSection : UserOptionSection -> UserSession -> UserSession
 collapseUserOptionSection section session =
     { session | expandedUserOptions = SeqSet.remove section session.expandedUserOptions }
+
+
+setSheepGameQuestions : Array SheepGameQuestion -> UserSession -> UserSession
+setSheepGameQuestions questions session =
+    { session | savedSheepGameQuestions = questions }
 
 
 toFrontend : Id UserId -> SeqDict ClientId Viewing -> UserSession -> Maybe FrontendUserSession

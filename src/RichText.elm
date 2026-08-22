@@ -85,6 +85,7 @@ import TimeInMinutes exposing (TimeInMinutes)
 import Touch exposing (ScreenCoordinate)
 import UInt64
 import Url exposing (Protocol(..), Url)
+import UserColor exposing (UserColor)
 
 
 {-| CSS background that hides spoilered content until it's revealed
@@ -3360,7 +3361,7 @@ preview onPressLink config nonempty =
         , time = config.time
         , drawings = SeqDict.empty
         , embedDrawings = SeqDict.empty
-        , drawingUserColor = always ""
+        , drawingUserColor = \_ -> UserColor.default
         , isSelectingAnchor = False
         , -- Previews replace code blocks with a placeholder, so no ascii art is drawn here
           devicePixelRatio = 1
@@ -3386,7 +3387,7 @@ type alias Config a userId =
       time : Time.Posix
     , drawings : SeqDict (Id FileId) (Drawing userId)
     , embedDrawings : SeqDict Int (Drawing userId)
-    , drawingUserColor : userId -> String
+    , drawingUserColor : userId -> UserColor
     , isSelectingAnchor : Bool
     , devicePixelRatio : Float
     , isHovered : Bool
@@ -4192,6 +4193,7 @@ imageView maybePressedSpoiler maybeOnPressImage containerWidth2 config imageSize
                 Html.img
                     (Html.Attributes.src thumbnailUrl
                         :: Html.Attributes.style "display" "block"
+                        :: MyUi.lazyLoading
                         :: MyUi.imagePlaceholderStyle
                         :: Html.Attributes.width (round width)
                         :: Html.Attributes.height (round height)
@@ -4423,6 +4425,7 @@ embedView timezone onPressLink maybeOnPressImage containerWidth domainWhitelist 
                                     , Html.Attributes.style "width" widthText
                                     , Html.Attributes.style "height" heightText
                                     , Html.Attributes.style "border-radius" "4px"
+                                    , MyUi.lazyLoading
                                     , Html.Attributes.style "display" "block"
                                     , MyUi.imagePlaceholderStyle
                                     , Html.Attributes.attribute "data-image-url" imageData.url
@@ -4566,6 +4569,7 @@ smallHyperlink onPressUrl domainWhitelist url =
             , Html.Attributes.style "height" "16px"
             , Html.Attributes.style "border-radius" "2px"
             , Html.Attributes.src (favicon url)
+            , MyUi.lazyLoading
             ]
             []
         , Html.span
@@ -4653,6 +4657,7 @@ inlineEmbedView showLargeContent onPressUrl domainWhitelist url =
             , Html.Attributes.style "transform" "translateY(0.125em)"
             , Html.Attributes.style "padding" "0 4px 0 4px"
             , Html.Attributes.src (favicon url)
+            , MyUi.lazyLoading
             ]
             []
         , if url.protocol == Http then

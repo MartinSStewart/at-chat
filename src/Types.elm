@@ -115,6 +115,7 @@ import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import SheepGame
 import Slack
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
@@ -127,6 +128,7 @@ import Untrusted exposing (Untrusted)
 import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
+import UserColor exposing (UserColor)
 import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, FrontendUserSession, NotificationMode, SetViewing, ToBeFilledInByBackend, UserOptionSection, UserSession)
 import WordSpellingGame exposing (WordList)
 
@@ -282,6 +284,9 @@ type alias UserOptionsModel =
     { name : Editable.Model
     , domainWhitelistInput : String
     , debugData : Maybe { data : String, loadedAt : Time.Posix }
+    , -- What the colour picker is pointing at, or Nothing while it's put away. The grid
+      -- takes up a lot of room, so it stays hidden until asked for.
+      color : Maybe UserColor.Selection
     }
 
 
@@ -344,6 +349,7 @@ type EmojiSelector
     | EmojiSelectorForReaction AnyGuildOrDmId ThreadRouteWithMessage
     | EmojiSelectorForMessage (Maybe Range)
     | EmojiSelectorForEditMessage (Coord CssPixels) (Maybe Range)
+    | EmojiSelectorForSheepGameInput SheepGame.Input (Coord CssPixels) (Maybe Range)
 
 
 type alias BackendModel =
@@ -560,13 +566,18 @@ type FrontendMsg_
     | PressedCloseExternalLinkWarning
     | PressedAddDomainToWhitelist Bool
     | TypedDomainWhitelist String
+    | PressedSelectNewColor
+    | SelectedUserColor UserColor.Selection
+    | PressedSubmitUserColor
+    | PressedResetUserColor
     | PressedSaveDomainWhitelist
     | PressedResetDomainWhitelist
     | PressedContinueToSite
     | EditMessage_MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
     | MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
     | GotEmojiData (Result Http.Error CachedEmojiData)
-    | GotEditMessageTextInputPositionForEmojiSelector (Result Dom.Error Dom.Element)
+    | GotPositionForEmojiSelector_EditMessage (Result Dom.Error Dom.Element)
+    | GotPositionForEmojiSelector_SheepGameInput SheepGame.Input (Result Dom.Error Dom.Element)
     | EnableToFrontendLogging
     | TextSelectionChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
@@ -907,6 +918,7 @@ type ServerChange
     | Server_DiscordForumPostDeleted (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId)
     | Server_DiscordDeleteDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId)
     | Server_SetName (Id UserId) PersonName
+    | Server_SetUserColor (Id UserId) UserColor
     | Server_SetUserIcon (Id UserId) (Maybe FileHash)
     | Server_SetGuildIcon (Id GuildId) (Maybe FileHash)
     | Server_PushNotificationsReset String
@@ -947,7 +959,7 @@ type ServerChange
     | Server_DiscordUpdateRole (Discord.Id Discord.GuildId) (Discord.Id Discord.RoleId) DiscordRole
     | Server_DiscordUpdateGuildCustomEmojis (Discord.Id Discord.GuildId) (SeqSet (Id CustomEmojiId))
     | Server_UpdateDiscordMembers (Discord.Id Discord.GuildId) (MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) })
-    | Server_DiscordGuildMemberJoined Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) PersonName
+    | Server_DiscordGuildMemberJoined Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) PersonName UserColor
     | Server_LinkedDiscordUserStickersLoaded (SeqDict (Id StickerId) StickerData)
     | Server_LinkedDiscordUserCustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
     | Server_VoiceChatChange Call.ServerChange
@@ -997,6 +1009,7 @@ type LocalChange
     | Local_SetNotificationMode NotificationMode
     | Local_ExpandUserOptionSection UserOptionSection
     | Local_CollapseUserOptionSection UserOptionSection
+    | Local_SetSheepGameQuestions (Array UserSession.SheepGameQuestion)
     | Local_SetEmailNotifications EmailNotifications
     | Local_RegisterPushSubscription Time.Posix RegisterPushSubscription
     | Local_TextEditor TextEditor.LocalChange
@@ -1005,6 +1018,7 @@ type LocalChange
     | Local_LinkDiscordAcknowledgementIsChecked Bool
     | Local_SetDomainWhitelist Bool Domain
     | Local_SetEmojiSkinTone (Maybe SkinTone)
+    | Local_SetUserColor UserColor
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange Call.LocalChange
     | Local_Game GuildOrDmId Game.LocalChange

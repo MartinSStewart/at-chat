@@ -86,6 +86,7 @@ import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, Expo
 import Unsafe
 import Untrusted
 import User exposing (BackendUser)
+import UserColor
 import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession, Viewing)
 import VisibleMessages
 import WireHelper
@@ -604,6 +605,26 @@ update msg model =
                                                     discordUserId
                                                     { name = DiscordUserData.username user2 |> PersonName.fromStringLossy
                                                     , icon = fileHash
+                                                    , color =
+                                                        case user2 of
+                                                            FullData data ->
+                                                                case NonemptyDict.get data.linkedTo model.users of
+                                                                    Just linkedUser ->
+                                                                        linkedUser.color
+
+                                                                    Nothing ->
+                                                                        UserColor.default
+
+                                                            BasicData _ ->
+                                                                UserColor.default
+
+                                                            NeedsAuthAgain data ->
+                                                                case NonemptyDict.get data.linkedTo model.users of
+                                                                    Just linkedUser ->
+                                                                        linkedUser.color
+
+                                                                    Nothing ->
+                                                                        UserColor.default
                                                     }
                                                 )
                                                 model
@@ -722,7 +743,7 @@ update msg model =
                             userId
                             (Server_LinkDiscordUser
                                 discordUser.id
-                                (User.discordFullDataUserToFrontendCurrentUser False backendUser backendUser.isLoadingData)
+                                (User.discordFullDataUserToFrontendCurrentUser model.users False backendUser backendUser.isLoadingData)
                                 |> ServerChange
                             )
                             model
@@ -761,7 +782,7 @@ update msg model =
                             userId
                             (Server_LinkDiscordUser
                                 discordUserId
-                                (User.discordFullDataUserToFrontendCurrentUser False discordUser2 discordUser2.isLoadingData)
+                                (User.discordFullDataUserToFrontendCurrentUser model.users False discordUser2 discordUser2.isLoadingData)
                                 |> ServerChange
                             )
                             model
@@ -4471,7 +4492,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         Just member ->
                                             SeqDict.insert
                                                 memberId
-                                                (User.discordUserDataToFrontendUser member)
+                                                (User.discordUserDataToFrontendUser model.users member)
                                                 dict
 
                                         Nothing ->
@@ -5077,6 +5098,25 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_SetSheepGameQuestions questions ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\session _ ->
+                            ( { model
+                                | sessions =
+                                    SeqDict.insert
+                                        sessionId
+                                        (UserSession.setSheepGameQuestions
+                                            (SheepGame.clampSavedQuestions questions)
+                                            session
+                                        )
+                                        model.sessions
+                              }
+                            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                            )
+                        )
+
                 Local_SetEmailNotifications emailNotifications ->
                     BackendExtra.asUser
                         model
@@ -5317,6 +5357,23 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_SetUserColor color ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\session user ->
+                            ( { model | users = NonemptyDict.insert session.userId { user | color = color } model.users }
+                            , Command.batch
+                                [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                                , Broadcast.toEveryoneWhoCanSeeUser
+                                    clientId
+                                    session.userId
+                                    (ServerChange (Server_SetUserColor session.userId color))
+                                    model
+                                ]
+                            )
+                        )
+
                 Local_AddCustomEmojisToUser customEmojiIds ->
                     BackendExtra.asUser
                         model
@@ -5416,6 +5473,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 Nothing ->
                                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                        Game.LoadMatch matchId _ ->
+                                            ( model
+                                            , loadMatchResponse
+                                                clientId
+                                                changeId
+                                                guildOrDmId
+                                                (GuildOrFullDmId_Dm dmChannelId)
+                                                matchId
+                                                dmChannel
+                                                model
+                                            )
 
                                         Game.LocalChange_WordSpellingGame matchId wsChange ->
                                             let
@@ -5667,6 +5736,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                         Nothing ->
                                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                                Game.LoadMatch matchId _ ->
+                                                    ( model
+                                                    , loadMatchResponse
+                                                        clientId
+                                                        changeId
+                                                        guildOrDmId
+                                                        (GuildOrFullDmId_Guild id.guildId id.channelId)
+                                                        matchId
+                                                        channel
+                                                        model
+                                                    )
 
                                         Nothing ->
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
@@ -6105,7 +6186,7 @@ handleGoMatchRequest messageId channel model =
 
                         Nothing ->
                             { name = PersonName.fromStringLossy "<missing>"
-                            , isAdmin = False
+                            , color = UserColor.default
                             , icon = Nothing
                             }
             in
@@ -6124,6 +6205,36 @@ handleGoMatchRequest messageId channel model =
 
         _ ->
             Err ()
+
+
+{-| Hand one match over to the client that asked for it. Nothing about the match changes,
+so this goes to that client alone rather than being broadcast.
+-}
+loadMatchResponse :
+    ClientId
+    -> ChangeId
+    -> GuildOrDmId
+    -> GuildOrFullDmId
+    -> Id ChannelMessageId
+    -> { a | games : SeqDict (Id ChannelMessageId) Game.BackendGameData }
+    -> BackendModel
+    -> Command BackendOnly ToFrontend BackendMsg
+loadMatchResponse clientId changeId guildOrDmId guildOrFullDmId matchId channel model =
+    case SeqDict.get matchId channel.games of
+        Just gameData ->
+            Game.LoadMatch
+                matchId
+                (FilledInByBackend
+                    { gameData = gameData
+                    , publicLink = OneToOne.first ( guildOrFullDmId, matchId ) model.goMatchPublicIds
+                    }
+                )
+                |> Local_Game guildOrDmId
+                |> LocalChangeResponse changeId
+                |> Lamdera.sendToFrontend clientId
+
+        Nothing ->
+            BackendExtra.invalidChangeResponse changeId clientId
 
 
 createGamePublicLinkHelper :
@@ -6493,6 +6604,22 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
     case sheepChange of
         SheepGame.StartMatch _ setup ->
             let
+                setup2 : SheepGame.ValidatedSetup
+                setup2 =
+                    -- A client could name files it never uploaded, the same way it could when
+                    -- sending a message, so only the ones we actually hold are kept.
+                    { setup
+                        | questions =
+                            List.Nonempty.map
+                                (\question ->
+                                    { question
+                                        | attachedFiles =
+                                            BackendExtra.validateAttachedFiles model.files question.attachedFiles
+                                    }
+                                )
+                                setup.questions
+                    }
+
                 ( messageId, channel2 ) =
                     LocalState.createChannelMessageBackend
                         (GameStarted
@@ -6508,14 +6635,14 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
 
                 localMsg2 : Game.LocalChange
                 localMsg2 =
-                    Game.LocalChange_SheepGame messageId (SheepGame.StartMatch time setup)
+                    Game.LocalChange_SheepGame messageId (SheepGame.StartMatch time setup2)
             in
             ( setChannel
                 { channel2
                     | games =
                         SeqDict.insert
                             messageId
-                            (Game.GameData_SheepGame setup Array.empty SheepGame.initShared)
+                            (Game.GameData_SheepGame setup2 Array.empty SheepGame.initShared)
                             channel2.games
                 }
                 model
@@ -6534,9 +6661,49 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
             case ( action.userId == session.userId, SeqDict.get matchId channel.games ) of
                 ( True, Just (Game.GameData_SheepGame setup actions shared) ) ->
                     let
+                        action2 : SheepGame.ActionWithTime
+                        action2 =
+                            case action.change of
+                                -- An answer names the files attached to it the way a message
+                                -- does, so it gets the same check that we're actually holding
+                                -- the ones it names.
+                                SheepGame.SubmittedAnswer questionId (Just answer) ->
+                                    { action
+                                        | change =
+                                            SheepGame.SubmittedAnswer
+                                                questionId
+                                                (Just
+                                                    { answer
+                                                        | attachedFiles =
+                                                            BackendExtra.validateAttachedFiles
+                                                                model.files
+                                                                answer.attachedFiles
+                                                    }
+                                                )
+                                    }
+
+                                -- And so does a note the host wrote about a question.
+                                SheepGame.ChangedNotes questionId (Just notes) ->
+                                    { action
+                                        | change =
+                                            SheepGame.ChangedNotes
+                                                questionId
+                                                (Just
+                                                    { notes
+                                                        | attachedFiles =
+                                                            BackendExtra.validateAttachedFiles
+                                                                model.files
+                                                                notes.attachedFiles
+                                                    }
+                                                )
+                                    }
+
+                                _ ->
+                                    action
+
                         localMsg2 : Game.LocalChange
                         localMsg2 =
-                            Game.LocalChange_SheepGame matchId (SheepGame.Action action)
+                            Game.LocalChange_SheepGame matchId (SheepGame.Action action2)
                     in
                     ( setChannel
                         { channel
@@ -6545,8 +6712,8 @@ handleSheepGame time session clientId changeId guildOrDmId channel setChannel br
                                     matchId
                                     (Game.GameData_SheepGame
                                         setup
-                                        (Array.push action actions)
-                                        (SheepGame.updateAction setup action shared)
+                                        (Array.push action2 actions)
+                                        (SheepGame.updateAction setup action2 shared)
                                     )
                                     channel.games
                         }
@@ -7673,8 +7840,10 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model session use
                         , case
                             ( NonemptyDict.get (MembersAndOwner.owner guild2.membersAndOwner) model2.users
                             , LocalState.guildToFrontendForUser
-                                (Just ( LocalState.announcementChannel guild2, NoThread ))
+                                guildId
+                                (Just ( LocalState.announcementChannel guild2, ( NoThread, Nothing ) ))
                                 session.userId
+                                model2.goMatchPublicIds
                                 guild2
                             )
                           of

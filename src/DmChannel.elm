@@ -5,6 +5,7 @@ module DmChannel exposing
     , FrontendDmChannel
     , backendInit
     , frontendInit
+    , gamesToFrontend
     , latestFrontendMessageId
     , latestFrontendThreadMessageId
     , latestMessageId
@@ -32,7 +33,7 @@ import OneToOne exposing (OneToOne)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
-import UserSession exposing (ToBeFilledInByBackend(..))
+import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend(..))
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -95,7 +96,7 @@ frontendInit =
 
 
 toFrontend :
-    Maybe ThreadRoute
+    Maybe ( ThreadRoute, Maybe ChannelHeaderTab )
     -> DmChannelId
     -> OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
     -> DmChannel
@@ -103,23 +104,43 @@ toFrontend :
 toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
     let
         preloadMessages =
-            Just NoThread == threadRoute
+            Just NoThread == Maybe.map Tuple.first threadRoute
     in
     { messages = toFrontendHelper preloadMessages dmChannel
     , visibleMessages = VisibleMessages.init preloadMessages (IdArray.length dmChannel.messages)
     , lastTypedAt = dmChannel.lastTypedAt
     , threads =
         SeqDict.map
-            (\threadId thread -> Thread.toFrontend (Just (ViewThread threadId) == threadRoute) thread)
-            dmChannel.threads
-    , games =
-        SeqDict.map
-            (\matchId gameData ->
-                Game.initMatchData gameData (OneToOne.first ( GuildOrFullDmId_Dm dmChannelId, matchId ) goMatchPublicIds)
+            (\threadId thread ->
+                Thread.toFrontend (Just (ViewThread threadId) == Maybe.map Tuple.first threadRoute) thread
             )
-            dmChannel.games
+            dmChannel.threads
+    , games = gamesToFrontend (GuildOrFullDmId_Dm dmChannelId) threadRoute goMatchPublicIds dmChannel
     , dateDividerDrawings = dmChannel.dateDividerDrawings
     }
+
+
+gamesToFrontend :
+    GuildOrFullDmId
+    -> Maybe ( a, Maybe ChannelHeaderTab )
+    -> OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
+    -> { b | games : SeqDict (Id ChannelMessageId) BackendGameData }
+    -> SeqDict (Id ChannelMessageId) Game.MatchData
+gamesToFrontend guildOrDmId threadRoute goMatchPublicIds channel =
+    SeqDict.map
+        (\matchId gameData ->
+            case threadRoute of
+                Just ( _, channelHeaderTab ) ->
+                    if channelHeaderTab == Just (ChannelHeaderTab_Games (Just matchId)) then
+                        Game.initMatchData gameData (OneToOne.first ( guildOrDmId, matchId ) goMatchPublicIds)
+
+                    else
+                        Game.matchNotLoaded gameData
+
+                Nothing ->
+                    Game.matchNotLoaded gameData
+        )
+        channel.games
 
 
 updateArray : Id messageId -> (a -> a) -> IdArray messageId a -> IdArray messageId a

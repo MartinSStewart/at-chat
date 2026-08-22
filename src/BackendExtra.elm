@@ -606,10 +606,8 @@ unreadOverviewData userId user model =
     , discordDmChannels = discordDmChannels
     , discordUsers =
         SeqDict.empty
-            |> discordUsersInMessages
-                model.discordUsers
-                (SeqDict.values discordGuilds.channels ++ SeqDict.values discordDmChannels)
-            |> discordUsersInMessages model.discordUsers (SeqDict.values discordGuilds.threads)
+            |> discordUsersInMessages model (SeqDict.values discordGuilds.channels ++ SeqDict.values discordDmChannels)
+            |> discordUsersInMessages model (SeqDict.values discordGuilds.threads)
     }
 
 
@@ -618,20 +616,23 @@ far. Channel messages and thread messages are numbered differently, so they can'
 in one list and are added in two passes instead.
 -}
 discordUsersInMessages :
-    SeqDict (Discord.Id Discord.UserId) DiscordUserData
+    BackendModel
     -> List (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId)))
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
-discordUsersInMessages allDiscordUsers messageDicts foundSoFar =
+discordUsersInMessages model messageDicts foundSoFar =
     List.foldl
         (\messages dict ->
             SeqDict.foldl
                 (\_ message dict2 ->
                     List.foldl
                         (\discordUserId dict3 ->
-                            case SeqDict.get discordUserId allDiscordUsers of
+                            case SeqDict.get discordUserId model.discordUsers of
                                 Just discordUser ->
-                                    SeqDict.insert discordUserId (User.discordUserDataToFrontendUser discordUser) dict3
+                                    SeqDict.insert
+                                        discordUserId
+                                        (User.discordUserDataToFrontendUser model.users discordUser)
+                                        dict3
 
                                 Nothing ->
                                     dict3
@@ -895,10 +896,11 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
             SeqDict.filterMap
                 (\guildId guild ->
                     LocalState.guildToFrontendForUser
+                        guildId
                         (case requestMessagesFor of
-                            InitialLoadRequested_Guild guildIdB channelId threadRoute _ ->
+                            InitialLoadRequested_Guild guildIdB channelId threadRoute channelHeaderTab ->
                                 if guildId == guildIdB then
-                                    Just ( channelId, threadRoute )
+                                    Just ( channelId, ( threadRoute, channelHeaderTab ) )
 
                                 else
                                     Nothing
@@ -907,6 +909,7 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
                                 Nothing
                         )
                         session.userId
+                        model.goMatchPublicIds
                         guild
                 )
                 model.guilds
@@ -920,9 +923,9 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
                             SeqDict.insert otherUserId
                                 (DmChannel.toFrontend
                                     (case requestMessagesFor of
-                                        InitialLoadRequested_Dm dmChannelIdB threadRoute _ ->
+                                        InitialLoadRequested_Dm dmChannelIdB threadRoute channelHeaderTab ->
                                             if dmChannelId == dmChannelIdB then
-                                                Just threadRoute
+                                                Just ( threadRoute, channelHeaderTab )
 
                                             else
                                                 Nothing
@@ -1243,7 +1246,7 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
                             if data.linkedTo == userId then
                                 SeqDict.insert
                                     discordUserId
-                                    (User.discordFullDataUserToFrontendCurrentUser False data data.isLoadingData)
+                                    (User.discordFullDataUserToFrontendCurrentUser model.users False data data.isLoadingData)
                                     linkedDiscordUsers2
 
                             else
@@ -1256,7 +1259,7 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
                             if data.linkedTo == userId then
                                 SeqDict.insert
                                     discordUserId
-                                    (User.discordFullDataUserToFrontendCurrentUser True data DiscordUserLoadedSuccessfully)
+                                    (User.discordFullDataUserToFrontendCurrentUser model.users True data DiscordUserLoadedSuccessfully)
                                     linkedDiscordUsers2
 
                             else
@@ -1299,7 +1302,7 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
                                     Just discordUser ->
                                         SeqDict.insert
                                             memberId
-                                            (User.discordUserDataToFrontendUser discordUser)
+                                            (User.discordUserDataToFrontendUser model.users discordUser)
                                             dict2
 
                                     Nothing ->
@@ -1324,7 +1327,7 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
                                     Just discordUser ->
                                         SeqDict.insert
                                             memberId
-                                            (User.discordUserDataToFrontendUser discordUser)
+                                            (User.discordUserDataToFrontendUser model.users discordUser)
                                             dict2
 
                                     Nothing ->
@@ -2312,6 +2315,9 @@ toBackendLog toBackend =
                 Local_ExpandUserOptionSection _ ->
                     ToBackendLog_Local_ExpandUserOptionSection
 
+                Local_SetSheepGameQuestions _ ->
+                    ToBackendLog_Local_SetSheepGameQuestions
+
                 Local_CollapseUserOptionSection _ ->
                     ToBackendLog_Local_CollapseUserOptionSection
 
@@ -2338,6 +2344,9 @@ toBackendLog toBackend =
 
                 Local_SetEmojiSkinTone _ ->
                     ToBackendLog_Local_SetEmojiSkinTone
+
+                Local_SetUserColor _ ->
+                    ToBackendLog_Local_SetUserColor
 
                 Local_AddCustomEmojisToUser _ ->
                     ToBackendLog_Local_AddCustomEmojisToUser
