@@ -1,8 +1,6 @@
 module UserColor exposing (Selection, UserColor(..), default, picked, picker, startPicking, swatchId, toColor, toStyle)
 
 import Color
-import Coord exposing (Coord)
-import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom
 import MyUi
 import Ui
@@ -41,6 +39,7 @@ swatchSize isMobile =
         20
 
 
+swatchSizeMobile : number
 swatchSizeMobile =
     17
 
