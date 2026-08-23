@@ -147,11 +147,17 @@ revealed questionsRevealed model =
 tests : Test
 tests =
     Test.describe "Sheep game"
-        [ Test.test "A question revealed while the reader is at the bottom of the tab takes them to it"
+        [ Test.test "The first reveal is the scoring explanation rather than a question"
+            (\_ ->
+                watching ScrolledToBottom 0
+                    |> revealed 1
+                    |> Expect.equal ( False, Just SheepGame.scoringId )
+            )
+        , Test.test "A question revealed while the reader is at the bottom of the tab takes them to it"
             (\_ ->
                 watching ScrolledToBottom 1
                     |> revealed 2
-                    |> Expect.equal ( False, Just (SheepGame.revealedQuestionId 1) )
+                    |> Expect.equal ( False, Just (SheepGame.revealedQuestionId 0) )
             )
         , Test.test "A question revealed while the reader is further up the tab is announced instead"
             (\_ ->
