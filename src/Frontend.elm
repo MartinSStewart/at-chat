@@ -1414,6 +1414,29 @@ updateLoaded msg model =
                                         emojiOrSticker
                                         model
                                         loggedIn
+
+                                EmojiSelectorForSheepGameReaction guildOrDmId matchId target ->
+                                    case emojiOrSticker of
+                                        EmojiOrSticker_UnicodeEmoji emoji ->
+                                            addSheepGameReaction
+                                                guildOrDmId
+                                                matchId
+                                                target
+                                                (EmojiOrCustomEmoji_Emoji emoji)
+                                                model
+                                                loggedIn
+
+                                        EmojiOrSticker_CustomEmoji customEmojiId ->
+                                            addSheepGameReaction
+                                                guildOrDmId
+                                                matchId
+                                                target
+                                                (EmojiOrCustomEmoji_CustomEmoji customEmojiId)
+                                                model
+                                                loggedIn
+
+                                        EmojiOrSticker_Sticker _ ->
+                                            ( loggedIn, Command.none )
                         )
                         model
 
@@ -6447,6 +6470,33 @@ pressedEditMessage guildOrDmId threadRoute model =
         model
 
 
+{-| An emoji picked out of the selector for one of the answers or notes on a sheep game's
+results screen.
+-}
+addSheepGameReaction :
+    GuildOrDmId
+    -> Id Id.ChannelMessageId
+    -> SheepGame.ReactionTarget
+    -> EmojiOrCustomEmoji
+    -> LoadedFrontend
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+addSheepGameReaction guildOrDmId matchId target emoji model loggedIn =
+    FrontendExtra.handleLocalChange
+        model.time
+        (SheepGame.Action
+            { userId = (Local.model loggedIn.localState).localUser.session.userId
+            , time = model.time
+            , change = SheepGame.AddedReaction target emoji
+            }
+            |> Game.LocalChange_SheepGame matchId
+            |> Local_Game guildOrDmId
+            |> Just
+        )
+        { loggedIn | showEmojiSelector = EmojiSelectorHidden }
+        Command.none
+
+
 showReactionEmojiSelector : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 showReactionEmojiSelector guildOrDmId messageIndex model =
     FrontendExtra.updateLoggedIn
@@ -6468,6 +6518,9 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
                             EmojiSelectorHidden
 
                         EmojiSelectorForEditMessage _ _ ->
+                            EmojiSelectorHidden
+
+                        EmojiSelectorForSheepGameReaction _ _ _ ->
                             EmojiSelectorHidden
 
                         EmojiSelectorForSheepGameInput _ _ _ ->
@@ -8368,6 +8421,33 @@ handleGameOutMsgs outMsgs model =
                         }
                         :: cmds
                     )
+
+                Game.OpenSheepGameReactionEmojiSelector guildOrDmId matchId target ->
+                    let
+                        ( selectorModel, selectorCmd ) =
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn ->
+                                    let
+                                        emojiSelectorModel : Emoji.Model
+                                        emojiSelectorModel =
+                                            loggedIn.emojiSelector
+                                    in
+                                    ( { loggedIn
+                                        | showEmojiSelector =
+                                            EmojiSelectorForSheepGameReaction guildOrDmId matchId target
+                                        , emojiSelector =
+                                            { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
+                                      }
+                                    , if MyUi.isMobile model2 then
+                                        Command.none
+
+                                      else
+                                        Dom.focus Emoji.searchInputId |> Task.attempt (\_ -> SetFocus)
+                                    )
+                                )
+                                model2
+                    in
+                    ( selectorModel, selectorCmd :: cmds )
 
                 Game.OpenSheepGameEmojiSelector input ->
                     ( model2

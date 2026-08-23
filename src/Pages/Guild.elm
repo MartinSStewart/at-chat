@@ -4610,12 +4610,12 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
 
             else
                 Coord.xRaw model.windowSize - MyUi.channelAndGuildColumnWidth model.windowSize - paddingX * 2
-    in
-    case loggedIn.showEmojiSelector of
-        EmojiSelectorHidden ->
-            Ui.noAttr
 
-        EmojiSelectorForReaction _ _ ->
+        {- Reacting doesn't happen anywhere in particular, so the selector opens along the
+           bottom rather than pointing at whatever was pressed.
+        -}
+        atBottomOfTheConversation : Ui.Attribute FrontendMsg_
+        atBottomOfTheConversation =
             Ui.inFront
                 (Emoji.selector
                     model.startupData.scrollbarWidth
@@ -4639,6 +4639,16 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                         ]
                     |> Ui.map EmojiSelectorMsg
                 )
+    in
+    case loggedIn.showEmojiSelector of
+        EmojiSelectorHidden ->
+            Ui.noAttr
+
+        EmojiSelectorForReaction _ _ ->
+            atBottomOfTheConversation
+
+        EmojiSelectorForSheepGameReaction _ _ _ ->
+            atBottomOfTheConversation
 
         EmojiSelectorForMessage _ ->
             Ui.inFront

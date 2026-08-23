@@ -450,6 +450,42 @@ threePlayerMatchTest normalConfig =
                                 , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "▲" ])
                                 , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "▼" ])
 
+                                -- An answer can be reacted to the way a message can: the menu
+                                -- comes up while the pointer is over it, and the reaction is
+                                -- drawn underneath the answer afterwards for everyone
+                                , stevie.mouseEnter
+                                    100
+                                    (SheepGame.reactionTargetId
+                                        -- Joe is the third of the four to sign up, so his
+                                        -- answer to the first question is this one
+                                        (SheepGame.AnswerReaction (Id.fromInt 2) (Id.fromInt 0))
+                                    )
+                                    ( 10, 10 )
+                                    []
+                                , stevie.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.id "miniView_emojiReact_0" ])
+                                , stevie.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_reply" ])
+                                , stevie.click 100 (Dom.id "miniView_emojiReact_0")
+                                , stevie.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.id "guild_removeReactionEmoji_0" ])
+                                , joe.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.id "guild_addReactionEmoji" ])
+
+                                -- The notes the host wrote about the question take reactions too
+                                , stevie.mouseEnter
+                                    100
+                                    (SheepGame.reactionTargetId (SheepGame.NotesReaction (Id.fromInt 0)))
+                                    ( 10, 10 )
+                                    []
+                                , stevie.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.id "miniView_showReactionEmojiSelector" ])
+
                                 -- Joe reads back over the first question instead of waiting at the
                                 -- bottom, so the next one to turn up is announced to him rather than
                                 -- scrolled onto, which would move what he's reading out from under him.
