@@ -370,7 +370,7 @@ lightnessSlider selection parts onChange =
                 (Ui.text "Brightness")
     in
     Ui.column
-        [ Ui.spacing 2 ]
+        [ Ui.spacing 2, Ui.widthMax 350 ]
         [ sliderLabel.element
         , Ui.Input.sliderHorizontal
             [ Ui.background MyUi.background3

@@ -1563,7 +1563,7 @@ background3 =
 
 inputBackground : Ui.Color
 inputBackground =
-    Ui.rgb 17 22 40
+    Ui.rgba 0 0 0 0.3
 
 
 inputBorder : Ui.Color
