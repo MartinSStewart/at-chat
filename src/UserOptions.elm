@@ -1,6 +1,8 @@
 module UserOptions exposing (discordBookmarkletId, domainWhitelistToString, init, view)
 
 import Codec
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
 import Drawing exposing (Drawing)
@@ -88,7 +90,7 @@ viewConnectedDevice sessionId otherCurrentlyViewing userAgent =
             UserAgent.deviceToString userAgent.device
     in
     Ui.row
-        [ Ui.spacing 8 ]
+        [ Ui.spacing 8, Ui.paddingXY 16 0 ]
         [ Ui.el
             [ Ui.width (Ui.px 36)
             , Ui.height (Ui.px 36)
@@ -183,7 +185,7 @@ gotoAdmin =
 
 
 view :
-    Bool
+    Coord CssPixels
     -> Maybe { a | htmlId : HtmlId, selection : Range }
     -> Time.Posix
     -> LocalState
@@ -191,11 +193,14 @@ view :
     -> LoadedFrontend
     -> UserOptionsModel
     -> Element FrontendMsg_
-view isMobile textInputFocus time local loggedIn loaded model =
+view windowSize textInputFocus time local loggedIn loaded model =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
             User.allUsers local.localUser
+
+        isMobile =
+            MyUi.isMobileAlt windowSize
     in
     Ui.el
         [ Ui.height Ui.fill
@@ -290,13 +295,14 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         UserNameEditableMsg
                         (PersonName.toString local.localUser.user.name)
                         model.name
+                        |> Ui.el [ Ui.paddingXY 16 0 ]
                     , Ui.column
-                        [ Ui.spacing 8 ]
+                        [ Ui.spacing 8, Ui.paddingXY 16 0 ]
                         [ Ui.el [ Ui.Font.bold ] (Ui.text "Email")
                         , Ui.text (EmailAddress.toString local.localUser.user.email)
                         ]
                     , Ui.column
-                        [ Ui.spacing 8 ]
+                        [ Ui.spacing 8, Ui.paddingXY 16 0 ]
                         [ Ui.el [ Ui.Font.bold ] (Ui.text "Profile Picture")
                         , Ui.row
                             [ Ui.spacing 12, Ui.alignLeft ]
@@ -309,7 +315,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             ]
                         ]
                     , Ui.column
-                        [ Ui.spacing 8 ]
+                        [ Ui.spacing 8, Ui.paddingXY 16 0 ]
                         [ MyUi.radioColumn
                             (Dom.id "userOptions_notificationMode")
                             SelectedNotificationMode
@@ -361,10 +367,13 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         [ ( User.NeverNotifyMe, "No email notifications" )
                         , ( User.NotifyMeWhenMentioned, "Send me email notifications" )
                         ]
+                        |> Ui.el [ Ui.paddingXY 16 0 ]
                     , Ui.column
                         [ Ui.spacing 8 ]
-                        (Ui.el [ Ui.Font.bold ] (Ui.text "Color")
-                            :: Ui.text "This is the color used when you use the drawing tool or to represent you in some games."
+                        (Ui.el [ Ui.Font.bold, Ui.paddingXY 16 0 ] (Ui.text "Color")
+                            :: Ui.el
+                                [ Ui.paddingXY 16 0 ]
+                                (Ui.text "This is the color used when you use the drawing tool or to represent you in some games.")
                             :: (case model.color of
                                     Nothing ->
                                         [ Ui.row
@@ -379,9 +388,10 @@ view isMobile textInputFocus time local loggedIn loaded model =
 
                                     Just selection ->
                                         [ colorPreview time isMobile local allUsers (UserColor.picked selection)
-                                        , UserColor.picker isMobile selection SelectedUserColor
+                                            |> Ui.el [ Ui.paddingXY 16 0 ]
+                                        , UserColor.picker isMobile (Coord.xRaw windowSize - 16 * 2) selection SelectedUserColor
                                         , Ui.row
-                                            [ Ui.spacing 8 ]
+                                            [ Ui.spacing 8, Ui.paddingXY 16 0 ]
                                             [ if UserColor.picked selection == local.localUser.user.color then
                                                 Ui.none
 
@@ -398,39 +408,6 @@ view isMobile textInputFocus time local loggedIn loaded model =
                                         ]
                                )
                         )
-
-                    --, Ui.el
-                    --    [ Ui.linkNewTab
-                    --        (Slack.buildOAuthUrl
-                    --            { clientId = Env.slackClientId
-                    --            , redirectUri = Slack.redirectUri
-                    --            , botScopes =
-                    --                Nonempty
-                    --                    "channels:read"
-                    --                    [ "channels:history"
-                    --                    , "users:read"
-                    --                    , "team:read"
-                    --                    ]
-                    --            , userScopes =
-                    --                Nonempty
-                    --                    "channels:read"
-                    --                    [ "channels:history"
-                    --                    , "channels:write"
-                    --                    , "groups:read"
-                    --                    , "groups:history"
-                    --                    , "groups:write"
-                    --                    , "mpim:read"
-                    --                    , "mpim:history"
-                    --                    , "mpim:write"
-                    --                    , "im:read"
-                    --                    , "im:history"
-                    --                    , "im:write"
-                    --                    ]
-                    --            , state = SessionIdHash.toString local.localUser.session.sessionIdHash
-                    --            }
-                    --        )
-                    --    ]
-                    --    (Ui.text "Link Slack account")
                     ]
                 , MyUi.container
                     (SeqSet.member UserOption_TwoFactorAuthentication local.localUser.session.expandedUserOptions)
@@ -446,6 +423,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         time
                         loggedIn.twoFactor
                         |> Ui.map TwoFactorMsg
+                        |> Ui.el [ Ui.paddingXY 16 0 ]
                     ]
                 , if SeqSet.isEmpty local.localUser.user.domainWhitelist then
                     Ui.none
@@ -477,9 +455,10 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             , label = Ui.Input.labelHidden "Whitelisted domains"
                             , spellcheck = False
                             }
+                            |> Ui.el [ Ui.paddingXY 16 0 ]
                         , if hasChanges then
                             Ui.row
-                                [ Ui.spacing 8, Ui.width Ui.shrink ]
+                                [ Ui.spacing 8, Ui.width Ui.shrink, Ui.paddingXY 16 0 ]
                                 [ MyUi.simpleButton
                                     (Dom.id "userOptions_saveWhitelistDomains")
                                     PressedSaveDomainWhitelist
@@ -505,7 +484,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
 
                       else
                         Ui.column
-                            [ Ui.spacing 8 ]
+                            [ Ui.spacing 8, Ui.paddingXY 16 0 ]
                             [ Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ] (Ui.text "Linked Discord users")
                             , Ui.column
                                 [ Ui.spacing 8 ]
@@ -522,7 +501,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                                 (Ui.text "Bookmarklet URL")
                       in
                       Ui.column
-                        [ Ui.spacing 16 ]
+                        [ Ui.spacing 16, Ui.paddingXY 16 0 ]
                         [ discordAcknowledgement local.localUser.user.linkDiscordAcknowledgementIsChecked
                         , if local.localUser.user.linkDiscordAcknowledgementIsChecked then
                             Ui.column
@@ -590,6 +569,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
 
                           else
                             Ui.width Ui.shrink
+                        , Ui.paddingXY 16 0
                         ]
                         [ Ui.el
                             [ Ui.Font.size 14, Ui.Font.bold ]
@@ -605,10 +585,12 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         (Dom.id "userOptions_unregisterServiceWorkers")
                         PressedUnregisterServiceWorkers
                         "Unregister service workers"
+                        |> Ui.el [ Ui.paddingXY 16 0 ]
                     , MyUi.secondaryButton
                         (Dom.id "userOptions_loadDebugData")
                         PressedLoadDebugData
                         "Load debug data"
+                        |> Ui.el [ Ui.paddingXY 16 0 ]
                     , case model.debugData of
                         Just debugData ->
                             Ui.column
@@ -617,6 +599,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
 
                                   else
                                     Ui.width Ui.shrink
+                                , Ui.paddingXY 16 0
                                 ]
                                 [ Ui.el
                                     [ Ui.Font.size 14, Ui.Font.bold ]
@@ -646,6 +629,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                                         "unknown"
                                )
                         )
+                        |> Ui.el [ Ui.paddingXY 16 0 ]
                     ]
                 ]
             )

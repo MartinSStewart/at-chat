@@ -813,7 +813,7 @@ container isExpanded htmlId onPressedExpand backgroundColor isMobile2 label2 con
             (Ui.column
                 [ Ui.border 1
                 , Ui.rounded 4
-                , Ui.padding 16
+                , Ui.paddingXY 0 16
                 , Ui.spacing 16
                 ]
                 contents

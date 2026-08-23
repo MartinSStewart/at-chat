@@ -7956,7 +7956,7 @@ view _ model =
                                     [ case loggedIn.userOptions of
                                         Just userOptions ->
                                             UserOptions.view
-                                                (MyUi.isMobile loaded)
+                                                loaded.windowSize
                                                 loggedIn.textInputFocus
                                                 loaded.time
                                                 local
