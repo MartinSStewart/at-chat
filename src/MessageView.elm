@@ -1,4 +1,4 @@
-module MessageView exposing (MessageViewMsg(..), isPressMsg, miniView, reactionEmojiButtonContent)
+module MessageView exposing (MessageViewMsg(..), isPressMsg, miniView, reactionEmojiButtonContent, reactionsMiniView)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -151,31 +151,8 @@ reactionEmojiButtonContent customEmojis emoji =
 
 miniView : FrontendCurrentUser -> Bool -> Bool -> SeqSet (Id CustomEmojiId) -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
 miniView user isThreadStarter canEdit availableCustomEmojis customEmojis =
-    let
-        recentEmojis : List (Element MessageViewMsg)
-        recentEmojis =
-            User.commonlyUsedEmojis availableCustomEmojis user
-                |> List.take 3
-                |> List.indexedMap
-                    (\index ( emoji, _ ) ->
-                        miniButton
-                            (Dom.id ("miniView_emojiReact_" ++ String.fromInt index))
-                            (MessageViewMsg_PressedReactionEmoji emoji)
-                            ""
-                            (reactionEmojiButtonContent customEmojis emoji)
-                    )
-    in
-    Ui.row
-        [ Ui.alignRight
-        , Ui.background MyUi.background1
-        , Ui.rounded 4
-        , Ui.borderColor MyUi.border1
-        , Ui.border 1
-        , Ui.move { x = -48, y = -16, z = 0 }
-        , Ui.height (Ui.px 32)
-        , Ui.clip
-        ]
-        (recentEmojis
+    miniViewContainer
+        (recentEmojiButtons user availableCustomEmojis customEmojis
             ++ [ miniButton
                     (Dom.id "miniView_showReactionEmojiSelector")
                     MessageViewMsg_PressedShowReactionEmojiSelector
@@ -205,6 +182,55 @@ miniView user isThreadStarter canEdit availableCustomEmojis customEmojis =
                     Icons.dotDotDot
                ]
         )
+
+
+{-| The mini menu the unread overview shows instead. Editing, replying and everything in
+the full menu belong to the channel a message came from, but reacting to it doesn't need
+the reader to go there, so the reaction buttons are all that's left.
+-}
+reactionsMiniView : FrontendCurrentUser -> SeqSet (Id CustomEmojiId) -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
+reactionsMiniView user availableCustomEmojis customEmojis =
+    miniViewContainer
+        (recentEmojiButtons user availableCustomEmojis customEmojis
+            ++ [ miniButton
+                    (Dom.id "miniView_showReactionEmojiSelector")
+                    MessageViewMsg_PressedShowReactionEmojiSelector
+                    "Add reaction"
+                    Icons.smile
+               ]
+        )
+
+
+{-| Buttons for the emojis this user reacts with most often, so that the common case
+doesn't need the emoji selector.
+-}
+recentEmojiButtons : FrontendCurrentUser -> SeqSet (Id CustomEmojiId) -> SeqDict (Id CustomEmojiId) CustomEmojiData -> List (Element MessageViewMsg)
+recentEmojiButtons user availableCustomEmojis customEmojis =
+    User.commonlyUsedEmojis availableCustomEmojis user
+        |> List.take 3
+        |> List.indexedMap
+            (\index ( emoji, _ ) ->
+                miniButton
+                    (Dom.id ("miniView_emojiReact_" ++ String.fromInt index))
+                    (MessageViewMsg_PressedReactionEmoji emoji)
+                    ""
+                    (reactionEmojiButtonContent customEmojis emoji)
+            )
+
+
+miniViewContainer : List (Element MessageViewMsg) -> Element MessageViewMsg
+miniViewContainer buttons =
+    Ui.row
+        [ Ui.alignRight
+        , Ui.background MyUi.background1
+        , Ui.rounded 4
+        , Ui.borderColor MyUi.border1
+        , Ui.border 1
+        , Ui.move { x = -48, y = -16, z = 0 }
+        , Ui.height (Ui.px 32)
+        , Ui.clip
+        ]
+        buttons
 
 
 miniButton : HtmlId -> msg -> String -> Html msg -> Element msg

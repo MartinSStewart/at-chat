@@ -982,11 +982,29 @@ markMessageAsUnreadTest config =
                 , E2EHelper.hasExactText user [ "Two", "Three" ]
                 , E2EHelper.hasNotExactText user [ "One" ]
 
-                -- Hovering a message in the overview restarts the animations inside it,
-                -- which the mini menu of a channel message stays out of
+                -- Hovering a message in the overview restarts the animations inside it and
+                -- offers the reaction buttons of the mini menu. Editing, replying and the
+                -- full menu belong to the channel the message came from, so they stay out
+                -- of it.
                 , user.mouseEnter 100 (Dom.id "guild_message_2") ( 10, 10 ) []
                 , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_showFullMenu" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_reply" ])
+                , user.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.id "miniView_showReactionEmojiSelector" ]
+                    )
                 , user.checkModel 100 (checkMessageIsHovered (Id.fromInt 2))
+
+                -- Reacting from the overview reaches the channel the message came from,
+                -- without the reader having to open it
+                , user.click 100 (Dom.id "miniView_emojiReact_0")
+                , user.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.id "guild_removeReactionEmoji_0" ])
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.id "guild_addReactionEmoji" ])
 
                 -- Reading the channel for real puts the unread count away again
                 , user.click 100 (Dom.id "guild_openGuild_1")

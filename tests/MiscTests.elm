@@ -49,6 +49,36 @@ tests =
                 Pages.Guild.encodeMessageView input.isMobile input.isHovered input.containerWidth input.isEditing input.highlight input.time
                     |> Pages.Guild.decodeMessageView
                     |> Expect.equal input
+        , Test.test "Round trip message view encoding 3" <|
+            \_ ->
+                let
+                    input =
+                        { isMobile = False
+                        , containerWidth = 65535
+                        , isEditing = True
+                        , highlight = UrlHighlight
+                        , isHovered = IsHoveredWithReactionMenu
+                        , time = Time.millisToPosix 1786013400000
+                        }
+                in
+                Pages.Guild.encodeMessageView input.isMobile input.isHovered input.containerWidth input.isEditing input.highlight input.time
+                    |> Pages.Guild.decodeMessageView
+                    |> Expect.equal input
+        , Test.test "Round trip message view encoding 4" <|
+            \_ ->
+                let
+                    input =
+                        { isMobile = True
+                        , containerWidth = 400
+                        , isEditing = False
+                        , highlight = ReplyToHighlight
+                        , isHovered = IsHoveredWhileSelectingAnchor
+                        , time = Time.millisToPosix 1786013400000
+                        }
+                in
+                Pages.Guild.encodeMessageView input.isMobile input.isHovered input.containerWidth input.isEditing input.highlight input.time
+                    |> Pages.Guild.decodeMessageView
+                    |> Expect.equal input
         , Test.test "Discord thread name is left as is when it's short enough" <|
             \_ ->
                 DiscordSync.threadName "Hello world!"
