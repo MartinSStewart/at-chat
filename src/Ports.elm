@@ -12,6 +12,7 @@ port module Ports exposing
     , audioPortFromJS
     , audioPortToJS
     , checkNotificationPermissionResponse
+    , clearAppBadge
     , closeNotifications
     , copyImageToClipboard
     , copyToClipboard
@@ -395,6 +396,9 @@ port service_worker_message_from_js : (Json.Decode.Value -> msg) -> Sub msg
 port close_notifications_to_js : Json.Encode.Value -> Cmd msg
 
 
+port clear_app_badge_to_js : Json.Encode.Value -> Cmd msg
+
+
 port visual_viewport_resized_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
@@ -480,6 +484,16 @@ gotDevicePixelRatio msg =
 closeNotifications : Command FrontendOnly toMsg msg
 closeNotifications =
     Command.sendToJs "close_notifications_to_js" close_notifications_to_js Json.Encode.null
+
+
+{-| Remove the unread count that the service worker put on the app icon (home
+screen, dock, taskbar) when push notifications arrived while the app was closed.
+Sent when the user is looking at the app again, since at that point the count has
+served its purpose.
+-}
+clearAppBadge : Command FrontendOnly toMsg msg
+clearAppBadge =
+    Command.sendToJs "clear_app_badge_to_js" clear_app_badge_to_js Json.Encode.null
 
 
 serviceWorkerMessage : (String -> msg) -> Subscription FrontendOnly msg

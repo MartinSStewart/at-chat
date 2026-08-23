@@ -47,24 +47,96 @@ self.addEventListener('activate', (event) => {
     event.waitUntil(self.clients.claim());
 });
 
+// Number of push notifications received since the app was last focused, shown on
+// the app icon (home screen, dock, taskbar) via the Badging API. It's kept in Cache
+// Storage rather than a variable because the service worker is shut down between
+// pushes, so an in-memory count would be back to zero by the time the next one
+// arrives, and because the page has to read the same value to reset it (see
+// clear_app_badge_to_js in elm-pkg-js/stuff.js).
+const badgeCountCacheName = 'app_badge_count';
+
+const badgeCountKey = 'count';
+
+async function incrementAppBadge() {
+    if (!("setAppBadge" in navigator)) {
+        return;
+    }
+
+    let count = 1;
+
+    // Failing to read or write the count is not a reason to skip the badge itself,
+    // so this gets its own try/catch and falls back to showing a count of one.
+    try {
+        const cache = await caches.open(badgeCountCacheName);
+        const stored = await cache.match(badgeCountKey);
+
+        if (stored) {
+            const previous = Number(await stored.text());
+
+            if (Number.isFinite(previous) && previous > 0) {
+                count = previous + 1;
+            }
+        }
+
+        await cache.put(
+            badgeCountKey,
+            new Response(String(count), {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'Content-Type': 'text/plain' }
+            })
+        );
+    }
+    catch (error) {
+        log("Badge count storage error: " + error.message);
+    }
+
+    try {
+        // Browsers that only badge installed apps reject this when the site is
+        // running in a normal tab, which is nothing to worry about.
+        await navigator.setAppBadge(count);
+    }
+    catch (error) {
+        log("Set app badge error: " + error.message);
+    }
+}
+
+async function clearAppBadge() {
+    try {
+        await caches.delete(badgeCountCacheName);
+
+        if ("clearAppBadge" in navigator) {
+            await navigator.clearAppBadge();
+        }
+    }
+    catch (error) {
+        log("Clear app badge error: " + error.message);
+    }
+}
+
 // Register event listener for the 'push' event.
 self.addEventListener('push', function(event) {
-    try
-    {
-        const data = event.data.json().notification;
+    // The badge write is async, so the work has to be wrapped in waitUntil to stop
+    // the service worker being terminated halfway through it.
+    event.waitUntil((async () => {
+        try
+        {
+            const data = event.data.json().notification;
 
-        self.registration.showNotification(
-            data.title,
-            { body: data.body
-            , icon: data.icon
-            , data: data.data
-            });
-        log("Push event: " + JSON.stringify(event.data.json()));
-    }
-    catch(error)
-    {
-        log("Push event error: " + error.message);
-    }
+            await self.registration.showNotification(
+                data.title,
+                { body: data.body
+                , icon: data.icon
+                , data: data.data
+                });
+            await incrementAppBadge();
+            log("Push event: " + JSON.stringify(event.data.json()));
+        }
+        catch(error)
+        {
+            log("Push event error: " + error.message);
+        }
+    })());
 });
 
 self.addEventListener('notificationclick', function(event) {
@@ -96,6 +168,10 @@ self.addEventListener('notificationclick', function(event) {
                         return clients.openWindow(notificationData);
                     }
                 })
+                // The user is opening the app, so the unread count on the app icon
+                // has served its purpose. Cleared after focusing/opening the window
+                // so the badge work can't delay handling the click itself.
+                .then(clearAppBadge)
         );
     }
     catch (e) {

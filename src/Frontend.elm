@@ -1617,6 +1617,7 @@ updateLoaded msg model =
                         [ FrontendExtra.setFocus model Pages.Guild.channelTextInputId
                         , Ports.setFavicon "/favicon.ico"
                         , Ports.closeNotifications
+                        , Ports.clearAppBadge
                         , Ports.registerServiceWorker
                         , checkAppVersion True
                         ]
@@ -3089,7 +3090,7 @@ updateLoaded msg model =
                                 )
                                 loggedIn
                                 (if hasFocus then
-                                    Ports.closeNotifications
+                                    Command.batch [ Ports.closeNotifications, Ports.clearAppBadge ]
 
                                  else
                                     Command.none
