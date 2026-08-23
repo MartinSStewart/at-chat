@@ -4925,7 +4925,7 @@ updateLoaded msg model =
                     ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedShowReactionEmojiSelector ->
-                    ( model, Command.none )
+                    showReactionEmojiSelector guildOrDmId (NoThreadWithMessage messageId) model
 
                 MessageView.MessageViewMsg_PressedEditMessage ->
                     ( model, Command.none )
@@ -5080,7 +5080,7 @@ updateLoaded msg model =
                     ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedShowReactionEmojiSelector ->
-                    ( model, Command.none )
+                    showReactionEmojiSelector guildOrDmId (ViewThreadWithMessage threadId messageId) model
 
                 MessageView.MessageViewMsg_PressedEditMessage ->
                     ( model, Command.none )
