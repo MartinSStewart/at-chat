@@ -35,6 +35,7 @@ import E2EVoiceChat
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Time as Time
+import Emoji
 import Expect
 import FileStatus
 import Html.Attributes
@@ -1052,11 +1053,38 @@ markMessageAsUnreadTest config =
                 , E2EHelper.hasExactText user [ "Two", "Three" ]
                 , E2EHelper.hasNotExactText user [ "One" ]
 
-                -- Hovering a message in the overview restarts the animations inside it,
-                -- which the mini menu of a channel message stays out of
+                -- Hovering a message in the overview restarts the animations inside it and
+                -- offers to react to it. Editing, replying and the full menu belong to the
+                -- channel the message came from, so the menu here leaves them out
                 , user.mouseEnter 100 (Dom.id "guild_message_2") ( 10, 10 ) []
-                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_showFullMenu" ])
                 , user.checkModel 100 (checkMessageIsHovered (Id.fromInt 2))
+                , user.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.id "miniView_showReactionEmojiSelector"
+                        , Test.Html.Selector.id "miniView_emojiReact_0"
+                        ]
+                    )
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_showFullMenu" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_reply" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_editMessage" ])
+                , E2EHelper.tallSnapshot user 100 { name = "Reaction menu on an unread overview message" }
+
+                -- The shortcut reacts with the emoji drawn on it, without leaving the overview
+                , user.click 100 (Dom.id "miniView_emojiReact_0")
+                , user.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.id "guild_removeReactionEmoji_0" ])
+
+                -- And the button beside the shortcuts opens the emoji selector over the
+                -- overview, for a reaction that isn't one of them
+                , user.click 100 (Dom.id "miniView_showReactionEmojiSelector")
+                , user.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.id (Dom.idToString Emoji.searchInputId) ]
+                    )
+                , user.click 100 (Dom.id "miniView_showReactionEmojiSelector")
 
                 -- Reading the channel for real puts the unread count away again
                 , user.click 100 (Dom.id "guild_openGuild_1")

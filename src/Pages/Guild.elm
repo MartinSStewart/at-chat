@@ -421,7 +421,20 @@ unreadOverviewNotMobile local loggedIn model =
             unreadOverviewChannels local allDiscordUsers
     in
     Ui.column
-        [ Ui.height Ui.fill, Ui.heightMin 0, Ui.Font.color MyUi.font1 ]
+        [ Ui.height Ui.fill
+        , Ui.heightMin 0
+        , Ui.Font.color MyUi.font1
+
+        -- Reacting to a message from here opens the emoji selector over the overview, so it
+        -- has to be drawn here as well as over a conversation
+        , emojiSelector
+            (MyUi.isMobile model)
+            local.localUser.user.availableCustomEmojis
+            local.localUser.user.availableStickers
+            local
+            loggedIn
+            model
+        ]
         [ Ui.row
             [ Ui.paddingXY 8 0
             , Ui.spacing 8
@@ -3241,15 +3254,16 @@ messageHover guildOrDmId threadRoute loggedIn model =
 
 
 {-| Hovering a message in the unread overview restarts the animated emojis, stickers and
-embeds inside it, the same as it does in a channel. The mini menu stays away though, since
-editing, replying and reacting all belong to the channel the message came from.
+embeds inside it, the same as it does in a channel, and brings up a menu offering to react
+to it. That's all the menu offers: editing and replying belong to the channel the message
+came from.
 -}
 unreadOverviewMessageHover : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoggedIn2 -> IsHovered
 unreadOverviewMessageHover guildOrDmId threadRoute loggedIn =
     case loggedIn.messageHover of
         MessageHover hoveredGuildOrDmId hoveredThreadRoute ->
             if guildOrDmId == hoveredGuildOrDmId && threadRoute == hoveredThreadRoute then
-                IsHoveredButNoMenu
+                IsHoveredReactionsOnly
 
             else
                 IsNotHovered
@@ -4470,9 +4484,12 @@ encodeMessageView isMobile isHovered containerWidth otherUserIsEditing highlight
 
                 IsHoveredWhileSelectingAnchor ->
                     3
+
+                IsHoveredReactionsOnly ->
+                    4
             )
         + Bitwise.shiftLeftBy
-            3
+            4
             (case highlight of
                 NoHighlight ->
                     0
@@ -4487,24 +4504,24 @@ encodeMessageView isMobile isHovered containerWidth otherUserIsEditing highlight
                     3
             )
         + Bitwise.shiftLeftBy
-            5
+            6
             (if isMobile then
                 1
 
              else
                 0
             )
-        + Bitwise.shiftLeftBy 6 containerWidth
+        + Bitwise.shiftLeftBy 7 containerWidth
         + (Time.posixToMillis time // msInMinute * timePackingOffset)
 
 
 {-| Where the time starts in the Int `encodeMessageView` packs. The flags take the bottom
-six bits and the container width sits above them, so this leaves room for a container up to
+seven bits and the container width sits above them, so this leaves room for a container up to
 65535px wide, and the whole packed number stays well inside the range integers are exact in.
 -}
 timePackingOffset : Int
 timePackingOffset =
-    2 ^ 22
+    2 ^ 23
 
 
 msInMinute : Int
@@ -4530,7 +4547,7 @@ decodeMessageView packed =
     in
     { isEditing = Bitwise.and 0x01 value == 1
     , isHovered =
-        case Bitwise.shiftRightBy 1 value |> Bitwise.and 0x03 of
+        case Bitwise.shiftRightBy 1 value |> Bitwise.and 0x07 of
             1 ->
                 IsHovered
 
@@ -4540,10 +4557,13 @@ decodeMessageView packed =
             3 ->
                 IsHoveredWhileSelectingAnchor
 
+            4 ->
+                IsHoveredReactionsOnly
+
             _ ->
                 IsNotHovered
     , highlight =
-        case Bitwise.shiftRightBy 3 value |> Bitwise.and 0x03 of
+        case Bitwise.shiftRightBy 4 value |> Bitwise.and 0x03 of
             1 ->
                 ReplyToHighlight
 
@@ -4555,8 +4575,8 @@ decodeMessageView packed =
 
             _ ->
                 NoHighlight
-    , isMobile = Bitwise.shiftRightBy 5 value |> Bitwise.and 0x01 |> (==) 1
-    , containerWidth = Bitwise.shiftRightBy 6 value
+    , isMobile = Bitwise.shiftRightBy 6 value |> Bitwise.and 0x01 |> (==) 1
+    , containerWidth = Bitwise.shiftRightBy 7 value
     , time = packed // timePackingOffset * msInMinute |> Time.millisToPosix
     }
 
@@ -6125,6 +6145,9 @@ reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers animat
                                 IsHoveredButNoMenu ->
                                     Ui.noAttr
 
+                                IsHoveredReactionsOnly ->
+                                    Ui.noAttr
+
                                 IsHoveredWhileSelectingAnchor ->
                                     Ui.noAttr
                             ]
@@ -6607,6 +6630,7 @@ type IsHovered
     = IsNotHovered
     | IsHovered
     | IsHoveredButNoMenu
+    | IsHoveredReactionsOnly
     | IsHoveredWhileSelectingAnchor
 
 
@@ -7584,6 +7608,9 @@ isHoveredToAnimationMode isHovered =
         IsHoveredButNoMenu ->
             Sticker.ResetAndLoopAFewTimes
 
+        IsHoveredReactionsOnly ->
+            Sticker.ResetAndLoopAFewTimes
+
         IsHoveredWhileSelectingAnchor ->
             Sticker.ResetAndLoopAFewTimes
 
@@ -7713,6 +7740,9 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                                 True
 
                             IsHoveredButNoMenu ->
+                                True
+
+                            IsHoveredReactionsOnly ->
                                 True
 
                             IsHoveredWhileSelectingAnchor ->
@@ -7863,6 +7893,9 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                                 True
 
                             IsHoveredButNoMenu ->
+                                True
+
+                            IsHoveredReactionsOnly ->
                                 True
 
                             IsHoveredWhileSelectingAnchor ->
@@ -8424,6 +8457,22 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
                             UrlHighlight ->
                                 [ Ui.background MyUi.hoverAndReplyToColor ]
 
+                    IsHoveredReactionsOnly ->
+                        [ case highlight of
+                            NoHighlight ->
+                                Ui.background MyUi.hoverHighlight
+
+                            ReplyToHighlight ->
+                                Ui.background MyUi.hoverAndReplyToColor
+
+                            MentionHighlight ->
+                                Ui.background MyUi.hoverAndMentionColor
+
+                            UrlHighlight ->
+                                Ui.background MyUi.hoverAndReplyToColor
+                        , MessageView.reactionsMiniView currentUser availableCustomEmojis customEmojis |> Ui.inFront
+                        ]
+
                     IsHoveredWhileSelectingAnchor ->
                         []
                )
@@ -8544,6 +8593,22 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
 
                             UrlHighlight ->
                                 [ Ui.background MyUi.hoverAndReplyToColor ]
+
+                    IsHoveredReactionsOnly ->
+                        [ case highlight of
+                            NoHighlight ->
+                                Ui.background MyUi.hoverHighlight
+
+                            ReplyToHighlight ->
+                                Ui.background MyUi.hoverAndReplyToColor
+
+                            MentionHighlight ->
+                                Ui.background MyUi.hoverAndMentionColor
+
+                            UrlHighlight ->
+                                Ui.background MyUi.hoverAndReplyToColor
+                        , MessageView.reactionsMiniView currentUser availableCustomEmojis customEmojis |> Ui.inFront
+                        ]
 
                     IsHoveredWhileSelectingAnchor ->
                         []
