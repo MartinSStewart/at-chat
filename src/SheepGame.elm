@@ -61,6 +61,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.File exposing (File)
 import Effect.Http as Http
 import Effect.Time as Time
+import Emoji exposing (EmojiOrCustomEmoji)
 import FileName
 import FileStatus exposing (FileData, FileId, FileMetadata(..), FileStatus)
 import Go
@@ -75,6 +76,7 @@ import List.Nonempty exposing (Nonempty)
 import MessageInput exposing (TextInputFocus)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import NonemptySet exposing (NonemptySet)
 import RichText exposing (RichText)
 import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
@@ -133,7 +135,10 @@ type alias UnvalidatedInput =
 
 
 type alias ValidatedInput =
-    { text : Nonempty (RichText (Id UserId)), attachedFiles : SeqDict (Id FileId) FileData }
+    { text : Nonempty (RichText (Id UserId))
+    , attachedFiles : SeqDict (Id FileId) FileData
+    , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId))
+    }
 
 
 type alias SetupModel =
@@ -388,6 +393,7 @@ validateInput timezone users question =
             (\() ->
                 { text = RichText.fromNonemptyString timezone users content
                 , attachedFiles = FileStatus.onlyUploadedFiles question.attachedFiles
+                , reactions = SeqDict.empty
                 }
             )
                 |> Ok

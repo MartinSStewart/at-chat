@@ -377,8 +377,7 @@ lightnessSlider selection parts onChange =
             , Ui.rounded 4
             ]
             { label = sliderLabel.id
-            , onChange =
-                \value -> select selection (fromParts { parts | lightness = round value }) |> onChange
+            , onChange = \value -> select selection (fromParts { parts | lightness = round value }) |> onChange
             , min = 5
             , max = toFloat (lightnessCount - 1) - 2
             , value = toFloat parts.lightness
