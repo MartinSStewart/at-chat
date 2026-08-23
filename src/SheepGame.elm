@@ -24,6 +24,7 @@ module SheepGame exposing
     , fileUploadPreview
     , fileUploadPreviewSize
     , gameView
+    , gameViewId
     , initGame
     , initSetup
     , initSetupFromSavedQuestions
@@ -31,8 +32,10 @@ module SheepGame exposing
     , inputContainerId
     , inputId
     , mapQuestionRichText
+    , questionRevealed
     , removeAttachedFileFromText
     , resultsData
+    , revealedQuestionId
     , saveInputAction
     , scoresThroughQuestion
     , setupView
@@ -73,11 +76,13 @@ import MessageInput exposing (TextInputFocus)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import RichText exposing (RichText)
+import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Sticker
 import String.Nonempty
 import Ui exposing (Element)
+import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Input
@@ -169,6 +174,16 @@ type alias GameData =
     , -- Which pair of players the cursor is over in the results grid, so their row and
       -- column light up and how much they matched is spelled out beside it.
       gridHovered : Maybe ( Id UserId, Id UserId )
+    , -- How far the tab body is scrolled, which decides what happens when the host puts
+      -- another question on screen.
+      scrollPosition : ScrollPosition
+    , -- How many questions were revealed the last time this client reacted to that count
+      -- changing. The host can go back to an earlier question, and going forward again
+      -- isn't a question nobody has seen yet.
+      questionsRevealedSeen : Int
+    , -- Whether a question turned up while the reader was somewhere further up the tab, in
+      -- which case they're told about it instead of being scrolled onto it.
+      newQuestionRevealed : Bool
     }
 
 
@@ -193,6 +208,8 @@ type GameMsg
     | PressedHidePreviousQuestion
     | HoveredResultsGrid ( Id UserId, Id UserId )
     | ExitedResultsGrid ( Id UserId, Id UserId )
+    | UserScrolledResults ScrollPosition
+    | PressedNewQuestionRevealed
     | NoOp
 
 
@@ -296,6 +313,9 @@ initGame localUser setup shared =
                 (\index -> SeqDict.get (Id.fromInt index) shared.notes |> Maybe.withDefault Nothing |> toDraft localUser)
             |> IdArray.fromList
     , gridHovered = Nothing
+    , scrollPosition = ScrolledToBottom
+    , questionsRevealedSeen = shared.questionsRevealed
+    , newQuestionRevealed = False
     }
 
 
@@ -411,6 +431,9 @@ type OutMsg
     | UploadAttachedFiles Input (Nonempty ( Id FileId, File ))
     | CancelAttachedFileUpload Input (Id FileId)
     | ShowAttachedFileInfo FileStatus.FileDataWithImage
+      -- Take the reader to the bottom of the tab body, which is where the question they were
+      -- told about is.
+    | ScrollResultsToBottom
 
 
 updateSetup : LocalUser -> SetupMsg -> SetupModel -> ( SetupOrGame, OutMsg )
@@ -1062,8 +1085,54 @@ updateGame localUser setup shared msg model =
             , NoOutMsg
             )
 
+        UserScrolledResults scrollPosition ->
+            ( { model
+                | scrollPosition = scrollPosition
+
+                -- Reaching the bottom is the reader catching up with the question they were
+                -- told about, so the indicator has said what it had to say
+                , newQuestionRevealed = model.newQuestionRevealed && scrollPosition /= ScrolledToBottom
+              }
+            , Nothing
+            , NoOutMsg
+            )
+
+        PressedNewQuestionRevealed ->
+            ( { model | newQuestionRevealed = False }, Nothing, ScrollResultsToBottom )
+
         NoOp ->
             ( model, Nothing, NoOutMsg )
+
+
+{-| What a change in how many questions are revealed means for the person watching. Someone
+sitting at the bottom of the tab is taken on to the question that just turned up, and someone
+who has scrolled up is told about it instead so that what they're reading doesn't move out
+from under them. The host stepping back to an earlier question isn't a question turning up,
+so it does neither.
+
+The id returned is the question to scroll to, when there is scrolling to be done.
+
+-}
+questionRevealed : Int -> GameData -> ( GameData, Maybe HtmlId )
+questionRevealed questionsRevealed model =
+    if questionsRevealed > model.questionsRevealedSeen then
+        ( { model
+            | questionsRevealedSeen = questionsRevealed
+            , newQuestionRevealed = model.scrollPosition /= ScrolledToBottom
+          }
+        , case model.scrollPosition of
+            ScrolledToBottom ->
+                revealedQuestionId (questionsRevealed - 1) |> Just
+
+            ScrolledToTop ->
+                Nothing
+
+            ScrolledToMiddle ->
+                Nothing
+        )
+
+    else
+        ( { model | questionsRevealedSeen = questionsRevealed }, Nothing )
 
 
 {-| The answer boxes whose contents changed, so that typing in one doesn't schedule a save
@@ -1533,6 +1602,47 @@ questionInput isMobile localUser loggedIn users index question =
         ]
 
 
+{-| The scrollable body of the games tab while a sheep game is being played.
+-}
+gameViewId : HtmlId
+gameViewId =
+    Dom.id "sheepGame_tabBody"
+
+
+revealedQuestionId : Int -> HtmlId
+revealedQuestionId index =
+    Dom.id ("sheepGame_revealedQuestion_" ++ String.fromInt index)
+
+
+newQuestionRevealedId : HtmlId
+newQuestionRevealedId =
+    Dom.id "sheepGame_newQuestionRevealed"
+
+
+{-| Sits at the bottom of the tab body when a question turned up while the reader was
+somewhere further up. Pressing it takes them down to it.
+-}
+newQuestionRevealedView : Bool -> Element GameMsg
+newQuestionRevealedView isMobile =
+    MyUi.elButton
+        newQuestionRevealedId
+        PressedNewQuestionRevealed
+        [ Ui.alignBottom
+        , Ui.centerX
+        , Ui.width Ui.shrink
+        , Ui.move { x = 0, y = -16, z = 0 }
+        , Ui.paddingXY 12 8
+        , Ui.rounded 8
+        , Ui.border 1
+        , Ui.borderColor MyUi.buttonBorder
+        , Ui.background MyUi.buttonBackground
+        , Ui.Font.color MyUi.font1
+        , Ui.pointer
+        , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.highlightedBorder ]
+        ]
+        (Ui.text "New question revealed!")
+
+
 tabBodyHeight : Coord units -> Int
 tabBodyHeight windowSize =
     round (toFloat (Coord.yRaw windowSize) * 0.8) - MyUi.channelHeaderHeight
@@ -1572,6 +1682,8 @@ gameView time windowSize showMemberTab localUser loggedIn setup shared model =
         , Ui.background MyUi.background1
         , Ui.scrollable
         , Ui.height (Ui.px (tabBodyHeight windowSize))
+        , Ui.id (Dom.idToString gameViewId)
+        , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledResults model.scrollPosition)
         ]
         (case shared.phase of
             Answering ->
@@ -1583,6 +1695,16 @@ gameView time windowSize showMemberTab localUser loggedIn setup shared model =
             Revealing ->
                 revealingView time contentWidth localUser setup shared model
         )
+        -- The indicator hangs off a wrapper rather than the tab body itself, so that it stays
+        -- put at the bottom instead of scrolling away with the questions.
+        |> Ui.el
+            [ Ui.height (Ui.px (tabBodyHeight windowSize))
+            , if model.newQuestionRevealed then
+                Ui.inFront (newQuestionRevealedView isMobile)
+
+              else
+                Ui.noAttr
+            ]
 
 
 {-| Questions and answers are drawn the same way a message is, so that a file attached to a
@@ -2276,7 +2398,7 @@ resultsQuestionView time contentWidth localUser setup maxPoints index result =
                 time
                 contentWidth
                 localUser
-                (Dom.id ("sheepGame_revealedQuestion_" ++ String.fromInt index))
+                (revealedQuestionId index)
                 result.question.attachedFiles
                 result.question.text
             ]

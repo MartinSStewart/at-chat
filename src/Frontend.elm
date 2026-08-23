@@ -7698,8 +7698,7 @@ updateLoadedFromBackend msg model =
 
                                 Server_Game _ guildOrDmId gameChange ->
                                     let
-                                        updatedGameModel : Maybe Game.Model
-                                        updatedGameModel =
+                                        ( updatedGameModel, maybeScrollTo ) =
                                             Game.gameChangeFromServer
                                                 model.time
                                                 local.localUser
@@ -7709,33 +7708,43 @@ updateLoadedFromBackend msg model =
                                     ( { loggedIn2
                                         | games = SeqDict.update guildOrDmId (\_ -> updatedGameModel) loggedIn2.games
                                       }
-                                    , -- Another player's move adds a Past moves entry; if we're
-                                      -- watching that match, keep the list pinned to the bottom when
-                                      -- it already was (mirrors the conversation view).
-                                      case gameChange of
-                                        Game.LocalChange_WordSpellingGame matchId (WordSpellingGame.Action _) ->
-                                            case FrontendExtra.currentGamesTab local model.route of
-                                                Just gamesTab ->
-                                                    if gamesTab.guildOrDmId == guildOrDmId && gamesTab.maybeMatchId == Just matchId then
-                                                        Scroll.toBottomOfChannelIfAtBottom
-                                                            WordSpellingGame.pastWordsContainerId
-                                                            SetScrollToBottom
-                                                            (case updatedGameModel of
-                                                                Just gameModel3 ->
-                                                                    Game.wordSpellingScrollPosition matchId gameModel3
+                                    , Command.batch
+                                        [ -- A question the host has just put on screen is scrolled onto for
+                                          -- anyone who was already at the bottom of the tab
+                                          case maybeScrollTo of
+                                            Just scrollTo ->
+                                                scrollElementToTop scrollTo
 
-                                                                Nothing ->
-                                                                    ScrolledToBottom
-                                                            )
+                                            Nothing ->
+                                                Command.none
+                                        , -- Another player's move adds a Past moves entry; if we're
+                                          -- watching that match, keep the list pinned to the bottom when
+                                          -- it already was (mirrors the conversation view).
+                                          case gameChange of
+                                            Game.LocalChange_WordSpellingGame matchId (WordSpellingGame.Action _) ->
+                                                case FrontendExtra.currentGamesTab local model.route of
+                                                    Just gamesTab ->
+                                                        if gamesTab.guildOrDmId == guildOrDmId && gamesTab.maybeMatchId == Just matchId then
+                                                            Scroll.toBottomOfChannelIfAtBottom
+                                                                WordSpellingGame.pastWordsContainerId
+                                                                SetScrollToBottom
+                                                                (case updatedGameModel of
+                                                                    Just gameModel3 ->
+                                                                        Game.wordSpellingScrollPosition matchId gameModel3
 
-                                                    else
+                                                                    Nothing ->
+                                                                        ScrolledToBottom
+                                                                )
+
+                                                        else
+                                                            Command.none
+
+                                                    Nothing ->
                                                         Command.none
 
-                                                Nothing ->
-                                                    Command.none
-
-                                        _ ->
-                                            Command.none
+                                            _ ->
+                                                Command.none
+                                        ]
                                     )
 
                                 _ ->
@@ -8241,6 +8250,16 @@ routeToInitialDataRequest route =
             InitialLoadRequested_None
 
 
+{-| Whatever is being scrolled to has only just been added, so it isn't in the page until the
+next render. The sleep lets that happen before we go looking for it.
+-}
+scrollElementToTop : Game.ScrollTo -> Command FrontendOnly ToBackend FrontendMsg_
+scrollElementToTop { container, target } =
+    Process.sleep Duration.millisecond
+        |> Task.andThen (\() -> Scroll.smoothScrollToTopOf container target)
+        |> Task.attempt (\_ -> SetScrollToBottom)
+
+
 handleGameOutMsgs :
     List Game.OutMsg
     -> LoadedFrontend
@@ -8270,6 +8289,9 @@ handleGameOutMsgs outMsgs model =
 
                 Game.ScrollToBottom htmlId ->
                     ( model2, Scroll.toBottomOfChannel htmlId SetScrollToBottom :: cmds )
+
+                Game.SmoothScrollTo scrollTo ->
+                    ( model2, scrollElementToTop scrollTo :: cmds )
 
                 Game.SaveSheepGameQuestions _ ->
                     ( model2, cmds )

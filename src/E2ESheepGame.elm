@@ -6,7 +6,9 @@ import Effect.Test as T
 import Expect
 import Html.Attributes
 import Id exposing (ChannelMessageId, Id)
+import Json.Encode
 import SeqDict
+import SheepGame
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
@@ -448,9 +450,29 @@ threePlayerMatchTest normalConfig =
                                 , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "▲" ])
                                 , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "▼" ])
 
+                                -- Joe reads back over the first question instead of waiting at the
+                                -- bottom, so the next one to turn up is announced to him rather than
+                                -- scrolled onto, which would move what he's reading out from under him.
+                                , scrollTabBodyToMiddle joe
+
                                 -- Dog is worth two points to Joe and Wanda while Cat is worth one to Stevie,
                                 -- which puts Joe past Stevie: one arrow up and one arrow down.
                                 , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
+                                , joe.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.exactText "New question revealed!" ])
+
+                                -- Stevie stayed at the bottom, so the question is already in front of
+                                -- him and there's nothing to announce
+                                , stevie.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "New question revealed!" ])
+
+                                -- Pressing it takes Joe down to the question, so it has nothing left to say
+                                , joe.click 100 (Dom.id "sheepGame_newQuestionRevealed")
+                                , joe.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "New question revealed!" ])
                                 , wanda.checkView
                                     100
                                     (Test.Html.Query.has
@@ -493,6 +515,29 @@ threePlayerMatchTest normalConfig =
                 ]
             )
         ]
+
+
+{-| Nothing on screen has a size in these tests, so how far the tab body is scrolled is fed
+in as the numbers a real scroll event would carry.
+-}
+scrollTabBodyToMiddle :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+scrollTabBodyToMiddle user =
+    user.custom
+        100
+        SheepGame.gameViewId
+        "scroll"
+        (Json.Encode.object
+            [ ( "target"
+              , Json.Encode.object
+                    [ ( "scrollTop", Json.Encode.float 1000 )
+                    , ( "scrollHeight", Json.Encode.float 2000 )
+                    , ( "clientHeight", Json.Encode.float 500 )
+                    ]
+              )
+            ]
+        )
 
 
 {-| The channel message the sheep game was started from, which is what the card that opens

@@ -5,6 +5,7 @@ module Scroll exposing
     , smoothScroll
     , smoothScrollBy
     , smoothScrollTo
+    , smoothScrollToTopOf
     , toBottomOfChannel
     , toBottomOfChannelIfAtBottom
     , toBottomOfChannelSmooth
@@ -100,6 +101,28 @@ smoothScrollTo conversationContainerId targetId =
                     viewport.y
                     (viewport.y + element.y - MyUi.channelHeaderHeight)
             )
+
+
+{-| Smooth scroll a container so the target ends up at the top of it. `smoothScroll` and
+`smoothScrollTo` assume the container starts right below the channel header; this works out
+where it actually starts, so it also does the right thing for a tab drawn over the
+conversation.
+-}
+smoothScrollToTopOf : HtmlId -> HtmlId -> Task FrontendOnly Dom.Error ()
+smoothScrollToTopOf containerId targetId =
+    Task.map3
+        (\target container { viewport } ->
+            smoothScrollY
+                containerId
+                0
+                viewport.x
+                viewport.y
+                (viewport.y + target.element.y - container.element.y)
+        )
+        (Dom.getElement targetId)
+        (Dom.getElement containerId)
+        (Dom.getViewportOf containerId)
+        |> Task.andThen identity
 
 
 smoothScrollBy : HtmlId -> Float -> Command FrontendOnly toMsg msg
