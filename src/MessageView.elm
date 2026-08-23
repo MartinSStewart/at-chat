@@ -224,6 +224,13 @@ recentEmojiButtons user availableCustomEmojis customEmojis =
             )
 
 
+{-| The height of the menu, and the width of each of the buttons in it, which are square.
+-}
+miniButtonSize : number
+miniButtonSize =
+    36
+
+
 miniViewContainer : List (Element MessageViewMsg) -> Element MessageViewMsg
 miniViewContainer buttons =
     Ui.row
@@ -233,33 +240,47 @@ miniViewContainer buttons =
         , Ui.borderColor MyUi.border1
         , Ui.border 1
         , Ui.move { x = -48, y = -16, z = 0 }
-        , Ui.height (Ui.px 32)
+        , Ui.height (Ui.px miniButtonSize)
         , Ui.clip
         ]
         buttons
 
 
+{-| An icon in the menu is drawn at the size of the box it's given rather than at whatever
+size the svg itself asks for (see the `mini-button-icon` rule in `MyUi.css`), since browsers
+don't agree on how to size an svg that leaves its height to them.
+-}
+miniButtonIcon : Html msg -> Element msg
+miniButtonIcon svg =
+    Html.div
+        [ Html.Attributes.class "mini-button-icon" ]
+        [ svg ]
+        |> Ui.html
+
+
 miniButton : HtmlId -> msg -> String -> Html msg -> Element msg
 miniButton htmlId onPress hoverText svg =
     Ui.el
-        [ Ui.width (Ui.px 32)
-        , Ui.paddingXY 4 3
-        , Ui.height Ui.fill
+        [ Ui.width (Ui.px miniButtonSize)
+        , Ui.height (Ui.px miniButtonSize)
+        , Ui.contentCenterX
+        , Ui.contentCenterY
         , Ui.id (Dom.idToString htmlId)
         , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( onPress, True ))
         , Ui.pointer
         , MyUi.hoverText hoverText
         , MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
         ]
-        (Ui.html svg)
+        (miniButtonIcon svg)
 
 
 miniButtonWithPosition : HtmlId -> (Coord CssPixels -> msg) -> Html msg -> Element msg
 miniButtonWithPosition htmlId onPress svg =
     Ui.el
-        [ Ui.width (Ui.px 32)
-        , Ui.paddingXY 4 3
-        , Ui.height Ui.fill
+        [ Ui.width (Ui.px miniButtonSize)
+        , Ui.height (Ui.px miniButtonSize)
+        , Ui.contentCenterX
+        , Ui.contentCenterY
         , Ui.htmlAttribute (Html.Attributes.attribute "role" "button")
         , Ui.id (Dom.idToString htmlId)
         , Ui.Events.stopPropagationOn "click"
@@ -271,7 +292,7 @@ miniButtonWithPosition htmlId onPress svg =
         , Ui.pointer
         , MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
         ]
-        (Ui.html svg)
+        (miniButtonIcon svg)
 
 
 {-| Whether the popup naming who reacted with an emoji comes up when the pointer is over

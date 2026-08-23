@@ -154,6 +154,16 @@ sheepGameDmTest normalConfig =
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.text "The results will be revealed shortly" ]
                             )
+
+                        -- How the scoring works comes up on its own, before any of the
+                        -- answers are given away.
+                        , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Scoring" ])
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "colour" ])
                         , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
                         , admin.checkView
                             100
@@ -421,6 +431,15 @@ threePlayerMatchTest normalConfig =
                                     2000
                                     (Test.Html.Query.has [ Test.Html.Selector.id "sheepGame_revealScores" ])
                                 , admin.click 100 (Dom.id "sheepGame_revealScores")
+
+                                -- The scoring explanation is the first thing revealed, on its own.
+                                , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
+                                , wanda.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Scoring" ])
+                                , wanda.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Name a colour" ])
 
                                 -- Everyone scores the size of the group their answer landed in, so the first
                                 -- question leaves Stevie and Joe on 2 apiece and Wanda on 1. Nobody has

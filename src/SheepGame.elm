@@ -41,6 +41,7 @@ module SheepGame exposing
     , revealedQuestionId
     , saveInputAction
     , scoresThroughQuestion
+    , scoringId
     , setupView
     , updateAction
     , updateGame
@@ -1090,7 +1091,7 @@ updateGame localUser setup shared msg model =
 
         PressedShowNextQuestion ->
             ( model
-            , min (List.Nonempty.length setup.questions) (shared.questionsRevealed + 1)
+            , min (revealStepCount setup) (shared.questionsRevealed + 1)
                 |> Id.fromInt
                 |> ChangedQuestionsRevealed
                 |> Just
@@ -1173,6 +1174,27 @@ updateGame localUser setup shared msg model =
             ( model, Nothing, NoOutMsg )
 
 
+{-| How many times the host can press "Show next question": once to put the scoring
+explanation up and once for each question after that. The last press brings the final scores
+with it.
+-}
+revealStepCount : ValidatedSetup -> Int
+revealStepCount setup =
+    List.Nonempty.length setup.questions + 1
+
+
+{-| The part of the results that the given number of reveals has just put on screen. The
+first reveal is the scoring explanation and every one after it is a question.
+-}
+revealedSectionId : Int -> HtmlId
+revealedSectionId questionsRevealed =
+    if questionsRevealed <= 1 then
+        scoringId
+
+    else
+        revealedQuestionId (questionsRevealed - 2)
+
+
 {-| What a change in how many questions are revealed means for the person watching. Someone
 sitting at the bottom of the tab is taken on to the question that just turned up, and someone
 who has scrolled up is told about it instead so that what they're reading doesn't move out
@@ -1191,7 +1213,7 @@ questionRevealed questionsRevealed model =
           }
         , case model.scrollPosition of
             ScrolledToBottom ->
-                revealedQuestionId (questionsRevealed - 1) |> Just
+                revealedSectionId questionsRevealed |> Just
 
             ScrolledToTop ->
                 Nothing
@@ -1358,9 +1380,7 @@ updateAction setup action shared =
         ChangedQuestionsRevealed count ->
             case ( shared.phase, isHost action.userId setup ) of
                 ( Revealing, True ) ->
-                    { shared
-                        | questionsRevealed = clamp 0 (List.Nonempty.length setup.questions) (Id.toInt count)
-                    }
+                    { shared | questionsRevealed = clamp 0 (revealStepCount setup) (Id.toInt count) }
 
                 _ ->
                     shared
@@ -2485,20 +2505,22 @@ revealingView time contentWidth localUser setup shared model =
         Ui.none
     , if shared.questionsRevealed == 0 then
         Ui.Prose.paragraph
-            [ Ui.Font.size 20, Ui.Font.center, Ui.padding 16 ]
+            [ Ui.Font.size 20, Ui.Font.center, Ui.padding 16, MyUi.fadeIn ]
             [ Ui.text "Stay tuned. The results will be revealed shortly." ]
 
       else
+        -- How the scoring works is the first thing put on screen, so that it has been read
+        -- by the time the first question turns up under it.
         Ui.column
             [ Ui.spacing 16 ]
             (scoringExplanation
-                :: (List.take shared.questionsRevealed results.questions
+                :: (List.take (shared.questionsRevealed - 1) results.questions
                         |> List.indexedMap (resultsQuestionView time contentWidth localUser setup model.hoveredResult results.maxPoints)
                    )
             )
-    , if shared.questionsRevealed >= questionCount then
+    , if shared.questionsRevealed > questionCount then
         Ui.column
-            [ Ui.spacing 32, Ui.paddingWith { left = 0, right = 0, top = 32, bottom = 0 } ]
+            [ Ui.spacing 32, Ui.paddingWith { left = 0, right = 0, top = 32, bottom = 0 }, MyUi.fadeIn ]
             [ Ui.el
                 [ Ui.height (Ui.px 2), Ui.background MyUi.border1 ]
                 Ui.none
@@ -2524,10 +2546,15 @@ revealingView time contentWidth localUser setup shared model =
     ]
 
 
+scoringId : HtmlId
+scoringId =
+    Dom.id "sheepGame_scoring"
+
+
 scoringExplanation : Element msg
 scoringExplanation =
     Ui.column
-        [ Ui.spacing 8 ]
+        [ Ui.spacing 8, Ui.id (Dom.idToString scoringId), MyUi.fadeIn ]
         [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Scoring")
         , Ui.column
             [ Ui.spacing 16, Ui.padding 8, Ui.Font.color MyUi.font3 ]
@@ -2542,7 +2569,7 @@ scoringExplanation =
 resultsQuestionView : Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Maybe ReactionTarget -> Int -> Int -> QuestionResult -> Element GameMsg
 resultsQuestionView time contentWidth localUser setup hoveredResult maxPoints index result =
     Ui.column
-        [ Ui.spacing 8, Ui.paddingXY 0 16 ]
+        [ Ui.spacing 8, Ui.paddingXY 0 16, MyUi.fadeIn ]
         [ Ui.row
             [ Ui.Font.size 20, Ui.spacing 6 ]
             [ Ui.el
@@ -2675,6 +2702,7 @@ reactableResult localUser contentWidth target hoveredResult reactions content =
     Ui.column
         [ Ui.id (Dom.idToString (reactionTargetId target))
         , Ui.spacing 4
+        , Ui.attrIf isHovered (Ui.background MyUi.hoverHighlight)
         , Ui.Events.onMouseEnter (ResultMsg target MessageView.MessageView_MouseEnteredMessage)
         , Ui.Events.onMouseLeave (ResultMsg target MessageView.MessageView_MouseExitedMessage)
         , if isHovered then
