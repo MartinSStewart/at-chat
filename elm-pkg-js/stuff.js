@@ -189,6 +189,16 @@ exports.init = async function init(app)
                 }
             }
 
+            // The count the service worker shows on the app icon, also kept in
+            // Cache Storage (see incrementAppBadge in public/service-worker.js).
+            try {
+                const badgeCache = await caches.open('app_badge_count');
+                const badgeCount = await badgeCache.matchAll();
+                result.appBadgeCount = badgeCount[0] ? await badgeCount[0].text() : "0";
+            } catch (e) {
+                result.appBadgeCount = "Error: " + e.toString();
+            }
+
             if ("Notification" in window) {
                 result.notificationPermission = Notification.permission;
             }
@@ -428,6 +438,22 @@ exports.init = async function init(app)
 
             activeNotifications.forEach((notification) => { try { notification.close(); } catch(error) {} });
             activeNotifications = [];
+        }
+    });
+
+    app.ports.clear_app_badge_to_js.subscribe(async () => {
+        // The service worker counts the push notifications it has shown in Cache
+        // Storage (see public/service-worker.js) so it can keep the app icon badge
+        // up to date. The user is looking at the app now, so drop both the count and
+        // the badge itself.
+        try {
+            await caches.delete('app_badge_count');
+
+            if ("clearAppBadge" in navigator) {
+                await navigator.clearAppBadge();
+            }
+        } catch (error) {
+            console.log(error);
         }
     });
 
