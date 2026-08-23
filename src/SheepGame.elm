@@ -2463,10 +2463,18 @@ revealingView time contentWidth localUser setup shared model =
     , if isHost localUser.session.userId setup then
         Ui.row
             [ Ui.spacing 8 ]
-            [ MyUi.secondaryButton
+            [ MyUi.secondaryButtonTall
                 (Dom.id "sheepGame_hidePreviousQuestion")
                 PressedHidePreviousQuestion
                 "Back"
+                |> Ui.el
+                    [ if shared.questionsRevealed == 0 then
+                        Ui.opacity 0.5
+
+                      else
+                        Ui.opacity 1
+                    , Ui.width Ui.shrink
+                    ]
             , MyUi.simpleButton
                 (Dom.id "sheepGame_showNextQuestion")
                 PressedShowNextQuestion
