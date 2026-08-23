@@ -7214,7 +7214,7 @@ updateLoadedFromBackend msg model =
                     , case localChange of
                         Local_Game guildOrDmId game ->
                             case game of
-                                Game.CreatePublicLink id toBeFilledInByBackend ->
+                                Game.CreatePublicLink _ _ ->
                                     Command.none
 
                                 Game.LoadMatch matchId (FilledInByBackend _) ->
@@ -7232,16 +7232,16 @@ updateLoadedFromBackend msg model =
                                         Nothing ->
                                             Command.none
 
-                                Game.LoadMatch matchId EmptyPlaceholder ->
+                                Game.LoadMatch _ EmptyPlaceholder ->
                                     Command.none
 
-                                Game.LocalChange_Go id _ ->
+                                Game.LocalChange_Go _ _ ->
                                     Command.none
 
-                                Game.LocalChange_WordSpellingGame id _ ->
+                                Game.LocalChange_WordSpellingGame _ _ ->
                                     Command.none
 
-                                Game.LocalChange_SheepGame id _ ->
+                                Game.LocalChange_SheepGame _ _ ->
                                     Command.none
 
                         Local_VoiceChatChange callChange ->
