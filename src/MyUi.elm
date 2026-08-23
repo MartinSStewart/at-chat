@@ -239,7 +239,7 @@ label htmlId attributes element =
 
 errorBackground : Ui.Attribute msg
 errorBackground =
-    Ui.background (Ui.rgb 61 16 36)
+    Ui.background (Ui.rgb 38 10 22)
 
 
 timeElapsedView : Time.Zone -> Time.Posix -> Time.Posix -> Element msg
@@ -608,7 +608,6 @@ radioCircle option =
     Ui.el
         [ Ui.width (Ui.px 23)
         , Ui.height (Ui.px 23)
-        , Ui.background background1
         , Ui.rounded 99
         , Ui.border 2
         , Ui.borderColor
@@ -1549,27 +1548,27 @@ tabBackground =
 
 background1 : Ui.Color
 background1 =
-    Ui.rgb 14 20 40
+    Ui.rgb 4 6 20
 
 
 background2 : Ui.Color
 background2 =
-    Ui.rgb 32 40 70
+    Ui.rgb 21 28 53
 
 
 background3 : Ui.Color
 background3 =
-    Ui.rgb 50 60 90
+    Ui.rgb 39 50 76
 
 
 inputBackground : Ui.Color
 inputBackground =
-    Ui.rgb 35 42 70
+    Ui.rgba 0 0 0 0.3
 
 
 inputBorder : Ui.Color
 inputBorder =
-    Ui.rgb 97 104 124
+    Ui.rgb 79 84 102
 
 
 selectedTextBackground : Ui.Color
@@ -1584,12 +1583,12 @@ buttonBackground =
 
 disabledButtonBackground : Ui.Color
 disabledButtonBackground =
-    Ui.rgb 130 133 135
+    Ui.rgb 112 113 113
 
 
 disabledButtonBorder : Ui.Color
 disabledButtonBorder =
-    Ui.rgb 158 162 165
+    Ui.rgb 140 142 143
 
 
 deleteButtonBackground : Ui.Color
@@ -1629,12 +1628,12 @@ font3 =
 
 border1 : Ui.Color
 border1 =
-    Ui.rgb 60 70 100
+    Ui.rgb 34 39 56
 
 
 border2 : Ui.Color
 border2 =
-    Ui.rgb 34 39 56
+    Ui.rgb 17 20 28
 
 
 highlightedBorder : Ui.Color
@@ -1649,7 +1648,7 @@ errorColor =
 
 hoverHighlight : Ui.Color
 hoverHighlight =
-    Ui.rgba 255 255 255 0.2
+    Ui.rgba 255 255 255 0.17
 
 
 {-| Weaker version of hoverHighlight, used when hovering rows that have no
@@ -1657,14 +1656,14 @@ background of their own
 -}
 weakHoverHighlight : Ui.Color
 weakHoverHighlight =
-    Ui.rgba 255 255 255 0.1
+    Ui.rgba 255 255 255 0.08
 
 
 {-| Background for the currently selected item in a list of channels/rows
 -}
 selectedHighlight : Ui.Color
 selectedHighlight =
-    Ui.rgba 255 255 255 0.15
+    Ui.rgba 255 255 255 0.13
 
 
 {-| Dim gray for placeholder text and secondary metadata shown on dark
@@ -1693,22 +1692,22 @@ scrim =
 
 replyToColor : Ui.Color
 replyToColor =
-    Ui.rgb 69 69 140
+    Ui.rgb 51 51 118
 
 
 mentionColor : Ui.Color
 mentionColor =
-    Ui.rgb 130 110 100
+    Ui.rgb 112 90 78
 
 
 hoverAndReplyToColor : Ui.Color
 hoverAndReplyToColor =
-    Ui.rgb 84 84 161
+    Ui.rgb 66 66 139
 
 
 hoverAndMentionColor : Ui.Color
 hoverAndMentionColor =
-    Ui.rgb 156 132 130
+    Ui.rgb 138 112 108
 
 
 alertColor : Ui.Color
@@ -1720,7 +1719,7 @@ alertColor =
 -}
 userLabelBackground : Ui.Color
 userLabelBackground =
-    Ui.rgb 50 70 240
+    Ui.rgb 32 50 218
 
 
 {-| Font color for inline @user mention labels in messages

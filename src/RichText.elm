@@ -102,7 +102,7 @@ codeBackground =
 
 codeBorder : String
 codeBorder =
-    "rgb(55,61,73)"
+    "rgb(37,41,51)"
 
 
 {-| The border and left/right padding of a code block. Named because scaling ascii art has
@@ -3692,7 +3692,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                         ++ [ Html.span
                                 (Html.Attributes.style "border-radius" "2px"
                                     :: (if revealed then
-                                            [ Html.Attributes.style "background" "rgb(30,30,30)" ]
+                                            [ Html.Attributes.style "background" "rgb(14,14,16)" ]
 
                                         else
                                             [ Html.Attributes.style "cursor" "pointer"
