@@ -8,6 +8,7 @@ module Game exposing
     , Model
     , Msg(..)
     , OutMsg(..)
+    , ScrollTo
     , Setup(..)
     , addGoAction
     , addPublicLink
@@ -319,6 +320,25 @@ wordSpellingScrollPosition matchId model =
             Scroll.ScrolledToBottom
 
 
+{-| Fold a question the host has just put on screen into the local view state of that match,
+and say where the tab body has to be scrolled to as a result (see `SheepGame.questionRevealed`).
+-}
+sheepGameQuestionRevealed : Id ChannelMessageId -> Int -> Model -> ( Model, Maybe ScrollTo )
+sheepGameQuestionRevealed matchId questionsRevealed model =
+    case SeqDict.get matchId model.startedGames of
+        Just (SheepGame_Game gameData) ->
+            let
+                ( gameData2, maybeTarget ) =
+                    SheepGame.questionRevealed questionsRevealed gameData
+            in
+            ( { model | startedGames = SeqDict.insert matchId (SheepGame_Game gameData2) model.startedGames }
+            , Maybe.map (\target -> { container = SheepGame.gameViewId, target = target }) maybeTarget
+            )
+
+        _ ->
+            ( model, Nothing )
+
+
 routeRequest :
     Time.Posix
     -> LocalUser
@@ -464,11 +484,19 @@ type LocalChange
     | LocalChange_SheepGame (Id ChannelMessageId) SheepGame.LocalChange
 
 
+{-| Somewhere a view has to be scrolled to once a change has been applied.
+-}
+type alias ScrollTo =
+    { container : HtmlId, target : HtmlId }
+
+
 type OutMsg
     = OutLocalChange LocalChange
     | CopyText String
     | OutSelectMatch (Maybe (Id ChannelMessageId))
     | ScrollToBottom HtmlId
+      -- Scroll a container so that the element named ends up at the top of it.
+    | SmoothScrollTo ScrollTo
       -- Fetch the dictionary definition for an English word the player clicked in a Word Spelling
       -- Game's Moves log. The frontend issues the HTTP request (see `Frontend.handleGameOutMsgs`).
     | FetchWordDefinition String
@@ -704,11 +732,26 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                                         )
                                         model.sheepGameSaveCounters
                                         changed
+
+                                model2 : Model
+                                model2 =
+                                    { model
+                                        | startedGames = SeqDict.insert matchId (SheepGame_Game game) model.startedGames
+                                        , sheepGameSaveCounters = counters
+                                    }
+
+                                -- The host putting another question on screen is the same event
+                                -- for them as it is for everyone else, so it goes through the
+                                -- same place
+                                ( model3, maybeScrollTo ) =
+                                    case maybeAction of
+                                        Just (SheepGame.ChangedQuestionsRevealed count) ->
+                                            sheepGameQuestionRevealed matchId (Id.toInt count) model2
+
+                                        _ ->
+                                            ( model2, Nothing )
                             in
-                            ( { model
-                                | startedGames = SeqDict.insert matchId (SheepGame_Game game) model.startedGames
-                                , sheepGameSaveCounters = counters
-                              }
+                            ( model3
                             , (case maybeAction of
                                 Just action ->
                                     [ OutLocalChange
@@ -721,6 +764,13 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                                 Nothing ->
                                     []
                               )
+                                ++ (case maybeScrollTo of
+                                        Just scrollTo ->
+                                            [ SmoothScrollTo scrollTo ]
+
+                                        Nothing ->
+                                            []
+                                   )
                                 ++ List.map
                                     (\input ->
                                         SeqDict.get ( matchId, input ) counters
@@ -881,6 +931,9 @@ sheepGameOutMsgs time newMatchId outMsg =
 
         SheepGame.ShowAttachedFileInfo fileData ->
             [ ShowSheepGameAttachedFileInfo fileData ]
+
+        SheepGame.ScrollResultsToBottom ->
+            [ ScrollToBottom SheepGame.gameViewId ]
 
 
 {-| Files someone picked for one of the sheep game's inputs, on their way back to whichever
@@ -1453,7 +1506,10 @@ pressedKey matchId key matchData maybeGameModel =
             Nothing
 
 
-gameChangeFromServer : Time.Posix -> LocalUser -> LocalChange -> Maybe Model -> Maybe Model
+{-| Fold a change another player made into the local view state of their match, along with
+anywhere the tab body has to be scrolled to because of it.
+-}
+gameChangeFromServer : Time.Posix -> LocalUser -> LocalChange -> Maybe Model -> ( Maybe Model, Maybe ScrollTo )
 gameChangeFromServer time localUser gameChange maybeModel =
     let
         currentUserId : Id UserId
@@ -1463,122 +1519,135 @@ gameChangeFromServer time localUser gameChange maybeModel =
         model : Model
         model =
             Maybe.withDefault initModel maybeModel
-    in
-    (case gameChange of
-        LocalChange_Go matchId goChange ->
-            case goChange of
-                Go.StartMatch _ _ ->
-                    { model | startedGames = SeqDict.insert matchId (GoModel_Game Go.initGame) model.startedGames }
 
-                Go.Action actionWithTime ->
-                    let
-                        playPop : Bool
-                        playPop =
-                            case actionWithTime.change of
-                                Go.PlaceStone _ _ ->
-                                    True
+        updated : Model
+        updated =
+            case gameChange of
+                LocalChange_Go matchId goChange ->
+                    case goChange of
+                        Go.StartMatch _ _ ->
+                            { model | startedGames = SeqDict.insert matchId (GoModel_Game Go.initGame) model.startedGames }
 
-                                Go.PassTurn ->
-                                    True
+                        Go.Action actionWithTime ->
+                            let
+                                playPop : Bool
+                                playPop =
+                                    case actionWithTime.change of
+                                        Go.PlaceStone _ _ ->
+                                            True
 
-                                Go.MarkTerritory _ _ ->
-                                    False
+                                        Go.PassTurn ->
+                                            True
 
-                                Go.FinishedMarking ->
-                                    True
+                                        Go.MarkTerritory _ _ ->
+                                            False
 
-                                Go.AcceptTerritory ->
-                                    True
+                                        Go.FinishedMarking ->
+                                            True
 
-                                Go.RejectTerritory ->
-                                    True
+                                        Go.AcceptTerritory ->
+                                            True
 
-                                Go.Joined _ ->
-                                    True
-                    in
-                    if playPop then
-                        { model
-                            | startedGames =
-                                SeqDict.updateIfExists
-                                    matchId
-                                    (\game ->
-                                        case game of
-                                            GoModel_Game goModel ->
-                                                GoModel_Game { goModel | lastPlacedStone = Just time }
+                                        Go.RejectTerritory ->
+                                            True
 
-                                            _ ->
-                                                game
-                                    )
-                                    model.startedGames
-                        }
+                                        Go.Joined _ ->
+                                            True
+                            in
+                            if playPop then
+                                { model
+                                    | startedGames =
+                                        SeqDict.updateIfExists
+                                            matchId
+                                            (\game ->
+                                                case game of
+                                                    GoModel_Game goModel ->
+                                                        GoModel_Game { goModel | lastPlacedStone = Just time }
 
-                    else
-                        model
+                                                    _ ->
+                                                        game
+                                            )
+                                            model.startedGames
+                                }
 
-        CreatePublicLink _ _ ->
-            model
+                            else
+                                model
 
-        LoadMatch _ _ ->
-            model
+                CreatePublicLink _ _ ->
+                    model
 
-        LocalChange_WordSpellingGame matchId wordSpellinGameChange ->
-            case wordSpellinGameChange of
-                WordSpellingGame.StartMatch serverTime setup ->
-                    { model
-                        | startedGames =
-                            SeqDict.insert
-                                matchId
-                                (WordSpellingGame_Game
-                                    (WordSpellingGame.initGame
-                                        serverTime
-                                        currentUserId
-                                        setup
-                                        (WordSpellingGame.initShared setup)
-                                    )
-                                )
-                                model.startedGames
-                    }
+                LoadMatch _ _ ->
+                    model
 
-                WordSpellingGame.Action action ->
-                    case action.change of
-                        WordSpellingGame.PlaceWord placedWord _ ->
+                LocalChange_WordSpellingGame matchId wordSpellinGameChange ->
+                    case wordSpellinGameChange of
+                        WordSpellingGame.StartMatch serverTime setup ->
                             { model
                                 | startedGames =
-                                    SeqDict.updateIfExists
+                                    SeqDict.insert
                                         matchId
-                                        (\game ->
-                                            case game of
-                                                WordSpellingGame_Game gameData ->
-                                                    WordSpellingGame_Game
-                                                        { gameData
-                                                            | lastWordPlaced =
-                                                                { time = time
-                                                                , letterCount = List.Nonempty.length placedWord.letters
-                                                                }
-                                                                    |> Just
-                                                        }
-
-                                                _ ->
-                                                    game
+                                        (WordSpellingGame_Game
+                                            (WordSpellingGame.initGame
+                                                serverTime
+                                                currentUserId
+                                                setup
+                                                (WordSpellingGame.initShared setup)
+                                            )
                                         )
                                         model.startedGames
                             }
 
-                        _ ->
+                        WordSpellingGame.Action action ->
+                            case action.change of
+                                WordSpellingGame.PlaceWord placedWord _ ->
+                                    { model
+                                        | startedGames =
+                                            SeqDict.updateIfExists
+                                                matchId
+                                                (\game ->
+                                                    case game of
+                                                        WordSpellingGame_Game gameData ->
+                                                            WordSpellingGame_Game
+                                                                { gameData
+                                                                    | lastWordPlaced =
+                                                                        { time = time
+                                                                        , letterCount = List.Nonempty.length placedWord.letters
+                                                                        }
+                                                                            |> Just
+                                                                }
+
+                                                        _ ->
+                                                            game
+                                                )
+                                                model.startedGames
+                                    }
+
+                                _ ->
+                                    model
+
+                LocalChange_SheepGame matchId sheepChange ->
+                    case sheepChange of
+                        SheepGame.StartMatch _ setup ->
+                            { model
+                                | startedGames =
+                                    SeqDict.insert
+                                        matchId
+                                        (SheepGame_Game (SheepGame.initGame localUser setup SheepGame.initShared))
+                                        model.startedGames
+                            }
+
+                        SheepGame.Action _ ->
                             model
+    in
+    case gameChange of
+        LocalChange_SheepGame matchId (SheepGame.Action action) ->
+            case action.change of
+                SheepGame.ChangedQuestionsRevealed count ->
+                    sheepGameQuestionRevealed matchId (Id.toInt count) updated
+                        |> Tuple.mapFirst Just
 
-        LocalChange_SheepGame matchId sheepChange ->
-            case sheepChange of
-                SheepGame.StartMatch _ setup ->
-                    { model
-                        | startedGames =
-                            SeqDict.insert
-                                matchId
-                                (SheepGame_Game (SheepGame.initGame localUser setup SheepGame.initShared))
-                                model.startedGames
-                    }
+                _ ->
+                    ( Just updated, Nothing )
 
-                SheepGame.Action _ ->
-                    model
-    )
-        |> Just
+        _ ->
+            ( Just updated, Nothing )
