@@ -7212,6 +7212,38 @@ updateLoadedFromBackend msg model =
                                     loggedIn.games
                       }
                     , case localChange of
+                        Local_Game guildOrDmId game ->
+                            case game of
+                                Game.CreatePublicLink id toBeFilledInByBackend ->
+                                    Command.none
+
+                                Game.LoadMatch matchId (FilledInByBackend _) ->
+                                    case FrontendExtra.currentGamesTab local model.route of
+                                        Just gamesTab ->
+                                            if gamesTab.guildOrDmId == guildOrDmId && gamesTab.maybeMatchId == Just matchId then
+                                                Scroll.toBottomOfChannelIfAtBottom
+                                                    WordSpellingGame.pastWordsContainerId
+                                                    SetScrollToBottom
+                                                    ScrolledToBottom
+
+                                            else
+                                                Command.none
+
+                                        Nothing ->
+                                            Command.none
+
+                                Game.LoadMatch matchId EmptyPlaceholder ->
+                                    Command.none
+
+                                Game.LocalChange_Go id _ ->
+                                    Command.none
+
+                                Game.LocalChange_WordSpellingGame id _ ->
+                                    Command.none
+
+                                Game.LocalChange_SheepGame id _ ->
+                                    Command.none
+
                         Local_VoiceChatChange callChange ->
                             case callChange of
                                 Call.Local_Leave _ ->

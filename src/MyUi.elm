@@ -608,7 +608,6 @@ radioCircle option =
     Ui.el
         [ Ui.width (Ui.px 23)
         , Ui.height (Ui.px 23)
-        , Ui.background background1
         , Ui.rounded 99
         , Ui.border 2
         , Ui.borderColor
@@ -1549,17 +1548,17 @@ tabBackground =
 
 background1 : Ui.Color
 background1 =
-    Ui.rgb 0 6 20
+    Ui.rgb 4 6 20
 
 
 background2 : Ui.Color
 background2 =
-    Ui.rgb 14 20 40
+    Ui.rgb 21 28 53
 
 
 background3 : Ui.Color
 background3 =
-    Ui.rgb 32 40 70
+    Ui.rgb 39 50 76
 
 
 inputBackground : Ui.Color

@@ -1895,13 +1895,9 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                                             Nothing ->
                                                 scrollToBottom
                                 ]
-
-                        -- Opening the games tab shows the Past moves list scrolled to the bottom. The sleep lets the
-                        -- list render first (its container may not be in the DOM yet on this frame).
                         , case tab of
                             Just (ChannelHeaderTab_Games _) ->
-                                Process.sleep Duration.millisecond
-                                    |> Task.andThen (\() -> Dom.setViewportOf WordSpellingGame.pastWordsContainerId 0 9999999)
+                                Dom.setViewportOf WordSpellingGame.pastWordsContainerId 0 9999999
                                     |> Task.attempt (\_ -> SetScrollToBottom)
 
                             _ ->
