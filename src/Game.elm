@@ -510,6 +510,9 @@ type OutMsg
       -- has stopped typing (see `Frontend.handleGameOutMsgs`).
     | SaveSheepGameInputAfterDelay (Id ChannelMessageId) SheepGame.Input Int
     | OpenSheepGameEmojiSelector SheepGame.Input
+      -- Somebody wants to react to an answer or a note with an emoji that isn't one of their
+      -- most used ones, so the full selector is opened for them.
+    | OpenSheepGameReactionEmojiSelector GuildOrDmId (Id ChannelMessageId) SheepGame.ReactionTarget
       -- Ask for a file to attach to a sheep game question, then upload what comes back
       -- (see `Frontend.handleGameOutMsgs`).
     | SelectSheepGameFilesToAttach SheepGame.Input
@@ -778,7 +781,13 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                                             |> SaveSheepGameInputAfterDelay matchId input
                                     )
                                     changed
-                                ++ sheepGameOutMsgs time newMatchId outMsg
+                                ++ (case outMsg of
+                                        SheepGame.OpenReactionEmojiSelector target ->
+                                            [ OpenSheepGameReactionEmojiSelector guildOrDmId matchId target ]
+
+                                        _ ->
+                                            sheepGameOutMsgs time newMatchId outMsg
+                                   )
                             )
 
                         _ ->
@@ -934,6 +943,11 @@ sheepGameOutMsgs time newMatchId outMsg =
 
         SheepGame.ScrollResultsToBottom ->
             [ ScrollToBottom SheepGame.gameViewId ]
+
+        SheepGame.OpenReactionEmojiSelector _ ->
+            -- Only the results of a match in progress have anything to react to, so this is
+            -- handled where the match it belongs to is known.
+            []
 
 
 {-| Files someone picked for one of the sheep game's inputs, on their way back to whichever

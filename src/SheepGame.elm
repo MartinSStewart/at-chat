@@ -11,6 +11,8 @@ module SheepGame exposing
     , Phase(..)
     , QuestionResult
     , RankChange(..)
+    , ReactionTarget(..)
+    , Reactions
     , SetupModel
     , SetupMsg(..)
     , SetupOrGame(..)
@@ -33,6 +35,7 @@ module SheepGame exposing
     , inputId
     , mapQuestionRichText
     , questionRevealed
+    , reactionTargetId
     , removeAttachedFileFromText
     , resultsData
     , revealedQuestionId
@@ -74,12 +77,14 @@ import IdArray exposing (IdArray)
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MessageInput exposing (TextInputFocus)
+import MessageView
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import RichText exposing (RichText)
 import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet
 import Sticker
 import String.Nonempty
@@ -137,8 +142,20 @@ type alias UnvalidatedInput =
 type alias ValidatedInput =
     { text : Nonempty (RichText (Id UserId))
     , attachedFiles : SeqDict (Id FileId) FileData
-    , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId))
+    , reactions : Reactions
     }
+
+
+type alias Reactions =
+    SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId))
+
+
+{-| Something on the results screen that can be reacted to: what one player answered to one
+question, or what the host wrote about that question.
+-}
+type ReactionTarget
+    = AnswerReaction (Id UserId) (Id QuestionId)
+    | NotesReaction (Id QuestionId)
 
 
 type alias SetupModel =
@@ -189,6 +206,8 @@ type alias GameData =
     , -- Whether a question turned up while the reader was somewhere further up the tab, in
       -- which case they're told about it instead of being scrolled onto it.
       newQuestionRevealed : Bool
+    , -- Which answer or note the pointer is over, which is the one offering to be reacted to.
+      hoveredResult : Maybe ReactionTarget
     }
 
 
@@ -214,6 +233,9 @@ type GameMsg
     | HoveredResultsGrid ( Id UserId, Id UserId )
     | ExitedResultsGrid ( Id UserId, Id UserId )
     | UserScrolledResults ScrollPosition
+      -- What someone did to one of the answers or notes on the results screen, which is
+      -- drawn with the same menu and reaction row a message has.
+    | ResultMsg ReactionTarget MessageView.MessageViewMsg
     | PressedNewQuestionRevealed
     | NoOp
 
@@ -226,6 +248,8 @@ type Action
     | ChangedNotes (Id QuestionId) (Maybe ValidatedInput)
     | FinishedGrouping
     | ChangedQuestionsRevealed (Id QuestionId)
+    | AddedReaction ReactionTarget EmojiOrCustomEmoji
+    | RemovedReaction ReactionTarget EmojiOrCustomEmoji
 
 
 type alias ActionWithTime =
@@ -321,6 +345,7 @@ initGame localUser setup shared =
     , scrollPosition = ScrolledToBottom
     , questionsRevealedSeen = shared.questionsRevealed
     , newQuestionRevealed = False
+    , hoveredResult = Nothing
     }
 
 
@@ -440,6 +465,9 @@ type OutMsg
       -- Take the reader to the bottom of the tab body, which is where the question they were
       -- told about is.
     | ScrollResultsToBottom
+      -- Somebody wants to react with an emoji that isn't one of the ones they reach for
+      -- most, so the full selector has to be opened for them.
+    | OpenReactionEmojiSelector ReactionTarget
 
 
 updateSetup : LocalUser -> SetupMsg -> SetupModel -> ( SetupOrGame, OutMsg )
@@ -1106,6 +1134,41 @@ updateGame localUser setup shared msg model =
         PressedNewQuestionRevealed ->
             ( { model | newQuestionRevealed = False }, Nothing, ScrollResultsToBottom )
 
+        ResultMsg target messageViewMsg ->
+            case messageViewMsg of
+                MessageView.MessageView_MouseEnteredMessage ->
+                    ( { model | hoveredResult = Just target }, Nothing, NoOutMsg )
+
+                MessageView.MessageView_MouseExitedMessage ->
+                    ( { model
+                        | hoveredResult =
+                            if model.hoveredResult == Just target then
+                                Nothing
+
+                            else
+                                model.hoveredResult
+                      }
+                    , Nothing
+                    , NoOutMsg
+                    )
+
+                MessageView.MessageViewMsg_PressedReactionEmoji emoji ->
+                    ( model, toggleReaction localUser.session.userId shared target emoji |> Just, NoOutMsg )
+
+                MessageView.MessageView_PressedReactionEmoji_Add emoji ->
+                    ( model, AddedReaction target emoji |> Just, NoOutMsg )
+
+                MessageView.MessageView_PressedReactionEmoji_Remove emoji ->
+                    ( model, RemovedReaction target emoji |> Just, NoOutMsg )
+
+                MessageView.MessageViewMsg_PressedShowReactionEmojiSelector ->
+                    ( model, Nothing, OpenReactionEmojiSelector target )
+
+                -- The rest of what a message offers belongs to the conversation it's in, and
+                -- an answer isn't in one
+                _ ->
+                    ( model, Nothing, NoOutMsg )
+
         NoOp ->
             ( model, Nothing, NoOutMsg )
 
@@ -1285,6 +1348,12 @@ updateAction setup action shared =
 
                 _ ->
                     shared
+
+        AddedReaction target emoji ->
+            mapReactions target (SeqDictHelper.addToSet emoji action.userId) shared
+
+        RemovedReaction target emoji ->
+            mapReactions target (removeFromReactions emoji action.userId) shared
 
         ChangedQuestionsRevealed count ->
             case ( shared.phase, isHost action.userId setup ) of
@@ -2204,6 +2273,77 @@ type alias QuestionResult =
     }
 
 
+{-| Change the reactions on whichever answer or note the target names, leaving everything
+alone when it names something that isn't there.
+-}
+mapReactions : ReactionTarget -> (Reactions -> Reactions) -> Shared -> Shared
+mapReactions target mapFunc shared =
+    case target of
+        AnswerReaction userId questionId ->
+            { shared
+                | answers =
+                    SeqDict.updateIfExists
+                        userId
+                        (IdArray.update questionId (Maybe.map (\answer -> { answer | reactions = mapFunc answer.reactions })))
+                        shared.answers
+            }
+
+        NotesReaction questionId ->
+            { shared
+                | notes =
+                    SeqDict.updateIfExists
+                        questionId
+                        (Maybe.map (\notes -> { notes | reactions = mapFunc notes.reactions }))
+                        shared.notes
+            }
+
+
+{-| An emoji nobody is left reacting with is dropped, the same as it is on a message.
+-}
+removeFromReactions : EmojiOrCustomEmoji -> Id UserId -> Reactions -> Reactions
+removeFromReactions emoji userId reactions =
+    SeqDict.update
+        emoji
+        (Maybe.andThen
+            (\users -> NonemptySet.toSeqSet users |> SeqSet.remove userId |> NonemptySet.fromSeqSet)
+        )
+        reactions
+
+
+{-| Pressing a reaction that's already yours takes it back, which is what one press of the
+same emoji does on a message too.
+-}
+toggleReaction : Id UserId -> Shared -> ReactionTarget -> EmojiOrCustomEmoji -> Action
+toggleReaction userId shared target emoji =
+    let
+        reactions : Reactions
+        reactions =
+            case target of
+                AnswerReaction answeredBy questionId ->
+                    SeqDict.get answeredBy shared.answers
+                        |> Maybe.andThen (IdArray.get questionId)
+                        |> Maybe.andThen identity
+                        |> Maybe.map .reactions
+                        |> Maybe.withDefault SeqDict.empty
+
+                NotesReaction questionId ->
+                    SeqDict.get questionId shared.notes
+                        |> Maybe.andThen identity
+                        |> Maybe.map .reactions
+                        |> Maybe.withDefault SeqDict.empty
+    in
+    case SeqDict.get emoji reactions of
+        Just users ->
+            if NonemptySet.member userId users then
+                RemovedReaction target emoji
+
+            else
+                AddedReaction target emoji
+
+        Nothing ->
+            AddedReaction target emoji
+
+
 {-| Everything the results screen has to say about a match: what everyone answered to each
 question, where that left them on the scoreboard, and who ends up on top.
 
@@ -2345,7 +2485,7 @@ revealingView time contentWidth localUser setup shared model =
             [ Ui.spacing 16 ]
             (scoringExplanation
                 :: (List.take shared.questionsRevealed results.questions
-                        |> List.indexedMap (resultsQuestionView time contentWidth localUser setup results.maxPoints)
+                        |> List.indexedMap (resultsQuestionView time contentWidth localUser setup model.hoveredResult results.maxPoints)
                    )
             )
     , if shared.questionsRevealed >= questionCount then
@@ -2391,8 +2531,8 @@ scoringExplanation =
         ]
 
 
-resultsQuestionView : Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Int -> Int -> QuestionResult -> Element GameMsg
-resultsQuestionView time contentWidth localUser setup maxPoints index result =
+resultsQuestionView : Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Maybe ReactionTarget -> Int -> Int -> QuestionResult -> Element GameMsg
+resultsQuestionView time contentWidth localUser setup hoveredResult maxPoints index result =
     Ui.column
         [ Ui.spacing 8, Ui.paddingXY 0 16 ]
         [ Ui.row
@@ -2410,7 +2550,7 @@ resultsQuestionView time contentWidth localUser setup maxPoints index result =
             ]
         , Ui.column
             [ Ui.spacing 16 ]
-            [ answerGroupsView localUser result.answers
+            [ answerGroupsView localUser contentWidth hoveredResult (Id.fromInt index) result.answers
             , scoreTableView localUser maxPoints result.answers
             , case result.notes of
                 Nothing ->
@@ -2430,6 +2570,12 @@ resultsQuestionView time contentWidth localUser setup maxPoints index result =
                                 notes.attachedFiles
                                 notes.text
                             )
+                            |> reactableResult
+                                localUser
+                                contentWidth
+                                (NotesReaction (Id.fromInt index))
+                                hoveredResult
+                                notes.reactions
                         ]
             ]
         ]
@@ -2448,8 +2594,8 @@ userColor userId local =
 {-| Answers that scored together, drawn together. The biggest group is last, so that the
 answer everyone landed on is what the eye finishes on.
 -}
-answerGroupsView : LocalUser -> List AnswerResult -> Element msg
-answerGroupsView localUser answers =
+answerGroupsView : LocalUser -> Int -> Maybe ReactionTarget -> Id QuestionId -> List AnswerResult -> Element GameMsg
+answerGroupsView localUser contentWidth hoveredResult questionId answers =
     List.filterMap
         (\answerResult ->
             Maybe.map (\answer -> ( answerResult.userId, answerResult.group, answer )) answerResult.answer
@@ -2474,6 +2620,12 @@ answerGroupsView localUser answers =
                             -- them the treatment the questions get comes later.
                             , Ui.Prose.paragraph [] [ Ui.text (toSourceText localUser answer.text) ]
                             ]
+                            |> reactableResult
+                                localUser
+                                contentWidth
+                                (AnswerReaction userId questionId)
+                                hoveredResult
+                                answer.reactions
                     )
                     (first :: rest)
                     |> Ui.column
@@ -2486,6 +2638,72 @@ answerGroupsView localUser answers =
                         ]
             )
         |> Ui.column [ Ui.spacing 8 ]
+
+
+{-| What an answer or a note is called on the results screen, which is what the reactions on
+it hang off.
+-}
+reactionTargetId : ReactionTarget -> HtmlId
+reactionTargetId target =
+    case target of
+        AnswerReaction userId questionId ->
+            Dom.id ("sheepGame_revealedAnswer_" ++ Id.toString questionId ++ "_" ++ Id.toString userId)
+
+        NotesReaction questionId ->
+            Dom.id ("sheepGame_revealedNotes_" ++ Id.toString questionId)
+
+
+{-| An answer or a note, drawn with the reactions it has and, while the pointer is over it,
+the menu for adding one. That menu is all that's on offer: editing, replying and the rest of
+what a message's menu does belong to the conversation a message is in.
+-}
+reactableResult : LocalUser -> Int -> ReactionTarget -> Maybe ReactionTarget -> Reactions -> Element GameMsg -> Element GameMsg
+reactableResult localUser contentWidth target hoveredResult reactions content =
+    let
+        isHovered : Bool
+        isHovered =
+            hoveredResult == Just target
+    in
+    Ui.column
+        [ Ui.id (Dom.idToString (reactionTargetId target))
+        , Ui.spacing 4
+        , Ui.Events.onMouseEnter (ResultMsg target MessageView.MessageView_MouseEnteredMessage)
+        , Ui.Events.onMouseLeave (ResultMsg target MessageView.MessageView_MouseExitedMessage)
+        , if isHovered then
+            MessageView.reactionsMiniView
+                localUser.user
+                localUser.user.availableCustomEmojis
+                localUser.customEmojis
+                |> Ui.map (ResultMsg target)
+                |> Ui.inFront
+
+          else
+            Ui.noAttr
+        ]
+        (content
+            :: (case
+                    MessageView.reactionEmojiView
+                        localUser.emojiData
+                        (if isHovered then
+                            MessageView.ReactionsHovered
+
+                         else
+                            MessageView.ReactionsNotHovered
+                        )
+                        localUser.session.userId
+                        localUser.customEmojis
+                        (User.allUsers localUser)
+                        Sticker.LoopAFewTimesOnLoad
+                        contentWidth
+                        reactions
+                of
+                    Just reactionRow ->
+                        [ Ui.map (ResultMsg target) reactionRow ]
+
+                    Nothing ->
+                        []
+               )
+        )
 
 
 {-| Where everyone stands once this question has been counted, as a bar each measured
