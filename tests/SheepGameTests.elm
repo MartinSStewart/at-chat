@@ -52,7 +52,7 @@ content text =
 -}
 question : String -> SheepGame.ValidatedInput
 question text =
-    { text = content text, attachedFiles = SeqDict.empty }
+    { text = content text, attachedFiles = SeqDict.empty, reactions = SeqDict.empty }
 
 
 {-| A match with `questionCount` questions, whose wording never matters to these tests.
