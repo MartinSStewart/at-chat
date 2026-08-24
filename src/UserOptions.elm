@@ -373,7 +373,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                         (Ui.el [ Ui.Font.bold, Ui.paddingXY 16 0 ] (Ui.text "Color")
                             :: Ui.el
                                 [ Ui.paddingXY 16 0 ]
-                                (Ui.text "This is the color used when you use the drawing tool or to represent you in some games.")
+                                (Ui.text "This is the color used for your drawings or to represent you in some games.")
                             :: (case model.color of
                                     Nothing ->
                                         [ Ui.row
