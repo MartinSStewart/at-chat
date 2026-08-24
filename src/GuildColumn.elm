@@ -8,6 +8,7 @@ module GuildColumn exposing
     , guildColumnLazy
     , newMessageCount
     , rowLinkButton
+    , unreadNotificationCount
     )
 
 import Discord
@@ -626,6 +627,87 @@ guildHasNotifications currentUser guildId guild =
 
                             Nothing ->
                                 NoNotification
+
+
+{-| How many unread messages are announced with a red circle in the guild column, i.e.
+direct mentions, DMs and guilds the user asked to hear about every message in. Messages
+that only get the plain white circle are left out, as are muted guilds, channels and
+threads. This is what the app icon badge shows (see Ports.setAppBadge).
+-}
+unreadNotificationCount : LocalState -> Int
+unreadNotificationCount local =
+    let
+        currentUser : FrontendCurrentUser
+        currentUser =
+            local.localUser.user
+
+        dmCount : Int
+        dmCount =
+            SeqDict.foldl
+                (\otherUserId dmChannel total ->
+                    case dmHasNotifications currentUser otherUserId dmChannel of
+                        Just count ->
+                            total + OneOrGreater.toInt count
+
+                        Nothing ->
+                            total
+                )
+                0
+                local.dmChannels
+
+        discordDmCount : Int
+        discordDmCount =
+            SeqDict.foldl
+                (\channelId dmChannel total ->
+                    case discordDmHasNotifications local.localUser channelId dmChannel of
+                        Just ( _, count ) ->
+                            total + OneOrGreater.toInt count
+
+                        Nothing ->
+                            total
+                )
+                0
+                local.discordDmChannels
+
+        guildCount : Int
+        guildCount =
+            SeqDict.foldl
+                (\guildId guild total ->
+                    total + redNotificationCount (guildHasNotifications currentUser guildId guild)
+                )
+                0
+                local.guilds
+
+        discordGuildCount : Int
+        discordGuildCount =
+            SeqDict.foldl
+                (\guildId guild total ->
+                    case discordGuildCurrentUserId local.localUser guild of
+                        Just currentDiscordUserId ->
+                            total
+                                + redNotificationCount
+                                    (discordGuildHasNotifications currentDiscordUserId currentUser guildId guild)
+
+                        Nothing ->
+                            total
+                )
+                0
+                local.discordGuilds
+    in
+    dmCount + discordDmCount + guildCount + discordGuildCount
+
+
+redNotificationCount : ChannelNotificationType -> Int
+redNotificationCount notification =
+    case notification of
+        NoNotification ->
+            0
+
+        NewMessage _ ->
+            0
+
+        NewMessageForUser count ->
+            OneOrGreater.toInt count
 
 
 {-| Mentions in muted channels and threads don't count, the same way their messages don't.

@@ -196,6 +196,9 @@ type alias LoadedFrontend =
       toFrontendLogs : Maybe (Array ToFrontend)
     , popSound : Result Audio.LoadError Audio.Source
     , startupData : Ports.StartupData
+    , -- The unread count last sent to the app icon badge. Nothing means nothing has
+      -- been sent yet, so the first count always reaches the badge.
+      appBadgeCount : Maybe Int
     }
 
 

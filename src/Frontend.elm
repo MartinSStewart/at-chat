@@ -34,6 +34,7 @@ import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
 import Game
 import Go
+import GuildColumn
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
@@ -456,15 +457,20 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , toFrontendLogs = Nothing
             , popSound = loading.popSound
             , startupData = startupData
+            , appBadgeCount = Nothing
             }
 
         ( model2, cmdA ) =
             FrontendExtra.routeRequest Nothing model.route model
+
+        ( model3, badgeCmd ) =
+            checkAppBadgeChange model2
     in
-    ( model2
+    ( model3
     , Command.batch
         [ cmdB
         , cmdA
+        , badgeCmd
         , Command.map AiChatToBackend AiChatMsg aiChatCmd
         , checkAppVersion True
         , case loginResult of
@@ -683,17 +689,20 @@ update _ msg model =
                     let
                         ( loadedNew, cmd ) =
                             updateLoaded msg loaded
+
+                        ( loadedNew2, badgeCmd ) =
+                            checkAppBadgeChange loadedNew
                     in
-                    ( case loadedNew.loginStatus of
+                    ( case loadedNew2.loginStatus of
                         LoggedIn loggedIn ->
-                            { loadedNew
+                            { loadedNew2
                                 | loginStatus = LoggedIn { loggedIn | previousTextInputFocus = Nothing }
                             }
                                 |> Loaded
 
                         NotLoggedIn _ ->
-                            Loaded loadedNew
-                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ]
+                            Loaded loadedNew2
+                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew2, badgeCmd ]
                     , Audio.cmdNone
                     )
 
@@ -701,8 +710,14 @@ update _ msg model =
                     let
                         ( loadedNew, cmd ) =
                             updateLoaded msg loaded
+
+                        ( loadedNew2, badgeCmd ) =
+                            checkAppBadgeChange loadedNew
                     in
-                    ( Loaded loadedNew, Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ], Audio.cmdNone )
+                    ( Loaded loadedNew2
+                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew2, badgeCmd ]
+                    , Audio.cmdNone
+                    )
 
 
 parseDomainWhitelistInput : String -> SeqSet RichText.Domain
@@ -1617,7 +1632,6 @@ updateLoaded msg model =
                         [ FrontendExtra.setFocus model Pages.Guild.channelTextInputId
                         , Ports.setFavicon "/favicon.ico"
                         , Ports.closeNotifications
-                        , Ports.clearAppBadge
                         , Ports.registerServiceWorker
                         , checkAppVersion True
                         ]
@@ -3090,7 +3104,7 @@ updateLoaded msg model =
                                 )
                                 loggedIn
                                 (if hasFocus then
-                                    Command.batch [ Ports.closeNotifications, Ports.clearAppBadge ]
+                                    Ports.closeNotifications
 
                                  else
                                     Command.none
@@ -5494,6 +5508,28 @@ copyText text model =
     )
 
 
+{-| Keep the app icon badge showing how many unread messages the user has. Only sent
+to JS when the count changes, since it runs after every update.
+-}
+checkAppBadgeChange : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg msg )
+checkAppBadgeChange model =
+    let
+        count : Int
+        count =
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    GuildColumn.unreadNotificationCount (Local.model loggedIn.localState)
+
+                NotLoggedIn _ ->
+                    0
+    in
+    if model.appBadgeCount == Just count then
+        ( model, Command.none )
+
+    else
+        ( { model | appBadgeCount = Just count }, Ports.setAppBadge count )
+
+
 checkCallDisplayModeChange : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
 checkCallDisplayModeChange modelOld modelNew =
     case ( modelOld.loginStatus, modelNew.loginStatus ) of
@@ -7068,8 +7104,11 @@ updateFromBackend _ msg model =
                             Nothing ->
                                 loaded
                         )
+
+                ( loaded3, badgeCmd ) =
+                    checkAppBadgeChange loaded2
             in
-            ( Loaded loaded2, cmds, Audio.cmdNone )
+            ( Loaded loaded3, Command.batch [ cmds, badgeCmd ], Audio.cmdNone )
 
 
 updateLoadedFromBackend : ToFrontend -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )

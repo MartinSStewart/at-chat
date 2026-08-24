@@ -12,7 +12,6 @@ port module Ports exposing
     , audioPortFromJS
     , audioPortToJS
     , checkNotificationPermissionResponse
-    , clearAppBadge
     , closeNotifications
     , copyImageToClipboard
     , copyToClipboard
@@ -34,6 +33,7 @@ port module Ports exposing
     , selectionChanged
     , serviceWorkerData
     , serviceWorkerMessage
+    , setAppBadge
     , setCursorPosition
     , setFavicon
     , shiftScrollByElementDelta
@@ -396,7 +396,7 @@ port service_worker_message_from_js : (Json.Decode.Value -> msg) -> Sub msg
 port close_notifications_to_js : Json.Encode.Value -> Cmd msg
 
 
-port clear_app_badge_to_js : Json.Encode.Value -> Cmd msg
+port set_app_badge_to_js : Json.Encode.Value -> Cmd msg
 
 
 port visual_viewport_resized_from_js : (Json.Decode.Value -> msg) -> Sub msg
@@ -486,14 +486,14 @@ closeNotifications =
     Command.sendToJs "close_notifications_to_js" close_notifications_to_js Json.Encode.null
 
 
-{-| Remove the unread count that the service worker put on the app icon (home
-screen, dock, taskbar) when push notifications arrived while the app was closed.
-Sent when the user is looking at the app again, since at that point the count has
-served its purpose.
+{-| Show the number of unread messages on the app icon (home screen, dock, taskbar).
+Zero removes the badge. The service worker keeps this count up to date on its own
+while the app is closed and push notifications arrive, so sending it here also tells
+the service worker what to count up from (see public/service-worker.js).
 -}
-clearAppBadge : Command FrontendOnly toMsg msg
-clearAppBadge =
-    Command.sendToJs "clear_app_badge_to_js" clear_app_badge_to_js Json.Encode.null
+setAppBadge : Int -> Command FrontendOnly toMsg msg
+setAppBadge count =
+    Command.sendToJs "set_app_badge_to_js" set_app_badge_to_js (Json.Encode.int count)
 
 
 serviceWorkerMessage : (String -> msg) -> Subscription FrontendOnly msg

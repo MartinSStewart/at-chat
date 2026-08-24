@@ -441,18 +441,34 @@ exports.init = async function init(app)
         }
     });
 
-    app.ports.clear_app_badge_to_js.subscribe(async () => {
-        // The service worker counts the push notifications it has shown in Cache
-        // Storage (see public/service-worker.js) so it can keep the app icon badge
-        // up to date. The user is looking at the app now, so drop both the count and
-        // the badge itself.
-        try {
-            await caches.delete('app_badge_count');
+    app.ports.set_app_badge_to_js.subscribe(async (count) => {
+        if (!("setAppBadge" in navigator)) {
+            return;
+        }
 
-            if ("clearAppBadge" in navigator) {
+        try {
+            if (count > 0) {
+                // The service worker counts up from this value when push
+                // notifications arrive while the app is closed, so it's stored in
+                // the same Cache Storage entry the worker reads (see
+                // public/service-worker.js).
+                const cache = await caches.open('app_badge_count');
+                await cache.put(
+                    'count',
+                    new Response(String(count), {
+                        status: 200,
+                        statusText: 'OK',
+                        headers: { 'Content-Type': 'text/plain' }
+                    })
+                );
+                await navigator.setAppBadge(count);
+            } else {
+                await caches.delete('app_badge_count');
                 await navigator.clearAppBadge();
             }
         } catch (error) {
+            // Browsers that only badge installed apps reject this when the site is
+            // running in a normal tab, which is nothing to worry about.
             console.log(error);
         }
     });
