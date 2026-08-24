@@ -1,4 +1,4 @@
-module MessageView exposing (MessageViewMsg(..), ReactionsHover(..), isPressMsg, miniView, profileImagePaddingRight, reactionEmojiButtonContent, reactionEmojiView, reactionsMiniView)
+module MessageView exposing (MessageViewMsg(..), ReactionsHover(..), isPressMsg, miniView, miniViewContainer, profileImagePaddingRight, reactionEmojiButtonContent, reactionEmojiView, reactionsMiniView, reactionsMiniViewNearEdge)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -158,6 +158,7 @@ reactionEmojiButtonContent customEmojis emoji =
 miniView : FrontendCurrentUser -> Bool -> Bool -> SeqSet (Id CustomEmojiId) -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
 miniView user isThreadStarter canEdit availableCustomEmojis customEmojis =
     miniViewContainer
+        -48
         (recentEmojiButtons user availableCustomEmojis customEmojis
             ++ [ miniButton
                     (Dom.id "miniView_showReactionEmojiSelector")
@@ -190,13 +191,32 @@ miniView user isThreadStarter canEdit availableCustomEmojis customEmojis =
         )
 
 
-{-| The menu for a message that is only there to be reacted to, which is what the unread
-overview shows. Editing, replying and everything behind the full menu belong to the channel
-the message came from, so adding a reaction is all that's on offer.
--}
-reactionsMiniView : FrontendCurrentUser -> SeqSet (Id CustomEmojiId) -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
+reactionsMiniView :
+    FrontendCurrentUser
+    -> SeqSet (Id CustomEmojiId)
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> Element MessageViewMsg
 reactionsMiniView user availableCustomEmojis customEmojis =
     miniViewContainer
+        -48
+        (recentEmojiButtons user availableCustomEmojis customEmojis
+            ++ [ miniButton
+                    (Dom.id "miniView_showReactionEmojiSelector")
+                    MessageViewMsg_PressedShowReactionEmojiSelector
+                    "Add reaction"
+                    Icons.smile
+               ]
+        )
+
+
+reactionsMiniViewNearEdge :
+    FrontendCurrentUser
+    -> SeqSet (Id CustomEmojiId)
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> Element MessageViewMsg
+reactionsMiniViewNearEdge user availableCustomEmojis customEmojis =
+    miniViewContainer
+        -8
         (recentEmojiButtons user availableCustomEmojis customEmojis
             ++ [ miniButton
                     (Dom.id "miniView_showReactionEmojiSelector")
@@ -231,15 +251,15 @@ miniButtonSize =
     36
 
 
-miniViewContainer : List (Element MessageViewMsg) -> Element MessageViewMsg
-miniViewContainer buttons =
+miniViewContainer : Int -> List (Element MessageViewMsg) -> Element MessageViewMsg
+miniViewContainer xOffset buttons =
     Ui.row
         [ Ui.alignRight
         , Ui.background MyUi.background1
         , Ui.rounded 4
         , Ui.borderColor MyUi.border1
         , Ui.border 1
-        , Ui.move { x = -48, y = -16, z = 0 }
+        , Ui.move { x = xOffset, y = -16, z = 0 }
         , Ui.height (Ui.px miniButtonSize)
         , Ui.clip
         ]

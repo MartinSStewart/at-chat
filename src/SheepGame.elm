@@ -234,9 +234,7 @@ type GameMsg
     | HoveredResultsGrid ( Id UserId, Id UserId )
     | ExitedResultsGrid ( Id UserId, Id UserId )
     | UserScrolledResults ScrollPosition
-      -- What someone did to one of the answers or notes on the results screen, which is
-      -- drawn with the same menu and reaction row a message has.
-    | ResultMsg ReactionTarget MessageView.MessageViewMsg
+    | ReactionMsg ReactionTarget MessageView.MessageViewMsg
     | PressedImage RichText.PressedImageData
     | PressedNewQuestionRevealed
     | NoOp
@@ -1139,7 +1137,7 @@ updateGame localUser setup shared msg model =
         PressedNewQuestionRevealed ->
             ( { model | newQuestionRevealed = False }, Nothing, ScrollResultsToBottom )
 
-        ResultMsg target messageViewMsg ->
+        ReactionMsg target messageViewMsg ->
             case messageViewMsg of
                 MessageView.MessageView_MouseEnteredMessage ->
                     ( { model | hoveredResult = Just target }, Nothing, NoOutMsg )
@@ -2672,7 +2670,7 @@ answerGroupsView isMobile time localUser contentWidth hoveredResult questionId a
                 List.map
                     (\( userId, _, answer ) ->
                         Ui.row
-                            [ Ui.spacing 8 ]
+                            [ Ui.spacing 8, Ui.widthMin 300 ]
                             [ Ui.el
                                 [ Ui.width Ui.shrink
                                 , Ui.Font.bold
@@ -2765,14 +2763,14 @@ reactableResult paddingX2 localUser contentWidth target hoveredResult reactions 
         , Ui.paddingXY paddingX2 4
         , Ui.spacing 4
         , Ui.attrIf isHovered (Ui.background MyUi.hoverHighlight)
-        , Ui.Events.onMouseEnter (ResultMsg target MessageView.MessageView_MouseEnteredMessage)
-        , Ui.Events.onMouseLeave (ResultMsg target MessageView.MessageView_MouseExitedMessage)
+        , Ui.Events.onMouseEnter (ReactionMsg target MessageView.MessageView_MouseEnteredMessage)
+        , Ui.Events.onMouseLeave (ReactionMsg target MessageView.MessageView_MouseExitedMessage)
         , if isHovered then
-            MessageView.reactionsMiniView
+            MessageView.reactionsMiniViewNearEdge
                 localUser.user
                 localUser.user.availableCustomEmojis
                 localUser.customEmojis
-                |> Ui.map (ResultMsg target)
+                |> Ui.map (ReactionMsg target)
                 |> Ui.inFront
 
           else
@@ -2796,7 +2794,7 @@ reactableResult paddingX2 localUser contentWidth target hoveredResult reactions 
                         reactions
                 of
                     Just reactionRow ->
-                        [ Ui.map (ResultMsg target) reactionRow ]
+                        [ Ui.map (ReactionMsg target) reactionRow ]
 
                     Nothing ->
                         []
