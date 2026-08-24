@@ -416,6 +416,7 @@ threePlayerMatchTest normalConfig =
                                 -- Wanda can't think of a fruit and submits with that box left empty.
                                 , wanda.input 100 (Dom.id "sheepGame_answer_0") "Red"
                                 , wanda.input 100 (Dom.id "sheepGame_answer_1") "Dog"
+                                , joe.snapshotView 100 { name = "Sheep game answers on desktop" }
                                 , wanda.snapshotView 100 { name = "Sheep game answers on mobile" }
 
                                 -- Answering two of the three questions still counts as playing.
@@ -570,6 +571,7 @@ threePlayerMatchTest normalConfig =
                                         , Test.Html.Selector.text "Which players think most alike"
                                         ]
                                     )
+                                , E2EHelper.tallSnapshot joe 100 { name = "Sheep game results on desktop" }
                                 , wanda.snapshotView 100 { name = "Sheep game results on mobile" }
                                 ]
 

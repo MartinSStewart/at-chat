@@ -3102,7 +3102,7 @@ updateLoaded msg model =
                                         StopViewingChannel
                                         |> Just
                                 )
-                                loggedIn
+                                { loggedIn | messageHover = NoMessageHover }
                                 (if hasFocus then
                                     Ports.closeNotifications
 
