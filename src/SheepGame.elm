@@ -1540,14 +1540,15 @@ setupView windowSize localUser loggedIn users model =
     in
     Ui.column
         [ Ui.spacing 16
-        , Ui.paddingXY (paddingX isMobile) 16
         , Ui.background MyUi.tabBackground
         , Ui.heightMax (tabBodyHeight windowSize)
         , Ui.scrollable
         , Ui.heightMin 0
+        , Ui.paddingXY 0 16
         ]
         [ Go.setupSection
-            (Ui.text "Questions")
+            isMobile
+            (Ui.text "Sheep Questions")
             Nothing
             (Ui.column
                 [ Ui.spacing 8 ]

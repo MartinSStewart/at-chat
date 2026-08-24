@@ -1436,7 +1436,7 @@ setupView playingAgainstSelf windowSize model =
     Ui.column
         [ Ui.spacing
             (if isMobile then
-                12
+                8
 
              else
                 16
@@ -1445,18 +1445,19 @@ setupView playingAgainstSelf windowSize model =
         , Ui.background MyUi.tabBackground
         ]
         [ Ui.column
-            [ Ui.paddingXY
-                (if isMobile then
-                    8
-
-                 else
-                    16
-                )
-                0
-            , Ui.spacing 16
+            [ Ui.spacing 16
             ]
             [ Ui.column
-                [ Ui.spacing 8 ]
+                [ Ui.spacing 8
+                , Ui.paddingXY
+                    (if isMobile then
+                        8
+
+                     else
+                        16
+                    )
+                    0
+                ]
                 [ boardSizeLabel.element
                 , Ui.Input.chooseOne
                     Ui.row
@@ -1496,9 +1497,20 @@ setupView playingAgainstSelf windowSize model =
                     (Just model.gameCreatorPlayingAs)
                     "Playing as"
                     [ ( Black, "Black" ), ( White, "White" ) ]
+                    |> Ui.el
+                        [ Ui.paddingXY
+                            (if isMobile then
+                                8
+
+                             else
+                                16
+                            )
+                            0
+                        ]
             , setupSection
+                isMobile
                 (Ui.text "Handicap")
-                (Just " (Black starts with this many stones)")
+                (Just " (Extra black starting stones)")
                 (numberInput
                     { htmlId = "go_handicapInput"
                     , width = 60
@@ -1509,8 +1521,9 @@ setupView playingAgainstSelf windowSize model =
                     , onChange = ChangedHandicapInput
                     }
                 )
-            , setupSection (Ui.text "Komi") (Just " (extra points for White)") (komiInput model.komiInput)
+            , setupSection isMobile (Ui.text "Komi") (Just " (extra points for White)") (komiInput model.komiInput)
             , setupSection
+                isMobile
                 (Ui.text "Time control")
                 (Just " (set main time to 0 to disable)")
                 (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
@@ -1588,10 +1601,20 @@ startOrCancel domIdPrefix isMobile pressedCancel pressedStart =
         ]
 
 
-setupSection : Element msg -> Maybe String -> Element msg -> Element msg
-setupSection title subtitle content =
+setupSection : Bool -> Element msg -> Maybe String -> Element msg -> Element msg
+setupSection isMobile title subtitle content =
     Ui.column
-        [ Ui.spacing 2, MyUi.prewrap, Ui.paddingXY 16 0 ]
+        [ Ui.spacing 2
+        , MyUi.prewrap
+        , Ui.paddingXY
+            (if isMobile then
+                8
+
+             else
+                16
+            )
+            0
+        ]
         [ Ui.row
             [ Ui.Font.weight 600 ]
             [ title

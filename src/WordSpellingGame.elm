@@ -6104,7 +6104,7 @@ setupView windowSize isReadonly setup =
     Ui.column
         [ Ui.spacing
             (if isMobile then
-                12
+                8
 
              else
                 16
@@ -6119,12 +6119,11 @@ setupView windowSize isReadonly setup =
         , Ui.column
             [ Ui.spacing
                 (if isMobile then
-                    12
+                    8
 
                  else
                     16
                 )
-            , padding
             ]
             [ --setupSection
               --    (Ui.text "Time control")
@@ -6134,7 +6133,7 @@ setupView windowSize isReadonly setup =
               --        ]
               --    )
               if isReadonly then
-                Go.setupSection (Ui.text "Dictionary") Nothing (Ui.text (languageToString setup.language))
+                Go.setupSection isMobile (Ui.text "Dictionary") Nothing (Ui.text (languageToString setup.language))
 
               else
                 MyUi.radioColumn
@@ -6143,7 +6142,18 @@ setupView windowSize isReadonly setup =
                     (Just setup.language)
                     (Ui.text "Dictionary")
                     (List.map (\language -> ( language, languageToString language )) allLanguages)
+                    |> Ui.el
+                        [ Ui.paddingXY
+                            (if isMobile then
+                                8
+
+                             else
+                                16
+                            )
+                            0
+                        ]
             , Go.setupSection
+                isMobile
                 (Ui.text "Attempts per turn")
                 (Just " (# of tries to place a word)")
                 (Go.numberInput
@@ -6169,6 +6179,7 @@ setupView windowSize isReadonly setup =
             isMobile
             "Advanced settings"
             [ Go.setupSection
+                isMobile
                 (Ui.text "Bingo bonus")
                 (Just " (points for using a full tray)")
                 (Go.numberInput
@@ -6182,6 +6193,7 @@ setupView windowSize isReadonly setup =
                     }
                 )
             , Go.setupSection
+                isMobile
                 (Ui.text "Tray size")
                 (Just " (how many letters you get)")
                 (Go.numberInput
@@ -6195,6 +6207,7 @@ setupView windowSize isReadonly setup =
                     }
                 )
             , Go.setupSection
+                isMobile
                 (Ui.text "Letter distribution")
                 (Just " (spaces are wildcards)")
                 (lettersInput isReadonly setup.letters)
@@ -6204,6 +6217,7 @@ setupView windowSize isReadonly setup =
 
                 distributionChars ->
                     Go.setupSection
+                        isMobile
                         (Ui.text "Letter values")
                         Nothing
                         (Ui.row
