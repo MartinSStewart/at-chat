@@ -8,12 +8,14 @@ module WordSpellingGame exposing
     , GameData
     , GameMsg(..)
     , GameSummary
+    , HoveredMove
     , IsValid(..)
     , Language(..)
     , Letter(..)
     , LetterId
     , LetterOrWildcard(..)
     , LocalChange(..)
+    , LogEntry
     , OpenWordDefinition
     , PlacedWord
     , PlacementResult
@@ -139,15 +141,22 @@ type alias GameData =
       lastWordPlaced : Maybe { time : Time.Posix, letterCount : Int }
     , showSettings : Bool
     , highlightedPlayer : Maybe (Id UserId)
-    , -- The board cells of the word currently hovered in the Moves log, drawn with a highlight so
-      -- the player can see where a past word was placed. Empty when no word is hovered.
-      highlightedWordCells : Dict ( Int, Int ) LetterOrWildcard
+    , -- The move the pointer is over in the Moves log. Nothing when no move is hovered.
+      hoveredMove : Maybe HoveredMove
     , scrollPosition : ScrollPosition
     , -- The dictionary definition popup opened by clicking a played word in the Moves log. Shown in
       -- a column to the right of the status view on wide screens, or overlaid on the board otherwise
       -- (see `gameView`).
       wordDefinition : WordDefinition
     }
+
+
+{-| A move being hovered in the Moves log: the board cells its word covers, drawn with a
+highlight so the player can see where it was placed, and the game as it stood just after that
+move, so the board shows how it looked then rather than how it ended up.
+-}
+type alias HoveredMove =
+    { cells : Dict ( Int, Int ) LetterOrWildcard, shared : Shared }
 
 
 {-| OpaqueVariants
@@ -338,7 +347,7 @@ type GameMsg
     | PressedPlayerRow (Id UserId)
     | MouseEnterPlayerRow (Id UserId)
     | MouseExitPlayerRow (Id UserId)
-    | MouseEnterWord (List ( ( Int, Int ), LetterOrWildcard ))
+    | MouseEnterWord (List ( ( Int, Int ), LetterOrWildcard )) Shared
     | MouseExitWord
     | UserScrolledPastMoves ScrollPosition
     | PressedSubmitPremove PlacedWord
@@ -489,7 +498,7 @@ initGame time currentUserId setup shared =
     , lastWordPlaced = Nothing
     , showSettings = False
     , highlightedPlayer = Nothing
-    , highlightedWordCells = Dict.empty
+    , hoveredMove = Nothing
     , scrollPosition = ScrolledToBottom
     , wordDefinition = WordDefinition_None
     }
@@ -1082,6 +1091,13 @@ placedWordDescription setup player placedWord result isPremove wildcardMatches =
         , isPremove = isPremove
         , wildcardMatches = wildcardMatches
         }
+
+
+{-| One entry of the Moves log along with the game as it stood just after the action that
+produced it, so that hovering the entry can put the board back to how it looked then.
+-}
+type alias LogEntry =
+    { description : Description, shared : Shared }
 
 
 {-| One entry of the Moves log, carrying who did it and everything the view needs to describe it
@@ -1939,11 +1955,14 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
             , Nothing
             )
 
-        MouseEnterWord cells ->
-            ( { model | highlightedWordCells = Dict.fromList cells }, Nothing, Nothing )
+        MouseEnterWord cells sharedAtMove ->
+            ( { model | hoveredMove = Just { cells = Dict.fromList cells, shared = sharedAtMove } }
+            , Nothing
+            , Nothing
+            )
 
         MouseExitWord ->
-            ( { model | highlightedWordCells = Dict.empty }, Nothing, Nothing )
+            ( { model | hoveredMove = Nothing }, Nothing, Nothing )
 
         UserScrolledPastMoves position ->
             -- Track how far the Past moves list is scrolled so new moves only auto-scroll to the
@@ -3732,6 +3751,16 @@ gameView currentTime windowSize showMemberTab maybeDragging isPersonalDm localUs
                 Nothing ->
                     Dict.empty
 
+        -- Hovering a move in the Moves log puts the board back to how it looked right after that
+        -- move, with the word it played picked out on it.
+        ( boardShared, hoveredWordCells ) =
+            case model.hoveredMove of
+                Just hovered ->
+                    ( hovered.shared, hovered.cells )
+
+                Nothing ->
+                    ( shared, Dict.empty )
+
         -- A gear in the top right corner that toggles between the game and its (read-only)
         -- settings, so players can check what was configured for the match.
         settingsButton : Ui.Attribute GameMsg
@@ -3817,8 +3846,8 @@ gameView currentTime windowSize showMemberTab maybeDragging isPersonalDm localUs
                 maybeDragging
                 localUser
                 setup
-                shared
-                (Dict.union highlightedCells model.highlightedWordCells)
+                boardShared
+                (Dict.union highlightedCells hoveredWordCells)
                 model
              , statusView windowSize isPersonalDm localUser setup actions shared model
              ]
@@ -4221,15 +4250,18 @@ type alias GameSummary =
             , points : Int
             , placedCells : List ( ( Int, Int ), LetterOrWildcard )
             , wildcardMatches : Set String
+            , -- The game as it stood just after the word was played, so that hovering it in the
+              -- summary puts the board back to how it looked then.
+              shared : Shared
             }
     }
 
 
-gameSummary : List Description -> GameSummary
+gameSummary : List LogEntry -> GameSummary
 gameSummary log =
     List.foldl
-        (\description summary ->
-            case description of
+        (\entry summary ->
+            case entry.description of
                 Description_PlacedWord userId placedWord ->
                     { summary
                         | tilesPlaced =
@@ -4249,6 +4281,7 @@ gameSummary log =
                                             , points = placedWord.points
                                             , placedCells = placedWord.placedCells
                                             , wildcardMatches = placedWord.wildcardMatches
+                                            , shared = entry.shared
                                             }
 
                                     else
@@ -4261,6 +4294,7 @@ gameSummary log =
                                         , points = placedWord.points
                                         , placedCells = placedWord.placedCells
                                         , wildcardMatches = placedWord.wildcardMatches
+                                        , shared = entry.shared
                                         }
                     }
 
@@ -4284,7 +4318,7 @@ gameSummary log =
 tiles each player put on the board, one for the invalid words they tried, and the best word anyone
 played. Each section lists every player, highest count first.
 -}
-gameSummaryView : Coord CssPixels -> LocalUser -> Shared -> List Description -> Element GameMsg
+gameSummaryView : Coord CssPixels -> LocalUser -> Shared -> List LogEntry -> Element GameMsg
 gameSummaryView windowSize localUser shared log =
     let
         summary : GameSummary
@@ -4336,7 +4370,7 @@ gameSummaryView windowSize localUser shared log =
                                 , Ui.width Ui.shrink
                                 , MyUi.htmlStyle "cursor" "pointer"
                                 , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
-                                , Ui.Events.onMouseEnter (MouseEnterWord bestWord.placedCells)
+                                , Ui.Events.onMouseEnter (MouseEnterWord bestWord.placedCells bestWord.shared)
                                 , Ui.Events.onMouseLeave MouseExitWord
                                 ]
                                 [ Ui.Prose.paragraph
@@ -4381,7 +4415,7 @@ countsView entries =
 recentActionsView : ScrollPosition -> Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
 recentActionsView scrollPosition windowSize localUser setup actions shared =
     let
-        log : List Description
+        log : List LogEntry
         log =
             Array.foldl
                 (\action ( shared2, acc ) ->
@@ -4389,7 +4423,10 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                         ( shared3, descriptions ) =
                             updateAction setup action shared2
                     in
-                    ( shared3, List.reverse descriptions ++ acc )
+                    ( shared3
+                    , List.map (\description -> { description = description, shared = shared3 }) (List.reverse descriptions)
+                        ++ acc
+                    )
                 )
                 ( initShared setup, [] )
                 actions
@@ -4443,8 +4480,12 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                             []
             )
                 ++ List.indexedMap
-                    (\index description ->
+                    (\index entry ->
                         let
+                            description : Description
+                            description =
+                                entry.description
+
                             name : String
                             name =
                                 User.toStringAlt (descriptionUserId description) localUser
@@ -4482,7 +4523,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                     , Ui.width Ui.shrink
                                     , MyUi.htmlStyle "cursor" "pointer"
                                     , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
-                                    , Ui.Events.onMouseEnter (MouseEnterWord placedCells)
+                                    , Ui.Events.onMouseEnter (MouseEnterWord placedCells entry.shared)
                                     , Ui.Events.onMouseLeave MouseExitWord
                                     ]
                                     rowContent
@@ -4498,7 +4539,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                     , Ui.width Ui.shrink
                                     , MyUi.htmlStyle "cursor" "pointer"
                                     , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
-                                    , Ui.Events.onMouseEnter (MouseEnterWord placedCells)
+                                    , Ui.Events.onMouseEnter (MouseEnterWord placedCells entry.shared)
                                     , Ui.Events.onMouseLeave MouseExitWord
                                     ]
                                     rowContent
