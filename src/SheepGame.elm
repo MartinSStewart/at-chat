@@ -2698,14 +2698,42 @@ answerGroupsView isMobile time localUser contentWidth hoveredResult questionId a
                     )
                     (first :: rest)
                     |> Ui.column
-                        [ Ui.spacing 8
-                        , Ui.border 2
-                        , Ui.borderColor MyUi.border1
+                        [ MyUi.htmlStyle
+                            "outline"
+                            ("solid "
+                                ++ String.fromInt answerGroupOutlineWidth
+                                ++ "px "
+                                ++ MyUi.colorToStyle answerGroupOutlineColor
+                            )
+                        , MyUi.htmlStyle "outline-offset" (String.fromInt answerGroupOutlineOffset ++ "px")
                         , Ui.rounded 3
-                        , Ui.background MyUi.background1
+                        , Ui.width Ui.shrink
+                        , Ui.background MyUi.background2
                         ]
             )
-        |> Ui.column [ Ui.spacing 8, Ui.paddingXY (paddingX isMobile) 0 ]
+        |> Ui.column
+            [ Ui.paddingWith
+                { left = paddingX isMobile + answerGroupOutlineWidth + answerGroupOutlineOffset
+                , right = paddingX isMobile
+                , top = 0
+                , bottom = 0
+                }
+            ]
+
+
+answerGroupOutlineWidth : number
+answerGroupOutlineWidth =
+    2
+
+
+answerGroupOutlineOffset : number
+answerGroupOutlineOffset =
+    -1
+
+
+answerGroupOutlineColor : Ui.Color
+answerGroupOutlineColor =
+    Ui.rgb 88 89 94
 
 
 {-| What an answer or a note is called on the results screen, which is what the reactions on

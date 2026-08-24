@@ -383,10 +383,10 @@ threePlayerMatchTest normalConfig =
                 , admin.click 100 (Dom.id "game_select_Sheep Game (WIP)")
 
                 -- The setup opens with two questions written in, so a third is added.
-                , admin.input 100 (Dom.id "sheepGame_question_0") "Name a colour"
-                , admin.input 100 (Dom.id "sheepGame_question_1") "Name an animal"
+                , admin.input 100 (Dom.id "sheepGame_question_0") "Name\na\ncolour"
+                , admin.input 100 (Dom.id "sheepGame_question_1") "Name an _animal_"
                 , admin.click 100 (Dom.id "sheepGame_addQuestion")
-                , admin.input 100 (Dom.id "sheepGame_question_2") "Name a fruit"
+                , admin.input 100 (Dom.id "sheepGame_question_2") "Name a fruit 🥝"
                 , admin.click 100 (Dom.id "sheepGame_start")
 
                 -- Everyone else opens the match from the card it wrote to the channel.
@@ -400,7 +400,7 @@ threePlayerMatchTest normalConfig =
                                 , wanda.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
                                 , stevie.input 100 (Dom.id "sheepGame_answer_0") "Blue"
                                 , stevie.input 100 (Dom.id "sheepGame_answer_1") "Cat"
-                                , stevie.input 100 (Dom.id "sheepGame_answer_2") "Apple"
+                                , stevie.input 100 (Dom.id "sheepGame_answer_2") "Apple\n\nline break"
 
                                 -- Answers save themselves a moment after the typing stops,
                                 -- so there's no button to press here either.
@@ -441,7 +441,7 @@ threePlayerMatchTest normalConfig =
                                     (Test.Html.Query.has [ Test.Html.Selector.text "Scoring" ])
                                 , wanda.checkView
                                     100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Name a colour" ])
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Name\na\ncolour" ])
 
                                 -- Everyone scores the size of the group their answer landed in, so the first
                                 -- question leaves Stevie and Joe on 2 apiece and Wanda on 1. Nobody has
@@ -450,7 +450,7 @@ threePlayerMatchTest normalConfig =
                                 , wanda.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text "Name a colour"
+                                        [ Test.Html.Selector.text "Name\na\ncolour"
                                         , Test.Html.Selector.text "Nobody said"
                                         ]
                                     )
