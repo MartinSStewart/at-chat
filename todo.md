@@ -24,6 +24,7 @@
 * "add to home screen" is called "install and create shortcut" on Android (Chrome)
 * Add unread overview to mobile
 * Figure out why messages can be sent before files have loaded
+* User.profileImage's flicker when selecting an anchor for drawing and the cursor enters/exits a message
 
 Requested features:
 

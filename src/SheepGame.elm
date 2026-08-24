@@ -1853,9 +1853,9 @@ messageWithProfile : Id UserId -> LocalUser -> Element msg -> Element msg
 messageWithProfile userId localUser content =
     Ui.row
         [ Ui.spacing 8 ]
-        [ User.profileImage (User.getUser userId localUser)
+        [ Ui.el [ Ui.alignTop, Ui.width Ui.shrink ] (User.profileImage (User.getUser userId localUser))
         , Ui.column
-            [ Ui.spacing 2 ]
+            []
             [ User.toStringAlt userId localUser
                 |> Ui.text
                 |> Ui.el [ Ui.Font.bold ]
@@ -2243,22 +2243,27 @@ groupingAnswerView time contentWidth localUser questionId userId shared answer =
     Ui.row
         [ Ui.spacing 8 ]
         [ Ui.el [ Ui.width (Ui.px 40) ] groupLabel2.element
-        , Ui.el
-            [ Ui.width (Ui.px 48) ]
-            (Ui.Input.text
-                [ Ui.border 1
-                , Ui.borderColor MyUi.inputBorder
-                , Ui.background MyUi.inputBackground
-                , Ui.rounded 4
-                , Ui.paddingXY 8 4
-                ]
-                { onChange = TypedGroup userId questionId
-                , text = SeqDict.get ( userId, questionId ) shared.groups |> Maybe.withDefault ""
-                , placeholder = Nothing
-                , label = groupLabel2.id
-                }
-            )
-        , Ui.el [ Ui.Font.weight 600 ] (Ui.text (User.toStringAlt userId localUser))
+        , Ui.row
+            [ Ui.alignTop, Ui.spacing 8, Ui.width Ui.shrink, MyUi.noShrinking ]
+            [ Ui.el
+                [ Ui.width (Ui.px 48) ]
+                (Ui.Input.text
+                    [ Ui.border 1
+                    , Ui.borderColor MyUi.inputBorder
+                    , Ui.background MyUi.inputBackground
+                    , Ui.rounded 4
+                    , Ui.paddingXY 8 4
+                    ]
+                    { onChange = TypedGroup userId questionId
+                    , text = SeqDict.get ( userId, questionId ) shared.groups |> Maybe.withDefault ""
+                    , placeholder = Nothing
+                    , label = groupLabel2.id
+                    }
+                )
+            , Ui.el
+                [ Ui.Font.weight 600, Ui.width Ui.shrink, MyUi.noShrinking ]
+                (Ui.text (User.toStringAlt userId localUser))
+            ]
         , contentView
             time
             contentWidth
@@ -2585,7 +2590,7 @@ resultsQuestionView time contentWidth localUser setup hoveredResult maxPoints in
             ]
         , Ui.column
             [ Ui.spacing 16 ]
-            [ answerGroupsView localUser contentWidth hoveredResult (Id.fromInt index) result.answers
+            [ answerGroupsView time localUser contentWidth hoveredResult (Id.fromInt index) result.answers
             , scoreTableView localUser maxPoints result.answers
             , case result.notes of
                 Nothing ->
@@ -2626,11 +2631,8 @@ userColor userId local =
             UserColor.toColor UserColor.default
 
 
-{-| Answers that scored together, drawn together. The biggest group is last, so that the
-answer everyone landed on is what the eye finishes on.
--}
-answerGroupsView : LocalUser -> Int -> Maybe ReactionTarget -> Id QuestionId -> List AnswerResult -> Element GameMsg
-answerGroupsView localUser contentWidth hoveredResult questionId answers =
+answerGroupsView : Time.Posix -> LocalUser -> Int -> Maybe ReactionTarget -> Id QuestionId -> List AnswerResult -> Element GameMsg
+answerGroupsView time localUser contentWidth hoveredResult questionId answers =
     List.filterMap
         (\answerResult ->
             Maybe.map (\answer -> ( answerResult.userId, answerResult.group, answer )) answerResult.answer
@@ -2643,17 +2645,21 @@ answerGroupsView localUser contentWidth hoveredResult questionId answers =
                 List.map
                     (\( userId, _, answer ) ->
                         Ui.row
-                            [ Ui.spacing 16 ]
+                            [ Ui.spacing 8 ]
                             [ Ui.el
                                 [ Ui.width Ui.shrink
                                 , Ui.Font.bold
                                 , Ui.Font.color (userColor userId localUser)
+                                , Ui.alignTop
                                 ]
                                 (Ui.text (User.toStringAlt userId localUser))
-
-                            -- Answers are still drawn as the text they were typed as. Giving
-                            -- them the treatment the questions get comes later.
-                            , Ui.Prose.paragraph [] [ Ui.text (toSourceText localUser answer.text) ]
+                            , contentView
+                                time
+                                300
+                                localUser
+                                (Dom.id ("sheepGame_answerReveal_" ++ Id.toString questionId ++ "_" ++ Id.toString userId))
+                                answer.attachedFiles
+                                answer.text
                             ]
                             |> reactableResult
                                 localUser
@@ -2665,7 +2671,6 @@ answerGroupsView localUser contentWidth hoveredResult questionId answers =
                     (first :: rest)
                     |> Ui.column
                         [ Ui.spacing 8
-                        , Ui.padding 8
                         , Ui.border 2
                         , Ui.borderColor MyUi.border1
                         , Ui.rounded 3
@@ -2701,6 +2706,7 @@ reactableResult localUser contentWidth target hoveredResult reactions content =
     in
     Ui.column
         [ Ui.id (Dom.idToString (reactionTargetId target))
+        , Ui.paddingXY 8 4
         , Ui.spacing 4
         , Ui.attrIf isHovered (Ui.background MyUi.hoverHighlight)
         , Ui.Events.onMouseEnter (ResultMsg target MessageView.MessageView_MouseEnteredMessage)
@@ -2776,7 +2782,7 @@ scoreRowView localUser maxPoints answerResult =
                 round (toFloat score / toFloat maxPoints * 1000)
     in
     Ui.row
-        [ Ui.spacing 2 ]
+        [ Ui.spacing 1 ]
         [ User.smallProfileImage (User.getUser userId localUser)
         , Ui.row
             [ Ui.height Ui.fill ]

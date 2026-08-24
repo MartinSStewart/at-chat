@@ -981,6 +981,12 @@ profileImage user =
         Just user2 ->
             case user2.icon of
                 Just fileHash ->
+                    let
+                        outlineColor =
+                            UserColor.toColor user2.color
+                                |> MyUi.colorWithAlpha 0.5
+                                |> MyUi.colorToStyle
+                    in
                     Ui.imageLazy
                         [ Ui.rounded profileImageRounding
                         , Ui.width (Ui.px profileImageSize)
@@ -988,6 +994,8 @@ profileImage user =
                         , Ui.clip
                         , -- We need no pointer events here so drawing anchoring gets the offset of the parent
                           MyUi.noPointerEvents
+                        , MyUi.htmlStyle "outline" ("solid 1px " ++ outlineColor)
+                        , MyUi.htmlStyle "outline-offset" "-1px"
                         ]
                         { source = FileStatus.fileUrl FileStatus.pngContent fileHash
                         , description = ""
@@ -1016,18 +1024,30 @@ smallProfileImage user =
         Just user2 ->
             case user2.icon of
                 Just fileHash ->
+                    let
+                        outlineColor =
+                            UserColor.toColor user2.color
+                                |> MyUi.colorWithAlpha 0.3
+                                |> MyUi.colorToStyle
+                    in
                     Ui.imageLazy
-                        [ rounding
-                        , Ui.width (Ui.px smallProfileImageSize)
-                        , Ui.height (Ui.px smallProfileImageSize)
-                        , Ui.clip
-                        , -- We need no pointer events here so drawing anchoring gets the offset of the parent
-                          MyUi.noPointerEvents
+                        [ Ui.width (Ui.px (smallProfileImageSize + 4))
+                        , Ui.height (Ui.px (smallProfileImageSize + 4))
+                        , Ui.move { x = -2, y = -2, z = 0 }
                         ]
                         { source = FileStatus.fileUrl FileStatus.pngContent fileHash
                         , description = ""
                         , onLoad = Nothing
                         }
+                        |> Ui.el
+                            [ Ui.width (Ui.px smallProfileImageSize)
+                            , Ui.height (Ui.px smallProfileImageSize)
+                            , Ui.clip
+                            , rounding
+                            , MyUi.htmlStyle "outline" ("solid 1px " ++ outlineColor)
+                            , MyUi.htmlStyle "outline-offset" "-1px"
+                            , MyUi.noPointerEvents
+                            ]
 
                 Nothing ->
                     GuildIcon.defaultUser False smallProfileImageSize rounding user2.color
