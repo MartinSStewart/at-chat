@@ -1532,18 +1532,10 @@ setupView windowSize localUser loggedIn users model =
         isMobile : Bool
         isMobile =
             MyUi.isMobileAlt windowSize
-
-        horizontalPadding : Int
-        horizontalPadding =
-            if isMobile then
-                8
-
-            else
-                16
     in
     Ui.column
         [ Ui.spacing 16
-        , Ui.paddingXY horizontalPadding 16
+        , Ui.paddingXY (paddingX isMobile) 16
         , Ui.background MyUi.tabBackground
         , Ui.heightMax (tabBodyHeight windowSize)
         , Ui.scrollable
@@ -1743,6 +1735,15 @@ tabBodyHeight windowSize =
     round (toFloat (Coord.yRaw windowSize) * 0.8) - MyUi.channelHeaderHeight
 
 
+paddingX : Bool -> Int
+paddingX isMobile =
+    if isMobile then
+        8
+
+    else
+        16
+
+
 gameView :
     Time.Posix
     -> Coord CssPixels
@@ -1759,22 +1760,12 @@ gameView time windowSize showMemberTab localUser loggedIn setup shared model =
         isMobile =
             MyUi.isMobileAlt windowSize
 
-        horizontalPadding : Int
-        horizontalPadding =
-            if isMobile then
-                8
-
-            else
-                16
-
         contentWidth : Int
         contentWidth =
-            MyUi.conversationWidthIgnoreScrollbar windowSize showMemberTab - horizontalPadding * 2
+            MyUi.conversationWidthIgnoreScrollbar windowSize showMemberTab - paddingX isMobile * 2
     in
-    Ui.column
-        [ Ui.spacing 16
-        , Ui.paddingXY horizontalPadding 16
-        , Ui.background MyUi.background1
+    Ui.el
+        [ Ui.background MyUi.background1
         , Ui.scrollable
         , Ui.height (Ui.px (tabBodyHeight windowSize))
         , Ui.id (Dom.idToString gameViewId)
@@ -1783,12 +1774,15 @@ gameView time windowSize showMemberTab localUser loggedIn setup shared model =
         (case shared.phase of
             Answering ->
                 answeringView time contentWidth isMobile localUser loggedIn setup shared model
+                    |> Ui.column [ Ui.paddingXY (paddingX isMobile) 16, Ui.spacing 16 ]
 
             Grouping ->
                 groupingView time contentWidth isMobile localUser loggedIn setup shared model
+                    |> Ui.column [ Ui.paddingXY (paddingX isMobile) 16, Ui.spacing 16 ]
 
             Revealing ->
-                revealingView time contentWidth localUser setup shared model
+                revealingView isMobile time contentWidth localUser setup shared model
+                    |> Ui.column [ Ui.paddingXY 0 16, Ui.spacing 16 ]
         )
         -- The indicator hangs off a wrapper rather than the tab body itself, so that it stays
         -- put at the bottom instead of scrolling away with the questions.
@@ -2473,8 +2467,8 @@ placeIn userId scores =
         |> List.length
 
 
-revealingView : Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Shared -> GameData -> List (Element GameMsg)
-revealingView time contentWidth localUser setup shared model =
+revealingView : Bool -> Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Shared -> GameData -> List (Element GameMsg)
+revealingView isMobile time contentWidth localUser setup shared model =
     let
         questionCount : Int
         questionCount =
@@ -2483,11 +2477,14 @@ revealingView time contentWidth localUser setup shared model =
         results : { maxPoints : Int, questions : List QuestionResult, winners : List (Id UserId) }
         results =
             resultsData setup shared
+
+        padding =
+            Ui.paddingXY (paddingX isMobile) 0
     in
-    [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Sheep game results")
+    [ Ui.el [ Ui.Font.bold, Ui.Font.size 20, padding ] (Ui.text "Sheep game results")
     , if isHost localUser.session.userId setup then
         Ui.row
-            [ Ui.spacing 8 ]
+            [ Ui.spacing 8, padding ]
             [ MyUi.secondaryButtonTall
                 (Dom.id "sheepGame_hidePreviousQuestion")
                 PressedHidePreviousQuestion
@@ -2509,23 +2506,37 @@ revealingView time contentWidth localUser setup shared model =
       else
         Ui.none
     , if shared.questionsRevealed == 0 then
-        Ui.Prose.paragraph
-            [ Ui.Font.size 20, Ui.Font.center, Ui.padding 16, MyUi.fadeIn ]
-            [ Ui.text "Stay tuned. The results will be revealed shortly." ]
+        Ui.el
+            [ Ui.Font.size 20
+            , Ui.Font.center
+            , Ui.padding 16
+            , MyUi.fadeIn
+            , padding
+            ]
+            (Ui.text "Stay tuned. The results will be revealed shortly.")
 
       else
-        -- How the scoring works is the first thing put on screen, so that it has been read
-        -- by the time the first question turns up under it.
         Ui.column
             [ Ui.spacing 16 ]
-            (scoringExplanation
-                :: (List.take (shared.questionsRevealed - 1) results.questions
-                        |> List.indexedMap (resultsQuestionView time contentWidth localUser setup model.hoveredResult results.maxPoints)
-                   )
+            (Ui.column
+                [ Ui.spacing 8, Ui.id (Dom.idToString scoringId), MyUi.fadeIn, padding ]
+                [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Scoring")
+                , Ui.column
+                    [ Ui.spacing 12, Ui.padding 8, Ui.Font.color MyUi.font3 ]
+                    [ Ui.text "For each question you get points equal to the number of people who picked the same answer as you (including yourself). For example, if you pick a unique answer, you get 1 point. If you and two others pick the same answer, you three get 3 points."
+                    , Ui.text "The person with the most points at the end wins!"
+                    ]
+                ]
+                :: List.indexedMap
+                    (resultsQuestionView isMobile time contentWidth localUser setup model.hoveredResult results.maxPoints)
+                    (List.take (shared.questionsRevealed - 1) results.questions)
             )
     , if shared.questionsRevealed > questionCount then
         Ui.column
-            [ Ui.spacing 32, Ui.paddingWith { left = 0, right = 0, top = 32, bottom = 0 }, MyUi.fadeIn ]
+            [ Ui.spacing 32
+            , Ui.paddingWith { left = paddingX isMobile, right = paddingX isMobile, top = 32, bottom = 0 }
+            , MyUi.fadeIn
+            ]
             [ Ui.el
                 [ Ui.height (Ui.px 2), Ui.background MyUi.border1 ]
                 Ui.none
@@ -2556,27 +2567,22 @@ scoringId =
     Dom.id "sheepGame_scoring"
 
 
-scoringExplanation : Element msg
-scoringExplanation =
-    Ui.column
-        [ Ui.spacing 8, Ui.id (Dom.idToString scoringId), MyUi.fadeIn ]
-        [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Scoring")
-        , Ui.column
-            [ Ui.spacing 16, Ui.padding 8, Ui.Font.color MyUi.font3 ]
-            [ Ui.Prose.paragraph
-                []
-                [ Ui.text "For each question you get points equal to the number of people who picked the same answer as you (including yourself). For example, if you pick a unique answer, you get 1 point. If you and two others pick the same answer, you three get 3 points." ]
-            , Ui.Prose.paragraph [] [ Ui.text "The person with the most points at the end wins!" ]
-            ]
-        ]
-
-
-resultsQuestionView : Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Maybe ReactionTarget -> Int -> Int -> QuestionResult -> Element GameMsg
-resultsQuestionView time contentWidth localUser setup hoveredResult maxPoints index result =
+resultsQuestionView :
+    Bool
+    -> Time.Posix
+    -> Int
+    -> LocalUser
+    -> ValidatedSetup
+    -> Maybe ReactionTarget
+    -> Int
+    -> Int
+    -> QuestionResult
+    -> Element GameMsg
+resultsQuestionView isMobile time contentWidth localUser setup hoveredResult maxPoints index result =
     Ui.column
         [ Ui.spacing 8, Ui.paddingXY 0 16, MyUi.fadeIn ]
         [ Ui.row
-            [ Ui.Font.size 20, Ui.spacing 6 ]
+            [ Ui.Font.size 20, Ui.spacing 6, Ui.paddingXY (paddingX isMobile) 0 ]
             [ Ui.el
                 [ Ui.width Ui.shrink, Ui.alignTop, Ui.Font.bold ]
                 (Ui.text (String.fromInt (index + 1) ++ ". "))

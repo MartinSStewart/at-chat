@@ -6177,6 +6177,7 @@ setupView windowSize isReadonly setup =
 
               else
                 MyUi.simpleButton (Dom.id "wsg_resetLetters") PressedResetLetters (Ui.text "Reset to default")
+                    |> Ui.el [ Ui.paddingXY 16 0 ]
             ]
         , case setup.error of
             Just error ->

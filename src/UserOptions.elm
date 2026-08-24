@@ -377,7 +377,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                             :: (case model.color of
                                     Nothing ->
                                         [ Ui.row
-                                            [ Ui.spacing 8 ]
+                                            [ Ui.spacing 8, Ui.paddingXY 16 0 ]
                                             [ currentColorSquare local.localUser.user.color
                                             , MyUi.secondaryButtonTall
                                                 (Dom.id "userOptions_selectColor")

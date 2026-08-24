@@ -1591,7 +1591,7 @@ startOrCancel domIdPrefix isMobile pressedCancel pressedStart =
 setupSection : Element msg -> Maybe String -> Element msg -> Element msg
 setupSection title subtitle content =
     Ui.column
-        [ Ui.spacing 2, MyUi.prewrap ]
+        [ Ui.spacing 2, MyUi.prewrap, Ui.paddingXY 16 0 ]
         [ Ui.row
             [ Ui.Font.weight 600 ]
             [ title
