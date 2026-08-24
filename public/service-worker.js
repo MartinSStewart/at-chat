@@ -47,12 +47,13 @@ self.addEventListener('activate', (event) => {
     event.waitUntil(self.clients.claim());
 });
 
-// Number of push notifications received since the app was last focused, shown on
-// the app icon (home screen, dock, taskbar) via the Badging API. It's kept in Cache
-// Storage rather than a variable because the service worker is shut down between
-// pushes, so an in-memory count would be back to zero by the time the next one
-// arrives, and because the page has to read the same value to reset it (see
-// clear_app_badge_to_js in elm-pkg-js/stuff.js).
+// Number of unread messages shown on the app icon (home screen, dock, taskbar) via
+// the Badging API. The app itself sets this to the number of messages with a red
+// notification circle whenever that count changes, and each push that arrives while
+// the app is closed adds one to it. It's kept in Cache Storage rather than a variable
+// because the service worker is shut down between pushes, so an in-memory count would
+// be back to zero by the time the next one arrives, and because the app writes the
+// same entry (see set_app_badge_to_js in elm-pkg-js/stuff.js).
 const badgeCountCacheName = 'app_badge_count';
 
 const badgeCountKey = 'count';
@@ -98,19 +99,6 @@ async function incrementAppBadge() {
     }
     catch (error) {
         log("Set app badge error: " + error.message);
-    }
-}
-
-async function clearAppBadge() {
-    try {
-        await caches.delete(badgeCountCacheName);
-
-        if ("clearAppBadge" in navigator) {
-            await navigator.clearAppBadge();
-        }
-    }
-    catch (error) {
-        log("Clear app badge error: " + error.message);
     }
 }
 
@@ -168,10 +156,6 @@ self.addEventListener('notificationclick', function(event) {
                         return clients.openWindow(notificationData);
                     }
                 })
-                // The user is opening the app, so the unread count on the app icon
-                // has served its purpose. Cleared after focusing/opening the window
-                // so the badge work can't delay handling the click itself.
-                .then(clearAppBadge)
         );
     }
     catch (e) {
