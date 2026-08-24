@@ -1785,11 +1785,11 @@ gameView time windowSize showMemberTab localUser loggedIn setup shared model =
         ]
         (case shared.phase of
             Answering ->
-                answeringView time contentWidth isMobile localUser loggedIn setup shared model
+                answeringView time contentWidth localUser loggedIn setup shared model
                     |> Ui.column [ Ui.paddingXY (paddingX isMobile) 16, Ui.centerX, Ui.widthMax maxWidth, Ui.spacing 16 ]
 
             Grouping ->
-                groupingView time contentWidth isMobile localUser loggedIn setup shared model
+                groupingView time contentWidth localUser loggedIn setup shared model
                     |> Ui.column [ Ui.paddingXY (paddingX isMobile) 16, Ui.centerX, Ui.widthMax maxWidth, Ui.spacing 16 ]
 
             Revealing ->
@@ -1873,14 +1873,13 @@ messageWithProfile userId localUser content =
 answeringView :
     Time.Posix
     -> Int
-    -> Bool
     -> LocalUser
     -> LoggedIn a
     -> ValidatedSetup
     -> Shared
     -> GameData
     -> List (Element GameMsg)
-answeringView time contentWidth isMobile localUser loggedIn setup shared model =
+answeringView time contentWidth localUser loggedIn setup shared model =
     let
         currentUserId : Id UserId
         currentUserId =
@@ -2072,14 +2071,13 @@ answeredCountText count =
 groupingView :
     Time.Posix
     -> Int
-    -> Bool
     -> LocalUser
     -> LoggedIn a
     -> ValidatedSetup
     -> Shared
     -> GameData
     -> List (Element GameMsg)
-groupingView time contentWidth isMobile localUser loggedIn setup shared model =
+groupingView time contentWidth localUser loggedIn setup shared model =
     if isHost localUser.session.userId setup then
         [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Group the answers")
         , Ui.Prose.paragraph
@@ -2088,7 +2086,7 @@ groupingView time contentWidth isMobile localUser loggedIn setup shared model =
         , Ui.column
             [ Ui.spacing 16 ]
             (List.Nonempty.toList setup.questions
-                |> List.indexedMap (groupingQuestionView time contentWidth isMobile localUser loggedIn shared model)
+                |> List.indexedMap (groupingQuestionView time contentWidth localUser loggedIn shared model)
             )
         , Ui.row
             [ Ui.spacing 8 ]
@@ -2114,7 +2112,6 @@ groupingView time contentWidth isMobile localUser loggedIn setup shared model =
 groupingQuestionView :
     Time.Posix
     -> Int
-    -> Bool
     -> LocalUser
     -> LoggedIn a
     -> Shared
@@ -2122,7 +2119,7 @@ groupingQuestionView :
     -> Int
     -> ValidatedInput
     -> Element GameMsg
-groupingQuestionView time contentWidth isMobile localUser loggedIn shared model questionIndex question =
+groupingQuestionView time contentWidth localUser loggedIn shared model questionIndex question =
     let
         questionId : Id QuestionId
         questionId =
@@ -2156,7 +2153,6 @@ groupingQuestionView time contentWidth isMobile localUser loggedIn shared model 
                 [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
                 (Ui.text "Notes")
             , notesInput
-                isMobile
                 localUser
                 loggedIn
                 questionId
@@ -2168,8 +2164,8 @@ groupingQuestionView time contentWidth isMobile localUser loggedIn shared model 
 {-| The host's comment on a question, written in the same input an answer is so that it can
 say the same kinds of things.
 -}
-notesInput : Bool -> LocalUser -> LoggedIn a -> Id QuestionId -> UnvalidatedInput -> Element GameMsg
-notesInput isMobile localUser loggedIn questionId notes =
+notesInput : LocalUser -> LoggedIn a -> Id QuestionId -> UnvalidatedInput -> Element GameMsg
+notesInput localUser loggedIn questionId notes =
     let
         htmlId : HtmlId
         htmlId =
@@ -2561,7 +2557,7 @@ revealingView isMobile time contentWidth localUser setup shared model =
                     [ Ui.Prose.paragraph
                         [ Ui.Font.size 20, Ui.Font.bold, Ui.Font.center ]
                         [ Ui.text "Statistics: Which players think most alike?" ]
-                    , resultsGridView localUser setup shared model.gridHovered
+                    , resultsGridView isMobile localUser setup shared model.gridHovered
                     ]
 
               else
@@ -2671,7 +2667,7 @@ answerGroupsView isMobile time localUser contentWidth hoveredResult questionId a
                 List.map
                     (\( userId, _, answer ) ->
                         Ui.row
-                            [ Ui.spacing 8, Ui.widthMin 300 ]
+                            [ Ui.spacing 8, Ui.widthMin 200 ]
                             [ Ui.el
                                 [ Ui.width Ui.shrink
                                 , Ui.Font.bold
@@ -2909,12 +2905,13 @@ It's turned on its side so that the diagonal runs along the bottom and each play
 sits at the end of their own row and column.
 -}
 resultsGridView :
-    LocalUser
+    Bool
+    -> LocalUser
     -> ValidatedSetup
     -> Shared
     -> Maybe ( Id UserId, Id UserId )
     -> Element GameMsg
-resultsGridView localUser setup shared gridHovered =
+resultsGridView isMobile localUser setup shared gridHovered =
     let
         everyone : List (Id UserId)
         everyone =
@@ -2960,38 +2957,42 @@ resultsGridView localUser setup shared gridHovered =
                 )
                 everyone
             )
-        , case gridHovered |> Maybe.andThen (\pair -> SeqDict.get pair overlap |> Maybe.map (Tuple.pair pair)) of
-            Just ( ( userIdA, userIdB ), count ) ->
-                Ui.column
-                    [ Ui.spacing 16, Ui.Font.size 16 ]
-                    [ Ui.Prose.paragraph
-                        []
-                        [ Ui.text (User.toStringAlt userIdA localUser)
-                        , Ui.text " and "
-                        , Ui.text (User.toStringAlt userIdB localUser)
-                        , Ui.text " have "
-                        , Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.text (String.fromInt count))
-                        , Ui.text
-                            (if count == 1 then
-                                " matching answer."
+        , if isMobile then
+            Ui.none
 
-                             else
-                                " matching answers."
-                            )
-                        ]
-                    , if count == highestMatchCount && count > 0 then
-                        Ui.Prose.paragraph
+          else
+            case gridHovered |> Maybe.andThen (\pair -> SeqDict.get pair overlap |> Maybe.map (Tuple.pair pair)) of
+                Just ( ( userIdA, userIdB ), count ) ->
+                    Ui.column
+                        [ Ui.spacing 16, Ui.Font.size 16 ]
+                        [ Ui.Prose.paragraph
                             []
-                            [ Ui.text "🐑 This is the highest number of matching answers! 🐑" ]
+                            [ Ui.text (User.toStringAlt userIdA localUser)
+                            , Ui.text " and "
+                            , Ui.text (User.toStringAlt userIdB localUser)
+                            , Ui.text " have "
+                            , Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.text (String.fromInt count))
+                            , Ui.text
+                                (if count == 1 then
+                                    " matching answer."
 
-                      else
-                        Ui.none
-                    ]
+                                 else
+                                    " matching answers."
+                                )
+                            ]
+                        , if count == highestMatchCount && count > 0 then
+                            Ui.Prose.paragraph
+                                []
+                                [ Ui.text "🐑 This is the highest number of matching answers! 🐑" ]
 
-            Nothing ->
-                Ui.Prose.paragraph
-                    [ Ui.widthMax 400, Ui.Font.size 16, Ui.Font.color MyUi.font3 ]
-                    [ Ui.text "Move your cursor over a grid square to see how many matching answers two players got." ]
+                          else
+                            Ui.none
+                        ]
+
+                Nothing ->
+                    Ui.Prose.paragraph
+                        [ Ui.widthMax 400, Ui.Font.size 16, Ui.Font.color MyUi.font3 ]
+                        [ Ui.text "Move your cursor over a grid square to see how many matching answers two players got." ]
         ]
 
 
@@ -3050,7 +3051,7 @@ resultsGridCell localUser gridHovered overlap highestMatchCount { columnIndex, r
                 Ui.rgba 0 0 0 0
             )
          , if columnIndex == 0 && rowIndex > 0 then
-            Ui.above (resultsGridLabel localUser gridHovered Tuple.second otherUserId)
+            Ui.above (resultsGridLabel localUser gridHovered Tuple.second otherUserId |> Ui.el [ Ui.rotate (Ui.turns -0.25) ])
 
            else
             Ui.noAttr

@@ -1,4 +1,4 @@
-module MessageView exposing (MessageViewMsg(..), ReactionsHover(..), isPressMsg, miniView, miniViewContainer, profileImagePaddingRight, reactionEmojiButtonContent, reactionEmojiView, reactionsMiniView, reactionsMiniViewNearEdge)
+module MessageView exposing (MessageViewMsg(..), ReactionsHover(..), isPressMsg, miniView, profileImagePaddingRight, reactionEmojiButtonContent, reactionEmojiView, reactionsMiniView, reactionsMiniViewNearEdge)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)

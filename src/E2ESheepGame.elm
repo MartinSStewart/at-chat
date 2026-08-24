@@ -546,8 +546,8 @@ threePlayerMatchTest normalConfig =
                                 , wanda.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.exactText "5"
-                                        , Test.Html.Selector.exactText "6"
+                                        [ Test.Html.Selector.exactText "4"
+                                        , Test.Html.Selector.exactText "5"
                                         , Test.Html.Selector.exactText "3"
                                         ]
                                     )
@@ -555,12 +555,19 @@ threePlayerMatchTest normalConfig =
 
                                 -- And with three players there are pairs to compare, so the grid turns up
                                 -- alongside the winner.
-                                , wanda.checkView
+                                , joe.checkView
                                     100
                                     (Test.Html.Query.has
                                         [ Test.Html.Selector.text "And the winner is"
                                         , Test.Html.Selector.text "Which players think most alike"
                                         , Test.Html.Selector.text "Move your cursor over a grid square"
+                                        ]
+                                    )
+                                , wanda.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text "And the winner is"
+                                        , Test.Html.Selector.text "Which players think most alike"
                                         ]
                                     )
                                 , wanda.snapshotView 100 { name = "Sheep game results on mobile" }
