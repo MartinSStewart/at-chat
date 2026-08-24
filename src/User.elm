@@ -975,38 +975,16 @@ discordUserColor localUser userId =
             UserColor.default
 
 
+profileOutlineColor : UserColor -> String
+profileOutlineColor userColor2 =
+    UserColor.toColor userColor2
+        |> MyUi.colorWithAlpha 0.5
+        |> MyUi.colorToStyle
+
+
 profileImage : Maybe { a | color : UserColor, icon : Maybe FileHash } -> Element msg
 profileImage user =
-    case user of
-        Just user2 ->
-            case user2.icon of
-                Just fileHash ->
-                    let
-                        outlineColor =
-                            UserColor.toColor user2.color
-                                |> MyUi.colorWithAlpha 0.5
-                                |> MyUi.colorToStyle
-                    in
-                    Ui.imageLazy
-                        [ Ui.rounded profileImageRounding
-                        , Ui.width (Ui.px profileImageSize)
-                        , Ui.height (Ui.px profileImageSize)
-                        , Ui.clip
-                        , -- We need no pointer events here so drawing anchoring gets the offset of the parent
-                          MyUi.noPointerEvents
-                        , MyUi.htmlStyle "outline" ("solid 1px " ++ outlineColor)
-                        , MyUi.htmlStyle "outline-offset" "-1px"
-                        ]
-                        { source = FileStatus.fileUrl FileStatus.pngContent fileHash
-                        , description = ""
-                        , onLoad = Nothing
-                        }
-
-                Nothing ->
-                    GuildIcon.defaultUser False profileImageSize (Ui.rounded 8) user2.color
-
-        Nothing ->
-            GuildIcon.defaultUser False profileImageSize (Ui.rounded 8) UserColor.default
+    profileImageHtml user |> Ui.html
 
 
 smallProfileImage : Maybe { a | color : UserColor, icon : Maybe FileHash } -> Element msg
@@ -1024,12 +1002,6 @@ smallProfileImage user =
         Just user2 ->
             case user2.icon of
                 Just fileHash ->
-                    let
-                        outlineColor =
-                            UserColor.toColor user2.color
-                                |> MyUi.colorWithAlpha 0.3
-                                |> MyUi.colorToStyle
-                    in
                     Ui.imageLazy
                         [ Ui.width (Ui.px (smallProfileImageSize + 4))
                         , Ui.height (Ui.px (smallProfileImageSize + 4))
@@ -1044,7 +1016,7 @@ smallProfileImage user =
                             , Ui.height (Ui.px smallProfileImageSize)
                             , Ui.clip
                             , rounding
-                            , MyUi.htmlStyle "outline" ("solid 1px " ++ outlineColor)
+                            , MyUi.htmlStyle "outline" ("solid 1px " ++ profileOutlineColor user2.color)
                             , MyUi.htmlStyle "outline-offset" "-1px"
                             , MyUi.noPointerEvents
                             ]
@@ -1056,26 +1028,33 @@ smallProfileImage user =
             GuildIcon.defaultUser False smallProfileImageSize rounding UserColor.default
 
 
-profileImageHtml : Maybe FrontendUser -> Html msg
+profileImageHtml : Maybe { a | color : UserColor, icon : Maybe FileHash } -> Html msg
 profileImageHtml user =
     case user of
         Just user2 ->
             case user2.icon of
                 Just fileHash ->
-                    Html.img
-                        [ Html.Attributes.style "border-radius" (String.fromInt profileImageRounding ++ "px")
-                        , Html.Attributes.style "width" (String.fromInt profileImageSize ++ "px")
-                        , Html.Attributes.style "height" (String.fromInt profileImageSize ++ "px")
-                        , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
-                        , MyUi.lazyLoading
-                        ]
-                        []
+                    profileImgHtml fileHash user2.color
 
                 Nothing ->
                     GuildIcon.defaultUserHtml profileImageSize 8 user2.color
 
         Nothing ->
             GuildIcon.defaultUserHtml profileImageSize 8 UserColor.default
+
+
+profileImgHtml : FileHash -> UserColor -> Html msg
+profileImgHtml fileHash color =
+    Html.img
+        [ Html.Attributes.style "border-radius" (String.fromInt profileImageRounding ++ "px")
+        , Html.Attributes.style "width" (String.fromInt profileImageSize ++ "px")
+        , Html.Attributes.style "height" (String.fromInt profileImageSize ++ "px")
+        , Html.Attributes.style "outline" ("solid 1px " ++ profileOutlineColor color)
+        , Html.Attributes.style "outline-offset" "-1px"
+        , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+        , MyUi.lazyLoading
+        ]
+        []
 
 
 discordProfileImage : Discord.Id Discord.UserId -> Maybe FileHash -> Element msg

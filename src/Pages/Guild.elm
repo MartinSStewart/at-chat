@@ -7290,7 +7290,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     message2.userIconDrawings
                     ++ (if isHovered == IsHoveredWhileSelectingAnchor then
-                            []
+                            [ Ui.rounded User.profileImageRounding ]
 
                         else
                             openDmButton messageId (MessageView_PressedUserIconButton message2.createdBy)
@@ -7443,7 +7443,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     message2.userIconDrawings
                     ++ (if isHovered == IsHoveredWhileSelectingAnchor then
-                            []
+                            [ Ui.rounded User.profileImageRounding ]
 
                         else
                             openDmButton messageId (MessageView_PressedDiscordUserIconButton message2.createdBy)
