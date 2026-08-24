@@ -3753,13 +3753,13 @@ gameView currentTime windowSize showMemberTab maybeDragging isPersonalDm localUs
 
         -- Hovering a move in the Moves log puts the board back to how it looked right after that
         -- move, with the word it played picked out on it.
-        ( boardShared, hoveredWordCells ) =
+        hoveredWordCells =
             case model.hoveredMove of
                 Just hovered ->
-                    ( hovered.shared, hovered.cells )
+                    hovered.cells
 
                 Nothing ->
-                    ( shared, Dict.empty )
+                    Dict.empty
 
         -- A gear in the top right corner that toggles between the game and its (read-only)
         -- settings, so players can check what was configured for the match.
@@ -3846,7 +3846,7 @@ gameView currentTime windowSize showMemberTab maybeDragging isPersonalDm localUs
                 maybeDragging
                 localUser
                 setup
-                boardShared
+                shared
                 (Dict.union highlightedCells hoveredWordCells)
                 model
              , statusView windowSize isPersonalDm localUser setup actions shared model
@@ -5036,7 +5036,12 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
 
         animatingCellSet : Set ( Int, Int )
         animatingCellSet =
-            animatingCells currentTime shared
+            case model.hoveredMove of
+                Just _ ->
+                    Set.empty
+
+                Nothing ->
+                    animatingCells currentTime shared
 
         maybePlayer : Maybe Player
         maybePlayer =
@@ -5069,7 +5074,13 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                             boardTileInFront setup False p.size p.pos letter :: list
                     )
                     []
-                    shared.board
+                    (case model.hoveredMove of
+                        Just hovered ->
+                            hovered.shared.board
+
+                        Nothing ->
+                            shared.board
+                    )
 
         currentUserId =
             localUser.session.userId
