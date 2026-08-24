@@ -237,6 +237,7 @@ type GameMsg
       -- What someone did to one of the answers or notes on the results screen, which is
       -- drawn with the same menu and reaction row a message has.
     | ResultMsg ReactionTarget MessageView.MessageViewMsg
+    | PressedImage RichText.PressedImageData
     | PressedNewQuestionRevealed
     | NoOp
 
@@ -469,6 +470,9 @@ type OutMsg
       -- Somebody wants to react with an emoji that isn't one of the ones they reach for
       -- most, so the full selector has to be opened for them.
     | OpenReactionEmojiSelector ReactionTarget
+      -- An image attached to a question, an answer or a note, pressed to see it full size.
+      -- Where that gets shown is the frontend's business rather than the game's.
+    | ShowImage RichText.PressedImageData
 
 
 updateSetup : LocalUser -> SetupMsg -> SetupModel -> ( SetupOrGame, OutMsg )
@@ -1170,6 +1174,9 @@ updateGame localUser setup shared msg model =
                 _ ->
                     ( model, Nothing, NoOutMsg )
 
+        PressedImage pressedImageData ->
+            ( model, Nothing, ShowImage pressedImageData )
+
         NoOp ->
             ( model, Nothing, NoOutMsg )
 
@@ -1799,9 +1806,9 @@ gameView time windowSize showMemberTab localUser loggedIn setup shared model =
 {-| Questions and answers are drawn the same way a message is, so that a file attached to a
 question shows up as the image or video it is rather than as a placeholder.
 
-Nothing here is clickable yet. Revealing a spoiler and opening an image both need somewhere
-to keep what's been revealed and what's open, which is the frontend's rather than the
-game's.
+Pressing an image opens it full size, which the frontend does since it's the one holding the
+viewer. Revealing a spoiler still does nothing: what has been revealed is kept per message
+by the frontend and a question isn't one.
 
 -}
 contentView :
@@ -1818,7 +1825,7 @@ contentView time contentWidth localUser htmlId attachedFiles content =
         contentWidth
         (\_ -> NoOp)
         (\_ -> NoOp)
-        (\_ -> NoOp)
+        PressedImage
         { domainWhitelist = localUser.user.domainWhitelist
         , revealedSpoilers = SeqSet.empty
         , users = User.allUsers localUser

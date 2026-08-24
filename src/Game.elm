@@ -56,6 +56,7 @@ import List.Nonempty exposing (Nonempty)
 import Message exposing (GameType(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import RichText
 import Scroll
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
@@ -521,6 +522,8 @@ type OutMsg
       -- Show what a file the host attached to a sheep game question holds. Where that's
       -- drawn belongs to the frontend rather than to the game.
     | ShowSheepGameAttachedFileInfo FileStatus.FileDataWithImage
+      -- An image in a question, an answer or a note, pressed to see it full size.
+    | ShowSheepGameImage RichText.PressedImageData
 
 
 update :
@@ -948,6 +951,9 @@ sheepGameOutMsgs time newMatchId outMsg =
             -- Only the results of a match in progress have anything to react to, so this is
             -- handled where the match it belongs to is known.
             []
+
+        SheepGame.ShowImage pressedImageData ->
+            [ ShowSheepGameImage pressedImageData ]
 
 
 {-| Files someone picked for one of the sheep game's inputs, on their way back to whichever

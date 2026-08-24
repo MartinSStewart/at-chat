@@ -3028,6 +3028,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , E2EGo.tests normalConfig
     , E2ESheepGame.tests normalConfig
+    , E2ESheepGame.imageInQuestionOpensImageViewerTest imageUploadConfig
     , E2EWordSpellingGame.tests normalConfig
     ]
 

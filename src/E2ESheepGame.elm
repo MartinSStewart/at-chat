@@ -1,9 +1,11 @@
-module E2ESheepGame exposing (tests)
+module E2ESheepGame exposing (imageInQuestionOpensImageViewerTest, tests)
 
+import Coord
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Expect
+import FileStatus
 import Html.Attributes
 import Id exposing (ChannelMessageId, Id)
 import Json.Encode
@@ -593,6 +595,50 @@ scrollTabBodyToMiddle user =
               )
             ]
         )
+
+
+{-| A file attached to a question is drawn as the image it is, and pressing it opens the
+image viewer the same way pressing one in a message does.
+-}
+imageInQuestionOpensImageViewerTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+imageInQuestionOpensImageViewerTest imageUploadConfig =
+    E2EHelper.startTest
+        "An image attached to a sheep game question opens in the image viewer"
+        E2EHelper.startTime
+        imageUploadConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.tallDesktopWindow
+            (\admin _ ->
+                [ admin.click 100 (Dom.id "guild_openGamesTab")
+                , admin.click 100 (Dom.id "game_select_Sheep Game (WIP)")
+                , admin.input 100 (Dom.id "sheepGame_question_0") "What is this a picture of?"
+
+                -- Attaching a file to the question puts a reference to it at the end of what
+                -- the host wrote, which is what draws it as an image
+                , admin.click 100 (Dom.id "sheepGame_question_0_uploadFile")
+                , T.backendUpdate
+                    100
+                    (Types.Rpc_GotFileUpload (FileStatus.fileHash "123123123") 1234 (Just (Coord.xy 128 128)))
+                , admin.click 100 (Dom.id "sheepGame_start")
+
+                -- Nobody has to answer for the host to reveal, and the first reveal is the
+                -- scoring explanation, so the question needs a second one
+                , admin.click 100 (Dom.id "sheepGame_lockAnswers")
+                , admin.click 100 (Dom.id "sheepGame_revealScores")
+                , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
+                , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "imageViewer_overlay" ])
+                , admin.click 100 (Dom.id "sheepGame_revealedQuestion_0_image_1")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.id "imageViewer_overlay" ])
+                ]
+            )
+        ]
 
 
 {-| The channel message the sheep game was started from, which is what the card that opens

@@ -8489,6 +8489,11 @@ handleGameOutMsgs outMsgs model =
                     in
                     ( selectorModel, selectorCmd :: cmds )
 
+                Game.ShowSheepGameImage { fileUrl, imageSize } ->
+                    ( { model2 | imageViewer = Just (ImageViewer.init { url = fileUrl, imageSize = imageSize }) }
+                    , cmds
+                    )
+
                 Game.OpenSheepGameEmojiSelector input ->
                     ( model2
                     , Task.attempt
