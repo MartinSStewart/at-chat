@@ -26,6 +26,45 @@ const port = parseInt(process.env.SNAPSHOT_PORT || '8877', 10)
 const outDir = process.env.SNAPSHOT_OUT || 'snapshots'
 const projectAssets = '../public'
 
+// How long the *first* advanceSnapshotRequested may take. That one call loads
+// the test data files and then simulates the entire E2E suite (T.toSnapshots),
+// which is minutes of work and grows as tests are added. It is also entirely
+// synchronous: Elm runs it inside the callback that delivers the last data
+// file, so the browser's JS thread is wedged for the whole duration.
+//
+// Overrunning this budget is worse than it looks, because a blocked thread
+// can't report its own timeout: the browser notices the script timeout on
+// schedule but only delivers the error once the block ends, so the run either
+// dies of a client-side ETIMEDOUT with no explanation (if webdriverio gives up
+// first) or loses the first snapshot to a script timeout that the simulation
+// had already outrun. Both mean the budget has to cover the slowest machine
+// that runs this, not the fastest - a laptop is easily several times slower
+// than a desktop at the same simulation, and Firefox several times slower than
+// Chrome. Raise it with SNAPSHOT_FIRST_ADVANCE_TIMEOUT (ms) if even this isn't
+// enough. For scale: Chrome on a Linux desktop simulates the suite in ~90s.
+const firstAdvanceTimeout = parseInt(process.env.SNAPSHOT_FIRST_ADVANCE_TIMEOUT || '1800000', 10)
+
+// Every later advance just steps to an already-simulated snapshot (a few
+// milliseconds). This budget covers each of those, including waiting for web
+// fonts to load before a screenshot.
+const stepTimeout = parseInt(process.env.SNAPSHOT_STEP_TIMEOUT || '60000', 10)
+
+// The webdriverio (client) side has to outlast the browser side, so that a page
+// which is idle-but-stuck - a data file that never arrives, say - is reported
+// as a script timeout by the browser instead of as an unexplained connection
+// timeout here.
+const connectionTimeout = firstAdvanceTimeout + 120000
+
+// Assigned once the session is up; module scope so the error handler at the
+// bottom can still see it (it used to be a `let` inside the async IIFE, so any
+// failure was replaced by "ReferenceError: browser is not defined", hiding the
+// real error and leaking the browser session).
+let browser = null
+
+// Set when a failure has something more useful to say than its stack trace.
+// Printed after it, which is where the eye ends up.
+let failureAdvice = null
+
 // Which browser renders the snapshots (SNAPSHOT_BROWSER, default chrome).
 // webdriverio fetches the matching driver itself. It also downloads Chrome, but
 // Firefox has to be installed already (its download fallback only knows how to
@@ -94,21 +133,32 @@ server.listen(port, () => {
   console.log(`✅ listening on http://127.0.0.1:${port}`)
 });
 
+// Tear down whatever managed to start. Every step is guarded, because this also
+// runs on the failure path, where the session may never have been created (or
+// may already be gone) and a throw in here would replace the real error.
+async function shutDown() {
+  if (browser) {
+    try { await browser.deleteSession() } catch (e) { /* session already gone */ }
+    browser = null
+  }
+  try { server.close() } catch (e) { /* never listened */ }
+}
+
 
 (async () => {
     markTime("boot")
     // The first advanceSnapshotRequested below blocks for as long as it takes to
-    // simulate the whole test suite (minutes). webdriverio gives up on a command
-    // after connectionRetryTimeout (2 minutes by default) and then RETRIES it,
-    // which is silent and destructive here: the retry sends a second advance, so
-    // the harness steps past a snapshot that never got photographed. Firefox is
-    // slow enough at the simulation to cross the 2 minute default and lose the
-    // first snapshot every run; Chrome sneaks in just under it. Wait long enough
-    // for the simulation, and never retry - a lost command should be an error, not
-    // a quietly missing image.
-    let browser = await remote({
+    // simulate the whole test suite (minutes; see firstAdvanceTimeout above).
+    // webdriverio gives up on a command after connectionRetryTimeout (2 minutes
+    // by default) and then RETRIES it, which is silent and destructive here: the
+    // retry sends a second advance, so the harness steps past a snapshot that
+    // never got photographed. Firefox is slow enough at the simulation to cross
+    // the 2 minute default and lose the first snapshot every run; Chrome sneaks
+    // in just under it. Wait long enough for the simulation, and never retry - a
+    // lost command should be an error, not a quietly missing image.
+    browser = await remote({
       capabilities: browserCapabilities,
-      connectionRetryTimeout: 600000,
+      connectionRetryTimeout: connectionTimeout,
       connectionRetryCount: 0,
     });
     markTime("remote")
@@ -131,13 +181,10 @@ server.listen(port, () => {
 
     var snapshot = { hasMore: true }
 
-    // The first advanceSnapshotRequested is special: the harness only responds
-    // once the test data files have loaded AND the entire test suite has been
-    // simulated (T.toSnapshots), which takes minutes and grows as tests are
-    // added. This is the browser-side half of the budget for it (the client-side
-    // half is connectionRetryTimeout above); if it runs out the browser aborts
-    // the script and the first snapshot is lost.
-    await browser.setTimeout({ script: 300000 })
+    // The browser-side half of the budget for the first advance (the
+    // client-side half is connectionRetryTimeout above); if it runs out the
+    // browser aborts the script and the first snapshot is lost.
+    await browser.setTimeout({ script: firstAdvanceTimeout })
 
     // Web fonts (e.g. the app's Montserrat @font-face, declared with
     // `font-display: swap`) are fetched lazily and can finish *after* the page
@@ -189,14 +236,49 @@ server.listen(port, () => {
       });
     }
 
-    snapshot = await browser.executeAsync(function(readyForSnapshotCallback) {
-      window.advanceSnapshotRequested(readyForSnapshotCallback)
-    });
+    // Nothing comes out of the browser while the simulation runs, so without
+    // this the run looks indistinguishable from a crash for however many
+    // minutes it takes. Node's event loop is free (the block is in the
+    // browser), so a ticker here still prints.
+    const started = Date.now()
+    const ticker = setInterval(() => {
+      const elapsed = Math.round((Date.now() - started) / 1000)
+      const budget = Math.round(firstAdvanceTimeout / 1000)
+      console.log(`⏳ simulating the test suite... ${elapsed}s elapsed (budget ${budget}s)`)
+    }, 30000)
+    ticker.unref()
+
+    try {
+      snapshot = await browser.executeAsync(function(readyForSnapshotCallback) {
+        window.advanceSnapshotRequested(readyForSnapshotCallback)
+      });
+    } catch (err) {
+      const elapsed = Math.round((Date.now() - started) / 1000)
+      failureAdvice = [
+        '',
+        `❌ The harness never answered the first advanceSnapshotRequested (gave up after ${elapsed}s).`,
+        '',
+        '   That call loads the test data files and then simulates the whole E2E',
+        '   suite, which is minutes of blocking work. Two things cause this:',
+        '',
+        '   1. The machine is slower than the budget allows. Re-run with a bigger',
+        `      one: SNAPSHOT_FIRST_ADVANCE_TIMEOUT=${firstAdvanceTimeout * 2} npm run snapshot-${process.env.SNAPSHOT_BROWSER || 'chrome'}`,
+        '   2. The harness is genuinely stuck - most often a test data file that',
+        `      never loads. Open http://localhost:${port} in a browser and check the`,
+        '      console for "Failed to load" and the network tab for a 404.',
+        '',
+      ].join('\n')
+      throw err
+    } finally {
+      clearInterval(ticker)
+    }
+
+    markTime("test suite simulated")
 
     // Every later advance just steps to an already-simulated snapshot (a few
     // milliseconds). This budget covers each executeAsync below, including
     // waiting for web fonts to load before a screenshot.
-    await browser.setTimeout({ script: 60000 })
+    await browser.setTimeout({ script: stepTimeout })
 
     var count = 0
 
@@ -214,13 +296,14 @@ server.listen(port, () => {
       });
     }
 
-    await browser.deleteSession()
+    await shutDown()
 
     console.log(`📸 Wrote ${count} snapshot(s) to ${outDir}`)
     process.exit(0)
 
-})().catch((err) => {
+})().catch(async (err) => {
     console.error(err)
-    browser.deleteSession()
+    if (failureAdvice) { console.error(failureAdvice) }
+    await shutDown()
     process.exit(1)
 })
