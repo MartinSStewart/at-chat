@@ -38,6 +38,13 @@ for you on first run. Then, depending on the browser:
 
 ### Notes
 
+- Rendering starts with one call that simulates the whole E2E test suite before
+  the first snapshot exists. It takes minutes (Chrome on a Linux desktop: ~90s;
+  Firefox is several times slower, and a laptop slower again) and blocks the
+  browser's JS thread throughout, so nothing is printed but the elapsed-time
+  ticker. If a machine is slow enough to run past the 30 minute budget the run
+  fails with a timeout; give it more with
+  `SNAPSHOT_FIRST_ADVANCE_TIMEOUT=3600000 npm run snapshot-firefox` (ms).
 - Baselines are cached per browser and base commit. Delete `snapshots/` to
   force fresh ones; everything in there is gitignored.
 - Each browser draws text slightly differently and gets its own snapshot
