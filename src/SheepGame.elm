@@ -1557,7 +1557,7 @@ setupView windowSize localUser loggedIn users model =
                     (\index question ->
                         Ui.column
                             []
-                            [ Ui.Lazy.lazy6 questionInput isMobile localUser loggedIn users index question
+                            [ Ui.Lazy.lazy5 questionInput localUser loggedIn users index question
                             , case ( model.pressedSubmit, validateInput localUser.timezone users question ) of
                                 ( True, Err error ) ->
                                     Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
@@ -1625,14 +1625,13 @@ inputContainerId input =
 
 
 questionInput :
-    Bool
-    -> LocalUser
+    LocalUser
     -> LoggedIn a
     -> SeqDict (Id UserId) FrontendUser
     -> Int
     -> UnvalidatedInput
     -> Element SetupMsg
-questionInput isMobile localUser loggedIn users index question =
+questionInput localUser loggedIn users index question =
     let
         questionId : Id QuestionId
         questionId =
@@ -1665,11 +1664,14 @@ questionInput isMobile localUser loggedIn users index question =
             Nothing ->
                 Ui.none
         , Ui.row
-            [ Ui.spacing 8 ]
-            [ MessageInput.attachmentButton (Dom.idToString htmlId)
-                |> Ui.map (TypedQuestion questionId)
-            , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
-                |> Ui.map (TypedQuestion questionId)
+            [ Ui.spacing 4 ]
+            [ Ui.row
+                [ Ui.width Ui.shrink, Ui.alignTop, Ui.spacing 4 ]
+                [ MessageInput.attachmentButton (Dom.idToString htmlId)
+                    |> Ui.map (TypedQuestion questionId)
+                , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
+                    |> Ui.map (TypedQuestion questionId)
+                ]
             , MessageInput.textarea
                 True
                 htmlId
@@ -1692,6 +1694,7 @@ questionInput isMobile localUser loggedIn users index question =
             , MyUi.deleteButton
                 (Dom.id ("sheepGame_removeQuestion_" ++ String.fromInt index))
                 (PressedRemoveQuestion questionId)
+                |> Ui.el [ Ui.width Ui.shrink, Ui.alignTop ]
             ]
         ]
 
@@ -1964,7 +1967,6 @@ answeringView time contentWidth isMobile localUser loggedIn setup shared model =
                                     [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
                                     (Ui.text "Your answer")
                                 , answerInput
-                                    isMobile
                                     localUser
                                     loggedIn
                                     questionId
@@ -1992,8 +1994,8 @@ answeringView time contentWidth isMobile localUser loggedIn setup shared model =
 {-| An answer is written in the same input a message is, so that what someone types is
 drawn the way it will be once everyone's answers are compared.
 -}
-answerInput : Bool -> LocalUser -> LoggedIn a -> Id QuestionId -> UnvalidatedInput -> Element GameMsg
-answerInput isMobile localUser loggedIn questionId answer =
+answerInput : LocalUser -> LoggedIn a -> Id QuestionId -> UnvalidatedInput -> Element GameMsg
+answerInput localUser loggedIn questionId answer =
     let
         htmlId : HtmlId
         htmlId =
@@ -2026,11 +2028,14 @@ answerInput isMobile localUser loggedIn questionId answer =
             Nothing ->
                 Ui.none
         , Ui.row
-            [ Ui.spacing 8 ]
-            [ MessageInput.attachmentButton (Dom.idToString htmlId)
-                |> Ui.map (TypedAnswer questionId)
-            , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
-                |> Ui.map (TypedAnswer questionId)
+            [ Ui.spacing 4 ]
+            [ Ui.row
+                [ Ui.width Ui.shrink, Ui.alignTop, Ui.spacing 4 ]
+                [ MessageInput.attachmentButton (Dom.idToString htmlId)
+                    |> Ui.map (TypedAnswer questionId)
+                , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
+                    |> Ui.map (TypedAnswer questionId)
+                ]
             , MessageInput.textarea
                 True
                 htmlId

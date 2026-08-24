@@ -583,7 +583,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
             [ Ui.paddingWith { left = 80, right = 36, top = 0, bottom = 0 }
             , Ui.inFront
                 (Ui.row
-                    [ Ui.width Ui.shrink, Ui.move { x = 2, y = 0, z = 0 }, Ui.spacing 4 ]
+                    [ Ui.width Ui.shrink, Ui.move { x = 2, y = 0, z = 0 }, Ui.spacing 4, Ui.alignBottom ]
                     [ attachmentButton htmlIdPrefix, showEmojiSelectorButton htmlIdPrefix ]
                 )
             , Ui.inFront (characterCounter charsLeft)
@@ -605,7 +605,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
                         )
                     , Ui.move { x = -2, y = 0, z = 0 }
                     , Ui.contentCenterY
-                    , Ui.centerY
+                    , Ui.alignBottom
                     , MyUi.hoverText "Send message"
                     , Html.Events.preventDefaultOn
                         "touchend"
@@ -677,7 +677,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
             [ Ui.paddingWith { left = 80, right = 36, top = 0, bottom = 0 }
             , Ui.inFront
                 (Ui.row
-                    [ Ui.width Ui.shrink, Ui.move { x = 2, y = 2, z = 0 }, Ui.spacing 4 ]
+                    [ Ui.width Ui.shrink, Ui.move { x = 2, y = -2, z = 0 }, Ui.spacing 4, Ui.alignBottom ]
                     [ attachmentButton htmlIdPrefix, showEmojiSelectorButton htmlIdPrefix ]
                 )
             , Ui.inFront (characterCounter charsLeft)
@@ -697,9 +697,9 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
                          else
                             MyUi.buttonBackground
                         )
-                    , Ui.move { x = -2, y = 0, z = 0 }
+                    , Ui.move { x = -2, y = -4, z = 0 }
                     , Ui.contentCenterY
-                    , Ui.centerY
+                    , Ui.alignBottom
                     , MyUi.hoverText "Send message"
                     , Html.Events.custom
                         "touchstart"
