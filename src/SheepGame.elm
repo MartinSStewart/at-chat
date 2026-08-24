@@ -2596,33 +2596,31 @@ resultsQuestionView isMobile time contentWidth localUser setup hoveredResult max
             ]
         , Ui.column
             [ Ui.spacing 16 ]
-            [ answerGroupsView time localUser contentWidth hoveredResult (Id.fromInt index) result.answers
-            , scoreTableView localUser maxPoints result.answers
+            [ answerGroupsView isMobile time localUser contentWidth hoveredResult (Id.fromInt index) result.answers
+            , scoreTableView isMobile localUser maxPoints result.answers
             , case result.notes of
                 Nothing ->
                     Ui.none
 
                 Just notes ->
-                    Ui.column
-                        [ Ui.spacing 8 ]
-                        [ messageWithProfile
-                            setup.createdBy
+                    messageWithProfile
+                        setup.createdBy
+                        localUser
+                        (contentView
+                            time
+                            contentWidth
                             localUser
-                            (contentView
-                                time
-                                contentWidth
-                                localUser
-                                (Dom.id ("sheepGame_questionNotes_" ++ String.fromInt index))
-                                notes.attachedFiles
-                                notes.text
-                            )
-                            |> reactableResult
-                                localUser
-                                contentWidth
-                                (NotesReaction (Id.fromInt index))
-                                hoveredResult
-                                notes.reactions
-                        ]
+                            (Dom.id ("sheepGame_questionNotes_" ++ String.fromInt index))
+                            notes.attachedFiles
+                            notes.text
+                        )
+                        |> reactableResult
+                            (paddingX isMobile)
+                            localUser
+                            contentWidth
+                            (NotesReaction (Id.fromInt index))
+                            hoveredResult
+                            notes.reactions
             ]
         ]
 
@@ -2637,8 +2635,16 @@ userColor userId local =
             UserColor.toColor UserColor.default
 
 
-answerGroupsView : Time.Posix -> LocalUser -> Int -> Maybe ReactionTarget -> Id QuestionId -> List AnswerResult -> Element GameMsg
-answerGroupsView time localUser contentWidth hoveredResult questionId answers =
+answerGroupsView :
+    Bool
+    -> Time.Posix
+    -> LocalUser
+    -> Int
+    -> Maybe ReactionTarget
+    -> Id QuestionId
+    -> List AnswerResult
+    -> Element GameMsg
+answerGroupsView isMobile time localUser contentWidth hoveredResult questionId answers =
     List.filterMap
         (\answerResult ->
             Maybe.map (\answer -> ( answerResult.userId, answerResult.group, answer )) answerResult.answer
@@ -2668,6 +2674,7 @@ answerGroupsView time localUser contentWidth hoveredResult questionId answers =
                                 answer.text
                             ]
                             |> reactableResult
+                                8
                                 localUser
                                 contentWidth
                                 (AnswerReaction userId questionId)
@@ -2683,7 +2690,7 @@ answerGroupsView time localUser contentWidth hoveredResult questionId answers =
                         , Ui.background MyUi.background1
                         ]
             )
-        |> Ui.column [ Ui.spacing 8 ]
+        |> Ui.column [ Ui.spacing 8, Ui.paddingXY (paddingX isMobile) 0 ]
 
 
 {-| What an answer or a note is called on the results screen, which is what the reactions on
@@ -2703,8 +2710,8 @@ reactionTargetId target =
 the menu for adding one. That menu is all that's on offer: editing, replying and the rest of
 what a message's menu does belong to the conversation a message is in.
 -}
-reactableResult : LocalUser -> Int -> ReactionTarget -> Maybe ReactionTarget -> Reactions -> Element GameMsg -> Element GameMsg
-reactableResult localUser contentWidth target hoveredResult reactions content =
+reactableResult : Int -> LocalUser -> Int -> ReactionTarget -> Maybe ReactionTarget -> Reactions -> Element GameMsg -> Element GameMsg
+reactableResult paddingX2 localUser contentWidth target hoveredResult reactions content =
     let
         isHovered : Bool
         isHovered =
@@ -2712,7 +2719,7 @@ reactableResult localUser contentWidth target hoveredResult reactions content =
     in
     Ui.column
         [ Ui.id (Dom.idToString (reactionTargetId target))
-        , Ui.paddingXY 8 4
+        , Ui.paddingXY paddingX2 4
         , Ui.spacing 4
         , Ui.attrIf isHovered (Ui.background MyUi.hoverHighlight)
         , Ui.Events.onMouseEnter (ResultMsg target MessageView.MessageView_MouseEnteredMessage)
@@ -2742,7 +2749,7 @@ reactableResult localUser contentWidth target hoveredResult reactions content =
                         localUser.customEmojis
                         (User.allUsers localUser)
                         Sticker.LoopAFewTimesOnLoad
-                        contentWidth
+                        (contentWidth - paddingX2 * 2)
                         reactions
                 of
                     Just reactionRow ->
@@ -2754,11 +2761,8 @@ reactableResult localUser contentWidth target hoveredResult reactions content =
         )
 
 
-{-| Where everyone stands once this question has been counted, as a bar each measured
-against what the winner finishes on.
--}
-scoreTableView : LocalUser -> Int -> List AnswerResult -> Element msg
-scoreTableView localUser maxPoints answers =
+scoreTableView : Bool -> LocalUser -> Int -> List AnswerResult -> Element msg
+scoreTableView isMobile localUser maxPoints answers =
     List.sortWith
         (\a b ->
             case compare b.score a.score of
@@ -2770,7 +2774,7 @@ scoreTableView localUser maxPoints answers =
         )
         answers
         |> List.map (scoreRowView localUser maxPoints)
-        |> Ui.column [ Ui.spacing 2, Ui.Font.bold ]
+        |> Ui.column [ Ui.spacing 2, Ui.Font.bold, Ui.paddingXY (paddingX isMobile) 0 ]
 
 
 scoreRowView : LocalUser -> Int -> AnswerResult -> Element msg
