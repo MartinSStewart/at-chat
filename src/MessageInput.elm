@@ -259,7 +259,7 @@ textarea :
     -> { c | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
     -> Html Msg
-textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles localUser loggedIn users =
+textarea allowEnterKeyLinebreak channelTextInputId placeholderText charsLeft text richText attachedFiles localUser loggedIn users =
     let
         keyDownNoDropdown : Html.Attribute Msg
         keyDownNoDropdown =
@@ -273,7 +273,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
                             if key == "ArrowUp" && text == "" then
                                 Json.Decode.succeed ( TypedArrowUpInEmptyInput, True )
 
-                            else if key == "Enter" && not shiftHeld && not isMobileKeyboard then
+                            else if key == "Enter" && not shiftHeld && not allowEnterKeyLinebreak then
                                 case codeBlockSelection of
                                     Just _ ->
                                         -- The user is writing a code block so the textarea gets to

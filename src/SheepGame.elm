@@ -1671,7 +1671,7 @@ questionInput isMobile localUser loggedIn users index question =
             , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
                 |> Ui.map (TypedQuestion questionId)
             , MessageInput.textarea
-                isMobile
+                True
                 htmlId
                 ""
                 (maxQuestionLength - String.length question.text)
@@ -1767,9 +1767,12 @@ gameView time windowSize showMemberTab localUser loggedIn setup shared model =
         isMobile =
             MyUi.isMobileAlt windowSize
 
+        maxWidth =
+            1000
+
         contentWidth : Int
         contentWidth =
-            MyUi.conversationWidthIgnoreScrollbar windowSize showMemberTab - paddingX isMobile * 2
+            MyUi.conversationWidthIgnoreScrollbar windowSize showMemberTab - paddingX isMobile * 2 |> min maxWidth
     in
     Ui.el
         [ Ui.background MyUi.background1
@@ -1781,15 +1784,15 @@ gameView time windowSize showMemberTab localUser loggedIn setup shared model =
         (case shared.phase of
             Answering ->
                 answeringView time contentWidth isMobile localUser loggedIn setup shared model
-                    |> Ui.column [ Ui.paddingXY (paddingX isMobile) 16, Ui.spacing 16 ]
+                    |> Ui.column [ Ui.paddingXY (paddingX isMobile) 16, Ui.centerX, Ui.widthMax maxWidth, Ui.spacing 16 ]
 
             Grouping ->
                 groupingView time contentWidth isMobile localUser loggedIn setup shared model
-                    |> Ui.column [ Ui.paddingXY (paddingX isMobile) 16, Ui.spacing 16 ]
+                    |> Ui.column [ Ui.paddingXY (paddingX isMobile) 16, Ui.centerX, Ui.widthMax maxWidth, Ui.spacing 16 ]
 
             Revealing ->
                 revealingView isMobile time contentWidth localUser setup shared model
-                    |> Ui.column [ Ui.paddingXY 0 16, Ui.spacing 16 ]
+                    |> Ui.column [ Ui.paddingXY 0 16, Ui.centerX, Ui.widthMax maxWidth, Ui.spacing 16 ]
         )
         -- The indicator hangs off a wrapper rather than the tab body itself, so that it stays
         -- put at the bottom instead of scrolling away with the questions.
@@ -2029,7 +2032,7 @@ answerInput isMobile localUser loggedIn questionId answer =
             , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
                 |> Ui.map (TypedAnswer questionId)
             , MessageInput.textarea
-                isMobile
+                True
                 htmlId
                 ""
                 (maxAnswerLength - String.length answer.text)
@@ -2201,7 +2204,7 @@ notesInput isMobile localUser loggedIn questionId notes =
             , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
                 |> Ui.map (TypedNotes questionId)
             , MessageInput.textarea
-                isMobile
+                True
                 htmlId
                 ""
                 (maxAnswerLength - String.length notes.text)
