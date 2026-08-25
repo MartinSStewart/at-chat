@@ -1,0 +1,5 @@
+# Fetched by scripts/fetch-speech-to-text-model.sh. The model alone is 141MB.
+sherpa-ncnn.js
+sherpa-ncnn-wasm-main.js
+sherpa-ncnn-wasm-main.wasm
+sherpa-ncnn-wasm-main.data

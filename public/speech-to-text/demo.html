@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>at-chat local speech to text</title>
+<style>
+    body { background: rgb(50, 60, 90); color: #eee; font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 24px; }
+    main { max-width: 46rem; margin: 0 auto; }
+    h1 { font-size: 1.4rem; }
+    p.note { color: #aab; }
+    button, input { font: inherit; padding: 6px 14px; }
+    button { margin-right: 8px; }
+    #status { margin: 16px 0; color: #9cf; }
+    #transcript { background: rgb(35, 42, 64); border-radius: 6px; padding: 16px; min-height: 8rem; white-space: pre-wrap; }
+    #partial { color: #9ab; }
+</style>
+</head>
+<body>
+<main>
+    <h1>Local speech to text</h1>
+    <p class="note">
+        sherpa-ncnn running in a worker in this tab. The model is about 141MB and
+        loads once; no audio leaves the browser.
+    </p>
+
+    <div id="status">loading model…</div>
+
+    <p>
+        <button id="start" disabled>Start microphone</button>
+        <button id="stop" disabled>Stop</button>
+        <button id="clear">Clear</button>
+    </p>
+
+    <p>
+        Or transcribe a file, which goes through the same path as the microphone:
+        <input id="file" type="file" accept="audio/*" disabled>
+    </p>
+
+    <div id="transcript"><span id="final"></span><span id="partial"></span></div>
+</main>
+
+<script src="/speech-to-text/speech-to-text.js"></script>
+<script>
+    const AUDIO_SAMPLE_RATE = 48000;
+    const AUDIO_BLOCK_FRAMES = 960;
+
+    // The same worklet voice-chat.js records with, so what the demo transcribes
+    // is what a call would transcribe.
+    const captureWorklet = `
+class CaptureProcessor extends AudioWorkletProcessor {
+    constructor() {
+        super();
+        this.block = new Float32Array(${AUDIO_BLOCK_FRAMES});
+        this.filled = 0;
+    }
+
+    process(inputs) {
+        const channel = inputs[0] && inputs[0][0];
+        if (!channel) return true;
+
+        let offset = 0;
+        while (offset < channel.length) {
+            const take = Math.min(channel.length - offset, this.block.length - this.filled);
+            this.block.set(channel.subarray(offset, offset + take), this.filled);
+            this.filled += take;
+            offset += take;
+            if (this.filled === this.block.length) {
+                this.port.postMessage(this.block.slice());
+                this.filled = 0;
+            }
+        }
+        return true;
+    }
+}
+registerProcessor("capture-processor", CaptureProcessor);
+`;
+
+    const statusElement = document.getElementById("status");
+    const finalElement = document.getElementById("final");
+    const partialElement = document.getElementById("partial");
+    const startButton = document.getElementById("start");
+    const stopButton = document.getElementById("stop");
+    const fileInput = document.getElementById("file");
+
+    let recording = null;
+
+    const stt = createSpeechToText({
+        onReady: function () {
+            statusElement.textContent = "model loaded";
+            startButton.disabled = false;
+            fileInput.disabled = false;
+            document.body.dataset.sttReady = "true";
+        },
+        onPartial: function (text) {
+            partialElement.textContent = text;
+        },
+        onFinal: function (text) {
+            partialElement.textContent = "";
+            finalElement.textContent += text + "\n";
+        },
+        onError: function (message) {
+            statusElement.textContent = "error: " + message;
+            document.body.dataset.sttError = message;
+        },
+    });
+
+    document.getElementById("clear").onclick = function () {
+        finalElement.textContent = "";
+        partialElement.textContent = "";
+    };
+
+    startButton.onclick = async function () {
+        startButton.disabled = true;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const context = new AudioContext({ sampleRate: AUDIO_SAMPLE_RATE });
+            const moduleUrl = URL.createObjectURL(new Blob([captureWorklet], { type: "application/javascript" }));
+            try {
+                await context.audioWorklet.addModule(moduleUrl);
+            } finally {
+                URL.revokeObjectURL(moduleUrl);
+            }
+
+            const source = context.createMediaStreamSource(stream);
+            const capture = new AudioWorkletNode(context, "capture-processor", {
+                channelCount: 1,
+                channelCountMode: "explicit",
+            });
+            capture.port.onmessage = function (event) {
+                stt.feed(event.data);
+            };
+
+            // The worklet only runs while its output goes somewhere, and routing
+            // the microphone to the speakers would just howl.
+            const silence = context.createGain();
+            silence.gain.value = 0;
+            source.connect(capture);
+            capture.connect(silence);
+            silence.connect(context.destination);
+
+            recording = { stream: stream, context: context };
+            statusElement.textContent = "listening";
+            stopButton.disabled = false;
+        } catch (e) {
+            statusElement.textContent = "microphone failed: " + e;
+            startButton.disabled = false;
+        }
+    };
+
+    stopButton.onclick = function () {
+        stopButton.disabled = true;
+        if (recording) {
+            recording.stream.getTracks().forEach(function (track) { track.stop(); });
+            recording.context.close();
+            recording = null;
+        }
+        stt.flush();
+        statusElement.textContent = "stopped";
+        startButton.disabled = false;
+    };
+
+    fileInput.onchange = async function () {
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        statusElement.textContent = "transcribing " + file.name + "…";
+        const decoded = await new AudioContext().decodeAudioData(await file.arrayBuffer());
+
+        // Resampled to 48kHz first so the file takes the same route as the
+        // microphone, decimation included.
+        const offline = new OfflineAudioContext(1, Math.ceil(decoded.duration * AUDIO_SAMPLE_RATE), AUDIO_SAMPLE_RATE);
+        const source = offline.createBufferSource();
+        source.buffer = decoded;
+        source.connect(offline.destination);
+        source.start();
+        const samples = (await offline.startRendering()).getChannelData(0);
+
+        for (let offset = 0; offset + AUDIO_BLOCK_FRAMES <= samples.length; offset += AUDIO_BLOCK_FRAMES) {
+            stt.feed(samples.subarray(offset, offset + AUDIO_BLOCK_FRAMES));
+        }
+        stt.flush();
+        statusElement.textContent = "transcribed " + file.name;
+    };
+</script>
+</body>
+</html>
