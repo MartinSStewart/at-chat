@@ -1121,8 +1121,23 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     , "Windows • Chrome"
                                     , "Current device"
                                     ]
+
+                                -- Every device here has something connected, so none of them
+                                -- has a last time it was in use to report. The wait puts a
+                                -- few minutes between signing in and dropping off, so the two
+                                -- can be told apart below.
+                                , adminA.checkView
+                                    180000
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Last active" ])
                                 ]
                             )
+
+                        -- Closing that frontend leaves adminC's device with nothing connected,
+                        -- so its row starts saying how long ago it was last in use. That is
+                        -- when it dropped off a moment ago, not when it signed in.
+                        , adminA.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Last active 1\u{00A0}minute" ])
                         , adminB.click 100 (Dom.id "options_logout")
                         , E2EHelper.hasNotExactText adminA [ "iPhone • Safari" ]
                         , E2EHelper.hasExactText adminA [ "Windows • Chrome", "Windows • Firefox", "Current device" ]

@@ -61,8 +61,13 @@ domainWhitelistToString domains =
         |> String.join ", "
 
 
-viewConnectedDevice : SessionIdHash -> Maybe (SeqDict ClientId UserSession.Viewing) -> UserAgent -> Element FrontendMsg_
-viewConnectedDevice sessionId otherCurrentlyViewing userAgent =
+viewConnectedDevice :
+    Time.Posix
+    -> SessionIdHash
+    -> Maybe { a | currentlyViewing : SeqDict ClientId UserSession.Viewing, lastActiveAt : Time.Posix }
+    -> UserAgent
+    -> Element FrontendMsg_
+viewConnectedDevice time sessionId otherSession userAgent =
     let
         browserText : String
         browserText =
@@ -132,14 +137,16 @@ viewConnectedDevice sessionId otherCurrentlyViewing userAgent =
         , Ui.column
             [ Ui.spacing 2 ]
             [ deviceText ++ " • " ++ browserText |> Ui.text
-            , (case otherCurrentlyViewing of
-                Just currentlyViewing ->
-                    case SeqDict.size currentlyViewing of
+            , (case otherSession of
+                Just session ->
+                    case SeqDict.size session.currentlyViewing of
                         1 ->
                             ""
 
                         0 ->
-                            "Idle"
+                            -- Nothing is connected from this device, so when it was last
+                            -- heard from is the useful thing to say about it.
+                            "Last active " ++ MyUi.timeElapsed time session.lastActiveAt
 
                         count ->
                             "(" ++ String.fromInt count ++ " connections)"
@@ -151,7 +158,7 @@ viewConnectedDevice sessionId otherCurrentlyViewing userAgent =
                 |> Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
             ]
         , MyUi.simpleButton
-            (case otherCurrentlyViewing of
+            (case otherSession of
                 Just _ ->
                     Dom.id ("options_logout_other_" ++ SessionIdHash.toString sessionId)
 
@@ -159,7 +166,7 @@ viewConnectedDevice sessionId otherCurrentlyViewing userAgent =
                     Dom.id "options_logout"
             )
             (PressedLogOut sessionId)
-            (case otherCurrentlyViewing of
+            (case otherSession of
                 Just _ ->
                     Ui.text "Logout other"
 
@@ -549,10 +556,14 @@ view windowSize textInputFocus time local loggedIn loaded model =
                     MyUi.background1
                     isMobile
                     "Connected devices"
-                    (viewConnectedDevice local.localUser.session.sessionIdHash Nothing local.localUser.session.userAgent
+                    (viewConnectedDevice
+                        time
+                        local.localUser.session.sessionIdHash
+                        Nothing
+                        local.localUser.session.userAgent
                         :: List.map
                             (\( otherSessionId, otherSession ) ->
-                                viewConnectedDevice otherSessionId (Just otherSession.currentlyViewing) otherSession.userAgent
+                                viewConnectedDevice time otherSessionId (Just otherSession) otherSession.userAgent
                             )
                             (SeqDict.toList local.otherSessions)
                     )

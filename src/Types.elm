@@ -919,7 +919,7 @@ type ServerChange
     | Server_NewSession SessionIdHash FrontendUserSession
     | Server_LoggedOut SessionIdHash
     | Server_CurrentlyViewing SessionIdHash ClientId UserSession.Viewing
-    | Server_ClientDisconnected SessionIdHash ClientId
+    | Server_ClientDisconnected SessionIdHash ClientId Time.Posix
     | Server_TextEditor TextEditor.ServerChange
     | Server_LinkDiscordUser (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     | Server_UnlinkDiscordUser (Discord.Id Discord.UserId)

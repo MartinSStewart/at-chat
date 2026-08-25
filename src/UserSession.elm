@@ -25,6 +25,7 @@ module UserSession exposing
     , init
     , isViewing
     , isViewingGame
+    , setLastActiveAt
     , setPreviouslyLastViewedChannelMessage
     , setPreviouslyLastViewedThreadMessage
     , setSheepGameQuestions
@@ -57,6 +58,9 @@ type alias UserSession =
     , userAgent : UserAgent
     , sessionIdHash : SessionIdHash
     , signedInAt : Time.Posix
+    , -- When this session was last heard from, so that a device with nothing connected can
+      -- say how long ago it was in use rather than only that it isn't now.
+      lastActiveAt : Time.Posix
     , expandedUserOptions : SeqSet UserOptionSection
     , savedSheepGameQuestions : IdArray QuestionId SheepGameQuestion
     }
@@ -79,6 +83,7 @@ type alias FrontendUserSession =
     { notificationMode : NotificationMode
     , currentlyViewing : SeqDict ClientId Viewing
     , userAgent : UserAgent
+    , lastActiveAt : Time.Posix
     }
 
 
@@ -430,6 +435,7 @@ init time sessionId userId userAgent =
     , userAgent = userAgent
     , sessionIdHash = SessionIdHash.fromSessionId sessionId
     , signedInAt = time
+    , lastActiveAt = time
     , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
     , savedSheepGameQuestions = IdArray.empty
     }
@@ -450,12 +456,18 @@ setSheepGameQuestions questions session =
     { session | savedSheepGameQuestions = questions }
 
 
+setLastActiveAt : Time.Posix -> UserSession -> UserSession
+setLastActiveAt time session =
+    { session | lastActiveAt = time }
+
+
 toFrontend : Id UserId -> SeqDict ClientId Viewing -> UserSession -> Maybe FrontendUserSession
 toFrontend currentUserId currentlyViewing userSession =
     if currentUserId == userSession.userId then
         { notificationMode = userSession.notificationMode
         , currentlyViewing = currentlyViewing
         , userAgent = userSession.userAgent
+        , lastActiveAt = userSession.lastActiveAt
         }
             |> Just
 

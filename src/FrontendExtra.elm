@@ -4443,13 +4443,16 @@ changeUpdate localMsg local =
                                     local.otherSessions
                         }
 
-                Server_ClientDisconnected sessionId clientId ->
+                Server_ClientDisconnected sessionId clientId disconnectedAt ->
                     { local
                         | otherSessions =
                             SeqDict.updateIfExists
                                 sessionId
                                 (\session ->
-                                    { session | currentlyViewing = SeqDict.remove clientId session.currentlyViewing }
+                                    { session
+                                        | currentlyViewing = SeqDict.remove clientId session.currentlyViewing
+                                        , lastActiveAt = disconnectedAt
+                                    }
                                 )
                                 local.otherSessions
                     }

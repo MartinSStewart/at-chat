@@ -2558,7 +2558,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_CurrentlyViewing _ _ _ ->
                             True
 
-                        Types.Server_ClientDisconnected _ _ ->
+                        Types.Server_ClientDisconnected _ _ _ ->
                             True
 
                         Types.Server_TextEditor _ ->

@@ -770,6 +770,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                         { notificationMode = session.notificationMode
                                         , currentlyViewing = SeqDict.singleton clientId currentlyViewing
                                         , userAgent = session.userAgent
+                                        , lastActiveAt = session.lastActiveAt
                                         }
                                         |> ServerChange
                                     )

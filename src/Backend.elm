@@ -398,6 +398,10 @@ update msg model =
                                 )
                             )
                             model.connections
+
+                    -- Connections are thrown away when they drop, so the session keeps its own
+                    -- copy of when it was last heard from for the devices list to read.
+                    , sessions = SeqDict.updateIfExists sessionId (UserSession.setLastActiveAt time) model.sessions
                 }
                 |> (\( model2, cmds ) ->
                         ( model2
@@ -2258,15 +2262,21 @@ disconnectClient time sessionId clientId model =
 
                         NotInCall ->
                             { model | connections = connections }
+
+                model3 : BackendModel
+                model3 =
+                    -- Dropping the connection is the last we hear from this device, so that's
+                    -- when it was last active.
+                    { model2 | sessions = SeqDict.updateIfExists sessionId (UserSession.setLastActiveAt time) model2.sessions }
             in
-            ( model2
+            ( model3
             , Command.batch
                 [ Broadcast.toUser
                     Nothing
                     Nothing
                     session.userId
-                    (Server_ClientDisconnected session.sessionIdHash clientId |> ServerChange)
-                    model2
+                    (Server_ClientDisconnected session.sessionIdHash clientId time |> ServerChange)
+                    model3
                 , case removedConnection.call of
                     ConnectedToCall (Call.DmRoomId id) ->
                         Broadcast.toDmChannel
@@ -2280,7 +2290,7 @@ disconnectClient time sessionId clientId model =
                                     }
                                     |> Server_VoiceChatChange
                             )
-                            model2
+                            model3
 
                     ConnectedToCall (Call.GuildRoomId id) ->
                         Broadcast.toGuild
@@ -2293,7 +2303,7 @@ disconnectClient time sessionId clientId model =
                                 |> Server_VoiceChatChange
                                 |> ServerChange
                             )
-                            model2
+                            model3
 
                     NotInCall ->
                         Command.none
@@ -2509,6 +2519,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     { notificationMode = session.notificationMode
                                     , currentlyViewing = SeqDict.singleton clientId currentlyViewing
                                     , userAgent = session.userAgent
+                                    , lastActiveAt = session.lastActiveAt
                                     }
                                     |> ServerChange
                                 )
@@ -2647,6 +2658,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 { notificationMode = session.notificationMode
                                                 , currentlyViewing = SeqDict.singleton clientId currentlyViewing
                                                 , userAgent = session.userAgent
+                                                , lastActiveAt = session.lastActiveAt
                                                 }
                                                 |> ServerChange
                                             )
