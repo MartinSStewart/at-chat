@@ -1859,6 +1859,12 @@ gameView time windowSize showMemberTab localUser drag loggedIn setup shared mode
             , Ui.height (Ui.px (tabBodyHeight (shared.phase == Answering) windowSize))
             , Ui.id (Dom.idToString gameViewId)
             , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledResults model.scrollPosition)
+
+            -- Ui.onRight and friends are given a z-index by elm-ui while Ui.inFront isn't, so
+            -- without this the scores drawn beside the scoreboard bars come out on top of the
+            -- reveal buttons placed in front of this. Keeping their z-index inside this div
+            -- means everything scrolling here stays behind those buttons.
+            , MyUi.htmlStyle "isolation" "isolate"
             ]
             (case shared.phase of
                 Answering ->
