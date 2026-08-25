@@ -26,6 +26,7 @@ tests normalConfig =
         , setupNeedsAQuestionTest normalConfig
         , questionsSurviveAReloadTest normalConfig
         , threePlayerMatchTest normalConfig
+        , mobileHostMatchTest normalConfig
         ]
 
 
@@ -573,6 +574,124 @@ threePlayerMatchTest normalConfig =
                                     )
                                 , E2EHelper.tallSnapshot joe 100 { name = "Sheep game results on desktop" }
                                 , wanda.snapshotView 100 { name = "Sheep game results on mobile" }
+                                ]
+
+                            Nothing ->
+                                [ T.checkState 0 (\_ -> Err "Expected a sheep game in the guild channel") ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| The same match again, only this time it's the host who's on a phone. They write the
+questions, lock the answers, group them by hand and step the reveal from there, so every
+screen only the host ever sees gets rendered at a mobile size.
+-}
+mobileHostMatchTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+mobileHostMatchTest normalConfig =
+    E2EHelper.startTest
+        "A sheep game host runs a three player match from a phone"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectFourUsersAndJoinNewGuild
+            E2EHelper.tallDesktopWindow
+            (\admin stevie joe wanda ->
+                [ -- Everything the host does from here on happens at phone size, while the
+                  -- three playing along stay on desktop.
+                  admin.resizeWindow 0 E2EHelper.iphone14Window
+                , admin.click 100 (Dom.id "guild_openGamesTab")
+                , admin.click 100 (Dom.id "game_select_Sheep Game (WIP)")
+
+                -- The setup opens with room for two questions, which is as many as this
+                -- match needs.
+                , admin.input 100 (Dom.id "sheepGame_question_0") "Name a **drink**"
+                , admin.input 100 (Dom.id "sheepGame_question_1") "Name a country"
+                , admin.snapshotView 100 { name = "Sheep game setup on mobile" }
+                , admin.click 100 (Dom.id "sheepGame_start")
+                , T.andThen
+                    100
+                    (\state ->
+                        case guildChannelGameId state.backend of
+                            Just messageId ->
+                                [ stevie.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
+                                , joe.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
+                                , wanda.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
+
+                                -- Tea and Cuppa are the same drink written two ways, which is
+                                -- the sort of thing the host has to sort out by hand later.
+                                , stevie.input 100 (Dom.id "sheepGame_answer_0") "Tea"
+                                , stevie.input 100 (Dom.id "sheepGame_answer_1") "Japan"
+                                , joe.input 100 (Dom.id "sheepGame_answer_0") "Cuppa"
+                                , joe.input 100 (Dom.id "sheepGame_answer_1") "Japan"
+                                , wanda.input 100 (Dom.id "sheepGame_answer_0") "Coffee"
+                                , wanda.input 100 (Dom.id "sheepGame_answer_1") "Brazil"
+
+                                -- Answers save themselves a moment after the typing stops, so
+                                -- this waits that out rather than pressing anything.
+                                , admin.checkView
+                                    2000
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "3 players have answered so far" ])
+                                , admin.snapshotView 100 { name = "Sheep game waiting on answers on mobile" }
+                                , admin.click 100 (Dom.id "sheepGame_lockAnswers")
+
+                                -- Grouping is the host's alone, so this view has only ever been
+                                -- seen on desktop until now. A group is one letter, and putting
+                                -- Stevie and Joe on the same one makes their two drinks count as
+                                -- the same answer. The three who answered are the second, third
+                                -- and fourth to sign up, which makes Stevie 2 and Joe 3.
+                                , admin.snapshotView 100 { name = "Sheep game grouping on mobile" }
+                                , admin.input 100 (Dom.id "sheepGame_group_0_2") "a"
+                                , admin.input 100 (Dom.id "sheepGame_group_0_3") "a"
+                                , admin.input 100 (Dom.id "sheepGame_notes_0") "Nobody said **water**"
+
+                                -- Notes save on the same delay the answers did.
+                                , admin.checkView
+                                    2000
+                                    (Test.Html.Query.has [ Test.Html.Selector.id "sheepGame_revealScores" ])
+                                , admin.click 100 (Dom.id "sheepGame_revealScores")
+
+                                -- How the scoring works is revealed on its own first, without
+                                -- giving away any of the questions.
+                                , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
+                                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Scoring" ])
+                                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "drink" ])
+
+                                -- Grouped together, Tea and Cuppa are worth two apiece while
+                                -- Wanda's Coffee is worth the one for matching herself.
+                                , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text "drink"
+                                        , Test.Html.Selector.text "Nobody said"
+                                        ]
+                                    )
+                                , stevie.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text "Tea"
+                                        , Test.Html.Selector.text "Cuppa"
+                                        ]
+                                    )
+                                , admin.snapshotView 100 { name = "Sheep game first question revealed on mobile" }
+
+                                -- Japan carries Stevie and Joe to 4 while Brazil leaves Wanda on
+                                -- 2. Without the grouping the first question would have been
+                                -- worth one apiece and they'd be finishing on 3.
+                                , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text "And the winner is"
+                                        , Test.Html.Selector.exactText "4"
+                                        , Test.Html.Selector.exactText "2"
+                                        ]
+                                    )
+                                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "3" ])
+                                , E2EHelper.tallSnapshot admin 100 { name = "Sheep game results on mobile as the host" }
                                 ]
 
                             Nothing ->
