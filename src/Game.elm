@@ -1148,7 +1148,7 @@ view currentTime windowSize showMemberTab drag startupData lastCopied localUser 
             case ( SeqDict.get matchId matches, SeqDict.get matchId model.startedGames ) of
                 ( Just (MatchNotLoaded _), _ ) ->
                     Ui.el
-                        [ Ui.centerX, Ui.centerY, Ui.Font.bold, Ui.Font.size 20, Ui.background MyUi.background1 ]
+                        [ Ui.Font.center, Ui.paddingXY 0 16, Ui.Font.bold, Ui.Font.size 20, Ui.background MyUi.background1 ]
                         (Ui.text "Loading match")
 
                 ( Just (MatchData match), Just game ) ->

@@ -489,7 +489,8 @@ inviteUserAndDmChat config =
                             100
                             (\html ->
                                 Test.Html.Query.findAll [ Test.Html.Selector.exactText "Sven" ] html
-                                    |> Test.Html.Query.count (Expect.equal 2)
+                                    -- Two Sven messages, Sven in the DM column, and Sven in the user options
+                                    |> Test.Html.Query.count (Expect.equal 4)
                             )
                         , E2EHelper.createThread user (Id.fromInt 1)
                         , E2EHelper.writeMessage user 100 "Writing in thread"
