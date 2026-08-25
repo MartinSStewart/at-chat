@@ -467,9 +467,9 @@ type OutMsg
     | UploadAttachedFiles Input (Nonempty ( Id FileId, File ))
     | CancelAttachedFileUpload Input (Id FileId)
     | ShowAttachedFileInfo FileStatus.FileDataWithImage
-      -- Take the reader to the bottom of the tab body, which is where the question they were
-      -- told about is.
-    | ScrollResultsToBottom
+      -- Take the reader to the question they were told about, the same way they'd have been
+      -- taken there had they been at the bottom of the tab body when it turned up.
+    | ScrollResultsTo HtmlId
       -- Somebody wants to react with an emoji that isn't one of the ones they reach for
       -- most, so the full selector has to be opened for them.
     | OpenReactionEmojiSelector ReactionTarget
@@ -1155,7 +1155,10 @@ updateGame localUser setup shared msg model =
             )
 
         PressedNewQuestionRevealed ->
-            ( { model | newQuestionRevealed = False }, Nothing, ScrollResultsToBottom )
+            ( { model | newQuestionRevealed = False }
+            , Nothing
+            , revealedSectionId shared.questionsRevealed |> ScrollResultsTo
+            )
 
         ReactionMsg target messageViewMsg ->
             case messageViewMsg of

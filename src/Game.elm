@@ -946,8 +946,8 @@ sheepGameOutMsgs time newMatchId outMsg =
         SheepGame.ShowAttachedFileInfo fileData ->
             [ ShowSheepGameAttachedFileInfo fileData ]
 
-        SheepGame.ScrollResultsToBottom ->
-            [ ScrollToBottom SheepGame.gameViewId ]
+        SheepGame.ScrollResultsTo htmlId ->
+            [ SmoothScrollTo { container = SheepGame.gameViewId, target = htmlId } ]
 
         SheepGame.OpenReactionEmojiSelector _ ->
             -- Only the results of a match in progress have anything to react to, so this is

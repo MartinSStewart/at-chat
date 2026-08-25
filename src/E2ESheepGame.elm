@@ -1,11 +1,13 @@
 module E2ESheepGame exposing (imageInQuestionOpensImageViewerTest, tests)
 
+import Audio
 import Coord
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Expect
 import FileStatus
+import Game
 import Html.Attributes
 import Id exposing (ChannelMessageId, Id)
 import Json.Encode
@@ -659,6 +661,11 @@ mobileHostMatchTest normalConfig =
                                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Scoring" ])
                                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "drink" ])
 
+                                -- Pressing the button is the host catching up with a reveal the
+                                -- same way everyone else does, which is what takes them down onto
+                                -- what just turned up rather than leaving them where they were.
+                                , admin.checkModel 100 (checkQuestionsRevealedSeen 1)
+
                                 -- Grouped together, Tea and Cuppa are worth two apiece while
                                 -- Wanda's Coffee is worth the one for matching herself.
                                 , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
@@ -669,6 +676,7 @@ mobileHostMatchTest normalConfig =
                                         , Test.Html.Selector.text "Nobody said"
                                         ]
                                     )
+                                , admin.checkModel 100 (checkQuestionsRevealedSeen 2)
                                 , stevie.checkView
                                     100
                                     (Test.Html.Query.has
@@ -767,6 +775,57 @@ imageInQuestionOpensImageViewerTest imageUploadConfig =
                 ]
             )
         ]
+
+
+{-| How many reveals this frontend's copy of the match has caught up with.
+-}
+questionsRevealedSeen : FrontendModel -> Maybe Int
+questionsRevealedSeen model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    SeqDict.values loggedIn.games
+                        |> List.concatMap (\game -> SeqDict.values game.startedGames)
+                        |> List.filterMap
+                            (\startedGame ->
+                                case startedGame of
+                                    Game.SheepGame_Game gameData ->
+                                        Just gameData.questionsRevealedSeen
+
+                                    _ ->
+                                        Nothing
+                            )
+                        |> List.head
+
+                Types.NotLoggedIn _ ->
+                    Nothing
+
+        Types.Loading _ ->
+            Nothing
+
+
+{-| Assert that a reveal has been folded into this frontend's view of the match. The host presses
+the button themselves, so this is what says their press goes through the same place everyone
+else's reveal does, rather than only moving the shared state along.
+-}
+checkQuestionsRevealedSeen : Int -> FrontendModel -> Result String ()
+checkQuestionsRevealedSeen expected model =
+    case questionsRevealedSeen model of
+        Just seen ->
+            if seen == expected then
+                Ok ()
+
+            else
+                Err
+                    ("Expected the match to have caught up with "
+                        ++ String.fromInt expected
+                        ++ " reveals but it has caught up with "
+                        ++ String.fromInt seen
+                    )
+
+        Nothing ->
+            Err "Couldn't find a started sheep game in the frontend"
 
 
 {-| The channel message the sheep game was started from, which is what the card that opens
