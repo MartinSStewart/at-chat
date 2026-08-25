@@ -403,6 +403,10 @@ maxAnswerLength =
     100
 
 
+maxNoteLength =
+    200
+
+
 {-| A question or an answer, ready to go to everyone else, or why it isn't. Blank text is
 how an answer says the player hasn't written one yet, so the setup is the only place that
 shows these.
@@ -1804,6 +1808,36 @@ gameView time windowSize showMemberTab localUser drag loggedIn setup shared mode
 
           else
             Ui.noAttr
+        , case ( shared.phase, isHost localUser.session.userId setup ) of
+            ( Revealing, True ) ->
+                Ui.row
+                    [ Ui.spacing 8
+                    , Ui.padding 8
+                    , Ui.width Ui.shrink
+                    , Ui.background MyUi.background1
+                    , Ui.alignRight
+                    ]
+                    [ MyUi.secondaryButtonTall
+                        (Dom.id "sheepGame_hidePreviousQuestion")
+                        PressedHidePreviousQuestion
+                        "Back"
+                        |> Ui.el
+                            [ if shared.questionsRevealed == 0 then
+                                Ui.opacity 0.5
+
+                              else
+                                Ui.opacity 1
+                            , Ui.width Ui.shrink
+                            ]
+                    , MyUi.simpleButton
+                        (Dom.id "sheepGame_showNextQuestion")
+                        PressedShowNextQuestion
+                        (Ui.text "Show next question")
+                    ]
+                    |> Ui.inFront
+
+            _ ->
+                Ui.noAttr
         ]
         (Ui.el
             [ Ui.background MyUi.background1
@@ -2237,7 +2271,7 @@ notesInput localUser loggedIn questionId notes =
                 True
                 htmlId
                 ""
-                (maxAnswerLength - String.length notes.text)
+                (maxNoteLength - String.length notes.text)
                 notes.text
                 richText
                 notes.attachedFiles
@@ -2522,29 +2556,6 @@ revealingView isMobile time contentWidth localUser setup shared model =
             Ui.paddingXY (paddingX isMobile) 0
     in
     [ Ui.el [ Ui.Font.bold, Ui.Font.size 20, padding ] (Ui.text "Sheep game results")
-    , if isHost localUser.session.userId setup then
-        Ui.row
-            [ Ui.spacing 8, padding ]
-            [ MyUi.secondaryButtonTall
-                (Dom.id "sheepGame_hidePreviousQuestion")
-                PressedHidePreviousQuestion
-                "Back"
-                |> Ui.el
-                    [ if shared.questionsRevealed == 0 then
-                        Ui.opacity 0.5
-
-                      else
-                        Ui.opacity 1
-                    , Ui.width Ui.shrink
-                    ]
-            , MyUi.simpleButton
-                (Dom.id "sheepGame_showNextQuestion")
-                PressedShowNextQuestion
-                (Ui.text "Show next question")
-            ]
-
-      else
-        Ui.none
     , if shared.questionsRevealed == 0 then
         Ui.el
             [ Ui.Font.size 20
@@ -2584,17 +2595,17 @@ revealingView isMobile time contentWidth localUser setup shared model =
             , if SeqDict.size shared.answers > 2 then
                 Ui.column
                     [ Ui.spacing 16 ]
-                    [ Ui.Prose.paragraph
+                    [ Ui.el
                         [ Ui.Font.size 20, Ui.Font.bold, Ui.Font.center ]
-                        [ Ui.text "Statistics: Which players think most alike?" ]
+                        (Ui.text "Statistics: Which players think most alike?")
                     , resultsGridView isMobile localUser setup shared model.gridHovered
                     ]
 
               else
                 Ui.none
-            , Ui.Prose.paragraph
-                [ Ui.Font.size 14, Ui.Font.center, Ui.opacity 0.5 ]
-                [ Ui.text "No sheep were impersonated in the playing of this game." ]
+            , Ui.el
+                [ Ui.Font.size 12, Ui.Font.center, Ui.Font.color MyUi.font3 ]
+                (Ui.text "No sheep were impersonated in the playing of this game.")
             ]
 
       else
