@@ -8348,8 +8348,7 @@ next render. The sleep lets that happen before we go looking for it.
 -}
 scrollElementToTop : Game.ScrollTo -> Command FrontendOnly ToBackend FrontendMsg_
 scrollElementToTop { container, target } =
-    Process.sleep Duration.millisecond
-        |> Task.andThen (\() -> Scroll.smoothScrollToTopOf container target)
+    Scroll.smoothScrollToTopOf container target
         |> Task.attempt (\_ -> SetScrollToBottom)
 
 

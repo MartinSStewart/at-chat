@@ -1815,45 +1815,31 @@ gameView time windowSize showMemberTab localUser drag loggedIn setup shared mode
             Ui.noAttr
         , case ( shared.phase, isHost2 ) of
             ( Revealing, True ) ->
-                let
-                    buttons =
-                        [ MyUi.secondaryButtonTall
+                Ui.row
+                    [ Ui.spacing 8
+                    , Ui.padding 8
+                    , Ui.attrIf (not isMobile) (Ui.width Ui.shrink)
+                    , Ui.background MyUi.background1
+                    , Ui.alignBottom
+                    ]
+                    [ Ui.el
+                        [ if shared.questionsRevealed == 0 then
+                            Ui.opacity 0.5
+
+                          else
+                            Ui.opacity 1
+                        , Ui.width Ui.shrink
+                        ]
+                        (MyUi.secondaryButtonTall
                             (Dom.id "sheepGame_hidePreviousQuestion")
                             PressedHidePreviousQuestion
                             "Back"
-                            |> Ui.el
-                                [ if shared.questionsRevealed == 0 then
-                                    Ui.opacity 0.5
-
-                                  else
-                                    Ui.opacity 1
-                                , Ui.width Ui.shrink
-                                ]
-                        , MyUi.simpleButton
-                            (Dom.id "sheepGame_showNextQuestion")
-                            PressedShowNextQuestion
-                            (Ui.text "Show next question")
-                        ]
-                in
-                (if isMobile then
-                    Ui.row
-                        [ Ui.spacing 8
-                        , Ui.padding 8
-                        , Ui.background MyUi.background1
-                        , Ui.alignBottom
-                        ]
-                        buttons
-
-                 else
-                    Ui.row
-                        [ Ui.spacing 8
-                        , Ui.padding 8
-                        , Ui.width Ui.shrink
-                        , Ui.background MyUi.background1
-                        , Ui.alignRight
-                        ]
-                        buttons
-                )
+                        )
+                    , MyUi.simpleButton
+                        (Dom.id "sheepGame_showNextQuestion")
+                        PressedShowNextQuestion
+                        (Ui.text "Show next question")
+                    ]
                     |> Ui.inFront
 
             _ ->
@@ -1903,7 +1889,7 @@ gameView time windowSize showMemberTab localUser drag loggedIn setup shared mode
                             , right = 0
                             , top = 16
                             , bottom =
-                                if isHost2 && isMobile then
+                                if isHost2 then
                                     -- Approximate padding for show next question button at bottom
                                     16 + 56
 
@@ -1960,7 +1946,7 @@ contentView time contentWidth localUser htmlId attachedFiles content =
         }
         Array.empty
         content
-        |> Html.div [ Html.Attributes.style "white-space" "pre-wrap" ]
+        |> Html.div [ Html.Attributes.style "white-space" "pre-wrap", Html.Attributes.id (Dom.idToString htmlId) ]
         |> Ui.html
 
 
@@ -2596,7 +2582,14 @@ revealingView isMobile time contentWidth localUser setup shared model =
         padding =
             Ui.paddingXY (paddingX isMobile) 0
     in
-    [ Ui.el [ Ui.Font.bold, Ui.Font.size 32, padding, Ui.Font.color MyUi.font2 ] (Ui.text "Sheep game results")
+    [ Ui.el
+        [ Ui.Font.bold
+        , Ui.Font.size 28
+        , padding
+        , Ui.Font.color MyUi.font2
+        , Ui.attrIf isMobile Ui.Font.center
+        ]
+        (Ui.text "Sheep game results")
     , if shared.questionsRevealed == 0 then
         Ui.column
             [ Ui.Font.size 20

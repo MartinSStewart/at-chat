@@ -1260,8 +1260,8 @@ body {
   animation: fade-in 2s;
 }
 @keyframes fade-in {
-  0% { opacity: 0; transform: translate(0px, 20px); }
-  50% { opacity: 0; transform: translate(0px, 20px); }
+  0% { opacity: 0; transform: translate(0px, -20px); }
+  50% { opacity: 0; transform: translate(0px, -20px); }
   100% { opacity: 1; }
 }
 /* The custom emoji tooltip hangs above its emoji, centred on it. The arrow is a

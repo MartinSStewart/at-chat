@@ -132,7 +132,7 @@ smoothScrollBy conversationContainerId scrollYAmount =
 
 smoothScrollSteps : number
 smoothScrollSteps =
-    20
+    30
 
 
 smoothScrollY : HtmlId -> Int -> Float -> Float -> Float -> Task FrontendOnly Dom.Error ()
