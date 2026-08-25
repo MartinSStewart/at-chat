@@ -1,5 +1,6 @@
 module IdArray exposing
     ( IdArray(..)
+    , append
     , empty
     , foldl
     , fromArray
@@ -9,6 +10,7 @@ module IdArray exposing
     , last
     , length
     , map
+    , nextId
     , push
     , set
     , slice
@@ -101,6 +103,18 @@ push value (IdArray array) =
     Array.push value array |> IdArray
 
 
+{-| Note that this will cause the second IdArray's IDs to shift.
+-}
+append : IdArray k v -> IdArray k v -> IdArray k v
+append (IdArray arrayA) (IdArray arrayB) =
+    Array.append arrayA arrayB |> IdArray
+
+
 slice : Id k -> Id k -> IdArray k v -> IdArray k v
 slice start end (IdArray array) =
     Array.slice (Id.toInt start) (Id.toInt end) array |> IdArray
+
+
+nextId : IdArray k v -> Id k
+nextId idArray =
+    length idArray |> Id.fromInt

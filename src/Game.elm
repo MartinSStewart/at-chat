@@ -524,6 +524,7 @@ type OutMsg
     | ShowSheepGameAttachedFileInfo FileStatus.FileDataWithImage
       -- An image in a question, an answer or a note, pressed to see it full size.
     | ShowSheepGameImage RichText.PressedImageData
+    | SetFocus HtmlId
 
 
 update :
@@ -954,6 +955,9 @@ sheepGameOutMsgs time newMatchId outMsg =
 
         SheepGame.ShowImage pressedImageData ->
             [ ShowSheepGameImage pressedImageData ]
+
+        SheepGame.SetFocusOnQuestion questionId ->
+            [ SetFocus (SheepGame.inputId (SheepGame.QuestionInput questionId)) ]
 
 
 {-| Files someone picked for one of the sheep game's inputs, on their way back to whichever

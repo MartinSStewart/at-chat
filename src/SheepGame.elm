@@ -471,6 +471,7 @@ type OutMsg
       -- An image attached to a question, an answer or a note, pressed to see it full size.
       -- Where that gets shown is the frontend's business rather than the game's.
     | ShowImage RichText.PressedImageData
+    | SetFocusOnQuestion (Id QuestionId)
 
 
 updateSetup : LocalUser -> SetupMsg -> SetupModel -> ( SetupOrGame, OutMsg )
@@ -493,8 +494,22 @@ updateSetup localUser msg model =
                     , NoOutMsg
                     )
 
-                MessageInput.PressedSendMessage _ ->
-                    ( Setup model, NoOutMsg )
+                MessageInput.PressedSendMessage { charsLeft } ->
+                    if charsLeft == maxQuestionLength then
+                        ( Setup model, NoOutMsg )
+
+                    else
+                        ( { model
+                            | questions =
+                                IdArray.append
+                                    (IdArray.slice (Id.fromInt 0) (Id.increment questionId) model.questions
+                                        |> IdArray.push { text = "", attachedFiles = SeqDict.empty }
+                                    )
+                                    (IdArray.slice (Id.increment questionId) (IdArray.nextId model.questions) model.questions)
+                          }
+                            |> Setup
+                        , SetFocusOnQuestion (Id.increment questionId)
+                        )
 
                 -- The mention and emoji dropdown never opens over a question. The frontend
                 -- only fills in `textInputFocus.dropdown` for the channel and edit message
@@ -545,7 +560,7 @@ updateSetup localUser msg model =
                             IdArray.push { text = "", attachedFiles = SeqDict.empty } model.questions
                     , error = Nothing
                 }
-            , NoOutMsg
+            , SetFocusOnQuestion (IdArray.nextId model.questions)
             )
 
         PressedRemoveQuestion index ->
@@ -1672,7 +1687,7 @@ questionInput localUser loggedIn users index question =
                     |> Ui.map (TypedQuestion questionId)
                 ]
             , MessageInput.textarea
-                True
+                False
                 htmlId
                 ""
                 (maxQuestionLength - String.length question.text)
@@ -1902,7 +1917,7 @@ answeringView time contentWidth localUser loggedIn setup shared model =
         , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text "*The game host decides what counts as sufficiently similar.")
         ]
     , Ui.column
-        [ Ui.spacing 8 ]
+        [ Ui.spacing 16 ]
         (List.Nonempty.toList setup.questions
             |> List.indexedMap
                 (\index question ->
@@ -1959,19 +1974,13 @@ answeringView time contentWidth localUser loggedIn setup shared model =
                                     Ui.column [] answers
 
                           else
-                            Ui.column
-                                [ Ui.spacing 4 ]
-                                [ Ui.el
-                                    [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
-                                    (Ui.text "Your answer")
-                                , answerInput
-                                    localUser
-                                    loggedIn
-                                    questionId
-                                    (IdArray.get questionId model.answerDrafts
-                                        |> Maybe.withDefault { text = "", attachedFiles = SeqDict.empty }
-                                    )
-                                ]
+                            answerInput
+                                localUser
+                                loggedIn
+                                questionId
+                                (IdArray.get questionId model.answerDrafts
+                                    |> Maybe.withDefault { text = "", attachedFiles = SeqDict.empty }
+                                )
                         ]
                 )
         )
@@ -2037,7 +2046,7 @@ answerInput localUser loggedIn questionId answer =
             , MessageInput.textarea
                 True
                 htmlId
-                ""
+                "Answer here"
                 (maxAnswerLength - String.length answer.text)
                 answer.text
                 richText
@@ -2728,7 +2737,7 @@ answerGroupOutlineOffset =
 
 answerGroupOutlineColor : Ui.Color
 answerGroupOutlineColor =
-    Ui.rgb 88 89 94
+    Ui.rgb 76 80 100
 
 
 {-| What an answer or a note is called on the results screen, which is what the reactions on

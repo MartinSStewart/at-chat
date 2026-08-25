@@ -8501,6 +8501,9 @@ handleGameOutMsgs outMsgs model =
                         (Dom.getElement (SheepGame.inputContainerId input))
                         :: cmds
                     )
+
+                Game.SetFocus htmlId ->
+                    ( model2, FrontendExtra.setFocus model2 htmlId :: cmds )
         )
         ( model, [] )
         outMsgs
