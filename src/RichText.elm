@@ -4883,6 +4883,8 @@ fileDownloadView maybeHtmlId isSpoilered fileData =
           else
             Html.Attributes.href fileUrl
         , Html.Attributes.download (FileName.toString fileData.fileName)
+        , Html.Attributes.target "_blank"
+        , Html.Attributes.rel "noreferrer"
         , Html.Attributes.style "font-size" "14px"
         , Html.Attributes.style "padding" "4px 8px 4px 8px"
         ]
