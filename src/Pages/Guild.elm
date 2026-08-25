@@ -7890,7 +7890,9 @@ eventCard userIdToColor isSelectingAnchor messageId drawings htmlId onPress icon
                 [ icon
                 , Ui.column
                     [ Ui.spacing 2, Ui.width Ui.shrink ]
-                    [ Ui.el [ Ui.Font.bold, Ui.Font.color MyUi.font1 ] (Ui.text userName)
+                    [ Ui.el
+                        [ Ui.Font.bold, Ui.Font.color MyUi.font1, Ui.widthMax 200, Ui.clipWithEllipsis ]
+                        (Ui.text userName)
                     , Ui.el [ Ui.Font.size 13 ] (Ui.text action)
                     ]
                 ]
