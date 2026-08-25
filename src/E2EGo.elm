@@ -106,7 +106,23 @@ goMatchTest normalConfig =
                                 , user2.click 100 (Dom.id "guild_friendLabel_0")
                                 , user2.click 100 (Dom.id "guild_openGamesTab")
                                 , user2.click 100 (Dom.id "game_select_Go (Baduk)")
+
+                                -- This frontend was only told the match exists, so picking it means
+                                -- asking the backend for it. The round trip is stretched out to
+                                -- leave room to look at the placeholder while it's in flight.
+                                , user2.setNetworkLatency 100 { toBackendLatency = 1000, toFrontendLatency = 1000 }
                                 , user2.input 100 (Dom.id "game_matchSwitcher") "0"
+                                , user2.checkView
+                                    500
+                                    (Test.Html.Query.has [ Test.Html.Selector.exactText "Loading match" ])
+                                , user2.snapshotView 0 { name = "Go match still loading" }
+
+                                -- Once the match lands the board takes the placeholder's place.
+                                , user2.checkView
+                                    3000
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Loading match" ])
+                                , user2.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
+                                , user2.setNetworkLatency 100 { toBackendLatency = 0, toFrontendLatency = 0 }
 
                                 -- A few more moves to confirm the state persisted
                                 , admin.click 100 (Dom.id "go_cell_3_3")
