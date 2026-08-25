@@ -1796,6 +1796,9 @@ gameView time windowSize showMemberTab localUser drag loggedIn setup shared mode
         contentWidth : Int
         contentWidth =
             MyUi.conversationWidthIgnoreScrollbar windowSize showMemberTab - paddingX isMobile * 2 |> min maxWidth
+
+        isHost2 =
+            isHost localUser.session.userId setup
     in
     Ui.el
         [ Ui.height (Ui.px (tabBodyHeight (shared.phase == Answering) windowSize))
@@ -1804,7 +1807,7 @@ gameView time windowSize showMemberTab localUser drag loggedIn setup shared mode
 
           else
             Ui.noAttr
-        , case ( shared.phase, isHost localUser.session.userId setup ) of
+        , case ( shared.phase, isHost2 ) of
             ( Revealing, True ) ->
                 let
                     buttons =
@@ -1883,7 +1886,22 @@ gameView time windowSize showMemberTab localUser drag loggedIn setup shared mode
 
                 Revealing ->
                     Ui.column
-                        [ Ui.paddingXY 0 16, Ui.centerX, Ui.widthMax maxWidth, Ui.spacing 16 ]
+                        [ Ui.paddingWith
+                            { left = 0
+                            , right = 0
+                            , top = 16
+                            , bottom =
+                                if isHost2 && isMobile then
+                                    -- Approximate padding for show next question button at bottom
+                                    16 + 56
+
+                                else
+                                    16
+                            }
+                        , Ui.centerX
+                        , Ui.widthMax maxWidth
+                        , Ui.spacing 16
+                        ]
                         (revealingView isMobile time contentWidth localUser setup shared model)
             )
         )
