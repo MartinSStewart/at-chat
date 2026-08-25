@@ -26,6 +26,7 @@ module RichText exposing
     , escapedCharToString
     , fromDiscord
     , fromNonemptyString
+    , hasLargeContent
     , hyperlinks
     , maxLength
     , mentionsUser
@@ -3312,6 +3313,80 @@ domainToString (Domain domain) =
 type ShowLargeContent
     = ShowLargeContent Int
     | NoLargeContent
+
+
+hasLargeContent : Nonempty (RichText userId) -> Bool
+hasLargeContent richText =
+    List.Nonempty.any
+        (\richText2 ->
+            case richText2 of
+                Bold a ->
+                    hasLargeContent a
+
+                UserMention userId ->
+                    False
+
+                NormalText char string ->
+                    False
+
+                Italic a ->
+                    hasLargeContent a
+
+                Underline a ->
+                    hasLargeContent a
+
+                Strikethrough a ->
+                    hasLargeContent a
+
+                Spoiler a ->
+                    hasLargeContent a
+
+                BlockQuote hasLeadingLineBreak richTexts ->
+                    True
+
+                Heading headingLevel hasLeadingLineBreak a ->
+                    hasLargeContent a
+
+                Hyperlink url ->
+                    False
+
+                MarkdownLink nonemptyString url ->
+                    False
+
+                InlineCode char string ->
+                    False
+
+                CodeBlock language string ->
+                    True
+
+                AttachedFile id ->
+                    True
+
+                EscapedChar escapedChar ->
+                    False
+
+                Sticker id ->
+                    True
+
+                CustomEmoji id ->
+                    False
+
+                BulletPoint hasLeadingLineBreak a ->
+                    List.Nonempty.any
+                        (\list ->
+                            case List.Nonempty.fromList list of
+                                Just nonempty ->
+                                    hasLargeContent nonempty
+
+                                Nothing ->
+                                    False
+                        )
+                        a
+
+                Timestamp timeInMinutes ->
+                    False
+        )
+        richText
 
 
 view :

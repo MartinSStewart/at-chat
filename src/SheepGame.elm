@@ -1835,10 +1835,19 @@ gameView time windowSize showMemberTab localUser drag loggedIn setup shared mode
                             PressedHidePreviousQuestion
                             "Back"
                         )
-                    , MyUi.simpleButton
-                        (Dom.id "sheepGame_showNextQuestion")
-                        PressedShowNextQuestion
-                        (Ui.text "Show next question")
+                    , Ui.el
+                        [ if shared.questionsRevealed > List.Nonempty.length setup.questions then
+                            Ui.opacity 0.5
+
+                          else
+                            Ui.opacity 1
+                        , Ui.width Ui.shrink
+                        ]
+                        (MyUi.simpleButton
+                            (Dom.id "sheepGame_showNextQuestion")
+                            PressedShowNextQuestion
+                            (Ui.text "Show next question")
+                        )
                     ]
                     |> Ui.inFront
 
@@ -2744,6 +2753,10 @@ userColor userId local =
             UserColor.toColor UserColor.default
 
 
+answerGroupPaddingX =
+    8
+
+
 answerGroupsView :
     Bool
     -> Time.Posix
@@ -2765,8 +2778,14 @@ answerGroupsView isMobile time localUser contentWidth hoveredResult questionId a
             (\( first, rest ) ->
                 List.map
                     (\( userId, _, answer ) ->
-                        Ui.row
-                            [ Ui.spacing 8, Ui.widthMin 200 ]
+                        (if RichText.hasLargeContent answer.text then
+                            Ui.column
+                                [ Ui.spacing 8, Ui.widthMin 200 ]
+
+                         else
+                            Ui.row
+                                [ Ui.spacing 8, Ui.widthMin 200 ]
+                        )
                             [ Ui.el
                                 [ Ui.widthMax (toFloat contentWidth * 0.5 |> round)
                                 , Ui.width Ui.shrink
@@ -2778,14 +2797,14 @@ answerGroupsView isMobile time localUser contentWidth hoveredResult questionId a
                                 (Ui.text (User.toStringAlt userId localUser))
                             , contentView
                                 time
-                                300
+                                (min 300 (contentWidth - answerGroupPaddingX * 2))
                                 localUser
                                 (Dom.id ("sheepGame_answerReveal_" ++ Id.toString questionId ++ "_" ++ Id.toString userId))
                                 answer.attachedFiles
                                 answer.text
                             ]
                             |> reactableResult
-                                8
+                                answerGroupPaddingX
                                 localUser
                                 contentWidth
                                 (AnswerReaction userId questionId)
@@ -2974,9 +2993,9 @@ scoreRowView localUser maxPoints answerResult =
 finalResultsView : LocalUser -> List (Id UserId) -> Element msg
 finalResultsView localUser winners =
     Ui.column
-        [ Ui.spacing 16 ]
+        [ Ui.spacing 48, Ui.Font.size 24 ]
         [ Ui.Prose.paragraph
-            [ Ui.Font.size 20, Ui.Font.center ]
+            [ Ui.Font.center ]
             (Ui.text "🐑 And the winner is "
                 :: (case winners of
                         [] ->
