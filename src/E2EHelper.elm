@@ -2,6 +2,7 @@ module E2EHelper exposing
     ( BackendModel2(..)
     , CustomRequest
     , adminEmail
+    , adminName
     , allAttackerLocalChanges
     , allAttackerToBackendChanges
     , andThenWebsocket
@@ -148,6 +149,7 @@ import Pages.Admin
 import Pages.Guild
 import Pages.Home
 import Parser exposing ((|.), (|=))
+import PersonName
 import Ports exposing (RegisterPushSubscription(..))
 import Range exposing (Range)
 import RichText exposing (Domain(..))
@@ -513,6 +515,14 @@ startTime =
 adminEmail : EmailAddress
 adminEmail =
     Backend.adminUser.email
+
+
+{-| The admin's display name, taken from the admin user itself so that tests reading it off
+the screen don't have to be gone through every time it changes.
+-}
+adminName : String
+adminName =
+    PersonName.toString Backend.adminUser.name
 
 
 userEmail : EmailAddress

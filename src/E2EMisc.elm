@@ -194,7 +194,7 @@ exportChannelTest config =
                                         case
                                             List.filter
                                                 (\text -> not (String.contains text content))
-                                                [ "Hello everyone", "\"AT\"", "Stevie Steve" ]
+                                                [ "Hello everyone", "\"" ++ E2EHelper.adminName ++ "\"", "Stevie Steve" ]
                                         of
                                             [] ->
                                                 -- None of these messages were replied to, edited,
@@ -278,7 +278,7 @@ exportDmChannelTest config =
                                                 case
                                                     List.filter
                                                         (\text -> not (String.contains text content))
-                                                        [ "Hello in a DM", "\"AT\"", "\"Sven\"" ]
+                                                        [ "Hello in a DM", "\"" ++ E2EHelper.adminName ++ "\"", "\"Sven\"" ]
                                                 of
                                                     [] ->
                                                         Ok ()
@@ -1251,7 +1251,9 @@ dmThreadsTest config =
                             [ Test.Html.Selector.id "guild_unreadOverviewOpenChannel_dm_0" ]
                             html
                             |> Test.Html.Query.has
-                                [ Test.Html.Selector.exactText "Chat with", Test.Html.Selector.exactText "AT" ]
+                                [ Test.Html.Selector.exactText "Chat with"
+                                , Test.Html.Selector.exactText E2EHelper.adminName
+                                ]
                     )
                 , user.checkView
                     100
@@ -1261,7 +1263,7 @@ dmThreadsTest config =
                             html
                             |> Test.Html.Query.has
                                 [ Test.Html.Selector.exactText "Chat with"
-                                , Test.Html.Selector.exactText "AT"
+                                , Test.Html.Selector.exactText E2EHelper.adminName
                                 , Test.Html.Selector.exactText "Hello in a DM!"
                                 ]
                     )
