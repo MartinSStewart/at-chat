@@ -1199,10 +1199,6 @@ updateGame localUser setup shared msg model =
             ( model, Nothing, NoOutMsg )
 
 
-{-| How many times the host can press "Show next question": once to put the scoring
-explanation up and once for each question after that. The last press brings the final scores
-with it.
--}
 revealStepCount : ValidatedSetup -> Int
 revealStepCount setup =
     List.Nonempty.length setup.questions + 1
@@ -1810,30 +1806,45 @@ gameView time windowSize showMemberTab localUser drag loggedIn setup shared mode
             Ui.noAttr
         , case ( shared.phase, isHost localUser.session.userId setup ) of
             ( Revealing, True ) ->
-                Ui.row
-                    [ Ui.spacing 8
-                    , Ui.padding 8
-                    , Ui.width Ui.shrink
-                    , Ui.background MyUi.background1
-                    , Ui.alignRight
-                    ]
-                    [ MyUi.secondaryButtonTall
-                        (Dom.id "sheepGame_hidePreviousQuestion")
-                        PressedHidePreviousQuestion
-                        "Back"
-                        |> Ui.el
-                            [ if shared.questionsRevealed == 0 then
-                                Ui.opacity 0.5
+                let
+                    buttons =
+                        [ MyUi.secondaryButtonTall
+                            (Dom.id "sheepGame_hidePreviousQuestion")
+                            PressedHidePreviousQuestion
+                            "Back"
+                            |> Ui.el
+                                [ if shared.questionsRevealed == 0 then
+                                    Ui.opacity 0.5
 
-                              else
-                                Ui.opacity 1
-                            , Ui.width Ui.shrink
-                            ]
-                    , MyUi.simpleButton
-                        (Dom.id "sheepGame_showNextQuestion")
-                        PressedShowNextQuestion
-                        (Ui.text "Show next question")
-                    ]
+                                  else
+                                    Ui.opacity 1
+                                , Ui.width Ui.shrink
+                                ]
+                        , MyUi.simpleButton
+                            (Dom.id "sheepGame_showNextQuestion")
+                            PressedShowNextQuestion
+                            (Ui.text "Show next question")
+                        ]
+                in
+                (if isMobile then
+                    Ui.row
+                        [ Ui.spacing 8
+                        , Ui.padding 8
+                        , Ui.background MyUi.background1
+                        , Ui.alignBottom
+                        ]
+                        buttons
+
+                 else
+                    Ui.row
+                        [ Ui.spacing 8
+                        , Ui.padding 8
+                        , Ui.width Ui.shrink
+                        , Ui.background MyUi.background1
+                        , Ui.alignRight
+                        ]
+                        buttons
+                )
                     |> Ui.inFront
 
             _ ->
