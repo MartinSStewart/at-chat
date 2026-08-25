@@ -15,6 +15,7 @@ rather than as an unreadable model later.
 """
 
 import hashlib
+import importlib.util
 import pathlib
 import shutil
 import subprocess
@@ -32,11 +33,16 @@ PACKAGER = ROOT / "scripts" / "build-speech-to-text-package.py"
 # .data this space publishes, so that one model needs no repacking.
 NCNN_SPACE = ("https://huggingface.co/spaces/k2-fsa/web-assembly-asr-sherpa-ncnn-en"
               "/resolve/4901c6e472b4c99d104444f805ec93e671c48812")
+# Only the recogniser itself is kept. The 77KB of emscripten glue published
+# beside it, and the 8KB wrapper over the C API, are both replaced by
+# public/speech-to-text/ncnn-recognizer.js — except that the glue is still
+# fetched, because the manifest saying where each model file sits inside the
+# English package's .data is held inside it and nowhere else.
 NCNN_ENGINE = {
-    "sherpa-ncnn.js": "9d9a74dd6ea4174210b63ed75bf0be248e315cfa0569efa957e3a77f24acdd12",
-    "sherpa-ncnn-wasm-main.js": "bb8a60a40650f4d648bab677c16b4f5b8456156861dbd77201ff18cbbb328b2b",
     "sherpa-ncnn-wasm-main.wasm": "43acc0c12a58b53b3164582009a175b829cca5c50a8db4b7907c9b48c44448ae",
 }
+NCNN_ENGLISH_GLUE = ("sherpa-ncnn-wasm-main.js",
+                     "bb8a60a40650f4d648bab677c16b4f5b8456156861dbd77201ff18cbbb328b2b")
 NCNN_ENGLISH_DATA = ("sherpa-ncnn-wasm-main.data",
                      "6e8b17f3820d3bda13616a91cf6957056ff202674c9e749d890782ad4de317fb")
 
@@ -83,6 +89,16 @@ MODEL_FILES = {
 }
 
 
+def load_packager():
+    """build-speech-to-text-package.py, whose name is not an importable one."""
+    # Importing it would otherwise drop a .pyc into scripts/__pycache__.
+    sys.dont_write_bytecode = True
+    spec = importlib.util.spec_from_file_location("packager", PACKAGER)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def digest_of(path):
     hasher = hashlib.sha256()
     with path.open("rb") as handle:
@@ -109,10 +125,13 @@ def download(url, path, want):
     return path
 
 
-def repack(glue, model_dir, out_dir, wasm):
-    subprocess.run([sys.executable, str(PACKAGER),
-                    "--glue", str(glue), "--model-dir", str(model_dir),
-                    "--out-dir", str(out_dir), "--wasm", str(wasm)], check=True)
+def repack(model_dir, out_dir, data_name, wasm, glue=None):
+    command = [sys.executable, str(PACKAGER),
+               "--model-dir", str(model_dir), "--data-name", data_name,
+               "--out-dir", str(out_dir), "--wasm", str(wasm)]
+    if glue:
+        command += ["--glue", str(glue)]
+    subprocess.run(command, check=True)
 
 
 def ncnn_engine(cache):
@@ -139,13 +158,23 @@ def onnx_engine(cache):
 
 
 def build_zipformer_en(cache):
+    # The English model is the one the upstream package was built around, so its
+    # .data is used exactly as published rather than repacked. Its manifest is
+    # lifted out of the glue and written beside it, and the glue itself is then
+    # not kept.
     engine = ncnn_engine(cache)
     out = MODELS / "zipformer-en"
     out.mkdir(parents=True, exist_ok=True)
     for name in NCNN_ENGINE:
         shutil.copy(engine / name, out / name)
+
     name, want = NCNN_ENGLISH_DATA
     download(f"{NCNN_SPACE}/{name}", out / name, want)
+
+    name, want = NCNN_ENGLISH_GLUE
+    glue = download(f"{NCNN_SPACE}/{name}", cache / name, want)
+    packager = load_packager()
+    packager.write_manifest(out, packager.read_manifest(glue), None)
 
 
 def build_zipformer_small_zh_en(cache):
@@ -154,9 +183,8 @@ def build_zipformer_small_zh_en(cache):
     for name, (url, want) in MODEL_FILES["zipformer-small-zh-en"].items():
         download(url, model / name, want)
 
-    out = MODELS / "zipformer-small-zh-en"
-    repack(engine / "sherpa-ncnn-wasm-main.js", model, out, engine / "sherpa-ncnn-wasm-main.wasm")
-    shutil.copy(engine / "sherpa-ncnn.js", out / "sherpa-ncnn.js")
+    repack(model, MODELS / "zipformer-small-zh-en", "sherpa-ncnn-wasm-main.data",
+           engine / "sherpa-ncnn-wasm-main.wasm")
 
 
 def build_zipformer_20m_en(cache):
@@ -166,7 +194,9 @@ def build_zipformer_20m_en(cache):
         download(url, model / name, want)
 
     out = MODELS / "zipformer-20m-en"
-    repack(engine / "sherpa-onnx-wasm-main-asr.js", model, out, engine / "sherpa-onnx-wasm-main-asr.wasm")
+    repack(model, out, "sherpa-onnx-wasm-main-asr.data",
+           engine / "sherpa-onnx-wasm-main-asr.wasm",
+           glue=engine / "sherpa-onnx-wasm-main-asr.js")
     shutil.copy(engine / "sherpa-onnx-asr.js", out / "sherpa-onnx-asr.js")
 
 

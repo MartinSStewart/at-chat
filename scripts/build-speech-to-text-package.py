@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""Repack an emscripten preload bundle around a different model.
+"""Pack model files into an emscripten preload bundle.
 
-The sherpa WebAssembly builds published on Hugging Face bake one model into a
-`.data` file, and record where each file sits inside it as a JSON blob in the
-emscripten glue JavaScript. Swapping the model therefore means rewriting both,
-which is all this does: concatenate the new model files and patch the offsets.
+The `.data` file emscripten preloads from is a plain concatenation of the files
+it contains; what says which bytes are which is a manifest, held in the
+emscripten glue JavaScript. Swapping in a different model is therefore a matter
+of rewriting both, which is all this does. Nothing is compiled: the `.wasm` is
+the recogniser and does not care which model it loads.
 
-Nothing is compiled. The `.wasm` is the recogniser and does not care which model
-it loads, so the same binary serves every package built this way.
+The manifest is always written out as `files.json` as well, because
+ncnn-recognizer.js loads the package without the glue and needs it on its own.
+`--glue` additionally writes a patched copy of the glue, for the sherpa-onnx
+package, which is still loaded the upstream way.
 
-    build-speech-to-text-package.py --glue upstream/sherpa-ncnn-wasm-main.js \
-                                    --model-dir models/foo \
-                                    --out-dir public/speech-to-text/foo
+    build-speech-to-text-package.py --model-dir models/foo \
+                                    --data-name sherpa-ncnn-wasm-main.data \
+                                    --out-dir public/speech-to-text/models/foo
 """
 
 import argparse
@@ -21,30 +24,36 @@ import re
 import shutil
 import sys
 
-# The glue contains exactly one loadPackage call, holding the whole manifest.
-# Older emscripten quotes the keys and newer emscripten does not, so both spellings
-# have to be recognised; what gets written back is always quoted, which parses
-# either way.
+# Older emscripten quotes the keys in the manifest and newer emscripten does not,
+# so both spellings have to be recognised. What gets written back is always
+# quoted, which parses either way.
 MANIFEST = re.compile(
     r'loadPackage\(\s*(\{\s*"?files"?\s*:\s*\[[^\]]*\]\s*,'
     r'\s*"?remote_package_size"?\s*:\s*\d+\s*\})\s*\)')
 
 
+def read_manifest(glue):
+    """The manifest already inside a published glue file."""
+    match = MANIFEST.search(glue.read_text())
+    if not match:
+        sys.exit(f"{glue} has no loadPackage manifest; is it emscripten glue?")
+    # The unquoted form is not JSON, so let the keys be quoted before parsing.
+    text = re.sub(r'([{,])\s*(files|filename|start|end|remote_package_size)\s*:', r'\1"\2":', match.group(1))
+    return json.loads(text)
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--glue", required=True, type=pathlib.Path,
-                        help="emscripten glue .js published alongside the .wasm")
     parser.add_argument("--model-dir", required=True, type=pathlib.Path,
                         help="directory of model files to put in the package")
+    parser.add_argument("--data-name", required=True,
+                        help="what the recogniser's loader fetches the package as")
     parser.add_argument("--out-dir", required=True, type=pathlib.Path)
+    parser.add_argument("--glue", type=pathlib.Path,
+                        help="emscripten glue to rewrite the manifest of, for packages loaded through it")
     parser.add_argument("--wasm", type=pathlib.Path,
-                        help="copied next to the output, since the glue fetches it by name")
+                        help="copied next to the output, since the loader fetches it by name")
     args = parser.parse_args()
-
-    glue = args.glue.read_text()
-    match = MANIFEST.search(glue)
-    if not match:
-        sys.exit(f"{args.glue} has no loadPackage manifest; is it emscripten glue?")
 
     # The recogniser opens its model by name, so the names have to survive.
     # Sorted, because that is the order file_packager itself writes them in and
@@ -54,7 +63,7 @@ def main():
         sys.exit(f"{args.model_dir} is empty")
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    data_path = args.out_dir / args.glue.name.replace(".js", ".data")
+    data_path = args.out_dir / args.data_name
 
     files = []
     offset = 0
@@ -67,10 +76,7 @@ def main():
                           "end": offset + len(payload)})
             offset += len(payload)
 
-    manifest = json.dumps({"files": files, "remote_package_size": offset},
-                          separators=(",", ":"))
-    (args.out_dir / args.glue.name).write_text(
-        glue[:match.start(1)] + manifest + glue[match.end(1):])
+    write_manifest(args.out_dir, {"files": files, "remote_package_size": offset}, args.glue)
 
     if args.wasm:
         shutil.copy(args.wasm, args.out_dir / args.wasm.name)
@@ -78,6 +84,20 @@ def main():
     print(f"{data_path} ({offset / 1e6:.1f} MB)")
     for entry in files:
         print(f"  {entry['end'] - entry['start']:>12,}  {entry['filename']}")
+
+
+def write_manifest(out_dir, manifest, glue):
+    (out_dir / "files.json").write_text(json.dumps(manifest, separators=(",", ":")))
+
+    if glue:
+        text = glue.read_text()
+        match = MANIFEST.search(text)
+        if not match:
+            sys.exit(f"{glue} has no loadPackage manifest; is it emscripten glue?")
+        (out_dir / glue.name).write_text(
+            text[:match.start(1)]
+            + json.dumps(manifest, separators=(",", ":"))
+            + text[match.end(1):])
 
 
 if __name__ == "__main__":
