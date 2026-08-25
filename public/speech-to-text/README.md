@@ -3,42 +3,65 @@
 Speech recognition that runs in the browser, for transcribing what you say in a
 call without the audio leaving the machine.
 
-## What this is
+## Getting it
 
-`k2-fsa/web-assembly-asr-sherpa-ncnn-en` on Hugging Face is a *static* space: it
-contains the emscripten output, not the sources, so there is nothing to build.
-`scripts/fetch-speech-to-text-model.sh` downloads the four files it publishes and
-checks them against the hashes recorded at a pinned revision:
+```
+./scripts/fetch-speech-to-text-models.py            # all three, about 250MB of downloads
+./scripts/fetch-speech-to-text-models.py zipformer-small-zh-en   # or just one
+```
 
-| file | size | what it is |
+Then open `/speech-to-text/demo.html`, pick a model, and talk. The page also
+takes an audio file, which goes through the same path, and has a **Compare all
+models** button that runs every model over the same audio and reports what each
+one costs.
+
+Everything under `models/` is gitignored.
+
+## The models
+
+All three stream: they transcribe while you talk rather than waiting for you to
+stop, and decide where one utterance ends from trailing silence. Download is
+what the browser fetches once and caches: the recogniser binary plus the model.
+
+| | download | engine |
 | --- | --- | --- |
-| `sherpa-ncnn.js` | 8KB | hand-written wrapper over the C API |
-| `sherpa-ncnn-wasm-main.js` | 79KB | emscripten glue |
-| `sherpa-ncnn-wasm-main.wasm` | 1.7MB | sherpa-ncnn itself |
-| `sherpa-ncnn-wasm-main.data` | 141MB | the model, in an emscripten filesystem image |
+| `zipformer-small-zh-en` | 55MB | sherpa-ncnn |
+| `zipformer-20m-en` | 58MB | sherpa-onnx (SIMD) |
+| `zipformer-en` | 143MB | sherpa-ncnn |
 
-All four are gitignored. Run the script once after cloning.
+Measured in Chromium on one machine, over a 6.6s LibriSpeech clip, which is
+read speech and so flatters all three:
 
-The model is a streaming zipformer transducer trained on English read speech. It
-transcribes as you talk rather than waiting for you to stop, and decides where
-one utterance ends from trailing silence.
+| | load | first text | speed | transcript |
+| --- | --- | --- | --- | --- |
+| `zipformer-small-zh-en` | 600ms | 300ms | 0.26x | …THE SQUALID QUARTER OF THE **BRAWS** |
+| `zipformer-20m-en` | 2685ms | 425ms | 0.18x | **(drops the first four words)** … THE **BRAFFLELS** |
+| `zipformer-en` | 2785ms | 712ms | 0.55x | (correct throughout) |
 
-## Running it
+Speed is decode time over audio length, so under 1.00x keeps up with a
+conversation; the rest of that core is what is left for encoding call video.
+One clip is not an accuracy benchmark — record yourself and press Compare.
 
-```
-./scripts/fetch-speech-to-text-model.sh
-```
+`zipformer-20m-en` decodes fastest but was the least accurate of the three here,
+losing the opening words entirely. Its fp32 export gives the same transcript for
+twice the download, which is why the int8 one is what the fetch script builds.
 
-then open `/speech-to-text/demo.html`, which listens on the microphone. It also
-takes an audio file, which goes through the same path, so it can be checked
-without a microphone.
+## Nothing here is compiled
+
+The WebAssembly is published prebuilt: sherpa-ncnn as a static Hugging Face
+space, sherpa-onnx as a release asset from the project's own workflow. The
+`.wasm` is the recogniser and does not care which model it loads, so where the
+model is not the one a build shipped with,
+`scripts/build-speech-to-text-package.py` repacks the emscripten bundle around
+it — the `.data` is a plain concatenation and the offsets live in the glue
+JavaScript, so this is a rewrite rather than a build. Every download is checked
+against a recorded sha256.
 
 ## Using it from a call
 
-`speech-to-text.js` hides the worker behind four callbacks:
-
 ```js
 const stt = createSpeechToText({
+    model: "zipformer-small-zh-en",
     onReady: function () {},
     onPartial: function (text) {},
     onFinal: function (text) {},
@@ -54,18 +77,27 @@ utterance; `stt.stop()` tears the worker down.
 
 ## What to know before building on it
 
-* **No punctuation and no casing.** Output looks like
-  `AFTER EARLY NIGHTFALL THE YELLOW LAMPS WOULD LIGHT UP`. The model's vocabulary
-  has neither, so this cannot be configured away — it needs a second pass, or a
-  different model.
-* **English only.**
+* **No punctuation and no casing**, in any of them. Output looks like
+  `AFTER EARLY NIGHTFALL THE YELLOW LAMPS WOULD LIGHT UP`. The vocabularies have
+  neither, so this cannot be configured away.
 * **Trained on read speech**, so accuracy on a relaxed conversation with
-  crosstalk is well below what the demo suggests.
-* **One core, roughly 0.6x real time**, measured in Chromium on this machine.
-  It keeps up, but a slow machine already encoding video for a call has less
-  headroom than that number suggests.
-* **141MB on first load**, cached afterwards. Since the files are gitignored they
-  are not part of a deploy: serving this in production means either committing
-  them, putting them behind a CDN, or pointing `Module.locateFile` in
-  `stt-worker.js` at Hugging Face so the browser fetches the model from there.
+  crosstalk is well below what the table above suggests.
+* **One core.** Decoding is in a worker so it does not stall the main thread,
+  but it still competes with the call's video encoding for CPU.
+* **Not part of a deploy.** `models/` is gitignored and the deploy builds from
+  git, so serving this in production means committing the files, putting them
+  behind a CDN, or pointing `Module.locateFile` in the workers at a remote host.
   Inference stays local in every case.
+
+## Why not Whisper, Moonshine or Parakeet
+
+They lose on both counts that matter here. All are non-streaming: they transcribe
+a finished segment, so text cannot appear until you stop talking, where these
+three emit it mid-sentence. And they are not smaller — Moonshine tiny is 123MB of
+ONNX once converted, against 45MB for the model in `zipformer-20m-en`. Whisper is
+worse again, since it pads every input to a fixed 30 seconds of audio whatever
+was actually said.
+
+They are the right answer when transcript quality matters more than delay — they
+are cased, punctuated and multilingual — which is the opposite trade to the one
+being made here.

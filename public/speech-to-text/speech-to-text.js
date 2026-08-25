@@ -1,8 +1,9 @@
-// Main-thread half of the local speech recogniser. Owns the worker in
-// stt-worker.js and nothing else, so the only thing a caller has to get right is
-// handing it 48kHz mono blocks.
+// Main-thread half of the local speech recogniser. Owns one worker and nothing
+// else, so the only thing a caller has to get right is handing it 48kHz mono
+// blocks.
 //
 //     const stt = createSpeechToText({
+//         model: "zipformer-20m-en",
 //         onReady: function () { ... },
 //         onPartial: function (text) { ... },   // the utterance so far, revised as it goes
 //         onFinal: function (text) { ... },     // an utterance the recogniser has closed
@@ -16,8 +17,36 @@
 // which is the microphone before the opus encoder sees it. Nothing leaves the
 // browser: the recogniser and the model are both local.
 
+// Every model here streams, which is what keeps the delay between speaking and
+// seeing text short. Whisper and Moonshine are deliberately absent: both decode
+// a finished segment rather than a running one, so text can only appear once you
+// stop talking, and both are larger than any of these once converted.
+//
+// `download` is what the browser fetches on first use and caches afterwards:
+// the recogniser binary plus the model bundled with it.
+const MODELS = {
+    "zipformer-small-zh-en": {
+        engine: "ncnn",
+        label: "Zipformer small, English and Chinese",
+        download: 55,
+    },
+    "zipformer-20m-en": {
+        engine: "onnx",
+        label: "Zipformer 20M, English (int8)",
+        download: 58,
+    },
+    "zipformer-en": {
+        engine: "ncnn",
+        label: "Zipformer, English",
+        download: 143,
+    },
+};
+
 function createSpeechToText(handlers) {
-    const worker = new Worker("/speech-to-text/stt-worker.js");
+    const model = MODELS[handlers.model];
+    if (!model) throw new Error("unknown speech-to-text model: " + handlers.model);
+
+    const worker = new Worker("/speech-to-text/" + model.engine + "-worker.js?model=" + handlers.model);
     let ready = false;
 
     worker.onmessage = function (event) {

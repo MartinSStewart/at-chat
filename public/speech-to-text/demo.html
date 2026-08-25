@@ -9,19 +9,30 @@
     main { max-width: 46rem; margin: 0 auto; }
     h1 { font-size: 1.4rem; }
     p.note { color: #aab; }
-    button, input { font: inherit; padding: 6px 14px; }
+    button, input, select { font: inherit; padding: 6px 14px; }
+    label { margin-right: 8px; }
     button { margin-right: 8px; }
     #status { margin: 16px 0; color: #9cf; }
     #transcript { background: rgb(35, 42, 64); border-radius: 6px; padding: 16px; min-height: 8rem; white-space: pre-wrap; }
     #partial { color: #9ab; }
+    h2 { font-size: 1.1rem; margin-top: 32px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid rgb(70, 80, 110); vertical-align: top; }
+    th { color: #9cf; font-weight: normal; }
+    td.number { text-align: right; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
 <main>
     <h1>Local speech to text</h1>
     <p class="note">
-        sherpa-ncnn running in a worker in this tab. The model is about 141MB and
-        loads once; no audio leaves the browser.
+        Running in a worker in this tab. Each model downloads once and is cached
+        by the browser afterwards; no audio leaves the machine.
+    </p>
+
+    <p>
+        <label for="model">Model</label>
+        <select id="model"></select>
     </p>
 
     <div id="status">loading model…</div>
@@ -38,6 +49,19 @@
     </p>
 
     <div id="transcript"><span id="final"></span><span id="partial"></span></div>
+
+    <h2>Compare</h2>
+    <p class="note">
+        Runs every model over the file above, or over whatever the microphone last
+        recorded, and reports what each one costs. Recording yourself for ten
+        seconds says far more about which to use than a benchmark clip does.
+        The audio is pushed all at once rather than at speaking pace, so
+        <em>first text</em> is how long a model needs before it will commit to
+        anything, not the delay you see live; <em>speed</em> is decode time over
+        audio length, and anything under 1.00x keeps up with a conversation.
+    </p>
+    <p><button id="compare" disabled>Compare all models</button></p>
+    <table id="comparison"></table>
 </main>
 
 <script src="/speech-to-text/speech-to-text.js"></script>
@@ -83,27 +107,59 @@ registerProcessor("capture-processor", CaptureProcessor);
     const stopButton = document.getElementById("stop");
     const fileInput = document.getElementById("file");
 
-    let recording = null;
+    const modelSelect = document.getElementById("model");
 
-    const stt = createSpeechToText({
-        onReady: function () {
-            statusElement.textContent = "model loaded";
-            startButton.disabled = false;
-            fileInput.disabled = false;
-            document.body.dataset.sttReady = "true";
-        },
-        onPartial: function (text) {
-            partialElement.textContent = text;
-        },
-        onFinal: function (text) {
-            partialElement.textContent = "";
-            finalElement.textContent += text + "\n";
-        },
-        onError: function (message) {
-            statusElement.textContent = "error: " + message;
-            document.body.dataset.sttError = message;
-        },
+    const compareButton = document.getElementById("compare");
+    const comparison = document.getElementById("comparison");
+
+    let recording = null;
+    let stt = null;
+    let samplesToCompare = null;
+    let recorded = [];
+
+    Object.keys(MODELS).forEach(function (name) {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = MODELS[name].label + " — " + MODELS[name].download + "MB";
+        modelSelect.appendChild(option);
     });
+
+    function loadModel(name) {
+        if (stt) stt.stop();
+        delete document.body.dataset.sttReady;
+        delete document.body.dataset.sttError;
+        startButton.disabled = true;
+        fileInput.disabled = true;
+        statusElement.textContent = "loading " + MODELS[name].label + " (" + MODELS[name].download + "MB)…";
+
+        const started = performance.now();
+        stt = createSpeechToText({
+            model: name,
+            onReady: function () {
+                statusElement.textContent = "loaded in " + Math.round(performance.now() - started) + "ms";
+                startButton.disabled = false;
+                fileInput.disabled = false;
+                document.body.dataset.sttReady = "true";
+            },
+            onPartial: function (text) {
+                partialElement.textContent = text;
+            },
+            onFinal: function (text) {
+                partialElement.textContent = "";
+                finalElement.textContent += text + "\n";
+            },
+            onError: function (message) {
+                statusElement.textContent = "error: " + message;
+                document.body.dataset.sttError = message;
+            },
+        });
+    }
+
+    modelSelect.onchange = function () {
+        loadModel(modelSelect.value);
+    };
+
+    loadModel(modelSelect.value);
 
     document.getElementById("clear").onclick = function () {
         finalElement.textContent = "";
@@ -112,6 +168,7 @@ registerProcessor("capture-processor", CaptureProcessor);
 
     startButton.onclick = async function () {
         startButton.disabled = true;
+        recorded = [];
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const context = new AudioContext({ sampleRate: AUDIO_SAMPLE_RATE });
@@ -128,6 +185,7 @@ registerProcessor("capture-processor", CaptureProcessor);
                 channelCountMode: "explicit",
             });
             capture.port.onmessage = function (event) {
+                recorded.push(event.data);
                 stt.feed(event.data);
             };
 
@@ -156,6 +214,17 @@ registerProcessor("capture-processor", CaptureProcessor);
             recording = null;
         }
         stt.flush();
+
+        // Kept so the comparison below can replay the same speech through every
+        // model, which is worth more than any benchmark clip.
+        if (recorded.length > 0) {
+            samplesToCompare = new Float32Array(recorded.length * AUDIO_BLOCK_FRAMES);
+            recorded.forEach(function (block, index) {
+                samplesToCompare.set(block, index * AUDIO_BLOCK_FRAMES);
+            });
+            compareButton.disabled = false;
+        }
+
         statusElement.textContent = "stopped";
         startButton.disabled = false;
     };
@@ -174,13 +243,106 @@ registerProcessor("capture-processor", CaptureProcessor);
         source.buffer = decoded;
         source.connect(offline.destination);
         source.start();
-        const samples = (await offline.startRendering()).getChannelData(0);
+        samplesToCompare = (await offline.startRendering()).getChannelData(0);
 
-        for (let offset = 0; offset + AUDIO_BLOCK_FRAMES <= samples.length; offset += AUDIO_BLOCK_FRAMES) {
-            stt.feed(samples.subarray(offset, offset + AUDIO_BLOCK_FRAMES));
-        }
+        feedAll(stt, samplesToCompare);
         stt.flush();
+        compareButton.disabled = false;
         statusElement.textContent = "transcribed " + file.name;
+    };
+
+    function feedAll(target, samples) {
+        for (let offset = 0; offset + AUDIO_BLOCK_FRAMES <= samples.length; offset += AUDIO_BLOCK_FRAMES) {
+            target.feed(samples.subarray(offset, offset + AUDIO_BLOCK_FRAMES));
+        }
+    }
+
+    // Everything the comparison reports is measured here rather than guessed at
+    // from the model's size: how long the model took to become usable, how long
+    // after speech started the first text appeared, and how much of a core the
+    // decode ate. The last one is the number that decides whether it can run
+    // during a call, where video encoding wants the same core.
+    function measure(name, samples) {
+        return new Promise(function (resolve) {
+            const loadStarted = performance.now();
+            let loaded = 0;
+            let firstPartial = null;
+            let feedStarted = 0;
+            let text = "";
+
+            const candidate = createSpeechToText({
+                model: name,
+                onReady: function () {
+                    loaded = performance.now() - loadStarted;
+                    feedStarted = performance.now();
+                    feedAll(candidate, samples);
+                    candidate.flush();
+                },
+                onPartial: function (partial) {
+                    if (partial && firstPartial === null) firstPartial = performance.now() - feedStarted;
+                },
+                onFinal: function (final) {
+                    if (firstPartial === null) firstPartial = performance.now() - feedStarted;
+                    text += (text ? " " : "") + final;
+                    const wall = performance.now() - feedStarted;
+                    candidate.stop();
+                    resolve({
+                        name: name,
+                        loaded: loaded,
+                        firstPartial: firstPartial,
+                        realTimeFactor: wall / 1000 / (samples.length / AUDIO_SAMPLE_RATE),
+                        text: text,
+                    });
+                },
+                onError: function (message) {
+                    candidate.stop();
+                    resolve({ name: name, error: message });
+                },
+            });
+        });
+    }
+
+    function row(cells, tag) {
+        const tr = document.createElement("tr");
+        cells.forEach(function (cell) {
+            const td = document.createElement(tag);
+            if (typeof cell === "object") {
+                td.textContent = cell.text;
+                td.className = "number";
+            } else {
+                td.textContent = cell;
+            }
+            tr.appendChild(td);
+        });
+        comparison.appendChild(tr);
+    }
+
+    compareButton.onclick = async function () {
+        compareButton.disabled = true;
+        comparison.textContent = "";
+        row(["Model", "Download", "Load", "First text", "Speed", "Transcript"], "th");
+
+        if (stt) stt.stop();
+        for (const name of Object.keys(MODELS)) {
+            statusElement.textContent = "measuring " + MODELS[name].label + "…";
+            const result = await measure(name, samplesToCompare);
+            if (result.error) {
+                row([MODELS[name].label, "", "", "", "", result.error], "td");
+            } else {
+                row([
+                    MODELS[name].label,
+                    { text: MODELS[name].download + "MB" },
+                    { text: Math.round(result.loaded) + "ms" },
+                    { text: Math.round(result.firstPartial) + "ms" },
+                    { text: result.realTimeFactor.toFixed(2) + "x" },
+                    result.text,
+                ], "td");
+            }
+        }
+
+        statusElement.textContent = "comparison done";
+        document.body.dataset.sttCompared = "true";
+        loadModel(modelSelect.value);
     };
 </script>
 </body>

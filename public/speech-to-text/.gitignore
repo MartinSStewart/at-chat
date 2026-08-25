@@ -1,5 +1,3 @@
-# Fetched by scripts/fetch-speech-to-text-model.sh. The model alone is 141MB.
-sherpa-ncnn.js
-sherpa-ncnn-wasm-main.js
-sherpa-ncnn-wasm-main.wasm
-sherpa-ncnn-wasm-main.data
+# Built by scripts/fetch-speech-to-text-models.py. The smallest of these is
+# still 45MB, so none of it belongs in git.
+models/
