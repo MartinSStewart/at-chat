@@ -7324,10 +7324,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                 allUsers
             , Ui.row
                 []
-                [ User.toString message2.createdBy allUsers
-                    ++ " "
-                    |> Ui.text
-                    |> Ui.el [ Ui.Font.bold ]
+                [ User.toStringView message2.createdBy allUsers
                 , messageTimestamp
                     drawingColor
                     message2.timestampDrawings

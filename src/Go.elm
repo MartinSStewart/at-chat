@@ -1510,7 +1510,7 @@ setupView playingAgainstSelf windowSize model =
             , setupSection
                 isMobile
                 (Ui.text "Handicap")
-                (Just " (Extra black starting stones)")
+                (Just " (extra black starting stones)")
                 (numberInput
                     { htmlId = "go_handicapInput"
                     , width = 60

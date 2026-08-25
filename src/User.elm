@@ -49,6 +49,7 @@ module User exposing
     , smallProfileImageRounding
     , toString
     , toStringAlt
+    , toStringView
     , userColor
     )
 
@@ -919,6 +920,18 @@ toString userId allUsers2 =
 
         Nothing ->
             "<missing>"
+
+
+toStringView : userId -> SeqDict userId { a | name : PersonName, color : UserColor } -> Ui.Element msg
+toStringView userId allUsers2 =
+    case SeqDict.get userId allUsers2 of
+        Just user ->
+            PersonName.toString user.name
+                |> Ui.text
+                |> Ui.el [ Ui.Font.bold, Ui.Font.color (UserColor.toColor user.color) ]
+
+        Nothing ->
+            Ui.text "<missing>"
 
 
 toStringAlt : Id UserId -> LocalUser -> String
