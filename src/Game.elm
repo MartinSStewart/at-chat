@@ -56,12 +56,13 @@ import List.Nonempty exposing (Nonempty)
 import Message exposing (GameType(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import Ports exposing (StartupData)
 import RichText
 import Scroll
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SheepGame
-import Touch exposing (Touch)
+import Touch exposing (Drag(..), Touch)
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Lazy
@@ -1122,7 +1123,8 @@ view :
     Time.Posix
     -> Coord CssPixels
     -> Bool
-    -> Maybe (NonemptyDict Int Touch)
+    -> Drag
+    -> StartupData
     -> Maybe MyUi.LastCopy
     -> LocalUser
     -> SheepGame.LoggedIn a
@@ -1131,7 +1133,7 @@ view :
     -> SeqDict (Id ChannelMessageId) MatchData
     -> Model
     -> Element Msg
-view currentTime windowSize showMemberTab maybeDragging lastCopied localUser loggedIn guildOrDmId maybeMatchId matches model =
+view currentTime windowSize showMemberTab drag startupData lastCopied localUser loggedIn guildOrDmId maybeMatchId matches model =
     let
         isMobile : Bool
         isMobile =
@@ -1146,7 +1148,7 @@ view currentTime windowSize showMemberTab maybeDragging lastCopied localUser log
             case ( SeqDict.get matchId matches, SeqDict.get matchId model.startedGames ) of
                 ( Just (MatchNotLoaded _), _ ) ->
                     Ui.el
-                        [ Ui.centerX, Ui.centerY, Ui.Font.bold, Ui.Font.size 20 ]
+                        [ Ui.centerX, Ui.centerY, Ui.Font.bold, Ui.Font.size 20, Ui.background MyUi.background1 ]
                         (Ui.text "Loading match")
 
                 ( Just (MatchData match), Just game ) ->
@@ -1184,7 +1186,16 @@ view currentTime windowSize showMemberTab maybeDragging lastCopied localUser log
                                         currentTime
                                         windowSize
                                         showMemberTab
-                                        maybeDragging
+                                        (case drag of
+                                            NoDrag ->
+                                                Nothing
+
+                                            DragStart _ dragging ->
+                                                Just (Touch.removeSafeAreaTopInset startupData.safeAreaInsetTop dragging)
+
+                                            Dragging dragging ->
+                                                Just (Touch.removeSafeAreaTopInset startupData.safeAreaInsetTop dragging.touches)
+                                        )
                                         isPersonalDm
                                         localUser
                                         setup
@@ -1199,7 +1210,16 @@ view currentTime windowSize showMemberTab maybeDragging lastCopied localUser log
                         FrontendGameData_SheepGame setup _ cache ->
                             case game of
                                 SheepGame_Game game2 ->
-                                    SheepGame.gameView currentTime windowSize showMemberTab localUser loggedIn setup cache game2
+                                    SheepGame.gameView
+                                        currentTime
+                                        windowSize
+                                        showMemberTab
+                                        localUser
+                                        drag
+                                        loggedIn
+                                        setup
+                                        cache
+                                        game2
                                         |> Ui.map SheepGameMsg
 
                                 _ ->

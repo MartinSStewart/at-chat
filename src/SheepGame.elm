@@ -89,6 +89,7 @@ import SeqDictHelper
 import SeqSet
 import Sticker
 import String.Nonempty
+import Touch exposing (Drag(..), Touch)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -1556,7 +1557,7 @@ setupView windowSize localUser loggedIn users model =
     Ui.column
         [ Ui.spacing 16
         , Ui.background MyUi.tabBackground
-        , Ui.heightMax (tabBodyHeight windowSize)
+        , Ui.heightMax (tabBodyHeight False windowSize)
         , Ui.scrollable
         , Ui.heightMin 0
         , Ui.paddingXY 0 16
@@ -1754,9 +1755,13 @@ newQuestionRevealedView isMobile =
         (Ui.text "New question revealed!")
 
 
-tabBodyHeight : Coord units -> Int
-tabBodyHeight windowSize =
-    round (toFloat (Coord.yRaw windowSize) * 0.8) - MyUi.channelHeaderHeight
+tabBodyHeight : Bool -> Coord CssPixels -> Int
+tabBodyHeight isAnsweringQuestions windowSize =
+    if isAnsweringQuestions && MyUi.isMobileAlt windowSize then
+        Coord.yRaw windowSize - MyUi.channelHeaderHeight
+
+    else
+        round (toFloat (Coord.yRaw windowSize) * 0.7) - MyUi.channelHeaderHeight
 
 
 paddingX : Bool -> Int
@@ -1773,12 +1778,13 @@ gameView :
     -> Coord CssPixels
     -> Bool
     -> LocalUser
+    -> Drag
     -> LoggedIn a
     -> ValidatedSetup
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView time windowSize showMemberTab localUser loggedIn setup shared model =
+gameView time windowSize showMemberTab localUser drag loggedIn setup shared model =
     let
         isMobile : Bool
         isMobile =
@@ -1792,35 +1798,37 @@ gameView time windowSize showMemberTab localUser loggedIn setup shared model =
             MyUi.conversationWidthIgnoreScrollbar windowSize showMemberTab - paddingX isMobile * 2 |> min maxWidth
     in
     Ui.el
-        [ Ui.background MyUi.background1
-        , Ui.scrollable
-        , Ui.height (Ui.px (tabBodyHeight windowSize))
-        , Ui.id (Dom.idToString gameViewId)
-        , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledResults model.scrollPosition)
+        [ Ui.height (Ui.px (tabBodyHeight (shared.phase == Answering) windowSize))
+        , if model.newQuestionRevealed then
+            Ui.inFront (newQuestionRevealedView isMobile)
+
+          else
+            Ui.noAttr
         ]
-        (case shared.phase of
-            Answering ->
-                answeringView time contentWidth localUser loggedIn setup shared model
-                    |> Ui.column [ Ui.paddingXY (paddingX isMobile) 16, Ui.centerX, Ui.widthMax maxWidth, Ui.spacing 16 ]
-
-            Grouping ->
-                groupingView time contentWidth localUser loggedIn setup shared model
-                    |> Ui.column [ Ui.paddingXY (paddingX isMobile) 16, Ui.centerX, Ui.widthMax maxWidth, Ui.spacing 16 ]
-
-            Revealing ->
-                revealingView isMobile time contentWidth localUser setup shared model
-                    |> Ui.column [ Ui.paddingXY 0 16, Ui.centerX, Ui.widthMax maxWidth, Ui.spacing 16 ]
-        )
-        -- The indicator hangs off a wrapper rather than the tab body itself, so that it stays
-        -- put at the bottom instead of scrolling away with the questions.
-        |> Ui.el
-            [ Ui.height (Ui.px (tabBodyHeight windowSize))
-            , if model.newQuestionRevealed then
-                Ui.inFront (newQuestionRevealedView isMobile)
-
-              else
-                Ui.noAttr
+        (Ui.el
+            [ Ui.background MyUi.background1
+            , MyUi.scrollable (MyUi.canScroll (MyUi.isMobileAlt windowSize) drag)
+            , Ui.height (Ui.px (tabBodyHeight (shared.phase == Answering) windowSize))
+            , Ui.id (Dom.idToString gameViewId)
+            , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledResults model.scrollPosition)
             ]
+            (case shared.phase of
+                Answering ->
+                    Ui.column
+                        [ Ui.paddingXY (paddingX isMobile) 16, Ui.centerX, Ui.widthMax maxWidth, Ui.spacing 16 ]
+                        (answeringView time contentWidth localUser loggedIn setup shared model)
+
+                Grouping ->
+                    Ui.column
+                        [ Ui.paddingXY (paddingX isMobile) 16, Ui.centerX, Ui.widthMax maxWidth, Ui.spacing 16 ]
+                        (groupingView time contentWidth localUser loggedIn setup shared model)
+
+                Revealing ->
+                    Ui.column
+                        [ Ui.paddingXY 0 16, Ui.centerX, Ui.widthMax maxWidth, Ui.spacing 16 ]
+                        (revealingView isMobile time contentWidth localUser setup shared model)
+            )
+        )
 
 
 {-| Questions and answers are drawn the same way a message is, so that a file attached to a

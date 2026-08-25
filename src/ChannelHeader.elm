@@ -33,8 +33,8 @@ import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), Sho
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import Thread
-import Touch
-import Types exposing (Drag(..), FrontendMsg_(..), LoadedFrontend, LoggedIn2)
+import Touch exposing (Drag(..))
+import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -262,6 +262,8 @@ channelHeader isMobile content tabContent =
                     (Ui.el
                         [ Ui.move { x = 0, y = MyUi.channelHeaderHeight + 1, z = 0 }
                         , tabBodyZIndex
+                        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 4 }
+                        , Ui.borderColor MyUi.background1
                         ]
                         tabContent2
                     )
@@ -833,20 +835,8 @@ gameTabBody guildOrDmId maybeMatchId local loggedIn matchData model =
             ( HideChannelSettings, _ ) ->
                 False
         )
-        -- Touches are reported from the viewport top (behind the safe-area
-        -- inset); shift them to match the board laid out below the inset.
-        ((case model.drag of
-            NoDrag ->
-                Nothing
-
-            DragStart _ dragging ->
-                Just dragging
-
-            Dragging dragging ->
-                Just dragging.touches
-         )
-            |> Maybe.map (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop)
-        )
+        model.drag
+        model.startupData
         model.lastCopied
         local.localUser
         loggedIn

@@ -1,6 +1,5 @@
 module GuildColumn exposing
-    ( canScroll
-    , channelOrThreadHasNotifications
+    ( channelOrThreadHasNotifications
     , discordDmCurrentUserId
     , discordDmHasNotifications
     , discordGuildCurrentUserId
@@ -32,7 +31,7 @@ import OneOrGreater exposing (OneOrGreater)
 import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet
-import Types exposing (Drag(..), FrontendMsg_(..), LoadedFrontend)
+import Types exposing (FrontendMsg_(..), LoadedFrontend)
 import Ui exposing (Element)
 import Ui.Gradient
 import Ui.Lazy
@@ -40,26 +39,10 @@ import User exposing (FrontendCurrentUser, LocalUser)
 import UserColor
 
 
-canScroll : Bool -> Drag -> Bool
-canScroll isMobile drag =
-    if isMobile then
-        case drag of
-            Dragging dragging ->
-                not dragging.horizontalStart
-
-            _ ->
-                True
-
-    else
-        -- On desktop there's no horizontal drag gesture, so keep scrolling
-        -- enabled to stop scrollbars flickering while other drags happen.
-        True
-
-
 guildColumnLazy : Bool -> LoadedFrontend -> LocalState -> Element FrontendMsg_
 guildColumnLazy isMobile model local =
     Ui.Lazy.lazy6
-        (case ( canScroll isMobile model.drag, isMobile ) of
+        (case ( MyUi.canScroll isMobile model.drag, isMobile ) of
             ( True, True ) ->
                 guildColumnCanScrollMobile
 

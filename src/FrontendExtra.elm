@@ -104,9 +104,9 @@ import SheepGame
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import Thread exposing (FrontendGenericThread)
-import Touch
+import Touch exposing (Drag(..), DragTarget(..))
 import TwoFactorAuthentication
-import Types exposing (Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
+import Types exposing (EmojiSelector(..), FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -505,7 +505,7 @@ layout model attributes child =
                 else
                     [ Html.Events.on "pointerdown" (Touch.decoderPointerEvent TouchStart) |> Ui.htmlAttribute
                     , case model.drag of
-                        Types.NoDrag ->
+                        NoDrag ->
                             Ui.noAttr
 
                         _ ->

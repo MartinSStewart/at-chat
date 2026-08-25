@@ -5,8 +5,6 @@ module Types exposing
     , BackendMsg(..)
     , CountToFrontendState
     , DiscordAttachmentData
-    , Drag(..)
-    , DragTarget(..)
     , EditChannelForm
     , EditGuildForm
     , EditMessage
@@ -122,7 +120,7 @@ import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import ToBackendLog exposing (ToBackendLog, ToBackendLogData)
-import Touch exposing (Touch)
+import Touch exposing (Drag, Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
 import Untrusted exposing (Untrusted)
@@ -207,18 +205,6 @@ type PublicGoMatch
     | PublicGoMatch_Loading
     | PublicGoMatch_Loaded Go.PublicGoMatchData Go.GameModel
     | PublicGoMatch_Missing
-
-
-type Drag
-    = NoDrag
-    | DragStart Time.Posix (NonemptyDict Int Touch)
-    | Dragging { horizontalStart : Bool, touches : NonemptyDict Int Touch, target : DragTarget }
-
-
-type DragTarget
-    = Drag_Channel
-    | Drag_CallThumbnail
-    | Drag_Game
 
 
 type LoginStatus

@@ -13,6 +13,7 @@ module MyUi exposing
     , bounceScroll
     , buttonBackground
     , buttonBorder
+    , canScroll
     , channelAndGuildColumnWidth
     , channelHeaderHeight
     , colorToHex
@@ -123,6 +124,7 @@ import SeqDict exposing (SeqDict)
 import Svg
 import Svg.Attributes
 import Time exposing (Month(..))
+import Touch exposing (Drag(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -1490,6 +1492,22 @@ scrollable canScroll2 =
 
     else
         Ui.clip
+
+
+canScroll : Bool -> Drag -> Bool
+canScroll isMobile2 drag =
+    if isMobile2 then
+        case drag of
+            Dragging dragging ->
+                not dragging.horizontalStart
+
+            _ ->
+                True
+
+    else
+        -- On desktop there's no horizontal drag gesture, so keep scrolling
+        -- enabled to stop scrollbars flickering while other drags happen.
+        True
 
 
 isMobileAlt : Coord CssPixels -> Bool
