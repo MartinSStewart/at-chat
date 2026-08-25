@@ -1802,7 +1802,7 @@ gameView time windowSize showMemberTab localUser drag loggedIn setup shared mode
     in
     Ui.el
         [ Ui.height (Ui.px (tabBodyHeight (shared.phase == Answering) windowSize))
-        , if model.newQuestionRevealed then
+        , if model.newQuestionRevealed && not isHost2 then
             Ui.inFront (newQuestionRevealedView isMobile)
 
           else
@@ -2592,14 +2592,22 @@ revealingView isMobile time contentWidth localUser setup shared model =
     in
     [ Ui.el [ Ui.Font.bold, Ui.Font.size 20, padding ] (Ui.text "Sheep game results")
     , if shared.questionsRevealed == 0 then
-        Ui.el
+        Ui.column
             [ Ui.Font.size 20
             , Ui.Font.center
             , Ui.padding 16
             , MyUi.fadeIn
             , padding
+            , Ui.spacing 16
             ]
-            (Ui.text "Stay tuned. The results will be revealed shortly.")
+            [ Ui.image
+                [ Ui.widthMax 502 ]
+                { source = "/sheep-game.webp"
+                , description = "A sheep with a laptop and wearing headphones"
+                , onLoad = Nothing
+                }
+            , Ui.text "Stay tuned. The results will be revealed shortly."
+            ]
 
       else
         Ui.column
@@ -2665,16 +2673,32 @@ resultsQuestionView :
     -> QuestionResult
     -> Element GameMsg
 resultsQuestionView isMobile time contentWidth localUser setup hoveredResult maxPoints index result =
+    let
+        numberWidth : number
+        numberWidth =
+            if index < 10 then
+                20
+
+            else
+                30
+
+        numberSpacing : number
+        numberSpacing =
+            6
+    in
     Ui.column
         [ Ui.spacing 8, Ui.paddingXY 0 16, MyUi.fadeIn ]
         [ Ui.row
-            [ Ui.Font.size 20, Ui.spacing 6, Ui.paddingXY (paddingX isMobile) 0 ]
+            [ Ui.Font.size 20, Ui.spacing numberSpacing, Ui.paddingXY (paddingX isMobile) 0 ]
             [ Ui.el
-                [ Ui.width Ui.shrink, Ui.alignTop, Ui.Font.bold ]
+                [ Ui.width (Ui.px numberWidth)
+                , Ui.alignTop
+                , Ui.Font.bold
+                ]
                 (Ui.text (String.fromInt (index + 1) ++ ". "))
             , contentView
                 time
-                contentWidth
+                (contentWidth - (numberWidth + numberSpacing))
                 localUser
                 (revealedQuestionId index)
                 result.question.attachedFiles
@@ -2745,10 +2769,12 @@ answerGroupsView isMobile time localUser contentWidth hoveredResult questionId a
                         Ui.row
                             [ Ui.spacing 8, Ui.widthMin 200 ]
                             [ Ui.el
-                                [ Ui.width Ui.shrink
+                                [ Ui.widthMax (toFloat contentWidth * 0.5 |> round)
+                                , Ui.width Ui.shrink
                                 , Ui.Font.bold
                                 , Ui.Font.color (userColor userId localUser)
                                 , Ui.alignTop
+                                , Ui.clipWithEllipsis
                                 ]
                                 (Ui.text (User.toStringAlt userId localUser))
                             , contentView
