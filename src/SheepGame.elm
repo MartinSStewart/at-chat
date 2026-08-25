@@ -1815,7 +1815,20 @@ gameView time windowSize showMemberTab localUser drag loggedIn setup shared mode
             (case shared.phase of
                 Answering ->
                     Ui.column
-                        [ Ui.paddingXY (paddingX isMobile) 16, Ui.centerX, Ui.widthMax maxWidth, Ui.spacing 16 ]
+                        [ MyUi.htmlStyle
+                            "padding"
+                            ("16px "
+                                ++ String.fromInt (paddingX isMobile)
+                                ++ "px calc(16px + "
+                                ++ MyUi.insetBottom
+                                ++ ") "
+                                ++ String.fromInt (paddingX isMobile)
+                                ++ "px"
+                            )
+                        , Ui.centerX
+                        , Ui.widthMax maxWidth
+                        , Ui.spacing 16
+                        ]
                         (answeringView time contentWidth localUser loggedIn setup shared model)
 
                 Grouping ->
