@@ -390,7 +390,7 @@ emptyInput =
 
 maxQuestions : Int
 maxQuestions =
-    30
+    50
 
 
 maxQuestionLength : Int
@@ -400,11 +400,12 @@ maxQuestionLength =
 
 maxAnswerLength : Int
 maxAnswerLength =
-    100
-
-
-maxNoteLength =
     200
+
+
+maxNoteLength : Int
+maxNoteLength =
+    400
 
 
 {-| A question or an answer, ready to go to everyone else, or why it isn't. Blank text is
@@ -1764,7 +1765,9 @@ tabBodyHeight isAnsweringQuestions windowSize =
         Coord.yRaw windowSize - MyUi.channelHeaderHeight
 
     else
-        round (toFloat (Coord.yRaw windowSize) * 0.7) - MyUi.channelHeaderHeight
+        min
+            (Coord.yRaw windowSize - (MyUi.channelHeaderHeight + 150))
+            (round (toFloat (Coord.yRaw windowSize) * 0.8) - MyUi.channelHeaderHeight)
 
 
 paddingX : Bool -> Int
@@ -2593,7 +2596,7 @@ revealingView isMobile time contentWidth localUser setup shared model =
         padding =
             Ui.paddingXY (paddingX isMobile) 0
     in
-    [ Ui.el [ Ui.Font.bold, Ui.Font.size 20, padding ] (Ui.text "Sheep game results")
+    [ Ui.el [ Ui.Font.bold, Ui.Font.size 32, padding, Ui.Font.color MyUi.font2 ] (Ui.text "Sheep game results")
     , if shared.questionsRevealed == 0 then
         Ui.column
             [ Ui.Font.size 20
@@ -2614,7 +2617,7 @@ revealingView isMobile time contentWidth localUser setup shared model =
 
       else
         Ui.column
-            [ Ui.spacing 16 ]
+            [ Ui.spacing 32 ]
             (Ui.column
                 [ Ui.spacing 8, Ui.id (Dom.idToString scoringId), MyUi.fadeIn, padding ]
                 [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Scoring")
@@ -2679,7 +2682,7 @@ resultsQuestionView isMobile time contentWidth localUser setup hoveredResult max
     let
         numberWidth : number
         numberWidth =
-            if index < 10 then
+            if index < 9 then
                 20
 
             else
