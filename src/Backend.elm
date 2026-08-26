@@ -1235,6 +1235,12 @@ update msg model =
                                                                         (\a -> { a | messagesSent = a.messagesSent + 1 })
                                                                         members
 
+                                                                EncryptedUserTextMessage message2 ->
+                                                                    NonemptyDict.updateIfExists
+                                                                        message2.createdBy
+                                                                        (\a -> { a | messagesSent = a.messagesSent + 1 })
+                                                                        members
+
                                                                 UserJoinedMessage _ _ _ _ ->
                                                                     members
 
@@ -2463,6 +2469,9 @@ discordStartThread timezone discordUser channel channelId threadId messageId mod
                     case message of
                         UserTextMessage a ->
                             RichText.toStringWithGetter timezone DiscordUserData.username True model.discordUsers a.content
+
+                        EncryptedUserTextMessage a ->
+                            ""
 
                         UserJoinedMessage _ userId _ _ ->
                             case SeqDict.get userId model.discordUsers of

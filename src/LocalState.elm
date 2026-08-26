@@ -464,6 +464,9 @@ messageToString timezone allUsers3 message =
         UserTextMessage a ->
             RichText.toString timezone False allUsers3 a.content
 
+        EncryptedUserTextMessage _ ->
+            "Failed to decrypt message"
+
         UserJoinedMessage _ userId _ _ ->
             User.toString userId allUsers3
                 ++ " joined!"
@@ -1100,8 +1103,11 @@ createMessageBackend message channel =
         | messages = IdArray.push message channel.messages
         , lastTypedAt =
             case message of
-                UserTextMessage { createdBy } ->
-                    SeqDict.remove createdBy channel.lastTypedAt
+                UserTextMessage data ->
+                    SeqDict.remove data.createdBy channel.lastTypedAt
+
+                EncryptedUserTextMessage data ->
+                    SeqDict.remove data.createdBy channel.lastTypedAt
 
                 UserJoinedMessage _ _ _ _ ->
                     channel.lastTypedAt
@@ -1172,6 +1178,18 @@ createDiscordDmChannelMessageBackend messageId message channel =
                     )
                         |> Ok
 
+                EncryptedUserTextMessage message2 ->
+                    ( messageId2
+                    , { channel2
+                        | members =
+                            NonemptyDict.updateIfExists
+                                message2.createdBy
+                                (\a -> { a | messagesSent = a.messagesSent + 1 })
+                                channel2.members
+                      }
+                    )
+                        |> Ok
+
                 UserJoinedMessage _ _ _ _ ->
                     Ok ( messageId2, channel2 )
 
@@ -1217,8 +1235,11 @@ createDiscordMessageBackend messageId message channel =
             | messages = IdArray.push message channel.messages
             , lastTypedAt =
                 case message of
-                    UserTextMessage { createdBy } ->
-                        SeqDict.remove createdBy channel.lastTypedAt
+                    UserTextMessage data ->
+                        SeqDict.remove data.createdBy channel.lastTypedAt
+
+                    EncryptedUserTextMessage data ->
+                        SeqDict.remove data.createdBy channel.lastTypedAt
 
                     UserJoinedMessage _ _ _ _ ->
                         channel.lastTypedAt
@@ -1307,8 +1328,11 @@ createMessageFrontend message channel =
         , visibleMessages = VisibleMessages.increment (MessageArray.length channel.messages) channel.visibleMessages
         , lastTypedAt =
             case message of
-                UserTextMessage { createdBy } ->
-                    SeqDict.remove createdBy channel.lastTypedAt
+                UserTextMessage data ->
+                    SeqDict.remove data.createdBy channel.lastTypedAt
+
+                EncryptedUserTextMessage data ->
+                    SeqDict.remove data.createdBy channel.lastTypedAt
 
                 UserJoinedMessage _ _ _ _ ->
                     channel.lastTypedAt
@@ -2736,6 +2760,9 @@ usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channe
                                 Just (UserTextMessage data) ->
                                     [ data.createdBy ]
 
+                                Just (EncryptedUserTextMessage data) ->
+                                    [ data.createdBy ]
+
                                 Just (UserJoinedMessage _ userJoined _ _) ->
                                     [ userJoined ]
 
@@ -2794,6 +2821,9 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
                                 UserTextMessage data ->
                                     [ data.createdBy ]
 
+                                EncryptedUserTextMessage data ->
+                                    [ data.createdBy ]
+
                                 UserJoinedMessage _ userJoined _ _ ->
                                     [ userJoined ]
 
@@ -2826,6 +2856,9 @@ repliedToUserId maybeRepliedTo channel =
                         UserTextMessage repliedToData ->
                             Just repliedToData.createdBy
 
+                        EncryptedUserTextMessage repliedToData ->
+                            Just repliedToData.createdBy
+
                         UserJoinedMessage _ joinedUser _ _ ->
                             Just joinedUser
 
@@ -2853,6 +2886,9 @@ repliedToUserIdFrontend maybeRepliedTo channel =
                 Just message ->
                     case message of
                         UserTextMessage repliedToData ->
+                            Just repliedToData.createdBy
+
+                        EncryptedUserTextMessage repliedToData ->
                             Just repliedToData.createdBy
 
                         UserJoinedMessage _ joinedUser _ _ ->
@@ -3321,6 +3357,16 @@ toMessageNoReply message =
             { createdAt = data.createdAt
             , createdBy = data.createdBy
             , content = data.content
+            , reactions = data.reactions
+            , editedAt = data.editedAt
+            , attachedFiles = data.attachedFiles
+            }
+                |> UserTextMessage_NoReply
+
+        EncryptedUserTextMessage data ->
+            { createdAt = data.createdAt
+            , createdBy = data.createdBy
+            , content = RichText.failedToDecryptMessage
             , reactions = data.reactions
             , editedAt = data.editedAt
             , attachedFiles = data.attachedFiles

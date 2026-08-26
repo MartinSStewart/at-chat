@@ -24,12 +24,14 @@ module RichText exposing
     , emojisAndCustomEmojis
     , emptyPlaceholder
     , escapedCharToString
+    , failedToDecryptMessage
     , fromDiscord
     , fromNonemptyString
     , hasLargeContent
     , hyperlinks
     , maxLength
     , mentionsUser
+    , messageIsEncrypted
     , preview
     , removeAttachedFile
     , spoilerAttachedFile
@@ -3308,6 +3310,16 @@ urlToDomain data =
 domainToString : Domain -> String
 domainToString (Domain domain) =
     domain
+
+
+failedToDecryptMessage : Nonempty (RichText userId)
+failedToDecryptMessage =
+    Nonempty (Italic (Nonempty (NormalText 'F' "ailed to decrypt message") [])) []
+
+
+messageIsEncrypted : Nonempty (RichText userId)
+messageIsEncrypted =
+    Nonempty (Italic (Nonempty (NormalText 'M' "essage is encrypted") [])) []
 
 
 type ShowLargeContent

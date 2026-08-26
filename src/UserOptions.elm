@@ -897,6 +897,8 @@ colorPreview time isMobile local allUsers color =
         (\_ -> color)
         IsNotHovered
         (Id.fromInt 0)
+        message.content
+        message.embeds
         { message | userIconDrawings = exampleDrawing local.localUser.session.userId }
         |> Ui.map (\_ -> FrontendNoOp)
         |> Ui.el [ Ui.background MyUi.background3, Ui.widthMax 400, Ui.paddingXY 8 4 ]

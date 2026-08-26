@@ -65,7 +65,7 @@ import NonemptyDict
 import PersonName
 import Ports exposing (SubscribeData)
 import Postmark
-import RichText
+import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
@@ -679,6 +679,9 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                     UserTextMessage message2 ->
                                         RichText.toStringWithGetter Time.utc DiscordUserData.username True model.discordUsers message2.content
 
+                                    EncryptedUserTextMessage _ ->
+                                        "Message is encrypted"
+
                                     UserJoinedMessage _ _ _ _ ->
                                         "New user joined!"
 
@@ -1043,7 +1046,15 @@ messageNotificationEmail time email senderName userToString navigateTo plainText
             helper
                 (notificationEmailSubject senderName)
                 (Postmark.BodyBoth
-                    (notificationEmailContent userToString senderName link data)
+                    (notificationEmailContent userToString senderName link data.content data.attachedFiles)
+                    (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ link ++ " to reply.")
+                )
+
+        EncryptedUserTextMessage _ ->
+            helper
+                (notificationEmailSubject senderName)
+                (Postmark.BodyBoth
+                    (notificationEmailContent userToString senderName link RichText.messageIsEncrypted SeqDict.empty)
                     (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ link ++ " to reply.")
                 )
 
@@ -1076,8 +1087,14 @@ at-chat: a dark message card with the sender's name in bold above the message
 text. Email clients only support a small subset of CSS, so this sticks to inline
 styles and basic block elements.
 -}
-notificationEmailContent : (userId -> String) -> String -> String -> UserTextMessageData messageId userId -> Email.Html.Html
-notificationEmailContent userToString senderName link message =
+notificationEmailContent :
+    (userId -> String)
+    -> String
+    -> String
+    -> Nonempty (RichText userId)
+    -> SeqDict (Id FileId) FileData
+    -> Email.Html.Html
+notificationEmailContent userToString senderName link content attachedFiles =
     Email.Html.div
         [ Email.Html.Attributes.backgroundColor (MyUi.colorToStyle MyUi.background3)
         , Email.Html.Attributes.padding "8px"
@@ -1096,7 +1113,7 @@ notificationEmailContent userToString senderName link message =
             , Email.Html.Attributes.lineHeight "1.4"
             , Email.Html.Attributes.style "white-space" "pre-wrap"
             ]
-            (RichText.emailView { userToString = userToString, attachedFiles = message.attachedFiles } message.content)
+            (RichText.emailView { userToString = userToString, attachedFiles = attachedFiles } content)
         , Email.Html.div
             [ Email.Html.Attributes.paddingTop "20px" ]
             [ Email.Html.b

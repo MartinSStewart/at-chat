@@ -58,7 +58,7 @@ import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji)
 import FileName
-import FileStatus exposing (FileData, FileId, FileStatus(..))
+import FileStatus exposing (FileData, FileId, FileStatus(..), IsEncrypted(..))
 import Game
 import Go
 import Html exposing (Html)
@@ -812,6 +812,7 @@ gotFiles guildOrDmId threadRoute files model =
                                             (File.name file2 |> FileName.fromString)
                                             { sent = 0, size = File.size file2 }
                                             (File.mime file2 |> FileStatus.contentType)
+                                            IsNotEncrypted
                                         )
                                         dict3
                                     )
@@ -848,6 +849,7 @@ gotFiles guildOrDmId threadRoute files model =
                                         (File.name file2 |> FileName.fromString)
                                         { sent = 0, size = File.size file2 }
                                         (File.mime file2 |> FileStatus.contentType)
+                                        IsNotEncrypted
                                     )
                                 )
                                 files
@@ -985,6 +987,7 @@ pastedTextFileStatus pastedText =
         (FileName.fromString "message.txt")
         { sent = 0, size = Bytes.Encode.getStringWidth pastedText }
         (FileStatus.contentType "text/plain")
+        IsNotEncrypted
 
 
 editMessage_gotFiles :
@@ -1024,6 +1027,7 @@ editMessage_gotFiles guildOrDmId files model =
                                             (File.name file2 |> FileName.fromString)
                                             { sent = 0, size = File.size file2 }
                                             (File.mime file2 |> FileStatus.contentType)
+                                            IsNotEncrypted
                                         )
                                         dict3
                                     )

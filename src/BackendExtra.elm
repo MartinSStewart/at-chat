@@ -656,6 +656,9 @@ messageUserIds message =
         UserTextMessage data ->
             data.createdBy :: SeqSet.toList (RichText.mentionsUser data.content)
 
+        EncryptedUserTextMessage data ->
+            [ data.createdBy ]
+
         UserJoinedMessage _ userId _ _ ->
             [ userId ]
 

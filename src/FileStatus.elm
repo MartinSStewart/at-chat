@@ -9,6 +9,7 @@ module FileStatus exposing
     , FileMetadata(..)
     , FileStatus(..)
     , ImageMetadata
+    , IsEncrypted(..)
     , Location
     , Orientation(..)
     , UploadResponse
@@ -87,6 +88,7 @@ type alias FileData =
     , metadata : Maybe FileMetadata
     , contentType : ContentType
     , fileHash : FileHash
+    , isEncrypted : IsEncrypted
     }
 
 
@@ -105,9 +107,14 @@ type alias FileDataWithImage =
 
 
 type FileStatus
-    = FileUploading FileName { sent : Int, size : Int } ContentType
+    = FileUploading FileName { sent : Int, size : Int } ContentType IsEncrypted
     | FileUploaded FileData
-    | FileError FileName Int ContentType Http.Error
+    | FileError FileName Int ContentType Http.Error IsEncrypted
+
+
+type IsEncrypted
+    = IsEncrypted
+    | IsNotEncrypted
 
 
 {-| OpaqueVariants
@@ -930,7 +937,7 @@ videoHasMetadata metadata =
 addFileHash : Result Http.Error UploadResponse -> FileStatus -> FileStatus
 addFileHash result fileStatus =
     case fileStatus of
-        FileUploading fileName fileSize contentType2 ->
+        FileUploading fileName fileSize contentType2 isEncrypted ->
             case result of
                 Ok data ->
                     FileUploaded
@@ -939,15 +946,16 @@ addFileHash result fileStatus =
                         , metadata = uploadResponseMetadata data
                         , contentType = contentType2
                         , fileHash = data.fileHash
+                        , isEncrypted = isEncrypted
                         }
 
                 Err error ->
-                    FileError fileName fileSize.size contentType2 error
+                    FileError fileName fileSize.size contentType2 error isEncrypted
 
         FileUploaded _ ->
             fileStatus
 
-        FileError _ _ _ _ ->
+        FileError _ _ _ _ _ ->
             fileStatus
 
 
@@ -969,13 +977,13 @@ onlyUploadedFiles dict =
     SeqDict.filterMap
         (\_ status ->
             case status of
-                FileUploading _ _ _ ->
+                FileUploading _ _ _ _ ->
                     Nothing
 
                 FileUploaded fileData ->
                     Just fileData
 
-                FileError _ _ _ _ ->
+                FileError _ _ _ _ _ ->
                     Nothing
         )
         dict
@@ -987,13 +995,13 @@ hasUploadingFile dict =
         |> List.any
             (\( _, status ) ->
                 case status of
-                    FileUploading _ _ _ ->
+                    FileUploading _ _ _ _ ->
                         True
 
                     FileUploaded _ ->
                         False
 
-                    FileError _ _ _ _ ->
+                    FileError _ _ _ _ _ ->
                         False
             )
 

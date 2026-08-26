@@ -266,7 +266,7 @@ subscriptions _ model =
                                         NonemptyDict.foldl
                                             (\fileId fileStatus list2 ->
                                                 case fileStatus of
-                                                    FileUploading _ _ _ ->
+                                                    FileUploading _ _ _ _ ->
                                                         Http.track
                                                             (FileStatus.uploadTrackerId guildOrDmId fileId)
                                                             (FileUploadProgress guildOrDmId fileId)
@@ -275,7 +275,7 @@ subscriptions _ model =
                                                     FileUploaded _ ->
                                                         list2
 
-                                                    FileError _ _ _ _ ->
+                                                    FileError _ _ _ _ _ ->
                                                         list2
                                             )
                                             list
@@ -2420,7 +2420,7 @@ updateLoaded msg model =
                                     fileId
                                     (\fileStatus ->
                                         case fileStatus of
-                                            FileUploading fileName fileSize contentType ->
+                                            FileUploading fileName fileSize contentType isEncrypted ->
                                                 FileUploading
                                                     fileName
                                                     (case progress of
@@ -2431,11 +2431,12 @@ updateLoaded msg model =
                                                             { sent = received, size = fileSize.size }
                                                     )
                                                     contentType
+                                                    isEncrypted
 
                                             FileUploaded _ ->
                                                 fileStatus
 
-                                            FileError _ _ _ _ ->
+                                            FileError _ _ _ _ _ ->
                                                 fileStatus
                                     )
                                 )

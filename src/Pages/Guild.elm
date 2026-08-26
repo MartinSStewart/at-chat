@@ -22,6 +22,7 @@ module Pages.Guild exposing
     , userTextMessageContent
     )
 
+import Array exposing (Array)
 import AsciiArt exposing (AsciiArt)
 import Bitwise
 import Call
@@ -38,8 +39,9 @@ import Drawing exposing (Drawing)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (CachedEmojiData, EmojiConfig, EmojiOrCustomEmoji)
+import Embed exposing (Embed, EmbedData)
 import Env
-import FileStatus exposing (FileHash, FileId, FileStatus)
+import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
 import GuildColumn
 import GuildIcon exposing (ChannelNotificationType(..))
 import GuildName exposing (GuildName)
@@ -3572,21 +3574,32 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
         |> prependUnreadDivider lastViewedIndex channel.visibleMessages.oldest
 
 
+userTextMessageRepliedTo :
+    { a | repliedTo : Maybe (Id messageId) }
+    -> { b | messages : MessageArray messageId (Message messageId userId) }
+    -> Maybe ( Id messageId, Message messageId userId )
+userTextMessageRepliedTo data channel =
+    case data.repliedTo of
+        Just repliedToIndex ->
+            case MessageArray.get repliedToIndex channel.messages of
+                Just message2 ->
+                    Just ( repliedToIndex, message2 )
+
+                _ ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
 maybeRepliedTo : Message messageId userId -> { a | messages : MessageArray messageId (Message messageId userId) } -> Maybe ( Id messageId, Message messageId userId )
 maybeRepliedTo message channel =
     case message of
         UserTextMessage data ->
-            case data.repliedTo of
-                Just repliedToIndex ->
-                    case MessageArray.get repliedToIndex channel.messages of
-                        Just message2 ->
-                            Just ( repliedToIndex, message2 )
+            userTextMessageRepliedTo data channel
 
-                        _ ->
-                            Nothing
-
-                Nothing ->
-                    Nothing
+        EncryptedUserTextMessage data ->
+            userTextMessageRepliedTo data channel
 
         UserJoinedMessage _ _ _ _ ->
             Nothing
@@ -4758,6 +4771,9 @@ replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
                 Just message ->
                     case message of
                         UserTextMessage data ->
+                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just data.createdBy) allUsers
+
+                        EncryptedUserTextMessage data ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just data.createdBy) allUsers
 
                         UserJoinedMessage _ userId _ _ ->
@@ -6096,6 +6112,9 @@ messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessa
                         Ui.none
                 ]
 
+        EncryptedUserTextMessage _ ->
+            Ui.none
+
         UserJoinedMessage _ _ _ _ ->
             Ui.none
 
@@ -6228,6 +6247,9 @@ threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messa
                     Nothing ->
                         Ui.none
                 ]
+
+        EncryptedUserTextMessage _ ->
+            Ui.none
 
         UserJoinedMessage _ _ _ _ ->
             Ui.none
@@ -6519,6 +6541,44 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                     (User.userColor localUser)
                     isHovered
                     messageId
+                    data.content
+                    data.embeds
+                    data
+                )
+
+        EncryptedUserTextMessage data ->
+            messageContainer
+                containerWidth
+                isThreadStarter
+                localUser.timezone
+                time
+                localUser.user.availableCustomEmojis
+                localUser.customEmojis
+                localUser.emojiData
+                allUsers
+                highlight
+                messageId
+                (currentUserId == data.createdBy)
+                currentUserId
+                localUser.user
+                data.reactions
+                maybeThreadStarter
+                isHovered
+                (userTextMessageContent
+                    time
+                    (Dom.id "spoiler")
+                    containerWidth
+                    isBeingEdited
+                    isMobile
+                    maybeRepliedTo2
+                    localUser
+                    revealedSpoilers
+                    allUsers
+                    (User.userColor localUser)
+                    isHovered
+                    messageId
+                    RichText.failedToDecryptMessage
+                    Array.empty
                     data
                 )
 
@@ -6717,6 +6777,42 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                     allUsers
                     isHovered
                     messageId
+                    data.content
+                    data.embeds
+                    data
+                )
+
+        EncryptedUserTextMessage data ->
+            messageContainer
+                containerWidth
+                isThreadStarter
+                localUser.timezone
+                time
+                discordQuickReactionCustomEmojis
+                localUser.customEmojis
+                localUser.emojiData
+                allUsers
+                highlight
+                messageId
+                (currentUserId == data.createdBy)
+                currentUserId
+                localUser.user
+                data.reactions
+                maybeThreadStarter
+                isHovered
+                (discordUserTextMessageContent
+                    time
+                    (Dom.id "spoiler")
+                    containerWidth
+                    isMobile
+                    maybeRepliedTo2
+                    localUser
+                    revealedSpoilers
+                    allUsers
+                    isHovered
+                    messageId
+                    RichText.failedToDecryptMessage
+                    Array.empty
                     data
                 )
 
@@ -6912,6 +7008,40 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                     (User.userColor localUser)
                     isHovered
                     messageId
+                    message2.content
+                    message2.embeds
+                    message2
+                )
+
+        EncryptedUserTextMessage message2 ->
+            threadMessageContainer
+                containerWidth
+                highlight
+                messageId
+                (currentUserId == message2.createdBy)
+                currentUserId
+                localUser.user
+                message2.reactions
+                localUser.user.availableCustomEmojis
+                localUser.customEmojis
+                localUser.emojiData
+                allUsers
+                isHovered
+                (userTextMessageContent
+                    time
+                    (Dom.id "threadSpoiler")
+                    containerWidth
+                    isBeingEdited
+                    isMobile
+                    maybeRepliedTo2
+                    localUser
+                    revealedSpoilers
+                    allUsers
+                    (User.userColor localUser)
+                    isHovered
+                    messageId
+                    RichText.failedToDecryptMessage
+                    Array.empty
                     message2
                 )
 
@@ -7085,6 +7215,38 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                     allUsers
                     isHovered
                     messageId
+                    message2.content
+                    message2.embeds
+                    message2
+                )
+
+        EncryptedUserTextMessage message2 ->
+            threadMessageContainer
+                containerWidth
+                highlight
+                messageId
+                (currentUserId == message2.createdBy)
+                currentUserId
+                localUser.user
+                message2.reactions
+                discordQuickReactionCustomEmojis
+                localUser.customEmojis
+                localUser.emojiData
+                allUsers
+                isHovered
+                (discordUserTextMessageContent
+                    time
+                    (Dom.id "threadSpoiler")
+                    containerWidth
+                    isMobile
+                    maybeRepliedTo2
+                    localUser
+                    revealedSpoilers
+                    allUsers
+                    isHovered
+                    messageId
+                    RichText.failedToDecryptMessage
+                    Array.empty
                     message2
                 )
 
@@ -7276,9 +7438,23 @@ userTextMessageContent :
     -> (Id UserId -> UserColor)
     -> IsHovered
     -> Id messageId
-    -> UserTextMessageData messageId (Id UserId)
+    -> Nonempty (RichText (Id UserId))
+    -> Array Embed
+    ->
+        { a
+            | createdAt : Time.Posix
+            , createdBy : Id UserId
+            , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId))
+            , editedAt : Maybe Time.Posix
+            , repliedTo : Maybe (Id messageId)
+            , attachedFiles : SeqDict (Id FileId) FileData
+            , timestampDrawings : Drawing (Id UserId)
+            , userIconDrawings : Drawing (Id UserId)
+            , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing (Id UserId))
+            , embedDrawings : SeqDict Int (Drawing (Id UserId))
+        }
     -> Element MessageViewMsg
-userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId message2 =
+userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId content embeds message2 =
     Ui.row
         []
         [ User.profileImage (SeqDict.get message2.createdBy allUsers)
@@ -7379,8 +7555,8 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                             IsHoveredWhileSelectingAnchor ->
                                 False
                     }
-                    message2.embeds
-                    message2.content
+                    embeds
+                    content
                     ++ (if isBeingEdited then
                             [ Html.span
                                 [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
@@ -7420,9 +7596,23 @@ discordUserTextMessageContent :
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> IsHovered
     -> Id messageId
-    -> UserTextMessageData messageId (Discord.Id Discord.UserId)
+    -> Nonempty (RichText (Discord.Id Discord.UserId))
+    -> Array Embed
+    ->
+        { a
+            | createdAt : Time.Posix
+            , createdBy : Discord.Id Discord.UserId
+            , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet (Discord.Id Discord.UserId))
+            , editedAt : Maybe Time.Posix
+            , repliedTo : Maybe (Id messageId)
+            , attachedFiles : SeqDict (Id FileId) FileData
+            , timestampDrawings : Drawing (Discord.Id Discord.UserId)
+            , userIconDrawings : Drawing (Discord.Id Discord.UserId)
+            , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing (Discord.Id Discord.UserId))
+            , embedDrawings : SeqDict Int (Drawing (Discord.Id Discord.UserId))
+        }
     -> Element MessageViewMsg
-discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId message2 =
+discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId content embeds message2 =
     Ui.row
         []
         [ (case SeqDict.get message2.createdBy allUsers of
@@ -7532,8 +7722,8 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                             IsHoveredWhileSelectingAnchor ->
                                 False
                     }
-                    message2.embeds
-                    message2.content
+                    embeds
+                    content
                     ++ (case message2.editedAt of
                             Just editedAt ->
                                 [ Html.span
@@ -7619,6 +7809,38 @@ messagePreviewTimestamp createdAt timezone =
         [ MyUi.timestamp createdAt timezone |> Html.text ]
 
 
+replyToHeaderAboveMessage_userTextMessage :
+    Bool
+    -> Id messageId
+    -> Time.Zone
+    -> Time.Posix
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> SeqDict userId { a | name : PersonName }
+    -> SeqDict (Id messageId) (NonemptySet Int)
+    -> Nonempty (RichText userId)
+    -> { b | createdBy : userId, attachedFiles : SeqDict (Id FileId) FileData }
+    -> Element MessageViewMsg
+replyToHeaderAboveMessage_userTextMessage isMobile repliedToIndex timezone time customEmojis allUsers revealedSpoilers content repliedToData =
+    replyToHeaderAboveMessageHelper
+        isMobile
+        repliedToIndex
+        (userTextMessagePreview
+            timezone
+            time
+            customEmojis
+            allUsers
+            (case SeqDict.get repliedToIndex revealedSpoilers of
+                Just set ->
+                    NonemptySet.toSeqSet set
+
+                Nothing ->
+                    SeqSet.empty
+            )
+            content
+            repliedToData
+        )
+
+
 replyToHeaderAboveMessage :
     Bool
     -> Time.Zone
@@ -7631,23 +7853,28 @@ replyToHeaderAboveMessage :
 replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoilers customEmojis allUsers =
     case maybeRepliedTo2 of
         Just ( repliedToIndex, UserTextMessage repliedToData ) ->
-            replyToHeaderAboveMessageHelper
+            replyToHeaderAboveMessage_userTextMessage
                 isMobile
                 repliedToIndex
-                (userTextMessagePreview
-                    timezone
-                    time
-                    customEmojis
-                    allUsers
-                    (case SeqDict.get repliedToIndex revealedSpoilers of
-                        Just set ->
-                            NonemptySet.toSeqSet set
+                timezone
+                time
+                customEmojis
+                allUsers
+                revealedSpoilers
+                repliedToData.content
+                repliedToData
 
-                        Nothing ->
-                            SeqSet.empty
-                    )
-                    repliedToData
-                )
+        Just ( repliedToIndex, EncryptedUserTextMessage repliedToData ) ->
+            replyToHeaderAboveMessage_userTextMessage
+                isMobile
+                repliedToIndex
+                timezone
+                time
+                customEmojis
+                allUsers
+                revealedSpoilers
+                RichText.failedToDecryptMessage
+                repliedToData
 
         Just ( repliedToIndex, UserJoinedMessage _ userId _ _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (userJoinedContent userId allUsers)
@@ -7677,9 +7904,10 @@ userTextMessagePreview :
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> SeqSet Int
-    -> UserTextMessageData messageId userId
+    -> Nonempty (RichText userId)
+    -> { b | createdBy : userId, attachedFiles : SeqDict (Id FileId) FileData }
     -> Element MessageViewMsg
-userTextMessagePreview timezone time customEmojis allUsers revealedSpoilers message =
+userTextMessagePreview timezone time customEmojis allUsers revealedSpoilers content message =
     Html.div
         [ Html.Attributes.style "white-space" "nowrap"
         , Html.Attributes.style "overflow" "hidden"
@@ -7700,7 +7928,7 @@ userTextMessagePreview timezone time customEmojis allUsers revealedSpoilers mess
                 , timezone = timezone
                 , time = time
                 }
-                message.content
+                content
         )
         |> Ui.html
 
@@ -8250,6 +8478,33 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
         (messageContent :: Maybe.Extra.toList maybeReactions)
 
 
+previewThreadLastMessage_userTextMessage :
+    Time.Posix
+    -> Time.Zone
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> SeqDict userId { a | name : PersonName }
+    -> Nonempty (RichText userId)
+    -> { c | createdBy : userId, attachedFiles : SeqDict (Id FileId) FileStatus.FileData }
+    -> List (Html MessageViewMsg)
+previewThreadLastMessage_userTextMessage time timezone customEmojis allUsers content data =
+    Html.span
+        [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
+        , Html.Attributes.style "padding" "0 6px 0 2px"
+        ]
+        [ Html.text (User.toString data.createdBy allUsers) ]
+        :: RichText.preview
+            (\_ -> MessageView_NoOp)
+            { revealedSpoilers = SeqSet.empty
+            , users = allUsers
+            , attachedFiles = data.attachedFiles
+            , customEmojis = customEmojis
+            , domainWhitelist = SeqSet.empty
+            , timezone = timezone
+            , time = time
+            }
+            content
+
+
 previewThreadLastMessage :
     Time.Zone
     -> Time.Posix
@@ -8305,22 +8560,16 @@ previewThreadLastMessage timezone time customEmojis allUsers messageId thread =
                     Just last ->
                         case last of
                             UserTextMessage data ->
-                                Html.span
-                                    [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
-                                    , Html.Attributes.style "padding" "0 6px 0 2px"
-                                    ]
-                                    [ Html.text (User.toString data.createdBy allUsers) ]
-                                    :: RichText.preview
-                                        (\_ -> MessageView_NoOp)
-                                        { revealedSpoilers = SeqSet.empty
-                                        , users = allUsers
-                                        , attachedFiles = data.attachedFiles
-                                        , customEmojis = customEmojis
-                                        , domainWhitelist = SeqSet.empty
-                                        , timezone = timezone
-                                        , time = time
-                                        }
-                                        data.content
+                                previewThreadLastMessage_userTextMessage time timezone customEmojis allUsers data.content data
+
+                            EncryptedUserTextMessage data ->
+                                previewThreadLastMessage_userTextMessage
+                                    time
+                                    timezone
+                                    customEmojis
+                                    allUsers
+                                    RichText.failedToDecryptMessage
+                                    data
 
                             UserJoinedMessage _ userId _ _ ->
                                 [ Html.span
@@ -9878,6 +10127,13 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                     )
                                         ++ RichText.toString localUser.timezone True allUsers a.content
 
+                                EncryptedUserTextMessage a ->
+                                    if a.createdBy == localUser.session.userId then
+                                        "You: Failed to decrypt message"
+
+                                    else
+                                        "Failed to decrypt message"
+
                                 UserJoinedMessage _ userId _ _ ->
                                     User.toString userId allUsers
                                         ++ " joined!"
@@ -10003,6 +10259,13 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                             True
                                             (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
                                             a.content
+
+                                EncryptedUserTextMessage a ->
+                                    if LinkedAndOtherDiscordUsers.isLinkedUser a.createdBy localUser.discordUsers then
+                                        "You: Failed to decrypt message"
+
+                                    else
+                                        "Failed to decrypt message"
 
                                 UserJoinedMessage _ userId _ _ ->
                                     User.toString

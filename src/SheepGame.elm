@@ -67,7 +67,7 @@ import Effect.Http as Http
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji)
 import FileName
-import FileStatus exposing (FileData, FileId, FileMetadata(..), FileStatus)
+import FileStatus exposing (FileData, FileId, FileMetadata(..), FileStatus, IsEncrypted(..))
 import Go
 import GuildIcon
 import Html
@@ -715,6 +715,7 @@ attachFiles input files inputs =
                             (Effect.File.name file |> FileName.fromString)
                             { sent = 0, size = Effect.File.size file }
                             (Effect.File.mime file |> FileStatus.contentType)
+                            IsNotEncrypted
                         )
                         attachedFiles2
                     , ( fileId, file ) :: toUpload2
@@ -3394,10 +3395,10 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                             Nothing ->
                                 Ui.noAttr
 
-                    FileStatus.FileUploading _ _ _ ->
+                    FileStatus.FileUploading _ _ _ _ ->
                         Ui.noAttr
 
-                    FileStatus.FileError _ _ _ _ ->
+                    FileStatus.FileError _ _ _ _ _ ->
                         Ui.noAttr
                 , Ui.el
                     [ Ui.alignBottom
@@ -3412,7 +3413,7 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                     (Ui.text ("[!" ++ Id.toString fileStatusId ++ "]"))
                     |> Ui.inFront
                 , case fileStatus of
-                    FileStatus.FileUploading _ fileSize _ ->
+                    FileStatus.FileUploading _ fileSize _ _ ->
                         FileStatus.progressToString fileSize
                             |> Ui.text
                             |> Ui.el
@@ -3430,11 +3431,11 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                     FileStatus.FileUploaded _ ->
                         Ui.noAttr
 
-                    FileStatus.FileError _ _ _ _ ->
+                    FileStatus.FileError _ _ _ _ _ ->
                         Ui.noAttr
                 ]
                 (case fileStatus of
-                    FileStatus.FileUploading _ _ _ ->
+                    FileStatus.FileUploading _ _ _ _ ->
                         Ui.none
 
                     FileStatus.FileUploaded fileData ->
@@ -3501,7 +3502,7 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                                     ]
                                     (Ui.text "0110\n0001")
 
-                    FileStatus.FileError _ _ _ _ ->
+                    FileStatus.FileError _ _ _ _ _ ->
                         Ui.el
                             [ Ui.centerX
                             , Ui.centerY

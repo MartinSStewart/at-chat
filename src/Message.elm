@@ -28,6 +28,7 @@ import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Embed exposing (Embed(..), EmbedData)
 import Emoji exposing (EmojiOrCustomEmoji)
+import Encryption exposing (EncryptedData)
 import FileStatus exposing (FileData, FileId)
 import Id exposing (Id, StickerId)
 import List.Nonempty exposing (Nonempty)
@@ -45,6 +46,7 @@ import Url exposing (Url)
 
 type Message messageId userId
     = UserTextMessage (UserTextMessageData messageId userId)
+    | EncryptedUserTextMessage (EncryptedUserTextMessageData messageId userId)
     | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
     | DeletedMessage Time.Posix
     | CallStarted (CallStartedData userId)
@@ -268,6 +270,9 @@ addEmbed ( url, result ) message =
                                 message2.embeds
                 }
 
+        EncryptedUserTextMessage _ ->
+            message
+
         UserJoinedMessage _ _ _ _ ->
             message
 
@@ -281,28 +286,6 @@ addEmbed ( url, result ) message =
             message
 
 
-type EncryptedData a
-    = EncryptedData Bytes
-
-
-type PublicKey
-    = PublicKey Bytes
-
-
-type PrivateKey
-    = PrivateKey Bytes
-
-
-encrypt : PublicKey -> Serialize.Codec e a -> a -> EncryptedData a
-encrypt publicKey codec value =
-    Debug.todo ""
-
-
-decrypt : PrivateKey -> Serialize.Codec e a -> Bytes -> Result (Serialize.Error e) a
-decrypt privateKey codec bytes =
-    Debug.todo ""
-
-
 type alias UserTextMessageData messageId userId =
     { createdAt : Time.Posix
     , createdBy : userId
@@ -312,6 +295,23 @@ type alias UserTextMessageData messageId userId =
     , repliedTo : Maybe (Id messageId)
     , attachedFiles : SeqDict (Id FileId) FileData
     , embeds : Array Embed
+    , timestampDrawings : Drawing userId
+    , userIconDrawings : Drawing userId
+    , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing userId)
+    , -- Keyed by the index of the embed the drawing is attached to
+      embedDrawings : SeqDict Int (Drawing userId)
+    }
+
+
+type alias EncryptedUserTextMessageData messageId userId =
+    { createdAt : Time.Posix
+    , createdBy : userId
+    , content : EncryptedData (Nonempty (RichText userId))
+    , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+    , editedAt : Maybe Time.Posix
+    , repliedTo : Maybe (Id messageId)
+    , attachedFiles : SeqDict (Id FileId) FileData
+    , embeds : EncryptedData (Array Embed)
     , timestampDrawings : Drawing userId
     , userIconDrawings : Drawing userId
     , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing userId)
@@ -343,47 +343,70 @@ userJoined time userId =
     UserJoinedMessage time userId SeqDict.empty Drawing.emptyDrawing
 
 
+handleDrawingChangeHelper :
+    userId
+    -> Drawing.LocalChange
+    -> Drawing.MessageAnchor
+    ->
+        { b
+            | userIconDrawings : Drawing userId
+            , timestampDrawings : Drawing userId
+            , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing userId)
+            , embedDrawings : SeqDict Int (Drawing userId)
+        }
+    ->
+        { b
+            | userIconDrawings : Drawing userId
+            , timestampDrawings : Drawing userId
+            , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing userId)
+            , embedDrawings : SeqDict Int (Drawing userId)
+        }
+handleDrawingChangeHelper changeBy change anchorType data =
+    case anchorType of
+        Drawing.UserIconAnchor ->
+            { data | userIconDrawings = Drawing.handleLocalChange changeBy change data.userIconDrawings }
+
+        Drawing.TimestampAnchor ->
+            { data | timestampDrawings = Drawing.handleLocalChange changeBy change data.timestampDrawings }
+
+        Drawing.ImageAttachmentAnchor fileId ->
+            { data
+                | imageAttachmentDrawings =
+                    SeqDict.update
+                        fileId
+                        (\maybe ->
+                            Maybe.withDefault Drawing.emptyDrawing maybe
+                                |> Drawing.handleLocalChange changeBy change
+                                |> Just
+                        )
+                        data.imageAttachmentDrawings
+            }
+
+        Drawing.EmbedImageAnchor embedIndex ->
+            { data
+                | embedDrawings =
+                    SeqDict.update
+                        embedIndex
+                        (\maybe ->
+                            Maybe.withDefault Drawing.emptyDrawing maybe
+                                |> Drawing.handleLocalChange changeBy change
+                                |> Just
+                        )
+                        data.embedDrawings
+            }
+
+        Drawing.CardAnchor ->
+            data
+
+
 handleDrawingChange : userId -> Drawing.MessageAnchor -> Drawing.LocalChange -> Message messageId userId -> Message messageId userId
 handleDrawingChange changeBy anchorType change message =
     case message of
         UserTextMessage data ->
-            case anchorType of
-                Drawing.UserIconAnchor ->
-                    UserTextMessage { data | userIconDrawings = Drawing.handleLocalChange changeBy change data.userIconDrawings }
+            handleDrawingChangeHelper changeBy change anchorType data |> UserTextMessage
 
-                Drawing.TimestampAnchor ->
-                    UserTextMessage { data | timestampDrawings = Drawing.handleLocalChange changeBy change data.timestampDrawings }
-
-                Drawing.ImageAttachmentAnchor fileId ->
-                    UserTextMessage
-                        { data
-                            | imageAttachmentDrawings =
-                                SeqDict.update
-                                    fileId
-                                    (\maybe ->
-                                        Maybe.withDefault Drawing.emptyDrawing maybe
-                                            |> Drawing.handleLocalChange changeBy change
-                                            |> Just
-                                    )
-                                    data.imageAttachmentDrawings
-                        }
-
-                Drawing.EmbedImageAnchor embedIndex ->
-                    UserTextMessage
-                        { data
-                            | embedDrawings =
-                                SeqDict.update
-                                    embedIndex
-                                    (\maybe ->
-                                        Maybe.withDefault Drawing.emptyDrawing maybe
-                                            |> Drawing.handleLocalChange changeBy change
-                                            |> Just
-                                    )
-                                    data.embedDrawings
-                        }
-
-                Drawing.CardAnchor ->
-                    message
+        EncryptedUserTextMessage data ->
+            handleDrawingChangeHelper changeBy change anchorType data |> EncryptedUserTextMessage
 
         UserJoinedMessage time userId reactions drawings ->
             UserJoinedMessage time userId reactions drawings
@@ -442,25 +465,32 @@ handleDrawingChange changeBy anchorType change message =
                         }
 
 
+userTextMessageDrawing anchor data =
+    case anchor of
+        Drawing.UserIconAnchor ->
+            data.userIconDrawings
+
+        Drawing.TimestampAnchor ->
+            data.timestampDrawings
+
+        Drawing.ImageAttachmentAnchor fileId ->
+            SeqDict.get fileId data.imageAttachmentDrawings |> Maybe.withDefault Drawing.emptyDrawing
+
+        Drawing.EmbedImageAnchor embedIndex ->
+            SeqDict.get embedIndex data.embedDrawings |> Maybe.withDefault Drawing.emptyDrawing
+
+        Drawing.CardAnchor ->
+            Drawing.emptyDrawing
+
+
 drawing : Drawing.MessageAnchor -> Message messageId userId -> Drawing userId
 drawing anchor message =
     case message of
         UserTextMessage data ->
-            case anchor of
-                Drawing.UserIconAnchor ->
-                    data.userIconDrawings
+            userTextMessageDrawing anchor data
 
-                Drawing.TimestampAnchor ->
-                    data.timestampDrawings
-
-                Drawing.ImageAttachmentAnchor fileId ->
-                    SeqDict.get fileId data.imageAttachmentDrawings |> Maybe.withDefault Drawing.emptyDrawing
-
-                Drawing.EmbedImageAnchor embedIndex ->
-                    SeqDict.get embedIndex data.embedDrawings |> Maybe.withDefault Drawing.emptyDrawing
-
-                Drawing.CardAnchor ->
-                    Drawing.emptyDrawing
+        EncryptedUserTextMessage data ->
+            userTextMessageDrawing anchor data
 
         UserJoinedMessage _ _ _ drawings ->
             drawings
@@ -509,6 +539,9 @@ createdAt message =
         UserTextMessage data ->
             data.createdAt
 
+        EncryptedUserTextMessage data ->
+            data.createdAt
+
         UserJoinedMessage time _ _ _ ->
             time
 
@@ -526,7 +559,10 @@ addReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> M
 addReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
-            { message2 | reactions = addReactionEmojiHelper userId emoji message2.reactions } |> UserTextMessage
+            UserTextMessage { message2 | reactions = addReactionEmojiHelper userId emoji message2.reactions }
+
+        EncryptedUserTextMessage message2 ->
+            EncryptedUserTextMessage { message2 | reactions = addReactionEmojiHelper userId emoji message2.reactions }
 
         UserJoinedMessage time userJoinedId reactions drawings ->
             UserJoinedMessage time userJoinedId (addReactionEmojiHelper userId emoji reactions) drawings
@@ -550,7 +586,10 @@ removeReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -
 removeReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
-            { message2 | reactions = removeReactionEmojiHelper userId emoji message2.reactions } |> UserTextMessage
+            UserTextMessage { message2 | reactions = removeReactionEmojiHelper userId emoji message2.reactions }
+
+        EncryptedUserTextMessage message2 ->
+            EncryptedUserTextMessage { message2 | reactions = removeReactionEmojiHelper userId emoji message2.reactions }
 
         UserJoinedMessage time userJoinedId reactions drawings ->
             UserJoinedMessage time userJoinedId (removeReactionEmojiHelper userId emoji reactions) drawings
@@ -586,6 +625,9 @@ reactionEmojis : Message messageId userId -> SeqDict EmojiOrCustomEmoji (Nonempt
 reactionEmojis message =
     case message of
         UserTextMessage data ->
+            data.reactions
+
+        EncryptedUserTextMessage data ->
             data.reactions
 
         UserJoinedMessage _ _ reactions _ ->

@@ -454,6 +454,9 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                                 UserTextMessage data ->
                                     MessageMenu_PressedOpenDm data.createdBy |> Just
 
+                                EncryptedUserTextMessage data ->
+                                    MessageMenu_PressedOpenDm data.createdBy |> Just
+
                                 UserJoinedMessage _ createdBy _ _ ->
                                     MessageMenu_PressedOpenDm createdBy |> Just
 
@@ -480,6 +483,9 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         messageUserId =
                             case message of
                                 UserTextMessage data ->
+                                    Just data.createdBy
+
+                                EncryptedUserTextMessage data ->
                                     Just data.createdBy
 
                                 UserJoinedMessage _ createdBy _ _ ->
@@ -943,6 +949,9 @@ messageCustomEmojiIds message =
     case message of
         UserTextMessage data ->
             RichText.customEmojis data.content ++ reactionIds data.reactions
+
+        EncryptedUserTextMessage data ->
+            reactionIds data.reactions
 
         UserJoinedMessage _ _ reactions _ ->
             reactionIds reactions

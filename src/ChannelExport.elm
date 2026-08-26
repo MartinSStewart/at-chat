@@ -29,6 +29,7 @@ import DmChannel exposing (DiscordDmChannel, DmChannel)
 import Effect.Time as Time
 import Embed exposing (Embed(..))
 import Emoji exposing (EmojiOrCustomEmoji(..))
+import Encryption as Encrypted exposing (EncryptedData)
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
@@ -423,6 +424,21 @@ encodeMessage userIdToString userNames maybeThread message =
                 ++ encodeReactions userIdToString data.reactions
                 ++ encodeAttachedFiles data.attachedFiles
                 ++ encodeEmbeds data.embeds
+
+        EncryptedUserTextMessage data ->
+            [ ( "type", Json.Encode.string "userTextMessage" )
+            , ( "createdAt", encodeTime data.createdAt )
+            , ( "createdBy", Json.Encode.string (userIdToString data.createdBy) )
+            , ( "content", Encrypted.encode data.content )
+            , ( "embeds", Encrypted.encode data.embeds )
+            ]
+                ++ optionalField "editedAt" encodeTime data.editedAt
+                ++ optionalField
+                    "repliedTo"
+                    (\messageId -> Json.Encode.int (Id.toInt messageId))
+                    data.repliedTo
+                ++ encodeReactions userIdToString data.reactions
+                ++ encodeAttachedFiles data.attachedFiles
 
         UserJoinedMessage createdAt userId reactions _ ->
             [ ( "type", Json.Encode.string "userJoined" )
