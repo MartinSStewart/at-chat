@@ -22,6 +22,7 @@ module Message exposing
     )
 
 import Array exposing (Array)
+import Bytes exposing (Bytes)
 import Drawing exposing (Drawing)
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -36,6 +37,7 @@ import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet
+import Serialize
 import Sticker exposing (StickerData)
 import Time
 import Url exposing (Url)
@@ -277,6 +279,28 @@ addEmbed ( url, result ) message =
 
         GameStarted _ ->
             message
+
+
+type EncryptedData a
+    = EncryptedData Bytes
+
+
+type PublicKey
+    = PublicKey Bytes
+
+
+type PrivateKey
+    = PrivateKey Bytes
+
+
+encrypt : PublicKey -> Serialize.Codec e a -> a -> EncryptedData a
+encrypt publicKey codec value =
+    Debug.todo ""
+
+
+decrypt : PrivateKey -> Serialize.Codec e a -> Bytes -> Result (Serialize.Error e) a
+decrypt privateKey codec bytes =
+    Debug.todo ""
 
 
 type alias UserTextMessageData messageId userId =
