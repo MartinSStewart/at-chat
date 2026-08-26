@@ -318,6 +318,7 @@ defaultUserHtml size2 rounded color =
         , Html.Attributes.style "height" (String.fromInt (size2 - 8) ++ "px")
         , Html.Attributes.style "padding" "4px"
         , Html.Attributes.style "color" (MyUi.colorToStyle iconFontColor)
+        , Html.Attributes.style "flex-shrink" "0"
         ]
         [ Icons.person ]
 

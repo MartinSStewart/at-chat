@@ -25,12 +25,10 @@ module UserSession exposing
     , init
     , isViewing
     , isViewingGame
-    , setLastActiveAt
     , setPreviouslyLastViewedChannelMessage
     , setPreviouslyLastViewedThreadMessage
     , setSheepGameQuestions
     , setViewingToCurrentlyViewing
-    , toFrontend
     , unreadOverviewMessageLimit
     )
 
@@ -58,9 +56,7 @@ type alias UserSession =
     , userAgent : UserAgent
     , sessionIdHash : SessionIdHash
     , signedInAt : Time.Posix
-    , -- When this session was last heard from, so that a device with nothing connected can
-      -- say how long ago it was in use rather than only that it isn't now.
-      lastActiveAt : Time.Posix
+    , lastClientDisconnect : Maybe Time.Posix
     , expandedUserOptions : SeqSet UserOptionSection
     , savedSheepGameQuestions : IdArray QuestionId SheepGameQuestion
     }
@@ -435,7 +431,7 @@ init time sessionId userId userAgent =
     , userAgent = userAgent
     , sessionIdHash = SessionIdHash.fromSessionId sessionId
     , signedInAt = time
-    , lastActiveAt = time
+    , lastClientDisconnect = Nothing
     , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
     , savedSheepGameQuestions = IdArray.empty
     }
@@ -454,22 +450,3 @@ collapseUserOptionSection section session =
 setSheepGameQuestions : IdArray QuestionId SheepGameQuestion -> UserSession -> UserSession
 setSheepGameQuestions questions session =
     { session | savedSheepGameQuestions = questions }
-
-
-setLastActiveAt : Time.Posix -> UserSession -> UserSession
-setLastActiveAt time session =
-    { session | lastActiveAt = time }
-
-
-toFrontend : Id UserId -> SeqDict ClientId Viewing -> UserSession -> Maybe FrontendUserSession
-toFrontend currentUserId currentlyViewing userSession =
-    if currentUserId == userSession.userId then
-        { notificationMode = userSession.notificationMode
-        , currentlyViewing = currentlyViewing
-        , userAgent = userSession.userAgent
-        , lastActiveAt = userSession.lastActiveAt
-        }
-            |> Just
-
-    else
-        Nothing

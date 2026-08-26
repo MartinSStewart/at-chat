@@ -33,7 +33,6 @@ import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), Sho
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import Thread
-import Touch exposing (Drag(..))
 import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2)
 import Ui exposing (Element)
 import Ui.Anim

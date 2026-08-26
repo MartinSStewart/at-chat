@@ -89,7 +89,7 @@ import SeqDictHelper
 import SeqSet
 import Sticker
 import String.Nonempty
-import Touch exposing (Drag(..), Touch)
+import Touch exposing (Drag)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -2753,6 +2753,7 @@ userColor userId local =
             UserColor.toColor UserColor.default
 
 
+answerGroupPaddingX : number
 answerGroupPaddingX =
     8
 

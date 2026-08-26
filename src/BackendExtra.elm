@@ -70,7 +70,7 @@ import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAn
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..), FrontendGuild)
+import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), ConnectionData, DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..), FrontendGuild, LastRequest(..))
 import Log exposing (Log)
 import LoginForm
 import MembersAndOwner exposing (IsMember(..))
@@ -770,7 +770,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                         { notificationMode = session.notificationMode
                                         , currentlyViewing = SeqDict.singleton clientId currentlyViewing
                                         , userAgent = session.userAgent
-                                        , lastActiveAt = session.lastActiveAt
+                                        , lastActiveAt = time
                                         }
                                         |> ServerChange
                                     )
@@ -834,6 +834,32 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
 
         _ ->
             ( model, LoginTokenInvalid loginCode |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId )
+
+
+getLastActiveAt : Maybe (NonemptyDict ClientId ConnectionData) -> Maybe Time.Posix
+getLastActiveAt connections =
+    case connections of
+        Just connections2 ->
+            NonemptyDict.foldl
+                (\_ connection lastActiveAt ->
+                    case connection.lastRequest of
+                        LastRequest lastRequest ->
+                            timeMax lastRequest lastActiveAt
+
+                        NoRequestsMade ->
+                            lastActiveAt
+                )
+                (Time.millisToPosix 0)
+                connections2
+                |> Just
+
+        Nothing ->
+            Nothing
+
+
+timeMax : Time.Posix -> Time.Posix -> Time.Posix
+timeMax a b =
+    max (Time.posixToMillis a) (Time.posixToMillis b) |> Time.millisToPosix
 
 
 shouldRateLimit : Time.Posix -> BackendUser -> Bool
@@ -1019,23 +1045,37 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
             |> List.filterMap
                 (\( otherSessionId, otherSession ) ->
                     let
-                        connection : SeqDict ClientId UserSession.Viewing
-                        connection =
-                            case SeqDict.get otherSessionId model.connections of
-                                Just connections ->
-                                    SeqDict.map
-                                        (\_ connection2 -> connection2.currentlyViewing)
-                                        (NonemptyDict.toSeqDict connections)
-
-                                Nothing ->
-                                    SeqDict.empty
+                        connections : Maybe (NonemptyDict ClientId ConnectionData)
+                        connections =
+                            SeqDict.get otherSessionId model.connections
                     in
-                    case UserSession.toFrontend session.userId connection otherSession of
-                        Just frontendSession ->
-                            Just ( otherSession.sessionIdHash, frontendSession )
+                    if session.userId == otherSession.userId then
+                        ( otherSession.sessionIdHash
+                        , { notificationMode = otherSession.notificationMode
+                          , currentlyViewing =
+                                case connections of
+                                    Just connections2 ->
+                                        SeqDict.map
+                                            (\_ connection2 -> connection2.currentlyViewing)
+                                            (NonemptyDict.toSeqDict connections2)
 
-                        Nothing ->
-                            Nothing
+                                    Nothing ->
+                                        SeqDict.empty
+                          , userAgent = otherSession.userAgent
+                          , lastActiveAt =
+                                case otherSession.lastClientDisconnect of
+                                    Just time ->
+                                        Maybe.withDefault otherSession.signedInAt (getLastActiveAt connections)
+                                            |> timeMax time
+
+                                    Nothing ->
+                                        Maybe.withDefault otherSession.signedInAt (getLastActiveAt connections)
+                          }
+                        )
+                            |> Just
+
+                    else
+                        Nothing
                 )
             |> SeqDict.fromList
     , publicVapidKey = model.publicVapidKey
@@ -2588,7 +2628,7 @@ asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain :
     -> Viewing_DiscordChannelId
     ->
         (UserSession
-         -> LocalState.ConnectionData
+         -> ConnectionData
          -> NeedsAuthAgainData
          -> BackendUser
          -> DiscordBackendGuild

@@ -398,10 +398,6 @@ update msg model =
                                 )
                             )
                             model.connections
-
-                    -- Connections are thrown away when they drop, so the session keeps its own
-                    -- copy of when it was last heard from for the devices list to read.
-                    , sessions = SeqDict.updateIfExists sessionId (UserSession.setLastActiveAt time) model.sessions
                 }
                 |> (\( model2, cmds ) ->
                         ( model2
@@ -2267,7 +2263,13 @@ disconnectClient time sessionId clientId model =
                 model3 =
                     -- Dropping the connection is the last we hear from this device, so that's
                     -- when it was last active.
-                    { model2 | sessions = SeqDict.updateIfExists sessionId (UserSession.setLastActiveAt time) model2.sessions }
+                    { model2
+                        | sessions =
+                            SeqDict.updateIfExists
+                                sessionId
+                                (\session -> { session | lastClientDisconnect = Just time })
+                                model2.sessions
+                    }
             in
             ( model3
             , Command.batch
@@ -2519,7 +2521,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     { notificationMode = session.notificationMode
                                     , currentlyViewing = SeqDict.singleton clientId currentlyViewing
                                     , userAgent = session.userAgent
-                                    , lastActiveAt = session.lastActiveAt
+                                    , lastActiveAt = time
                                     }
                                     |> ServerChange
                                 )
@@ -2658,7 +2660,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 { notificationMode = session.notificationMode
                                                 , currentlyViewing = SeqDict.singleton clientId currentlyViewing
                                                 , userAgent = session.userAgent
-                                                , lastActiveAt = session.lastActiveAt
+                                                , lastActiveAt = time
                                                 }
                                                 |> ServerChange
                                             )

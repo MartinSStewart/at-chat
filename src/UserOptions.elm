@@ -62,12 +62,13 @@ domainWhitelistToString domains =
 
 
 viewConnectedDevice :
-    Time.Posix
+    Bool
+    -> Time.Posix
     -> SessionIdHash
     -> Maybe { a | currentlyViewing : SeqDict ClientId UserSession.Viewing, lastActiveAt : Time.Posix }
     -> UserAgent
     -> Element FrontendMsg_
-viewConnectedDevice time sessionId otherSession userAgent =
+viewConnectedDevice isMobile time sessionId otherSession userAgent =
     let
         browserText : String
         browserText =
@@ -95,7 +96,19 @@ viewConnectedDevice time sessionId otherSession userAgent =
             UserAgent.deviceToString userAgent.device
     in
     Ui.row
-        [ Ui.spacing 8, Ui.paddingXY 16 0 ]
+        [ Ui.spacing 8
+        , Ui.paddingWith
+            { left = 16
+            , right =
+                if isMobile then
+                    8
+
+                else
+                    16
+            , top = 0
+            , bottom = 0
+            }
+        ]
         [ Ui.el
             [ Ui.width (Ui.px 36)
             , Ui.height (Ui.px 36)
@@ -139,17 +152,18 @@ viewConnectedDevice time sessionId otherSession userAgent =
             [ deviceText ++ " • " ++ browserText |> Ui.text
             , (case otherSession of
                 Just session ->
-                    case SeqDict.size session.currentlyViewing of
-                        1 ->
-                            ""
+                    "Last active "
+                        ++ MyUi.timeElapsed time session.lastActiveAt
+                        ++ (case SeqDict.size session.currentlyViewing of
+                                0 ->
+                                    ""
 
-                        0 ->
-                            -- Nothing is connected from this device, so when it was last
-                            -- heard from is the useful thing to say about it.
-                            "Last active " ++ MyUi.timeElapsed time session.lastActiveAt
+                                1 ->
+                                    ""
 
-                        count ->
-                            "(" ++ String.fromInt count ++ " connections)"
+                                count ->
+                                    " (" ++ String.fromInt count ++ " connections)"
+                           )
 
                 Nothing ->
                     "Current device"
@@ -557,13 +571,14 @@ view windowSize textInputFocus time local loggedIn loaded model =
                     isMobile
                     "Connected devices"
                     (viewConnectedDevice
+                        isMobile
                         time
                         local.localUser.session.sessionIdHash
                         Nothing
                         local.localUser.session.userAgent
                         :: List.map
                             (\( otherSessionId, otherSession ) ->
-                                viewConnectedDevice time otherSessionId (Just otherSession) otherSession.userAgent
+                                viewConnectedDevice isMobile time otherSessionId (Just otherSession) otherSession.userAgent
                             )
                             (SeqDict.toList local.otherSessions)
                     )

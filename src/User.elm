@@ -922,13 +922,13 @@ toString userId allUsers2 =
             "<missing>"
 
 
-toStringView : userId -> SeqDict userId { a | name : PersonName, color : UserColor } -> Ui.Element msg
+toStringView : userId -> SeqDict userId { a | name : PersonName, color : UserColor } -> Element msg
 toStringView userId allUsers2 =
     case SeqDict.get userId allUsers2 of
         Just user ->
             PersonName.toString user.name
                 |> Ui.text
-                |> Ui.el [ Ui.Font.bold, Ui.Font.color (UserColor.toColor user.color) ]
+                |> Ui.el [ Ui.Font.bold, Ui.Font.color (UserColor.toColor user.color), Ui.clipWithEllipsis ]
 
         Nothing ->
             Ui.text "<missing>"
@@ -1064,6 +1064,7 @@ profileImgHtml fileHash color =
         , Html.Attributes.style "height" (String.fromInt profileImageSize ++ "px")
         , Html.Attributes.style "outline" ("solid 1px " ++ profileOutlineColor color)
         , Html.Attributes.style "outline-offset" "-1px"
+        , Html.Attributes.style "flex-shrink" "0"
         , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
         , MyUi.lazyLoading
         ]

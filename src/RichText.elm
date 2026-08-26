@@ -3323,10 +3323,10 @@ hasLargeContent richText =
                 Bold a ->
                     hasLargeContent a
 
-                UserMention userId ->
+                UserMention _ ->
                     False
 
-                NormalText char string ->
+                NormalText _ _ ->
                     False
 
                 Italic a ->
@@ -3341,37 +3341,37 @@ hasLargeContent richText =
                 Spoiler a ->
                     hasLargeContent a
 
-                BlockQuote hasLeadingLineBreak richTexts ->
+                BlockQuote _ _ ->
                     True
 
-                Heading headingLevel hasLeadingLineBreak a ->
+                Heading _ _ a ->
                     hasLargeContent a
 
-                Hyperlink url ->
+                Hyperlink _ ->
                     False
 
-                MarkdownLink nonemptyString url ->
+                MarkdownLink _ _ ->
                     False
 
-                InlineCode char string ->
+                InlineCode _ _ ->
                     False
 
-                CodeBlock language string ->
+                CodeBlock _ _ ->
                     True
 
-                AttachedFile id ->
+                AttachedFile _ ->
                     True
 
-                EscapedChar escapedChar ->
+                EscapedChar _ ->
                     False
 
-                Sticker id ->
+                Sticker _ ->
                     True
 
-                CustomEmoji id ->
+                CustomEmoji _ ->
                     False
 
-                BulletPoint hasLeadingLineBreak a ->
+                BulletPoint _ a ->
                     List.Nonempty.any
                         (\list ->
                             case List.Nonempty.fromList list of
@@ -3383,7 +3383,7 @@ hasLargeContent richText =
                         )
                         a
 
-                Timestamp timeInMinutes ->
+                Timestamp _ ->
                     False
         )
         richText
