@@ -5,6 +5,7 @@ module Types exposing
     , BackendMsg(..)
     , CountToFrontendState
     , DiscordAttachmentData
+    , E2eeSection
     , EditChannelForm
     , EditGuildForm
     , EditMessage
@@ -81,7 +82,7 @@ import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileS
 import Game
 import Go
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, ExportChannelId, GamePublicId, GuildId, GuildOrDmId, Id, InviteLinkId, QuestionId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId, Viewing_DiscordDmId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, ExportChannelId, GamePublicId, GuildId, GuildOrDmId, Id, InviteLinkId, QuestionId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId, Viewing_DiscordDmId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import ImageEditor
 import ImageViewer
@@ -260,10 +261,21 @@ type alias LoggedIn2 =
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
     , friendsSearch : String
     , channelSearch : String
+    , e2eeSections : SeqDict (Id UserId) E2eeSection
     , {- We want to slightly change the letter spacing for textarea's on Safari in order to force it to recalculate word wrap.
          This is to work around this bug https://github.com/panphora/overtype/issues/116
       -}
       typedTextCounter : Int
+    }
+
+
+{-| The parts of a DM's end-to-end encryption settings that only this browser knows about.
+`isExpanded` is a `Maybe` because the section opens on its own when the other person has
+asked to start encrypting, until the user opens or closes it themselves.
+-}
+type alias E2eeSection =
+    { isExpanded : Maybe Bool
+    , risksAccepted : Bool
     }
 
 
@@ -555,6 +567,11 @@ type FrontendMsg_
     | PressedCloseImageInfo
     | PressedMemberListBack
     | PressedExportChannel ExportChannelId
+    | PressedExpandE2eeSection (Id UserId)
+    | PressedE2eeRisksAccepted (Id UserId) Bool
+    | PressedEnableE2ee (Id UserId)
+    | PressedCancelE2eeRequest (Id UserId)
+    | PressedStartE2ee (Id UserId)
     | PageHasFocusChanged Bool
     | GotServiceWorkerMessage String
     | VisualViewportResized Float
@@ -996,6 +1013,10 @@ type ServerChange
     | Server_SetMuteGuild (Id GuildId) IsMuted
     | Server_SetMuteDiscordGuild (Discord.Id Discord.GuildId) IsMuted
     | Server_DiscordAvatarsLoaded (Discord.Id Discord.UserId) DiscordFrontendUser
+      -- The DM is named from the point of view of whoever is receiving this, so the user
+      -- that asked for encryption is named separately.
+    | Server_E2eeRequested Viewing_DmId (Id UserId)
+    | Server_E2eeRequestCancelled Viewing_DmId
 
 
 type LocalChange
@@ -1053,3 +1074,5 @@ type LocalChange
     | Local_SetMuteDiscordThread (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
     | Local_SetMuteGuild (Id GuildId) IsMuted
     | Local_SetMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
+    | Local_RequestE2ee Viewing_DmId
+    | Local_CancelE2eeRequest Viewing_DmId

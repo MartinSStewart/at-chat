@@ -2466,6 +2466,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetMuteDiscordGuild _ _ _ ->
                     True
 
+                Local_RequestE2ee _ ->
+                    True
+
+                Local_CancelE2eeRequest _ ->
+                    True
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -2705,6 +2711,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_DiscordAvatarsLoaded _ _ ->
+                            True
+
+                        Types.Server_E2eeRequested _ _ ->
+                            True
+
+                        Types.Server_E2eeRequestCancelled _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
@@ -2954,6 +2966,8 @@ allAttackerLocalChanges =
         (Drawing.StartStroke ( 0, 0 ))
     , Local_SetMuteDiscordGuild discordUserId discordGuildId MuteSettings.IsMuted
     , Local_SetMuteGuild legitGuildId MuteSettings.IsMuted
+    , Local_RequestE2ee { otherUserId = Broadcast.adminUserId }
+    , Local_CancelE2eeRequest { otherUserId = Broadcast.adminUserId }
     ]
 
 

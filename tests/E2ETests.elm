@@ -307,6 +307,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.noTimestampSuggestionTest normalConfig
     , E2EMisc.mentionSuggestionTest normalConfig
     , E2EMisc.emojiSuggestionTest normalConfig
+    , E2EMisc.endToEndEncryptionRequestTest normalConfig
     , E2EMisc.codeBlockInputTest normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig
     , E2EHelper.startTest

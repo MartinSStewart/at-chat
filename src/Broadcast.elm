@@ -4,6 +4,7 @@ module Broadcast exposing
     , broadcastDm
     , discordDmNotification
     , discordGuildMessageNotification
+    , e2eeRequestNotification
     , gameStartedDmNotification
     , gameStartedGuildNotification
     , getSessionFromSessionIdHash
@@ -1632,6 +1633,62 @@ gameStartedDmNotification time senderId { otherUserId } gameType model =
 
             Nothing ->
                 ( model.sessions, Command.none )
+
+
+{-| Let the other person in a DM know that they've been asked to start end-to-end
+encrypting it. Unlike a message notification this is sent even when they're looking at
+the DM, since the only thing marking the request in the conversation is a dot on the
+channel settings button, which is easy to miss.
+-}
+e2eeRequestNotification :
+    Time.Posix
+    -> Id UserId
+    -> Viewing_DmId
+    -> BackendModel
+    -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
+e2eeRequestNotification time requestedBy { otherUserId } model =
+    if requestedBy == otherUserId then
+        ( model.sessions, Command.none )
+
+    else
+        case NonemptyDict.get requestedBy model.users of
+            Just requestedByUser ->
+                notificationAlt
+                    time
+                    otherUserId
+                    (case requestedByUser.name of
+                        PersonName.PersonName name ->
+                            name
+                    )
+                    (case requestedByUser.icon of
+                        Just icon ->
+                            FileStatus.fileUrl FileStatus.pngContent icon
+
+                        Nothing ->
+                            Env.domain ++ "/at-logo-no-background.png"
+                    )
+                    e2eeRequestText
+                    e2eeRequestText
+                    (Email.Html.text e2eeRequestText)
+                    (DmRoute
+                        { channelId = DmChannelId.fromUserIds requestedBy otherUserId
+                        , threadRoute = NoThreadWithFriends Nothing ShowChannelSettings
+                        , tab = Nothing
+                        , channelsVisible = ChannelsHiddenOnMobile
+                        }
+                        |> Just
+                    )
+                    model.sessions
+                    model
+                    |> Tuple.mapSecond Command.batch
+
+            Nothing ->
+                ( model.sessions, Command.none )
+
+
+e2eeRequestText : String
+e2eeRequestText =
+    "Wants to start end-to-end encryption"
 
 
 {-| Notify the members of a guild channel when a game is started in it, skipping anyone who is

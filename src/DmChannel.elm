@@ -2,6 +2,7 @@ module DmChannel exposing
     ( DiscordDmChannel
     , DiscordFrontendDmChannel
     , DmChannel
+    , E2eeStatus(..)
     , FrontendDmChannel
     , backendInit
     , frontendInit
@@ -43,7 +44,17 @@ type alias DmChannel =
     , threads : SeqDict (Id ChannelMessageId) BackendThread
     , games : SeqDict (Id ChannelMessageId) BackendGameData
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
+    , e2ee : E2eeStatus
     }
+
+
+{-| How far along the two people in a DM are with turning on end-to-end encryption.
+Turning it on needs both of them to agree to it, so one of them asks and then the other
+one either accepts or the asker changes their mind and cancels.
+-}
+type E2eeStatus
+    = E2eeDisabled
+    | E2eeRequestedBy (Id UserId)
 
 
 type alias DiscordDmChannel =
@@ -71,6 +82,7 @@ type alias FrontendDmChannel =
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
     , games : SeqDict (Id ChannelMessageId) Game.MatchData
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
+    , e2ee : E2eeStatus
     }
 
 
@@ -81,6 +93,7 @@ backendInit =
     , threads = SeqDict.empty
     , games = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
+    , e2ee = E2eeDisabled
     }
 
 
@@ -92,6 +105,7 @@ frontendInit =
     , threads = SeqDict.empty
     , games = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
+    , e2ee = E2eeDisabled
     }
 
 
@@ -117,6 +131,7 @@ toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
             dmChannel.threads
     , games = gamesToFrontend (GuildOrFullDmId_Dm dmChannelId) threadRoute goMatchPublicIds dmChannel
     , dateDividerDrawings = dmChannel.dateDividerDrawings
+    , e2ee = dmChannel.e2ee
     }
 
 

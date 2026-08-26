@@ -80,6 +80,7 @@ module LocalState exposing
     , discordGuildOrDmIdToLatestMessages
     , discordGuildOrDmIdToMessage
     , discordTopicToDescription
+    , dmE2eeRequestedByOtherUser
     , drawingHandleChangeFrontend
     , drawingHandleChangeHelperBackend
     , drawingHandleChangeNoThreadBackend
@@ -132,6 +133,7 @@ module LocalState exposing
     , removeReactionEmojiHelper
     , routeToViewing
     , sentEnoughDiscordDmMessages
+    , setDmE2ee
     , updateChannel
     , userIsLoadingDiscordChannel
     , usersMentionedOrRepliedToBackend
@@ -422,6 +424,53 @@ messageReactions guildOrDmId threadRoute local =
 
                 Nothing ->
                     SeqDict.empty
+
+
+{-| True when the other person in the DM is the one who asked to start end-to-end
+encrypting it, which means they're waiting on an answer.
+-}
+dmE2eeRequestedByOtherUser : Id UserId -> LocalState -> Bool
+dmE2eeRequestedByOtherUser otherUserId local =
+    case SeqDict.get otherUserId local.dmChannels of
+        Just dmChannel ->
+            case dmChannel.e2ee of
+                DmChannel.E2eeRequestedBy requestedBy ->
+                    requestedBy /= local.localUser.session.userId
+
+                DmChannel.E2eeDisabled ->
+                    False
+
+        Nothing ->
+            False
+
+
+{-| Records how far along the two people in a DM are with turning on end-to-end
+encryption. The DM might not have any messages in it yet, in which case the frontend
+hasn't got a channel for it and one gets started here.
+-}
+setDmE2ee : Id UserId -> DmChannel.E2eeStatus -> LocalState -> LocalState
+setDmE2ee otherUserId e2ee local =
+    let
+        emptyDmChannel : FrontendDmChannel
+        emptyDmChannel =
+            DmChannel.frontendInit
+    in
+    { local
+        | dmChannels =
+            SeqDict.update
+                otherUserId
+                (\maybeDmChannel ->
+                    (case maybeDmChannel of
+                        Just dmChannel ->
+                            { dmChannel | e2ee = e2ee }
+
+                        Nothing ->
+                            { emptyDmChannel | e2ee = e2ee }
+                    )
+                        |> Just
+                )
+                local.dmChannels
+    }
 
 
 messageReactionsHelper :

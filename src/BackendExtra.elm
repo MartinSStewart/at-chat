@@ -2428,6 +2428,12 @@ toBackendLog toBackend =
                 Local_SetMuteDiscordGuild _ _ _ ->
                     ToBackendLog_Local_SetMuteDiscordGuild
 
+                Local_RequestE2ee _ ->
+                    ToBackendLog_Local_RequestE2ee
+
+                Local_CancelE2eeRequest _ ->
+                    ToBackendLog_Local_CancelE2eeRequest
+
         TwoFactorToBackend _ ->
             ToBackendLog_TwoFactorToBackend
 

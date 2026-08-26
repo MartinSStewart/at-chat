@@ -6027,6 +6027,79 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_RequestE2ee id ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session _ _ dmChannelId dmChannel ->
+                            case dmChannel.e2ee of
+                                DmChannel.E2eeDisabled ->
+                                    let
+                                        model2 : BackendModel
+                                        model2 =
+                                            { model
+                                                | dmChannels =
+                                                    SeqDict.insert
+                                                        dmChannelId
+                                                        { dmChannel | e2ee = DmChannel.E2eeRequestedBy session.userId }
+                                                        model.dmChannels
+                                            }
+
+                                        ( sessions, notificationCmd ) =
+                                            Broadcast.e2eeRequestNotification time session.userId id model2
+                                    in
+                                    ( { model2 | sessions = sessions }
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toDmChannelExcludingOne
+                                            clientId
+                                            session.userId
+                                            id
+                                            (\id2 -> Server_E2eeRequested id2 session.userId)
+                                            model2
+                                        , notificationCmd
+                                        ]
+                                    )
+
+                                DmChannel.E2eeRequestedBy _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
+                Local_CancelE2eeRequest id ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session _ _ dmChannelId dmChannel ->
+                            if dmChannel.e2ee == DmChannel.E2eeRequestedBy session.userId then
+                                let
+                                    model2 : BackendModel
+                                    model2 =
+                                        { model
+                                            | dmChannels =
+                                                SeqDict.insert
+                                                    dmChannelId
+                                                    { dmChannel | e2ee = DmChannel.E2eeDisabled }
+                                                    model.dmChannels
+                                        }
+                                in
+                                ( model2
+                                , Command.batch
+                                    [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                    , Broadcast.toDmChannelExcludingOne
+                                        clientId
+                                        session.userId
+                                        id
+                                        Server_E2eeRequestCancelled
+                                        model2
+                                    ]
+                                )
+
+                            else
+                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
         TwoFactorToBackend toBackend2 ->
             BackendExtra.asUser
                 model

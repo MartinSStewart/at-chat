@@ -3802,6 +3802,9 @@ discordMessageToString backend message =
                 Message.UserTextMessage data ->
                     RichText.toStringWithGetter Time.utc DiscordUserData.username True (E2EHelper.unwrapBackend backend).discordUsers data.content
 
+                Message.EncryptedUserTextMessage _ ->
+                    "<encrypted message>"
+
                 Message.UserJoinedMessage _ _ _ _ ->
                     "<user joined>"
 

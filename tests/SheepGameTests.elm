@@ -396,6 +396,7 @@ tests =
                                 (FileName.fromString "sheep.png")
                                 { sent = 0, size = 10 }
                                 FileStatus.pngContent
+                                FileStatus.IsNotEncrypted
                             )
                         )
                     )
@@ -551,6 +552,7 @@ uploadedFile =
     , metadata = Nothing
     , contentType = FileStatus.pngContent
     , fileHash = FileStatus.fileHash "abc"
+    , isEncrypted = FileStatus.IsNotEncrypted
     }
 
 

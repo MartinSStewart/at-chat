@@ -333,6 +333,12 @@ pendingChangesText localChange =
         Local_SetMuteDiscordGuild _ _ _ ->
             "Set mute Discord guild"
 
+        Local_RequestE2ee _ ->
+            "Asked to start end-to-end encryption"
+
+        Local_CancelE2eeRequest _ ->
+            "Cancelled the end-to-end encryption request"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg_) -> Element FrontendMsg_ -> Html FrontendMsg_
 layout model attributes child =
@@ -2213,6 +2219,21 @@ isPressMsg msg =
         PressedExportChannel _ ->
             True
 
+        PressedExpandE2eeSection _ ->
+            True
+
+        PressedE2eeRisksAccepted _ _ ->
+            True
+
+        PressedEnableE2ee _ ->
+            True
+
+        PressedCancelE2eeRequest _ ->
+            True
+
+        PressedStartE2ee _ ->
+            True
+
         PageHasFocusChanged _ ->
             False
 
@@ -3650,6 +3671,15 @@ changeUpdate localMsg local =
                 Local_SetMuteDiscordGuild _ guildId isMuted ->
                     setMuteDiscordGuild guildId isMuted local
 
+                Local_RequestE2ee { otherUserId } ->
+                    LocalState.setDmE2ee
+                        otherUserId
+                        (DmChannel.E2eeRequestedBy local.localUser.session.userId)
+                        local
+
+                Local_CancelE2eeRequest { otherUserId } ->
+                    LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage createdBy createdByUser createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles stickers ->
@@ -5026,6 +5056,12 @@ changeUpdate localMsg local =
 
                 Server_SetMuteDiscordGuild guildId isMuted ->
                     setMuteDiscordGuild guildId isMuted local
+
+                Server_E2eeRequested { otherUserId } requestedBy ->
+                    LocalState.setDmE2ee otherUserId (DmChannel.E2eeRequestedBy requestedBy) local
+
+                Server_E2eeRequestCancelled { otherUserId } ->
+                    LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
 
                 Server_DiscordAvatarsLoaded discordUserId discordUser ->
                     let

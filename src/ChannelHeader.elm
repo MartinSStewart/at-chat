@@ -513,8 +513,66 @@ dmHeaderButtons isMobile route currentTab otherUserId local =
         [ voiceChatButton isMobile currentTab (DmRoomId { otherUserId = otherUserId }) local.localUser local.calls
         , Ui.Lazy.lazy2 gameButton isMobile currentTab
         , drawingTab isMobile currentTab
-        , channelSettingsTab isMobile route
+        , dmChannelSettingsTab isMobile route (LocalState.dmE2eeRequestedByOtherUser otherUserId local)
         ]
+
+
+{-| The channel settings button of a DM. Same as `channelSettingsTab` except that it
+marks itself when the other person is waiting on an answer about end-to-end encryption,
+since the settings are the only place that request can be answered from.
+-}
+dmChannelSettingsTab : Bool -> Route -> Bool -> Element FrontendMsg_
+dmChannelSettingsTab isMobile route hasE2eeRequest =
+    case Route.toShowMembersTab route of
+        ( HideChannelSettings, isThread ) ->
+            MyUi.elButton
+                (Dom.id "guild_showMembers")
+                PressedShowMembers
+                [ Ui.width (Ui.px (24 + 24))
+                , Ui.height Ui.fill
+                , Ui.paddingXY 12 0
+                , Ui.contentCenterY
+                , Ui.Font.color MyUi.font3
+                , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+                , MyUi.hoverText
+                    (if isThread then
+                        "Thread settings"
+
+                     else
+                        "Channel settings"
+                    )
+                ]
+                (Ui.el
+                    [ if hasE2eeRequest then
+                        e2eeRequestDot
+
+                      else
+                        Ui.noAttr
+                    ]
+                    (Ui.html Icons.gear)
+                )
+
+        ( ShowChannelSettings, _ ) ->
+            Ui.none
+
+
+e2eeRequestDot : Ui.Attribute msg
+e2eeRequestDot =
+    Ui.el
+        [ Ui.rounded 99
+        , Ui.background MyUi.alertColor
+        , Ui.border 2
+        , Ui.borderColor MyUi.background1
+        , Ui.width (Ui.px 12)
+        , Ui.height (Ui.px 12)
+        , Ui.move { x = 6, y = -6, z = 0 }
+        , Ui.alignRight
+        , Ui.alignTop
+        , Html.Attributes.attribute "aria-label" "Waiting for an answer about end-to-end encryption"
+            |> Ui.htmlAttribute
+        ]
+        Ui.none
+        |> Ui.inFront
 
 
 gameButton : Bool -> Maybe ChannelHeaderTab -> Element FrontendMsg_

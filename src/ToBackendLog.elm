@@ -80,6 +80,8 @@ type ToBackendLog
     | ToBackendLog_Local_SetMuteDiscordThread
     | ToBackendLog_Local_SetMuteGuild
     | ToBackendLog_Local_SetMuteDiscordGuild
+    | ToBackendLog_Local_RequestE2ee
+    | ToBackendLog_Local_CancelE2eeRequest
 
 
 toBackendLogToString : ToBackendLog -> String
@@ -297,3 +299,9 @@ toBackendLogToString log =
 
         ToBackendLog_Local_SetMuteDiscordGuild ->
             "Local_SetMuteDiscordGuild"
+
+        ToBackendLog_Local_RequestE2ee ->
+            "Local_RequestE2ee"
+
+        ToBackendLog_Local_CancelE2eeRequest ->
+            "Local_CancelE2eeRequest"

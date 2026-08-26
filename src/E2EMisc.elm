@@ -4,6 +4,7 @@ module E2EMisc exposing
     , colorPickerTest
     , dmThreadsTest
     , emojiSuggestionTest
+    , endToEndEncryptionRequestTest
     , exportChannelTest
     , exportDmChannelTest
     , friendsSearchTest
@@ -297,6 +298,85 @@ exportDmChannelTest config =
                             )
                         ]
                     )
+                ]
+            )
+        ]
+
+
+{-| The two people in a DM both have to accept the risks that come with end-to-end
+encryption before it can be turned on, so asking for it leaves the asker waiting and puts
+the request in front of the other person.
+-}
+endToEndEncryptionRequestTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+endToEndEncryptionRequestTest config =
+    let
+        warning : String
+        warning =
+            "If you and the other person lose your private keys, the messages can't be decrypted."
+    in
+    E2EHelper.startTest
+        "Ask the other person in a DM to start end-to-end encryption"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.openDm admin 100 "2"
+                , E2EHelper.openDm user 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "End-to-end encryption" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text warning ])
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text warning ])
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Enable end-to-end encryption" ])
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , admin.click 100 (Dom.id "guild_enableE2ee")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Enable end-to-end encryption" ])
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.text "Waiting for Stevie Steve to accept message encryption."
+                        , Test.Html.Selector.id "guild_cancelE2ee"
+                        ]
+                    )
+                , E2EHelper.checkNotification E2EHelper.adminName "Wants to start end-to-end encryption"
+                , user.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.attribute
+                            (Html.Attributes.attribute
+                                "aria-label"
+                                "Waiting for an answer about end-to-end encryption"
+                            )
+                        ]
+                    )
+
+                -- The request opens the section on its own, so the warning is waiting for
+                -- them as soon as they open the channel settings.
+                , user.click 100 (Dom.id "guild_showMembers")
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text warning ])
+                , user.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Start end-to-end encryption" ])
+                , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , user.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "Start end-to-end encryption" ])
+                , admin.click 100 (Dom.id "guild_cancelE2ee")
+                , user.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Start end-to-end encryption" ])
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "Enable end-to-end encryption" ])
                 ]
             )
         ]

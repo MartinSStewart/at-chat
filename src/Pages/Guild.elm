@@ -7,8 +7,10 @@ module Pages.Guild exposing
     , channelTextInputId
     , conversationContainerId
     , decodeMessageView
+    , defaultE2eeSection
     , discordGuildView
     , dropdownButtonId
+    , e2eeSectionIsExpanded
     , encodeMessageView
     , friendsSearchInputId
     , guildView
@@ -38,8 +40,8 @@ import DmChannelId
 import Drawing exposing (Drawing)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Emoji exposing (CachedEmojiData, EmojiConfig, EmojiOrCustomEmoji)
 import Embed exposing (Embed, EmbedData)
+import Emoji exposing (CachedEmojiData, EmojiConfig, EmojiOrCustomEmoji)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
 import GuildColumn
@@ -84,7 +86,7 @@ import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
-import Types exposing (EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
+import Types exposing (E2eeSection, EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -162,12 +164,14 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                     SelectedDmChannel dmRoute ->
                                         case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                                             Just otherUserId ->
-                                                Ui.Lazy.lazy4
+                                                Ui.Lazy.lazy6
                                                     dmChannelSettingsMobile
                                                     canScroll2
                                                     local.localUser
                                                     otherUserId
                                                     isThread
+                                                    (dmE2eeStatus otherUserId local)
+                                                    (e2eeSectionFor otherUserId loggedIn)
                                                     |> Ui.el
                                                         [ Ui.height Ui.fill
                                                         , Ui.background MyUi.background3
@@ -341,7 +345,13 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         ( ( ShowChannelSettings, isThread ), SelectedDmChannel dmRoute ) ->
                             case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                                 Just otherUserId ->
-                                    Ui.Lazy.lazy3 dmChannelSettingsNotMobile local.localUser otherUserId isThread
+                                    Ui.Lazy.lazy5
+                                        dmChannelSettingsNotMobile
+                                        local.localUser
+                                        otherUserId
+                                        isThread
+                                        (dmE2eeStatus otherUserId local)
+                                        (e2eeSectionFor otherUserId loggedIn)
                                         |> Ui.el
                                             [ Ui.width Ui.shrink
                                             , Ui.height Ui.fill
@@ -2290,8 +2300,157 @@ dmMembers localUser otherUserId =
         [ localUser.session.userId, otherUserId ]
 
 
-dmChannelSettingsNotMobile : LocalUser -> Id UserId -> Bool -> Element FrontendMsg_
-dmChannelSettingsNotMobile localUser otherUserId isThread =
+{-| What this browser remembers about a DM's end-to-end encryption section before the
+user has touched it.
+-}
+defaultE2eeSection : E2eeSection
+defaultE2eeSection =
+    { isExpanded = Nothing, risksAccepted = False }
+
+
+e2eeSectionFor : Id UserId -> LoggedIn2 -> E2eeSection
+e2eeSectionFor otherUserId loggedIn =
+    SeqDict.get otherUserId loggedIn.e2eeSections |> Maybe.withDefault defaultE2eeSection
+
+
+{-| Whether the end-to-end encryption section of a DM's channel settings is open. It
+opens on its own while the other person is waiting for an answer, up until the user opens
+or closes it themselves.
+-}
+e2eeSectionIsExpanded : Id UserId -> LocalState -> LoggedIn2 -> Bool
+e2eeSectionIsExpanded otherUserId local loggedIn =
+    Maybe.withDefault
+        (LocalState.dmE2eeRequestedByOtherUser otherUserId local)
+        (e2eeSectionFor otherUserId loggedIn).isExpanded
+
+
+dmE2eeStatus : Id UserId -> LocalState -> DmChannel.E2eeStatus
+dmE2eeStatus otherUserId local =
+    case SeqDict.get otherUserId local.dmChannels of
+        Just dmChannel ->
+            dmChannel.e2ee
+
+        Nothing ->
+            DmChannel.E2eeDisabled
+
+
+{-| Turning end-to-end encryption on needs both people in the DM to accept the risks that
+come with it, so this section is either asking this user for that, or waiting on the
+other person to give it.
+-}
+e2eeSectionView : Bool -> LocalUser -> Id UserId -> DmChannel.E2eeStatus -> E2eeSection -> Element FrontendMsg_
+e2eeSectionView isMobile localUser otherUserId e2ee section =
+    let
+        risksLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
+        risksLabel =
+            Ui.Input.label
+                "guild_e2eeAcceptRisks"
+                [ Ui.pointer, Ui.width Ui.shrink ]
+                (Ui.text "I understand and accept the risks")
+
+        requestedByOtherUser : Bool
+        requestedByOtherUser =
+            case e2ee of
+                DmChannel.E2eeRequestedBy requestedBy ->
+                    requestedBy /= localUser.session.userId
+
+                DmChannel.E2eeDisabled ->
+                    False
+    in
+    MyUi.container
+        (Maybe.withDefault requestedByOtherUser section.isExpanded)
+        (Dom.id "guild_e2eeSection")
+        (PressedExpandE2eeSection otherUserId)
+        MyUi.background2
+        isMobile
+        "End-to-end encryption"
+        [ Ui.column
+            [ Ui.paddingXY 16 0, Ui.spacing 16 ]
+            [ Ui.row
+                [ Ui.spacing 8, Ui.contentTop, Ui.Font.color MyUi.font3 ]
+                [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html (Icons.warning 24))
+                , Ui.Prose.paragraph
+                    []
+                    [ Ui.text "If you and the other person lose your private keys, the messages can't be decrypted." ]
+                ]
+            , Ui.row
+                [ Ui.spacing 16 ]
+                [ Ui.Input.checkbox
+                    [ Ui.Font.size 14 ]
+                    { onChange = PressedE2eeRisksAccepted otherUserId
+                    , icon = Nothing
+                    , checked = section.risksAccepted
+                    , label = risksLabel.id
+                    }
+                , risksLabel.element
+                ]
+            , case e2ee of
+                DmChannel.E2eeDisabled ->
+                    if section.risksAccepted then
+                        MyUi.simpleButton
+                            (Dom.id "guild_enableE2ee")
+                            (PressedEnableE2ee otherUserId)
+                            (Ui.text "Enable end-to-end encryption")
+
+                    else
+                        Ui.none
+
+                DmChannel.E2eeRequestedBy requestedBy ->
+                    if requestedByOtherUser then
+                        if section.risksAccepted then
+                            MyUi.simpleButton
+                                (Dom.id "guild_startE2ee")
+                                (PressedStartE2ee otherUserId)
+                                (Ui.text "Start end-to-end encryption")
+
+                        else
+                            Ui.none
+
+                    else
+                        Ui.column
+                            [ Ui.spacing 16 ]
+                            [ Ui.Prose.paragraph
+                                []
+                                [ Ui.text
+                                    ("Waiting for "
+                                        ++ waitingOnName requestedBy otherUserId localUser
+                                        ++ " to accept message encryption."
+                                    )
+                                ]
+                            , MyUi.simpleButton
+                                (Dom.id "guild_cancelE2ee")
+                                (PressedCancelE2eeRequest otherUserId)
+                                (Ui.text "Cancel")
+                            ]
+            ]
+        ]
+
+
+{-| The name of whoever is being waited on. In a DM with yourself that's you, which is
+also the only time the request and the person it's addressed to come from the same user.
+-}
+waitingOnName : Id UserId -> Id UserId -> LocalUser -> String
+waitingOnName requestedBy otherUserId localUser =
+    case User.getUser otherUserId localUser of
+        Just user ->
+            if requestedBy == otherUserId then
+                "yourself"
+
+            else
+                PersonName.toString user.name
+
+        Nothing ->
+            "them"
+
+
+dmChannelSettingsNotMobile :
+    LocalUser
+    -> Id UserId
+    -> Bool
+    -> DmChannel.E2eeStatus
+    -> E2eeSection
+    -> Element FrontendMsg_
+dmChannelSettingsNotMobile localUser otherUserId isThread e2ee section =
     let
         members : List (Id UserId)
         members =
@@ -2311,11 +2470,23 @@ dmChannelSettingsNotMobile localUser otherUserId isThread =
                 [ Ui.height Ui.fill ]
                 (List.map (memberLabel False localUser) members)
             ]
+        , if isThread then
+            Ui.none
+
+          else
+            e2eeSectionView False localUser otherUserId e2ee section
         ]
 
 
-dmChannelSettingsMobile : Bool -> LocalUser -> Id UserId -> Bool -> Element FrontendMsg_
-dmChannelSettingsMobile canScroll2 localUser otherUserId isThread =
+dmChannelSettingsMobile :
+    Bool
+    -> LocalUser
+    -> Id UserId
+    -> Bool
+    -> DmChannel.E2eeStatus
+    -> E2eeSection
+    -> Element FrontendMsg_
+dmChannelSettingsMobile canScroll2 localUser otherUserId isThread e2ee section =
     let
         members : List (Id UserId)
         members =
@@ -2358,6 +2529,11 @@ dmChannelSettingsMobile canScroll2 localUser otherUserId isThread =
                     [ Ui.height Ui.fill ]
                     (List.map (memberLabel True localUser) members)
                 ]
+            , if isThread then
+                Ui.none
+
+              else
+                e2eeSectionView True localUser otherUserId e2ee section
             ]
         ]
 
