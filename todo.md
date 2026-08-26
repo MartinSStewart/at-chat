@@ -24,6 +24,8 @@
 * "add to home screen" is called "install and create shortcut" on Android (Chrome)
 * Add unread overview to mobile
 * Figure out why messages can be sent before files have loaded
+* lishaduck's android phone has slow loading times and shows both a loading step with just the at-chat logo and then
+  another step with a blank blue background
 
 Requested features:
 
