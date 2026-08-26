@@ -2267,7 +2267,7 @@ disconnectClient time sessionId clientId model =
                         | sessions =
                             SeqDict.updateIfExists
                                 sessionId
-                                (\session -> { session | lastClientDisconnect = Just time })
+                                (\session2 -> { session2 | lastClientDisconnect = Just time })
                                 model2.sessions
                     }
             in

@@ -8746,6 +8746,10 @@ the fixed header area, not the scrollable channel list.
 -}
 channelSearchRow : Bool -> String -> Element FrontendMsg_
 channelSearchRow isMobile channelSearch =
+    let
+        clearPaddingX =
+            12
+    in
     Ui.el
         [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border1
@@ -8756,7 +8760,7 @@ channelSearchRow isMobile channelSearch =
                 [ Ui.Font.color MyUi.font3
                 , Ui.height Ui.fill
                 , Ui.contentCenterY
-                , Ui.paddingXY 12 0
+                , Ui.paddingXY clearPaddingX 0
                 , MyUi.noPointerEvents
                 , Ui.alignRight
                 ]
@@ -8771,20 +8775,25 @@ channelSearchRow isMobile channelSearch =
                 , Ui.width Ui.shrink
                 , Ui.height Ui.fill
                 , Ui.contentCenterY
-                , Ui.paddingXY 12 0
+                , Ui.paddingXY clearPaddingX 0
                 , Ui.background MyUi.inputBackground
                 , Ui.alignRight
                 , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font3 ]
                 , MyUi.hoverText "Clear search"
                 ]
                 (Ui.html Icons.x)
+                |> Ui.el
+                    [ -- Don't cover up the input focus outline
+                      Ui.padding 2
+                    , Ui.height Ui.fill
+                    ]
                 |> Ui.inFront
         ]
         (Ui.Input.text
             [ Ui.id (Dom.idToString channelSearchInputId)
             , Ui.background MyUi.inputBackground
             , Ui.border 0
-            , Ui.paddingXY 8 8
+            , Ui.paddingWith { left = 8, top = 8, bottom = 8, right = clearPaddingX * 2 + 24 + 8 }
             , Ui.Font.color MyUi.font1
             ]
             { onChange = TypedChannelSearch
