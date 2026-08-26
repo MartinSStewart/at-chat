@@ -3090,6 +3090,9 @@ routeToViewing isMobile route local =
         PublicGoMatchRoute _ ->
             StopViewingChannel
 
+        PostFinderRoute _ ->
+            StopViewingChannel
+
 
 guildOrDmIdToMessage :
     GuildOrDmId

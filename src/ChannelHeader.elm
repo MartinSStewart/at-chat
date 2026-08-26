@@ -813,6 +813,9 @@ tabBodyView isMobile local loggedIn model =
         PublicGoMatchRoute _ ->
             Nothing
 
+        PostFinderRoute _ ->
+            Nothing
+
 
 gameTabBody :
     GuildOrDmId

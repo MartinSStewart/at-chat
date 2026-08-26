@@ -104,6 +104,7 @@ import Pages.Admin exposing (AdminChange, ExportSubset, InitAdminData)
 import Pagination exposing (PageId)
 import PersonName exposing (PersonName)
 import Ports exposing (NotificationPermission, RegisterPushSubscription, SubscribeData)
+import PostFinder
 import Postmark
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
@@ -186,6 +187,7 @@ type alias LoadedFrontend =
     , drag : Drag
     , dragPrevious : Drag
     , aiChatModel : AiChat.FrontendModel
+    , postFinderModel : PostFinder.FrontendModel
     , pageHasFocus : Bool
     , versionNumber : Maybe Int
     , emojiData : Maybe CachedEmojiData
@@ -522,6 +524,7 @@ type FrontendMsg_
     | PressedExpandContainer UserOptionSection
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg
+    | PostFinderMsg PostFinder.Msg
     | GameMsg Game.Msg
     | GoSpectatorMsg Go.SpectatorMsg
     | UserNameEditableMsg (Editable.Msg PersonName)

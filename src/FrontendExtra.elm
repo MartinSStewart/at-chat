@@ -92,6 +92,7 @@ import Pages.Guild
 import Pagination
 import PersonName
 import Ports exposing (RegisterPushSubscription(..))
+import PostFinder
 import Range exposing (Range)
 import RecoveryLogin
 import RichText exposing (Domain, RichText)
@@ -687,6 +688,9 @@ canDropFiles isMobile currentUserId route =
             Nothing
 
         PublicGoMatchRoute _ ->
+            Nothing
+
+        PostFinderRoute _ ->
             Nothing
 
 
@@ -1697,6 +1701,15 @@ routeRequest previousRoute newRoute model =
             ( { model2 | publicGoMatch = PublicGoMatch_Loading }
             , Lamdera.sendToBackend (GetPublicGoMatchRequest publicGoMatchId)
             )
+
+        PostFinderRoute maybeTweetLink ->
+            let
+                ( postFinderModel, postFinderCmd ) =
+                    PostFinder.searchFor maybeTweetLink model2.postFinderModel
+            in
+            ( { model2 | postFinderModel = postFinderModel }
+            , Command.map identity PostFinderMsg postFinderCmd
+            )
     )
         |> Tuple.mapSecond (\a -> Command.batch [ viewCmd, a ])
 
@@ -2126,6 +2139,9 @@ isPressMsg msg =
 
         AiChatMsg aiChatMsg ->
             AiChat.isPressMsg aiChatMsg
+
+        PostFinderMsg postFinderMsg ->
+            PostFinder.isPressMsg postFinderMsg
 
         GameMsg _ ->
             True

@@ -63,6 +63,18 @@ routeFuzzer =
             (Fuzz.maybe tabFuzzer)
             channelsVisibleFuzzer
         , Fuzz.map PublicGoMatchRoute secretIdFuzzer
+        , Fuzz.map PostFinderRoute tweetLinkFuzzer
+        ]
+
+
+tweetLinkFuzzer : Fuzzer (Maybe String)
+tweetLinkFuzzer =
+    Fuzz.oneOfValues
+        [ Nothing
+        , Just "https://x.com/MartinSStewart/status/1234567890123456789"
+        , Just "https://twitter.com/jack/status/20?s=20&t=abc"
+        , Just "not a link at all"
+        , Just "https://x.com/i/status/20 with spaces & symbols?#"
         ]
 
 

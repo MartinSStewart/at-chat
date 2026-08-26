@@ -62,6 +62,7 @@ import Pages.Home
 import Pagination
 import Point2d exposing (Point2d)
 import Ports exposing (PwaStatus(..))
+import PostFinder
 import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RecoveryLogin
@@ -448,6 +449,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , drag = NoDrag
             , dragPrevious = NoDrag
             , aiChatModel = aiChatModel
+            , postFinderModel = PostFinder.init
             , pageHasFocus = True
             , versionNumber = Nothing
             , emojiData = Nothing
@@ -2149,6 +2151,15 @@ updateLoaded msg model =
             , Command.map AiChatToBackend AiChatMsg aiChatCmd
             )
 
+        PostFinderMsg postFinderMsg ->
+            let
+                ( postFinderModel, postFinderCmd ) =
+                    PostFinder.update model.navigationKey postFinderMsg model.postFinderModel
+            in
+            ( { model | postFinderModel = postFinderModel }
+            , Command.map identity PostFinderMsg postFinderCmd
+            )
+
         GameMsg gameMsg ->
             case model.loginStatus of
                 LoggedIn loggedIn ->
@@ -2815,6 +2826,9 @@ updateLoaded msg model =
                             ( model, Command.none )
 
                         PublicGoMatchRoute _ ->
+                            ( model, Command.none )
+
+                        PostFinderRoute _ ->
                             ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
@@ -4696,6 +4710,9 @@ updateLoaded msg model =
                 PublicGoMatchRoute _ ->
                     ( model, Command.none )
 
+                PostFinderRoute _ ->
+                    ( model, Command.none )
+
         GoSpectatorMsg spectatorMsg ->
             case model.publicGoMatch of
                 PublicGoMatch_Loaded data gameModel ->
@@ -6267,6 +6284,9 @@ setShowMembers showMembers model =
         PublicGoMatchRoute _ ->
             ( model, Command.none )
 
+        PostFinderRoute _ ->
+            ( model, Command.none )
+
 
 viewImageInfo :
     ( AnyGuildOrDmId, ThreadRoute )
@@ -6929,6 +6949,9 @@ channelSidebarTarget route =
                     2
 
                 PublicGoMatchRoute _ ->
+                    2
+
+                PostFinderRoute _ ->
                     2
 
 
@@ -8055,6 +8078,11 @@ view _ model =
                                   else
                                     Ui.noAttr
                                 ]
+
+                    PostFinderRoute _ ->
+                        PostFinder.view loaded.windowSize loaded.timezone loaded.postFinderModel
+                            |> Ui.map PostFinderMsg
+                            |> FrontendExtra.layout loaded [ Ui.background MyUi.background3 ]
 
                     GuildRoute guildId maybeChannelId _ ->
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)

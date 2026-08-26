@@ -55,6 +55,7 @@ type Route
     | TextEditorRoute
     | LinkDiscord (Result LinkDiscordError Discord.UserAuth)
     | PublicGoMatchRoute (SecretId GamePublicId)
+    | PostFinderRoute (Maybe String)
 
 
 type LinkDiscordError
@@ -382,6 +383,16 @@ decode url =
         [ "go-match", goMatchPublicId ] ->
             PublicGoMatchRoute (SecretId.fromString goMatchPublicId)
 
+        [ "post-finder" ] ->
+            PostFinderRoute
+                (case Dict.get postFinderTweetParam url2.queryParameters of
+                    Just [ tweetLink ] ->
+                        Just tweetLink
+
+                    _ ->
+                        Nothing
+                )
+
         _ ->
             HomePageRoute
 
@@ -478,6 +489,9 @@ toChannelHeaderTab route =
         PublicGoMatchRoute _ ->
             Nothing
 
+        PostFinderRoute _ ->
+            Nothing
+
 
 type ChannelSidebarMode
     = ChannelSidebarNotDragging { offset : Float }
@@ -570,6 +584,9 @@ toShowMembersTabVisible { sidebarMode } route =
         PublicGoMatchRoute _ ->
             ( HideChannelSettings, False )
 
+        PostFinderRoute _ ->
+            ( HideChannelSettings, False )
+
 
 {-| Whether the member column is open. Routes that have no member column to
 open are treated as having it closed.
@@ -630,6 +647,9 @@ toShowMembersTab route =
             ( HideChannelSettings, False )
 
         PublicGoMatchRoute _ ->
+            ( HideChannelSettings, False )
+
+        PostFinderRoute _ ->
             ( HideChannelSettings, False )
 
 
@@ -751,6 +771,9 @@ setChannelsVisible channelsVisible route =
             route
 
         PublicGoMatchRoute _ ->
+            route
+
+        PostFinderRoute _ ->
             route
 
 
@@ -933,6 +956,16 @@ encode route =
 
                 PublicGoMatchRoute goMatchPublicId ->
                     ( [ "go-match", SecretId.toString goMatchPublicId ], [] )
+
+                PostFinderRoute maybeTweetLink ->
+                    ( [ postFinderPath ]
+                    , case maybeTweetLink of
+                        Just tweetLink ->
+                            [ Url.Builder.string postFinderTweetParam tweetLink ]
+
+                        Nothing ->
+                            []
+                    )
     in
     Url.Builder.absolute path query
 
@@ -940,6 +973,19 @@ encode route =
 linkDiscordPath : String
 linkDiscordPath =
     "link-discord"
+
+
+{-| Elm can't match a pattern against a constant, so the path is spelled out
+again in `decode`.
+-}
+postFinderPath : String
+postFinderPath =
+    "post-finder"
+
+
+postFinderTweetParam : String
+postFinderTweetParam =
+    "tweet"
 
 
 linkDiscordQueryParam : String
@@ -1040,6 +1086,9 @@ requiresLogin route =
             False
 
         PublicGoMatchRoute _ ->
+            False
+
+        PostFinderRoute _ ->
             False
 
 
