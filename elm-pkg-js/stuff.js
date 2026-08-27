@@ -711,6 +711,117 @@ exports.init = async function init(app)
             });
     });
 
+    // --- End-to-end encryption -------------------------------------------------
+    //
+    // The symmetric key for a DM is derived from the shared secret Elm worked out, then
+    // kept in IndexedDB as a CryptoKey the browser will not export. Storing the handle
+    // rather than the bytes is the whole point: nothing on the page can read the key
+    // back out afterwards, it can only ask for something to be encrypted with it.
+
+    const e2eeDbName = "at-chat-e2ee";
+    const e2eeStoreName = "dm-keys";
+
+    function e2eeOpenDb() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(e2eeDbName, 1);
+            request.onupgradeneeded = () => {
+                if (!request.result.objectStoreNames.contains(e2eeStoreName)) {
+                    request.result.createObjectStore(e2eeStoreName);
+                }
+            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    function e2eeWithStore(mode, run) {
+        return e2eeOpenDb().then(db => new Promise((resolve, reject) => {
+            const transaction = db.transaction(e2eeStoreName, mode);
+            const request = run(transaction.objectStore(e2eeStoreName));
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+            transaction.oncomplete = () => db.close();
+        }));
+    }
+
+    function e2eeBase64ToBytes(base64) {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
+        return bytes;
+    }
+
+    function e2eeBytesToBase64(bytes) {
+        let binary = "";
+        const view = new Uint8Array(bytes);
+        for (let i = 0; i < view.length; i++) { binary += String.fromCharCode(view[i]); }
+        return btoa(binary);
+    }
+
+    app.ports.encryption_to_js.subscribe(async (message) => {
+        try {
+            if (message.tag === "store-shared-secret") {
+                const data = message.args[0];
+                const secret = e2eeBase64ToBytes(data.sharedSecret);
+
+                // The raw X25519 output is not a key, it is a number both sides happen to
+                // agree on, so it goes through HKDF before anything encrypts with it.
+                const hkdfKey = await crypto.subtle.importKey(
+                    "raw", secret, "HKDF", false, ["deriveKey"]);
+
+                const aesKey = await crypto.subtle.deriveKey(
+                    { name: "HKDF"
+                    , hash: "SHA-256"
+                    , salt: new Uint8Array(32)
+                    , info: new TextEncoder().encode("at-chat dm e2ee v1")
+                    },
+                    hkdfKey,
+                    { name: "AES-GCM", length: 256 },
+                    false, // not exportable, which is why it is safe to keep around
+                    ["encrypt", "decrypt"]);
+
+                await e2eeWithStore("readwrite", store => store.put(aesKey, data.otherUserId));
+                app.ports.encryption_from_js.send(
+                    { tag: "shared-secret-stored", args: [ data.otherUserId ] });
+
+            } else if (message.tag === "encrypt-message") {
+                const data = message.args[0];
+                const key = await e2eeWithStore("readonly", store => store.get(data.otherUserId));
+
+                if (!key) {
+                    app.ports.encryption_from_js.send(
+                        { tag: "message-encrypt-failed"
+                        , args: [ data.requestId, "No encryption key is stored on this device for that conversation" ]
+                        });
+                    return;
+                }
+
+                // A fresh IV every message, prepended to the ciphertext so that decrypting
+                // only needs the one blob.
+                const iv = crypto.getRandomValues(new Uint8Array(12));
+                const cipherText = await crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: iv },
+                    key,
+                    new TextEncoder().encode(data.plainText));
+
+                const combined = new Uint8Array(iv.length + cipherText.byteLength);
+                combined.set(iv, 0);
+                combined.set(new Uint8Array(cipherText), iv.length);
+
+                app.ports.encryption_from_js.send(
+                    { tag: "message-encrypted", args: [ data.requestId, e2eeBytesToBase64(combined) ] });
+            }
+        } catch (e) {
+            if (message.tag === "store-shared-secret") {
+                app.ports.encryption_from_js.send(
+                    { tag: "shared-secret-failed", args: [ message.args[0].otherUserId, e.toString() ] });
+            } else if (message.tag === "encrypt-message") {
+                app.ports.encryption_from_js.send(
+                    { tag: "message-encrypt-failed", args: [ message.args[0].requestId, e.toString() ] });
+            }
+        }
+    });
+
     app.ports.haptic_feedback.subscribe((a) => {
         try {
             const label = document.createElement("label");

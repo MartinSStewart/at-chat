@@ -58,6 +58,7 @@ import Effect.Process as Process
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji)
+import Encryption exposing (EncryptedData)
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..), IsEncrypted(..))
 import Game
@@ -346,6 +347,12 @@ pendingChangesText localChange =
 
         Local_SetE2eeRisksAccepted _ ->
             "Accepted the end-to-end encryption risks"
+
+        Local_AcceptE2ee _ _ ->
+            "Started end-to-end encryption"
+
+        Local_SendEncryptedMessage _ _ _ _ _ ->
+            "Sent an encrypted message"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg_) -> Element FrontendMsg_ -> Html FrontendMsg_
@@ -2293,14 +2300,14 @@ isPressMsg msg =
         PressedExportChannel _ ->
             True
 
+        EncryptionFromJs _ ->
+            False
+
         PressedAddPrivateKeyToAccount ->
             True
 
         PressedCloseNewPrivateKey ->
             True
-
-        TypedNewPrivateKey ->
-            False
 
         PressedExpandE2eeSection _ ->
             True
@@ -3766,6 +3773,42 @@ changeUpdate localMsg local =
                 Local_CancelE2eeRequest { otherUserId } ->
                     LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
 
+                Local_SendEncryptedMessage createdAt { otherUserId } content threadRouteWithRepliedTo attachedFiles ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        local2 : LocalState
+                        local2 =
+                            addEncryptedDmMessage
+                                createdAt
+                                localUser.session.userId
+                                otherUserId
+                                content
+                                threadRouteWithRepliedTo
+                                attachedFiles
+                                local
+
+                        ( currentlyViewing2, user2 ) =
+                            LocalState.ownMessageIsReadFrontend
+                                (GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId }))
+                                (latestMessageThreadRoute
+                                    threadRouteWithRepliedTo
+                                    (SeqDict.get otherUserId local2.dmChannels
+                                        |> Maybe.withDefault DmChannel.frontendInit
+                                    )
+                                )
+                                ( localUser.currentlyViewing, localUser.user )
+                    in
+                    { local2
+                        | localUser =
+                            { localUser | currentlyViewing = currentlyViewing2, user = user2 }
+                    }
+
+                Local_AcceptE2ee { otherUserId } time ->
+                    LocalState.setDmE2ee otherUserId (DmChannel.E2eeEnabled time) local
+
                 Local_SetE2eeRisksAccepted isAccepted ->
                     let
                         localUser : LocalUser
@@ -5172,6 +5215,49 @@ changeUpdate localMsg local =
 
                 Server_E2eeRequestCancelled { otherUserId } ->
                     LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
+
+                Server_SetPublicKey userId publicKey ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | otherUsers =
+                                    SeqDict.updateIfExists
+                                        userId
+                                        (\otherUser -> { otherUser | publicKey = Just publicKey })
+                                        localUser.otherUsers
+                            }
+                    }
+
+                Server_E2eeAccepted { otherUserId } time ->
+                    LocalState.setDmE2ee otherUserId (DmChannel.E2eeEnabled time) local
+
+                Server_SendEncryptedMessage createdBy createdByUser createdAt { otherUserId } content threadRouteWithRepliedTo attachedFiles ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    addEncryptedDmMessage
+                        createdAt
+                        createdBy
+                        otherUserId
+                        content
+                        threadRouteWithRepliedTo
+                        attachedFiles
+                        -- The sender comes along with the message because the receiver
+                        -- might not have them loaded, the same way a plain message does it.
+                        { local
+                            | localUser =
+                                { localUser
+                                    | otherUsers =
+                                        SeqDict.insert createdBy createdByUser localUser.otherUsers
+                                }
+                        }
 
                 Server_DiscordAvatarsLoaded discordUserId discordUser ->
                     let
@@ -6969,3 +7055,54 @@ audio _ model =
 
                 NotLoggedIn _ ->
                     Audio.silence
+
+
+{-| Put an encrypted DM message into the conversation it belongs to. The sender's own copy
+and the copy that arrives from the other person are the same thing here, only differing in
+who is recorded as having written it.
+-}
+addEncryptedDmMessage :
+    Time.Posix
+    -> Id UserId
+    -> Id UserId
+    -> EncryptedData (Nonempty (RichText (Id UserId)))
+    -> ThreadRouteWithMaybeMessage
+    -> SeqDict (Id FileId) FileData
+    -> LocalState
+    -> LocalState
+addEncryptedDmMessage createdAt createdBy otherUserId content threadRouteWithRepliedTo attachedFiles local =
+    let
+        dmChannel : FrontendDmChannel
+        dmChannel =
+            SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit
+    in
+    { local
+        | dmChannels =
+            SeqDict.insert
+                otherUserId
+                (case threadRouteWithRepliedTo of
+                    ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+                        LocalState.createThreadMessageFrontend
+                            threadId
+                            (Message.encryptedUserTextMessageFrontend
+                                createdAt
+                                createdBy
+                                content
+                                maybeReplyTo
+                                attachedFiles
+                            )
+                            dmChannel
+
+                    NoThreadWithMaybeMessage maybeReplyTo ->
+                        LocalState.createChannelMessageFrontend
+                            (Message.encryptedUserTextMessageFrontend
+                                createdAt
+                                createdBy
+                                content
+                                maybeReplyTo
+                                attachedFiles
+                            )
+                            dmChannel
+                )
+                local.dmChannels
+    }

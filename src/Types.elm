@@ -38,6 +38,7 @@ module Types exposing
     , NewChannelForm
     , NewGuildForm
     , PendingGatewayReconnect
+    , PendingEncryptedMessage
     , PublicGoMatch(..)
     , RevealedSpoilers
     , ServerChange(..)
@@ -78,6 +79,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
+import Encryption exposing (EncryptedData)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import Game
 import Go
@@ -265,6 +267,18 @@ type alias LoggedIn2 =
     , -- The private key that was just generated, while its one and only showing is on
       -- screen. Deliberately not kept anywhere else.
       newPrivateKey : Maybe X25519.PrivateKey
+    , -- Whatever the browser last said went wrong while storing a key or encrypting a
+      -- message, so that a failure is visible rather than silent.
+      e2eeError : Maybe String
+    , -- Messages waiting on the browser to encrypt them. A reply carries only the request
+      -- id, so everything else the message needs to be sent is held here until it lands.
+      pendingEncryptedMessages : SeqDict Int PendingEncryptedMessage
+    , nextEncryptionRequestId : Int
+    , -- The private key for this session, which is what a shared secret gets derived
+      -- from. It arrives either by being generated here or by being pasted back in from
+      -- a password manager, and is never stored, so a reload leaves it empty until the
+      -- user pastes it again.
+      privateKey : Maybe X25519.PrivateKey
     , -- Which DMs' encryption sections the user has opened or closed themselves. Absent
       -- means they have not touched it and it follows whether an answer is being waited on.
       e2eeSectionsExpanded : SeqDict (Id UserId) Bool
@@ -272,6 +286,19 @@ type alias LoggedIn2 =
          This is to work around this bug https://github.com/panphora/overtype/issues/116
       -}
       typedTextCounter : Int
+    }
+
+
+{-| What a message needs in order to be sent, minus the content, which is off being
+encrypted.
+-}
+type alias PendingEncryptedMessage =
+    { otherUserId : Id UserId
+    , threadRoute : ThreadRouteWithMaybeMessage
+    , attachedFiles : SeqDict (Id FileId) FileData
+    , -- What the draft is filed under, so it can be cleared once the message has
+      -- actually gone, and left alone if the encryption failed.
+      draft : ( AnyGuildOrDmId, ThreadRoute )
     }
 
 
@@ -572,7 +599,6 @@ type FrontendMsg_
     | PressedExportChannel ExportChannelId
     | PressedAddPrivateKeyToAccount
     | PressedCloseNewPrivateKey
-    | TypedNewPrivateKey
     | PressedExpandE2eeSection (Id UserId)
     | PressedE2eeRisksAccepted Bool
     | PressedEnableE2ee (Id UserId)
@@ -636,7 +662,8 @@ type FrontendMsg_
     | PressedMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
     | UnreadOverviewChannelMsg AnyGuildOrDmId (Id ChannelMessageId) MessageViewMsg
     | UnreadOverviewThreadMsg AnyGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) MessageViewMsg
-    | ValidatedE2eePrivateKey (Result String ())
+    | ValidatedE2eePrivateKey (Result String X25519.PrivateKey)
+    | EncryptionFromJs (Result String Encryption.FromJs)
 
 
 type alias NewChannelForm =
@@ -1024,6 +1051,9 @@ type ServerChange
       -- that asked for encryption is named separately.
     | Server_E2eeRequested Viewing_DmId (Id UserId)
     | Server_E2eeRequestCancelled Viewing_DmId
+    | Server_E2eeAccepted Viewing_DmId Time.Posix
+    | Server_SetPublicKey (Id UserId) X25519.PublicKey
+    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (EncryptedData (Nonempty (RichText (Id UserId)))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
 
 
 type LocalChange
@@ -1085,3 +1115,5 @@ type LocalChange
     | Local_CancelE2eeRequest Viewing_DmId
     | Local_SetPublicKey X25519.PublicKey
     | Local_SetE2eeRisksAccepted Bool
+    | Local_AcceptE2ee Viewing_DmId Time.Posix
+    | Local_SendEncryptedMessage Time.Posix Viewing_DmId (EncryptedData (Nonempty (RichText (Id UserId)))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)

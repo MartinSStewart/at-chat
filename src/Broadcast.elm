@@ -5,6 +5,7 @@ module Broadcast exposing
     , discordDmNotification
     , discordGuildMessageNotification
     , e2eeRequestNotification
+    , encryptedDmNotification
     , gameStartedDmNotification
     , gameStartedGuildNotification
     , getSessionFromSessionIdHash
@@ -1633,6 +1634,74 @@ gameStartedDmNotification time senderId { otherUserId } gameType model =
 
             Nothing ->
                 ( model.sessions, Command.none )
+
+
+{-| Tell the other person a message arrived. The server cannot read it, so unlike a plain
+message notification this can only say that there was one.
+-}
+encryptedDmNotification :
+    Time.Posix
+    -> Id UserId
+    -> Viewing_DmId
+    -> BackendModel
+    -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
+encryptedDmNotification time senderId { otherUserId } model =
+    let
+        isViewing : Bool
+        isViewing =
+            List.any
+                (\connection ->
+                    case connection.currentlyViewing of
+                        UserSession.Viewing_Dm data ->
+                            data.id.otherUserId == senderId
+
+                        _ ->
+                            False
+                )
+                (userGetAllConnections otherUserId model)
+    in
+    if senderId == otherUserId || isViewing then
+        ( model.sessions, Command.none )
+
+    else
+        case NonemptyDict.get senderId model.users of
+            Just senderUser ->
+                notificationAlt
+                    time
+                    otherUserId
+                    (case senderUser.name of
+                        PersonName.PersonName name ->
+                            name
+                    )
+                    (case senderUser.icon of
+                        Just icon ->
+                            FileStatus.fileUrl FileStatus.pngContent icon
+
+                        Nothing ->
+                            Env.domain ++ "/at-logo-no-background.png"
+                    )
+                    encryptedDmText
+                    encryptedDmText
+                    (Email.Html.text encryptedDmText)
+                    (DmRoute
+                        { channelId = DmChannelId.fromUserIds senderId otherUserId
+                        , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
+                        , tab = Nothing
+                        , channelsVisible = ChannelsHiddenOnMobile
+                        }
+                        |> Just
+                    )
+                    model.sessions
+                    model
+                    |> Tuple.mapSecond Command.batch
+
+            Nothing ->
+                ( model.sessions, Command.none )
+
+
+encryptedDmText : String
+encryptedDmText =
+    "Sent you an encrypted message"
 
 
 {-| Let the other person in a DM know that they've been asked to start end-to-end

@@ -1,6 +1,7 @@
 module Message exposing
     ( CallStartedData
     , ChangeAttachments(..)
+    , EncryptedUserTextMessageData
     , GameStartedData
     , GameType(..)
     , Message(..)
@@ -12,6 +13,7 @@ module Message exposing
     , createdAt
     , drawing
     , editUserTextMessage
+    , encryptedUserTextMessageFrontend
     , handleDrawingChange
     , reactionEmojis
     , removeReactionEmoji
@@ -158,6 +160,34 @@ userTextMessageBackend secretKey createdAt2 createdBy content repliedTo attached
         SeqDict.empty
         (RichText.stickers content)
     )
+
+
+{-| An encrypted message, as both people in the conversation hold it. There are no embeds
+because working them out means reading the message, which nothing outside the two of them
+can do.
+-}
+encryptedUserTextMessageFrontend :
+    Time.Posix
+    -> userId
+    -> EncryptedData (Nonempty (RichText userId))
+    -> Maybe (Id messageId)
+    -> SeqDict (Id FileId) FileData
+    -> Message messageId userId
+encryptedUserTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
+    EncryptedUserTextMessage
+        { createdAt = createdAt2
+        , createdBy = createdBy
+        , content = content
+        , reactions = SeqDict.empty
+        , editedAt = Nothing
+        , repliedTo = repliedTo
+        , attachedFiles = attachedFiles
+        , embeds = Encryption.empty
+        , timestampDrawings = Drawing.emptyDrawing
+        , userIconDrawings = Drawing.emptyDrawing
+        , imageAttachmentDrawings = SeqDict.empty
+        , embedDrawings = SeqDict.empty
+        }
 
 
 userTextMessageFrontend :

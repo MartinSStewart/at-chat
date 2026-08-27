@@ -559,7 +559,10 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                                 case X25519.privateKeyFromString text of
                                                     Ok privateKey ->
                                                         if X25519.toPublicKey privateKey == publicKey then
-                                                            Ok ()
+                                                            -- Handing the key back rather than just saying it
+                                                            -- was valid is what puts it into the session, so
+                                                            -- conversations can be encrypted after a reload.
+                                                            Ok privateKey
 
                                                         else
                                                             Err "Public+private key pair is invalid"

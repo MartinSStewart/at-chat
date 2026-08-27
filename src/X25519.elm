@@ -12,6 +12,7 @@ module X25519 exposing
     , publicKeyToString
     , sharedSecret
     , sharedSecretToBytes
+    , sharedSecretToString
     , toPublicKey
     )
 
@@ -164,6 +165,14 @@ publicKeyToBytes (PublicKey key) =
 sharedSecretToBytes : SharedSecret -> Bytes
 sharedSecretToBytes (SharedSecret key) =
     keyToBytes key
+
+
+{-| The shared secret as text, which is how it is handed to the browser to be turned into
+a key it will not give back.
+-}
+sharedSecretToString : SharedSecret -> String
+sharedSecretToString secret =
+    Base64.fromBytes (sharedSecretToBytes secret) |> Maybe.withDefault ""
 
 
 {-| The public key to hand to the person you want to talk to, found by multiplying the

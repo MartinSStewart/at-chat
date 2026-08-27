@@ -4,6 +4,7 @@ module E2EMisc exposing
     , colorPickerTest
     , dmThreadsTest
     , emojiSuggestionTest
+    , endToEndEncryptionAcceptTest
     , endToEndEncryptionRequestTest
     , exportChannelTest
     , exportDmChannelTest
@@ -27,6 +28,7 @@ module E2EMisc exposing
     )
 
 import Audio
+import Base64
 import Broadcast
 import DmChannel
 import DmChannelId
@@ -37,10 +39,12 @@ import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Time as Time
 import Emoji
+import Encryption
 import Expect
 import FileStatus
 import Html.Attributes
 import Id
+import IdArray
 import Json.Encode
 import List.Nonempty
 import Local
@@ -315,7 +319,7 @@ endToEndEncryptionRequestTest config =
     let
         warning : String
         warning =
-            "If you and the other person lose your private keys, the messages can't be decrypted."
+            "If you lose it, you'll permanently lose access to all your encrypted messages."
     in
     E2EHelper.startTest
         "Ask the other person in a DM to start end-to-end encryption"
@@ -415,6 +419,194 @@ endToEndEncryptionRequestTest config =
                 ]
             )
         ]
+
+
+{-| Accepting a request is what actually turns encryption on: both people work out the
+same shared secret from their own private key and the other's public one, hand it to the
+browser to keep, and from then on messages go through the browser before they are sent.
+-}
+endToEndEncryptionAcceptTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+endToEndEncryptionAcceptTest config =
+    E2EHelper.startTest
+        "Accept an encryption request and send an encrypted message"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.openDm admin 100 "2"
+                , E2EHelper.openDm user 100 "0"
+
+                -- The person asking sets themselves up and sends the request.
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                , admin.click 100 (Dom.id "guild_enableE2ee")
+
+                -- The person being asked accepts, which is the point at which their
+                -- browser is given a key.
+                , user.click 100 (Dom.id "guild_showMembers")
+                , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount user
+                , user.click 100 (Dom.id "guild_startE2ee")
+                , E2EHelper.respondToEncryptionPort user
+
+                -- Accepting reaches the other side, which works the secret out too.
+                , E2EHelper.respondToEncryptionPort admin
+                , T.checkState 100 checkBothSidesDerivedTheSameSecret
+                , T.checkBackend 100 checkDmIsEncrypted
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "E2EE was enabled on" ])
+
+                -- The section opens itself only while an answer is being waited on, so
+                -- once it has been given it closes again and has to be reopened.
+                , user.click 100 (Dom.id "guild_e2eeSection")
+                , user.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "E2EE was enabled on" ])
+
+                -- A message in an encrypted conversation goes past the browser first, and
+                -- what reaches the server is what came back rather than what was typed.
+                , admin.click 100 (Dom.id "guild_hideMembers")
+                , E2EHelper.writeMessage admin 100 "Hello in secret"
+                , T.checkBackend 100 (checkNoPlainTextReachedTheServer "Hello in secret")
+                , E2EHelper.respondToEncryptionPort admin
+                , T.checkBackend 100 (checkEncryptedMessageStored "Hello in secret")
+
+                -- Without a key on this device the message is not sent, and the draft is
+                -- left alone so nothing is lost.
+                , E2EHelper.writeMessage admin 100 "This one cannot go"
+                , E2EHelper.respondToEncryptionPortWithMissingKey admin
+                , T.checkBackend 100 (checkEncryptedMessageCount 1)
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "This one cannot go" ])
+                ]
+            )
+        ]
+
+
+{-| Both people should have handed the browser the same secret. They each work it out
+from their own private key and the other's public one, so this failing means the key
+agreement disagreed across the two clients.
+-}
+checkBothSidesDerivedTheSameSecret : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkBothSidesDerivedTheSameSecret data =
+    let
+        secrets : List String
+        secrets =
+            SeqDict.keys data.frontends
+                |> List.concatMap (\clientId -> E2EHelper.encryptionPortRequests clientId data)
+                |> List.filterMap
+                    (\request ->
+                        case request of
+                            Encryption.ToJs_StoreSharedSecret { sharedSecret } ->
+                                Just sharedSecret
+
+                            Encryption.ToJs_EncryptMessage _ ->
+                                Nothing
+                    )
+    in
+    case secrets of
+        [ first, second ] ->
+            if first == second then
+                Ok ()
+
+            else
+                Err "The two sides worked out different shared secrets"
+
+        _ ->
+            Err
+                ("Expected both sides to store a shared secret, instead got "
+                    ++ String.fromInt (List.length secrets)
+                )
+
+
+checkDmIsEncrypted : E2EHelper.BackendModel2 -> Result String ()
+checkDmIsEncrypted backend =
+    case adminDmChannel backend |> Maybe.map .e2ee of
+        Just (DmChannel.E2eeEnabled _) ->
+            Ok ()
+
+        _ ->
+            Err "The DM should have been marked as encrypted on the backend"
+
+
+{-| The server should never have been handed the message as it was typed.
+-}
+checkNoPlainTextReachedTheServer : String -> E2EHelper.BackendModel2 -> Result String ()
+checkNoPlainTextReachedTheServer text backend =
+    if List.any (String.contains text) (encryptedMessageContents backend) then
+        Err "The message reached the server as plain text"
+
+    else
+        Ok ()
+
+
+checkEncryptedMessageStored : String -> E2EHelper.BackendModel2 -> Result String ()
+checkEncryptedMessageStored text backend =
+    let
+        expected : String
+        expected =
+            Base64.fromString text |> Maybe.withDefault "not base64"
+    in
+    if List.member expected (encryptedMessageContents backend) then
+        Ok ()
+
+    else
+        Err
+            ("The stored message isn't what the browser handed back. Stored: "
+                ++ String.join ", " (encryptedMessageContents backend)
+            )
+
+
+checkEncryptedMessageCount : Int -> E2EHelper.BackendModel2 -> Result String ()
+checkEncryptedMessageCount expected backend =
+    let
+        actual : Int
+        actual =
+            List.length (encryptedMessageContents backend)
+    in
+    if actual == expected then
+        Ok ()
+
+    else
+        Err
+            ("Expected "
+                ++ String.fromInt expected
+                ++ " encrypted messages on the backend, found "
+                ++ String.fromInt actual
+            )
+
+
+encryptedMessageContents : E2EHelper.BackendModel2 -> List String
+encryptedMessageContents backend =
+    case adminDmChannel backend of
+        Just dmChannel ->
+            IdArray.toList dmChannel.messages
+                |> List.filterMap
+                    (\message ->
+                        case message of
+                            Message.EncryptedUserTextMessage data ->
+                                Just (Encryption.toBase64 data.content)
+
+                            _ ->
+                                Nothing
+                    )
+
+        Nothing ->
+            []
+
+
+adminDmChannel : E2EHelper.BackendModel2 -> Maybe DmChannel.DmChannel
+adminDmChannel backend =
+    SeqDict.get
+        (DmChannelId.fromUserIds (Id.fromInt 0) (Id.fromInt 2))
+        (E2EHelper.unwrapBackend backend).dmChannels
 
 
 {-| Generates a key pair, which stores the public half on the account and shows the

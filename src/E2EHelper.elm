@@ -34,6 +34,7 @@ module E2EHelper exposing
     , drawingAnchorClick
     , editMostRecentMessageViaArrowUp
     , enableNotifications
+    , encryptionPortRequests
     , expectPointsCloseTo
     , expectPolylineCount
     , expectPolylineScale
@@ -79,6 +80,8 @@ module E2EHelper exposing
     , regularDiscordChannelBecomesPrivateEvent
     , regularDiscordChannelCreateEvent
     , regularDiscordChannelId
+    , respondToEncryptionPort
+    , respondToEncryptionPortWithMissingKey
     , safariIphone
     , scrollToBottom
     , scrollToMiddle
@@ -109,6 +112,7 @@ import AiChat exposing (AiModelName(..))
 import Array
 import Audio
 import Backend
+import Base64
 import Broadcast
 import Call
 import ChannelDescription
@@ -127,6 +131,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed
 import Emoji exposing (EmojiOrCustomEmoji(..), SkinTone(..))
+import Encryption
 import Env
 import Expect
 import FileStatus
@@ -666,6 +671,81 @@ checkNotification title body =
         )
 
 
+{-| Everything a client has asked the browser to do with encryption so far, most recent
+first, which is the order `portRequests` keeps them in.
+-}
+encryptionPortRequests : Lamdera.ClientId -> T.Data frontendModel backendModel -> List Encryption.ToJs
+encryptionPortRequests clientId data =
+    List.filterMap
+        (\request ->
+            if request.clientId == clientId && request.portName == "encryption_to_js" then
+                Codec.decodeValue Encryption.toJsCodec request.value |> Result.toMaybe
+
+            else
+                Nothing
+        )
+        data.portRequests
+
+
+{-| Stands in for the browser's half of the encryption port, answering the most recent
+thing a client asked for as though the crypto had worked.
+
+The stand-in ciphertext is the plaintext in base64, which is not encryption at all but
+does let a test check that the message the app handed over is the one that came back, and
+that what reaches the server is the transformed version rather than what was typed.
+
+-}
+respondToEncryptionPort :
+    T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+respondToEncryptionPort client =
+    T.andThen
+        100
+        (\data ->
+            case encryptionPortRequests client.clientId data of
+                (Encryption.ToJs_StoreSharedSecret request) :: _ ->
+                    [ Encryption.FromJs_SharedSecretStored request.otherUserId
+                        |> Codec.encodeToValue Encryption.fromJsCodec
+                        |> client.portEvent 100 "encryption_from_js"
+                    ]
+
+                (Encryption.ToJs_EncryptMessage request) :: _ ->
+                    [ Base64.fromString request.plainText
+                        |> Maybe.withDefault ""
+                        |> Encryption.FromJs_MessageEncrypted request.requestId
+                        |> Codec.encodeToValue Encryption.fromJsCodec
+                        |> client.portEvent 100 "encryption_from_js"
+                    ]
+
+                [] ->
+                    [ T.checkState 0 (\_ -> Err "The client didn't ask the browser to do any encryption") ]
+        )
+
+
+{-| Answers an encryption request with the failure the browser gives when this device has
+no key for the conversation.
+-}
+respondToEncryptionPortWithMissingKey :
+    T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+respondToEncryptionPortWithMissingKey client =
+    T.andThen
+        100
+        (\data ->
+            case encryptionPortRequests client.clientId data of
+                (Encryption.ToJs_EncryptMessage request) :: _ ->
+                    [ Encryption.FromJs_MessageEncryptFailed
+                        request.requestId
+                        "No encryption key is stored on this device for that conversation"
+                        |> Codec.encodeToValue Encryption.fromJsCodec
+                        |> client.portEvent 100 "encryption_from_js"
+                    ]
+
+                _ ->
+                    [ T.checkState 0 (\_ -> Err "The client didn't ask for a message to be encrypted") ]
+        )
+
+
 httpBasic : String -> Int -> String -> HttpResponse
 httpBasic url statusCode body =
     StringHttpResponse
@@ -1024,7 +1104,7 @@ connectFourUsersAndJoinNewGuild windowSize continueFunc =
             , admin.click 100 (Dom.id "guild_createGuildSubmit")
             , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
             , admin.click 100 (Dom.id "guild_createInviteLink")
-            , admin.click 100 (Dom.id "guild_copyText")
+            , admin.click 100 (Dom.id "guild_inviteLinkCopy_copy")
             , T.andThen
                 100
                 (\data ->
@@ -1156,7 +1236,7 @@ connectTwoUsersAndJoinNewGuild windowSize continueFunc =
             , admin.click 100 (Dom.id "guild_createGuildSubmit")
             , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
             , admin.click 100 (Dom.id "guild_createInviteLink")
-            , admin.click 100 (Dom.id "guild_copyText")
+            , admin.click 100 (Dom.id "guild_inviteLinkCopy_copy")
             , T.andThen
                 100
                 (\data ->
@@ -2506,6 +2586,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetE2eeRisksAccepted _ ->
                     False
 
+                Local_AcceptE2ee _ _ ->
+                    True
+
+                Local_SendEncryptedMessage _ _ _ _ _ ->
+                    True
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -2751,6 +2837,15 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_E2eeRequestCancelled _ ->
+                            True
+
+                        Types.Server_E2eeAccepted _ _ ->
+                            True
+
+                        Types.Server_SetPublicKey _ _ ->
+                            True
+
+                        Types.Server_SendEncryptedMessage _ _ _ _ _ _ _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
@@ -3004,6 +3099,13 @@ allAttackerLocalChanges =
     , Local_CancelE2eeRequest { otherUserId = Broadcast.adminUserId }
     , Local_SetPublicKey attackerPublicKey
     , Local_SetE2eeRisksAccepted True
+    , Local_AcceptE2ee { otherUserId = Broadcast.adminUserId } startTime
+    , Local_SendEncryptedMessage
+        startTime
+        { otherUserId = Broadcast.adminUserId }
+        Encryption.empty
+        (NoThreadWithMaybeMessage Nothing)
+        SeqDict.empty
     ]
 
 
@@ -3281,7 +3383,7 @@ inviteUser admin continueWith =
     [ admin.click 100 (Dom.id "guild_openGuild_0")
     , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
     , admin.click 100 (Dom.id "guild_createInviteLink")
-    , admin.click 100 (Dom.id "guild_copyText")
+    , admin.click 100 (Dom.id "guild_inviteLinkCopy_copy")
     , T.andThen
         100
         (\data ->

@@ -6099,13 +6099,96 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 { user | publicKey = Just publicKey }
                                                 model.users
                                       }
-                                    , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                                    , Command.batch
+                                        [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+
+                                        -- Anyone who might want to encrypt something to
+                                        -- this person needs their public key, so it goes
+                                        -- out the same way a name or an icon does.
+                                        , Broadcast.toEveryoneWhoCanSeeUser
+                                            clientId
+                                            session.userId
+                                            (Server_SetPublicKey session.userId publicKey |> ServerChange)
+                                            model
+                                        ]
                                     )
 
                                 Just _ ->
                                     -- Replacing a key would orphan everything encrypted to the old
                                     -- one, so a second attempt (another tab, say) is refused rather
                                     -- than allowed to overwrite.
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
+                Local_SendEncryptedMessage _ id content threadRoute attachedFiles ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session user _ dmChannelId dmChannel ->
+                            case dmChannel.e2ee of
+                                DmChannel.E2eeEnabled _ ->
+                                    BackendExtra.sendEncryptedDm
+                                        time
+                                        clientId
+                                        changeId
+                                        id
+                                        content
+                                        threadRoute
+                                        (BackendExtra.validateAttachedFiles model.files attachedFiles)
+                                        session
+                                        user
+                                        dmChannelId
+                                        dmChannel
+                                        model
+
+                                _ ->
+                                    -- Nothing has agreed to encrypt this conversation, so
+                                    -- a message nobody can read is not worth storing.
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
+                Local_AcceptE2ee id _ ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session _ _ dmChannelId dmChannel ->
+                            case dmChannel.e2ee of
+                                DmChannel.E2eeRequestedBy requestedBy ->
+                                    if requestedBy == session.userId then
+                                        -- Accepting your own request would encrypt the
+                                        -- conversation without the other person ever
+                                        -- having agreed to it, or having a key.
+                                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                    else
+                                        let
+                                            model2 : BackendModel
+                                            model2 =
+                                                { model
+                                                    | dmChannels =
+                                                        SeqDict.insert
+                                                            dmChannelId
+                                                            { dmChannel | e2ee = DmChannel.E2eeEnabled time }
+                                                            model.dmChannels
+                                                }
+                                        in
+                                        ( model2
+                                        , Command.batch
+                                            [ Local_AcceptE2ee id time
+                                                |> LocalChangeResponse changeId
+                                                |> Lamdera.sendToFrontend clientId
+                                            , Broadcast.toDmChannelExcludingOne
+                                                clientId
+                                                session.userId
+                                                id
+                                                (\id2 -> Server_E2eeAccepted id2 time)
+                                                model2
+                                            ]
+                                        )
+
+                                _ ->
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 

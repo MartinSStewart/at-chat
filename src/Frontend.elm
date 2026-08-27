@@ -30,6 +30,7 @@ import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji(..), EmojiOrSticker(..))
+import Encryption
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
 import Game
@@ -246,6 +247,7 @@ subscriptions _ model =
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
         , Call.fromJs GotVoiceChatSignalFromJs
+        , Encryption.fromJs EncryptionFromJs
         , case model of
             Loading _ ->
                 Subscription.none
@@ -565,6 +567,10 @@ loadedInitHelper startupData emojiData loginData loading =
             , friendsSearch = ""
             , channelSearch = ""
             , newPrivateKey = Nothing
+            , privateKey = Nothing
+            , e2eeError = Nothing
+            , pendingEncryptedMessages = SeqDict.empty
+            , nextEncryptionRequestId = 0
             , e2eeSectionsExpanded = SeqDict.empty
             , typedTextCounter = 0
             }
@@ -3100,7 +3106,7 @@ updateLoaded msg model =
                             FrontendExtra.handleLocalChange
                                 model.time
                                 (X25519.toPublicKey privateKey |> Local_SetPublicKey |> Just)
-                                { loggedIn | newPrivateKey = Just privateKey }
+                                { loggedIn | newPrivateKey = Just privateKey, privateKey = Just privateKey }
                                 Command.none
                         )
                         -- The words that went into this key are dropped so that generating a
@@ -3117,10 +3123,6 @@ updateLoaded msg model =
             FrontendExtra.updateLoggedIn
                 (\loggedIn -> ( { loggedIn | newPrivateKey = Nothing }, Command.none ))
                 model
-
-        TypedNewPrivateKey ->
-            -- The box the private key is shown in is read only, so there is nothing to do.
-            ( model, Command.none )
 
         PressedExpandE2eeSection otherUserId ->
             FrontendExtra.updateLoggedIn
@@ -3175,10 +3177,102 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedStartE2ee _ ->
-            -- Accepting the request is what generates the key pair, so this waits on the
-            -- crypto library that Encryption.elm is a placeholder for.
-            ( model, Command.none )
+        PressedStartE2ee otherUserId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    -- Only the key is set up here. The conversation is not marked as
+                    -- encrypted until the browser says the key is stored, since doing it
+                    -- the other way round would leave a conversation that nothing can
+                    -- encrypt for if the storing failed.
+                    case storeSharedSecret otherUserId loggedIn of
+                        Ok command ->
+                            ( { loggedIn | e2eeError = Nothing }, command )
+
+                        Err error ->
+                            ( { loggedIn | e2eeError = Just error }, Command.none )
+                )
+                model
+
+        EncryptionFromJs result ->
+            case result of
+                Ok (Encryption.FromJs_SharedSecretStored otherUserId) ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            -- Whoever was asked is the one who still owes an answer. The
+                            -- person who did the asking is only catching up with an
+                            -- answer that already arrived, so they have nothing to send.
+                            if LocalState.dmE2eeRequestedByOtherUser otherUserId (Local.model loggedIn.localState) then
+                                FrontendExtra.handleLocalChange
+                                    model.time
+                                    (Local_AcceptE2ee { otherUserId = otherUserId } model.time |> Just)
+                                    loggedIn
+                                    Command.none
+
+                            else
+                                ( loggedIn, Command.none )
+                        )
+                        model
+
+                Ok (Encryption.FromJs_SharedSecretFailed _ error) ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn -> ( { loggedIn | e2eeError = Just error }, Command.none ))
+                        model
+
+                Ok (Encryption.FromJs_MessageEncrypted requestId cipherText) ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            case
+                                ( SeqDict.get requestId loggedIn.pendingEncryptedMessages
+                                , Encryption.fromBase64 cipherText
+                                )
+                            of
+                                ( Just pending, Just content ) ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Local_SendEncryptedMessage
+                                            model.time
+                                            { otherUserId = pending.otherUserId }
+                                            content
+                                            pending.threadRoute
+                                            pending.attachedFiles
+                                            |> Just
+                                        )
+                                        { loggedIn
+                                            | pendingEncryptedMessages =
+                                                SeqDict.remove requestId loggedIn.pendingEncryptedMessages
+                                            , drafts = SeqDict.remove pending.draft loggedIn.drafts
+                                            , replyTo = SeqDict.remove pending.draft loggedIn.replyTo
+                                            , filesToUpload = SeqDict.remove pending.draft loggedIn.filesToUpload
+                                        }
+                                        (Scroll.toBottomOfChannel
+                                            Pages.Guild.conversationContainerId
+                                            SetScrollToBottom
+                                        )
+
+                                _ ->
+                                    ( loggedIn, Command.none )
+                        )
+                        model
+
+                Ok (Encryption.FromJs_MessageEncryptFailed requestId error) ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            -- The draft is deliberately left where it is, so that a
+                            -- message that could not be encrypted is not also lost.
+                            ( { loggedIn
+                                | e2eeError = Just error
+                                , pendingEncryptedMessages =
+                                    SeqDict.remove requestId loggedIn.pendingEncryptedMessages
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
+
+                Err error ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn -> ( { loggedIn | e2eeError = Just error }, Command.none ))
+                        model
 
         PageHasFocusChanged hasFocus ->
             let
@@ -4033,7 +4127,21 @@ updateLoaded msg model =
                                                             LocalState.canSendDiscordMessage local guildOrDmId2 == Ok ()
                                                    )
                                     in
-                                    if safeToSend then
+                                    if not safeToSend then
+                                        ( loggedIn, Command.none )
+
+                                    else if encryptedDmOtherUser guildOrDmId local /= Nothing then
+                                        -- An encrypted conversation cannot send anything
+                                        -- until the browser hands back the ciphertext, so
+                                        -- the draft stays put until it does.
+                                        startEncryptingMessage
+                                            guildOrDmIdWithThread
+                                            threadRoute
+                                            nonempty
+                                            (encryptedDmOtherUser guildOrDmId local)
+                                            loggedIn
+
+                                    else
                                         FrontendExtra.handleLocalChange
                                             model.time
                                             ((case guildOrDmId of
@@ -4108,9 +4216,6 @@ updateLoaded msg model =
                                              else
                                                 Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
                                             )
-
-                                    else
-                                        ( loggedIn, Command.none )
 
                                 Nothing ->
                                     ( loggedIn, Command.none )
@@ -5273,7 +5378,7 @@ updateLoaded msg model =
                                     { userOptions
                                         | e2eeKeysValid =
                                             case result of
-                                                Ok () ->
+                                                Ok _ ->
                                                     E2eeKeys_Valid
 
                                                 Err error ->
@@ -5281,6 +5386,16 @@ updateLoaded msg model =
                                     }
                                 )
                                 loggedIn.userOptions
+
+                        -- A key that matches the account's public key is the one this
+                        -- session needs in order to encrypt anything, so it is kept.
+                        , privateKey =
+                            case result of
+                                Ok privateKey ->
+                                    Just privateKey
+
+                                Err _ ->
+                                    loggedIn.privateKey
                       }
                     , Command.none
                     )
@@ -7654,6 +7769,18 @@ updateLoadedFromBackend msg model =
                                             Command.none
                                     )
 
+                                Server_E2eeAccepted { otherUserId } _ ->
+                                    -- The other person accepted, so this side works out
+                                    -- the same secret and has the browser store it. Both
+                                    -- ends reach the same key from their own private key
+                                    -- and the other's public one.
+                                    case storeSharedSecret otherUserId loggedIn2 of
+                                        Ok command ->
+                                            ( { loggedIn2 | e2eeError = Nothing }, command )
+
+                                        Err error ->
+                                            ( { loggedIn2 | e2eeError = Just error }, Command.none )
+
                                 Server_YouJoinedGuildByInvite (Ok { guildId, guild }) ->
                                     ( loggedIn2
                                     , case model.route of
@@ -8640,3 +8767,111 @@ handleGameOutMsgs outMsgs model =
         )
         ( model, [] )
         outMsgs
+
+
+{-| Work out the secret this session shares with the other person in a DM and hand it to
+the browser, which turns it into a key it will not give back.
+
+Both halves have to be to hand: this session's private key, which is only here if it was
+generated or pasted in since the page loaded, and the other person's public key, which
+they only have once they have made a key pair of their own.
+
+-}
+storeSharedSecret : Id UserId -> LoggedIn2 -> Result String (Command FrontendOnly ToBackend FrontendMsg_)
+storeSharedSecret otherUserId loggedIn =
+    let
+        local : LocalState
+        local =
+            Local.model loggedIn.localState
+    in
+    case loggedIn.privateKey of
+        Nothing ->
+            Err "Paste your private key into your user settings first, this browser doesn't have it"
+
+        Just privateKey ->
+            case User.getUser otherUserId local.localUser |> Maybe.andThen .publicKey of
+                Nothing ->
+                    Err "The other person hasn't created a private key yet"
+
+                Just otherPublicKey ->
+                    case X25519.sharedSecret privateKey otherPublicKey of
+                        Nothing ->
+                            Err "The other person's public key is not usable"
+
+                        Just secret ->
+                            Encryption.ToJs_StoreSharedSecret
+                                { otherUserId = otherUserId
+                                , sharedSecret = X25519.sharedSecretToString secret
+                                }
+                                |> Encryption.toJs
+                                |> Ok
+
+
+{-| The other person in the conversation, when this is a DM that has been encrypted.
+`Nothing` for anything that goes to the server in the clear.
+-}
+encryptedDmOtherUser : AnyGuildOrDmId -> LocalState -> Maybe (Id UserId)
+encryptedDmOtherUser guildOrDmId local =
+    case guildOrDmId of
+        GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
+            case SeqDict.get otherUserId local.dmChannels |> Maybe.map .e2ee of
+                Just (DmChannel.E2eeEnabled _) ->
+                    Just otherUserId
+
+                _ ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
+{-| Hand a message to the browser to be encrypted. Everything the message needs besides
+its contents is put aside under the request id, since that is all the answer carries.
+-}
+startEncryptingMessage :
+    ( AnyGuildOrDmId, ThreadRoute )
+    -> ThreadRoute
+    -> String.Nonempty.NonemptyString
+    -> Maybe (Id UserId)
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+startEncryptingMessage draft threadRoute text maybeOtherUserId loggedIn =
+    case maybeOtherUserId of
+        Nothing ->
+            ( loggedIn, Command.none )
+
+        Just otherUserId ->
+            ( { loggedIn
+                | e2eeError = Nothing
+                , nextEncryptionRequestId = loggedIn.nextEncryptionRequestId + 1
+                , pendingEncryptedMessages =
+                    SeqDict.insert
+                        loggedIn.nextEncryptionRequestId
+                        { otherUserId = otherUserId
+                        , threadRoute =
+                            case threadRoute of
+                                ViewThread threadId ->
+                                    ViewThreadWithMaybeMessage
+                                        threadId
+                                        (SeqDict.get draft loggedIn.replyTo |> Maybe.map Id.changeType)
+
+                                NoThread ->
+                                    NoThreadWithMaybeMessage (SeqDict.get draft loggedIn.replyTo)
+                        , attachedFiles =
+                            case SeqDict.get draft loggedIn.filesToUpload of
+                                Just dict ->
+                                    NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+
+                                Nothing ->
+                                    SeqDict.empty
+                        , draft = draft
+                        }
+                        loggedIn.pendingEncryptedMessages
+              }
+            , Encryption.ToJs_EncryptMessage
+                { requestId = loggedIn.nextEncryptionRequestId
+                , otherUserId = otherUserId
+                , plainText = String.Nonempty.toString text
+                }
+                |> Encryption.toJs
+            )

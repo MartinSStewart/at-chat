@@ -29,6 +29,7 @@ module BackendExtra exposing
     , ownMessageIsReadBackend
     , requestedForToGuildOrDmId
     , sendDm
+    , sendEncryptedDm
     , sendGuildMessage
     , sendLoginEmail
     , shouldRateLimit
@@ -60,6 +61,7 @@ import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
+import Encryption exposing (EncryptedData)
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Http
@@ -1895,6 +1897,107 @@ readerIsViewingDm readerId senderId threadRoute model =
         model.users
 
 
+{-| Store and pass on a DM whose contents the server cannot read.
+
+Almost everything `sendDm` does with a message needs the text: working out who was
+mentioned, what to put in a notification, which links to fetch embeds for. None of that
+is possible here, so this keeps only what is left, and the notification says a message
+arrived without saying what it was.
+
+-}
+sendEncryptedDm :
+    Time.Posix
+    -> ClientId
+    -> ChangeId
+    -> Viewing_DmId
+    -> EncryptedData (Nonempty (RichText (Id UserId)))
+    -> ThreadRouteWithMaybeMessage
+    -> SeqDict (Id FileId) FileData
+    -> UserSession
+    -> BackendUser
+    -> DmChannelId
+    -> DmChannel
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+sendEncryptedDm time clientId changeId id content threadRouteWithReplyTo attachedFiles session user dmChannelId dmChannel model =
+    case RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits of
+        Ok sendMessageRateLimits ->
+            let
+                messageData : Message.EncryptedUserTextMessageData messageId (Id UserId)
+                messageData =
+                    { createdAt = time
+                    , createdBy = session.userId
+                    , content = content
+                    , reactions = SeqDict.empty
+                    , editedAt = Nothing
+                    , repliedTo = Nothing
+                    , attachedFiles = attachedFiles
+                    , embeds = Encryption.empty
+                    , timestampDrawings = Drawing.emptyDrawing
+                    , userIconDrawings = Drawing.emptyDrawing
+                    , imageAttachmentDrawings = SeqDict.empty
+                    , embedDrawings = SeqDict.empty
+                    }
+
+                ( threadRouteWithMessage, dmChannel2 ) =
+                    case threadRouteWithReplyTo of
+                        ViewThreadWithMaybeMessage threadId repliedTo ->
+                            LocalState.createThreadMessageBackend
+                                threadId
+                                (Message.EncryptedUserTextMessage { messageData | repliedTo = repliedTo })
+                                dmChannel
+                                |> Tuple.mapFirst (ViewThreadWithMessage threadId)
+
+                        NoThreadWithMaybeMessage repliedTo ->
+                            LocalState.createChannelMessageBackend
+                                (Message.EncryptedUserTextMessage { messageData | repliedTo = repliedTo })
+                                dmChannel
+                                |> Tuple.mapFirst NoThreadWithMessage
+
+                ( sessions, notificationCmd ) =
+                    Broadcast.encryptedDmNotification time session.userId id model
+            in
+            ( { model
+                | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
+                , users =
+                    NonemptyDict.insert
+                        session.userId
+                        (User.setLastViewedMessage
+                            (GuildOrDmId (GuildOrDmId_Dm id))
+                            threadRouteWithMessage
+                            user
+                        )
+                        (readerIsViewingDm id.otherUserId session.userId threadRouteWithMessage model)
+                , sendMessageRateLimits = sendMessageRateLimits
+                , sessions = sessions
+              }
+            , Command.batch
+                [ Local_SendEncryptedMessage time id content threadRouteWithReplyTo attachedFiles
+                    |> LocalChangeResponse changeId
+                    |> Lamdera.sendToFrontend clientId
+                , Broadcast.toDmChannelExcludingOne
+                    clientId
+                    session.userId
+                    id
+                    (\id2 ->
+                        Server_SendEncryptedMessage
+                            session.userId
+                            (User.backendToFrontendForUser user)
+                            time
+                            id2
+                            content
+                            threadRouteWithReplyTo
+                            attachedFiles
+                    )
+                    model
+                , notificationCmd
+                ]
+            )
+
+        Err () ->
+            ( model, invalidChangeResponse changeId clientId )
+
+
 sendDm :
     BackendModel
     -> Time.Posix
@@ -2439,6 +2542,12 @@ toBackendLog toBackend =
 
                 Local_SetE2eeRisksAccepted _ ->
                     ToBackendLog_Local_SetE2eeRisksAccepted
+
+                Local_AcceptE2ee _ _ ->
+                    ToBackendLog_Local_AcceptE2ee
+
+                Local_SendEncryptedMessage _ _ _ _ _ ->
+                    ToBackendLog_Local_SendEncryptedMessage
 
         TwoFactorToBackend _ ->
             ToBackendLog_TwoFactorToBackend

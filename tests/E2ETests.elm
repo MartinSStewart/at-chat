@@ -307,6 +307,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.noTimestampSuggestionTest normalConfig
     , E2EMisc.mentionSuggestionTest normalConfig
     , E2EMisc.emojiSuggestionTest normalConfig
+    , E2EMisc.endToEndEncryptionAcceptTest normalConfig
     , E2EMisc.endToEndEncryptionRequestTest normalConfig
     , E2EMisc.codeBlockInputTest normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig
@@ -2724,7 +2725,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.click 100 (Dom.id "guild_openGuild_0")
                 , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
                 , admin.click 100 (Dom.id "guild_createInviteLink")
-                , admin.click 100 (Dom.id "guild_copyText")
+                , admin.click 100 (Dom.id "guild_inviteLinkCopy_copy")
                 , T.andThen
                     100
                     (\data ->
