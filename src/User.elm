@@ -26,6 +26,7 @@ module User exposing
     , init
     , linkDiscordDataCodec
     , multipleProfileImages
+    , privateKeyForAccount
     , profileImage
     , profileImageHtml
     , profileImageNoRounding
@@ -251,6 +252,33 @@ type LastDmViewed
 
 type alias FrontendCurrentUser =
     BackendUser
+
+
+{-| Read a private key someone has typed in and check it is the one that goes with this
+account's public key.
+
+The key is never stored: it is turned into a shared secret and dropped. That means it has
+to be asked for again on another device or after a reload, which is the trade for not
+keeping it anywhere a script could read it.
+
+-}
+privateKeyForAccount : String -> { a | publicKey : Maybe X25519.PublicKey } -> Result String X25519.PrivateKey
+privateKeyForAccount text user =
+    case user.publicKey of
+        Nothing ->
+            Err "This account doesn't have a key pair yet"
+
+        Just publicKey ->
+            case X25519.privateKeyFromString (String.trim text) of
+                Ok privateKey ->
+                    if X25519.toPublicKey privateKey == publicKey then
+                        Ok privateKey
+
+                    else
+                        Err "That isn't the private key for this account"
+
+                Err error ->
+                    Err error
 
 
 linkDiscordDataCodec : Codec Discord.UserAuth

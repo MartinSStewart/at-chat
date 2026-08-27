@@ -2321,8 +2321,8 @@ isPressMsg msg =
         PressedCancelE2eeRequest _ ->
             True
 
-        PressedStartE2ee _ ->
-            True
+        TypedPrivateKey _ _ ->
+            False
 
         PageHasFocusChanged _ ->
             False
@@ -2535,7 +2535,7 @@ isPressMsg msg =
         GotPositionForEmojiSelector_SheepGameInput _ _ ->
             False
 
-        ValidatedE2eePrivateKey result ->
+        ValidatedE2eePrivateKey _ _ ->
             False
 
 

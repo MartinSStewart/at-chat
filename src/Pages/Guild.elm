@@ -164,14 +164,14 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                     SelectedDmChannel dmRoute ->
                                         case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                                             Just otherUserId ->
-                                                Ui.Lazy.lazy6
-                                                    dmChannelSettingsMobile
+                                                dmChannelSettingsMobile
                                                     canScroll2
                                                     local.localUser
                                                     otherUserId
                                                     isThread
                                                     (dmE2eeStatus otherUserId local)
                                                     (e2eeSectionIsExpanded otherUserId local loggedIn)
+                                                    (e2eeKeyInput otherUserId loggedIn)
                                                     |> Ui.el
                                                         [ Ui.height Ui.fill
                                                         , Ui.background MyUi.background3
@@ -345,13 +345,13 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         ( ( ShowChannelSettings, isThread ), SelectedDmChannel dmRoute ) ->
                             case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                                 Just otherUserId ->
-                                    Ui.Lazy.lazy5
-                                        dmChannelSettingsNotMobile
+                                    dmChannelSettingsNotMobile
                                         local.localUser
                                         otherUserId
                                         isThread
                                         (dmE2eeStatus otherUserId local)
                                         (e2eeSectionIsExpanded otherUserId local loggedIn)
+                                        (e2eeKeyInput otherUserId loggedIn)
                                         |> Ui.el
                                             [ Ui.width Ui.shrink
                                             , Ui.height Ui.fill
@@ -2325,8 +2325,14 @@ dmE2eeStatus otherUserId local =
 come with it, so this section is either asking this user for that, or waiting on the
 other person to give it.
 -}
-e2eeSectionView : LocalUser -> Id UserId -> DmChannel.E2eeStatus -> Bool -> Element FrontendMsg_
-e2eeSectionView localUser otherUserId e2ee isExpanded =
+e2eeSectionView :
+    LocalUser
+    -> Id UserId
+    -> DmChannel.E2eeStatus
+    -> Bool
+    -> E2eeKeyInput
+    -> Element FrontendMsg_
+e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
     let
         risksAccepted : Bool
         risksAccepted =
@@ -2401,10 +2407,10 @@ e2eeSectionView localUser otherUserId e2ee isExpanded =
                                     createPrivateKeyButton
 
                                 Just _ ->
-                                    MyUi.simpleButton
-                                        (Dom.id "guild_startE2ee")
-                                        (PressedStartE2ee otherUserId)
-                                        (Ui.text "Start end-to-end encryption")
+                                    privateKeyInput
+                                        otherUserId
+                                        "Type or paste your private key to start encrypting this conversation."
+                                        keyInput
 
                     else
                         Ui.column
@@ -2424,8 +2430,81 @@ e2eeSectionView localUser otherUserId e2ee isExpanded =
                             ]
 
                 DmChannel.E2eeEnabled time ->
-                    Ui.text ("E2EE was enabled on " ++ MyUi.datestamp localUser.timezone time)
+                    Ui.column
+                        [ Ui.spacing 16 ]
+                        [ Ui.text ("E2EE was enabled on " ++ MyUi.datestamp localUser.timezone time)
+                        , if keyInput.hasKeyOnThisDevice then
+                            Ui.none
+
+                          else
+                            -- The key lives in this browser, not on the account, so a
+                            -- different device or a reload after the key was worked out
+                            -- means asking for the private key again.
+                            privateKeyInput
+                                otherUserId
+                                "This device doesn't have the key for this conversation yet. Type or paste your private key to set it up."
+                                keyInput
+                        ]
             ]
+        ]
+
+
+{-| Pulls together what the private key box for one conversation needs from the model.
+
+`hasKeyOnThisDevice` defaults to true while the browser has not been asked yet, so that
+the box does not flash into view for a conversation that turns out to be set up already.
+
+-}
+e2eeKeyInput : Id UserId -> LoggedIn2 -> E2eeKeyInput
+e2eeKeyInput otherUserId loggedIn =
+    { text = loggedIn.e2eePrivateKeyText
+    , error = loggedIn.e2eeError
+    , hasKeyOnThisDevice =
+        SeqDict.get otherUserId loggedIn.e2eeKeysOnThisDevice |> Maybe.withDefault True
+    }
+
+
+{-| What the private key box needs to draw itself: what has been typed so far, whether
+anything went wrong with the last attempt, and whether this device already has a key and
+so does not need to ask at all.
+-}
+type alias E2eeKeyInput =
+    { text : String
+    , error : Maybe String
+    , hasKeyOnThisDevice : Bool
+    }
+
+
+{-| Where someone types their private key in so a shared key can be worked out from it.
+
+Nothing watches for a paste, only for the value ending in "=", which is what the base64
+of a 32 byte key always ends in. That way a password manager typing the key one character
+at a time works as well as pasting it in one go does.
+
+-}
+privateKeyInput : Id UserId -> String -> E2eeKeyInput -> Element FrontendMsg_
+privateKeyInput otherUserId prompt keyInput =
+    let
+        keyLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
+        keyLabel =
+            Ui.Input.label "guild_e2eePrivateKey" [] (Ui.text prompt)
+    in
+    Ui.column
+        [ Ui.spacing 4 ]
+        [ keyLabel.element
+        , Ui.Input.text
+            [ Ui.background (Ui.rgba 0 0 0 0), Ui.paddingXY 8 8, Ui.widthMax 300 ]
+            { text = keyInput.text
+            , onChange = TypedPrivateKey otherUserId
+            , placeholder = Just "Your private key"
+            , label = keyLabel.id
+            }
+        , case keyInput.error of
+            Just error ->
+                Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
+
+            Nothing ->
+                Ui.none
         ]
 
 
@@ -2460,8 +2539,9 @@ dmChannelSettingsNotMobile :
     -> Bool
     -> DmChannel.E2eeStatus
     -> Bool
+    -> E2eeKeyInput
     -> Element FrontendMsg_
-dmChannelSettingsNotMobile localUser otherUserId isThread e2ee isExpanded =
+dmChannelSettingsNotMobile localUser otherUserId isThread e2ee isExpanded keyInput =
     let
         members : List (Id UserId)
         members =
@@ -2485,7 +2565,7 @@ dmChannelSettingsNotMobile localUser otherUserId isThread e2ee isExpanded =
             Ui.none
 
           else
-            e2eeSectionView localUser otherUserId e2ee isExpanded
+            e2eeSectionView localUser otherUserId e2ee isExpanded keyInput
         ]
 
 
@@ -2496,8 +2576,9 @@ dmChannelSettingsMobile :
     -> Bool
     -> DmChannel.E2eeStatus
     -> Bool
+    -> E2eeKeyInput
     -> Element FrontendMsg_
-dmChannelSettingsMobile canScroll2 localUser otherUserId isThread e2ee isExpanded =
+dmChannelSettingsMobile canScroll2 localUser otherUserId isThread e2ee isExpanded keyInput =
     let
         members : List (Id UserId)
         members =
@@ -2544,7 +2625,7 @@ dmChannelSettingsMobile canScroll2 localUser otherUserId isThread e2ee isExpande
                 Ui.none
 
               else
-                e2eeSectionView localUser otherUserId e2ee isExpanded
+                e2eeSectionView localUser otherUserId e2ee isExpanded keyInput
             ]
         ]
 

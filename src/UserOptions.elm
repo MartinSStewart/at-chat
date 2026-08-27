@@ -53,6 +53,7 @@ init domainWhitelist =
     , debugData = Nothing
     , color = Nothing
     , e2eeKeysValid = E2eeKeys_NotChecked
+    , privateKeyText = ""
     }
 
 
@@ -534,7 +535,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                     Ui.Input.label
                                         "userOptions_privateKey"
                                         []
-                                        (Ui.text "You can paste your private key here to verify your public+private key pair is valid.")
+                                        (Ui.text "You can type or paste your private key here to check that it matches your public key. It is not stored.")
                             in
                             [ MyUi.copyBox
                                 (Dom.id "userOptions_publicKey")
@@ -549,29 +550,26 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                 [ privateKeyLabel.element
                                 , Ui.Input.text
                                     [ Ui.background (Ui.rgba 0 0 0 0), Ui.paddingXY 8 8, Ui.widthMax 300 ]
-                                    { text = ""
+                                    { text = model.privateKeyText
                                     , onChange =
                                         \text ->
-                                            (if String.length text < 3 then
-                                                Err "Copy+paste your private key here, don't type it"
-
-                                             else
-                                                case X25519.privateKeyFromString text of
-                                                    Ok privateKey ->
-                                                        if X25519.toPublicKey privateKey == publicKey then
-                                                            -- Handing the key back rather than just saying it
-                                                            -- was valid is what puts it into the session, so
-                                                            -- conversations can be encrypted after a reload.
-                                                            Ok privateKey
-
-                                                        else
-                                                            Err "Public+private key pair is invalid"
+                                            -- Base64 of a 32 byte key always ends in "=",
+                                            -- so only then is there a whole key to check
+                                            -- rather than a prefix of one. Waiting for
+                                            -- that means a password manager typing the
+                                            -- key in a character at a time works, and
+                                            -- that no error is shown part way through.
+                                            if String.endsWith "=" (String.trim text) then
+                                                case User.privateKeyForAccount text local.localUser.user of
+                                                    Ok _ ->
+                                                        ValidatedE2eePrivateKey "" E2eeKeys_Valid
 
                                                     Err error ->
-                                                        Err error
-                                            )
-                                                |> ValidatedE2eePrivateKey
-                                    , placeholder = Just "Paste your private key here"
+                                                        ValidatedE2eePrivateKey "" (E2eeKeys_Error error)
+
+                                            else
+                                                ValidatedE2eePrivateKey text E2eeKeys_NotChecked
+                                    , placeholder = Just "Your private key"
                                     , label = privateKeyLabel.id
                                     }
                                 , case model.e2eeKeysValid of

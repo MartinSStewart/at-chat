@@ -36,6 +36,7 @@ import Duration
 import E2EHelper
 import E2EVoiceChat
 import Effect.Browser.Dom as Dom
+import Effect.Lamdera as Lamdera
 import Effect.Test as T
 import Effect.Time as Time
 import Emoji
@@ -348,72 +349,84 @@ endToEndEncryptionRequestTest config =
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.text "Enable end-to-end encryption" ])
                 , addPrivateKeyToAccount admin
-                , admin.checkView
-                    100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "Enable end-to-end encryption" ])
-                , admin.click 100 (Dom.id "guild_enableE2ee")
-                , admin.checkView
-                    100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Enable end-to-end encryption" ])
-                , admin.checkView
-                    100
-                    (Test.Html.Query.has
-                        [ Test.Html.Selector.text "Waiting for Stevie Steve to accept message encryption."
-                        , Test.Html.Selector.id "guild_cancelE2ee"
-                        ]
-                    )
-                , E2EHelper.checkNotification E2EHelper.adminName "Wants to start end-to-end encryption"
-                , user.checkView
-                    100
-                    (Test.Html.Query.has
-                        [ Test.Html.Selector.attribute
-                            (Html.Attributes.attribute
-                                "aria-label"
-                                "Waiting for an answer about end-to-end encryption"
+                    (\_ ->
+                        [ admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Enable end-to-end encryption" ])
+                        , admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Enable end-to-end encryption" ])
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.text "Waiting for Stevie Steve to accept message encryption."
+                                , Test.Html.Selector.id "guild_cancelE2ee"
+                                ]
                             )
-                        ]
-                    )
+                        , E2EHelper.checkNotification E2EHelper.adminName "Wants to start end-to-end encryption"
+                        , user.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.attribute
+                                    (Html.Attributes.attribute
+                                        "aria-label"
+                                        "Waiting for an answer about end-to-end encryption"
+                                    )
+                                ]
+                            )
 
-                -- The request opens the section on its own, so the warning is waiting for
-                -- them as soon as they open the channel settings.
-                , user.click 100 (Dom.id "guild_showMembers")
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text warning ])
-                , user.checkView
-                    100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Start end-to-end encryption" ])
-                , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
-                , user.checkView
-                    100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Start end-to-end encryption" ])
-                , addPrivateKeyToAccount user
-                , user.checkView
-                    100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "Start end-to-end encryption" ])
-                , T.checkBackend 100 checkBothKeysStoredAndDifferent
-                , admin.click 100 (Dom.id "guild_cancelE2ee")
-                , user.checkView
-                    100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Start end-to-end encryption" ])
-                , admin.checkView
-                    100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "Enable end-to-end encryption" ])
+                        -- The request opens the section on its own, so the warning is waiting for
+                        -- them as soon as they open the channel settings.
+                        , user.click 100 (Dom.id "guild_showMembers")
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text warning ])
+                        , user.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Start end-to-end encryption" ])
+                        , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                        , user.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "to start encrypting this conversation" ])
+                        , addPrivateKeyToAccount user
+                            (\_ ->
+                                [ user.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text "to start encrypting this conversation" ]
+                                    )
+                                , T.checkBackend 100 checkBothKeysStoredAndDifferent
+                                , admin.click 100 (Dom.id "guild_cancelE2ee")
+                                , user.checkView
+                                    100
+                                    (Test.Html.Query.hasNot
+                                        [ Test.Html.Selector.text "to start encrypting this conversation" ]
+                                    )
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text "Enable end-to-end encryption" ]
+                                    )
 
-                -- Accepting the risks is answered once for the account rather than once
-                -- per conversation, so a DM that has never been opened before starts out
-                -- past that step instead of asking again. Reaching one means going back
-                -- out through the guild, since the buttons that open a DM live in a guild
-                -- channel's member list.
-                , admin.click 100 (Dom.id "guild_hideMembers")
-                , admin.click 100 (Dom.id "guild_openGuild_0")
-                , admin.click 100 (Dom.id "guild_openChannel_0")
-                , E2EHelper.openDm admin 100 "0"
-                , admin.click 100 (Dom.id "guild_showMembers")
-                , admin.click 100 (Dom.id "guild_e2eeSection")
-                , admin.checkView
-                    100
-                    (Test.Html.Query.has
-                        [ Test.Html.Selector.text warning
-                        , Test.Html.Selector.text "Enable end-to-end encryption"
+                                -- Accepting the risks is answered once for the account rather than once
+                                -- per conversation, so a DM that has never been opened before starts out
+                                -- past that step instead of asking again. Reaching one means going back
+                                -- out through the guild, since the buttons that open a DM live in a guild
+                                -- channel's member list.
+                                , admin.click 100 (Dom.id "guild_hideMembers")
+                                , admin.click 100 (Dom.id "guild_openGuild_0")
+                                , admin.click 100 (Dom.id "guild_openChannel_0")
+                                , E2EHelper.openDm admin 100 "0"
+                                , admin.click 100 (Dom.id "guild_showMembers")
+                                , admin.click 100 (Dom.id "guild_e2eeSection")
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text warning
+                                        , Test.Html.Selector.text "Enable end-to-end encryption"
+                                        ]
+                                    )
+                                ]
+                            )
                         ]
                     )
                 ]
@@ -444,50 +457,110 @@ endToEndEncryptionAcceptTest config =
                 , admin.click 100 (Dom.id "guild_e2eeSection")
                 , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
                 , addPrivateKeyToAccount admin
-                , admin.click 100 (Dom.id "guild_enableE2ee")
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
 
-                -- The person being asked accepts, which is the point at which their
-                -- browser is given a key.
-                , user.click 100 (Dom.id "guild_showMembers")
-                , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
-                , addPrivateKeyToAccount user
-                , user.click 100 (Dom.id "guild_startE2ee")
-                , E2EHelper.respondToEncryptionPort user
+                        -- The person being asked accepts by typing their private key in,
+                        -- which is the point at which their browser is given a key.
+                        , user.click 100 (Dom.id "guild_showMembers")
+                        , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                        , addPrivateKeyToAccount user
+                            (\userPrivateKey ->
+                                [ -- Part of a key is not a key. Nothing should happen
+                                  -- until the whole thing has arrived, which is what the
+                                  -- trailing "=" says, so that a password manager typing
+                                  -- it one character at a time still works.
+                                  user.input 100 (Dom.id "guild_e2eePrivateKey") (String.dropRight 5 userPrivateKey)
+                                , T.checkState 100 (checkNoSharedSecretsYet 0)
+                                , user.input 100 (Dom.id "guild_e2eePrivateKey") userPrivateKey
+                                , E2EHelper.respondToEncryptionPort user
 
-                -- Accepting reaches the other side, which works the secret out too.
-                , E2EHelper.respondToEncryptionPort admin
-                , T.checkState 100 checkBothSidesDerivedTheSameSecret
-                , T.checkBackend 100 checkDmIsEncrypted
-                , admin.checkView
-                    100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "E2EE was enabled on" ])
+                                -- Accepting reaches the other side, but the private key
+                                -- was never kept, so that side has to be asked for it too.
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text "This device doesn't have the key" ]
+                                    )
+                                , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                                , E2EHelper.respondToEncryptionPort admin
+                                , T.checkState 100 checkBothSidesDerivedTheSameSecret
+                                , T.checkBackend 100 checkDmIsEncrypted
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "E2EE was enabled on" ])
 
-                -- The section opens itself only while an answer is being waited on, so
-                -- once it has been given it closes again and has to be reopened.
-                , user.click 100 (Dom.id "guild_e2eeSection")
-                , user.checkView
-                    100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "E2EE was enabled on" ])
+                                -- The section opens itself only while an answer is being
+                                -- waited on, so once given it closes and must be reopened.
+                                , user.click 100 (Dom.id "guild_e2eeSection")
+                                , user.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "E2EE was enabled on" ])
 
-                -- A message in an encrypted conversation goes past the browser first, and
-                -- what reaches the server is what came back rather than what was typed.
-                , admin.click 100 (Dom.id "guild_hideMembers")
-                , E2EHelper.writeMessage admin 100 "Hello in secret"
-                , T.checkBackend 100 (checkNoPlainTextReachedTheServer "Hello in secret")
-                , E2EHelper.respondToEncryptionPort admin
-                , T.checkBackend 100 (checkEncryptedMessageStored "Hello in secret")
+                                -- A message in an encrypted conversation goes past the
+                                -- browser first, and what reaches the server is what came
+                                -- back rather than what was typed.
+                                , admin.click 100 (Dom.id "guild_hideMembers")
+                                , E2EHelper.writeMessage admin 100 "Hello in secret"
+                                , T.checkBackend 100 (checkNoPlainTextReachedTheServer "Hello in secret")
+                                , E2EHelper.respondToEncryptionPort admin
+                                , T.checkBackend 100 (checkEncryptedMessageStored "Hello in secret")
 
-                -- Without a key on this device the message is not sent, and the draft is
-                -- left alone so nothing is lost.
-                , E2EHelper.writeMessage admin 100 "This one cannot go"
-                , E2EHelper.respondToEncryptionPortWithMissingKey admin
-                , T.checkBackend 100 (checkEncryptedMessageCount 1)
-                , admin.checkView
-                    100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "This one cannot go" ])
+                                -- Without a key on this device the message is not sent,
+                                -- and the draft is left alone so nothing is lost.
+                                , E2EHelper.writeMessage admin 100 "This one cannot go"
+                                , E2EHelper.respondToEncryptionPortWithMissingKey admin
+                                , T.checkBackend 100 (checkEncryptedMessageCount 1)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "This one cannot go" ])
+                                ]
+                            )
+                        ]
+                    )
                 ]
             )
         ]
+
+
+{-| How many shared secrets have been handed to a browser so far. Used to check that a
+partly typed key does nothing at all.
+-}
+checkNoSharedSecretsYet : Int -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkNoSharedSecretsYet expected data =
+    let
+        actual : Int
+        actual =
+            List.length (storedSharedSecrets data)
+    in
+    if actual == expected then
+        Ok ()
+
+    else
+        Err
+            ("Expected "
+                ++ String.fromInt expected
+                ++ " shared secrets to have been worked out by now, found "
+                ++ String.fromInt actual
+            )
+
+
+storedSharedSecrets : T.Data FrontendModel E2EHelper.BackendModel2 -> List String
+storedSharedSecrets data =
+    SeqDict.keys data.frontends
+        |> List.concatMap (\clientId -> E2EHelper.encryptionPortRequests clientId data)
+        |> List.filterMap
+            (\request ->
+                case request of
+                    Encryption.ToJs_StoreSharedSecret { sharedSecret } ->
+                        Just sharedSecret
+
+                    Encryption.ToJs_EncryptMessage _ ->
+                        Nothing
+
+                    Encryption.ToJs_CheckKey _ ->
+                        Nothing
+            )
 
 
 {-| Both people should have handed the browser the same secret. They each work it out
@@ -499,17 +572,7 @@ checkBothSidesDerivedTheSameSecret data =
     let
         secrets : List String
         secrets =
-            SeqDict.keys data.frontends
-                |> List.concatMap (\clientId -> E2EHelper.encryptionPortRequests clientId data)
-                |> List.filterMap
-                    (\request ->
-                        case request of
-                            Encryption.ToJs_StoreSharedSecret { sharedSecret } ->
-                                Just sharedSecret
-
-                            Encryption.ToJs_EncryptMessage _ ->
-                                Nothing
-                    )
+            storedSharedSecrets data
     in
     case secrets of
         [ first, second ] ->
@@ -615,8 +678,9 @@ anybody gets to save the key.
 -}
 addPrivateKeyToAccount :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> (String -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2))
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-addPrivateKeyToAccount client =
+addPrivateKeyToAccount client continueWith =
     T.group
         [ client.click 100 (Dom.id "guild_addPrivateKey")
         , client.checkView
@@ -627,11 +691,42 @@ addPrivateKeyToAccount client =
                 , Test.Html.Selector.id "frontend_newPrivateKey_copy"
                 ]
             )
-        , client.click 100 (Dom.id "frontend_closeNewPrivateKey")
-        , client.checkView
+        , T.andThen
             100
-            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Save your private key now" ])
+            (\data ->
+                case privateKeyOnScreen client.clientId data of
+                    Just privateKeyText ->
+                        client.click 100 (Dom.id "frontend_closeNewPrivateKey")
+                            :: client.checkView
+                                100
+                                (Test.Html.Query.hasNot
+                                    [ Test.Html.Selector.text "Save your private key now" ]
+                                )
+                            :: continueWith privateKeyText
+
+                    Nothing ->
+                        [ T.checkState 0 (\_ -> Err "The private key wasn't on screen to be read") ]
+            )
         ]
+
+
+{-| Reads the private key out of the popup while it is up. The app forgets it the moment
+that closes, so this is the only chance a test gets to hold onto it either, which is the
+same position the person using it is in.
+-}
+privateKeyOnScreen : Lamdera.ClientId -> T.Data FrontendModel E2EHelper.BackendModel2 -> Maybe String
+privateKeyOnScreen clientId data =
+    case SeqDict.get clientId data.frontends |> Maybe.map Audio.userModel of
+        Just (Types.Loaded loaded) ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    Maybe.map X25519.privateKeyToString loggedIn.showNewPrivateKey
+
+                Types.NotLoggedIn _ ->
+                    Nothing
+
+        _ ->
+            Nothing
 
 
 {-| Both accounts should have ended up with a public key, and crucially not the same one:

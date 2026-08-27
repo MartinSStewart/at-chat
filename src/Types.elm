@@ -267,6 +267,9 @@ type alias LoggedIn2 =
     , showNewPrivateKey : Maybe X25519.PrivateKey
     , e2eeError : Maybe String
     , e2eePrivateKeyText : String
+    , -- Which conversations this browser has a key stored for. Absent means it hasn't
+      -- been asked about yet, since only IndexedDB knows and Elm can't see it.
+      e2eeKeysOnThisDevice : SeqDict (Id UserId) Bool
     , -- Messages waiting on the browser to encrypt them. A reply carries only the request
       -- id, so everything else the message needs to be sent is held here until it lands.
       pendingEncryptedMessages : SeqDict Int PendingEncryptedMessage
@@ -307,6 +310,9 @@ type alias UserOptionsModel =
       -- takes up a lot of room, so it stays hidden until asked for.
       color : Maybe UserColor.Selection
     , e2eeKeysValid : E2eeKeysValid
+    , -- What has been typed into the box that checks a private key. Cleared as soon as a
+      -- whole key has been checked, so the key isn't left sitting in the model.
+      privateKeyText : String
     }
 
 
@@ -654,7 +660,7 @@ type FrontendMsg_
     | PressedMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
     | UnreadOverviewChannelMsg AnyGuildOrDmId (Id ChannelMessageId) MessageViewMsg
     | UnreadOverviewThreadMsg AnyGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) MessageViewMsg
-    | ValidatedE2eePrivateKey (Result String ())
+    | ValidatedE2eePrivateKey String E2eeKeysValid
     | EncryptionFromJs (Result String Encryption.FromJs)
 
 

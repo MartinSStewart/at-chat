@@ -82,7 +82,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Drag(..), DragTarget(..), ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), E2eeKeysValid(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -569,6 +569,7 @@ loadedInitHelper startupData emojiData loginData loading =
             , showNewPrivateKey = Nothing
             , e2eeError = Nothing
             , e2eePrivateKeyText = ""
+            , e2eeKeysOnThisDevice = SeqDict.empty
             , pendingEncryptedMessages = SeqDict.empty
             , nextEncryptionRequestId = 0
             , e2eeSectionsExpanded = SeqDict.empty
@@ -595,6 +596,7 @@ loadedInitHelper startupData emojiData loginData loading =
             Call.NoVideo
             (Call.displayMode (MyUi.isMobile loading) local.localUser.session.userId loading.route local.calls)
             loggedIn.voiceChat
+        , checkE2eeKeysOnThisDevice local
         ]
     )
 
@@ -3181,11 +3183,27 @@ updateLoaded msg model =
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     let
-                        text2 =
+                        trimmed : String
+                        trimmed =
                             String.trim text
                     in
-                    if String.endsWith "=" text2 then
-                        case storeSharedSecret otherUserId loggedIn of
+                    -- Base64 of 32 bytes always ends in "=", so that is what says a whole
+                    -- key has arrived rather than a prefix of one. It has to be the value
+                    -- that decides rather than a paste event, because a password manager
+                    -- may type a key in one character at a time to defeat keyloggers.
+                    if String.endsWith "=" trimmed then
+                        let
+                            result : Result String (Command FrontendOnly ToBackend FrontendMsg_)
+                            result =
+                                User.privateKeyForAccount
+                                    trimmed
+                                    (Local.model loggedIn.localState).localUser.user
+                                    |> Result.andThen
+                                        (\privateKey -> storeSharedSecret otherUserId privateKey loggedIn)
+                        in
+                        -- The typed key is dropped either way, so a mistake means typing
+                        -- it again rather than leaving it sitting in the field.
+                        case result of
                             Ok command ->
                                 ( { loggedIn | e2eeError = Nothing, e2eePrivateKeyText = "" }, command )
 
@@ -3199,21 +3217,41 @@ updateLoaded msg model =
 
         EncryptionFromJs result ->
             case result of
+                Ok (Encryption.FromJs_KeyStatus otherUserId hasKey) ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | e2eeKeysOnThisDevice =
+                                    SeqDict.insert otherUserId hasKey loggedIn.e2eeKeysOnThisDevice
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
+
                 Ok (Encryption.FromJs_SharedSecretStored otherUserId) ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
+                            let
+                                loggedIn2 : LoggedIn2
+                                loggedIn2 =
+                                    { loggedIn
+                                        | e2eeKeysOnThisDevice =
+                                            SeqDict.insert otherUserId True loggedIn.e2eeKeysOnThisDevice
+                                    }
+                            in
                             -- Whoever was asked is the one who still owes an answer. The
                             -- person who did the asking is only catching up with an
                             -- answer that already arrived, so they have nothing to send.
-                            if LocalState.dmE2eeRequestedByOtherUser otherUserId (Local.model loggedIn.localState) then
+                            if LocalState.dmE2eeRequestedByOtherUser otherUserId (Local.model loggedIn2.localState) then
                                 FrontendExtra.handleLocalChange
                                     model.time
                                     (Local_AcceptE2ee { otherUserId = otherUserId } model.time |> Just)
-                                    loggedIn
+                                    loggedIn2
                                     Command.none
 
                             else
-                                ( loggedIn, Command.none )
+                                ( loggedIn2, Command.none )
                         )
                         model
 
@@ -5372,22 +5410,14 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedDiscordUserIconButton otherUserId ->
                     handlePressedDiscordUserIconButton otherUserId model
 
-        ValidatedE2eePrivateKey result ->
+        ValidatedE2eePrivateKey text keysValid ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn
                         | userOptions =
                             Maybe.map
                                 (\userOptions ->
-                                    { userOptions
-                                        | e2eeKeysValid =
-                                            case result of
-                                                Ok () ->
-                                                    E2eeKeys_Valid
-
-                                                Err error ->
-                                                    E2eeKeys_Error error
-                                    }
+                                    { userOptions | e2eeKeysValid = keysValid, privateKeyText = text }
                                 )
                                 loggedIn.userOptions
                       }
@@ -7764,16 +7794,17 @@ updateLoadedFromBackend msg model =
                                     )
 
                                 Server_E2eeAccepted { otherUserId } _ ->
-                                    -- The other person accepted, so this side works out
-                                    -- the same secret and has the browser store it. Both
-                                    -- ends reach the same key from their own private key
-                                    -- and the other's public one.
-                                    case storeSharedSecret otherUserId loggedIn2 of
-                                        Ok command ->
-                                            ( { loggedIn2 | e2eeError = Nothing }, command )
-
-                                        Err error ->
-                                            ( { loggedIn2 | e2eeError = Just error }, Command.none )
+                                    -- The other person accepted, but the private key is
+                                    -- not kept anywhere, so this side cannot work the
+                                    -- secret out on its own. Recording that this device
+                                    -- has no key is what puts the box asking for it in
+                                    -- front of the user.
+                                    ( { loggedIn2
+                                        | e2eeKeysOnThisDevice =
+                                            SeqDict.insert otherUserId False loggedIn2.e2eeKeysOnThisDevice
+                                      }
+                                    , Command.none
+                                    )
 
                                 Server_YouJoinedGuildByInvite (Ok { guildId, guild }) ->
                                     ( loggedIn2
@@ -8856,3 +8887,25 @@ startEncryptingMessage draft threadRoute text maybeOtherUserId loggedIn =
                 }
                 |> Encryption.toJs
             )
+
+
+{-| Ask the browser which encrypted conversations it already holds a key for.
+
+The key lives in IndexedDB rather than on the account, so after a reload, or on a device
+that was not the one the conversation was set up on, there is nothing in Elm that knows
+whether the private key still needs to be asked for.
+
+-}
+checkE2eeKeysOnThisDevice : LocalState -> Command FrontendOnly ToBackend FrontendMsg_
+checkE2eeKeysOnThisDevice local =
+    SeqDict.toList local.dmChannels
+        |> List.filterMap
+            (\( otherUserId, dmChannel ) ->
+                case dmChannel.e2ee of
+                    DmChannel.E2eeEnabled _ ->
+                        Encryption.toJs (Encryption.ToJs_CheckKey otherUserId) |> Just
+
+                    _ ->
+                        Nothing
+            )
+        |> Command.batch

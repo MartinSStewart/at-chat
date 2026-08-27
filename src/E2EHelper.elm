@@ -717,6 +717,13 @@ respondToEncryptionPort client =
                         |> client.portEvent 100 "encryption_from_js"
                     ]
 
+                (Encryption.ToJs_CheckKey otherUserId) :: _ ->
+                    -- A browser in a test starts out with nothing in IndexedDB.
+                    [ Encryption.FromJs_KeyStatus otherUserId False
+                        |> Codec.encodeToValue Encryption.fromJsCodec
+                        |> client.portEvent 100 "encryption_from_js"
+                    ]
+
                 [] ->
                     [ T.checkState 0 (\_ -> Err "The client didn't ask the browser to do any encryption") ]
         )

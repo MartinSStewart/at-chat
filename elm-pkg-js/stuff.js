@@ -784,6 +784,11 @@ exports.init = async function init(app)
                 app.ports.encryption_from_js.send(
                     { tag: "shared-secret-stored", args: [ data.otherUserId ] });
 
+            } else if (message.tag === "check-key") {
+                const otherUserId = message.args[0];
+                const key = await e2eeWithStore("readonly", store => store.get(otherUserId));
+                app.ports.encryption_from_js.send(
+                    { tag: "key-status", args: [ otherUserId, !!key ] });
             } else if (message.tag === "encrypt-message") {
                 const data = message.args[0];
                 const key = await e2eeWithStore("readonly", store => store.get(data.otherUserId));

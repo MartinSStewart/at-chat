@@ -80,6 +80,10 @@ type ToJs
     | -- The request id comes back with the answer, since a reply cannot be matched to
       -- what asked for it otherwise.
       ToJs_EncryptMessage { requestId : Int, otherUserId : Id UserId, plainText : String }
+    | -- Asks whether this browser already has a key for a conversation. Elm cannot see
+      -- IndexedDB, so without asking there is no way to tell whether a private key still
+      -- needs to be typed in on this device.
+      ToJs_CheckKey (Id UserId)
 
 
 type FromJs
@@ -87,6 +91,7 @@ type FromJs
     | FromJs_SharedSecretFailed (Id UserId) String
     | FromJs_MessageEncrypted Int String
     | FromJs_MessageEncryptFailed Int String
+    | FromJs_KeyStatus (Id UserId) Bool
 
 
 port encryption_to_js : Json.Encode.Value -> Cmd msg
@@ -123,13 +128,16 @@ userIdCodec =
 toJsCodec : Codec ToJs
 toJsCodec =
     Codec.custom
-        (\eStore eEncrypt value ->
+        (\eStore eEncrypt eCheck value ->
             case value of
                 ToJs_StoreSharedSecret a ->
                     eStore a
 
                 ToJs_EncryptMessage a ->
                     eEncrypt a
+
+                ToJs_CheckKey a ->
+                    eCheck a
         )
         |> Codec.variant1 "store-shared-secret"
             ToJs_StoreSharedSecret
@@ -146,13 +154,14 @@ toJsCodec =
                 |> Codec.field "plainText" .plainText Codec.string
                 |> Codec.buildObject
             )
+        |> Codec.variant1 "check-key" ToJs_CheckKey userIdCodec
         |> Codec.buildCustom
 
 
 fromJsCodec : Codec FromJs
 fromJsCodec =
     Codec.custom
-        (\eStored eStoreFailed eEncrypted eEncryptFailed value ->
+        (\eStored eStoreFailed eEncrypted eEncryptFailed eKeyStatus value ->
             case value of
                 FromJs_SharedSecretStored a ->
                     eStored a
@@ -165,9 +174,13 @@ fromJsCodec =
 
                 FromJs_MessageEncryptFailed a b ->
                     eEncryptFailed a b
+
+                FromJs_KeyStatus a b ->
+                    eKeyStatus a b
         )
         |> Codec.variant1 "shared-secret-stored" FromJs_SharedSecretStored userIdCodec
         |> Codec.variant2 "shared-secret-failed" FromJs_SharedSecretFailed userIdCodec Codec.string
         |> Codec.variant2 "message-encrypted" FromJs_MessageEncrypted Codec.int Codec.string
         |> Codec.variant2 "message-encrypt-failed" FromJs_MessageEncryptFailed Codec.int Codec.string
+        |> Codec.variant2 "key-status" FromJs_KeyStatus userIdCodec Codec.bool
         |> Codec.buildCustom
