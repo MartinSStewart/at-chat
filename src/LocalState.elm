@@ -440,6 +440,9 @@ dmE2eeRequestedByOtherUser otherUserId local =
                 DmChannel.E2eeDisabled ->
                     False
 
+                DmChannel.E2eeEnabled _ ->
+                    False
+
         Nothing ->
             False
 

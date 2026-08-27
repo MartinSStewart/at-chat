@@ -5,6 +5,7 @@ module Types exposing
     , BackendMsg(..)
     , CountToFrontendState
     , DiscordAttachmentData
+    , E2eeKeysValid(..)
     , EditChannelForm
     , EditGuildForm
     , EditMessage
@@ -286,7 +287,14 @@ type alias UserOptionsModel =
     , -- What the colour picker is pointing at, or Nothing while it's put away. The grid
       -- takes up a lot of room, so it stays hidden until asked for.
       color : Maybe UserColor.Selection
+    , e2eeKeysValid : E2eeKeysValid
     }
+
+
+type E2eeKeysValid
+    = E2eeKeys_NotChecked
+    | E2eeKeys_Error String
+    | E2eeKeys_Valid
 
 
 type MessageHover
@@ -628,6 +636,7 @@ type FrontendMsg_
     | PressedMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
     | UnreadOverviewChannelMsg AnyGuildOrDmId (Id ChannelMessageId) MessageViewMsg
     | UnreadOverviewThreadMsg AnyGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) MessageViewMsg
+    | ValidatedE2eePrivateKey (Result String ())
 
 
 type alias NewChannelForm =

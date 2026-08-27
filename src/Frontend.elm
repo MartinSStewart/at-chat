@@ -81,7 +81,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Drag(..), DragTarget(..), ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), E2eeKeysValid(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -5262,6 +5262,30 @@ updateLoaded msg model =
 
                 MessageView.MessageView_PressedDiscordUserIconButton otherUserId ->
                     handlePressedDiscordUserIconButton otherUserId model
+
+        ValidatedE2eePrivateKey result ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map
+                                (\userOptions ->
+                                    { userOptions
+                                        | e2eeKeysValid =
+                                            case result of
+                                                Ok () ->
+                                                    E2eeKeys_Valid
+
+                                                Err error ->
+                                                    E2eeKeys_Error error
+                                    }
+                                )
+                                loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
 
 
 handleMouseEnteredMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )

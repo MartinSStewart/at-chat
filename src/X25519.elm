@@ -4,10 +4,12 @@ module X25519 exposing
     , SharedSecret
     , privateKeyFromBytes
     , privateKeyFromListInt
+    , privateKeyFromString
     , privateKeyToBytes
     , privateKeyToString
     , publicKeyFromBytes
     , publicKeyToBytes
+    , publicKeyToString
     , sharedSecret
     , sharedSecretToBytes
     , toPublicKey
@@ -132,6 +134,26 @@ privateKeyToBytes (PrivateKey key) =
 privateKeyToString : PrivateKey -> String
 privateKeyToString key =
     Base64.fromBytes (privateKeyToBytes key) |> Maybe.withDefault ""
+
+
+privateKeyFromString : String -> Result String PrivateKey
+privateKeyFromString text =
+    case Base64.toBytes text of
+        Just bytes ->
+            case privateKeyFromBytes bytes of
+                Just key ->
+                    Ok key
+
+                Nothing ->
+                    Err "Invalid private key"
+
+        Nothing ->
+            Err "Invalid base64 string"
+
+
+publicKeyToString : PublicKey -> String
+publicKeyToString key =
+    Base64.fromBytes (publicKeyToBytes key) |> Maybe.withDefault ""
 
 
 publicKeyToBytes : PublicKey -> Bytes

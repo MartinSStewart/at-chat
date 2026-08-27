@@ -11,6 +11,7 @@ module Pages.Guild exposing
     , dropdownButtonId
     , e2eeSectionIsExpanded
     , encodeMessageView
+    , friendLabel
     , friendsSearchInputId
     , guildView
     , homePageLoggedInView
@@ -2324,8 +2325,8 @@ dmE2eeStatus otherUserId local =
 come with it, so this section is either asking this user for that, or waiting on the
 other person to give it.
 -}
-e2eeSectionView : Bool -> LocalUser -> Id UserId -> DmChannel.E2eeStatus -> Bool -> Element FrontendMsg_
-e2eeSectionView isMobile localUser otherUserId e2ee isExpanded =
+e2eeSectionView : LocalUser -> Id UserId -> DmChannel.E2eeStatus -> Bool -> Element FrontendMsg_
+e2eeSectionView localUser otherUserId e2ee isExpanded =
     let
         risksAccepted : Bool
         risksAccepted =
@@ -2335,8 +2336,8 @@ e2eeSectionView isMobile localUser otherUserId e2ee isExpanded =
         risksLabel =
             Ui.Input.label
                 "guild_e2eeAcceptRisks"
-                [ Ui.pointer, Ui.width Ui.shrink ]
-                (Ui.text "I understand and accept the risks")
+                [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.pointer, Ui.width Ui.shrink ]
+                (Ui.text "I understand and accept the\u{00A0}risks")
 
         requestedByOtherUser : Bool
         requestedByOtherUser =
@@ -2346,27 +2347,26 @@ e2eeSectionView isMobile localUser otherUserId e2ee isExpanded =
 
                 DmChannel.E2eeDisabled ->
                     False
+
+                DmChannel.E2eeEnabled posix ->
+                    False
     in
     MyUi.container
+        16
         isExpanded
         (Dom.id "guild_e2eeSection")
         (PressedExpandE2eeSection otherUserId)
         MyUi.background2
-        isMobile
+        True
         "End-to-end encryption"
         [ Ui.column
-            [ Ui.paddingXY 16 0, Ui.spacing 16 ]
-            [ Ui.row
-                [ Ui.spacing 8, Ui.contentTop, Ui.Font.color MyUi.font3 ]
-                [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html (Icons.warning 24))
-                , Ui.Prose.paragraph
-                    []
-                    [ Ui.text "If you and the other person lose your private keys, the messages can't be decrypted." ]
-                ]
+            [ Ui.paddingWith { left = 8, right = 8, top = 8, bottom = 0 }, Ui.spacing 16 ]
+            [ MyUi.warningHeader "Before you enable E2EE:"
+            , Ui.text "You'll get an encryption key that you need to store in a password manager. If you lose it, you'll permanently lose access to all your encrypted messages."
             , Ui.row
-                [ Ui.spacing 16 ]
+                []
                 [ Ui.Input.checkbox
-                    [ Ui.Font.size 14 ]
+                    []
                     { onChange = PressedE2eeRisksAccepted
                     , icon = Nothing
                     , checked = risksAccepted
@@ -2422,6 +2422,9 @@ e2eeSectionView isMobile localUser otherUserId e2ee isExpanded =
                                 (PressedCancelE2eeRequest otherUserId)
                                 (Ui.text "Cancel")
                             ]
+
+                DmChannel.E2eeEnabled time ->
+                    Ui.text ("E2EE was enabled on " ++ MyUi.datestamp localUser.timezone time)
             ]
         ]
 
@@ -2476,8 +2479,8 @@ dmChannelSettingsNotMobile localUser otherUserId isThread e2ee isExpanded =
           else
             Ui.el [ Ui.paddingXY 8 8 ] (exportChannelButton (ExportChannel_Dm otherUserId))
         , Ui.column
-            [ Ui.paddingXY 8 4 ]
-            [ Ui.text ("Members (" ++ String.fromInt (List.length members) ++ ")")
+            [ Ui.paddingWith { left = 0, right = 0, top = 4, bottom = 16 } ]
+            [ Ui.el [ Ui.paddingXY 8 0 ] (Ui.text ("Members (" ++ String.fromInt (List.length members) ++ ")"))
             , Ui.column
                 [ Ui.height Ui.fill ]
                 (List.map (memberLabel False localUser) members)
@@ -2486,7 +2489,7 @@ dmChannelSettingsNotMobile localUser otherUserId isThread e2ee isExpanded =
             Ui.none
 
           else
-            e2eeSectionView False localUser otherUserId e2ee isExpanded
+            e2eeSectionView localUser otherUserId e2ee isExpanded
         ]
 
 
@@ -2545,7 +2548,7 @@ dmChannelSettingsMobile canScroll2 localUser otherUserId isThread e2ee isExpande
                 Ui.none
 
               else
-                e2eeSectionView True localUser otherUserId e2ee isExpanded
+                e2eeSectionView localUser otherUserId e2ee isExpanded
             ]
         ]
 
@@ -3074,7 +3077,16 @@ guildSettingsView model loggedIn local guildId guild =
                                 [ Ui.spacing 8 ]
                                 [ Ui.row
                                     [ Ui.spacing 16 ]
-                                    [ Ui.el [ Ui.widthMax 300 ] (copyableText inviteLink model)
+                                    [ Ui.el
+                                        [ Ui.widthMax 300 ]
+                                        (MyUi.copyBox
+                                            (Dom.id "guild_inviteLinkCopy")
+                                            Nothing
+                                            PressedCopyText
+                                            FrontendNoOp
+                                            model
+                                            inviteLink
+                                        )
                                     , MyUi.elButton
                                         (Dom.id ("guild_inviteLinkQrCode_" ++ SecretId.toString inviteId))
                                         (PressedToggleInviteLinkQrCode inviteId)
@@ -3354,58 +3366,6 @@ inviteLinkQrCodeView containerWidth inviteLink =
 
         Err _ ->
             Ui.none
-
-
-copyableText : String -> LoadedFrontend -> Element FrontendMsg_
-copyableText text model =
-    let
-        isCopied : Bool
-        isCopied =
-            case model.lastCopied of
-                Just copied ->
-                    (copied.copied == CopiedText text)
-                        && (Duration.from copied.copiedAt model.time
-                                |> Quantity.lessThan (Duration.seconds 10)
-                           )
-
-                Nothing ->
-                    False
-    in
-    Ui.row
-        []
-        [ Ui.Input.text
-            [ Ui.roundedWith { topLeft = 4, bottomLeft = 4, topRight = 0, bottomRight = 0 }
-            , Ui.border 1
-            , Ui.borderColor MyUi.inputBorder
-            , Ui.paddingXY 4 4
-            , Ui.background MyUi.inputBackground
-            ]
-            { text = text
-            , onChange = \_ -> FrontendNoOp
-            , placeholder = Nothing
-            , label = Ui.Input.labelHidden "Readonly text field"
-            }
-        , MyUi.elButton
-            (Dom.id "guild_copyText")
-            (PressedCopyText text)
-            [ Ui.Font.color MyUi.font2
-            , Ui.roundedWith { topRight = 4, bottomRight = 4, topLeft = 0, bottomLeft = 0 }
-            , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
-            , Ui.borderColor MyUi.inputBorder
-            , Ui.paddingXY 6 0
-            , Ui.width Ui.shrink
-            , Ui.height Ui.fill
-            , Ui.contentCenterY
-            , Ui.Font.size 14
-            , MyUi.hoverText "Copy"
-            ]
-            (if isCopied then
-                Ui.text "Copied!"
-
-             else
-                Ui.el [ Ui.width (Ui.px 18) ] (Ui.html Icons.copyIcon)
-            )
-        ]
 
 
 channelTextInputId : HtmlId

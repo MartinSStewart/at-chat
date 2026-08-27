@@ -24,6 +24,7 @@ import Date exposing (Date)
 import Discord
 import DmChannelId exposing (DmChannelId, GuildOrFullDmId(..))
 import Drawing exposing (Drawing)
+import Effect.Time as Time
 import Game exposing (BackendGameData)
 import Id exposing (ChannelMessageId, GamePublicId, Id, ThreadMessageId, ThreadRoute(..), UserId)
 import IdArray exposing (IdArray)
@@ -48,13 +49,10 @@ type alias DmChannel =
     }
 
 
-{-| How far along the two people in a DM are with turning on end-to-end encryption.
-Turning it on needs both of them to agree to it, so one of them asks and then the other
-one either accepts or the asker changes their mind and cancels.
--}
 type E2eeStatus
     = E2eeDisabled
     | E2eeRequestedBy (Id UserId)
+    | E2eeEnabled Time.Posix
 
 
 type alias DiscordDmChannel =

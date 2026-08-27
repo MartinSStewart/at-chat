@@ -1289,6 +1289,7 @@ goShareView lastCopied matchId maybePublicLink =
                 [ Ui.text "Share"
                 , MyUi.copyBox
                     (Dom.id "go_shareLink")
+                    Nothing
                     PressedCopyLink
                     NoOpMsg
                     { lastCopied = lastCopied }

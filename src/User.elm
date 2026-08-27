@@ -770,6 +770,7 @@ type alias FrontendUser =
     { name : PersonName
     , color : UserColor
     , icon : Maybe FileHash
+    , publicKey : Maybe X25519.PublicKey
     }
 
 
@@ -908,18 +909,20 @@ backendToFrontend user =
     { name = user.name
     , color = user.color
     , icon = user.icon
+    , publicKey = user.publicKey
     }
 
 
 {-| Convert a BackendUser to a FrontendUser while only including data the current user has permission to see
 -}
 backendToFrontendForUser :
-    { a | name : PersonName, color : UserColor, icon : Maybe FileHash }
+    { a | name : PersonName, color : UserColor, icon : Maybe FileHash, publicKey : Maybe X25519.PublicKey }
     -> FrontendUser
 backendToFrontendForUser user =
     { name = user.name
     , color = user.color
     , icon = user.icon
+    , publicKey = user.publicKey
     }
 
 

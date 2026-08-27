@@ -6064,6 +6064,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                 DmChannel.E2eeRequestedBy _ ->
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                DmChannel.E2eeEnabled posix ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
                 Local_SetE2eeRisksAccepted isAccepted ->
@@ -6403,6 +6406,7 @@ handleGoMatchRequest messageId channel model =
                             { name = PersonName.fromStringLossy "<missing>"
                             , color = UserColor.default
                             , icon = Nothing
+                            , publicKey = Nothing
                             }
             in
             { setup = setup

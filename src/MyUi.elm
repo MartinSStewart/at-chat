@@ -100,6 +100,7 @@ module MyUi exposing
     , userLabelBackground
     , userLabelFontColor
     , userLabelHtml
+    , warningHeader
     , weakHoverHighlight
     , white
     , widthAttr
@@ -188,50 +189,65 @@ type Copied
     | CopiedImage String
 
 
-copyBox : HtmlId -> (String -> msg) -> msg -> { a | lastCopied : Maybe LastCopy } -> String -> Element msg
-copyBox htmlId pressedCopyText noOp loaded text =
-    Ui.row
-        []
-        [ Ui.Input.text
-            [ Ui.clipWithEllipsis
-            , Ui.paddingWith { left = 8, right = 0, top = 2, bottom = 2 }
-            , Ui.htmlAttribute (Html.Attributes.readonly True)
-            , Ui.background background1
-            , Ui.border 1
-            , Ui.borderColor inputBorder
-            , Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
-            , Ui.height Ui.fill
-            ]
-            { onChange = \_ -> noOp
-            , text = text
-            , placeholder = Nothing
-            , label = Ui.Input.labelHidden (Dom.idToString htmlId ++ "_textInput")
-            }
-        , elButton
-            (Dom.id (Dom.idToString htmlId ++ "_copy"))
-            (pressedCopyText text)
-            [ Ui.width Ui.shrink
-            , Ui.paddingWith { left = 4, right = 4, top = 2, bottom = 2 }
-            , Ui.borderColor inputBorder
-            , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
-            , Ui.roundedWith { topLeft = 0, topRight = 4, bottomLeft = 0, bottomRight = 4 }
-            , Ui.spacing 4
-            , Ui.background buttonBackground
-            , Ui.Font.size 14
-            , Ui.height Ui.fill
-            , Ui.contentCenterY
-            ]
-            (case loaded.lastCopied of
-                Just copied ->
-                    if copied.copied == CopiedText text then
-                        Ui.text "Copied!"
-
-                    else
-                        Ui.html Icons.copy
+copyBox : HtmlId -> Maybe String -> (String -> msg) -> msg -> { a | lastCopied : Maybe LastCopy } -> String -> Element msg
+copyBox htmlId label2 pressedCopyText noOp loaded text =
+    let
+        label4 =
+            case label2 of
+                Just label3 ->
+                    Ui.Input.label
+                        (Dom.idToString htmlId ++ "_textInput")
+                        [ Ui.Font.size 14, Ui.Font.color font3, Ui.Font.bold ]
+                        (Ui.text label3)
 
                 Nothing ->
-                    Ui.html Icons.copy
-            )
+                    { element = Ui.none, id = Ui.Input.labelHidden (Dom.idToString htmlId ++ "_textInput") }
+    in
+    Ui.column
+        [ Ui.spacing 2 ]
+        [ label4.element
+        , Ui.row
+            []
+            [ Ui.Input.text
+                [ Ui.clipWithEllipsis
+                , Ui.paddingWith { left = 8, right = 0, top = 2, bottom = 2 }
+                , Ui.htmlAttribute (Html.Attributes.readonly True)
+                , Ui.background (Ui.rgba 0 0 0 0.2)
+                , Ui.border 1
+                , Ui.borderColor inputBorder
+                , Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
+                , Ui.height Ui.fill
+                ]
+                { onChange = \_ -> noOp
+                , text = text
+                , placeholder = Nothing
+                , label = label4.id
+                }
+            , elButton
+                (Dom.id (Dom.idToString htmlId ++ "_copy"))
+                (pressedCopyText text)
+                [ Ui.width Ui.shrink
+                , Ui.paddingWith { left = 8, right = 8, top = 2, bottom = 2 }
+                , Ui.borderColor inputBorder
+                , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
+                , Ui.roundedWith { topLeft = 0, topRight = 4, bottomLeft = 0, bottomRight = 4 }
+                , Ui.spacing 4
+                , Ui.background buttonBackground
+                , Ui.height (Ui.px 40)
+                , Ui.contentCenterY
+                ]
+                (case loaded.lastCopied of
+                    Just copied ->
+                        if copied.copied == CopiedText text then
+                            Ui.text "Copied!"
+
+                        else
+                            Ui.html Icons.copy
+
+                    Nothing ->
+                        Ui.html Icons.copy
+                )
+            ]
         ]
 
 
@@ -792,8 +808,8 @@ prewrap =
     htmlStyle "white-space" "pre-wrap"
 
 
-container : Bool -> HtmlId -> msg -> Ui.Color -> Bool -> String -> List (Element msg) -> Element msg
-container isExpanded htmlId onPressedExpand backgroundColor isMobile2 label2 contents =
+container : Int -> Bool -> HtmlId -> msg -> Ui.Color -> Bool -> String -> List (Element msg) -> Element msg
+container topPadding isExpanded htmlId onPressedExpand backgroundColor isMobile2 label2 contents =
     if isExpanded then
         Ui.el
             [ Ui.paddingWith
@@ -804,7 +820,7 @@ container isExpanded htmlId onPressedExpand backgroundColor isMobile2 label2 con
 
                     else
                         16
-                , top = 10
+                , top = topPadding
                 , bottom = 0
                 }
             , Ui.row
@@ -825,7 +841,17 @@ container isExpanded htmlId onPressedExpand backgroundColor isMobile2 label2 con
             (Ui.column
                 [ Ui.border 1
                 , Ui.rounded 4
-                , Ui.paddingXY 0 16
+                , Ui.paddingWith
+                    { left = 0
+                    , right = 0
+                    , top = 16
+                    , bottom =
+                        if isMobile2 then
+                            8
+
+                        else
+                            16
+                    }
                 , Ui.spacing 16
                 ]
                 contents
@@ -861,6 +887,13 @@ simpleButton htmlId onPress content =
         , Ui.Font.weight 500
         ]
         content
+
+
+warningHeader : String -> Element msg
+warningHeader text =
+    Ui.row
+        [ Ui.spacing 8, Ui.Font.bold, Ui.Font.color font3 ]
+        [ Ui.html (Icons.warning 24), Ui.text text ]
 
 
 touchPress : msg -> Ui.Attribute msg

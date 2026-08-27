@@ -1121,8 +1121,9 @@ newPrivateKeyWarning isMobile loaded privateKey =
                 ]
             , MyUi.copyBox
                 (Dom.id "frontend_newPrivateKey")
+                (Just "Private key")
                 PressedCopyText
-                TypedNewPrivateKey
+                FrontendNoOp
                 loaded
                 (X25519.privateKeyToString privateKey)
             , MyUi.secondaryButton
@@ -2525,6 +2526,9 @@ isPressMsg msg =
             MessageView.isPressMsg messageViewMsg
 
         GotPositionForEmojiSelector_SheepGameInput _ _ ->
+            False
+
+        ValidatedE2eePrivateKey result ->
             False
 
 

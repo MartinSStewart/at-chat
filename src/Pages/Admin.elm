@@ -4420,6 +4420,7 @@ maxVisiblePages =
 section : Bool -> SeqSet AdminUiSection -> AdminUiSection -> List (Element Msg) -> Element Msg
 section isMobile expandedSections section2 content =
     MyUi.container
+        16
         (SeqSet.member section2 expandedSections)
         (expandSectionButtonId section2)
         (PressedExpandSection section2)
