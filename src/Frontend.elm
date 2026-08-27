@@ -566,9 +566,9 @@ loadedInitHelper startupData emojiData loginData loading =
             , showInviteLinkQrCode = Nothing
             , friendsSearch = ""
             , channelSearch = ""
-            , newPrivateKey = Nothing
-            , privateKey = Nothing
+            , showNewPrivateKey = Nothing
             , e2eeError = Nothing
+            , e2eePrivateKeyText = ""
             , pendingEncryptedMessages = SeqDict.empty
             , nextEncryptionRequestId = 0
             , e2eeSectionsExpanded = SeqDict.empty
@@ -3106,7 +3106,7 @@ updateLoaded msg model =
                             FrontendExtra.handleLocalChange
                                 model.time
                                 (X25519.toPublicKey privateKey |> Local_SetPublicKey |> Just)
-                                { loggedIn | newPrivateKey = Just privateKey, privateKey = Just privateKey }
+                                { loggedIn | showNewPrivateKey = Just privateKey }
                                 Command.none
                         )
                         -- The words that went into this key are dropped so that generating a
@@ -3121,7 +3121,7 @@ updateLoaded msg model =
 
         PressedCloseNewPrivateKey ->
             FrontendExtra.updateLoggedIn
-                (\loggedIn -> ( { loggedIn | newPrivateKey = Nothing }, Command.none ))
+                (\loggedIn -> ( { loggedIn | showNewPrivateKey = Nothing }, Command.none ))
                 model
 
         PressedExpandE2eeSection otherUserId ->
@@ -3177,19 +3177,23 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedStartE2ee otherUserId ->
+        TypedPrivateKey otherUserId text ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    -- Only the key is set up here. The conversation is not marked as
-                    -- encrypted until the browser says the key is stored, since doing it
-                    -- the other way round would leave a conversation that nothing can
-                    -- encrypt for if the storing failed.
-                    case storeSharedSecret otherUserId loggedIn of
-                        Ok command ->
-                            ( { loggedIn | e2eeError = Nothing }, command )
+                    let
+                        text2 =
+                            String.trim text
+                    in
+                    if String.endsWith "=" text2 then
+                        case storeSharedSecret otherUserId loggedIn of
+                            Ok command ->
+                                ( { loggedIn | e2eeError = Nothing, e2eePrivateKeyText = "" }, command )
 
-                        Err error ->
-                            ( { loggedIn | e2eeError = Just error }, Command.none )
+                            Err error ->
+                                ( { loggedIn | e2eeError = Just error, e2eePrivateKeyText = "" }, Command.none )
+
+                    else
+                        ( { loggedIn | e2eeError = Nothing, e2eePrivateKeyText = text }, Command.none )
                 )
                 model
 
@@ -5378,7 +5382,7 @@ updateLoaded msg model =
                                     { userOptions
                                         | e2eeKeysValid =
                                             case result of
-                                                Ok _ ->
+                                                Ok () ->
                                                     E2eeKeys_Valid
 
                                                 Err error ->
@@ -5386,16 +5390,6 @@ updateLoaded msg model =
                                     }
                                 )
                                 loggedIn.userOptions
-
-                        -- A key that matches the account's public key is the one this
-                        -- session needs in order to encrypt anything, so it is kept.
-                        , privateKey =
-                            case result of
-                                Ok privateKey ->
-                                    Just privateKey
-
-                                Err _ ->
-                                    loggedIn.privateKey
                       }
                     , Command.none
                     )
@@ -8265,7 +8259,7 @@ view _ model =
 
                                         Nothing ->
                                             Ui.noAttr
-                                    , case loggedIn.newPrivateKey of
+                                    , case loggedIn.showNewPrivateKey of
                                         Just privateKey ->
                                             FrontendExtra.newPrivateKeyWarning isMobile loaded privateKey
                                                 |> Ui.inFront
@@ -8769,42 +8763,29 @@ handleGameOutMsgs outMsgs model =
         outMsgs
 
 
-{-| Work out the secret this session shares with the other person in a DM and hand it to
-the browser, which turns it into a key it will not give back.
-
-Both halves have to be to hand: this session's private key, which is only here if it was
-generated or pasted in since the page loaded, and the other person's public key, which
-they only have once they have made a key pair of their own.
-
--}
-storeSharedSecret : Id UserId -> LoggedIn2 -> Result String (Command FrontendOnly ToBackend FrontendMsg_)
-storeSharedSecret otherUserId loggedIn =
+storeSharedSecret : Id UserId -> X25519.PrivateKey -> LoggedIn2 -> Result String (Command FrontendOnly ToBackend FrontendMsg_)
+storeSharedSecret otherUserId privateKey loggedIn =
     let
         local : LocalState
         local =
             Local.model loggedIn.localState
     in
-    case loggedIn.privateKey of
+    case User.getUser otherUserId local.localUser |> Maybe.andThen .publicKey of
         Nothing ->
-            Err "Paste your private key into your user settings first, this browser doesn't have it"
+            Err "The other person hasn't created a private key yet"
 
-        Just privateKey ->
-            case User.getUser otherUserId local.localUser |> Maybe.andThen .publicKey of
+        Just otherPublicKey ->
+            case X25519.sharedSecret privateKey otherPublicKey of
                 Nothing ->
-                    Err "The other person hasn't created a private key yet"
+                    Err "The other person's public key is not usable"
 
-                Just otherPublicKey ->
-                    case X25519.sharedSecret privateKey otherPublicKey of
-                        Nothing ->
-                            Err "The other person's public key is not usable"
-
-                        Just secret ->
-                            Encryption.ToJs_StoreSharedSecret
-                                { otherUserId = otherUserId
-                                , sharedSecret = X25519.sharedSecretToString secret
-                                }
-                                |> Encryption.toJs
-                                |> Ok
+                Just secret ->
+                    Encryption.ToJs_StoreSharedSecret
+                        { otherUserId = otherUserId
+                        , sharedSecret = X25519.sharedSecretToString secret
+                        }
+                        |> Encryption.toJs
+                        |> Ok
 
 
 {-| The other person in the conversation, when this is a DM that has been encrypted.
