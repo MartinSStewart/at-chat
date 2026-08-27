@@ -67,6 +67,7 @@ module MyUi exposing
     , monospace
     , monthToInt
     , monthToString
+    , newPasswordCopyBox
     , noPointerEvents
     , noShrinking
     , notoSans
@@ -222,6 +223,77 @@ copyBox htmlId label2 pressedCopyText noOp loaded text =
                 , text = text
                 , placeholder = Nothing
                 , label = label4.id
+                }
+            , elButton
+                (Dom.id (Dom.idToString htmlId ++ "_copy"))
+                (pressedCopyText text)
+                [ Ui.width Ui.shrink
+                , Ui.paddingWith { left = 8, right = 8, top = 2, bottom = 2 }
+                , Ui.borderColor inputBorder
+                , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
+                , Ui.roundedWith { topLeft = 0, topRight = 4, bottomLeft = 0, bottomRight = 4 }
+                , Ui.spacing 4
+                , Ui.background buttonBackground
+                , Ui.height (Ui.px 40)
+                , Ui.contentCenterY
+                ]
+                (case loaded.lastCopied of
+                    Just copied ->
+                        if copied.copied == CopiedText text then
+                            Ui.text "Copied!"
+
+                        else
+                            Ui.html Icons.copy
+
+                    Nothing ->
+                        Ui.html Icons.copy
+                )
+            ]
+        ]
+
+
+{-| `copyBox` for a secret that has only just been made.
+
+The field is a password input rather than a plain one so that a password manager notices
+it and offers to save it. That offer is worth a lot here, because saving the value
+somewhere is the whole job the box exists for: nothing in the page and nothing on the
+server keeps a copy.
+
+It stays masked for the same reason a password manager masks a password it just made. The
+copy button is how the value gets out, so there is nothing to read it for, and a secret
+shown in full at the exact moment it is worth the most is a poor thing to have on screen.
+
+-}
+newPasswordCopyBox : HtmlId -> String -> (String -> msg) -> msg -> { a | lastCopied : Maybe LastCopy } -> String -> Element msg
+newPasswordCopyBox htmlId label2 pressedCopyText noOp loaded text =
+    let
+        label3 : { element : Element msg, id : Ui.Input.Label }
+        label3 =
+            Ui.Input.label
+                (Dom.idToString htmlId ++ "_textInput")
+                [ Ui.Font.size 14, Ui.Font.color font3, Ui.Font.bold ]
+                (Ui.text label2)
+    in
+    Ui.column
+        [ Ui.spacing 2 ]
+        [ label3.element
+        , Ui.row
+            []
+            [ Ui.Input.newPassword
+                [ Ui.clipWithEllipsis
+                , Ui.paddingWith { left = 8, right = 0, top = 2, bottom = 2 }
+                , Ui.htmlAttribute (Html.Attributes.readonly True)
+                , Ui.background (Ui.rgba 0 0 0 0.2)
+                , Ui.border 1
+                , Ui.borderColor inputBorder
+                , Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
+                , Ui.height Ui.fill
+                ]
+                { onChange = \_ -> noOp
+                , text = text
+                , placeholder = Nothing
+                , label = label3.id
+                , show = False
                 }
             , elButton
                 (Dom.id (Dom.idToString htmlId ++ "_copy"))

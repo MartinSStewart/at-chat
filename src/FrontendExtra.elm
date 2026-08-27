@@ -57,6 +57,7 @@ import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task
 import Effect.Time as Time
+import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
 import FileName
@@ -64,6 +65,7 @@ import FileStatus exposing (FileData, FileId, FileStatus(..), IsEncrypted(..))
 import Game
 import Go
 import Html exposing (Html)
+import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
@@ -1081,13 +1083,27 @@ The key is not stored on the server, and the frontend forgets it as soon as this
 closed, so if it is not copied out now it is gone and anything encrypted to it with it.
 That is the whole point of the warning being this loud.
 
+The key sits in a password field with the account's email in a username field above it, so
+the page looks to a password manager like any other place a new login was just made and it
+offers to save the pair. That offer is the easiest way for this to end well, so it is
+worth laying the popup out around it.
+
 -}
 newPrivateKeyWarning :
     Bool
     -> { a | lastCopied : Maybe MyUi.LastCopy }
+    -> EmailAddress
     -> X25519.PrivateKey
     -> Element FrontendMsg_
-newPrivateKeyWarning isMobile loaded privateKey =
+newPrivateKeyWarning isMobile loaded email privateKey =
+    let
+        accountLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
+        accountLabel =
+            Ui.Input.label
+                "frontend_newPrivateKeyAccount"
+                [ Ui.Font.size 14, Ui.Font.color MyUi.font3, Ui.Font.bold ]
+                (Ui.text "Account")
+    in
     Ui.el
         [ Ui.behindContent
             (Ui.el [ Ui.background MyUi.scrim, Ui.height Ui.fill ] Ui.none)
@@ -1126,13 +1142,34 @@ newPrivateKeyWarning isMobile loaded privateKey =
                     []
                     [ Ui.text "Put this in a password manager. It is not stored anywhere else, so this is the only chance you have to save it. Without it your encrypted messages can't be decrypted." ]
                 ]
-            , MyUi.copyBox
-                (Dom.id "frontend_newPrivateKey")
-                (Just "Private key")
-                PressedCopyText
-                FrontendNoOp
-                loaded
-                (X25519.privateKeyToString privateKey)
+            , Ui.column
+                [ Ui.spacing 12 ]
+                [ Ui.column
+                    [ Ui.spacing 2 ]
+                    [ accountLabel.element
+                    , Ui.Input.username
+                        [ Ui.paddingWith { left = 8, right = 8, top = 2, bottom = 2 }
+                        , Ui.htmlAttribute (Html.Attributes.readonly True)
+                        , Ui.background (Ui.rgba 0 0 0 0.2)
+                        , Ui.border 1
+                        , Ui.borderColor MyUi.inputBorder
+                        , Ui.rounded 4
+                        , Ui.height (Ui.px 40)
+                        ]
+                        { onChange = \_ -> FrontendNoOp
+                        , text = EmailAddress.toString email
+                        , placeholder = Nothing
+                        , label = accountLabel.id
+                        }
+                    ]
+                , MyUi.newPasswordCopyBox
+                    (Dom.id "frontend_newPrivateKey")
+                    "Private key"
+                    PressedCopyText
+                    FrontendNoOp
+                    loaded
+                    (X25519.privateKeyToString privateKey)
+                ]
             , MyUi.secondaryButton
                 (Dom.id "frontend_closeNewPrivateKey")
                 PressedCloseNewPrivateKey

@@ -17,6 +17,7 @@ module E2EMisc exposing
     , markMessageAsUnreadTest
     , mentionSuggestionTest
     , noTimestampSuggestionTest
+    , oneKeySetsUpEveryConversationTest
     , profileImageOpensDm
     , reactionPopupNamesEmojiTest
     , reloadingAConversationLeavesItUnreadTest
@@ -57,6 +58,7 @@ import Pages.Guild
 import RichText
 import Route exposing (ChannelsVisibleOnMobile(..))
 import SeqDict
+import SeqSet
 import String.Nonempty
 import Test.Html.Query
 import Test.Html.Selector
@@ -495,7 +497,7 @@ endToEndEncryptionAcceptTest config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text "This device doesn't have the key" ]
+                                        [ Test.Html.Selector.text "This conversation is missing a private key" ]
                                     )
                                 , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
                                 , E2EHelper.respondToEncryptionPort admin
@@ -536,6 +538,135 @@ endToEndEncryptionAcceptTest config =
                 ]
             )
         ]
+
+
+{-| A device that has no keys has none for any of its conversations, so being asked for
+the same private key over and over, once per conversation, would be a poor way to set one
+up. Typing it in once works out every shared secret the device is short of.
+-}
+oneKeySetsUpEveryConversationTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+oneKeySetsUpEveryConversationTest config =
+    E2EHelper.startTest
+        "One private key sets up every conversation on a device"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectFourUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin userA userB _ ->
+                [ -- The admin asks the first of the others to encrypt, using the one key
+                  -- pair their account has.
+                  E2EHelper.openDm admin 100 "2"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , E2EHelper.openDm userA 100 "0"
+                        , userA.click 100 (Dom.id "guild_showMembers")
+                        , userA.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                        , addPrivateKeyToAccount userA
+                            (\userAPrivateKey ->
+                                [ userA.input 100 (Dom.id "guild_e2eePrivateKey") userAPrivateKey
+                                , E2EHelper.respondToEncryptionPort userA
+
+                                -- That conversation is encrypted now, and the admin's
+                                -- device has no key for it because their private key was
+                                -- never kept anywhere.
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text "This conversation is missing a private key" ]
+                                    )
+
+                                -- The second of the others asks the admin to encrypt,
+                                -- which is a conversation the admin has no key for
+                                -- either.
+                                , E2EHelper.openDm userB 100 "0"
+                                , userB.click 100 (Dom.id "guild_showMembers")
+                                , userB.click 100 (Dom.id "guild_e2eeSection")
+                                , userB.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                                , addPrivateKeyToAccount userB
+                                    (\_ ->
+                                        [ userB.click 100 (Dom.id "guild_enableE2ee")
+
+                                        -- Only the one person who has typed a key in so
+                                        -- far has worked a secret out.
+                                        , T.checkState 100 (checkNoSharedSecretsYet 1)
+
+                                        -- The admin answers in the conversation they were
+                                        -- asked in, and types their key there.
+                                        , admin.click 100 (Dom.id "guild_hideMembers")
+                                        , admin.click 100 (Dom.id "guild_friendLabel_3")
+                                        , admin.click 100 (Dom.id "guild_showMembers")
+                                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+
+                                        -- That one entry covered the other conversation
+                                        -- as well, which was never on screen for it.
+                                        , T.checkState 100 (checkNoSharedSecretsYet 3)
+                                        , E2EHelper.respondToAllSharedSecretPorts admin
+                                        , admin.checkModel
+                                            100
+                                            (checkKeysOnThisDeviceFor [ Id.fromInt 2, Id.fromInt 3 ])
+
+                                        -- So it stops asking for a key, and messages in
+                                        -- it now go past the browser on the way out.
+                                        , admin.click 100 (Dom.id "guild_hideMembers")
+                                        , admin.click 100 (Dom.id "guild_friendLabel_2")
+                                        , admin.click 100 (Dom.id "guild_showMembers")
+                                        , admin.checkView
+                                            100
+                                            (Test.Html.Query.hasNot
+                                                [ Test.Html.Selector.text "This conversation is missing a private key" ]
+                                            )
+                                        , admin.click 100 (Dom.id "guild_hideMembers")
+                                        , E2EHelper.writeMessage admin 100 "Hello in secret"
+                                        , T.checkBackend 100 (checkNoPlainTextReachedTheServer "Hello in secret")
+                                        , E2EHelper.respondToEncryptionPort admin
+                                        , T.checkBackend 100 (checkEncryptedMessageStored "Hello in secret")
+                                        ]
+                                    )
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| The conversations this device worked a key out for. The point of checking it is that
+one of them was never on screen when the key was typed in.
+-}
+checkKeysOnThisDeviceFor : List (Id.Id Id.UserId) -> FrontendModel -> Result String ()
+checkKeysOnThisDeviceFor expected model =
+    let
+        sorted : List (Id.Id Id.UserId) -> String
+        sorted ids =
+            List.map Id.toInt ids |> List.sort |> List.map String.fromInt |> String.join ", "
+    in
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    if sorted expected == sorted (SeqSet.toList loggedIn.e2eeKeysOnThisDevice) then
+                        Ok ()
+
+                    else
+                        Err
+                            ("Expected this device to have keys for "
+                                ++ sorted expected
+                                ++ ", found "
+                                ++ sorted (SeqSet.toList loggedIn.e2eeKeysOnThisDevice)
+                            )
+
+                Types.NotLoggedIn _ ->
+                    Err "Not logged in"
+
+        _ ->
+            Err "Frontend hasn't loaded"
 
 
 {-| How many shared secrets have been handed to a browser so far. Used to check that a

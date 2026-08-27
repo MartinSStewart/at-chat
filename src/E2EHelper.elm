@@ -80,6 +80,7 @@ module E2EHelper exposing
     , regularDiscordChannelBecomesPrivateEvent
     , regularDiscordChannelCreateEvent
     , regularDiscordChannelId
+    , respondToAllSharedSecretPorts
     , respondToEncryptionPort
     , respondToEncryptionPortWithMissingKey
     , safariIphone
@@ -721,6 +722,48 @@ respondToEncryptionPort client =
 
                 [] ->
                     [ T.checkState 0 (\_ -> Err "The client didn't ask the browser to do any encryption") ]
+        )
+
+
+{-| Answers every shared secret a client has asked the browser to keep, rather than only
+the most recent one.
+
+Typing a private key in sets this device up for all of its conversations at once, so more
+than one can be waiting at a time. Answering the same one twice does nothing, which is
+what keeps this usable after an earlier answer.
+
+-}
+respondToAllSharedSecretPorts :
+    T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+respondToAllSharedSecretPorts client =
+    T.andThen
+        100
+        (\data ->
+            case
+                List.filterMap
+                    (\request ->
+                        case request of
+                            Encryption.ToJs_StoreSharedSecret { otherUserId } ->
+                                Just otherUserId
+
+                            Encryption.ToJs_EncryptMessage _ ->
+                                Nothing
+                    )
+                    (encryptionPortRequests client.clientId data)
+                    |> List.Extra.uniqueBy Id.toInt
+            of
+                [] ->
+                    [ T.checkState 0 (\_ -> Err "The client didn't ask the browser to keep any shared secrets") ]
+
+                otherUserIds ->
+                    List.map
+                        (\otherUserId ->
+                            Encryption.FromJs_SharedSecretStored otherUserId
+                                |> Codec.encodeToValue Encryption.fromJsCodec
+                                |> client.portEvent 100 "encryption_from_js"
+                        )
+                        otherUserIds
         )
 
 

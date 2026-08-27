@@ -548,13 +548,14 @@ view windowSize textInputFocus time local loggedIn loaded model =
                             , Ui.column
                                 [ Ui.paddingXY 16 0, Ui.spacing 4 ]
                                 [ privateKeyLabel.element
-                                , Ui.Input.text
+                                , Ui.Input.currentPassword
                                     [ Ui.background MyUi.inputBackground
                                     , Ui.paddingXY 8 8
                                     , Ui.widthMax 300
                                     , Ui.borderColor MyUi.inputBorder
                                     ]
                                     { text = model.privateKeyText
+                                    , show = False
                                     , onChange =
                                         \text ->
                                             if String.endsWith "=" (String.trim text) then

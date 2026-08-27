@@ -3198,7 +3198,16 @@ updateLoaded msg model =
                                     trimmed
                                     (Local.model loggedIn.localState).localUser.user
                                     |> Result.andThen
-                                        (\privateKey -> storeSharedSecret otherUserId privateKey loggedIn)
+                                        (\privateKey ->
+                                            Result.map
+                                                (\command ->
+                                                    Command.batch
+                                                        (command
+                                                            :: storeRemainingSharedSecrets otherUserId privateKey loggedIn
+                                                        )
+                                                )
+                                                (storeSharedSecret otherUserId privateKey loggedIn)
+                                        )
                         in
                         -- The typed key is dropped either way, so a mistake means typing
                         -- it again rather than leaving it sitting in the field.
@@ -8273,7 +8282,11 @@ view _ model =
                                             Ui.noAttr
                                     , case loggedIn.showNewPrivateKey of
                                         Just privateKey ->
-                                            FrontendExtra.newPrivateKeyWarning isMobile loaded privateKey
+                                            FrontendExtra.newPrivateKeyWarning
+                                                isMobile
+                                                loaded
+                                                local.localUser.user.email
+                                                privateKey
                                                 |> Ui.inFront
 
                                         Nothing ->
@@ -8773,6 +8786,47 @@ handleGameOutMsgs outMsgs model =
         )
         ( model, [] )
         outMsgs
+
+
+{-| Every other conversation this device still has no key for.
+
+Working a shared key out needs nothing but the private key and the other person's public
+key, so one visit to one conversation's key box is enough to set up the whole device
+rather than leaving the same key to be typed in again in each of the others. Anything
+that went wrong in one of these is dropped: the box reports on the key that was typed,
+and an unrelated conversation whose other side has no public key yet shouldn't be made to
+look like a bad key.
+
+Conversations that are only waiting on an answer are left alone. Accepting is a decision
+the user makes, not something typing a key elsewhere should make for them.
+
+-}
+storeRemainingSharedSecrets :
+    Id UserId
+    -> X25519.PrivateKey
+    -> LoggedIn2
+    -> List (Command FrontendOnly ToBackend FrontendMsg_)
+storeRemainingSharedSecrets alreadyHandled privateKey loggedIn =
+    SeqDict.toList (Local.model loggedIn.localState).dmChannels
+        |> List.filterMap
+            (\( otherUserId, dmChannel ) ->
+                case dmChannel.e2ee of
+                    DmChannel.E2eeEnabled _ ->
+                        if
+                            (otherUserId == alreadyHandled)
+                                || SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice
+                        then
+                            Nothing
+
+                        else
+                            storeSharedSecret otherUserId privateKey loggedIn |> Result.toMaybe
+
+                    DmChannel.E2eeRequestedBy _ ->
+                        Nothing
+
+                    DmChannel.E2eeDisabled ->
+                        Nothing
+            )
 
 
 storeSharedSecret : Id UserId -> X25519.PrivateKey -> LoggedIn2 -> Result String (Command FrontendOnly ToBackend FrontendMsg_)

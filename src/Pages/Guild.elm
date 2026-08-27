@@ -2476,6 +2476,9 @@ Nothing watches for a paste, only for the value ending in "=", which is what the
 of a 32 byte key always ends in. That way a password manager typing the key one character
 at a time works as well as pasting it in one go does.
 
+It is a password field rather than a plain one so that a password manager recognises it
+and offers to fill in the key it saved when the key was first made.
+
 -}
 privateKeyInput : Id UserId -> String -> E2eeKeyInput -> Element FrontendMsg_
 privateKeyInput otherUserId prompt keyInput =
@@ -2487,12 +2490,17 @@ privateKeyInput otherUserId prompt keyInput =
     Ui.column
         [ Ui.spacing 4 ]
         [ keyLabel.element
-        , Ui.Input.text
-            [ Ui.background (Ui.rgba 0 0 0 0), Ui.paddingXY 8 8, Ui.widthMax 300 ]
+        , Ui.Input.currentPassword
+            [ Ui.background MyUi.inputBackground
+            , Ui.paddingXY 8 8
+            , Ui.widthMax 300
+            , Ui.borderColor MyUi.inputBorder
+            ]
             { text = keyInput.text
             , onChange = TypedPrivateKey otherUserId
             , placeholder = Just "Your private key"
             , label = keyLabel.id
+            , show = False
             }
         , case keyInput.error of
             Just error ->
