@@ -261,18 +261,11 @@ type alias StartupData =
     , scrollbarWidth : Int
     , pwaStatus : PwaStatus
     , notificationPermission : NotificationPermission
-    , -- The safe-area inset at the top of the screen (e.g. a phone notch), in pixels. Touch events
-      -- report positions from the viewport top (behind the inset) while the UI is laid out below it.
-      safeAreaInsetTop : Int
-    , -- How many device pixels one CSS pixel is drawn with (2 or 3 on high DPI screens, and any
-      -- fractional value when the page is zoomed).
-      devicePixelRatio : Float
+    , safeAreaInsetTop : Int
+    , devicePixelRatio : Float
     , timezone : Time.Zone
     , randomSeed : List Int
-    , -- The conversations this browser already holds an encryption key for. It comes from
-      -- IndexedDB, which Elm can't read, and arrives here so that the first render already
-      -- knows which conversations still need a private key typed in.
-      e2eeKeys : List (Id UserId)
+    , e2eeKeys : List (Id UserId)
     }
 
 
