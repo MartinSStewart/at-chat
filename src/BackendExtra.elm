@@ -2434,6 +2434,9 @@ toBackendLog toBackend =
                 Local_CancelE2eeRequest _ ->
                     ToBackendLog_Local_CancelE2eeRequest
 
+                Local_SetPublicKey _ ->
+                    ToBackendLog_Local_SetPublicKey
+
         TwoFactorToBackend _ ->
             ToBackendLog_TwoFactorToBackend
 

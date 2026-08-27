@@ -134,6 +134,7 @@ import UserAgent exposing (UserAgent)
 import UserColor exposing (UserColor)
 import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, FrontendUserSession, NotificationMode, SetViewing, ToBeFilledInByBackend, UserOptionSection, UserSession)
 import WordSpellingGame exposing (WordList)
+import X25519
 
 
 type alias FrontendModel =
@@ -261,6 +262,9 @@ type alias LoggedIn2 =
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
     , friendsSearch : String
     , channelSearch : String
+    , -- The private key that was just generated, while its one and only showing is on
+      -- screen. Deliberately not kept anywhere else.
+      newPrivateKey : Maybe X25519.PrivateKey
     , e2eeSections : SeqDict (Id UserId) E2eeSection
     , {- We want to slightly change the letter spacing for textarea's on Safari in order to force it to recalculate word wrap.
          This is to work around this bug https://github.com/panphora/overtype/issues/116
@@ -567,6 +571,9 @@ type FrontendMsg_
     | PressedCloseImageInfo
     | PressedMemberListBack
     | PressedExportChannel ExportChannelId
+    | PressedAddPrivateKeyToAccount
+    | PressedCloseNewPrivateKey
+    | TypedNewPrivateKey
     | PressedExpandE2eeSection (Id UserId)
     | PressedE2eeRisksAccepted (Id UserId) Bool
     | PressedEnableE2ee (Id UserId)
@@ -1076,3 +1083,4 @@ type LocalChange
     | Local_SetMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
     | Local_RequestE2ee Viewing_DmId
     | Local_CancelE2eeRequest Viewing_DmId
+    | Local_SetPublicKey X25519.PublicKey

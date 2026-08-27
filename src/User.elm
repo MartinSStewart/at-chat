@@ -85,6 +85,7 @@ import Ui.Font
 import UserAgent exposing (UserAgent)
 import UserColor exposing (UserColor)
 import UserSession exposing (DiscordFrontendUser, UserSession)
+import X25519
 
 
 {-| Contains sensitive data that should only be accessible by admins, the backend, and the user themselves.
@@ -119,6 +120,9 @@ type alias BackendUser =
     , availableStickers : SeqSet (Id StickerId)
     , availableCustomEmojis : SeqSet (Id CustomEmojiId)
     , muteSettings : MuteSettings.Model
+    , -- The public half of the key this account encrypts to. The private half is only
+      -- ever shown to the user once, when they generate it, and is never sent here.
+      publicKey : Maybe X25519.PublicKey
     }
 
 
@@ -311,6 +315,7 @@ init createdAt name email userIsAdmin =
     , availableStickers = SeqSet.empty
     , availableCustomEmojis = SeqSet.empty
     , muteSettings = MuteSettings.init
+    , publicKey = Nothing
     }
 
 
@@ -887,6 +892,7 @@ backendToFrontendCurrent user =
     , availableStickers = user.availableStickers
     , availableCustomEmojis = user.availableCustomEmojis
     , muteSettings = user.muteSettings
+    , publicKey = user.publicKey
     }
 
 

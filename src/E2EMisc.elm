@@ -59,6 +59,7 @@ import TimeInMinutes
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 import UserColor
 import UserSession
+import X25519
 
 
 {-| Pasting a large chunk of text that would push the message over the max message length converts the pasted text into a text file attachment instead of inserting it into the text input.
@@ -336,6 +337,16 @@ endToEndEncryptionRequestTest config =
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.text "Enable end-to-end encryption" ])
                 , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+
+                -- Encrypting anything needs a key pair on the account first, so that
+                -- stands in front of enabling it.
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Enable end-to-end encryption" ])
+                , addPrivateKeyToAccount admin
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "Enable end-to-end encryption" ])
                 , admin.click 100 (Dom.id "guild_enableE2ee")
                 , admin.checkView
                     100
@@ -369,7 +380,12 @@ endToEndEncryptionRequestTest config =
                 , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
                 , user.checkView
                     100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Start end-to-end encryption" ])
+                , addPrivateKeyToAccount user
+                , user.checkView
+                    100
                     (Test.Html.Query.has [ Test.Html.Selector.text "Start end-to-end encryption" ])
+                , T.checkBackend 100 checkBothKeysStoredAndDifferent
                 , admin.click 100 (Dom.id "guild_cancelE2ee")
                 , user.checkView
                     100
@@ -380,6 +396,58 @@ endToEndEncryptionRequestTest config =
                 ]
             )
         ]
+
+
+{-| Generates a key pair, which stores the public half on the account and shows the
+private half once. The showing is checked on the way past, since it is the only chance
+anybody gets to save the key.
+-}
+addPrivateKeyToAccount :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+addPrivateKeyToAccount client =
+    T.group
+        [ client.click 100 (Dom.id "guild_addPrivateKey")
+        , client.checkView
+            100
+            (Test.Html.Query.has
+                [ Test.Html.Selector.text "Save your private key now"
+                , Test.Html.Selector.text "It is not stored anywhere else"
+                , Test.Html.Selector.id "frontend_newPrivateKey_copy"
+                ]
+            )
+        , client.click 100 (Dom.id "frontend_closeNewPrivateKey")
+        , client.checkView
+            100
+            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Save your private key now" ])
+        ]
+
+
+{-| Both accounts should have ended up with a public key, and crucially not the same one:
+they are generated from the random words each client started with, so a shared seed would
+quietly give two people the same private key.
+-}
+checkBothKeysStoredAndDifferent : E2EHelper.BackendModel2 -> Result String ()
+checkBothKeysStoredAndDifferent backend =
+    let
+        keyOf : Int -> Maybe X25519.PublicKey
+        keyOf userId =
+            NonemptyDict.get (Id.fromInt userId) (E2EHelper.unwrapBackend backend).users
+                |> Maybe.andThen .publicKey
+    in
+    case ( keyOf 0, keyOf 2 ) of
+        ( Just adminKey, Just userKey ) ->
+            if adminKey == userKey then
+                Err "Both accounts ended up with the same public key"
+
+            else
+                Ok ()
+
+        ( Nothing, _ ) ->
+            Err "The admin's public key wasn't stored on the backend"
+
+        ( _, Nothing ) ->
+            Err "The user's public key wasn't stored on the backend"
 
 
 {-| Simulates the browser moving focus into a search input. Unlike

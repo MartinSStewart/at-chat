@@ -6066,6 +6066,30 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
+                Local_SetPublicKey publicKey ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\session user ->
+                            case user.publicKey of
+                                Nothing ->
+                                    ( { model
+                                        | users =
+                                            NonemptyDict.insert
+                                                session.userId
+                                                { user | publicKey = Just publicKey }
+                                                model.users
+                                      }
+                                    , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                                    )
+
+                                Just _ ->
+                                    -- Replacing a key would orphan everything encrypted to the old
+                                    -- one, so a second attempt (another tab, say) is refused rather
+                                    -- than allowed to overwrite.
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
                 Local_CancelE2eeRequest id ->
                     BackendExtra.asDmUser
                         model

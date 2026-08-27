@@ -95,6 +95,7 @@ import UserOptions
 import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
 import WordSpellingGame
+import X25519
 
 
 app :
@@ -563,6 +564,7 @@ loadedInitHelper startupData emojiData loginData loading =
             , showInviteLinkQrCode = Nothing
             , friendsSearch = ""
             , channelSearch = ""
+            , newPrivateKey = Nothing
             , e2eeSections = SeqDict.empty
             , typedTextCounter = 0
             }
@@ -3084,6 +3086,41 @@ updateLoaded msg model =
 
         PressedExportChannel exportChannelId ->
             ( model, Lamdera.sendToBackend (ExportChannelRequest exportChannelId) )
+
+        PressedAddPrivateKeyToAccount ->
+            case X25519.privateKeyFromListInt model.startupData.randomSeed of
+                Just privateKey ->
+                    let
+                        startupData : Ports.StartupData
+                        startupData =
+                            model.startupData
+                    in
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (X25519.toPublicKey privateKey |> Local_SetPublicKey |> Just)
+                                { loggedIn | newPrivateKey = Just privateKey }
+                                Command.none
+                        )
+                        -- The words that went into this key are dropped so that generating a
+                        -- second key cannot come out the same as the first.
+                        { model
+                            | startupData =
+                                { startupData | randomSeed = List.drop 8 startupData.randomSeed }
+                        }
+
+                Nothing ->
+                    ( model, Command.none )
+
+        PressedCloseNewPrivateKey ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn -> ( { loggedIn | newPrivateKey = Nothing }, Command.none ))
+                model
+
+        TypedNewPrivateKey ->
+            -- The box the private key is shown in is read only, so there is nothing to do.
+            ( model, Command.none )
 
         PressedExpandE2eeSection otherUserId ->
             FrontendExtra.updateLoggedIn
@@ -8074,6 +8111,13 @@ view _ model =
                                                 local.localUser.user.domainWhitelist
                                                 isMobile
                                                 url
+                                                |> Ui.inFront
+
+                                        Nothing ->
+                                            Ui.noAttr
+                                    , case loggedIn.newPrivateKey of
+                                        Just privateKey ->
+                                            FrontendExtra.newPrivateKeyWarning isMobile loaded privateKey
                                                 |> Ui.inFront
 
                                         Nothing ->

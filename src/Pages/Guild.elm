@@ -2386,25 +2386,35 @@ e2eeSectionView isMobile localUser otherUserId e2ee section =
                 ]
             , case e2ee of
                 DmChannel.E2eeDisabled ->
-                    if section.risksAccepted then
-                        MyUi.simpleButton
-                            (Dom.id "guild_enableE2ee")
-                            (PressedEnableE2ee otherUserId)
-                            (Ui.text "Enable end-to-end encryption")
+                    if not section.risksAccepted then
+                        Ui.none
 
                     else
-                        Ui.none
+                        case localUser.user.publicKey of
+                            Nothing ->
+                                addPrivateKeyButton
+
+                            Just _ ->
+                                MyUi.simpleButton
+                                    (Dom.id "guild_enableE2ee")
+                                    (PressedEnableE2ee otherUserId)
+                                    (Ui.text "Enable end-to-end encryption")
 
                 DmChannel.E2eeRequestedBy requestedBy ->
                     if requestedByOtherUser then
-                        if section.risksAccepted then
-                            MyUi.simpleButton
-                                (Dom.id "guild_startE2ee")
-                                (PressedStartE2ee otherUserId)
-                                (Ui.text "Start end-to-end encryption")
+                        if not section.risksAccepted then
+                            Ui.none
 
                         else
-                            Ui.none
+                            case localUser.user.publicKey of
+                                Nothing ->
+                                    addPrivateKeyButton
+
+                                Just _ ->
+                                    MyUi.simpleButton
+                                        (Dom.id "guild_startE2ee")
+                                        (PressedStartE2ee otherUserId)
+                                        (Ui.text "Start end-to-end encryption")
 
                     else
                         Ui.column
@@ -2424,6 +2434,18 @@ e2eeSectionView isMobile localUser otherUserId e2ee section =
                             ]
             ]
         ]
+
+
+{-| Encrypting anything needs a key pair on the account first, so this stands in front of
+both of the buttons that would start it. It is only ever shown once per account, since
+after it is pressed the account has a public key.
+-}
+addPrivateKeyButton : Element FrontendMsg_
+addPrivateKeyButton =
+    MyUi.simpleButton
+        (Dom.id "guild_addPrivateKey")
+        PressedAddPrivateKeyToAccount
+        (Ui.text "Add a private key to account")
 
 
 {-| The name of whoever is being waited on. In a DM with yourself that's you, which is

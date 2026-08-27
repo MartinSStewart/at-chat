@@ -5,6 +5,7 @@ module X25519 exposing
     , privateKeyFromBytes
     , privateKeyFromListInt
     , privateKeyToBytes
+    , privateKeyToString
     , publicKeyFromBytes
     , publicKeyToBytes
     , sharedSecret
@@ -31,16 +32,47 @@ Two things this deliberately does not do:
     makes no timing guarantees about anything, so treat that as best effort rather than
     a property you can rely on.
 
-Keys are held as a list of bytes rather than as `Bytes` because Elm compares two `Bytes`
-values by their (empty) object properties, so `==` on `Bytes` reports equality no matter
-what the contents are. Comparing public keys is something callers will want to do.
+Keys are held as a record of eight 32 bit words rather than as `Bytes`, for two reasons.
+A key is exactly 32 bytes, and a record is the only shape that says so: a list or an
+array of the wrong length cannot be built in the first place. And Elm compares two
+`Bytes` values by their (empty) object properties, so `==` on `Bytes` reports equality no
+matter what the contents are, which is a trap for something callers will want to compare.
 
 -}
 
+import Base64
 import Bitwise
 import Bytes exposing (Bytes)
 import Bytes.Decode
 import Bytes.Encode
+
+
+{-| 32 bytes, as eight 32 bit words, least significant word first. Words are unsigned, so
+each one is somewhere in [0, 2^32), which Elm's `Int` holds exactly.
+-}
+type alias Key =
+    { w0 : Int
+    , w1 : Int
+    , w2 : Int
+    , w3 : Int
+    , w4 : Int
+    , w5 : Int
+    , w6 : Int
+    , w7 : Int
+    }
+
+
+keyZero : Key
+keyZero =
+    { w0 = 0
+    , w1 = 0
+    , w2 = 0
+    , w3 = 0
+    , w4 = 0
+    , w5 = 0
+    , w6 = 0
+    , w7 = 0
+    }
 
 
 {-| 32 bytes of secret, exactly as they came out of the random source. The clamping RFC
@@ -48,18 +80,18 @@ import Bytes.Encode
 key survive a round trip through `privateKeyToBytes`.
 -}
 type PrivateKey
-    = PrivateKey (List Int)
+    = PrivateKey Key
 
 
 type PublicKey
-    = PublicKey (List Int)
+    = PublicKey Key
 
 
 {-| The raw output of the key agreement. This is not a message key: run it through a key
 derivation function (HKDF) before encrypting anything with it.
 -}
 type SharedSecret
-    = SharedSecret (List Int)
+    = SharedSecret Key
 
 
 keyLength : Int
@@ -69,36 +101,47 @@ keyLength =
 
 privateKeyFromBytes : Bytes -> Maybe PrivateKey
 privateKeyFromBytes bytes =
-    Maybe.map PrivateKey (toByteList bytes)
+    Maybe.map PrivateKey (keyFromBytes bytes)
 
 
+{-| Build a private key out of the random words the page was started with, which come
+from `crypto.getRandomValues`. Eight of them are needed and the rest are ignored, so the
+caller is expected to drop the ones it hands over rather than reuse them.
+-}
 privateKeyFromListInt : List Int -> Maybe PrivateKey
 privateKeyFromListInt ints =
-    if List.length ints >= keyLength then
-        List.map (modBy 256) ints |> PrivateKey |> Just
-
-    else
-        Nothing
+    List.take 8 ints
+        |> List.map (modBy 4294967296)
+        |> keyFromWords
+        |> Maybe.map PrivateKey
 
 
 publicKeyFromBytes : Bytes -> Maybe PublicKey
 publicKeyFromBytes bytes =
-    Maybe.map PublicKey (toByteList bytes)
+    Maybe.map PublicKey (keyFromBytes bytes)
 
 
 privateKeyToBytes : PrivateKey -> Bytes
-privateKeyToBytes (PrivateKey bytes) =
-    fromByteList bytes
+privateKeyToBytes (PrivateKey key) =
+    keyToBytes key
+
+
+{-| The private key as text, for someone to put in a password manager. Base64 of the same
+32 bytes `privateKeyToBytes` gives.
+-}
+privateKeyToString : PrivateKey -> String
+privateKeyToString key =
+    Base64.fromBytes (privateKeyToBytes key) |> Maybe.withDefault ""
 
 
 publicKeyToBytes : PublicKey -> Bytes
-publicKeyToBytes (PublicKey bytes) =
-    fromByteList bytes
+publicKeyToBytes (PublicKey key) =
+    keyToBytes key
 
 
 sharedSecretToBytes : SharedSecret -> Bytes
-sharedSecretToBytes (SharedSecret bytes) =
-    fromByteList bytes
+sharedSecretToBytes (SharedSecret key) =
+    keyToBytes key
 
 
 {-| The public key to hand to the person you want to talk to, found by multiplying the
@@ -121,11 +164,11 @@ know.
 sharedSecret : PrivateKey -> PublicKey -> Maybe SharedSecret
 sharedSecret (PrivateKey scalar) (PublicKey point) =
     let
-        secret : List Int
+        secret : Key
         secret =
             scalarMult scalar point
     in
-    if List.all (\byte -> byte == 0) secret then
+    if secret == keyZero then
         Nothing
 
     else
@@ -134,9 +177,9 @@ sharedSecret (PrivateKey scalar) (PublicKey point) =
 
 {-| u = 9, the base point of Curve25519.
 -}
-basePoint : List Int
+basePoint : Key
 basePoint =
-    9 :: List.repeat (keyLength - 1) 0
+    { keyZero | w0 = 9 }
 
 
 
@@ -154,18 +197,18 @@ type alias Ladder =
     }
 
 
-scalarMult : List Int -> List Int -> List Int
-scalarMult scalarBytes pointBytes =
+scalarMult : Key -> Key -> Key
+scalarMult scalar point =
     let
         x1 : Fe
         x1 =
-            feUnpack pointBytes
+            feUnpack point
 
         final : Ladder
         final =
             List.foldl (ladderStep x1)
                 { x2 = feOne, z2 = feZero, x3 = x1, z3 = feOne }
-                (scalarBits scalarBytes)
+                (scalarBits scalar)
     in
     fePack (feMul final.x2 (feInvert final.z2))
 
@@ -174,32 +217,33 @@ scalarMult scalarBytes pointBytes =
 
 RFC 7748 section 5 clamps a scalar before use: the bottom three bits are cleared so it is
 a multiple of the cofactor, the top bit is cleared and the next one set so that every
-scalar has the same bit length. Bit 255 is always zero afterwards and is dropped, leaving
-the 255 bits the ladder runs over.
+scalar has the same bit length. Those live at the two ends, so only the first and last
+words need touching. Bit 255 is always zero afterwards and is dropped, leaving the 255
+bits the ladder runs over.
 
 -}
-scalarBits : List Int -> List Int
-scalarBits bytes =
-    List.indexedMap
-        (\index byte ->
-            if index == 0 then
-                Bitwise.and 248 byte
-
-            else if index == keyLength - 1 then
-                Bitwise.or 64 (Bitwise.and 127 byte)
-
-            else
-                byte
-        )
-        bytes
-        |> List.reverse
-        |> List.concatMap
-            (\byte ->
-                List.map
-                    (\bit -> Bitwise.and 1 (Bitwise.shiftRightBy bit byte))
-                    [ 7, 6, 5, 4, 3, 2, 1, 0 ]
-            )
+scalarBits : Key -> List Int
+scalarBits key =
+    [ Bitwise.or 0x40000000 (Bitwise.and 0x7FFFFFFF key.w7)
+    , key.w6
+    , key.w5
+    , key.w4
+    , key.w3
+    , key.w2
+    , key.w1
+    , key.w0 - modBy 8 key.w0
+    ]
+        |> List.concatMap wordBits
         |> List.drop 1
+
+
+{-| The 32 bits of a word, most significant first.
+-}
+wordBits : Int -> List Int
+wordBits word =
+    List.map
+        (\bit -> modBy 2 (word // (2 ^ bit)))
+        (List.reverse (List.range 0 31))
 
 
 {-| One rung of the Montgomery ladder, following TweetNaCl's `crypto_scalarmult` step for
@@ -609,56 +653,43 @@ invertStep base bitIndex acc =
             )
 
 
-{-| Read 32 little endian bytes as a field element. The top bit of the last byte is not
-part of the u coordinate, and RFC 7748 says to ignore it rather than reject the key.
+{-| Read a key as a field element. Each 32 bit word splits into two 16 bit limbs, which
+is the whole reason limbs are 16 bits wide here.
+
+The top bit of the last word is not part of a u coordinate, and RFC 7748 says to ignore
+it rather than reject the key, which is what the last limb's 32768 does.
+
 -}
-feUnpack : List Int -> Fe
-feUnpack bytes =
-    case pairBytes bytes of
-        [ l0, l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15 ] ->
-            { l0 = l0
-            , l1 = l1
-            , l2 = l2
-            , l3 = l3
-            , l4 = l4
-            , l5 = l5
-            , l6 = l6
-            , l7 = l7
-            , l8 = l8
-            , l9 = l9
-            , l10 = l10
-            , l11 = l11
-            , l12 = l12
-            , l13 = l13
-            , l14 = l14
-            , l15 = Bitwise.and 0x7FFF l15
-            }
-
-        _ ->
-            feZero
+feUnpack : Key -> Fe
+feUnpack key =
+    { l0 = modBy 65536 key.w0
+    , l1 = key.w0 // 65536
+    , l2 = modBy 65536 key.w1
+    , l3 = key.w1 // 65536
+    , l4 = modBy 65536 key.w2
+    , l5 = key.w2 // 65536
+    , l6 = modBy 65536 key.w3
+    , l7 = key.w3 // 65536
+    , l8 = modBy 65536 key.w4
+    , l9 = key.w4 // 65536
+    , l10 = modBy 65536 key.w5
+    , l11 = key.w5 // 65536
+    , l12 = modBy 65536 key.w6
+    , l13 = key.w6 // 65536
+    , l14 = modBy 65536 key.w7
+    , l15 = modBy 32768 (key.w7 // 65536)
+    }
 
 
-{-| Little endian byte pairs into 16 bit limbs. A key that is not 32 bytes long cannot
-reach here, since `privateKeyFromBytes` and `publicKeyFromBytes` reject those.
--}
-pairBytes : List Int -> List Int
-pairBytes bytes =
-    case bytes of
-        low :: high :: rest ->
-            (low + Bitwise.shiftLeftBy 8 high) :: pairBytes rest
-
-        _ ->
-            []
-
-
-{-| Write a field element as 32 little endian bytes, fully reduced first so that the same
-number always encodes the same way.
+{-| Write a field element back out as a key, fully reduced first so that the same number
+always encodes the same way.
 
 Three carry passes bring the limbs into range, then subtracting the prime twice with a
-constant time select brings a value in [p, 2p) down into [0, p).
+constant time select brings a value in [p, 2p) down into [0, p). Every limb is then under
+65536, so pairs of them fit a word each.
 
 -}
-fePack : Fe -> List Int
+fePack : Fe -> Key
 fePack fe =
     let
         reduced : Fe
@@ -670,25 +701,15 @@ fePack fe =
                 |> subtractPrime
                 |> subtractPrime
     in
-    List.concatMap
-        (\limb -> [ Bitwise.and 0xFF limb, Bitwise.and 0xFF (Bitwise.shiftRightBy 8 limb) ])
-        [ reduced.l0
-        , reduced.l1
-        , reduced.l2
-        , reduced.l3
-        , reduced.l4
-        , reduced.l5
-        , reduced.l6
-        , reduced.l7
-        , reduced.l8
-        , reduced.l9
-        , reduced.l10
-        , reduced.l11
-        , reduced.l12
-        , reduced.l13
-        , reduced.l14
-        , reduced.l15
-        ]
+    { w0 = reduced.l0 + reduced.l1 * 65536
+    , w1 = reduced.l2 + reduced.l3 * 65536
+    , w2 = reduced.l4 + reduced.l5 * 65536
+    , w3 = reduced.l6 + reduced.l7 * 65536
+    , w4 = reduced.l8 + reduced.l9 * 65536
+    , w5 = reduced.l10 + reduced.l11 * 65536
+    , w6 = reduced.l12 + reduced.l13 * 65536
+    , w7 = reduced.l14 + reduced.l15 * 65536
+    }
 
 
 {-| Subtract 2^255 - 19 limb by limb, then keep the result only if it did not go negative.
@@ -786,30 +807,45 @@ borrowLimb limb subtrahend borrow =
 -- BYTES
 
 
-toByteList : Bytes -> Maybe (List Int)
-toByteList bytes =
+{-| Eight little endian 32 bit words. Anything that is not exactly 32 bytes long is
+rejected rather than padded or truncated, so a key can only ever be the right size.
+-}
+keyFromBytes : Bytes -> Maybe Key
+keyFromBytes bytes =
     if Bytes.width bytes == keyLength then
-        Bytes.Decode.decode (Bytes.Decode.loop ( keyLength, [] ) byteListStep) bytes
+        Bytes.Decode.decode (Bytes.Decode.loop ( 8, [] ) wordListStep) bytes
+            |> Maybe.andThen keyFromWords
 
     else
         Nothing
 
 
-byteListStep :
+keyFromWords : List Int -> Maybe Key
+keyFromWords words =
+    case words of
+        [ w0, w1, w2, w3, w4, w5, w6, w7 ] ->
+            Just { w0 = w0, w1 = w1, w2 = w2, w3 = w3, w4 = w4, w5 = w5, w6 = w6, w7 = w7 }
+
+        _ ->
+            Nothing
+
+
+wordListStep :
     ( Int, List Int )
     -> Bytes.Decode.Decoder (Bytes.Decode.Step ( Int, List Int ) (List Int))
-byteListStep ( remaining, acc ) =
+wordListStep ( remaining, acc ) =
     if remaining <= 0 then
         Bytes.Decode.succeed (Bytes.Decode.Done (List.reverse acc))
 
     else
         Bytes.Decode.map
-            (\byte -> Bytes.Decode.Loop ( remaining - 1, byte :: acc ))
-            Bytes.Decode.unsignedInt8
+            (\word -> Bytes.Decode.Loop ( remaining - 1, word :: acc ))
+            (Bytes.Decode.unsignedInt32 Bytes.LE)
 
 
-fromByteList : List Int -> Bytes
-fromByteList bytes =
-    List.map Bytes.Encode.unsignedInt8 bytes
+keyToBytes : Key -> Bytes
+keyToBytes key =
+    [ key.w0, key.w1, key.w2, key.w3, key.w4, key.w5, key.w6, key.w7 ]
+        |> List.map (Bytes.Encode.unsignedInt32 Bytes.LE)
         |> Bytes.Encode.sequence
         |> Bytes.Encode.encode

@@ -82,6 +82,7 @@ type ToBackendLog
     | ToBackendLog_Local_SetMuteDiscordGuild
     | ToBackendLog_Local_RequestE2ee
     | ToBackendLog_Local_CancelE2eeRequest
+    | ToBackendLog_Local_SetPublicKey
 
 
 toBackendLogToString : ToBackendLog -> String
@@ -305,3 +306,6 @@ toBackendLogToString log =
 
         ToBackendLog_Local_CancelE2eeRequest ->
             "Local_CancelE2eeRequest"
+
+        ToBackendLog_Local_SetPublicKey ->
+            "Local_SetPublicKey"

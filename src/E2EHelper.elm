@@ -177,6 +177,7 @@ import UserAgent
 import UserColor
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import WordSpellingGame
+import X25519
 
 
 domain : Url
@@ -206,7 +207,32 @@ startupDataJsonWithInset time userAgent safeAreaInsetTop isPwa =
         , ( "safeAreaInsetTop", Json.Encode.int safeAreaInsetTop )
         , ( "devicePixelRatio", Json.Encode.float 2 )
         , ( "timezone", testTimezone )
+        , ( "randomSeed", testRandomSeed time )
         ]
+
+
+{-| Stands in for the words `crypto.getRandomValues` supplies in a browser.
+
+Two clients must not get the same words, or they would generate the same private key, so
+these are derived from the moment the client loaded. That is the one thing that reliably
+differs between the clients in a test, since they connect a little apart from each other.
+
+-}
+testRandomSeed : Time.Posix -> Json.Encode.Value
+testRandomSeed time =
+    List.foldl
+        (\_ ( previous, acc ) ->
+            let
+                next : Int
+                next =
+                    modBy 4294967296 (previous * 1103515 + 12345)
+            in
+            ( next, next :: acc )
+        )
+        ( Time.posixToMillis time + 1, [] )
+        (List.range 1 32)
+        |> Tuple.second
+        |> Json.Encode.list Json.Encode.int
 
 
 {-| The timezone tests run in. It sits on UTC and puts its clocks forward an hour for the
@@ -2472,6 +2498,11 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_CancelE2eeRequest _ ->
                     True
 
+                Local_SetPublicKey _ ->
+                    -- Setting the key on your own account is what this is for, so the
+                    -- attacker succeeding at it against themselves is not a leak.
+                    False
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -2968,7 +2999,20 @@ allAttackerLocalChanges =
     , Local_SetMuteGuild legitGuildId MuteSettings.IsMuted
     , Local_RequestE2ee { otherUserId = Broadcast.adminUserId }
     , Local_CancelE2eeRequest { otherUserId = Broadcast.adminUserId }
+    , Local_SetPublicKey attackerPublicKey
     ]
+
+
+{-| A public key for the attacker to try to plant on somebody else's account.
+-}
+attackerPublicKey : X25519.PublicKey
+attackerPublicKey =
+    case X25519.privateKeyFromListInt (List.repeat 8 123456789) of
+        Just privateKey ->
+            X25519.toPublicKey privateKey
+
+        Nothing ->
+            Debug.todo "Eight words is enough for a private key"
 
 
 {-| Id of a private Discord channel in the Bot Test guild (705745250815311942).

@@ -23,6 +23,7 @@ module FrontendExtra exposing
     , isPressMsg
     , layout
     , logout
+    , newPrivateKeyWarning
     , pingUserNameSoFar
     , playNotificationSound
     , playNotificationSoundForDiscordMessage
@@ -118,6 +119,7 @@ import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, Notification
 import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 import WordSpellingGame
+import X25519
 
 
 {-| The messages out of what the backend fills in when a Discord channel or thread is
@@ -338,6 +340,9 @@ pendingChangesText localChange =
 
         Local_CancelE2eeRequest _ ->
             "Cancelled the end-to-end encryption request"
+
+        Local_SetPublicKey _ ->
+            "Added a private key to the account"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg_) -> Element FrontendMsg_ -> Html FrontendMsg_
@@ -1058,6 +1063,71 @@ editMessage_gotFiles guildOrDmId files model =
                     ( loggedIn, Command.none )
         )
         model
+
+
+{-| The one and only showing of a freshly generated private key.
+
+The key is not stored on the server, and the frontend forgets it as soon as this is
+closed, so if it is not copied out now it is gone and anything encrypted to it with it.
+That is the whole point of the warning being this loud.
+
+-}
+newPrivateKeyWarning :
+    Bool
+    -> { a | lastCopied : Maybe MyUi.LastCopy }
+    -> X25519.PrivateKey
+    -> Element FrontendMsg_
+newPrivateKeyWarning isMobile loaded privateKey =
+    Ui.el
+        [ Ui.behindContent
+            (Ui.el [ Ui.background MyUi.scrim, Ui.height Ui.fill ] Ui.none)
+        , Ui.height Ui.fill
+        ]
+        (Ui.column
+            [ Ui.centerX
+            , if isMobile then
+                Ui.alignBottom
+
+              else
+                Ui.centerY
+            , Ui.attrIf (not isMobile) (Ui.rounded 16)
+            , if isMobile then
+                Ui.paddingXY 16 16
+
+              else
+                Ui.paddingXY 24 24
+            , Ui.background MyUi.background3
+            , if isMobile then
+                Ui.width Ui.fill
+
+              else
+                Ui.widthMax 600
+            , Ui.width Ui.shrink
+            , Ui.spacing 24
+            , Ui.borderColor MyUi.border1
+            , Ui.border 1
+            ]
+            [ Ui.column
+                [ Ui.spacing 8 ]
+                [ Ui.row
+                    [ Ui.Font.color MyUi.font3, Ui.spacing 16, Ui.contentCenterY, Ui.Font.bold ]
+                    [ Ui.html (Icons.warning 36), Ui.text "Save your private key now" ]
+                , Ui.Prose.paragraph
+                    []
+                    [ Ui.text "Put this in a password manager. It is not stored anywhere else, so this is the only chance you have to save it. Without it your encrypted messages can't be decrypted." ]
+                ]
+            , MyUi.copyBox
+                (Dom.id "frontend_newPrivateKey")
+                PressedCopyText
+                TypedNewPrivateKey
+                loaded
+                (X25519.privateKeyToString privateKey)
+            , MyUi.secondaryButton
+                (Dom.id "frontend_closeNewPrivateKey")
+                PressedCloseNewPrivateKey
+                "I've saved it"
+            ]
+        )
 
 
 externalLinkWarning : SeqSet Domain -> Bool -> Url -> Element FrontendMsg_
@@ -2218,6 +2288,15 @@ isPressMsg msg =
 
         PressedExportChannel _ ->
             True
+
+        PressedAddPrivateKeyToAccount ->
+            True
+
+        PressedCloseNewPrivateKey ->
+            True
+
+        TypedNewPrivateKey ->
+            False
 
         PressedExpandE2eeSection _ ->
             True
@@ -3679,6 +3758,18 @@ changeUpdate localMsg local =
 
                 Local_CancelE2eeRequest { otherUserId } ->
                     LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
+
+                Local_SetPublicKey publicKey ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        user : FrontendCurrentUser
+                        user =
+                            localUser.user
+                    in
+                    { local | localUser = { localUser | user = { user | publicKey = Just publicKey } } }
 
         ServerChange serverChange ->
             case serverChange of
