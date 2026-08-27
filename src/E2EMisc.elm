@@ -349,7 +349,7 @@ endToEndEncryptionRequestTest config =
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.text "Enable end-to-end encryption" ])
                 , addPrivateKeyToAccount admin
-                    (\_ ->
+                    (\adminPrivateKey ->
                         [ admin.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.text "Enable end-to-end encryption" ])
@@ -425,6 +425,21 @@ endToEndEncryptionRequestTest config =
                                         , Test.Html.Selector.text "Enable end-to-end encryption"
                                         ]
                                     )
+
+                                -- Sending your own private key to somebody hands them
+                                -- everything encrypted to it, so it never leaves the
+                                -- browser even when the sender pastes it into a message.
+                                , admin.click 100 (Dom.id "guild_hideMembers")
+                                , E2EHelper.writeMessage admin 100 ("here you go " ++ adminPrivateKey ++ " enjoy")
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text "don't reveal your private key!" ]
+                                    )
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text adminPrivateKey ])
+                                , T.checkBackend 100 (checkPrivateKeyNeverReachedTheServer adminPrivateKey)
                                 ]
                             )
                         ]
@@ -594,6 +609,39 @@ checkDmIsEncrypted backend =
 
         _ ->
             Err "The DM should have been marked as encrypted on the backend"
+
+
+{-| No message the server stored anywhere should contain the sender's private key, and
+the one that tried to give it away should carry the warning in its place instead.
+-}
+checkPrivateKeyNeverReachedTheServer : String -> E2EHelper.BackendModel2 -> Result String ()
+checkPrivateKeyNeverReachedTheServer privateKeyText backend =
+    let
+        messages : List String
+        messages =
+            SeqDict.values (E2EHelper.unwrapBackend backend).dmChannels
+                |> List.concatMap (\dmChannel -> IdArray.toList dmChannel.messages)
+                |> List.filterMap
+                    (\message ->
+                        case message of
+                            Message.UserTextMessage data ->
+                                RichText.toString Time.utc False SeqDict.empty data.content |> Just
+
+                            _ ->
+                                Nothing
+                    )
+    in
+    if List.any (String.contains privateKeyText) messages then
+        Err "The private key reached the server"
+
+    else if List.any (String.contains "don't reveal your private key!") messages then
+        Ok ()
+
+    else
+        Err
+            ("The message that tried to give the key away isn't on the server at all. Stored: "
+                ++ String.join " | " messages
+            )
 
 
 {-| The server should never have been handed the message as it was typed.

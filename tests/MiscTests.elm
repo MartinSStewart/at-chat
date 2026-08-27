@@ -8,16 +8,19 @@ import Expect
 import Id exposing (CustomEmojiId, Id)
 import Pages.Guild exposing (HighlightMessage(..), IsHovered(..))
 import SeqSet
+import String.Nonempty
 import Test exposing (Test)
 import User
 import UserAgent
+import X25519
 
 
 tests : Test
 tests =
     Test.describe
         "Misc tests"
-        [ Test.test "Round trip message view encoding" <|
+        [ redactPrivateKeysTests
+        , Test.test "Round trip message view encoding" <|
             \_ ->
                 let
                     input =
@@ -155,3 +158,89 @@ usableCustomEmoji =
 unusableCustomEmoji : Id CustomEmojiId
 unusableCustomEmoji =
     Id.fromInt 2
+
+
+{-| A message that gives away the sender's own private key is caught on the way out.
+
+The account used here is built from a fixed private key, so the public key it is checked
+against is the one that really pairs with it rather than one written down by hand.
+
+-}
+redactPrivateKeysTests : Test
+redactPrivateKeysTests =
+    let
+        privateKey : X25519.PrivateKey
+        privateKey =
+            case X25519.privateKeyFromListInt (List.repeat 8 305419896) of
+                Just key ->
+                    key
+
+                Nothing ->
+                    Debug.todo "Eight words is enough for a private key"
+
+        privateKeyText : String
+        privateKeyText =
+            X25519.privateKeyToString privateKey
+
+        account : { publicKey : Maybe X25519.PublicKey }
+        account =
+            { publicKey = Just (X25519.toPublicKey privateKey) }
+
+        redact : { publicKey : Maybe X25519.PublicKey } -> String -> String
+        redact user text =
+            case String.Nonempty.fromString text of
+                Just nonempty ->
+                    User.redactPrivateKeys user nonempty |> String.Nonempty.toString
+
+                Nothing ->
+                    "the test wrote an empty message"
+
+        warning : String
+        warning =
+            "*don't reveal your private key!*"
+    in
+    Test.describe "Redacting a private key from a message"
+        [ Test.test "the key on its own is replaced"
+            (\_ -> redact account privateKeyText |> Expect.equal warning)
+        , Test.test "the rest of the message is left alone"
+            (\_ ->
+                redact account ("here it is " ++ privateKeyText ++ " don't tell anyone")
+                    |> Expect.equal ("here it is " ++ warning ++ " don't tell anyone")
+            )
+        , Test.test "line breaks and runs of spaces survive"
+            (\_ ->
+                redact account ("one\n\ntwo   " ++ privateKeyText ++ "\nthree")
+                    |> Expect.equal ("one\n\ntwo   " ++ warning ++ "\nthree")
+            )
+        , Test.test "every mention of it goes"
+            (\_ ->
+                redact account (privateKeyText ++ " and again " ++ privateKeyText)
+                    |> Expect.equal (warning ++ " and again " ++ warning)
+            )
+        , Test.test "somebody else's private key is not this account's to worry about"
+            (\_ ->
+                let
+                    otherKey : String
+                    otherKey =
+                        X25519.privateKeyFromListInt (List.repeat 8 987654321)
+                            |> Maybe.map X25519.privateKeyToString
+                            |> Maybe.withDefault "no key"
+                in
+                redact account otherKey |> Expect.equal otherKey
+            )
+        , Test.test "the public key is fine to share"
+            (\_ ->
+                let
+                    publicKeyText : String
+                    publicKeyText =
+                        X25519.toPublicKey privateKey |> X25519.publicKeyToString
+                in
+                redact account publicKeyText |> Expect.equal publicKeyText
+            )
+        , Test.test "an ordinary message ending in = is left alone"
+            (\_ -> redact account "the answer is x =" |> Expect.equal "the answer is x =")
+        , Test.test "an account with no key pair has nothing to redact"
+            (\_ ->
+                redact { publicKey = Nothing } privateKeyText |> Expect.equal privateKeyText
+            )
+        ]

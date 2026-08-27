@@ -4130,11 +4130,18 @@ updateLoaded msg model =
                                     ( guildOrDmId, threadRoute )
                             in
                             case SeqDict.get guildOrDmIdWithThread loggedIn.drafts of
-                                Just nonempty ->
+                                Just draft ->
                                     let
                                         local : LocalState
                                         local =
                                             Local.model loggedIn.localState
+
+                                        nonempty : String.Nonempty.NonemptyString
+                                        nonempty =
+                                            -- Sending someone your own private key would hand
+                                            -- them everything that was ever encrypted to it, so
+                                            -- it is taken out on the way past rather than sent.
+                                            User.redactPrivateKeys local.localUser.user draft
 
                                         safeToSend : Bool
                                         safeToSend =
