@@ -26,6 +26,7 @@
 * Figure out why messages can be sent before files have loaded
 * lishaduck's android phone has slow loading times and shows both a loading step with just the at-chat logo and then
   another step with a blank blue background
+* Right most channel header tab selection background overlaps with channel settings a bit
 
 Requested features:
 

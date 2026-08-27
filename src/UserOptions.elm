@@ -535,7 +535,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                     Ui.Input.label
                                         "userOptions_privateKey"
                                         []
-                                        (Ui.text "You can type or paste your private key here to check that it matches your public key. It is not stored.")
+                                        (Ui.text "You can enter your private key here to check that it matches your public key.")
                             in
                             [ MyUi.copyBox
                                 (Dom.id "userOptions_publicKey")
@@ -553,12 +553,6 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                     { text = model.privateKeyText
                                     , onChange =
                                         \text ->
-                                            -- Base64 of a 32 byte key always ends in "=",
-                                            -- so only then is there a whole key to check
-                                            -- rather than a prefix of one. Waiting for
-                                            -- that means a password manager typing the
-                                            -- key in a character at a time works, and
-                                            -- that no error is shown part way through.
                                             if String.endsWith "=" (String.trim text) then
                                                 case User.privateKeyForAccount text local.localUser.user of
                                                     Ok _ ->
