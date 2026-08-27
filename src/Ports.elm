@@ -267,6 +267,7 @@ type alias StartupData =
       -- fractional value when the page is zoomed).
       devicePixelRatio : Float
     , timezone : Time.Zone
+    , randomSeed : List Int
     }
 
 
@@ -329,6 +330,7 @@ decodeStartupData =
                 ]
             )
         |> Json.Decode.Extra.andMap (Json.Decode.field "timezone" decodeTimezone)
+        |> Json.Decode.Extra.andMap (Json.Decode.field "randomSeed" (Json.Decode.list Json.Decode.int))
 
 
 pwaStatusFromBool : Bool -> PwaStatus

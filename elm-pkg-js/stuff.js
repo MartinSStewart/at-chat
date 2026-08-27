@@ -597,7 +597,8 @@ exports.init = async function init(app)
             notificationPermission: ("Notification" in window) ? Notification.permission : "unsupported",
             safeAreaInsetTop: safeAreaInsetTop,
             devicePixelRatio: window.devicePixelRatio || 1,
-            timezone: zone
+            timezone: zone,
+            randomSeed: Array.from(crypto.getRandomValues(new Uint32Array(32)))
         });
     }
 

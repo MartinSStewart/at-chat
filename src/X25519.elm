@@ -3,6 +3,7 @@ module X25519 exposing
     , PublicKey
     , SharedSecret
     , privateKeyFromBytes
+    , privateKeyFromListInt
     , privateKeyToBytes
     , publicKeyFromBytes
     , publicKeyToBytes
@@ -69,6 +70,15 @@ keyLength =
 privateKeyFromBytes : Bytes -> Maybe PrivateKey
 privateKeyFromBytes bytes =
     Maybe.map PrivateKey (toByteList bytes)
+
+
+privateKeyFromListInt : List Int -> Maybe PrivateKey
+privateKeyFromListInt ints =
+    if List.length ints >= keyLength then
+        List.map (modBy 256) ints |> PrivateKey |> Just
+
+    else
+        Nothing
 
 
 publicKeyFromBytes : Bytes -> Maybe PublicKey
