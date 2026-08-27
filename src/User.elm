@@ -123,6 +123,9 @@ type alias BackendUser =
     , -- The public half of the key this account encrypts to. The private half is only
       -- ever shown to the user once, when they generate it, and is never sent here.
       publicKey : Maybe X25519.PublicKey
+    , -- Whether the warning about losing your private key has been accepted. Kept on the
+      -- account rather than per conversation so that it is only answered once.
+      e2eeRisksAccepted : Bool
     }
 
 
@@ -316,6 +319,7 @@ init createdAt name email userIsAdmin =
     , availableCustomEmojis = SeqSet.empty
     , muteSettings = MuteSettings.init
     , publicKey = Nothing
+    , e2eeRisksAccepted = False
     }
 
 
@@ -893,6 +897,7 @@ backendToFrontendCurrent user =
     , availableCustomEmojis = user.availableCustomEmojis
     , muteSettings = user.muteSettings
     , publicKey = user.publicKey
+    , e2eeRisksAccepted = user.e2eeRisksAccepted
     }
 
 

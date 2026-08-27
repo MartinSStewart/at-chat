@@ -393,6 +393,25 @@ endToEndEncryptionRequestTest config =
                 , admin.checkView
                     100
                     (Test.Html.Query.has [ Test.Html.Selector.text "Enable end-to-end encryption" ])
+
+                -- Accepting the risks is answered once for the account rather than once
+                -- per conversation, so a DM that has never been opened before starts out
+                -- past that step instead of asking again. Reaching one means going back
+                -- out through the guild, since the buttons that open a DM live in a guild
+                -- channel's member list.
+                , admin.click 100 (Dom.id "guild_hideMembers")
+                , admin.click 100 (Dom.id "guild_openGuild_0")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.openDm admin 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.text warning
+                        , Test.Html.Selector.text "Enable end-to-end encryption"
+                        ]
+                    )
                 ]
             )
         ]

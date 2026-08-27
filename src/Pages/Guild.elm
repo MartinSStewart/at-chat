@@ -7,7 +7,6 @@ module Pages.Guild exposing
     , channelTextInputId
     , conversationContainerId
     , decodeMessageView
-    , defaultE2eeSection
     , discordGuildView
     , dropdownButtonId
     , e2eeSectionIsExpanded
@@ -86,7 +85,7 @@ import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
-import Types exposing (E2eeSection, EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
+import Types exposing (EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -171,7 +170,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                                     otherUserId
                                                     isThread
                                                     (dmE2eeStatus otherUserId local)
-                                                    (e2eeSectionFor otherUserId loggedIn)
+                                                    (e2eeSectionIsExpanded otherUserId local loggedIn)
                                                     |> Ui.el
                                                         [ Ui.height Ui.fill
                                                         , Ui.background MyUi.background3
@@ -351,7 +350,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                         otherUserId
                                         isThread
                                         (dmE2eeStatus otherUserId local)
-                                        (e2eeSectionFor otherUserId loggedIn)
+                                        (e2eeSectionIsExpanded otherUserId local loggedIn)
                                         |> Ui.el
                                             [ Ui.width Ui.shrink
                                             , Ui.height Ui.fill
@@ -2300,19 +2299,6 @@ dmMembers localUser otherUserId =
         [ localUser.session.userId, otherUserId ]
 
 
-{-| What this browser remembers about a DM's end-to-end encryption section before the
-user has touched it.
--}
-defaultE2eeSection : E2eeSection
-defaultE2eeSection =
-    { isExpanded = Nothing, risksAccepted = False }
-
-
-e2eeSectionFor : Id UserId -> LoggedIn2 -> E2eeSection
-e2eeSectionFor otherUserId loggedIn =
-    SeqDict.get otherUserId loggedIn.e2eeSections |> Maybe.withDefault defaultE2eeSection
-
-
 {-| Whether the end-to-end encryption section of a DM's channel settings is open. It
 opens on its own while the other person is waiting for an answer, up until the user opens
 or closes it themselves.
@@ -2321,7 +2307,7 @@ e2eeSectionIsExpanded : Id UserId -> LocalState -> LoggedIn2 -> Bool
 e2eeSectionIsExpanded otherUserId local loggedIn =
     Maybe.withDefault
         (LocalState.dmE2eeRequestedByOtherUser otherUserId local)
-        (e2eeSectionFor otherUserId loggedIn).isExpanded
+        (SeqDict.get otherUserId loggedIn.e2eeSectionsExpanded)
 
 
 dmE2eeStatus : Id UserId -> LocalState -> DmChannel.E2eeStatus
@@ -2338,9 +2324,13 @@ dmE2eeStatus otherUserId local =
 come with it, so this section is either asking this user for that, or waiting on the
 other person to give it.
 -}
-e2eeSectionView : Bool -> LocalUser -> Id UserId -> DmChannel.E2eeStatus -> E2eeSection -> Element FrontendMsg_
-e2eeSectionView isMobile localUser otherUserId e2ee section =
+e2eeSectionView : Bool -> LocalUser -> Id UserId -> DmChannel.E2eeStatus -> Bool -> Element FrontendMsg_
+e2eeSectionView isMobile localUser otherUserId e2ee isExpanded =
     let
+        risksAccepted : Bool
+        risksAccepted =
+            localUser.user.e2eeRisksAccepted
+
         risksLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
         risksLabel =
             Ui.Input.label
@@ -2358,7 +2348,7 @@ e2eeSectionView isMobile localUser otherUserId e2ee section =
                     False
     in
     MyUi.container
-        (Maybe.withDefault requestedByOtherUser section.isExpanded)
+        isExpanded
         (Dom.id "guild_e2eeSection")
         (PressedExpandE2eeSection otherUserId)
         MyUi.background2
@@ -2377,16 +2367,16 @@ e2eeSectionView isMobile localUser otherUserId e2ee section =
                 [ Ui.spacing 16 ]
                 [ Ui.Input.checkbox
                     [ Ui.Font.size 14 ]
-                    { onChange = PressedE2eeRisksAccepted otherUserId
+                    { onChange = PressedE2eeRisksAccepted
                     , icon = Nothing
-                    , checked = section.risksAccepted
+                    , checked = risksAccepted
                     , label = risksLabel.id
                     }
                 , risksLabel.element
                 ]
             , case e2ee of
                 DmChannel.E2eeDisabled ->
-                    if not section.risksAccepted then
+                    if not risksAccepted then
                         Ui.none
 
                     else
@@ -2402,7 +2392,7 @@ e2eeSectionView isMobile localUser otherUserId e2ee section =
 
                 DmChannel.E2eeRequestedBy requestedBy ->
                     if requestedByOtherUser then
-                        if not section.risksAccepted then
+                        if not risksAccepted then
                             Ui.none
 
                         else
@@ -2470,9 +2460,9 @@ dmChannelSettingsNotMobile :
     -> Id UserId
     -> Bool
     -> DmChannel.E2eeStatus
-    -> E2eeSection
+    -> Bool
     -> Element FrontendMsg_
-dmChannelSettingsNotMobile localUser otherUserId isThread e2ee section =
+dmChannelSettingsNotMobile localUser otherUserId isThread e2ee isExpanded =
     let
         members : List (Id UserId)
         members =
@@ -2496,7 +2486,7 @@ dmChannelSettingsNotMobile localUser otherUserId isThread e2ee section =
             Ui.none
 
           else
-            e2eeSectionView False localUser otherUserId e2ee section
+            e2eeSectionView False localUser otherUserId e2ee isExpanded
         ]
 
 
@@ -2506,9 +2496,9 @@ dmChannelSettingsMobile :
     -> Id UserId
     -> Bool
     -> DmChannel.E2eeStatus
-    -> E2eeSection
+    -> Bool
     -> Element FrontendMsg_
-dmChannelSettingsMobile canScroll2 localUser otherUserId isThread e2ee section =
+dmChannelSettingsMobile canScroll2 localUser otherUserId isThread e2ee isExpanded =
     let
         members : List (Id UserId)
         members =
@@ -2555,7 +2545,7 @@ dmChannelSettingsMobile canScroll2 localUser otherUserId isThread e2ee section =
                 Ui.none
 
               else
-                e2eeSectionView True localUser otherUserId e2ee section
+                e2eeSectionView True localUser otherUserId e2ee isExpanded
             ]
         ]
 

@@ -2437,6 +2437,9 @@ toBackendLog toBackend =
                 Local_SetPublicKey _ ->
                     ToBackendLog_Local_SetPublicKey
 
+                Local_SetE2eeRisksAccepted _ ->
+                    ToBackendLog_Local_SetE2eeRisksAccepted
+
         TwoFactorToBackend _ ->
             ToBackendLog_TwoFactorToBackend
 

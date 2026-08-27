@@ -5,7 +5,6 @@ module Types exposing
     , BackendMsg(..)
     , CountToFrontendState
     , DiscordAttachmentData
-    , E2eeSection
     , EditChannelForm
     , EditGuildForm
     , EditMessage
@@ -265,21 +264,13 @@ type alias LoggedIn2 =
     , -- The private key that was just generated, while its one and only showing is on
       -- screen. Deliberately not kept anywhere else.
       newPrivateKey : Maybe X25519.PrivateKey
-    , e2eeSections : SeqDict (Id UserId) E2eeSection
+    , -- Which DMs' encryption sections the user has opened or closed themselves. Absent
+      -- means they have not touched it and it follows whether an answer is being waited on.
+      e2eeSectionsExpanded : SeqDict (Id UserId) Bool
     , {- We want to slightly change the letter spacing for textarea's on Safari in order to force it to recalculate word wrap.
          This is to work around this bug https://github.com/panphora/overtype/issues/116
       -}
       typedTextCounter : Int
-    }
-
-
-{-| The parts of a DM's end-to-end encryption settings that only this browser knows about.
-`isExpanded` is a `Maybe` because the section opens on its own when the other person has
-asked to start encrypting, until the user opens or closes it themselves.
--}
-type alias E2eeSection =
-    { isExpanded : Maybe Bool
-    , risksAccepted : Bool
     }
 
 
@@ -575,7 +566,7 @@ type FrontendMsg_
     | PressedCloseNewPrivateKey
     | TypedNewPrivateKey
     | PressedExpandE2eeSection (Id UserId)
-    | PressedE2eeRisksAccepted (Id UserId) Bool
+    | PressedE2eeRisksAccepted Bool
     | PressedEnableE2ee (Id UserId)
     | PressedCancelE2eeRequest (Id UserId)
     | PressedStartE2ee (Id UserId)
@@ -1084,3 +1075,4 @@ type LocalChange
     | Local_RequestE2ee Viewing_DmId
     | Local_CancelE2eeRequest Viewing_DmId
     | Local_SetPublicKey X25519.PublicKey
+    | Local_SetE2eeRisksAccepted Bool

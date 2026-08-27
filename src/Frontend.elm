@@ -81,7 +81,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Drag(..), DragTarget(..), ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), E2eeSection, EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -565,7 +565,7 @@ loadedInitHelper startupData emojiData loginData loading =
             , friendsSearch = ""
             , channelSearch = ""
             , newPrivateKey = Nothing
-            , e2eeSections = SeqDict.empty
+            , e2eeSectionsExpanded = SeqDict.empty
             , typedTextCounter = 0
             }
     in
@@ -3133,24 +3133,23 @@ updateLoaded msg model =
                                 (Local.model loggedIn.localState)
                                 loggedIn
                     in
-                    ( updateE2eeSection
-                        otherUserId
-                        (\section -> { section | isExpanded = Just (not isExpanded) })
-                        loggedIn
+                    ( { loggedIn
+                        | e2eeSectionsExpanded =
+                            SeqDict.insert otherUserId (not isExpanded) loggedIn.e2eeSectionsExpanded
+                      }
                     , Command.none
                     )
                 )
                 model
 
-        PressedE2eeRisksAccepted otherUserId isChecked ->
+        PressedE2eeRisksAccepted isChecked ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( updateE2eeSection
-                        otherUserId
-                        (\section -> { section | risksAccepted = isChecked })
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetE2eeRisksAccepted isChecked |> Just)
                         loggedIn
-                    , Command.none
-                    )
+                        Command.none
                 )
                 model
 
@@ -8617,27 +8616,3 @@ handleGameOutMsgs outMsgs model =
         )
         ( model, [] )
         outMsgs
-
-
-{-| Changes what this browser remembers about a DM's end-to-end encryption settings.
-Nothing is remembered until the user touches the section, so a default is filled in the
-first time around.
--}
-updateE2eeSection : Id UserId -> (E2eeSection -> E2eeSection) -> LoggedIn2 -> LoggedIn2
-updateE2eeSection otherUserId updateFunc loggedIn =
-    { loggedIn
-        | e2eeSections =
-            SeqDict.update
-                otherUserId
-                (\maybeSection ->
-                    (case maybeSection of
-                        Just section ->
-                            updateFunc section
-
-                        Nothing ->
-                            updateFunc Pages.Guild.defaultE2eeSection
-                    )
-                        |> Just
-                )
-                loggedIn.e2eeSections
-    }

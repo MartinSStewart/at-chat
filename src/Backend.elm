@@ -6066,6 +6066,22 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
+                Local_SetE2eeRisksAccepted isAccepted ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\session user ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user | e2eeRisksAccepted = isAccepted }
+                                        model.users
+                              }
+                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                            )
+                        )
+
                 Local_SetPublicKey publicKey ->
                     BackendExtra.asUser
                         model

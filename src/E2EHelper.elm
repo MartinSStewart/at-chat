@@ -2503,6 +2503,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                     -- attacker succeeding at it against themselves is not a leak.
                     False
 
+                Local_SetE2eeRisksAccepted _ ->
+                    False
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -3000,6 +3003,7 @@ allAttackerLocalChanges =
     , Local_RequestE2ee { otherUserId = Broadcast.adminUserId }
     , Local_CancelE2eeRequest { otherUserId = Broadcast.adminUserId }
     , Local_SetPublicKey attackerPublicKey
+    , Local_SetE2eeRisksAccepted True
     ]
 
 

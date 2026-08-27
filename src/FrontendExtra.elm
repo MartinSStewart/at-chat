@@ -344,6 +344,9 @@ pendingChangesText localChange =
         Local_SetPublicKey _ ->
             "Added a private key to the account"
 
+        Local_SetE2eeRisksAccepted _ ->
+            "Accepted the end-to-end encryption risks"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg_) -> Element FrontendMsg_ -> Html FrontendMsg_
 layout model attributes child =
@@ -2301,7 +2304,7 @@ isPressMsg msg =
         PressedExpandE2eeSection _ ->
             True
 
-        PressedE2eeRisksAccepted _ _ ->
+        PressedE2eeRisksAccepted _ ->
             True
 
         PressedEnableE2ee _ ->
@@ -3758,6 +3761,18 @@ changeUpdate localMsg local =
 
                 Local_CancelE2eeRequest { otherUserId } ->
                     LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
+
+                Local_SetE2eeRisksAccepted isAccepted ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        user : FrontendCurrentUser
+                        user =
+                            localUser.user
+                    in
+                    { local | localUser = { localUser | user = { user | e2eeRisksAccepted = isAccepted } } }
 
                 Local_SetPublicKey publicKey ->
                     let
