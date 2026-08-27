@@ -569,7 +569,7 @@ loadedInitHelper startupData emojiData loginData loading =
             , showNewPrivateKey = Nothing
             , e2eeError = Nothing
             , e2eePrivateKeyText = ""
-            , e2eeKeysOnThisDevice = SeqDict.empty
+            , e2eeKeysOnThisDevice = SeqSet.fromList startupData.e2eeKeys
             , pendingEncryptedMessages = SeqDict.empty
             , nextEncryptionRequestId = 0
             , e2eeSectionsExpanded = SeqDict.empty
@@ -596,7 +596,6 @@ loadedInitHelper startupData emojiData loginData loading =
             Call.NoVideo
             (Call.displayMode (MyUi.isMobile loading) local.localUser.session.userId loading.route local.calls)
             loggedIn.voiceChat
-        , checkE2eeKeysOnThisDevice local
         ]
     )
 
@@ -3217,18 +3216,6 @@ updateLoaded msg model =
 
         EncryptionFromJs result ->
             case result of
-                Ok (Encryption.FromJs_KeyStatus otherUserId hasKey) ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            ( { loggedIn
-                                | e2eeKeysOnThisDevice =
-                                    SeqDict.insert otherUserId hasKey loggedIn.e2eeKeysOnThisDevice
-                              }
-                            , Command.none
-                            )
-                        )
-                        model
-
                 Ok (Encryption.FromJs_SharedSecretStored otherUserId) ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
@@ -3237,7 +3224,7 @@ updateLoaded msg model =
                                 loggedIn2 =
                                     { loggedIn
                                         | e2eeKeysOnThisDevice =
-                                            SeqDict.insert otherUserId True loggedIn.e2eeKeysOnThisDevice
+                                            SeqSet.insert otherUserId loggedIn.e2eeKeysOnThisDevice
                                     }
                             in
                             -- Whoever was asked is the one who still owes an answer. The
@@ -7793,19 +7780,6 @@ updateLoadedFromBackend msg model =
                                             Command.none
                                     )
 
-                                Server_E2eeAccepted { otherUserId } _ ->
-                                    -- The other person accepted, but the private key is
-                                    -- not kept anywhere, so this side cannot work the
-                                    -- secret out on its own. Recording that this device
-                                    -- has no key is what puts the box asking for it in
-                                    -- front of the user.
-                                    ( { loggedIn2
-                                        | e2eeKeysOnThisDevice =
-                                            SeqDict.insert otherUserId False loggedIn2.e2eeKeysOnThisDevice
-                                      }
-                                    , Command.none
-                                    )
-
                                 Server_YouJoinedGuildByInvite (Ok { guildId, guild }) ->
                                     ( loggedIn2
                                     , case model.route of
@@ -8887,25 +8861,3 @@ startEncryptingMessage draft threadRoute text maybeOtherUserId loggedIn =
                 }
                 |> Encryption.toJs
             )
-
-
-{-| Ask the browser which encrypted conversations it already holds a key for.
-
-The key lives in IndexedDB rather than on the account, so after a reload, or on a device
-that was not the one the conversation was set up on, there is nothing in Elm that knows
-whether the private key still needs to be asked for.
-
--}
-checkE2eeKeysOnThisDevice : LocalState -> Command FrontendOnly ToBackend FrontendMsg_
-checkE2eeKeysOnThisDevice local =
-    SeqDict.toList local.dmChannels
-        |> List.filterMap
-            (\( otherUserId, dmChannel ) ->
-                case dmChannel.e2ee of
-                    DmChannel.E2eeEnabled _ ->
-                        Encryption.toJs (Encryption.ToJs_CheckKey otherUserId) |> Just
-
-                    _ ->
-                        Nothing
-            )
-        |> Command.batch

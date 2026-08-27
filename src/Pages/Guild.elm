@@ -2450,17 +2450,12 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
 
 
 {-| Pulls together what the private key box for one conversation needs from the model.
-
-`hasKeyOnThisDevice` defaults to true while the browser has not been asked yet, so that
-the box does not flash into view for a conversation that turns out to be set up already.
-
 -}
 e2eeKeyInput : Id UserId -> LoggedIn2 -> E2eeKeyInput
 e2eeKeyInput otherUserId loggedIn =
     { text = loggedIn.e2eePrivateKeyText
     , error = loggedIn.e2eeError
-    , hasKeyOnThisDevice =
-        SeqDict.get otherUserId loggedIn.e2eeKeysOnThisDevice |> Maybe.withDefault True
+    , hasKeyOnThisDevice = SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice
     }
 
 

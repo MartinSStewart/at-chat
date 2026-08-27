@@ -14,6 +14,65 @@ function arrayBufferToBase64Url(buffer) {
         .replace(/=+$/, "");
 }
 
+// --- End-to-end encryption -------------------------------------------------------
+//
+// The symmetric key for a DM is derived from the shared secret Elm worked out, then kept
+// in IndexedDB as a CryptoKey the browser will not export. Storing the handle rather than
+// the bytes is the whole point: nothing on the page can read the key back out afterwards,
+// it can only ask for something to be encrypted with it.
+
+const e2eeDbName = "at-chat-e2ee";
+const e2eeStoreName = "dm-keys";
+
+function e2eeOpenDb() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(e2eeDbName, 1);
+        request.onupgradeneeded = () => {
+            if (!request.result.objectStoreNames.contains(e2eeStoreName)) {
+                request.result.createObjectStore(e2eeStoreName);
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+function e2eeWithStore(mode, run) {
+    return e2eeOpenDb().then(db => new Promise((resolve, reject) => {
+        const transaction = db.transaction(e2eeStoreName, mode);
+        const request = run(transaction.objectStore(e2eeStoreName));
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+        transaction.oncomplete = () => db.close();
+    }));
+}
+
+function e2eeBase64ToBytes(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
+    return bytes;
+}
+
+function e2eeBytesToBase64(bytes) {
+    let binary = "";
+    const view = new Uint8Array(bytes);
+    for (let i = 0; i < view.length; i++) { binary += String.fromCharCode(view[i]); }
+    return btoa(binary);
+}
+
+// The ids of every conversation this browser holds a key for. Sent along with the rest of
+// the startup data so that Elm knows from the first render which conversations still need
+// a private key typed in, without having to ask and wait.
+async function e2eeStoredKeyIds() {
+    try {
+        return await e2eeWithStore("readonly", store => store.getAllKeys());
+    } catch (e) {
+        return [];
+    }
+}
+
+
 async function requestNotificationPermission(app) {
     if (!("Notification" in window)) {
         app.ports.check_notification_permission_from_js.send("unsupported");
@@ -527,7 +586,7 @@ exports.init = async function init(app)
         }
     });
 
-    function sendStartupData() {
+    async function sendStartupData() {
         // original code found here https://stackoverflow.com/a/13382873
         // Creating invisible container
         const outer = document.createElement('div');
@@ -598,7 +657,8 @@ exports.init = async function init(app)
             safeAreaInsetTop: safeAreaInsetTop,
             devicePixelRatio: window.devicePixelRatio || 1,
             timezone: zone,
-            randomSeed: Array.from(crypto.getRandomValues(new Uint32Array(32)))
+            randomSeed: Array.from(crypto.getRandomValues(new Uint32Array(32))),
+            e2eeKeys: await e2eeStoredKeyIds()
         });
     }
 
@@ -711,53 +771,6 @@ exports.init = async function init(app)
             });
     });
 
-    // --- End-to-end encryption -------------------------------------------------
-    //
-    // The symmetric key for a DM is derived from the shared secret Elm worked out, then
-    // kept in IndexedDB as a CryptoKey the browser will not export. Storing the handle
-    // rather than the bytes is the whole point: nothing on the page can read the key
-    // back out afterwards, it can only ask for something to be encrypted with it.
-
-    const e2eeDbName = "at-chat-e2ee";
-    const e2eeStoreName = "dm-keys";
-
-    function e2eeOpenDb() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(e2eeDbName, 1);
-            request.onupgradeneeded = () => {
-                if (!request.result.objectStoreNames.contains(e2eeStoreName)) {
-                    request.result.createObjectStore(e2eeStoreName);
-                }
-            };
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
-    }
-
-    function e2eeWithStore(mode, run) {
-        return e2eeOpenDb().then(db => new Promise((resolve, reject) => {
-            const transaction = db.transaction(e2eeStoreName, mode);
-            const request = run(transaction.objectStore(e2eeStoreName));
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-            transaction.oncomplete = () => db.close();
-        }));
-    }
-
-    function e2eeBase64ToBytes(base64) {
-        const binary = atob(base64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
-        return bytes;
-    }
-
-    function e2eeBytesToBase64(bytes) {
-        let binary = "";
-        const view = new Uint8Array(bytes);
-        for (let i = 0; i < view.length; i++) { binary += String.fromCharCode(view[i]); }
-        return btoa(binary);
-    }
-
     app.ports.encryption_to_js.subscribe(async (message) => {
         try {
             if (message.tag === "store-shared-secret") {
@@ -784,11 +797,6 @@ exports.init = async function init(app)
                 app.ports.encryption_from_js.send(
                     { tag: "shared-secret-stored", args: [ data.otherUserId ] });
 
-            } else if (message.tag === "check-key") {
-                const otherUserId = message.args[0];
-                const key = await e2eeWithStore("readonly", store => store.get(otherUserId));
-                app.ports.encryption_from_js.send(
-                    { tag: "key-status", args: [ otherUserId, !!key ] });
             } else if (message.tag === "encrypt-message") {
                 const data = message.args[0];
                 const key = await e2eeWithStore("readonly", store => store.get(data.otherUserId));

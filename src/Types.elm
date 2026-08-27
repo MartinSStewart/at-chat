@@ -267,9 +267,10 @@ type alias LoggedIn2 =
     , showNewPrivateKey : Maybe X25519.PrivateKey
     , e2eeError : Maybe String
     , e2eePrivateKeyText : String
-    , -- Which conversations this browser has a key stored for. Absent means it hasn't
-      -- been asked about yet, since only IndexedDB knows and Elm can't see it.
-      e2eeKeysOnThisDevice : SeqDict (Id UserId) Bool
+    , -- Which conversations this browser has an encryption key for. Seeded from the
+      -- startup data, since the keys live in IndexedDB where Elm can't see them, and
+      -- added to as more are stored.
+      e2eeKeysOnThisDevice : SeqSet (Id UserId)
     , -- Messages waiting on the browser to encrypt them. A reply carries only the request
       -- id, so everything else the message needs to be sent is held here until it lands.
       pendingEncryptedMessages : SeqDict Int PendingEncryptedMessage

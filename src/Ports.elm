@@ -52,6 +52,7 @@ import CodecExtra
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
+import Id exposing (Id, UserId)
 import Json.Decode
 import Json.Decode.Extra
 import Json.Encode
@@ -268,6 +269,10 @@ type alias StartupData =
       devicePixelRatio : Float
     , timezone : Time.Zone
     , randomSeed : List Int
+    , -- The conversations this browser already holds an encryption key for. It comes from
+      -- IndexedDB, which Elm can't read, and arrives here so that the first render already
+      -- knows which conversations still need a private key typed in.
+      e2eeKeys : List (Id UserId)
     }
 
 
@@ -331,6 +336,8 @@ decodeStartupData =
             )
         |> Json.Decode.Extra.andMap (Json.Decode.field "timezone" decodeTimezone)
         |> Json.Decode.Extra.andMap (Json.Decode.field "randomSeed" (Json.Decode.list Json.Decode.int))
+        |> Json.Decode.Extra.andMap
+            (Json.Decode.field "e2eeKeys" (Json.Decode.list (Json.Decode.map Id.fromInt Json.Decode.int)))
 
 
 pwaStatusFromBool : Bool -> PwaStatus

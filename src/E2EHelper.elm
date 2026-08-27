@@ -213,6 +213,8 @@ startupDataJsonWithInset time userAgent safeAreaInsetTop isPwa =
         , ( "devicePixelRatio", Json.Encode.float 2 )
         , ( "timezone", testTimezone )
         , ( "randomSeed", testRandomSeed time )
+        , -- A browser in a test starts out with nothing stored.
+          ( "e2eeKeys", Json.Encode.list Json.Encode.int [] )
         ]
 
 
@@ -713,13 +715,6 @@ respondToEncryptionPort client =
                     [ Base64.fromString request.plainText
                         |> Maybe.withDefault ""
                         |> Encryption.FromJs_MessageEncrypted request.requestId
-                        |> Codec.encodeToValue Encryption.fromJsCodec
-                        |> client.portEvent 100 "encryption_from_js"
-                    ]
-
-                (Encryption.ToJs_CheckKey otherUserId) :: _ ->
-                    -- A browser in a test starts out with nothing in IndexedDB.
-                    [ Encryption.FromJs_KeyStatus otherUserId False
                         |> Codec.encodeToValue Encryption.fromJsCodec
                         |> client.portEvent 100 "encryption_from_js"
                     ]

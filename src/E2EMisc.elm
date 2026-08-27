@@ -557,9 +557,6 @@ storedSharedSecrets data =
 
                     Encryption.ToJs_EncryptMessage _ ->
                         Nothing
-
-                    Encryption.ToJs_CheckKey _ ->
-                        Nothing
             )
 
 
