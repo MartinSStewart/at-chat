@@ -549,7 +549,11 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                 [ Ui.paddingXY 16 0, Ui.spacing 4 ]
                                 [ privateKeyLabel.element
                                 , Ui.Input.text
-                                    [ Ui.background (Ui.rgba 0 0 0 0), Ui.paddingXY 8 8, Ui.widthMax 300 ]
+                                    [ Ui.background MyUi.inputBackground
+                                    , Ui.paddingXY 8 8
+                                    , Ui.widthMax 300
+                                    , Ui.borderColor MyUi.inputBorder
+                                    ]
                                     { text = model.privateKeyText
                                     , onChange =
                                         \text ->
@@ -559,7 +563,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                                         ValidatedE2eePrivateKey "" E2eeKeys_Valid
 
                                                     Err error ->
-                                                        ValidatedE2eePrivateKey "" (E2eeKeys_Error error)
+                                                        ValidatedE2eePrivateKey text (E2eeKeys_Error error)
 
                                             else
                                                 ValidatedE2eePrivateKey text E2eeKeys_NotChecked

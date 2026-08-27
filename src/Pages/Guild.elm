@@ -2367,18 +2367,21 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
         "End-to-end encryption"
         [ Ui.column
             [ Ui.paddingWith { left = 8, right = 8, top = 8, bottom = 0 }, Ui.spacing 16 ]
-            [ MyUi.warningHeader "Before you enable E2EE:"
-            , Ui.text "You'll get a private key that you need to store in a password manager. If you lose it, you'll permanently lose access to all your encrypted messages."
-            , Ui.row
-                []
-                [ Ui.Input.checkbox
+            [ Ui.column
+                [ Ui.attrIf risksAccepted (Ui.opacity 0.5), Ui.spacing 8 ]
+                [ MyUi.warningHeader "Before you enable E2EE:"
+                , Ui.text "You'll get a private key that you need to store in a password manager. If you lose it, you'll permanently lose access to all your encrypted messages."
+                , Ui.row
                     []
-                    { onChange = PressedE2eeRisksAccepted
-                    , icon = Nothing
-                    , checked = risksAccepted
-                    , label = risksLabel.id
-                    }
-                , risksLabel.element
+                    [ Ui.Input.checkbox
+                        []
+                        { onChange = PressedE2eeRisksAccepted
+                        , icon = Nothing
+                        , checked = risksAccepted
+                        , label = risksLabel.id
+                        }
+                    , risksLabel.element
+                    ]
                 ]
             , case e2ee of
                 DmChannel.E2eeDisabled ->
@@ -2437,12 +2440,9 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                             Ui.none
 
                           else
-                            -- The key lives in this browser, not on the account, so a
-                            -- different device or a reload after the key was worked out
-                            -- means asking for the private key again.
                             privateKeyInput
                                 otherUserId
-                                "This device doesn't have the key for this conversation yet. Type or paste your private key to set it up."
+                                "This conversation is missing a private key in order to decrypt messages. Enter your private key here."
                                 keyInput
                         ]
             ]

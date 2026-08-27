@@ -3207,7 +3207,7 @@ updateLoaded msg model =
                                 ( { loggedIn | e2eeError = Nothing, e2eePrivateKeyText = "" }, command )
 
                             Err error ->
-                                ( { loggedIn | e2eeError = Just error, e2eePrivateKeyText = "" }, Command.none )
+                                ( { loggedIn | e2eeError = Just error, e2eePrivateKeyText = text }, Command.none )
 
                     else
                         ( { loggedIn | e2eeError = Nothing, e2eePrivateKeyText = text }, Command.none )
