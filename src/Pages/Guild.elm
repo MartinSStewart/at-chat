@@ -2362,7 +2362,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded =
         [ Ui.column
             [ Ui.paddingWith { left = 8, right = 8, top = 8, bottom = 0 }, Ui.spacing 16 ]
             [ MyUi.warningHeader "Before you enable E2EE:"
-            , Ui.text "You'll get an encryption key that you need to store in a password manager. If you lose it, you'll permanently lose access to all your encrypted messages."
+            , Ui.text "You'll get a private key that you need to store in a password manager. If you lose it, you'll permanently lose access to all your encrypted messages."
             , Ui.row
                 []
                 [ Ui.Input.checkbox
@@ -2382,7 +2382,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded =
                     else
                         case localUser.user.publicKey of
                             Nothing ->
-                                addPrivateKeyButton
+                                createPrivateKeyButton
 
                             Just _ ->
                                 MyUi.simpleButton
@@ -2398,7 +2398,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded =
                         else
                             case localUser.user.publicKey of
                                 Nothing ->
-                                    addPrivateKeyButton
+                                    createPrivateKeyButton
 
                                 Just _ ->
                                     MyUi.simpleButton
@@ -2429,16 +2429,12 @@ e2eeSectionView localUser otherUserId e2ee isExpanded =
         ]
 
 
-{-| Encrypting anything needs a key pair on the account first, so this stands in front of
-both of the buttons that would start it. It is only ever shown once per account, since
-after it is pressed the account has a public key.
--}
-addPrivateKeyButton : Element FrontendMsg_
-addPrivateKeyButton =
+createPrivateKeyButton : Element FrontendMsg_
+createPrivateKeyButton =
     MyUi.simpleButton
         (Dom.id "guild_addPrivateKey")
         PressedAddPrivateKeyToAccount
-        (Ui.text "Add a private key to account")
+        (Ui.text "Create a private key")
 
 
 {-| The name of whoever is being waited on. In a DM with yourself that's you, which is

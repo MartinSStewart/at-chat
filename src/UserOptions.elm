@@ -534,7 +534,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                     Ui.Input.label
                                         "userOptions_privateKey"
                                         []
-                                        (Ui.text "You can paste your private key here to verify your public + private key pair is valid.")
+                                        (Ui.text "You can paste your private key here to verify your public+private key pair is valid.")
                             in
                             [ MyUi.copyBox
                                 (Dom.id "userOptions_publicKey")
@@ -545,26 +545,30 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                 (X25519.publicKeyToString publicKey)
                                 |> Ui.el [ Ui.paddingXY 16 0, Ui.widthMax 400 ]
                             , Ui.column
-                                []
+                                [ Ui.paddingXY 16 0, Ui.spacing 4 ]
                                 [ privateKeyLabel.element
                                 , Ui.Input.text
-                                    []
+                                    [ Ui.background (Ui.rgba 0 0 0 0), Ui.paddingXY 8 8, Ui.widthMax 300 ]
                                     { text = ""
                                     , onChange =
                                         \text ->
-                                            (case X25519.privateKeyFromString text of
-                                                Ok privateKey ->
-                                                    if X25519.toPublicKey privateKey == publicKey then
-                                                        Ok ()
+                                            (if String.length text < 3 then
+                                                Err "Copy+paste your private key here, don't type it"
 
-                                                    else
-                                                        Err "Public + private key pairing is invalid"
+                                             else
+                                                case X25519.privateKeyFromString text of
+                                                    Ok privateKey ->
+                                                        if X25519.toPublicKey privateKey == publicKey then
+                                                            Ok ()
 
-                                                Err error ->
-                                                    Err error
+                                                        else
+                                                            Err "Public+private key pair is invalid"
+
+                                                    Err error ->
+                                                        Err error
                                             )
                                                 |> ValidatedE2eePrivateKey
-                                    , placeholder = Nothing
+                                    , placeholder = Just "Paste your private key here"
                                     , label = privateKeyLabel.id
                                     }
                                 , case model.e2eeKeysValid of
@@ -591,7 +595,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
 
                         Nothing ->
                             [ Ui.Prose.paragraph
-                                [ Ui.paddingXY 0 4 ]
+                                [ Ui.paddingXY 16 4 ]
                                 [ Ui.text "You have not enabled E2EE for any direct message channels yet. Open a direct message channel and click on the "
                                 , Ui.html Icons.gear
                                 , Ui.text " to do so."
