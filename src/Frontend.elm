@@ -7864,7 +7864,7 @@ view _ model =
                                 ]
 
                             Nothing ->
-                                [ Html.text "Something went wrong."
+                                [ Html.text "Something went wrong"
                                 ]
 
                     LoadError ->
