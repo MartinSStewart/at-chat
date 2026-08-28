@@ -26,6 +26,7 @@ module Id exposing
     , Viewing_DmId
     , Viewing_DmThreadId
     , changeType
+    , codec
     , fromInt
     , fromString
     , increment
@@ -41,6 +42,7 @@ module Id exposing
 import Discord
 import List.Extra
 import SeqDict exposing (SeqDict)
+import Serialize
 
 
 type GuildOrDmId
@@ -253,3 +255,8 @@ changeType (Id a) =
 increment : Id a -> Id a
 increment (Id id) =
     Id (id + 1)
+
+
+codec : Serialize.Codec e (Id a)
+codec =
+    Serialize.map Id toInt Serialize.int

@@ -702,7 +702,9 @@ storedSharedSecrets data =
             (\request ->
                 case request of
                     Encryption.ToJs_StoreSharedSecret { sharedSecret } ->
-                        Just sharedSecret
+                        -- Base64 rather than the bytes themselves, because `==` on Bytes
+                        -- compares object properties and so is true of any two of them.
+                        Base64.fromBytes sharedSecret
 
                     Encryption.ToJs_EncryptMessage _ ->
                         Nothing
@@ -834,7 +836,15 @@ encryptedMessageContents backend =
                     (\message ->
                         case message of
                             Message.EncryptedUserTextMessage data ->
-                                Just (Encryption.toBase64 data.content)
+                                case data.encryptedStatus of
+                                    Message.MessageEncrypted content ->
+                                        Just (Encryption.toBase64 content)
+
+                                    Message.MessageDecrypted _ ->
+                                        Nothing
+
+                                    Message.MessageDecryptFailed content ->
+                                        Just (Encryption.toBase64 content)
 
                             _ ->
                                 Nothing
@@ -949,7 +959,15 @@ soloDmEncryptedContents backend =
                     (\message ->
                         case message of
                             Message.EncryptedUserTextMessage data ->
-                                Just (Encryption.toBase64 data.content)
+                                case data.encryptedStatus of
+                                    Message.MessageEncrypted content ->
+                                        Just (Encryption.toBase64 content)
+
+                                    Message.MessageDecrypted _ ->
+                                        Nothing
+
+                                    Message.MessageDecryptFailed content ->
+                                        Just (Encryption.toBase64 content)
 
                             _ ->
                                 Nothing

@@ -113,7 +113,6 @@ import AiChat exposing (AiModelName(..))
 import Array
 import Audio
 import Backend
-import Base64
 import Broadcast
 import Call
 import ChannelDescription
@@ -674,121 +673,46 @@ checkNotification title body =
         )
 
 
-{-| Everything a client has asked the browser to do with encryption so far, most recent
-first, which is the order `portRequests` keeps them in.
--}
-encryptionPortRequests : Lamdera.ClientId -> T.Data frontendModel backendModel -> List Encryption.ToJs
-encryptionPortRequests clientId data =
-    List.filterMap
-        (\request ->
-            if request.clientId == clientId && request.portName == "encryption_to_js" then
-                Codec.decodeValue Encryption.toJsCodec request.value |> Result.toMaybe
+{-| Blocked: `lamdera/program-test` doesn't simulate `Bytes` ports. Outgoing data is
+dropped rather than recorded in `portRequests`, and `SubPortBytes` never fires, so now
+that the encryption port carries bytes a test can neither see what a client asked the
+browser for nor answer it.
 
-            else
-                Nothing
-        )
-        data.portRequests
-
-
-{-| Stands in for the browser's half of the encryption port, answering the most recent
-thing a client asked for as though the crypto had worked.
-
-The stand-in ciphertext is the plaintext in base64, which is not encryption at all but
-does let a test check that the message the app handed over is the one that came back, and
-that what reaches the server is the transformed version rather than what was typed.
+The three helpers below are left in place so the rest of the suite still compiles and
+runs. Every end-to-end test that drives encryption fails on the first of them, saying
+why. Making them work again needs a decision about the port: teach the harness to
+simulate bytes ports, or carry the serialized payload through a JSON port instead.
 
 -}
+bytesPortsNotSimulated : String
+bytesPortsNotSimulated =
+    "lamdera/program-test doesn't simulate Bytes ports, so the encryption port can't be observed or answered from a test"
+
+
+encryptionPortRequests : Lamdera.ClientId -> T.Data frontendModel backendModel -> List (Encryption.ToJs ())
+encryptionPortRequests _ _ =
+    []
+
+
 respondToEncryptionPort :
     T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-respondToEncryptionPort client =
-    T.andThen
-        100
-        (\data ->
-            case encryptionPortRequests client.clientId data of
-                (Encryption.ToJs_StoreSharedSecret request) :: _ ->
-                    [ Encryption.FromJs_SharedSecretStored request.otherUserId
-                        |> Codec.encodeToValue Encryption.fromJsCodec
-                        |> client.portEvent 100 "encryption_from_js"
-                    ]
-
-                (Encryption.ToJs_EncryptMessage request) :: _ ->
-                    [ Base64.fromString request.plainText
-                        |> Maybe.withDefault ""
-                        |> Encryption.FromJs_MessageEncrypted request.requestId
-                        |> Codec.encodeToValue Encryption.fromJsCodec
-                        |> client.portEvent 100 "encryption_from_js"
-                    ]
-
-                [] ->
-                    [ T.checkState 0 (\_ -> Err "The client didn't ask the browser to do any encryption") ]
-        )
+respondToEncryptionPort _ =
+    T.checkState 0 (\_ -> Err bytesPortsNotSimulated)
 
 
-{-| Answers every shared secret a client has asked the browser to keep, rather than only
-the most recent one.
-
-Typing a private key in sets this device up for all of its conversations at once, so more
-than one can be waiting at a time. Answering the same one twice does nothing, which is
-what keeps this usable after an earlier answer.
-
--}
 respondToAllSharedSecretPorts :
     T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-respondToAllSharedSecretPorts client =
-    T.andThen
-        100
-        (\data ->
-            case
-                List.filterMap
-                    (\request ->
-                        case request of
-                            Encryption.ToJs_StoreSharedSecret { otherUserId } ->
-                                Just otherUserId
-
-                            Encryption.ToJs_EncryptMessage _ ->
-                                Nothing
-                    )
-                    (encryptionPortRequests client.clientId data)
-                    |> List.Extra.uniqueBy Id.toInt
-            of
-                [] ->
-                    [ T.checkState 0 (\_ -> Err "The client didn't ask the browser to keep any shared secrets") ]
-
-                otherUserIds ->
-                    List.map
-                        (\otherUserId ->
-                            Encryption.FromJs_SharedSecretStored otherUserId
-                                |> Codec.encodeToValue Encryption.fromJsCodec
-                                |> client.portEvent 100 "encryption_from_js"
-                        )
-                        otherUserIds
-        )
+respondToAllSharedSecretPorts _ =
+    T.checkState 0 (\_ -> Err bytesPortsNotSimulated)
 
 
-{-| Answers an encryption request with the failure the browser gives when this device has
-no key for the conversation.
--}
 respondToEncryptionPortWithMissingKey :
     T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-respondToEncryptionPortWithMissingKey client =
-    T.andThen
-        100
-        (\data ->
-            case encryptionPortRequests client.clientId data of
-                (Encryption.ToJs_EncryptMessage request) :: _ ->
-                    [ Encryption.FromJs_MessageEncryptFailed
-                        request.requestId
-                        "No encryption key is stored on this device for that conversation"
-                        |> Codec.encodeToValue Encryption.fromJsCodec
-                        |> client.portEvent 100 "encryption_from_js"
-                    ]
-
-                _ ->
-                    [ T.checkState 0 (\_ -> Err "The client didn't ask for a message to be encrypted") ]
-        )
+respondToEncryptionPortWithMissingKey _ =
+    T.checkState 0 (\_ -> Err bytesPortsNotSimulated)
 
 
 httpBasic : String -> Int -> String -> HttpResponse
@@ -3538,7 +3462,7 @@ lastGuildChannel backend =
 
 {-| The most recent message in the first channel of the most recently created guild.
 -}
-lastGuildChannelMessage : BackendModel2 -> Maybe ( Id GuildId, Id ChannelMessageId, Message.Message ChannelMessageId (Id UserId) )
+lastGuildChannelMessage : BackendModel2 -> Maybe ( Id GuildId, Id ChannelMessageId, Message.Message ChannelMessageId (Id UserId) Never )
 lastGuildChannelMessage backend =
     case SeqDict.toList (unwrapBackend backend).guilds |> List.reverse |> List.head of
         Just ( guildId, guild ) ->
@@ -3558,7 +3482,7 @@ lastGuildChannelMessage backend =
             Nothing
 
 
-lastGuildChannelMessageAt : Id ChannelMessageId -> BackendModel2 -> Maybe (Message.Message ChannelMessageId (Id UserId))
+lastGuildChannelMessageAt : Id ChannelMessageId -> BackendModel2 -> Maybe (Message.Message ChannelMessageId (Id UserId) Never)
 lastGuildChannelMessageAt messageId backend =
     case lastGuildChannel backend of
         Just channel ->

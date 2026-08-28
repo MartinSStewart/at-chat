@@ -1,6 +1,7 @@
 module TimeInMinutes exposing
     ( DateAndTime
     , TimeInMinutes(..)
+    , codec
     , fromDateAndTime
     , fromMinutes
     , toSeconds
@@ -9,6 +10,7 @@ module TimeInMinutes exposing
 
 import Date
 import Effect.Time as Time
+import Serialize
 
 
 {-| OpaqueVariants
@@ -105,3 +107,8 @@ rataDieEpoch =
 minutesPerDay : number
 minutesPerDay =
     1440
+
+
+codec : Serialize.Codec e TimeInMinutes
+codec =
+    Serialize.map TimeInMinutes (\(TimeInMinutes minutes) -> minutes) Serialize.int

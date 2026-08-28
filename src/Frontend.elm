@@ -3276,18 +3276,21 @@ updateLoaded msg model =
                 Ok (Encryption.FromJs_MessageEncrypted requestId cipherText) ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
-                            case
-                                ( SeqDict.get requestId loggedIn.pendingEncryptedMessages
-                                , Encryption.fromBase64 cipherText
-                                )
-                            of
-                                ( Just pending, Just content ) ->
+                            case SeqDict.get requestId loggedIn.pendingEncryptedMessages of
+                                Just pending ->
+                                    let
+                                        draft : ( AnyGuildOrDmId, ThreadRoute )
+                                        draft =
+                                            ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = pending.otherUserId })
+                                            , Id.threadRouteWithoutMaybeMessage pending.threadRoute
+                                            )
+                                    in
                                     FrontendExtra.handleLocalChange
                                         model.time
                                         (Local_SendEncryptedMessage
                                             model.time
                                             { otherUserId = pending.otherUserId }
-                                            content
+                                            (Encryption.EncryptedData cipherText)
                                             pending.threadRoute
                                             pending.attachedFiles
                                             |> Just
@@ -3295,16 +3298,16 @@ updateLoaded msg model =
                                         { loggedIn
                                             | pendingEncryptedMessages =
                                                 SeqDict.remove requestId loggedIn.pendingEncryptedMessages
-                                            , drafts = SeqDict.remove pending.draft loggedIn.drafts
-                                            , replyTo = SeqDict.remove pending.draft loggedIn.replyTo
-                                            , filesToUpload = SeqDict.remove pending.draft loggedIn.filesToUpload
+                                            , drafts = SeqDict.remove draft loggedIn.drafts
+                                            , replyTo = SeqDict.remove draft loggedIn.replyTo
+                                            , filesToUpload = SeqDict.remove draft loggedIn.filesToUpload
                                         }
                                         (Scroll.toBottomOfChannel
                                             Pages.Guild.conversationContainerId
                                             SetScrollToBottom
                                         )
 
-                                _ ->
+                                Nothing ->
                                     ( loggedIn, Command.none )
                         )
                         model
@@ -8851,12 +8854,7 @@ storeSharedSecret otherUserId privateKey loggedIn =
                     Err "The other person's public key is not usable"
 
                 Just secret ->
-                    Encryption.ToJs_StoreSharedSecret
-                        { otherUserId = otherUserId
-                        , sharedSecret = X25519.sharedSecretToString secret
-                        }
-                        |> Encryption.toJs
-                        |> Ok
+                    Encryption.storeSharedSecret otherUserId (X25519.sharedSecretToBytes secret) |> Ok
 
 
 {-| The other person in the conversation, when this is a DM that has been encrypted.

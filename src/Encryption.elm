@@ -5,11 +5,9 @@ port module Encryption exposing
     , empty
     , encode
     , encryptMessage
-    , fromBase64
     , fromJs
-    , fromJsCodec
+    , storeSharedSecret
     , toBase64
-    , toJsCodec
     )
 
 {-| The symmetric half of end-to-end encrypted DMs, which lives in the browser rather
@@ -30,11 +28,9 @@ the plaintext of a message is the only secret that crosses the port after that.
 import Base64
 import Bytes exposing (Bytes)
 import Bytes.Encode
-import Codec exposing (Codec)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Id exposing (Id, UserId, Viewing_DmId)
-import Json.Decode
 import Json.Encode
 import Serialize
 
@@ -65,11 +61,6 @@ toBase64 (EncryptedData bytes) =
     Base64.fromBytes bytes |> Maybe.withDefault ""
 
 
-fromBase64 : String -> Maybe (EncryptedData a)
-fromBase64 text =
-    Maybe.map EncryptedData (Base64.toBytes text)
-
-
 
 -- PORTS
 
@@ -77,6 +68,14 @@ fromBase64 text =
 type ToJs data
     = ToJs_StoreSharedSecret { otherUserId : Id UserId, sharedSecret : Bytes }
     | ToJs_EncryptMessage { requestId : Int, otherUserId : Id UserId, data : data }
+
+
+storeSharedSecret : Id UserId -> Bytes -> Command FrontendOnly toMsg msg
+storeSharedSecret otherUserId sharedSecret =
+    Serialize.encodeToBytes
+        (toJsCodec Serialize.unit)
+        (ToJs_StoreSharedSecret { otherUserId = otherUserId, sharedSecret = sharedSecret })
+        |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
 encryptMessage : Int -> Viewing_DmId -> Serialize.Codec e a -> a -> Command FrontendOnly toMsg msg
@@ -89,58 +88,81 @@ encryptMessage requestId id dataCodec data =
 
 toJsCodec : Serialize.Codec e data -> Serialize.Codec e (ToJs data)
 toJsCodec dataCodec =
-    Debug.todo ""
+    Serialize.customType
+        (\toJs_StoreSharedSecretEncoder toJs_EncryptMessageEncoder value ->
+            case value of
+                ToJs_StoreSharedSecret argA ->
+                    toJs_StoreSharedSecretEncoder argA
 
-
-idCodec : Serialize.Codec e Int -> Serialize.Codec e (Id a)
-idCodec =
-    Serialize.map Id.fromInt Id.toInt
+                ToJs_EncryptMessage argA ->
+                    toJs_EncryptMessageEncoder argA
+        )
+        |> Serialize.variant1
+            ToJs_StoreSharedSecret
+            (Serialize.record (\otherUserId sharedSecret -> { otherUserId = otherUserId, sharedSecret = sharedSecret })
+                |> Serialize.field .otherUserId Id.codec
+                |> Serialize.field .sharedSecret Serialize.bytes
+                |> Serialize.finishRecord
+            )
+        |> Serialize.variant1
+            ToJs_EncryptMessage
+            (Serialize.record
+                (\requestId otherUserId data -> { requestId = requestId, otherUserId = otherUserId, data = data })
+                |> Serialize.field .requestId Serialize.int
+                |> Serialize.field .otherUserId Id.codec
+                |> Serialize.field .data dataCodec
+                |> Serialize.finishRecord
+            )
+        |> Serialize.finishCustomType
 
 
 type FromJs
     = FromJs_SharedSecretStored (Id UserId)
     | FromJs_SharedSecretFailed (Id UserId) String
-    | FromJs_MessageEncrypted Int String
+    | FromJs_MessageEncrypted Int Bytes
     | FromJs_MessageEncryptFailed Int String
 
 
 port encryption_to_js : Bytes -> Cmd msg
 
 
-port encryption_from_js : (Json.Decode.Value -> msg) -> Sub msg
+port encryption_from_js : (Bytes -> msg) -> Sub msg
 
 
 fromJs : (Result String FromJs -> msg) -> Subscription FrontendOnly msg
 fromJs msg =
-    Subscription.fromJs
+    Subscription.fromJsBytes
         "encryption_from_js"
         encryption_from_js
-        (\json ->
-            Codec.decodeValue fromJsCodec json
-                |> Result.mapError Json.Decode.errorToString
-                |> msg
+        (\bytes ->
+            case Serialize.decodeFromBytes fromJsCodec bytes of
+                Ok fromJs_ ->
+                    msg (Ok fromJs_)
+
+                Err _ ->
+                    msg (Err "The browser sent back something this app can't read")
         )
 
 
-fromJsCodec : Codec FromJs
+fromJsCodec : Serialize.Codec e FromJs
 fromJsCodec =
-    Codec.custom
-        (\eStored eStoreFailed eEncrypted eEncryptFailed value ->
+    Serialize.customType
+        (\fromJs_SharedSecretStoredEncoder fromJs_SharedSecretFailedEncoder fromJs_MessageEncryptedEncoder fromJs_MessageEncryptFailedEncoder value ->
             case value of
-                FromJs_SharedSecretStored a ->
-                    eStored a
+                FromJs_SharedSecretStored argA ->
+                    fromJs_SharedSecretStoredEncoder argA
 
-                FromJs_SharedSecretFailed a b ->
-                    eStoreFailed a b
+                FromJs_SharedSecretFailed argA argB ->
+                    fromJs_SharedSecretFailedEncoder argA argB
 
-                FromJs_MessageEncrypted a b ->
-                    eEncrypted a b
+                FromJs_MessageEncrypted argA argB ->
+                    fromJs_MessageEncryptedEncoder argA argB
 
-                FromJs_MessageEncryptFailed a b ->
-                    eEncryptFailed a b
+                FromJs_MessageEncryptFailed argA argB ->
+                    fromJs_MessageEncryptFailedEncoder argA argB
         )
-        |> Codec.variant1 "shared-secret-stored" FromJs_SharedSecretStored userIdCodec
-        |> Codec.variant2 "shared-secret-failed" FromJs_SharedSecretFailed userIdCodec Codec.string
-        |> Codec.variant2 "message-encrypted" FromJs_MessageEncrypted Codec.int Codec.string
-        |> Codec.variant2 "message-encrypt-failed" FromJs_MessageEncryptFailed Codec.int Codec.string
-        |> Codec.buildCustom
+        |> Serialize.variant1 FromJs_SharedSecretStored Id.codec
+        |> Serialize.variant2 FromJs_SharedSecretFailed Id.codec Serialize.string
+        |> Serialize.variant2 FromJs_MessageEncrypted Serialize.int Serialize.bytes
+        |> Serialize.variant2 FromJs_MessageEncryptFailed Serialize.int Serialize.string
+        |> Serialize.finishCustomType

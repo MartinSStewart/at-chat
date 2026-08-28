@@ -39,6 +39,7 @@ import FileStatus exposing (FileData, FileId)
 import Id exposing (Id, StickerId, UserId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
+import Quantity
 import RichText exposing (RichText)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
@@ -730,4 +731,139 @@ toDecryptable message =
 
 contentAndEmbedsCodec : Serialize.Codec e ContentAndEmbeds
 contentAndEmbedsCodec =
-    Debug.todo ""
+    Serialize.record ContentAndEmbeds
+        |> Serialize.field .content (nonemptyCodec (RichText.codec Id.codec))
+        |> Serialize.field .embeds (Serialize.array embedCodec)
+        |> Serialize.finishRecord
+
+
+nonemptyCodec : Serialize.Codec e a -> Serialize.Codec e (Nonempty a)
+nonemptyCodec a =
+    Serialize.customType
+        (\nonemptyEncoder value ->
+            case value of
+                List.Nonempty.Nonempty argA argB ->
+                    nonemptyEncoder argA argB
+        )
+        |> Serialize.variant2 List.Nonempty.Nonempty a (Serialize.list a)
+        |> Serialize.finishCustomType
+
+
+embedCodec : Serialize.Codec e Embed
+embedCodec =
+    Serialize.customType
+        (\embedLoadingEncoder embedLoadedEncoder value ->
+            case value of
+                Embed.EmbedLoading ->
+                    embedLoadingEncoder
+
+                Embed.EmbedLoaded argA ->
+                    embedLoadedEncoder argA
+        )
+        |> Serialize.variant0 Embed.EmbedLoading
+        |> Serialize.variant1 Embed.EmbedLoaded embedDataCodec
+        |> Serialize.finishCustomType
+
+
+embedDataCodec : Serialize.Codec e EmbedData
+embedDataCodec =
+    Serialize.record EmbedData
+        |> Serialize.field .title (Serialize.maybe Serialize.string)
+        |> Serialize.field .image (Serialize.maybe embedImageDataCodec)
+        |> Serialize.field .description (Serialize.maybe Serialize.string)
+        |> Serialize.field .createdAt (Serialize.maybe posixCodec)
+        |> Serialize.finishRecord
+
+
+embedImageDataCodec : Serialize.Codec e Embed.EmbedImageData
+embedImageDataCodec =
+    Serialize.record Embed.EmbedImageData
+        |> Serialize.field .url Serialize.string
+        |> Serialize.field .imageSize (Serialize.tuple (quantityCodec Serialize.int) (quantityCodec Serialize.int))
+        |> Serialize.field .format (Serialize.maybe embedImageFormatCodec)
+        |> Serialize.finishRecord
+
+
+quantityCodec : Serialize.Codec e number -> Serialize.Codec e (Quantity.Quantity number units)
+quantityCodec number =
+    Serialize.customType
+        (\quantityEncoder value ->
+            case value of
+                Quantity.Quantity argA ->
+                    quantityEncoder argA
+        )
+        |> Serialize.variant1 Quantity.Quantity number
+        |> Serialize.finishCustomType
+
+
+embedImageFormatCodec : Serialize.Codec e Embed.EmbedImageFormat
+embedImageFormatCodec =
+    Serialize.customType
+        (\pngEncoder jpegEncoder gifEncoder webPEncoder pnmEncoder tiffEncoder tgaEncoder ddsEncoder bmpEncoder icoEncoder hdrEncoder openExrEncoder farbfeldEncoder avifEncoder qoiEncoder value ->
+            case value of
+                Embed.Png ->
+                    pngEncoder
+
+                Embed.Jpeg ->
+                    jpegEncoder
+
+                Embed.Gif ->
+                    gifEncoder
+
+                Embed.WebP ->
+                    webPEncoder
+
+                Embed.Pnm ->
+                    pnmEncoder
+
+                Embed.Tiff ->
+                    tiffEncoder
+
+                Embed.Tga ->
+                    tgaEncoder
+
+                Embed.Dds ->
+                    ddsEncoder
+
+                Embed.Bmp ->
+                    bmpEncoder
+
+                Embed.Ico ->
+                    icoEncoder
+
+                Embed.Hdr ->
+                    hdrEncoder
+
+                Embed.OpenExr ->
+                    openExrEncoder
+
+                Embed.Farbfeld ->
+                    farbfeldEncoder
+
+                Embed.Avif ->
+                    avifEncoder
+
+                Embed.Qoi ->
+                    qoiEncoder
+        )
+        |> Serialize.variant0 Embed.Png
+        |> Serialize.variant0 Embed.Jpeg
+        |> Serialize.variant0 Embed.Gif
+        |> Serialize.variant0 Embed.WebP
+        |> Serialize.variant0 Embed.Pnm
+        |> Serialize.variant0 Embed.Tiff
+        |> Serialize.variant0 Embed.Tga
+        |> Serialize.variant0 Embed.Dds
+        |> Serialize.variant0 Embed.Bmp
+        |> Serialize.variant0 Embed.Ico
+        |> Serialize.variant0 Embed.Hdr
+        |> Serialize.variant0 Embed.OpenExr
+        |> Serialize.variant0 Embed.Farbfeld
+        |> Serialize.variant0 Embed.Avif
+        |> Serialize.variant0 Embed.Qoi
+        |> Serialize.finishCustomType
+
+
+posixCodec : Serialize.Codec e Time.Posix
+posixCodec =
+    Serialize.map Time.millisToPosix Time.posixToMillis Serialize.int
