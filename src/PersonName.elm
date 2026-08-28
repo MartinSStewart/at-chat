@@ -1,4 +1,4 @@
-module PersonName exposing (PersonName(..), fromString, fromStringLossy, maxLength, toString)
+module PersonName exposing (PersonName(..), fromString, fromStringLossy, maxLength, toString, widestName)
 
 import String.Nonempty exposing (NonemptyString(..))
 
@@ -12,6 +12,11 @@ maxLength =
     32
 
 
+widestName : PersonName
+widestName =
+    NonemptyString 'W' (String.repeat (maxLength - 1) "W") |> PersonName
+
+
 fromString : String -> Result String PersonName
 fromString text =
     case String.trim text |> String.Nonempty.fromString of
@@ -21,6 +26,20 @@ fromString text =
 
             else if String.Nonempty.any (\char -> char == '\n' || char == '\u{000D}' || char == '@') nonempty then
                 Err "Name can't contain line breaks or @ symbol"
+
+            else if
+                String.Nonempty.any
+                    (\char ->
+                        (Char.toCode char < 32)
+                            || (char == '\u{00A0}')
+                            || (char == '\u{200B}')
+                            || (char == '\u{200C}')
+                            || (char == '\u{200D}')
+                            || (char == '\u{2060}')
+                    )
+                    nonempty
+            then
+                Err "Name can't contain special characters"
 
             else
                 PersonName nonempty |> Ok

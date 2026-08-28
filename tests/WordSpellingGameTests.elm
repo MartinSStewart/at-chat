@@ -644,14 +644,14 @@ tests =
             [ Test.test "counts tiles and invalid words per player and picks the best word" <|
                 \_ ->
                     WordSpellingGame.gameSummary
-                        [ summaryPlacedWord 1 "TOTE" 12 3
-                        , summaryInvalidWord 0 "CAB"
-                        , summaryPlacedWord 0 "HOTEL" 24 5
-                        , WordSpellingGame.Description_Passed (Id.fromInt 1)
-                        , summaryInvalidWord 0 "ELB"
-                        , summaryPlacedWord 1 "AT" 4 2
-                        , WordSpellingGame.Description_Joined (Id.fromInt 1)
-                        , summaryPlacedWord 0 "OATS" 8 4
+                        [ summaryEntry 8 (summaryPlacedWord 1 "TOTE" 12 3)
+                        , summaryEntry 7 (summaryInvalidWord 0 "CAB")
+                        , summaryEntry 6 (summaryPlacedWord 0 "HOTEL" 24 5)
+                        , summaryEntry 5 (WordSpellingGame.Description_Passed (Id.fromInt 1))
+                        , summaryEntry 4 (summaryInvalidWord 0 "ELB")
+                        , summaryEntry 3 (summaryPlacedWord 1 "AT" 4 2)
+                        , summaryEntry 2 (WordSpellingGame.Description_Joined (Id.fromInt 1))
+                        , summaryEntry 1 (summaryPlacedWord 0 "OATS" 8 4)
                         ]
                         |> Expect.equal
                             { tilesPlaced = SeqDict.fromList [ ( Id.fromInt 1, 5 ), ( Id.fromInt 0, 9 ) ]
@@ -663,14 +663,19 @@ tests =
                                     , points = 24
                                     , placedCells = summaryCells 5
                                     , wildcardMatches = Set.empty
+
+                                    -- The state the best word left behind comes from its own
+                                    -- entry, so hovering it in the summary shows the board as
+                                    -- it was then
+                                    , shared = notifShared 6 notifPlayers
                                     }
                             }
             , Test.test "the earliest word wins when two words score the same" <|
                 \_ ->
                     -- The log runs newest first, so the second entry was played first.
                     WordSpellingGame.gameSummary
-                        [ summaryPlacedWord 1 "TOTE" 12 3
-                        , summaryPlacedWord 0 "HOTEL" 12 5
+                        [ summaryEntry 2 (summaryPlacedWord 1 "TOTE" 12 3)
+                        , summaryEntry 1 (summaryPlacedWord 0 "HOTEL" 12 5)
                         ]
                         |> .bestWord
                         |> Expect.equal
@@ -680,13 +685,14 @@ tests =
                                 , points = 12
                                 , placedCells = summaryCells 5
                                 , wildcardMatches = Set.empty
+                                , shared = notifShared 1 notifPlayers
                                 }
                             )
             , Test.test "a game where nobody placed anything has no best word" <|
                 \_ ->
                     WordSpellingGame.gameSummary
-                        [ WordSpellingGame.Description_Passed (Id.fromInt 0)
-                        , WordSpellingGame.Description_Joined (Id.fromInt 0)
+                        [ summaryEntry 2 (WordSpellingGame.Description_Passed (Id.fromInt 0))
+                        , summaryEntry 1 (WordSpellingGame.Description_Joined (Id.fromInt 0))
                         ]
                         |> Expect.equal
                             { tilesPlaced = SeqDict.empty
@@ -695,6 +701,14 @@ tests =
                             }
             ]
         ]
+
+
+{-| A Moves log entry, along with the game it left behind. Only which entry that state came from
+matters here, so it's stood in for by one whose turn count says so.
+-}
+summaryEntry : Int -> WordSpellingGame.Description -> WordSpellingGame.LogEntry
+summaryEntry turnCount description =
+    { description = description, shared = notifShared turnCount notifPlayers }
 
 
 {-| A Moves log entry for `userId` placing `spelledWord` for `points`, using `tileCount` tiles from

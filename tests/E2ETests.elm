@@ -301,6 +301,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.leaveGuildTest normalConfig
     , E2EMisc.profileImageOpensDm normalConfig
     , E2EMisc.reactionPopupNamesEmojiTest normalConfig
+    , E2EMisc.reloadingAConversationLeavesItUnreadTest normalConfig
     , E2EMisc.timeOfDaySuggestionTest normalConfig
     , E2EMisc.timeOffsetSuggestionTest normalConfig
     , E2EMisc.noTimestampSuggestionTest normalConfig
@@ -1120,8 +1121,23 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     , "Windows • Chrome"
                                     , "Current device"
                                     ]
+
+                                -- Every device here has something connected, so none of them
+                                -- has a last time it was in use to report. The wait puts a
+                                -- few minutes between signing in and dropping off, so the two
+                                -- can be told apart below.
+                                , adminA.checkView
+                                    180000
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Last active" ])
                                 ]
                             )
+
+                        -- Closing that frontend leaves adminC's device with nothing connected,
+                        -- so its row starts saying how long ago it was last in use. That is
+                        -- when it dropped off a moment ago, not when it signed in.
+                        , adminA.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Last active 1\u{00A0}minute" ])
                         , adminB.click 100 (Dom.id "options_logout")
                         , E2EHelper.hasNotExactText adminA [ "iPhone • Safari" ]
                         , E2EHelper.hasExactText adminA [ "Windows • Chrome", "Windows • Firefox", "Current device" ]
@@ -1367,7 +1383,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 [ user.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
                 , user.keyUp 100 (Dom.id "guild_notificationLevel") "ArrowDown" []
                 , E2EHelper.writeMessage admin 100 "Test"
-                , E2EHelper.checkNotification "AT" "Test"
+                , E2EHelper.checkNotification E2EHelper.adminName "Test"
                 , E2EHelper.writeMessage admin 100 "Test 2"
                 , user.click 100 (Dom.id "guild_openChannel_0")
                 , E2EHelper.writeMessage user 100 "I shouldn't get notified"
@@ -2022,13 +2038,13 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , user.checkView
                     100
                     (Test.Html.Query.has
-                        [ Test.Html.Selector.exactText "AT is typing..." ]
+                        [ Test.Html.Selector.exactText (E2EHelper.adminName ++ " is typing...") ]
                     )
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , user.checkView
                     100
                     (Test.Html.Query.hasNot
-                        [ Test.Html.Selector.exactText "AT is typing..." ]
+                        [ Test.Html.Selector.exactText (E2EHelper.adminName ++ " is typing...") ]
                     )
                 , E2EHelper.checkNoNotification "@Stevie Steve Hi!"
                 , E2EHelper.enableNotifications False admin
@@ -2060,10 +2076,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , user.checkView
                     100
                     (Test.Html.Query.hasNot
-                        [ Test.Html.Selector.exactText "AT is typing..." ]
+                        [ Test.Html.Selector.exactText (E2EHelper.adminName ++ " is typing...") ]
                     )
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-                , E2EHelper.checkNotification "AT" "Lets move this to a thread..."
+                , E2EHelper.checkNotification E2EHelper.adminName "Lets move this to a thread..."
                 , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
                 , E2EHelper.openDm admin 100 "2"
                 , E2EHelper.writeMessage admin 100 "Here's a DM to you"
@@ -2109,7 +2125,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                 -- Positive control: while the user isn't viewing the DM they should get a push notification.
                 , E2EHelper.writeMessage admin 100 "DM while away"
-                , E2EHelper.checkNotification "AT" "DM while away"
+                , E2EHelper.checkNotification E2EHelper.adminName "DM while away"
 
                 -- Now the user opens (and is therefore viewing) the DM channel.
                 , user.click 100 (Dom.id "guildsColumn_openDm_0")
@@ -2138,7 +2154,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                 -- Positive control: while the user isn't viewing the channel they should get a push notification.
                 , E2EHelper.writeMessage admin 100 "@Stevie Steve while away"
-                , E2EHelper.checkNotification "AT" "@Stevie Steve while away"
+                , E2EHelper.checkNotification E2EHelper.adminName "@Stevie Steve while away"
                 ]
             )
         ]
@@ -2158,7 +2174,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.click 100 (Dom.id "wsg_advancedSection")
                 , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
                 , admin.click 100 (Dom.id "wsg_start")
-                , E2EHelper.checkNotification "AT" "Word Spelling Game started"
+                , E2EHelper.checkNotification E2EHelper.adminName "Word Spelling Game started"
 
                 -- DM case: admin opens the DM with the other user and starts a Go match there. The user
                 -- isn't viewing the DM either, so starting the game should push a notification to them.
@@ -2166,7 +2182,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.click 100 (Dom.id "guild_openGamesTab")
                 , admin.click 100 (Dom.id "game_select_Go (Baduk)")
                 , admin.click 100 (Dom.id "go_start")
-                , E2EHelper.checkNotification "AT" "Go match started"
+                , E2EHelper.checkNotification E2EHelper.adminName "Go match started"
                 ]
             )
         ]
@@ -3027,6 +3043,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , E2EGo.tests normalConfig
     , E2ESheepGame.tests normalConfig
+    , E2ESheepGame.imageInQuestionOpensImageViewerTest imageUploadConfig
     , E2EWordSpellingGame.tests normalConfig
     ]
 
@@ -3199,7 +3216,7 @@ attackerTriesToReadPrivateDiscordChannel config discordOpReady discordOpSuppleme
         config
         [ E2EHelper.linkDiscordAndLogin
             E2EHelper.sessionId0
-            "AT"
+            E2EHelper.adminName
             E2EHelper.adminEmail
             False
             discordOpReady
@@ -3328,7 +3345,7 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
         config
         [ E2EHelper.linkDiscordAndLogin
             E2EHelper.sessionId0
-            "AT"
+            E2EHelper.adminName
             E2EHelper.adminEmail
             False
             discordOpReady

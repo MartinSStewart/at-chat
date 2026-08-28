@@ -1,4 +1,4 @@
-module UserColor exposing (Selection, UserColor(..), default, picked, picker, startPicking, toColor, toStyle)
+module UserColor exposing (Selection, UserColor(..), default, picked, picker, startPicking, swatchId, toColor, toStyle)
 
 import Color
 import Effect.Browser.Dom as Dom
@@ -33,10 +33,15 @@ lightnessCount =
 swatchSize : Bool -> Int
 swatchSize isMobile =
     if isMobile then
-        18
+        swatchSizeMobile
 
     else
         20
+
+
+swatchSizeMobile : number
+swatchSizeMobile =
+    17
 
 
 default : UserColor
@@ -209,44 +214,46 @@ select selection color =
     }
 
 
-picker : Bool -> Selection -> (Selection -> msg) -> Ui.Element msg
-picker isMobile selection onChange =
+picker : Bool -> Int -> Selection -> (Selection -> msg) -> Ui.Element msg
+picker isMobile containerSize selection onChange =
     let
         parts : { hue : Int, saturation : Int, lightness : Int }
         parts =
             toParts selection.selected
-
-        swatchView2 : Ui.Element msg
-        swatchView2 =
-            Ui.row
+    in
+    if isMobile then
+        let
+            rowSize =
+                containerSize // swatchSizeMobile
+        in
+        Ui.column
+            [ Ui.spacing 8
+            , Ui.width (Ui.px (swatchSizeMobile * min (saturationCount * 2) rowSize))
+            , Ui.centerX
+            ]
+            [ Ui.el [ Ui.contentCenterX ] (lightnessSlider selection parts onChange)
+            , Ui.row
                 [ Ui.wrap ]
-                (List.map
-                    (swatchView isMobile selection parts onChange)
+                (List.filterMap
+                    (swatchView isMobile (saturationCount * 2 - rowSize) selection parts onChange)
                     (List.range 0 (hueCount * saturationCount - 1))
                 )
-    in
-    Ui.column
-        [ Ui.spacing 8
-        , Ui.width
-            (Ui.px
-                (if isMobile then
-                    swatchSize isMobile * saturationCount
-
-                 else
-                    swatchSize isMobile * hueCount
-                )
-            )
-        ]
-        (if isMobile then
-            [ lightnessSlider selection parts onChange
-            , swatchView2
             ]
 
-         else
-            [ swatchView2
+    else
+        Ui.column
+            [ Ui.spacing 8
+            , Ui.width (Ui.px (swatchSize isMobile * hueCount))
+            ]
+            [ Ui.row
+                [ Ui.wrap ]
+                (List.filterMap
+                    (swatchView isMobile 0 selection parts onChange)
+                    (List.range 0 (hueCount * saturationCount - 1))
+                )
             , lightnessSlider selection parts onChange
             ]
-        )
+            |> Ui.el [ Ui.paddingXY 16 0 ]
 
 
 swatchId : Int -> Dom.HtmlId
@@ -256,21 +263,14 @@ swatchId index =
 
 swatchView :
     Bool
+    -> Int
     -> Selection
     -> { hue : Int, saturation : Int, lightness : Int }
     -> (Selection -> msg)
     -> Int
-    -> Ui.Element msg
-swatchView isMobile selection selected onChange index =
+    -> Maybe (Ui.Element msg)
+swatchView isMobile columnsToDrop selection selected onChange index =
     let
-        hue : Int
-        hue =
-            if isMobile then
-                index // saturationCount
-
-            else
-                modBy hueCount index
-
         saturation : Int
         saturation =
             if isMobile then
@@ -279,51 +279,65 @@ swatchView isMobile selection selected onChange index =
             else
                 index // hueCount
 
-        userColor =
-            fromParts { hue = hue, saturation = saturation, lightness = selected.lightness }
+        hue : Int
+        hue =
+            if isMobile then
+                index // saturationCount
 
-        color : Ui.Color
-        color =
-            toColor userColor
-
-        swatchSize2 =
-            swatchSize isMobile |> Ui.px
-
-        usable : Bool
-        usable =
-            isReadable color
+            else
+                modBy hueCount index
     in
-    Ui.el
-        (Ui.id (Dom.idToString (swatchId index))
-            :: Ui.width swatchSize2
-            :: Ui.height swatchSize2
-            :: (if usable then
-                    [ Ui.background color
-                    , Ui.Events.onClick (onChange (select selection userColor))
-                    , MyUi.htmlStyle "cursor" "pointer"
-                    ]
+    if isMobile && (saturation < columnsToDrop) && modBy 2 hue == 0 then
+        Nothing
+
+    else
+        let
+            saturation2 : Int
+            saturation2 =
+                if isMobile && modBy 2 hue == 1 then
+                    saturationCount - saturation - 1
 
                 else
-                    []
-               )
-            ++ (if hue == selected.hue && saturation == selected.saturation then
-                    [ Ui.inFront (selectionOutline usable) ]
+                    saturation
 
-                else
-                    []
-               )
-        )
-        Ui.none
+            userColor =
+                fromParts { hue = hue, saturation = saturation2, lightness = selected.lightness }
+
+            color : Ui.Color
+            color =
+                toColor userColor
+
+            swatchSize2 =
+                swatchSize isMobile |> Ui.px
+
+            usable : Bool
+            usable =
+                isReadable color
+        in
+        Ui.el
+            (Ui.id (Dom.idToString (swatchId index))
+                :: Ui.width swatchSize2
+                :: Ui.height swatchSize2
+                :: (if usable then
+                        [ Ui.background color
+                        , Ui.Events.onClick (onChange (select selection userColor))
+                        , MyUi.htmlStyle "cursor" "pointer"
+                        ]
+
+                    else
+                        []
+                   )
+                ++ (if hue == selected.hue && saturation2 == selected.saturation then
+                        [ Ui.inFront (selectionOutline usable) ]
+
+                    else
+                        []
+                   )
+            )
+            Ui.none
+            |> Just
 
 
-{-| The ring around the square the picker is pointing at. Black reads against every colour
-the grid offers, since they all have to be light enough to be used in the first place.
-
-A square the brightness slider has taken out of reach has nothing drawn in it, so there the
-ring has to stand out against the panel behind it instead, and a line struck across says the
-square isn't on offer at this brightness.
-
--}
 selectionOutline : Bool -> Ui.Element msg
 selectionOutline usable =
     Ui.el
@@ -370,15 +384,14 @@ lightnessSlider selection parts onChange =
                 (Ui.text "Brightness")
     in
     Ui.column
-        [ Ui.spacing 2, Ui.widthMax 350 ]
+        [ Ui.spacing 2, Ui.widthMax 300 ]
         [ sliderLabel.element
         , Ui.Input.sliderHorizontal
             [ Ui.background MyUi.background3
             , Ui.rounded 4
             ]
             { label = sliderLabel.id
-            , onChange =
-                \value -> select selection (fromParts { parts | lightness = round value }) |> onChange
+            , onChange = \value -> select selection (fromParts { parts | lightness = round value }) |> onChange
             , min = 5
             , max = toFloat (lightnessCount - 1) - 2
             , value = toFloat parts.lightness

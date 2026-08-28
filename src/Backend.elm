@@ -119,7 +119,7 @@ app_ =
 
 adminUser : BackendUser
 adminUser =
-    User.init (Time.millisToPosix 0) (Unsafe.personName "AT") (Unsafe.emailAddress "a@a.aa") True
+    User.init (Time.millisToPosix 0) PersonName.widestName (Unsafe.emailAddress "a@a.aa") True
 
 
 {-| Sha256 hash of the password that logs you in as the admin user when the Postmark API key is
@@ -2258,15 +2258,27 @@ disconnectClient time sessionId clientId model =
 
                         NotInCall ->
                             { model | connections = connections }
+
+                model3 : BackendModel
+                model3 =
+                    -- Dropping the connection is the last we hear from this device, so that's
+                    -- when it was last active.
+                    { model2
+                        | sessions =
+                            SeqDict.updateIfExists
+                                sessionId
+                                (\session2 -> { session2 | lastClientDisconnect = Just time })
+                                model2.sessions
+                    }
             in
-            ( model2
+            ( model3
             , Command.batch
                 [ Broadcast.toUser
                     Nothing
                     Nothing
                     session.userId
-                    (Server_ClientDisconnected session.sessionIdHash clientId |> ServerChange)
-                    model2
+                    (Server_ClientDisconnected session.sessionIdHash clientId time |> ServerChange)
+                    model3
                 , case removedConnection.call of
                     ConnectedToCall (Call.DmRoomId id) ->
                         Broadcast.toDmChannel
@@ -2280,7 +2292,7 @@ disconnectClient time sessionId clientId model =
                                     }
                                     |> Server_VoiceChatChange
                             )
-                            model2
+                            model3
 
                     ConnectedToCall (Call.GuildRoomId id) ->
                         Broadcast.toGuild
@@ -2293,7 +2305,7 @@ disconnectClient time sessionId clientId model =
                                 |> Server_VoiceChatChange
                                 |> ServerChange
                             )
-                            model2
+                            model3
 
                     NotInCall ->
                         Command.none
@@ -2509,6 +2521,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     { notificationMode = session.notificationMode
                                     , currentlyViewing = SeqDict.singleton clientId currentlyViewing
                                     , userAgent = session.userAgent
+                                    , lastActiveAt = time
                                     }
                                     |> ServerChange
                                 )
@@ -2647,6 +2660,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 { notificationMode = session.notificationMode
                                                 , currentlyViewing = SeqDict.singleton clientId currentlyViewing
                                                 , userAgent = session.userAgent
+                                                , lastActiveAt = time
                                                 }
                                                 |> ServerChange
                                             )

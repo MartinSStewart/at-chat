@@ -21,11 +21,11 @@
   user saw duplicated messages for both themselves and the other user.
 * Scroll down warning is shown on iphone in DMs when the user is already scrolled down and writes a message.
 * Emoji in reaction emoji tooltip gets horizontally swished if there are many names (maybe MyUi.noShrinking is needed)
-* Modify pushRoute to require the caller to specify if this was triggered by a user click (for purposes of set viewing)
 * "add to home screen" is called "install and create shortcut" on Android (Chrome)
-* Clicking/pressing outside of an image (when viewing it in the image viewer) should close it
 * Add unread overview to mobile
 * Figure out why messages can be sent before files have loaded
+* lishaduck's android phone has slow loading times and shows both a loading step with just the at-chat logo and then
+  another step with a blank blue background
 
 Requested features:
 

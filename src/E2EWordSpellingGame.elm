@@ -151,6 +151,18 @@ tests normalConfig =
                         , user.snapshotView 0 { name = "Place \"rot\"" }
                         ]
                     , T.collapsableGroup
+                        "Hovering a move shows the board as it was then"
+                        [ -- The log numbers every entry, joins included, so LOAD (the first move
+                          -- made) is 1 and ROT is 3. The board LOAD left behind holds its four
+                          -- tiles and the one ROT left holds the two more it added.
+                          admin.mouseEnter 100 (Dom.id "wsg_moveWord_1") ( 10, 10 ) []
+                        , admin.checkModel 100 (checkHoveredMoveBoardSize 4)
+                        , admin.mouseEnter 100 (Dom.id "wsg_moveWord_3") ( 10, 10 ) []
+                        , admin.checkModel 100 (checkHoveredMoveBoardSize 6)
+                        , admin.custom 100 (Dom.id "wsg_moveWord_3") "mouseleave" (Json.Encode.object [])
+                        , admin.checkModel 100 checkNoHoveredMove
+                        ]
+                    , T.collapsableGroup
                         "Drop a tray tile one slot to the right"
                         -- Regression test for a tray-drop off-by-one: the dragged tile is drawn centred
                         -- on the cursor, so dropping the first tile centred just right of the next slot
@@ -167,7 +179,7 @@ tests normalConfig =
                         -- The leaderboard renders each player's name and score suffix as separate
                         -- elements (see WordSpellingGame.playerRow), so they're matched separately.
                         (Test.Html.Query.has
-                            [ Test.Html.Selector.exactText "AT"
+                            [ Test.Html.Selector.exactText E2EHelper.adminName
                             , Test.Html.Selector.exactText ": 10 (winner)"
                             , Test.Html.Selector.exactText "Stevie Steve"
                             , Test.Html.Selector.exactText ": 3"
@@ -178,7 +190,7 @@ tests normalConfig =
                         -- The leaderboard renders each player's name and score suffix as separate
                         -- elements (see WordSpellingGame.playerRow), so they're matched separately.
                         (Test.Html.Query.has
-                            [ Test.Html.Selector.exactText "AT"
+                            [ Test.Html.Selector.exactText E2EHelper.adminName
                             , Test.Html.Selector.exactText ": 10 (winner)"
                             , Test.Html.Selector.exactText "Stevie Steve"
                             , Test.Html.Selector.exactText ": 3"
@@ -343,7 +355,7 @@ tests normalConfig =
                         -- player it belongs to in a separate element too.
                         (Test.Html.Query.has
                             [ Test.Html.Selector.exactText "Game over"
-                            , Test.Html.Selector.exactText "AT"
+                            , Test.Html.Selector.exactText E2EHelper.adminName
                             , Test.Html.Selector.exactText ": 4 (winner)"
                             , Test.Html.Selector.exactText "Stevie Steve"
                             , Test.Html.Selector.exactText ": 0"
@@ -359,7 +371,7 @@ tests normalConfig =
                         100
                         (Test.Html.Query.has
                             [ Test.Html.Selector.exactText "Game over"
-                            , Test.Html.Selector.exactText "AT"
+                            , Test.Html.Selector.exactText E2EHelper.adminName
                             , Test.Html.Selector.exactText ": 4 (winner)"
                             , Test.Html.Selector.exactText "Stevie Steve"
                             , Test.Html.Selector.exactText ": 0"
@@ -367,7 +379,7 @@ tests normalConfig =
                         )
                     , -- Both players were viewing the game when it ended, so neither may get a
                       -- game-over push notification.
-                      E2EHelper.checkNoNotification "AT played AA (+4). The game has ended. AT won with 4 points!"
+                      E2EHelper.checkNoNotification (E2EHelper.adminName ++ " played AA (+4). The game has ended. " ++ E2EHelper.adminName ++ " won with 4 points!")
                     , admin.snapshotView 0 { name = "Game ended out of letters" }
 
                     -- The summary's top scoring word looks up its definition when clicked, just
@@ -623,14 +635,14 @@ tests normalConfig =
                       admin.checkView
                         100
                         (Test.Html.Query.has
-                            [ Test.Html.Selector.exactText "AT"
+                            [ Test.Html.Selector.exactText E2EHelper.adminName
                             , Test.Html.Selector.exactText ": 10 (winner)"
                             ]
                         )
                     , user.checkView
                         100
                         (Test.Html.Query.has
-                            [ Test.Html.Selector.exactText "AT"
+                            [ Test.Html.Selector.exactText E2EHelper.adminName
                             , Test.Html.Selector.exactText ": 10 (winner)"
                             ]
                         )
@@ -777,7 +789,7 @@ tests normalConfig =
                                     , watcher.checkView
                                         100
                                         (Test.Html.Query.has
-                                            [ Test.Html.Selector.exactText "AT"
+                                            [ Test.Html.Selector.exactText E2EHelper.adminName
                                             , Test.Html.Selector.exactText "Stevie Steve"
                                             , Test.Html.Selector.exactText "Joe"
                                             , Test.Html.Selector.text "Moves"
@@ -821,7 +833,7 @@ tests normalConfig =
                     -- viewing the game so they get a push notification about their turn that
                     -- includes what the admin just did.
                     , admin.click 100 (Dom.id "wordSpellingGame_replaceTray")
-                    , E2EHelper.checkNotification "Your turn!" "AT swapped their tiles. It's your turn in the Word Spelling Game."
+                    , E2EHelper.checkNotification "Your turn!" (E2EHelper.adminName ++ " swapped their tiles. It's your turn in the Word Spelling Game.")
 
                     -- The user comes back to the game and swaps their own tiles, then admin swaps
                     -- again so it's the user's turn once more. This time the user is viewing the
@@ -833,7 +845,7 @@ tests normalConfig =
                     , user.input 100 (Dom.id "game_matchSwitcher") "0"
                     , user.click 100 (Dom.id "wordSpellingGame_replaceTray")
                     , admin.click 100 (Dom.id "wordSpellingGame_replaceTray")
-                    , E2EHelper.checkNotification "Your turn!" "AT swapped their tiles. It's your turn in the Word Spelling Game."
+                    , E2EHelper.checkNotification "Your turn!" (E2EHelper.adminName ++ " swapped their tiles. It's your turn in the Word Spelling Game.")
                     ]
                 )
             ]
@@ -883,7 +895,7 @@ tests normalConfig =
                                     -- more than one notification, so it also proves the third
                                     -- player wasn't notified with the same text.
                                     , admin.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
-                                    , E2EHelper.checkNotification "Your turn!" "AT passed. It's your turn in the Word Spelling Game."
+                                    , E2EHelper.checkNotification "Your turn!" (E2EHelper.adminName ++ " passed. It's your turn in the Word Spelling Game.")
 
                                     -- The second player comes back, passes, and leaves again. Now
                                     -- the third player (still away) gets their turn notification.
@@ -902,7 +914,7 @@ tests normalConfig =
                                     , userB.click 100 (Dom.id "guild_openGuild_1")
                                     , userB.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
                                     , userB.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
-                                    , E2EHelper.checkNotification "Game over" "Joe passed. The game has ended. AT and Stevie Steve and Joe tied with 0 points!"
+                                    , E2EHelper.checkNotification "Game over" ("Joe passed. The game has ended. " ++ E2EHelper.adminName ++ " and Stevie Steve and Joe tied with 0 points!")
                                     ]
 
                                 _ ->
@@ -1384,6 +1396,73 @@ collectPopStartTimes node =
             collectPopStartTimes effect.audio
 
 
+{-| The move the pointer is over in the Moves log, if there is one. Only one match is ever open
+in these tests, so there's at most one to find.
+-}
+hoveredMove : FrontendModel -> Maybe WordSpellingGame.HoveredMove
+hoveredMove model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    SeqDict.values loggedIn.games
+                        |> List.concatMap (\game -> SeqDict.values game.startedGames)
+                        |> List.filterMap
+                            (\startedGame ->
+                                case startedGame of
+                                    Game.WordSpellingGame_Game gameData ->
+                                        gameData.hoveredMove
+
+                                    _ ->
+                                        Nothing
+                            )
+                        |> List.head
+
+                Types.NotLoggedIn _ ->
+                    Nothing
+
+        Types.Loading _ ->
+            Nothing
+
+
+{-| Assert how many tiles are on the board that hovering a Moves log entry put back on screen. An
+earlier move left fewer tiles behind than the board ended up with, which is what says the board
+went back in time rather than staying as it is now.
+-}
+checkHoveredMoveBoardSize : Int -> FrontendModel -> Result String ()
+checkHoveredMoveBoardSize expected model =
+    case hoveredMove model of
+        Just hovered ->
+            let
+                actual : Int
+                actual =
+                    SeqDict.size hovered.shared.board
+            in
+            if actual == expected then
+                Ok ()
+
+            else
+                Err
+                    ("Expected the hovered move's board to hold "
+                        ++ String.fromInt expected
+                        ++ " tiles but it holds "
+                        ++ String.fromInt actual
+                    )
+
+        Nothing ->
+            Err "Expected a move in the Moves log to be hovered"
+
+
+checkNoHoveredMove : FrontendModel -> Result String ()
+checkNoHoveredMove model =
+    case hoveredMove model of
+        Just _ ->
+            Err "Expected no move in the Moves log to be hovered once the pointer left it"
+
+        Nothing ->
+            Ok ()
+
+
 {-| Assert the number of pops `FrontendExtra.audio` is currently scheduling for a client.
 The pop count is diagnostic: the game schedules one fade-in pop per tile the player holds
 (tray or board), one extra pop for each tile placed on the board this turn, and one pop per
@@ -1547,12 +1626,12 @@ wordSpellingGamePremove normalConfig =
                   admin.checkView
                     100
                     (Test.Html.Query.has
-                        [ Test.Html.Selector.exactText "AT", Test.Html.Selector.exactText "'s turn (14)" ]
+                        [ Test.Html.Selector.exactText E2EHelper.adminName, Test.Html.Selector.exactText "'s turn (14)" ]
                     )
                 , user.checkView
                     100
                     (Test.Html.Query.has
-                        [ Test.Html.Selector.exactText "AT", Test.Html.Selector.exactText "'s turn (14)" ]
+                        [ Test.Html.Selector.exactText E2EHelper.adminName, Test.Html.Selector.exactText "'s turn (14)" ]
                     )
                 , T.collapsableGroup
                     "Premove \"rotes\" is cancelled by a move that affects it"
@@ -1607,7 +1686,7 @@ wordSpellingGamePremove normalConfig =
                         )
                     , -- The turn is the premover's now, and they're away, so they get a push
                       -- notification that mentions their premove was blocked.
-                      E2EHelper.checkNotification "Your turn!" "AT played AT (+2). Stevie Steve's premove got blocked. It's your turn in the Word Spelling Game."
+                      E2EHelper.checkNotification "Your turn!" (E2EHelper.adminName ++ " played AT (+2). Stevie Steve's premove got blocked. It's your turn in the Word Spelling Game.")
                     , -- The user comes back to the game for the snapshot.
                       user.click 100 (Dom.id "guild_friendLabel_0")
                     , user.click 100 (Dom.id "guild_openGamesTab")

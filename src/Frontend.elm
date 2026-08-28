@@ -34,6 +34,7 @@ import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
 import Game
 import Go
+import GuildColumn
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
@@ -78,9 +79,9 @@ import String.Nonempty
 import TextEditor
 import Thread
 import Toop exposing (T4(..))
-import Touch exposing (ScreenCoordinate, Touch)
+import Touch exposing (Drag(..), DragTarget(..), ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -456,16 +457,20 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , toFrontendLogs = Nothing
             , popSound = loading.popSound
             , startupData = startupData
-            , routeRequestCausedByPressingLink = False
+            , appBadgeCount = Nothing
             }
 
         ( model2, cmdA ) =
             FrontendExtra.routeRequest Nothing model.route model
+
+        ( model3, badgeCmd ) =
+            checkAppBadgeChange model2
     in
-    ( model2
+    ( model3
     , Command.batch
         [ cmdB
         , cmdA
+        , badgeCmd
         , Command.map AiChatToBackend AiChatMsg aiChatCmd
         , checkAppVersion True
         , case loginResult of
@@ -684,17 +689,20 @@ update _ msg model =
                     let
                         ( loadedNew, cmd ) =
                             updateLoaded msg loaded
+
+                        ( loadedNew2, badgeCmd ) =
+                            checkAppBadgeChange loadedNew
                     in
-                    ( case loadedNew.loginStatus of
+                    ( case loadedNew2.loginStatus of
                         LoggedIn loggedIn ->
-                            { loadedNew
+                            { loadedNew2
                                 | loginStatus = LoggedIn { loggedIn | previousTextInputFocus = Nothing }
                             }
                                 |> Loaded
 
                         NotLoggedIn _ ->
-                            Loaded loadedNew
-                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ]
+                            Loaded loadedNew2
+                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew2, badgeCmd ]
                     , Audio.cmdNone
                     )
 
@@ -702,8 +710,14 @@ update _ msg model =
                     let
                         ( loadedNew, cmd ) =
                             updateLoaded msg loaded
+
+                        ( loadedNew2, badgeCmd ) =
+                            checkAppBadgeChange loadedNew
                     in
-                    ( Loaded loadedNew, Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ], Audio.cmdNone )
+                    ( Loaded loadedNew2
+                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew2, badgeCmd ]
+                    , Audio.cmdNone
+                    )
 
 
 parseDomainWhitelistInput : String -> SeqSet RichText.Domain
@@ -932,7 +946,7 @@ updateLoaded msg model =
             ( { model | elmUiState = Ui.Anim.update ElmUiMsg elmUiMsg model.elmUiState }, Command.none )
 
         PressedLink route ->
-            FrontendExtra.routePush { model | routeRequestCausedByPressingLink = True } route
+            FrontendExtra.routePush model route
 
         DebouncedTyping ->
             FrontendExtra.updateLoggedIn
@@ -1415,6 +1429,29 @@ updateLoaded msg model =
                                         emojiOrSticker
                                         model
                                         loggedIn
+
+                                EmojiSelectorForSheepGameReaction guildOrDmId matchId target ->
+                                    case emojiOrSticker of
+                                        EmojiOrSticker_UnicodeEmoji emoji ->
+                                            addSheepGameReaction
+                                                guildOrDmId
+                                                matchId
+                                                target
+                                                (EmojiOrCustomEmoji_Emoji emoji)
+                                                model
+                                                loggedIn
+
+                                        EmojiOrSticker_CustomEmoji customEmojiId ->
+                                            addSheepGameReaction
+                                                guildOrDmId
+                                                matchId
+                                                target
+                                                (EmojiOrCustomEmoji_CustomEmoji customEmojiId)
+                                                model
+                                                loggedIn
+
+                                        EmojiOrSticker_Sticker _ ->
+                                            ( loggedIn, Command.none )
                         )
                         model
 
@@ -3065,7 +3102,7 @@ updateLoaded msg model =
                                         StopViewingChannel
                                         |> Just
                                 )
-                                loggedIn
+                                { loggedIn | messageHover = NoMessageHover }
                                 (if hasFocus then
                                     Ports.closeNotifications
 
@@ -4926,7 +4963,7 @@ updateLoaded msg model =
                     ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedShowReactionEmojiSelector ->
-                    ( model, Command.none )
+                    showReactionEmojiSelector guildOrDmId (NoThreadWithMessage messageId) model
 
                 MessageView.MessageViewMsg_PressedEditMessage ->
                     ( model, Command.none )
@@ -5081,7 +5118,7 @@ updateLoaded msg model =
                     ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedShowReactionEmojiSelector ->
-                    ( model, Command.none )
+                    showReactionEmojiSelector guildOrDmId (ViewThreadWithMessage threadId messageId) model
 
                 MessageView.MessageViewMsg_PressedEditMessage ->
                     ( model, Command.none )
@@ -5469,6 +5506,28 @@ copyText text model =
     ( { model | lastCopied = Just { copiedAt = model.time, copied = CopiedText text } }
     , Ports.copyToClipboard text
     )
+
+
+{-| Keep the app icon badge showing how many unread messages the user has. Only sent
+to JS when the count changes, since it runs after every update.
+-}
+checkAppBadgeChange : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg msg )
+checkAppBadgeChange model =
+    let
+        count : Int
+        count =
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    GuildColumn.unreadNotificationCount (Local.model loggedIn.localState)
+
+                NotLoggedIn _ ->
+                    0
+    in
+    if model.appBadgeCount == Just count then
+        ( model, Command.none )
+
+    else
+        ( { model | appBadgeCount = Just count }, Ports.setAppBadge count )
 
 
 checkCallDisplayModeChange : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
@@ -6448,6 +6507,33 @@ pressedEditMessage guildOrDmId threadRoute model =
         model
 
 
+{-| An emoji picked out of the selector for one of the answers or notes on a sheep game's
+results screen.
+-}
+addSheepGameReaction :
+    GuildOrDmId
+    -> Id Id.ChannelMessageId
+    -> SheepGame.ReactionTarget
+    -> EmojiOrCustomEmoji
+    -> LoadedFrontend
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+addSheepGameReaction guildOrDmId matchId target emoji model loggedIn =
+    FrontendExtra.handleLocalChange
+        model.time
+        (SheepGame.Action
+            { userId = (Local.model loggedIn.localState).localUser.session.userId
+            , time = model.time
+            , change = SheepGame.AddedReaction target emoji
+            }
+            |> Game.LocalChange_SheepGame matchId
+            |> Local_Game guildOrDmId
+            |> Just
+        )
+        { loggedIn | showEmojiSelector = EmojiSelectorHidden }
+        Command.none
+
+
 showReactionEmojiSelector : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 showReactionEmojiSelector guildOrDmId messageIndex model =
     FrontendExtra.updateLoggedIn
@@ -6469,6 +6555,9 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
                             EmojiSelectorHidden
 
                         EmojiSelectorForEditMessage _ _ ->
+                            EmojiSelectorHidden
+
+                        EmojiSelectorForSheepGameReaction _ _ _ ->
                             EmojiSelectorHidden
 
                         EmojiSelectorForSheepGameInput _ _ _ ->
@@ -7015,8 +7104,11 @@ updateFromBackend _ msg model =
                             Nothing ->
                                 loaded
                         )
+
+                ( loaded3, badgeCmd ) =
+                    checkAppBadgeChange loaded2
             in
-            ( Loaded loaded2, cmds, Audio.cmdNone )
+            ( Loaded loaded3, Command.batch [ cmds, badgeCmd ], Audio.cmdNone )
 
 
 updateLoadedFromBackend : ToFrontend -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
@@ -7699,8 +7791,7 @@ updateLoadedFromBackend msg model =
 
                                 Server_Game _ guildOrDmId gameChange ->
                                     let
-                                        updatedGameModel : Maybe Game.Model
-                                        updatedGameModel =
+                                        ( updatedGameModel, maybeScrollTo ) =
                                             Game.gameChangeFromServer
                                                 model.time
                                                 local.localUser
@@ -7710,33 +7801,43 @@ updateLoadedFromBackend msg model =
                                     ( { loggedIn2
                                         | games = SeqDict.update guildOrDmId (\_ -> updatedGameModel) loggedIn2.games
                                       }
-                                    , -- Another player's move adds a Past moves entry; if we're
-                                      -- watching that match, keep the list pinned to the bottom when
-                                      -- it already was (mirrors the conversation view).
-                                      case gameChange of
-                                        Game.LocalChange_WordSpellingGame matchId (WordSpellingGame.Action _) ->
-                                            case FrontendExtra.currentGamesTab local model.route of
-                                                Just gamesTab ->
-                                                    if gamesTab.guildOrDmId == guildOrDmId && gamesTab.maybeMatchId == Just matchId then
-                                                        Scroll.toBottomOfChannelIfAtBottom
-                                                            WordSpellingGame.pastWordsContainerId
-                                                            SetScrollToBottom
-                                                            (case updatedGameModel of
-                                                                Just gameModel3 ->
-                                                                    Game.wordSpellingScrollPosition matchId gameModel3
+                                    , Command.batch
+                                        [ -- A question the host has just put on screen is scrolled onto for
+                                          -- anyone who was already at the bottom of the tab
+                                          case maybeScrollTo of
+                                            Just scrollTo ->
+                                                scrollElementToTop scrollTo
 
-                                                                Nothing ->
-                                                                    ScrolledToBottom
-                                                            )
+                                            Nothing ->
+                                                Command.none
+                                        , -- Another player's move adds a Past moves entry; if we're
+                                          -- watching that match, keep the list pinned to the bottom when
+                                          -- it already was (mirrors the conversation view).
+                                          case gameChange of
+                                            Game.LocalChange_WordSpellingGame matchId (WordSpellingGame.Action _) ->
+                                                case FrontendExtra.currentGamesTab local model.route of
+                                                    Just gamesTab ->
+                                                        if gamesTab.guildOrDmId == guildOrDmId && gamesTab.maybeMatchId == Just matchId then
+                                                            Scroll.toBottomOfChannelIfAtBottom
+                                                                WordSpellingGame.pastWordsContainerId
+                                                                SetScrollToBottom
+                                                                (case updatedGameModel of
+                                                                    Just gameModel3 ->
+                                                                        Game.wordSpellingScrollPosition matchId gameModel3
 
-                                                    else
+                                                                    Nothing ->
+                                                                        ScrolledToBottom
+                                                                )
+
+                                                        else
+                                                            Command.none
+
+                                                    Nothing ->
                                                         Command.none
 
-                                                Nothing ->
-                                                    Command.none
-
-                                        _ ->
-                                            Command.none
+                                            _ ->
+                                                Command.none
+                                        ]
                                     )
 
                                 _ ->
@@ -7895,7 +7996,7 @@ view _ model =
                                     [ case loggedIn.userOptions of
                                         Just userOptions ->
                                             UserOptions.view
-                                                (MyUi.isMobile loaded)
+                                                loaded.windowSize
                                                 loggedIn.textInputFocus
                                                 loaded.time
                                                 local
@@ -8242,6 +8343,15 @@ routeToInitialDataRequest route =
             InitialLoadRequested_None
 
 
+{-| Whatever is being scrolled to has only just been added, so it isn't in the page until the
+next render. The sleep lets that happen before we go looking for it.
+-}
+scrollElementToTop : Game.ScrollTo -> Command FrontendOnly ToBackend FrontendMsg_
+scrollElementToTop { container, target } =
+    Scroll.smoothScrollToTopOf container target
+        |> Task.attempt (\_ -> SetScrollToBottom)
+
+
 handleGameOutMsgs :
     List Game.OutMsg
     -> LoadedFrontend
@@ -8271,6 +8381,9 @@ handleGameOutMsgs outMsgs model =
 
                 Game.ScrollToBottom htmlId ->
                     ( model2, Scroll.toBottomOfChannel htmlId SetScrollToBottom :: cmds )
+
+                Game.SmoothScrollTo scrollTo ->
+                    ( model2, scrollElementToTop scrollTo :: cmds )
 
                 Game.SaveSheepGameQuestions _ ->
                     ( model2, cmds )
@@ -8348,6 +8461,38 @@ handleGameOutMsgs outMsgs model =
                         :: cmds
                     )
 
+                Game.OpenSheepGameReactionEmojiSelector guildOrDmId matchId target ->
+                    let
+                        ( selectorModel, selectorCmd ) =
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn ->
+                                    let
+                                        emojiSelectorModel : Emoji.Model
+                                        emojiSelectorModel =
+                                            loggedIn.emojiSelector
+                                    in
+                                    ( { loggedIn
+                                        | showEmojiSelector =
+                                            EmojiSelectorForSheepGameReaction guildOrDmId matchId target
+                                        , emojiSelector =
+                                            { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
+                                      }
+                                    , if MyUi.isMobile model2 then
+                                        Command.none
+
+                                      else
+                                        Dom.focus Emoji.searchInputId |> Task.attempt (\_ -> SetFocus)
+                                    )
+                                )
+                                model2
+                    in
+                    ( selectorModel, selectorCmd :: cmds )
+
+                Game.ShowSheepGameImage { fileUrl, imageSize } ->
+                    ( { model2 | imageViewer = Just (ImageViewer.init { url = fileUrl, imageSize = imageSize }) }
+                    , cmds
+                    )
+
                 Game.OpenSheepGameEmojiSelector input ->
                     ( model2
                     , Task.attempt
@@ -8355,6 +8500,9 @@ handleGameOutMsgs outMsgs model =
                         (Dom.getElement (SheepGame.inputContainerId input))
                         :: cmds
                     )
+
+                Game.SetFocus htmlId ->
+                    ( model2, FrontendExtra.setFocus model2 htmlId :: cmds )
         )
         ( model, [] )
         outMsgs

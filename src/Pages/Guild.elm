@@ -37,7 +37,7 @@ import DmChannelId
 import Drawing exposing (Drawing)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Emoji exposing (CachedEmojiData, EmojiConfig, EmojiOrCustomEmoji(..))
+import Emoji exposing (CachedEmojiData, EmojiConfig, EmojiOrCustomEmoji)
 import Env
 import FileStatus exposing (FileHash, FileId, FileStatus)
 import GuildColumn
@@ -91,7 +91,6 @@ import Ui.Input
 import Ui.Keyed
 import Ui.Lazy
 import Ui.Prose
-import Ui.Shadow
 import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
 import UserColor exposing (UserColor)
 import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, PreviouslyLastViewedMessage(..), Viewing(..))
@@ -147,7 +146,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                 let
                     canScroll2 : Bool
                     canScroll2 =
-                        GuildColumn.canScroll True model.drag
+                        MyUi.canScroll True model.drag
 
                     showMembers : ( ShowChannelSettings, Bool )
                     showMembers =
@@ -284,7 +283,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ GuildColumn.guildColumnLazy False model local
                             , friendsColumnLazy
-                                (GuildColumn.canScroll False model.drag)
+                                (MyUi.canScroll False model.drag)
                                 False
                                 model.time
                                 maybeOtherUserId
@@ -421,7 +420,20 @@ unreadOverviewNotMobile local loggedIn model =
             unreadOverviewChannels local allDiscordUsers
     in
     Ui.column
-        [ Ui.height Ui.fill, Ui.heightMin 0, Ui.Font.color MyUi.font1 ]
+        [ Ui.height Ui.fill
+        , Ui.heightMin 0
+        , Ui.Font.color MyUi.font1
+
+        -- Reacting to a message from here opens the emoji selector over the overview, so it
+        -- has to be drawn here as well as over a conversation
+        , emojiSelector
+            (MyUi.isMobile model)
+            local.localUser.user.availableCustomEmojis
+            local.localUser.user.availableStickers
+            local
+            loggedIn
+            model
+        ]
         [ Ui.row
             [ Ui.paddingXY 8 0
             , Ui.spacing 8
@@ -1433,7 +1445,7 @@ conversationWidth model =
                 False
         )
         - model.startupData.scrollbarWidth
-        - (User.profileImageSize + (messagePaddingX * 2) + profileImagePaddingRight)
+        - (User.profileImageSize + (messagePaddingX * 2) + MessageView.profileImagePaddingRight)
 
 
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg_
@@ -1448,7 +1460,7 @@ guildView model guildId channelRoute loggedIn local =
                     if MyUi.isMobile model then
                         let
                             canScroll2 =
-                                GuildColumn.canScroll (MyUi.isMobile model) model.drag
+                                MyUi.canScroll (MyUi.isMobile model) model.drag
 
                             showMembers : ( ShowChannelSettings, Bool )
                             showMembers =
@@ -1627,7 +1639,7 @@ discordGuildView model routeData loggedIn local =
                     else if MyUi.isMobile model then
                         let
                             canScroll2 =
-                                GuildColumn.canScroll (MyUi.isMobile model) model.drag
+                                MyUi.canScroll (MyUi.isMobile model) model.drag
 
                             showMembers : ( ShowChannelSettings, Bool )
                             showMembers =
@@ -2814,7 +2826,7 @@ guildSettingsView model loggedIn local guildId guild =
             [ Ui.Font.color MyUi.font1
             , Ui.alignTop
             , Ui.spacing 16
-            , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
+            , MyUi.scrollable (MyUi.canScroll (MyUi.isMobile model) model.drag)
             ]
             [ ChannelHeader.channelHeader isMobile (Ui.text "Guild settings") Nothing
             , Ui.column
@@ -3241,15 +3253,16 @@ messageHover guildOrDmId threadRoute loggedIn model =
 
 
 {-| Hovering a message in the unread overview restarts the animated emojis, stickers and
-embeds inside it, the same as it does in a channel. The mini menu stays away though, since
-editing, replying and reacting all belong to the channel the message came from.
+embeds inside it, the same as it does in a channel, and brings up a menu offering to react
+to it. That's all the menu offers: editing and replying belong to the channel the message
+came from.
 -}
 unreadOverviewMessageHover : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoggedIn2 -> IsHovered
 unreadOverviewMessageHover guildOrDmId threadRoute loggedIn =
     case loggedIn.messageHover of
         MessageHover hoveredGuildOrDmId hoveredThreadRoute ->
             if guildOrDmId == hoveredGuildOrDmId && threadRoute == hoveredThreadRoute then
-                IsHoveredButNoMenu
+                IsHoveredReactionsOnly
 
             else
                 IsNotHovered
@@ -4470,9 +4483,12 @@ encodeMessageView isMobile isHovered containerWidth otherUserIsEditing highlight
 
                 IsHoveredWhileSelectingAnchor ->
                     3
+
+                IsHoveredReactionsOnly ->
+                    4
             )
         + Bitwise.shiftLeftBy
-            3
+            4
             (case highlight of
                 NoHighlight ->
                     0
@@ -4487,24 +4503,24 @@ encodeMessageView isMobile isHovered containerWidth otherUserIsEditing highlight
                     3
             )
         + Bitwise.shiftLeftBy
-            5
+            6
             (if isMobile then
                 1
 
              else
                 0
             )
-        + Bitwise.shiftLeftBy 6 containerWidth
+        + Bitwise.shiftLeftBy 7 containerWidth
         + (Time.posixToMillis time // msInMinute * timePackingOffset)
 
 
 {-| Where the time starts in the Int `encodeMessageView` packs. The flags take the bottom
-six bits and the container width sits above them, so this leaves room for a container up to
+seven bits and the container width sits above them, so this leaves room for a container up to
 65535px wide, and the whole packed number stays well inside the range integers are exact in.
 -}
 timePackingOffset : Int
 timePackingOffset =
-    2 ^ 22
+    2 ^ 23
 
 
 msInMinute : Int
@@ -4530,7 +4546,7 @@ decodeMessageView packed =
     in
     { isEditing = Bitwise.and 0x01 value == 1
     , isHovered =
-        case Bitwise.shiftRightBy 1 value |> Bitwise.and 0x03 of
+        case Bitwise.shiftRightBy 1 value |> Bitwise.and 0x07 of
             1 ->
                 IsHovered
 
@@ -4540,10 +4556,13 @@ decodeMessageView packed =
             3 ->
                 IsHoveredWhileSelectingAnchor
 
+            4 ->
+                IsHoveredReactionsOnly
+
             _ ->
                 IsNotHovered
     , highlight =
-        case Bitwise.shiftRightBy 3 value |> Bitwise.and 0x03 of
+        case Bitwise.shiftRightBy 4 value |> Bitwise.and 0x03 of
             1 ->
                 ReplyToHighlight
 
@@ -4555,8 +4574,8 @@ decodeMessageView packed =
 
             _ ->
                 NoHighlight
-    , isMobile = Bitwise.shiftRightBy 5 value |> Bitwise.and 0x01 |> (==) 1
-    , containerWidth = Bitwise.shiftRightBy 6 value
+    , isMobile = Bitwise.shiftRightBy 6 value |> Bitwise.and 0x01 |> (==) 1
+    , containerWidth = Bitwise.shiftRightBy 7 value
     , time = packed // timePackingOffset * msInMinute |> Time.millisToPosix
     }
 
@@ -4591,12 +4610,12 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
 
             else
                 Coord.xRaw model.windowSize - MyUi.channelAndGuildColumnWidth model.windowSize - paddingX * 2
-    in
-    case loggedIn.showEmojiSelector of
-        EmojiSelectorHidden ->
-            Ui.noAttr
 
-        EmojiSelectorForReaction _ _ ->
+        {- Reacting doesn't happen anywhere in particular, so the selector opens along the
+           bottom rather than pointing at whatever was pressed.
+        -}
+        atBottomOfTheConversation : Ui.Attribute FrontendMsg_
+        atBottomOfTheConversation =
             Ui.inFront
                 (Emoji.selector
                     model.startupData.scrollbarWidth
@@ -4620,6 +4639,16 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                         ]
                     |> Ui.map EmojiSelectorMsg
                 )
+    in
+    case loggedIn.showEmojiSelector of
+        EmojiSelectorHidden ->
+            Ui.noAttr
+
+        EmojiSelectorForReaction _ _ ->
+            atBottomOfTheConversation
+
+        EmojiSelectorForSheepGameReaction _ _ _ ->
+            atBottomOfTheConversation
 
         EmojiSelectorForMessage _ ->
             Ui.inFront
@@ -4947,7 +4976,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
+                 , MyUi.scrollable (MyUi.canScroll (MyUi.isMobile model) model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
@@ -5122,7 +5151,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
+                 , MyUi.scrollable (MyUi.canScroll (MyUi.isMobile model) model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
@@ -5405,7 +5434,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
+                 , MyUi.scrollable (MyUi.canScroll (MyUi.isMobile model) model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
@@ -5590,7 +5619,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
+                 , MyUi.scrollable (MyUi.canScroll (MyUi.isMobile model) model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
@@ -5932,396 +5961,6 @@ dropdownButtonId index =
     Dom.id ("dropdown_button" ++ String.fromInt index)
 
 
-{-| Reaction buttons are a fixed width so that the popup above one can work out where
-in the conversation its button sits, and from that which way it should open. A count
-that has reached two digits gets a wider button.
--}
-reactionButtonWidth : NonemptySet userId -> Int
-reactionButtonWidth users =
-    if NonemptySet.size users < 10 then
-        52
-
-    else
-        60
-
-
-reactionSpacing : number
-reactionSpacing =
-    4
-
-
-{-| The reaction row runs the full width of a message rather than being indented under
-the message text the way `containerWidth` is, so it has the profile image's column to
-itself as well.
--}
-reactionRowWidth : Int -> Int
-reactionRowWidth containerWidth =
-    containerWidth + User.profileImageSize + profileImagePaddingRight
-
-
-{-| Where each reaction button ends up, as an offset from the left of the reaction row,
-once the row has wrapped. Buttons are laid out left to right and wrap onto a new line
-when the next one no longer fits, which is what `Ui.wrap` does to them.
--}
-reactionButtonOffsets : Int -> List Int -> List Int
-reactionButtonOffsets rowWidth widths =
-    List.foldl
-        (\width ( nextOffset, offsets ) ->
-            if nextOffset > 0 && nextOffset + width > rowWidth then
-                ( width + reactionSpacing, 0 :: offsets )
-
-            else
-                ( nextOffset + width + reactionSpacing, nextOffset :: offsets )
-        )
-        ( 0, [] )
-        widths
-        |> Tuple.second
-        |> List.reverse
-
-
-{-| A reaction popup is much wider than the button it hangs off, so one near the edge of
-the conversation used to hang off the side of it and give the conversation a horizontal
-scrollbar. It opens away from whichever edge its button sits closest to instead, and is
-capped at the room it has on that side so it can't reach past the edge either way.
--}
-type ReactionPopupPlacement
-    = -- Left edge lined up with the button's left edge
-      PopupOpensRight { maxWidth : Int }
-    | -- Right edge lined up with the button's right edge, so the arrow has to be
-      -- measured from that edge instead to stay under the button's emoji
-      PopupOpensLeft { maxWidth : Int, arrowFromRight : Int }
-
-
-reactionPopupPlacement : Int -> Int -> Int -> ReactionPopupPlacement
-reactionPopupPlacement rowWidth buttonWidth buttonOffset =
-    let
-        roomOnRight : Int
-        roomOnRight =
-            rowWidth - buttonOffset
-
-        roomOnLeft : Int
-        roomOnLeft =
-            buttonOffset + buttonWidth
-    in
-    if roomOnRight >= roomOnLeft then
-        PopupOpensRight { maxWidth = min reactionPopupMaxWidth roomOnRight }
-
-    else
-        PopupOpensLeft
-            { maxWidth = min reactionPopupMaxWidth roomOnLeft
-            , arrowFromRight =
-                -- Mirrors the other arrow's offset across the button. Both are measured
-                -- from the popup's padding box, which the button's border and the
-                -- popup's own border inset by a pixel at each end.
-                buttonWidth - 4 - reactionPopupArrowOffset - reactionPopupArrowWidth
-            }
-
-
-reactionPopupMaxWidth : number
-reactionPopupMaxWidth =
-    400
-
-
-{-| How far the arrow sits from whichever edge of the popup is lined up with the
-button, so that it lands under that button's emoji.
--}
-reactionPopupArrowOffset : number
-reactionPopupArrowOffset =
-    11
-
-
-reactionPopupArrowWidth : number
-reactionPopupArrowWidth =
-    16
-
-
-reactionEmojiView :
-    Maybe CachedEmojiData
-    -> IsHovered
-    -> userId
-    -> SeqDict (Id CustomEmojiId) CustomEmojiData
-    -> SeqDict userId { a | name : PersonName }
-    -> AnimationMode
-    -> Int
-    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
-    -> Maybe (Element MessageViewMsg)
-reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers animationMode containerWidth reactions =
-    if SeqDict.isEmpty reactions then
-        Nothing
-
-    else
-        let
-            entries : List ( EmojiOrCustomEmoji, NonemptySet userId )
-            entries =
-                SeqDict.toList reactions
-
-            widths : List Int
-            widths =
-                List.map (\( _, users ) -> reactionButtonWidth users) entries
-
-            rowWidth : Int
-            rowWidth =
-                reactionRowWidth containerWidth
-
-            placements : List ReactionPopupPlacement
-            placements =
-                List.map2
-                    (reactionPopupPlacement rowWidth)
-                    widths
-                    (reactionButtonOffsets rowWidth widths)
-        in
-        Ui.row
-            [ Ui.wrap
-            , Ui.spacing reactionSpacing
-            ]
-            (List.map2 Tuple.pair entries placements
-                |> List.indexedMap
-                    (\index ( ( emoji, users ), placement ) ->
-                        let
-                            hasReactedTo : Bool
-                            hasReactedTo =
-                                NonemptySet.member currentUserId users
-                        in
-                        (if hasReactedTo then
-                            MyUi.rowButton
-                                (Dom.id ("guild_removeReactionEmoji_" ++ String.fromInt index))
-                                (MessageView_PressedReactionEmoji_Remove emoji)
-
-                         else
-                            MyUi.rowButton
-                                (Dom.id "guild_addReactionEmoji")
-                                (MessageView_PressedReactionEmoji_Add emoji)
-                        )
-                            [ Ui.rounded 8
-                            , Ui.spacing 2
-                            , Ui.background MyUi.background1
-                            , Ui.paddingXY 4 0
-                            , Ui.htmlAttribute (Html.Attributes.class "emoji-popup-container")
-                            , Ui.borderColor
-                                (if hasReactedTo then
-                                    MyUi.highlightedBorder
-
-                                 else
-                                    MyUi.border1
-                                )
-                            , Ui.Font.color
-                                (if hasReactedTo then
-                                    MyUi.highlightedBorder
-
-                                 else
-                                    MyUi.font2
-                                )
-                            , Ui.border 1
-                            , Ui.width (Ui.px (reactionButtonWidth users))
-                            , Ui.contentCenterX
-                            , Ui.Font.weight 500
-                            , case isHovered of
-                                IsHovered ->
-                                    reactionPopup emojiData customEmojis allUsers placement emoji users |> Ui.above
-
-                                IsNotHovered ->
-                                    Ui.noAttr
-
-                                IsHoveredButNoMenu ->
-                                    Ui.noAttr
-
-                                IsHoveredWhileSelectingAnchor ->
-                                    Ui.noAttr
-                            ]
-                            [ case emoji of
-                                EmojiOrCustomEmoji_Emoji emoji2 ->
-                                    Emoji.view emoji2
-
-                                EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
-                                    Ui.el
-                                        [ CustomEmoji.view "1.1em" "0em" customEmojiId customEmojis animationMode
-                                            |> Ui.html
-                                            |> Ui.el [ Ui.centerY, Ui.move { x = 1, y = 0, z = 0 } ]
-                                            |> Ui.inFront
-                                        , Ui.Font.color (Ui.rgba 0 0 0 0)
-                                        , Ui.Font.size 20
-                                        ]
-                                        (Ui.text "❓")
-                            , reactionCountView users
-                            ]
-                    )
-            )
-            |> Just
-
-
-{-| Past 99 there isn't room for the count in a reaction button, so it becomes an
-infinity sign.
--}
-reactionCountView : NonemptySet userId -> Element msg
-reactionCountView users =
-    if NonemptySet.size users > 99 then
-        Ui.el
-            [ Ui.width Ui.shrink, MyUi.noShrinking, Ui.centerY ]
-            (Ui.html (Icons.infinity 16))
-
-    else
-        Ui.text (String.fromInt (NonemptySet.size users))
-
-
-{-| Points down at the reaction's emoji from a popup whose left edge is lined up with
-the reaction button.
--}
-reactionPopupArrowFromLeft : Element msg
-reactionPopupArrowFromLeft =
-    Ui.html
-        (Html.div
-            [ Html.Attributes.style "position" "absolute"
-            , Html.Attributes.style "top" "calc(100% - 1px)"
-            , Html.Attributes.style "left" (String.fromInt reactionPopupArrowOffset ++ "px")
-            , Html.Attributes.style "width" "0"
-            , Html.Attributes.style "height" "0"
-            , Html.Attributes.style "border-left" "8px solid transparent"
-            , Html.Attributes.style "border-right" "8px solid transparent"
-            , Html.Attributes.style "border-top" ("8px solid " ++ MyUi.colorToStyle MyUi.background1)
-            , Html.Attributes.style "pointer-events" "none"
-            ]
-            []
-        )
-
-
-{-| The same arrow for a popup lined up with the button's right edge instead. It is
-measured from that edge so that it still lands under the reaction's emoji.
--}
-reactionPopupArrowFromRight : Int -> Element msg
-reactionPopupArrowFromRight arrowFromRight =
-    Ui.html
-        (Html.div
-            [ Html.Attributes.style "position" "absolute"
-            , Html.Attributes.style "top" "calc(100% - 1px)"
-            , Html.Attributes.style "right" (String.fromInt arrowFromRight ++ "px")
-            , Html.Attributes.style "width" "0"
-            , Html.Attributes.style "height" "0"
-            , Html.Attributes.style "border-left" "8px solid transparent"
-            , Html.Attributes.style "border-right" "8px solid transparent"
-            , Html.Attributes.style "border-top" ("8px solid " ++ MyUi.colorToStyle MyUi.background1)
-            , Html.Attributes.style "pointer-events" "none"
-            ]
-            []
-        )
-
-
-reactionPopup :
-    Maybe CachedEmojiData
-    -> SeqDict (Id CustomEmojiId) CustomEmojiData
-    -> SeqDict userId { a | name : PersonName }
-    -> ReactionPopupPlacement
-    -> EmojiOrCustomEmoji
-    -> NonemptySet userId
-    -> Element MessageViewMsg
-reactionPopup emojiData customEmojis allUsers placement emoji users =
-    let
-        names : Nonempty (Element msg)
-        names =
-            List.Nonempty.map
-                (\userId ->
-                    case SeqDict.get userId allUsers of
-                        Just user ->
-                            Ui.el
-                                [ Ui.Font.color MyUi.font1, Ui.width Ui.shrink ]
-                                (Ui.text (PersonName.toString user.name))
-
-                        Nothing ->
-                            Ui.text "<Missing>"
-                )
-                (NonemptySet.toNonemptyList users)
-
-        nameCount =
-            List.Nonempty.length names
-
-        maybeEmojiName : Maybe String
-        maybeEmojiName =
-            case emoji of
-                EmojiOrCustomEmoji_Emoji emoji2 ->
-                    Maybe.andThen (\cached -> Emoji.firstShortName cached emoji2) emojiData
-                        |> Maybe.map (\name -> ":" ++ name ++ ":")
-
-                EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
-                    SeqDict.get customEmojiId customEmojis
-                        |> Maybe.map (\customEmoji -> ":" ++ CustomEmoji.emojiNameToString customEmoji.name ++ ":")
-
-        namesParagraph : Element msg
-        namesParagraph =
-            Ui.Prose.paragraph
-                [ Ui.Font.size 14, Ui.width Ui.fill ]
-                (if nameCount > 10 then
-                    let
-                        visible =
-                            List.Nonempty.take 8 names
-                                |> List.Nonempty.toList
-                                |> List.intersperse (Ui.text ", ")
-                    in
-                    visible ++ [ Ui.text ", and ", Ui.text (String.fromInt (nameCount - 8)), Ui.text " more" ]
-
-                 else
-                    case List.Nonempty.tail names of
-                        [] ->
-                            [ List.Nonempty.head names ]
-
-                        [ two ] ->
-                            [ List.Nonempty.head names, Ui.text " and ", two ]
-
-                        rest ->
-                            List.intersperse (Ui.text ", ") rest ++ [ Ui.text ", and ", List.Nonempty.head names ]
-                )
-    in
-    Ui.row
-        ([ Ui.htmlAttribute (Html.Attributes.class "emoji-popup")
-         , Ui.width Ui.shrink
-         , MyUi.htmlStyle "width" "max-content"
-         , -- `Ui.above` puts the popup's wrapper flush against the top of the reaction
-           -- button, so positioning it in there is what leaves the gap for the arrow
-           -- and lines the popup up with one edge of the button or the other
-           MyUi.htmlStyle "position" "absolute"
-         , MyUi.htmlStyle "bottom" "8px"
-         , Ui.background MyUi.background1
-         , Ui.borderColor MyUi.border1
-         , Ui.border 1
-         , Ui.rounded 8
-         , Ui.padding 8
-         , Ui.spacing 8
-         , Ui.Font.color MyUi.font3
-         , MyUi.noPointerEvents
-         , Ui.Shadow.shadows [ { x = 0, y = 2, size = 0, blur = 8, color = Ui.rgba 0 0 0 0.3 } ]
-         , Ui.contentCenterY
-         ]
-            ++ (case placement of
-                    PopupOpensRight { maxWidth } ->
-                        [ MyUi.htmlStyle "left" "0"
-                        , MyUi.htmlStyle "max-width" (String.fromInt maxWidth ++ "px")
-                        , Ui.inFront reactionPopupArrowFromLeft
-                        ]
-
-                    PopupOpensLeft { maxWidth, arrowFromRight } ->
-                        [ MyUi.htmlStyle "right" "0"
-                        , MyUi.htmlStyle "max-width" (String.fromInt maxWidth ++ "px")
-                        , Ui.inFront (reactionPopupArrowFromRight arrowFromRight)
-                        ]
-               )
-        )
-        [ case emoji of
-            EmojiOrCustomEmoji_Emoji emoji2 ->
-                Ui.el [ Ui.Font.size 40, Ui.width Ui.shrink, MyUi.noShrinking ] (Ui.text (Emoji.toString emoji2))
-
-            EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
-                CustomEmoji.view "40px" "0em" customEmojiId customEmojis LoopForever |> Ui.html
-        , case maybeEmojiName of
-            Just emojiName ->
-                Ui.column
-                    [ Ui.spacing 2 ]
-                    [ Ui.el [ Ui.Font.size 14, Ui.Font.bold, Ui.Font.color MyUi.font1 ] (Ui.text emojiName)
-                    , namesParagraph
-                    ]
-
-            Nothing ->
-                namesParagraph
-        ]
-
-
 messageEditingView :
     Int
     -> Time.Posix
@@ -6346,7 +5985,7 @@ messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessa
             let
                 maybeReactions : Maybe (Element MessageViewMsg)
                 maybeReactions =
-                    reactionEmojiView local.localUser.emojiData IsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth data.reactions
+                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth data.reactions
 
                 ( guildOrDmIdNoThread, threadRoute ) =
                     guildOrDmId
@@ -6493,7 +6132,7 @@ threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messa
         UserTextMessage data ->
             let
                 maybeReactions =
-                    reactionEmojiView local.localUser.emojiData IsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth data.reactions
+                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth data.reactions
 
                 ( guildOrDmIdNoThread, _ ) =
                     guildOrDmId
@@ -6607,6 +6246,7 @@ type IsHovered
     = IsNotHovered
     | IsHovered
     | IsHoveredButNoMenu
+    | IsHoveredReactionsOnly
     | IsHoveredWhileSelectingAnchor
 
 
@@ -6801,11 +6441,6 @@ type HighlightMessage
     | ReplyToHighlight
     | MentionHighlight
     | UrlHighlight
-
-
-profileImagePaddingRight : number
-profileImagePaddingRight =
-    8
 
 
 {-| Which custom emojis the one-click reactions on a Discord message may offer.
@@ -7572,6 +7207,29 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 )
 
 
+{-| A reaction's popup comes up while whatever it is attached to is hovered, which for a
+message means the menu is up too. The places that show a message without its menu don't bring
+popups up either.
+-}
+reactionsHover : IsHovered -> MessageView.ReactionsHover
+reactionsHover isHovered =
+    case isHovered of
+        IsHovered ->
+            MessageView.ReactionsHovered
+
+        IsNotHovered ->
+            MessageView.ReactionsNotHovered
+
+        IsHoveredButNoMenu ->
+            MessageView.ReactionsNotHovered
+
+        IsHoveredReactionsOnly ->
+            MessageView.ReactionsNotHovered
+
+        IsHoveredWhileSelectingAnchor ->
+            MessageView.ReactionsNotHovered
+
+
 isHoveredToAnimationMode : IsHovered -> AnimationMode
 isHoveredToAnimationMode isHovered =
     case isHovered of
@@ -7582,6 +7240,9 @@ isHoveredToAnimationMode isHovered =
             Sticker.ResetAndLoopAFewTimes
 
         IsHoveredButNoMenu ->
+            Sticker.ResetAndLoopAFewTimes
+
+        IsHoveredReactionsOnly ->
             Sticker.ResetAndLoopAFewTimes
 
         IsHoveredWhileSelectingAnchor ->
@@ -7629,7 +7290,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     message2.userIconDrawings
                     ++ (if isHovered == IsHoveredWhileSelectingAnchor then
-                            []
+                            [ Ui.rounded User.profileImageRounding ]
 
                         else
                             openDmButton messageId (MessageView_PressedUserIconButton message2.createdBy)
@@ -7638,7 +7299,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
             |> Ui.el
                 [ Ui.paddingWith
                     { left = 0
-                    , right = profileImagePaddingRight
+                    , right = MessageView.profileImagePaddingRight
                     , top =
                         case maybeRepliedTo2 of
                             Just _ ->
@@ -7663,10 +7324,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                 allUsers
             , Ui.row
                 []
-                [ User.toString message2.createdBy allUsers
-                    ++ " "
-                    |> Ui.text
-                    |> Ui.el [ Ui.Font.bold ]
+                [ User.toStringView message2.createdBy allUsers
                 , messageTimestamp
                     drawingColor
                     message2.timestampDrawings
@@ -7713,6 +7371,9 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                                 True
 
                             IsHoveredButNoMenu ->
+                                True
+
+                            IsHoveredReactionsOnly ->
                                 True
 
                             IsHoveredWhileSelectingAnchor ->
@@ -7779,7 +7440,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     message2.userIconDrawings
                     ++ (if isHovered == IsHoveredWhileSelectingAnchor then
-                            []
+                            [ Ui.rounded User.profileImageRounding ]
 
                         else
                             openDmButton messageId (MessageView_PressedDiscordUserIconButton message2.createdBy)
@@ -7788,7 +7449,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
             |> Ui.el
                 [ Ui.paddingWith
                     { left = 0
-                    , right = profileImagePaddingRight
+                    , right = MessageView.profileImagePaddingRight
                     , top =
                         case maybeRepliedTo2 of
                             Just _ ->
@@ -7863,6 +7524,9 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                                 True
 
                             IsHoveredButNoMenu ->
+                                True
+
+                            IsHoveredReactionsOnly ->
                                 True
 
                             IsHoveredWhileSelectingAnchor ->
@@ -8226,7 +7890,9 @@ eventCard userIdToColor isSelectingAnchor messageId drawings htmlId onPress icon
                 [ icon
                 , Ui.column
                     [ Ui.spacing 2, Ui.width Ui.shrink ]
-                    [ Ui.el [ Ui.Font.bold, Ui.Font.color MyUi.font1 ] (Ui.text userName)
+                    [ Ui.el
+                        [ Ui.Font.bold, Ui.Font.color MyUi.font1, Ui.widthMax 200, Ui.clipWithEllipsis ]
+                        (Ui.text userName)
                     , Ui.el [ Ui.Font.size 13 ] (Ui.text action)
                     ]
                 ]
@@ -8339,7 +8005,7 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
+            MessageView.reactionEmojiView emojiData (reactionsHover isHovered) currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
@@ -8424,6 +8090,22 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
                             UrlHighlight ->
                                 [ Ui.background MyUi.hoverAndReplyToColor ]
 
+                    IsHoveredReactionsOnly ->
+                        [ case highlight of
+                            NoHighlight ->
+                                Ui.background MyUi.hoverHighlight
+
+                            ReplyToHighlight ->
+                                Ui.background MyUi.hoverAndReplyToColor
+
+                            MentionHighlight ->
+                                Ui.background MyUi.hoverAndMentionColor
+
+                            UrlHighlight ->
+                                Ui.background MyUi.hoverAndReplyToColor
+                        , MessageView.reactionsMiniView currentUser availableCustomEmojis customEmojis |> Ui.inFront
+                        ]
+
                     IsHoveredWhileSelectingAnchor ->
                         []
                )
@@ -8460,7 +8142,7 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
+            MessageView.reactionEmojiView emojiData (reactionsHover isHovered) currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
@@ -8544,6 +8226,22 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
 
                             UrlHighlight ->
                                 [ Ui.background MyUi.hoverAndReplyToColor ]
+
+                    IsHoveredReactionsOnly ->
+                        [ case highlight of
+                            NoHighlight ->
+                                Ui.background MyUi.hoverHighlight
+
+                            ReplyToHighlight ->
+                                Ui.background MyUi.hoverAndReplyToColor
+
+                            MentionHighlight ->
+                                Ui.background MyUi.hoverAndMentionColor
+
+                            UrlHighlight ->
+                                Ui.background MyUi.hoverAndReplyToColor
+                        , MessageView.reactionsMiniView currentUser availableCustomEmojis customEmojis |> Ui.inFront
+                        ]
 
                     IsHoveredWhileSelectingAnchor ->
                         []
@@ -9048,6 +8746,10 @@ the fixed header area, not the scrollable channel list.
 -}
 channelSearchRow : Bool -> String -> Element FrontendMsg_
 channelSearchRow isMobile channelSearch =
+    let
+        clearPaddingX =
+            12
+    in
     Ui.el
         [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border1
@@ -9058,7 +8760,7 @@ channelSearchRow isMobile channelSearch =
                 [ Ui.Font.color MyUi.font3
                 , Ui.height Ui.fill
                 , Ui.contentCenterY
-                , Ui.paddingXY 12 0
+                , Ui.paddingXY clearPaddingX 0
                 , MyUi.noPointerEvents
                 , Ui.alignRight
                 ]
@@ -9073,20 +8775,25 @@ channelSearchRow isMobile channelSearch =
                 , Ui.width Ui.shrink
                 , Ui.height Ui.fill
                 , Ui.contentCenterY
-                , Ui.paddingXY 12 0
+                , Ui.paddingXY clearPaddingX 0
                 , Ui.background MyUi.inputBackground
                 , Ui.alignRight
                 , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font3 ]
                 , MyUi.hoverText "Clear search"
                 ]
                 (Ui.html Icons.x)
+                |> Ui.el
+                    [ -- Don't cover up the input focus outline
+                      Ui.padding 2
+                    , Ui.height Ui.fill
+                    ]
                 |> Ui.inFront
         ]
         (Ui.Input.text
             [ Ui.id (Dom.idToString channelSearchInputId)
             , Ui.background MyUi.inputBackground
             , Ui.border 0
-            , Ui.paddingXY 8 8
+            , Ui.paddingWith { left = 8, top = 8, bottom = 8, right = clearPaddingX * 2 + 24 + 8 }
             , Ui.Font.color MyUi.font1
             ]
             { onChange = TypedChannelSearch

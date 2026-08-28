@@ -1,6 +1,5 @@
 module GuildColumn exposing
-    ( canScroll
-    , channelOrThreadHasNotifications
+    ( channelOrThreadHasNotifications
     , discordDmCurrentUserId
     , discordDmHasNotifications
     , discordGuildCurrentUserId
@@ -8,6 +7,7 @@ module GuildColumn exposing
     , guildColumnLazy
     , newMessageCount
     , rowLinkButton
+    , unreadNotificationCount
     )
 
 import Discord
@@ -31,7 +31,7 @@ import OneOrGreater exposing (OneOrGreater)
 import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet
-import Types exposing (Drag(..), FrontendMsg_(..), LoadedFrontend)
+import Types exposing (FrontendMsg_(..), LoadedFrontend)
 import Ui exposing (Element)
 import Ui.Gradient
 import Ui.Lazy
@@ -39,26 +39,10 @@ import User exposing (FrontendCurrentUser, LocalUser)
 import UserColor
 
 
-canScroll : Bool -> Drag -> Bool
-canScroll isMobile drag =
-    if isMobile then
-        case drag of
-            Dragging dragging ->
-                not dragging.horizontalStart
-
-            _ ->
-                True
-
-    else
-        -- On desktop there's no horizontal drag gesture, so keep scrolling
-        -- enabled to stop scrollbars flickering while other drags happen.
-        True
-
-
 guildColumnLazy : Bool -> LoadedFrontend -> LocalState -> Element FrontendMsg_
 guildColumnLazy isMobile model local =
     Ui.Lazy.lazy6
-        (case ( canScroll isMobile model.drag, isMobile ) of
+        (case ( MyUi.canScroll isMobile model.drag, isMobile ) of
             ( True, True ) ->
                 guildColumnCanScrollMobile
 
@@ -626,6 +610,87 @@ guildHasNotifications currentUser guildId guild =
 
                             Nothing ->
                                 NoNotification
+
+
+{-| How many unread messages are announced with a red circle in the guild column, i.e.
+direct mentions, DMs and guilds the user asked to hear about every message in. Messages
+that only get the plain white circle are left out, as are muted guilds, channels and
+threads. This is what the app icon badge shows (see Ports.setAppBadge).
+-}
+unreadNotificationCount : LocalState -> Int
+unreadNotificationCount local =
+    let
+        currentUser : FrontendCurrentUser
+        currentUser =
+            local.localUser.user
+
+        dmCount : Int
+        dmCount =
+            SeqDict.foldl
+                (\otherUserId dmChannel total ->
+                    case dmHasNotifications currentUser otherUserId dmChannel of
+                        Just count ->
+                            total + OneOrGreater.toInt count
+
+                        Nothing ->
+                            total
+                )
+                0
+                local.dmChannels
+
+        discordDmCount : Int
+        discordDmCount =
+            SeqDict.foldl
+                (\channelId dmChannel total ->
+                    case discordDmHasNotifications local.localUser channelId dmChannel of
+                        Just ( _, count ) ->
+                            total + OneOrGreater.toInt count
+
+                        Nothing ->
+                            total
+                )
+                0
+                local.discordDmChannels
+
+        guildCount : Int
+        guildCount =
+            SeqDict.foldl
+                (\guildId guild total ->
+                    total + redNotificationCount (guildHasNotifications currentUser guildId guild)
+                )
+                0
+                local.guilds
+
+        discordGuildCount : Int
+        discordGuildCount =
+            SeqDict.foldl
+                (\guildId guild total ->
+                    case discordGuildCurrentUserId local.localUser guild of
+                        Just currentDiscordUserId ->
+                            total
+                                + redNotificationCount
+                                    (discordGuildHasNotifications currentDiscordUserId currentUser guildId guild)
+
+                        Nothing ->
+                            total
+                )
+                0
+                local.discordGuilds
+    in
+    dmCount + discordDmCount + guildCount + discordGuildCount
+
+
+redNotificationCount : ChannelNotificationType -> Int
+redNotificationCount notification =
+    case notification of
+        NoNotification ->
+            0
+
+        NewMessage _ ->
+            0
+
+        NewMessageForUser count ->
+            OneOrGreater.toInt count
 
 
 {-| Mentions in muted channels and threads don't count, the same way their messages don't.

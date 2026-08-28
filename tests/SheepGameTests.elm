@@ -1,5 +1,6 @@
 module SheepGameTests exposing (tests)
 
+import Effect.Browser.Dom as Dom
 import Effect.Time as Time
 import Expect
 import FileName
@@ -8,6 +9,7 @@ import Id exposing (Id, UserId)
 import IdArray
 import List.Nonempty exposing (Nonempty(..))
 import RichText
+import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SheepGame exposing (Action(..), Phase(..))
 import String.Nonempty exposing (NonemptyString(..))
@@ -50,7 +52,7 @@ content text =
 -}
 question : String -> SheepGame.ValidatedInput
 question text =
-    { text = content text, attachedFiles = SeqDict.empty }
+    { text = content text, attachedFiles = SeqDict.empty, reactions = SeqDict.empty }
 
 
 {-| A match with `questionCount` questions, whose wording never matters to these tests.
@@ -119,10 +121,57 @@ answerTexts userId shared =
             )
 
 
+{-| The view state of someone watching the results, scrolled to `scrollPosition` and having
+already had `questionsRevealedSeen` questions turn up in front of them.
+-}
+watching : ScrollPosition -> Int -> SheepGame.GameData
+watching scrollPosition questionsRevealedSeen =
+    { answerDrafts = IdArray.empty
+    , noteDrafts = IdArray.empty
+    , gridHovered = Nothing
+    , scrollPosition = scrollPosition
+    , questionsRevealedSeen = questionsRevealedSeen
+    , newQuestionRevealed = False
+    , hoveredResult = Nothing
+    }
+
+
+{-| What the reader is told and where they're taken, which is all these tests care about.
+-}
+revealed : Int -> SheepGame.GameData -> ( Bool, Maybe Dom.HtmlId )
+revealed questionsRevealed model =
+    SheepGame.questionRevealed questionsRevealed model
+        |> Tuple.mapFirst .newQuestionRevealed
+
+
 tests : Test
 tests =
     Test.describe "Sheep game"
-        [ Test.test "Everyone who wrote the same answer scores the size of their group"
+        [ Test.test "The first reveal is the scoring explanation rather than a question"
+            (\_ ->
+                watching ScrolledToBottom 0
+                    |> revealed 1
+                    |> Expect.equal ( False, Just SheepGame.scoringId )
+            )
+        , Test.test "A question revealed while the reader is at the bottom of the tab takes them to it"
+            (\_ ->
+                watching ScrolledToBottom 1
+                    |> revealed 2
+                    |> Expect.equal ( False, Just (SheepGame.revealedQuestionId 0) )
+            )
+        , Test.test "A question revealed while the reader is further up the tab is announced instead"
+            (\_ ->
+                watching ScrolledToMiddle 1
+                    |> revealed 2
+                    |> Expect.equal ( True, Nothing )
+            )
+        , Test.test "The host going back to an earlier question isn't a question turning up"
+            (\_ ->
+                watching ScrolledToMiddle 2
+                    |> revealed 1
+                    |> Expect.equal ( False, Nothing )
+            )
+        , Test.test "Everyone who wrote the same answer scores the size of their group"
             (\_ ->
                 apply (setup 1)
                     [ answers playerA [ "Blue" ]

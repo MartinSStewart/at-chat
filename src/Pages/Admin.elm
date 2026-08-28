@@ -4353,7 +4353,7 @@ section isMobile expandedSections section2 content =
         )
         isMobile
         (User.sectionToString section2)
-        content
+        [ Ui.column [ Ui.paddingXY 16 0, Ui.spacing 16 ] content ]
 
 
 expandSectionButtonId : AdminUiSection -> HtmlId

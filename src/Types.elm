@@ -5,8 +5,6 @@ module Types exposing
     , BackendMsg(..)
     , CountToFrontendState
     , DiscordAttachmentData
-    , Drag(..)
-    , DragTarget(..)
     , EditChannelForm
     , EditGuildForm
     , EditMessage
@@ -80,7 +78,8 @@ import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileS
 import Game
 import Go
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, ExportChannelId, GamePublicId, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId, Viewing_DiscordDmId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, ExportChannelId, GamePublicId, GuildId, GuildOrDmId, Id, InviteLinkId, QuestionId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId, Viewing_DiscordDmId)
+import IdArray exposing (IdArray)
 import ImageEditor
 import ImageViewer
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
@@ -121,7 +120,7 @@ import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import ToBackendLog exposing (ToBackendLog, ToBackendLogData)
-import Touch exposing (Touch)
+import Touch exposing (Drag, Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
 import Untrusted exposing (Untrusted)
@@ -195,7 +194,9 @@ type alias LoadedFrontend =
       toFrontendLogs : Maybe (Array ToFrontend)
     , popSound : Result Audio.LoadError Audio.Source
     , startupData : Ports.StartupData
-    , routeRequestCausedByPressingLink : Bool
+    , -- The unread count last sent to the app icon badge. Nothing means nothing has
+      -- been sent yet, so the first count always reaches the badge.
+      appBadgeCount : Maybe Int
     }
 
 
@@ -204,18 +205,6 @@ type PublicGoMatch
     | PublicGoMatch_Loading
     | PublicGoMatch_Loaded Go.PublicGoMatchData Go.GameModel
     | PublicGoMatch_Missing
-
-
-type Drag
-    = NoDrag
-    | DragStart Time.Posix (NonemptyDict Int Touch)
-    | Dragging { horizontalStart : Bool, touches : NonemptyDict Int Touch, target : DragTarget }
-
-
-type DragTarget
-    = Drag_Channel
-    | Drag_CallThumbnail
-    | Drag_Game
 
 
 type LoginStatus
@@ -350,6 +339,7 @@ type EmojiSelector
     | EmojiSelectorForMessage (Maybe Range)
     | EmojiSelectorForEditMessage (Coord CssPixels) (Maybe Range)
     | EmojiSelectorForSheepGameInput SheepGame.Input (Coord CssPixels) (Maybe Range)
+    | EmojiSelectorForSheepGameReaction GuildOrDmId (Id ChannelMessageId) SheepGame.ReactionTarget
 
 
 type alias BackendModel =
@@ -929,7 +919,7 @@ type ServerChange
     | Server_NewSession SessionIdHash FrontendUserSession
     | Server_LoggedOut SessionIdHash
     | Server_CurrentlyViewing SessionIdHash ClientId UserSession.Viewing
-    | Server_ClientDisconnected SessionIdHash ClientId
+    | Server_ClientDisconnected SessionIdHash ClientId Time.Posix
     | Server_TextEditor TextEditor.ServerChange
     | Server_LinkDiscordUser (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     | Server_UnlinkDiscordUser (Discord.Id Discord.UserId)
@@ -1010,7 +1000,7 @@ type LocalChange
     | Local_SetNotificationMode NotificationMode
     | Local_ExpandUserOptionSection UserOptionSection
     | Local_CollapseUserOptionSection UserOptionSection
-    | Local_SetSheepGameQuestions (Array UserSession.SheepGameQuestion)
+    | Local_SetSheepGameQuestions (IdArray QuestionId UserSession.SheepGameQuestion)
     | Local_SetEmailNotifications EmailNotifications
     | Local_RegisterPushSubscription Time.Posix RegisterPushSubscription
     | Local_TextEditor TextEditor.LocalChange

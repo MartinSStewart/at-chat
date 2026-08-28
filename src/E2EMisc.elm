@@ -17,6 +17,7 @@ module E2EMisc exposing
     , noTimestampSuggestionTest
     , profileImageOpensDm
     , reactionPopupNamesEmojiTest
+    , reloadingAConversationLeavesItUnreadTest
     , startingACallOrGameStaysReadTest
     , staysReadWhileViewingTest
     , swipedAwayConversationStopsBeingViewedTest
@@ -34,6 +35,7 @@ import E2EVoiceChat
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Time as Time
+import Emoji
 import Expect
 import FileStatus
 import Html.Attributes
@@ -192,7 +194,7 @@ exportChannelTest config =
                                         case
                                             List.filter
                                                 (\text -> not (String.contains text content))
-                                                [ "Hello everyone", "\"AT\"", "Stevie Steve" ]
+                                                [ "Hello everyone", "\"" ++ E2EHelper.adminName ++ "\"", "Stevie Steve" ]
                                         of
                                             [] ->
                                                 -- None of these messages were replied to, edited,
@@ -276,7 +278,7 @@ exportDmChannelTest config =
                                                 case
                                                     List.filter
                                                         (\text -> not (String.contains text content))
-                                                        [ "Hello in a DM", "\"AT\"", "\"Sven\"" ]
+                                                        [ "Hello in a DM", "\"" ++ E2EHelper.adminName ++ "\"", "\"Sven\"" ]
                                                 of
                                                     [] ->
                                                         Ok ()
@@ -487,7 +489,8 @@ inviteUserAndDmChat config =
                             100
                             (\html ->
                                 Test.Html.Query.findAll [ Test.Html.Selector.exactText "Sven" ] html
-                                    |> Test.Html.Query.count (Expect.equal 2)
+                                    -- Two Sven messages, Sven in the DM column, and Sven in the user options
+                                    |> Test.Html.Query.count (Expect.equal 4)
                             )
                         , E2EHelper.createThread user (Id.fromInt 1)
                         , E2EHelper.writeMessage user 100 "Writing in thread"
@@ -695,12 +698,81 @@ staysReadWhileViewingTest config =
                 , user.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
                 , E2EHelper.tallSnapshot user 100 { name = "Unread divider stays put while viewing" }
 
+                -- Opening one of the channel's tabs isn't arriving in a conversation they
+                -- weren't already in, so that leaves the mark where it is too
+                , user.click 100 (Dom.id "guild_openGamesTab")
+                , user.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
+
                 -- Which is what the unread overview shows once they leave: everything from
                 -- the message they marked onwards, and nothing from before it
                 , user.click 100 (Dom.id "guildIcon_showFriends")
                 , E2EHelper.hasExactText user [ "While away", "After the mark" ]
                 , E2EHelper.hasNotExactText user [ "In the channel" ]
                 , E2EHelper.tallSnapshot user 100 { name = "Unread overview after a message marked as unread" }
+                ]
+            )
+        ]
+
+
+{-| Landing in a conversation because the page was loaded on its url isn't the reader having
+read what turned up while they were away. The unread divider is still there for them to look
+at rather than the messages being marked as read on their behalf as the page loads.
+-}
+reloadingAConversationLeavesItUnreadTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+reloadingAConversationLeavesItUnreadTest config =
+    E2EHelper.startTest
+        "Loading the url of a conversation leaves what's unread in it unread"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.writeMessage admin 100 "In the channel"
+                , checkChannelIsCaughtUp guildChannelId user
+
+                -- The reader goes elsewhere and a message turns up without them
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.writeMessage admin 100 "While away"
+                , E2EHelper.hasNotExactText user [ "You have no unread messages!" ]
+
+                -- Loading the channel's url puts them back in it with that message still
+                -- unread, so the divider above it is what they see
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    (Route.encode
+                        (Route.GuildRoute
+                            (Id.fromInt 1)
+                            (Route.ChannelRoute
+                                (Id.fromInt 0)
+                                (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
+                                Nothing
+                            )
+                            ChannelsHiddenOnMobile
+                        )
+                    )
+                    E2EHelper.desktopWindow
+                    (\reloaded ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ reloaded.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , reloaded.checkView
+                            500
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "While away" ])
+                        , reloaded.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "new" ])
+                        , reloaded.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
+                        ]
+                    )
                 ]
             )
         ]
@@ -982,11 +1054,38 @@ markMessageAsUnreadTest config =
                 , E2EHelper.hasExactText user [ "Two", "Three" ]
                 , E2EHelper.hasNotExactText user [ "One" ]
 
-                -- Hovering a message in the overview restarts the animations inside it,
-                -- which the mini menu of a channel message stays out of
+                -- Hovering a message in the overview restarts the animations inside it and
+                -- offers to react to it. Editing, replying and the full menu belong to the
+                -- channel the message came from, so the menu here leaves them out
                 , user.mouseEnter 100 (Dom.id "guild_message_2") ( 10, 10 ) []
-                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_showFullMenu" ])
                 , user.checkModel 100 (checkMessageIsHovered (Id.fromInt 2))
+                , user.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.id "miniView_showReactionEmojiSelector"
+                        , Test.Html.Selector.id "miniView_emojiReact_0"
+                        ]
+                    )
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_showFullMenu" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_reply" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_editMessage" ])
+                , E2EHelper.tallSnapshot user 100 { name = "Reaction menu on an unread overview message" }
+
+                -- The shortcut reacts with the emoji drawn on it, without leaving the overview
+                , user.click 100 (Dom.id "miniView_emojiReact_0")
+                , user.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.id "guild_removeReactionEmoji_0" ])
+
+                -- And the button beside the shortcuts opens the emoji selector over the
+                -- overview, for a reaction that isn't one of them
+                , user.click 100 (Dom.id "miniView_showReactionEmojiSelector")
+                , user.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.id (Dom.idToString Emoji.searchInputId) ]
+                    )
+                , user.click 100 (Dom.id "miniView_showReactionEmojiSelector")
 
                 -- Reading the channel for real puts the unread count away again
                 , user.click 100 (Dom.id "guild_openGuild_1")
@@ -1152,7 +1251,9 @@ dmThreadsTest config =
                             [ Test.Html.Selector.id "guild_unreadOverviewOpenChannel_dm_0" ]
                             html
                             |> Test.Html.Query.has
-                                [ Test.Html.Selector.exactText "Chat with", Test.Html.Selector.exactText "AT" ]
+                                [ Test.Html.Selector.exactText "Chat with"
+                                , Test.Html.Selector.exactText E2EHelper.adminName
+                                ]
                     )
                 , user.checkView
                     100
@@ -1162,7 +1263,7 @@ dmThreadsTest config =
                             html
                             |> Test.Html.Query.has
                                 [ Test.Html.Selector.exactText "Chat with"
-                                , Test.Html.Selector.exactText "AT"
+                                , Test.Html.Selector.exactText E2EHelper.adminName
                                 , Test.Html.Selector.exactText "Hello in a DM!"
                                 ]
                     )

@@ -9,9 +9,10 @@ module SheepGame exposing
     , LoggedIn
     , OutMsg(..)
     , Phase(..)
-    , QuestionId
     , QuestionResult
     , RankChange(..)
+    , ReactionTarget(..)
+    , Reactions
     , SetupModel
     , SetupMsg(..)
     , SetupOrGame(..)
@@ -25,6 +26,7 @@ module SheepGame exposing
     , fileUploadPreview
     , fileUploadPreviewSize
     , gameView
+    , gameViewId
     , initGame
     , initSetup
     , initSetupFromSavedQuestions
@@ -32,10 +34,14 @@ module SheepGame exposing
     , inputContainerId
     , inputId
     , mapQuestionRichText
+    , questionRevealed
+    , reactionTargetId
     , removeAttachedFileFromText
     , resultsData
+    , revealedQuestionId
     , saveInputAction
     , scoresThroughQuestion
+    , scoringId
     , setupView
     , updateAction
     , updateGame
@@ -52,32 +58,40 @@ before revealing the questions one at a time.
 
 -}
 
-import Array exposing (Array)
+import Array
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.File exposing (File)
 import Effect.Http as Http
 import Effect.Time as Time
+import Emoji exposing (EmojiOrCustomEmoji)
 import FileName
 import FileStatus exposing (FileData, FileId, FileMetadata(..), FileStatus)
 import Go
+import GuildIcon
 import Html
 import Html.Attributes
 import Icons
-import Id exposing (Id, UserId)
+import Id exposing (Id, QuestionId, UserId)
 import IdArray exposing (IdArray)
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MessageInput exposing (TextInputFocus)
+import MessageView
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import NonemptySet exposing (NonemptySet)
 import RichText exposing (RichText)
+import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet
 import Sticker
 import String.Nonempty
+import Touch exposing (Drag)
 import Ui exposing (Element)
+import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Input
@@ -92,10 +106,6 @@ type alias ValidatedSetup =
     { questions : Nonempty ValidatedInput
     , createdBy : Id UserId
     }
-
-
-type QuestionId
-    = QuestionId Never
 
 
 type alias LoggedIn a =
@@ -132,7 +142,22 @@ type alias UnvalidatedInput =
 
 
 type alias ValidatedInput =
-    { text : Nonempty (RichText (Id UserId)), attachedFiles : SeqDict (Id FileId) FileData }
+    { text : Nonempty (RichText (Id UserId))
+    , attachedFiles : SeqDict (Id FileId) FileData
+    , reactions : Reactions
+    }
+
+
+type alias Reactions =
+    SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId))
+
+
+{-| Something on the results screen that can be reacted to: what one player answered to one
+question, or what the host wrote about that question.
+-}
+type ReactionTarget
+    = AnswerReaction (Id UserId) (Id QuestionId)
+    | NotesReaction (Id QuestionId)
 
 
 type alias SetupModel =
@@ -173,6 +198,18 @@ type alias GameData =
     , -- Which pair of players the cursor is over in the results grid, so their row and
       -- column light up and how much they matched is spelled out beside it.
       gridHovered : Maybe ( Id UserId, Id UserId )
+    , -- How far the tab body is scrolled, which decides what happens when the host puts
+      -- another question on screen.
+      scrollPosition : ScrollPosition
+    , -- How many questions were revealed the last time this client reacted to that count
+      -- changing. The host can go back to an earlier question, and going forward again
+      -- isn't a question nobody has seen yet.
+      questionsRevealedSeen : Int
+    , -- Whether a question turned up while the reader was somewhere further up the tab, in
+      -- which case they're told about it instead of being scrolled onto it.
+      newQuestionRevealed : Bool
+    , -- Which answer or note the pointer is over, which is the one offering to be reacted to.
+      hoveredResult : Maybe ReactionTarget
     }
 
 
@@ -197,6 +234,10 @@ type GameMsg
     | PressedHidePreviousQuestion
     | HoveredResultsGrid ( Id UserId, Id UserId )
     | ExitedResultsGrid ( Id UserId, Id UserId )
+    | UserScrolledResults ScrollPosition
+    | ReactionMsg ReactionTarget MessageView.MessageViewMsg
+    | PressedImage RichText.PressedImageData
+    | PressedNewQuestionRevealed
     | NoOp
 
 
@@ -208,6 +249,8 @@ type Action
     | ChangedNotes (Id QuestionId) (Maybe ValidatedInput)
     | FinishedGrouping
     | ChangedQuestionsRevealed (Id QuestionId)
+    | AddedReaction ReactionTarget EmojiOrCustomEmoji
+    | RemovedReaction ReactionTarget EmojiOrCustomEmoji
 
 
 type alias ActionWithTime =
@@ -234,13 +277,13 @@ initSetup =
 {-| The setup someone was part way through, rebuilt from the questions their session held
 onto so that a refresh doesn't cost them what they'd written.
 -}
-initSetupFromSavedQuestions : Array UnvalidatedInput -> SetupModel
+initSetupFromSavedQuestions : IdArray QuestionId UnvalidatedInput -> SetupModel
 initSetupFromSavedQuestions questions =
-    if Array.isEmpty questions then
+    if IdArray.isEmpty questions then
         initSetup
 
     else
-        { questions = Array.toList questions |> IdArray.fromList, error = Nothing, pressedSubmit = False }
+        { questions = questions, error = Nothing, pressedSubmit = False }
 
 
 {-| File ids start at 1. The backend throws away anything lower when it checks that the
@@ -273,10 +316,10 @@ appendAttachedFiles fileIds question =
 sending more than the setup view lets anyone write, and this ends up in the backend's
 state, so it gets the same limits here.
 -}
-clampSavedQuestions : Array UnvalidatedInput -> Array UnvalidatedInput
+clampSavedQuestions : IdArray QuestionId UnvalidatedInput -> IdArray QuestionId UnvalidatedInput
 clampSavedQuestions questions =
-    Array.slice 0 maxQuestions questions
-        |> Array.map (\question -> { question | text = String.left maxQuestionLength question.text })
+    IdArray.slice (Id.fromInt 0) (Id.fromInt maxQuestions) questions
+        |> IdArray.map (\_ question -> { question | text = String.left maxQuestionLength question.text })
 
 
 {-| Someone opening a match they've already answered gets their own answers back in the
@@ -300,6 +343,10 @@ initGame localUser setup shared =
                 (\index -> SeqDict.get (Id.fromInt index) shared.notes |> Maybe.withDefault Nothing |> toDraft localUser)
             |> IdArray.fromList
     , gridHovered = Nothing
+    , scrollPosition = ScrolledToBottom
+    , questionsRevealedSeen = shared.questionsRevealed
+    , newQuestionRevealed = False
+    , hoveredResult = Nothing
     }
 
 
@@ -343,7 +390,7 @@ emptyInput =
 
 maxQuestions : Int
 maxQuestions =
-    30
+    50
 
 
 maxQuestionLength : Int
@@ -353,7 +400,12 @@ maxQuestionLength =
 
 maxAnswerLength : Int
 maxAnswerLength =
-    100
+    200
+
+
+maxNoteLength : Int
+maxNoteLength =
+    400
 
 
 {-| A question or an answer, ready to go to everyone else, or why it isn't. Blank text is
@@ -372,6 +424,7 @@ validateInput timezone users question =
             (\() ->
                 { text = RichText.fromNonemptyString timezone users content
                 , attachedFiles = FileStatus.onlyUploadedFiles question.attachedFiles
+                , reactions = SeqDict.empty
                 }
             )
                 |> Ok
@@ -415,6 +468,16 @@ type OutMsg
     | UploadAttachedFiles Input (Nonempty ( Id FileId, File ))
     | CancelAttachedFileUpload Input (Id FileId)
     | ShowAttachedFileInfo FileStatus.FileDataWithImage
+      -- Take the reader to the question they were told about, the same way they'd have been
+      -- taken there had they been at the bottom of the tab body when it turned up.
+    | ScrollResultsTo HtmlId
+      -- Somebody wants to react with an emoji that isn't one of the ones they reach for
+      -- most, so the full selector has to be opened for them.
+    | OpenReactionEmojiSelector ReactionTarget
+      -- An image attached to a question, an answer or a note, pressed to see it full size.
+      -- Where that gets shown is the frontend's business rather than the game's.
+    | ShowImage RichText.PressedImageData
+    | SetFocusOnQuestion (Id QuestionId)
 
 
 updateSetup : LocalUser -> SetupMsg -> SetupModel -> ( SetupOrGame, OutMsg )
@@ -437,8 +500,22 @@ updateSetup localUser msg model =
                     , NoOutMsg
                     )
 
-                MessageInput.PressedSendMessage _ ->
-                    ( Setup model, NoOutMsg )
+                MessageInput.PressedSendMessage { charsLeft } ->
+                    if charsLeft == maxQuestionLength then
+                        ( Setup model, NoOutMsg )
+
+                    else
+                        ( { model
+                            | questions =
+                                IdArray.append
+                                    (IdArray.slice (Id.fromInt 0) (Id.increment questionId) model.questions
+                                        |> IdArray.push { text = "", attachedFiles = SeqDict.empty }
+                                    )
+                                    (IdArray.slice (Id.increment questionId) (IdArray.nextId model.questions) model.questions)
+                          }
+                            |> Setup
+                        , SetFocusOnQuestion (Id.increment questionId)
+                        )
 
                 -- The mention and emoji dropdown never opens over a question. The frontend
                 -- only fills in `textInputFocus.dropdown` for the channel and edit message
@@ -489,7 +566,7 @@ updateSetup localUser msg model =
                             IdArray.push { text = "", attachedFiles = SeqDict.empty } model.questions
                     , error = Nothing
                 }
-            , NoOutMsg
+            , SetFocusOnQuestion (IdArray.nextId model.questions)
             )
 
         PressedRemoveQuestion index ->
@@ -1037,7 +1114,7 @@ updateGame localUser setup shared msg model =
 
         PressedShowNextQuestion ->
             ( model
-            , min (List.Nonempty.length setup.questions) (shared.questionsRevealed + 1)
+            , min (revealStepCount setup) (shared.questionsRevealed + 1)
                 |> Id.fromInt
                 |> ChangedQuestionsRevealed
                 |> Just
@@ -1066,8 +1143,112 @@ updateGame localUser setup shared msg model =
             , NoOutMsg
             )
 
+        UserScrolledResults scrollPosition ->
+            ( { model
+                | scrollPosition = scrollPosition
+
+                -- Reaching the bottom is the reader catching up with the question they were
+                -- told about, so the indicator has said what it had to say
+                , newQuestionRevealed = model.newQuestionRevealed && scrollPosition /= ScrolledToBottom
+              }
+            , Nothing
+            , NoOutMsg
+            )
+
+        PressedNewQuestionRevealed ->
+            ( { model | newQuestionRevealed = False }
+            , Nothing
+            , revealedSectionId shared.questionsRevealed |> ScrollResultsTo
+            )
+
+        ReactionMsg target messageViewMsg ->
+            case messageViewMsg of
+                MessageView.MessageView_MouseEnteredMessage ->
+                    ( { model | hoveredResult = Just target }, Nothing, NoOutMsg )
+
+                MessageView.MessageView_MouseExitedMessage ->
+                    ( { model
+                        | hoveredResult =
+                            if model.hoveredResult == Just target then
+                                Nothing
+
+                            else
+                                model.hoveredResult
+                      }
+                    , Nothing
+                    , NoOutMsg
+                    )
+
+                MessageView.MessageViewMsg_PressedReactionEmoji emoji ->
+                    ( model, toggleReaction localUser.session.userId shared target emoji |> Just, NoOutMsg )
+
+                MessageView.MessageView_PressedReactionEmoji_Add emoji ->
+                    ( model, AddedReaction target emoji |> Just, NoOutMsg )
+
+                MessageView.MessageView_PressedReactionEmoji_Remove emoji ->
+                    ( model, RemovedReaction target emoji |> Just, NoOutMsg )
+
+                MessageView.MessageViewMsg_PressedShowReactionEmojiSelector ->
+                    ( model, Nothing, OpenReactionEmojiSelector target )
+
+                -- The rest of what a message offers belongs to the conversation it's in, and
+                -- an answer isn't in one
+                _ ->
+                    ( model, Nothing, NoOutMsg )
+
+        PressedImage pressedImageData ->
+            ( model, Nothing, ShowImage pressedImageData )
+
         NoOp ->
             ( model, Nothing, NoOutMsg )
+
+
+revealStepCount : ValidatedSetup -> Int
+revealStepCount setup =
+    List.Nonempty.length setup.questions + 1
+
+
+{-| The part of the results that the given number of reveals has just put on screen. The
+first reveal is the scoring explanation and every one after it is a question.
+-}
+revealedSectionId : Int -> HtmlId
+revealedSectionId questionsRevealed =
+    if questionsRevealed <= 1 then
+        scoringId
+
+    else
+        revealedQuestionId (questionsRevealed - 2)
+
+
+{-| What a change in how many questions are revealed means for the person watching. Someone
+sitting at the bottom of the tab is taken on to the question that just turned up, and someone
+who has scrolled up is told about it instead so that what they're reading doesn't move out
+from under them. The host stepping back to an earlier question isn't a question turning up,
+so it does neither.
+
+The id returned is the question to scroll to, when there is scrolling to be done.
+
+-}
+questionRevealed : Int -> GameData -> ( GameData, Maybe HtmlId )
+questionRevealed questionsRevealed model =
+    if questionsRevealed > model.questionsRevealedSeen then
+        ( { model
+            | questionsRevealedSeen = questionsRevealed
+            , newQuestionRevealed = model.scrollPosition /= ScrolledToBottom
+          }
+        , case model.scrollPosition of
+            ScrolledToBottom ->
+                revealedSectionId questionsRevealed |> Just
+
+            ScrolledToTop ->
+                Nothing
+
+            ScrolledToMiddle ->
+                Nothing
+        )
+
+    else
+        ( { model | questionsRevealedSeen = questionsRevealed }, Nothing )
 
 
 {-| The answer boxes whose contents changed, so that typing in one doesn't schedule a save
@@ -1215,12 +1396,16 @@ updateAction setup action shared =
                 _ ->
                     shared
 
+        AddedReaction target emoji ->
+            mapReactions target (SeqDictHelper.addToSet emoji action.userId) shared
+
+        RemovedReaction target emoji ->
+            mapReactions target (removeFromReactions emoji action.userId) shared
+
         ChangedQuestionsRevealed count ->
             case ( shared.phase, isHost action.userId setup ) of
                 ( Revealing, True ) ->
-                    { shared
-                        | questionsRevealed = clamp 0 (List.Nonempty.length setup.questions) (Id.toInt count)
-                    }
+                    { shared | questionsRevealed = clamp 0 (revealStepCount setup) (Id.toInt count) }
 
                 _ ->
                     shared
@@ -1372,22 +1557,18 @@ setupView windowSize localUser loggedIn users model =
         isMobile : Bool
         isMobile =
             MyUi.isMobileAlt windowSize
-
-        horizontalPadding : Int
-        horizontalPadding =
-            if isMobile then
-                8
-
-            else
-                16
     in
     Ui.column
         [ Ui.spacing 16
-        , Ui.paddingXY horizontalPadding 16
         , Ui.background MyUi.tabBackground
+        , Ui.heightMax (tabBodyHeight False windowSize)
+        , Ui.scrollable
+        , Ui.heightMin 0
+        , Ui.paddingXY 0 16
         ]
         [ Go.setupSection
-            (Ui.text "Questions")
+            isMobile
+            (Ui.text "Sheep Questions")
             Nothing
             (Ui.column
                 [ Ui.spacing 8 ]
@@ -1395,7 +1576,7 @@ setupView windowSize localUser loggedIn users model =
                     (\index question ->
                         Ui.column
                             []
-                            [ Ui.Lazy.lazy6 questionInput isMobile localUser loggedIn users index question
+                            [ Ui.Lazy.lazy5 questionInput localUser loggedIn users index question
                             , case ( model.pressedSubmit, validateInput localUser.timezone users question ) of
                                 ( True, Err error ) ->
                                     Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
@@ -1463,14 +1644,13 @@ inputContainerId input =
 
 
 questionInput :
-    Bool
-    -> LocalUser
+    LocalUser
     -> LoggedIn a
     -> SeqDict (Id UserId) FrontendUser
     -> Int
     -> UnvalidatedInput
     -> Element SetupMsg
-questionInput isMobile localUser loggedIn users index question =
+questionInput localUser loggedIn users index question =
     let
         questionId : Id QuestionId
         questionId =
@@ -1503,13 +1683,16 @@ questionInput isMobile localUser loggedIn users index question =
             Nothing ->
                 Ui.none
         , Ui.row
-            [ Ui.spacing 8 ]
-            [ MessageInput.attachmentButton (Dom.idToString htmlId)
-                |> Ui.map (TypedQuestion questionId)
-            , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
-                |> Ui.map (TypedQuestion questionId)
+            [ Ui.spacing 4 ]
+            [ Ui.row
+                [ Ui.width Ui.shrink, Ui.alignTop, Ui.spacing 4 ]
+                [ MessageInput.attachmentButton (Dom.idToString htmlId)
+                    |> Ui.map (TypedQuestion questionId)
+                , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
+                    |> Ui.map (TypedQuestion questionId)
+                ]
             , MessageInput.textarea
-                isMobile
+                False
                 htmlId
                 ""
                 (maxQuestionLength - String.length question.text)
@@ -1530,8 +1713,70 @@ questionInput isMobile localUser loggedIn users index question =
             , MyUi.deleteButton
                 (Dom.id ("sheepGame_removeQuestion_" ++ String.fromInt index))
                 (PressedRemoveQuestion questionId)
+                |> Ui.el [ Ui.width Ui.shrink, Ui.alignTop ]
             ]
         ]
+
+
+{-| The scrollable body of the games tab while a sheep game is being played.
+-}
+gameViewId : HtmlId
+gameViewId =
+    Dom.id "sheepGame_tabBody"
+
+
+revealedQuestionId : Int -> HtmlId
+revealedQuestionId index =
+    Dom.id ("sheepGame_revealedQuestion_" ++ String.fromInt index)
+
+
+newQuestionRevealedId : HtmlId
+newQuestionRevealedId =
+    Dom.id "sheepGame_newQuestionRevealed"
+
+
+{-| Sits at the bottom of the tab body when a question turned up while the reader was
+somewhere further up. Pressing it takes them down to it.
+-}
+newQuestionRevealedView : Bool -> Element GameMsg
+newQuestionRevealedView isMobile =
+    MyUi.elButton
+        newQuestionRevealedId
+        PressedNewQuestionRevealed
+        [ Ui.alignBottom
+        , Ui.centerX
+        , Ui.width Ui.shrink
+        , Ui.move { x = 0, y = -16, z = 0 }
+        , Ui.paddingXY 12 8
+        , Ui.rounded 8
+        , Ui.border 1
+        , Ui.borderColor MyUi.buttonBorder
+        , Ui.background MyUi.buttonBackground
+        , Ui.Font.color MyUi.font1
+        , Ui.pointer
+        , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.highlightedBorder ]
+        ]
+        (Ui.text "New question revealed!")
+
+
+tabBodyHeight : Bool -> Coord CssPixels -> Int
+tabBodyHeight isAnsweringQuestions windowSize =
+    if isAnsweringQuestions && MyUi.isMobileAlt windowSize then
+        Coord.yRaw windowSize - MyUi.channelHeaderHeight
+
+    else
+        min
+            (Coord.yRaw windowSize - (MyUi.channelHeaderHeight + 150))
+            (round (toFloat (Coord.yRaw windowSize) * 0.8) - MyUi.channelHeaderHeight)
+
+
+paddingX : Bool -> Int
+paddingX isMobile =
+    if isMobile then
+        8
+
+    else
+        16
 
 
 gameView :
@@ -1539,54 +1784,142 @@ gameView :
     -> Coord CssPixels
     -> Bool
     -> LocalUser
+    -> Drag
     -> LoggedIn a
     -> ValidatedSetup
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView time windowSize showMemberTab localUser loggedIn setup shared model =
+gameView time windowSize showMemberTab localUser drag loggedIn setup shared model =
     let
         isMobile : Bool
         isMobile =
             MyUi.isMobileAlt windowSize
 
-        horizontalPadding : Int
-        horizontalPadding =
-            if isMobile then
-                8
-
-            else
-                16
+        maxWidth =
+            1000
 
         contentWidth : Int
         contentWidth =
-            MyUi.conversationWidthIgnoreScrollbar windowSize showMemberTab - horizontalPadding * 2
+            MyUi.conversationWidthIgnoreScrollbar windowSize showMemberTab - paddingX isMobile * 2 |> min maxWidth
+
+        isHost2 =
+            isHost localUser.session.userId setup
     in
-    Ui.column
-        [ Ui.spacing 16
-        , Ui.paddingXY horizontalPadding 16
-        , Ui.background MyUi.background1
-        , Ui.scrollable
-        , Ui.height (Ui.px 500)
+    Ui.el
+        [ Ui.height (Ui.px (tabBodyHeight (shared.phase == Answering) windowSize))
+        , if model.newQuestionRevealed && not isHost2 then
+            Ui.inFront (newQuestionRevealedView isMobile)
+
+          else
+            Ui.noAttr
+        , case ( shared.phase, isHost2 ) of
+            ( Revealing, True ) ->
+                Ui.row
+                    [ Ui.spacing 8
+                    , Ui.padding 8
+                    , Ui.attrIf (not isMobile) (Ui.width Ui.shrink)
+                    , Ui.background MyUi.background1
+                    , Ui.alignBottom
+                    ]
+                    [ Ui.el
+                        [ if shared.questionsRevealed == 0 then
+                            Ui.opacity 0.5
+
+                          else
+                            Ui.opacity 1
+                        , Ui.width Ui.shrink
+                        ]
+                        (MyUi.secondaryButtonTall
+                            (Dom.id "sheepGame_hidePreviousQuestion")
+                            PressedHidePreviousQuestion
+                            "Back"
+                        )
+                    , Ui.el
+                        [ if shared.questionsRevealed > List.Nonempty.length setup.questions then
+                            Ui.opacity 0.5
+
+                          else
+                            Ui.opacity 1
+                        , Ui.width Ui.shrink
+                        ]
+                        (MyUi.simpleButton
+                            (Dom.id "sheepGame_showNextQuestion")
+                            PressedShowNextQuestion
+                            (Ui.text "Show next question")
+                        )
+                    ]
+                    |> Ui.inFront
+
+            _ ->
+                Ui.noAttr
         ]
-        (case shared.phase of
-            Answering ->
-                answeringView time contentWidth isMobile localUser loggedIn setup shared model
+        (Ui.el
+            [ Ui.background MyUi.background1
+            , MyUi.scrollable (MyUi.canScroll (MyUi.isMobileAlt windowSize) drag)
+            , Ui.height (Ui.px (tabBodyHeight (shared.phase == Answering) windowSize))
+            , Ui.id (Dom.idToString gameViewId)
+            , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledResults model.scrollPosition)
 
-            Grouping ->
-                groupingView time contentWidth isMobile localUser loggedIn setup shared model
+            -- Ui.onRight and friends are given a z-index by elm-ui while Ui.inFront isn't, so
+            -- without this the scores drawn beside the scoreboard bars come out on top of the
+            -- reveal buttons placed in front of this. Keeping their z-index inside this div
+            -- means everything scrolling here stays behind those buttons.
+            , MyUi.htmlStyle "isolation" "isolate"
+            ]
+            (case shared.phase of
+                Answering ->
+                    Ui.column
+                        [ MyUi.htmlStyle
+                            "padding"
+                            ("16px "
+                                ++ String.fromInt (paddingX isMobile)
+                                ++ "px calc(16px + "
+                                ++ MyUi.insetBottom
+                                ++ ") "
+                                ++ String.fromInt (paddingX isMobile)
+                                ++ "px"
+                            )
+                        , Ui.centerX
+                        , Ui.widthMax maxWidth
+                        , Ui.spacing 16
+                        ]
+                        (answeringView time contentWidth localUser loggedIn setup shared model)
 
-            Revealing ->
-                revealingView time contentWidth localUser setup shared model
+                Grouping ->
+                    Ui.column
+                        [ Ui.paddingXY (paddingX isMobile) 16, Ui.centerX, Ui.widthMax maxWidth, Ui.spacing 16 ]
+                        (groupingView time contentWidth localUser loggedIn setup shared model)
+
+                Revealing ->
+                    Ui.column
+                        [ Ui.paddingWith
+                            { left = 0
+                            , right = 0
+                            , top = 16
+                            , bottom =
+                                if isHost2 then
+                                    -- Approximate padding for show next question button at bottom
+                                    16 + 56
+
+                                else
+                                    16
+                            }
+                        , Ui.centerX
+                        , Ui.widthMax maxWidth
+                        , Ui.spacing 16
+                        ]
+                        (revealingView isMobile time contentWidth localUser setup shared model)
+            )
         )
 
 
 {-| Questions and answers are drawn the same way a message is, so that a file attached to a
 question shows up as the image or video it is rather than as a placeholder.
 
-Nothing here is clickable yet. Revealing a spoiler and opening an image both need somewhere
-to keep what's been revealed and what's open, which is the frontend's rather than the
-game's.
+Pressing an image opens it full size, which the frontend does since it's the one holding the
+viewer. Revealing a spoiler still does nothing: what has been revealed is kept per message
+by the frontend and a question isn't one.
 
 -}
 contentView :
@@ -1603,7 +1936,7 @@ contentView time contentWidth localUser htmlId attachedFiles content =
         contentWidth
         (\_ -> NoOp)
         (\_ -> NoOp)
-        (\_ -> NoOp)
+        PressedImage
         { domainWhitelist = localUser.user.domainWhitelist
         , revealedSpoilers = SeqSet.empty
         , users = User.allUsers localUser
@@ -1622,7 +1955,7 @@ contentView time contentWidth localUser htmlId attachedFiles content =
         }
         Array.empty
         content
-        |> Html.div [ Html.Attributes.style "white-space" "pre-wrap" ]
+        |> Html.div [ Html.Attributes.style "white-space" "pre-wrap", Html.Attributes.id (Dom.idToString htmlId) ]
         |> Ui.html
 
 
@@ -1632,9 +1965,9 @@ messageWithProfile : Id UserId -> LocalUser -> Element msg -> Element msg
 messageWithProfile userId localUser content =
     Ui.row
         [ Ui.spacing 8 ]
-        [ User.profileImage (User.getUser userId localUser)
+        [ Ui.el [ Ui.alignTop, Ui.width Ui.shrink ] (User.profileImage (User.getUser userId localUser))
         , Ui.column
-            [ Ui.spacing 2 ]
+            []
             [ User.toStringAlt userId localUser
                 |> Ui.text
                 |> Ui.el [ Ui.Font.bold ]
@@ -1646,14 +1979,13 @@ messageWithProfile userId localUser content =
 answeringView :
     Time.Posix
     -> Int
-    -> Bool
     -> LocalUser
     -> LoggedIn a
     -> ValidatedSetup
     -> Shared
     -> GameData
     -> List (Element GameMsg)
-answeringView time contentWidth isMobile localUser loggedIn setup shared model =
+answeringView time contentWidth localUser loggedIn setup shared model =
     let
         currentUserId : Id UserId
         currentUserId =
@@ -1676,7 +2008,7 @@ answeringView time contentWidth isMobile localUser loggedIn setup shared model =
         , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text "*The game host decides what counts as sufficiently similar.")
         ]
     , Ui.column
-        [ Ui.spacing 8 ]
+        [ Ui.spacing 16 ]
         (List.Nonempty.toList setup.questions
             |> List.indexedMap
                 (\index question ->
@@ -1733,20 +2065,13 @@ answeringView time contentWidth isMobile localUser loggedIn setup shared model =
                                     Ui.column [] answers
 
                           else
-                            Ui.column
-                                [ Ui.spacing 4 ]
-                                [ Ui.el
-                                    [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
-                                    (Ui.text "Your answer")
-                                , answerInput
-                                    isMobile
-                                    localUser
-                                    loggedIn
-                                    questionId
-                                    (IdArray.get questionId model.answerDrafts
-                                        |> Maybe.withDefault { text = "", attachedFiles = SeqDict.empty }
-                                    )
-                                ]
+                            answerInput
+                                localUser
+                                loggedIn
+                                questionId
+                                (IdArray.get questionId model.answerDrafts
+                                    |> Maybe.withDefault { text = "", attachedFiles = SeqDict.empty }
+                                )
                         ]
                 )
         )
@@ -1767,8 +2092,8 @@ answeringView time contentWidth isMobile localUser loggedIn setup shared model =
 {-| An answer is written in the same input a message is, so that what someone types is
 drawn the way it will be once everyone's answers are compared.
 -}
-answerInput : Bool -> LocalUser -> LoggedIn a -> Id QuestionId -> UnvalidatedInput -> Element GameMsg
-answerInput isMobile localUser loggedIn questionId answer =
+answerInput : LocalUser -> LoggedIn a -> Id QuestionId -> UnvalidatedInput -> Element GameMsg
+answerInput localUser loggedIn questionId answer =
     let
         htmlId : HtmlId
         htmlId =
@@ -1801,15 +2126,18 @@ answerInput isMobile localUser loggedIn questionId answer =
             Nothing ->
                 Ui.none
         , Ui.row
-            [ Ui.spacing 8 ]
-            [ MessageInput.attachmentButton (Dom.idToString htmlId)
-                |> Ui.map (TypedAnswer questionId)
-            , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
-                |> Ui.map (TypedAnswer questionId)
+            [ Ui.spacing 4 ]
+            [ Ui.row
+                [ Ui.width Ui.shrink, Ui.alignTop, Ui.spacing 4 ]
+                [ MessageInput.attachmentButton (Dom.idToString htmlId)
+                    |> Ui.map (TypedAnswer questionId)
+                , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
+                    |> Ui.map (TypedAnswer questionId)
+                ]
             , MessageInput.textarea
-                isMobile
+                True
                 htmlId
-                ""
+                "Answer here"
                 (maxAnswerLength - String.length answer.text)
                 answer.text
                 richText
@@ -1843,14 +2171,13 @@ answeredCountText count =
 groupingView :
     Time.Posix
     -> Int
-    -> Bool
     -> LocalUser
     -> LoggedIn a
     -> ValidatedSetup
     -> Shared
     -> GameData
     -> List (Element GameMsg)
-groupingView time contentWidth isMobile localUser loggedIn setup shared model =
+groupingView time contentWidth localUser loggedIn setup shared model =
     if isHost localUser.session.userId setup then
         [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Group the answers")
         , Ui.Prose.paragraph
@@ -1859,7 +2186,7 @@ groupingView time contentWidth isMobile localUser loggedIn setup shared model =
         , Ui.column
             [ Ui.spacing 16 ]
             (List.Nonempty.toList setup.questions
-                |> List.indexedMap (groupingQuestionView time contentWidth isMobile localUser loggedIn shared model)
+                |> List.indexedMap (groupingQuestionView time contentWidth localUser loggedIn shared model)
             )
         , Ui.row
             [ Ui.spacing 8 ]
@@ -1885,7 +2212,6 @@ groupingView time contentWidth isMobile localUser loggedIn setup shared model =
 groupingQuestionView :
     Time.Posix
     -> Int
-    -> Bool
     -> LocalUser
     -> LoggedIn a
     -> Shared
@@ -1893,7 +2219,7 @@ groupingQuestionView :
     -> Int
     -> ValidatedInput
     -> Element GameMsg
-groupingQuestionView time contentWidth isMobile localUser loggedIn shared model questionIndex question =
+groupingQuestionView time contentWidth localUser loggedIn shared model questionIndex question =
     let
         questionId : Id QuestionId
         questionId =
@@ -1927,7 +2253,6 @@ groupingQuestionView time contentWidth isMobile localUser loggedIn shared model 
                 [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
                 (Ui.text "Notes")
             , notesInput
-                isMobile
                 localUser
                 loggedIn
                 questionId
@@ -1939,8 +2264,8 @@ groupingQuestionView time contentWidth isMobile localUser loggedIn shared model 
 {-| The host's comment on a question, written in the same input an answer is so that it can
 say the same kinds of things.
 -}
-notesInput : Bool -> LocalUser -> LoggedIn a -> Id QuestionId -> UnvalidatedInput -> Element GameMsg
-notesInput isMobile localUser loggedIn questionId notes =
+notesInput : LocalUser -> LoggedIn a -> Id QuestionId -> UnvalidatedInput -> Element GameMsg
+notesInput localUser loggedIn questionId notes =
     let
         htmlId : HtmlId
         htmlId =
@@ -1979,10 +2304,10 @@ notesInput isMobile localUser loggedIn questionId notes =
             , MessageInput.showEmojiSelectorButton (Dom.idToString htmlId)
                 |> Ui.map (TypedNotes questionId)
             , MessageInput.textarea
-                isMobile
+                True
                 htmlId
                 ""
-                (maxAnswerLength - String.length notes.text)
+                (maxNoteLength - String.length notes.text)
                 notes.text
                 richText
                 notes.attachedFiles
@@ -2022,22 +2347,27 @@ groupingAnswerView time contentWidth localUser questionId userId shared answer =
     Ui.row
         [ Ui.spacing 8 ]
         [ Ui.el [ Ui.width (Ui.px 40) ] groupLabel2.element
-        , Ui.el
-            [ Ui.width (Ui.px 48) ]
-            (Ui.Input.text
-                [ Ui.border 1
-                , Ui.borderColor MyUi.inputBorder
-                , Ui.background MyUi.inputBackground
-                , Ui.rounded 4
-                , Ui.paddingXY 8 4
-                ]
-                { onChange = TypedGroup userId questionId
-                , text = SeqDict.get ( userId, questionId ) shared.groups |> Maybe.withDefault ""
-                , placeholder = Nothing
-                , label = groupLabel2.id
-                }
-            )
-        , Ui.el [ Ui.Font.weight 600 ] (Ui.text (User.toStringAlt userId localUser))
+        , Ui.row
+            [ Ui.alignTop, Ui.spacing 8, Ui.width Ui.shrink, MyUi.noShrinking ]
+            [ Ui.el
+                [ Ui.width (Ui.px 48) ]
+                (Ui.Input.text
+                    [ Ui.border 1
+                    , Ui.borderColor MyUi.inputBorder
+                    , Ui.background MyUi.inputBackground
+                    , Ui.rounded 4
+                    , Ui.paddingXY 8 4
+                    ]
+                    { onChange = TypedGroup userId questionId
+                    , text = SeqDict.get ( userId, questionId ) shared.groups |> Maybe.withDefault ""
+                    , placeholder = Nothing
+                    , label = groupLabel2.id
+                    }
+                )
+            , Ui.el
+                [ Ui.Font.weight 600, Ui.width Ui.shrink, MyUi.noShrinking ]
+                (Ui.text (User.toStringAlt userId localUser))
+            ]
         , contentView
             time
             contentWidth
@@ -2070,6 +2400,77 @@ type alias QuestionResult =
     , notes : Maybe ValidatedInput
     , answers : List AnswerResult
     }
+
+
+{-| Change the reactions on whichever answer or note the target names, leaving everything
+alone when it names something that isn't there.
+-}
+mapReactions : ReactionTarget -> (Reactions -> Reactions) -> Shared -> Shared
+mapReactions target mapFunc shared =
+    case target of
+        AnswerReaction userId questionId ->
+            { shared
+                | answers =
+                    SeqDict.updateIfExists
+                        userId
+                        (IdArray.update questionId (Maybe.map (\answer -> { answer | reactions = mapFunc answer.reactions })))
+                        shared.answers
+            }
+
+        NotesReaction questionId ->
+            { shared
+                | notes =
+                    SeqDict.updateIfExists
+                        questionId
+                        (Maybe.map (\notes -> { notes | reactions = mapFunc notes.reactions }))
+                        shared.notes
+            }
+
+
+{-| An emoji nobody is left reacting with is dropped, the same as it is on a message.
+-}
+removeFromReactions : EmojiOrCustomEmoji -> Id UserId -> Reactions -> Reactions
+removeFromReactions emoji userId reactions =
+    SeqDict.update
+        emoji
+        (Maybe.andThen
+            (\users -> NonemptySet.toSeqSet users |> SeqSet.remove userId |> NonemptySet.fromSeqSet)
+        )
+        reactions
+
+
+{-| Pressing a reaction that's already yours takes it back, which is what one press of the
+same emoji does on a message too.
+-}
+toggleReaction : Id UserId -> Shared -> ReactionTarget -> EmojiOrCustomEmoji -> Action
+toggleReaction userId shared target emoji =
+    let
+        reactions : Reactions
+        reactions =
+            case target of
+                AnswerReaction answeredBy questionId ->
+                    SeqDict.get answeredBy shared.answers
+                        |> Maybe.andThen (IdArray.get questionId)
+                        |> Maybe.andThen identity
+                        |> Maybe.map .reactions
+                        |> Maybe.withDefault SeqDict.empty
+
+                NotesReaction questionId ->
+                    SeqDict.get questionId shared.notes
+                        |> Maybe.andThen identity
+                        |> Maybe.map .reactions
+                        |> Maybe.withDefault SeqDict.empty
+    in
+    case SeqDict.get emoji reactions of
+        Just users ->
+            if NonemptySet.member userId users then
+                RemovedReaction target emoji
+
+            else
+                AddedReaction target emoji
+
+        Nothing ->
+            AddedReaction target emoji
 
 
 {-| Everything the results screen has to say about a match: what everyone answered to each
@@ -2176,8 +2577,8 @@ placeIn userId scores =
         |> List.length
 
 
-revealingView : Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Shared -> GameData -> List (Element GameMsg)
-revealingView time contentWidth localUser setup shared model =
+revealingView : Bool -> Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Shared -> GameData -> List (Element GameMsg)
+revealingView isMobile time contentWidth localUser setup shared model =
     let
         questionCount : Int
         questionCount =
@@ -2186,39 +2587,58 @@ revealingView time contentWidth localUser setup shared model =
         results : { maxPoints : Int, questions : List QuestionResult, winners : List (Id UserId) }
         results =
             resultsData setup shared
+
+        padding =
+            Ui.paddingXY (paddingX isMobile) 0
     in
-    [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Sheep game results")
-    , if isHost localUser.session.userId setup then
-        Ui.row
-            [ Ui.spacing 8 ]
-            [ MyUi.secondaryButton
-                (Dom.id "sheepGame_hidePreviousQuestion")
-                PressedHidePreviousQuestion
-                "Back"
-            , MyUi.simpleButton
-                (Dom.id "sheepGame_showNextQuestion")
-                PressedShowNextQuestion
-                (Ui.text "Show next question")
+    [ Ui.el
+        [ Ui.Font.bold
+        , Ui.Font.size 28
+        , padding
+        , Ui.Font.color MyUi.font2
+        , Ui.attrIf isMobile Ui.Font.center
+        ]
+        (Ui.text "Sheep game results")
+    , if shared.questionsRevealed == 0 then
+        Ui.column
+            [ Ui.Font.size 20
+            , Ui.Font.center
+            , Ui.padding 16
+            , MyUi.fadeIn
+            , padding
+            , Ui.spacing 16
+            ]
+            [ Ui.image
+                [ Ui.widthMax 502 ]
+                { source = "/sheep-game.webp"
+                , description = "A sheep with a laptop and wearing headphones"
+                , onLoad = Nothing
+                }
+            , Ui.text "Stay tuned. The results will be revealed shortly."
             ]
 
       else
-        Ui.none
-    , if shared.questionsRevealed == 0 then
-        Ui.Prose.paragraph
-            [ Ui.Font.size 20, Ui.Font.center, Ui.padding 16 ]
-            [ Ui.text "Stay tuned. The results will be revealed shortly." ]
-
-      else
         Ui.column
-            [ Ui.spacing 16 ]
-            (scoringExplanation
-                :: (List.take shared.questionsRevealed results.questions
-                        |> List.indexedMap (resultsQuestionView time contentWidth localUser setup results.maxPoints)
-                   )
+            [ Ui.spacing 32 ]
+            (Ui.column
+                [ Ui.spacing 8, Ui.id (Dom.idToString scoringId), MyUi.fadeIn, padding ]
+                [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Scoring")
+                , Ui.column
+                    [ Ui.spacing 12, Ui.padding 8, Ui.Font.color MyUi.font3 ]
+                    [ Ui.text "For each question you get points equal to the number of people who picked the same answer as you (including yourself). For example, if you pick a unique answer, you get 1 point. If you and two others pick the same answer, you three get 3 points."
+                    , Ui.text "The person with the most points at the end wins!"
+                    ]
+                ]
+                :: List.indexedMap
+                    (resultsQuestionView isMobile time contentWidth localUser setup model.hoveredResult results.maxPoints)
+                    (List.take (shared.questionsRevealed - 1) results.questions)
             )
-    , if shared.questionsRevealed >= questionCount then
+    , if shared.questionsRevealed > questionCount then
         Ui.column
-            [ Ui.spacing 32, Ui.paddingWith { left = 0, right = 0, top = 32, bottom = 0 } ]
+            [ Ui.spacing 32
+            , Ui.paddingWith { left = paddingX isMobile, right = paddingX isMobile, top = 32, bottom = 0 }
+            , MyUi.fadeIn
+            ]
             [ Ui.el
                 [ Ui.height (Ui.px 2), Ui.background MyUi.border1 ]
                 Ui.none
@@ -2226,17 +2646,17 @@ revealingView time contentWidth localUser setup shared model =
             , if SeqDict.size shared.answers > 2 then
                 Ui.column
                     [ Ui.spacing 16 ]
-                    [ Ui.Prose.paragraph
+                    [ Ui.el
                         [ Ui.Font.size 20, Ui.Font.bold, Ui.Font.center ]
-                        [ Ui.text "Statistics: Which players think most alike?" ]
-                    , resultsGridView localUser setup shared model.gridHovered
+                        (Ui.text "Statistics: Which players think most alike?")
+                    , resultsGridView isMobile localUser setup shared model.gridHovered
                     ]
 
               else
                 Ui.none
-            , Ui.Prose.paragraph
-                [ Ui.Font.size 14, Ui.Font.center, Ui.opacity 0.5 ]
-                [ Ui.text "No sheep were impersonated in the playing of this game." ]
+            , Ui.el
+                [ Ui.Font.size 12, Ui.Font.center, Ui.Font.color MyUi.font3 ]
+                (Ui.text "No sheep were impersonated in the playing of this game.")
             ]
 
       else
@@ -2244,61 +2664,81 @@ revealingView time contentWidth localUser setup shared model =
     ]
 
 
-scoringExplanation : Element msg
-scoringExplanation =
-    Ui.column
-        [ Ui.spacing 8 ]
-        [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Scoring")
-        , Ui.column
-            [ Ui.spacing 16, Ui.padding 8, Ui.Font.color MyUi.font3 ]
-            [ Ui.Prose.paragraph
-                []
-                [ Ui.text "For each question you get points equal to the number of people who picked the same answer as you (including yourself). For example, if you pick a unique answer, you get 1 point. If you and two others pick the same answer, you three get 3 points." ]
-            , Ui.Prose.paragraph [] [ Ui.text "The person with the most points at the end wins!" ]
-            ]
-        ]
+scoringId : HtmlId
+scoringId =
+    Dom.id "sheepGame_scoring"
 
 
-resultsQuestionView : Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Int -> Int -> QuestionResult -> Element GameMsg
-resultsQuestionView time contentWidth localUser setup maxPoints index result =
+resultsQuestionView :
+    Bool
+    -> Time.Posix
+    -> Int
+    -> LocalUser
+    -> ValidatedSetup
+    -> Maybe ReactionTarget
+    -> Int
+    -> Int
+    -> QuestionResult
+    -> Element GameMsg
+resultsQuestionView isMobile time contentWidth localUser setup hoveredResult maxPoints index result =
+    let
+        numberWidth : number
+        numberWidth =
+            if index < 9 then
+                20
+
+            else
+                30
+
+        numberSpacing : number
+        numberSpacing =
+            6
+    in
     Ui.column
-        [ Ui.spacing 8, Ui.paddingXY 0 16 ]
+        [ Ui.spacing 8, Ui.paddingXY 0 16, MyUi.fadeIn ]
         [ Ui.row
-            [ Ui.Font.size 20, Ui.Font.bold ]
+            [ Ui.Font.size 20, Ui.spacing numberSpacing, Ui.paddingXY (paddingX isMobile) 0 ]
             [ Ui.el
-                [ Ui.width Ui.shrink, Ui.alignTop ]
+                [ Ui.width (Ui.px numberWidth)
+                , Ui.alignTop
+                , Ui.Font.bold
+                ]
                 (Ui.text (String.fromInt (index + 1) ++ ". "))
             , contentView
                 time
-                contentWidth
+                (contentWidth - (numberWidth + numberSpacing))
                 localUser
-                (Dom.id ("sheepGame_revealedQuestion_" ++ String.fromInt index))
+                (revealedQuestionId index)
                 result.question.attachedFiles
                 result.question.text
             ]
         , Ui.column
-            [ Ui.spacing 16, Ui.padding 8 ]
-            [ answerGroupsView localUser result.answers
-            , scoreTableView localUser maxPoints result.answers
+            [ Ui.spacing 16 ]
+            [ answerGroupsView isMobile time localUser contentWidth hoveredResult (Id.fromInt index) result.answers
+            , scoreTableView isMobile localUser maxPoints result.answers
             , case result.notes of
                 Nothing ->
                     Ui.none
 
                 Just notes ->
-                    Ui.column
-                        [ Ui.spacing 8 ]
-                        [ messageWithProfile
-                            setup.createdBy
+                    messageWithProfile
+                        setup.createdBy
+                        localUser
+                        (contentView
+                            time
+                            contentWidth
                             localUser
-                            (contentView
-                                time
-                                contentWidth
-                                localUser
-                                (Dom.id ("sheepGame_questionNotes_" ++ String.fromInt index))
-                                notes.attachedFiles
-                                notes.text
-                            )
-                        ]
+                            (Dom.id ("sheepGame_questionNotes_" ++ String.fromInt index))
+                            notes.attachedFiles
+                            notes.text
+                        )
+                        |> reactableResult
+                            (paddingX isMobile)
+                            localUser
+                            contentWidth
+                            (NotesReaction (Id.fromInt index))
+                            hoveredResult
+                            notes.reactions
             ]
         ]
 
@@ -2313,11 +2753,21 @@ userColor userId local =
             UserColor.toColor UserColor.default
 
 
-{-| Answers that scored together, drawn together. The biggest group is last, so that the
-answer everyone landed on is what the eye finishes on.
--}
-answerGroupsView : LocalUser -> List AnswerResult -> Element msg
-answerGroupsView localUser answers =
+answerGroupPaddingX : number
+answerGroupPaddingX =
+    8
+
+
+answerGroupsView :
+    Bool
+    -> Time.Posix
+    -> LocalUser
+    -> Int
+    -> Maybe ReactionTarget
+    -> Id QuestionId
+    -> List AnswerResult
+    -> Element GameMsg
+answerGroupsView isMobile time localUser contentWidth hoveredResult questionId answers =
     List.filterMap
         (\answerResult ->
             Maybe.map (\answer -> ( answerResult.userId, answerResult.group, answer )) answerResult.answer
@@ -2329,38 +2779,149 @@ answerGroupsView localUser answers =
             (\( first, rest ) ->
                 List.map
                     (\( userId, _, answer ) ->
-                        Ui.row
-                            [ Ui.spacing 16 ]
+                        (if RichText.hasLargeContent answer.text then
+                            Ui.column
+                                [ Ui.spacing 8, Ui.widthMin 200 ]
+
+                         else
+                            Ui.row
+                                [ Ui.spacing 8, Ui.widthMin 200 ]
+                        )
                             [ Ui.el
-                                [ Ui.width Ui.shrink
+                                [ Ui.widthMax (toFloat contentWidth * 0.5 |> round)
+                                , Ui.width Ui.shrink
                                 , Ui.Font.bold
                                 , Ui.Font.color (userColor userId localUser)
+                                , Ui.alignTop
+                                , Ui.clipWithEllipsis
                                 ]
                                 (Ui.text (User.toStringAlt userId localUser))
-
-                            -- Answers are still drawn as the text they were typed as. Giving
-                            -- them the treatment the questions get comes later.
-                            , Ui.Prose.paragraph [] [ Ui.text (toSourceText localUser answer.text) ]
+                            , contentView
+                                time
+                                (min 300 (contentWidth - answerGroupPaddingX * 2))
+                                localUser
+                                (Dom.id ("sheepGame_answerReveal_" ++ Id.toString questionId ++ "_" ++ Id.toString userId))
+                                answer.attachedFiles
+                                answer.text
                             ]
+                            |> reactableResult
+                                answerGroupPaddingX
+                                localUser
+                                contentWidth
+                                (AnswerReaction userId questionId)
+                                hoveredResult
+                                answer.reactions
                     )
                     (first :: rest)
                     |> Ui.column
-                        [ Ui.spacing 8
-                        , Ui.padding 8
-                        , Ui.border 2
-                        , Ui.borderColor MyUi.border1
+                        [ MyUi.htmlStyle
+                            "outline"
+                            ("solid "
+                                ++ String.fromInt answerGroupOutlineWidth
+                                ++ "px "
+                                ++ MyUi.colorToStyle answerGroupOutlineColor
+                            )
+                        , MyUi.htmlStyle "outline-offset" (String.fromInt answerGroupOutlineOffset ++ "px")
                         , Ui.rounded 3
-                        , Ui.background MyUi.background1
+                        , Ui.width Ui.shrink
+                        , Ui.background MyUi.background2
                         ]
             )
-        |> Ui.column [ Ui.spacing 8 ]
+        |> Ui.column
+            [ Ui.paddingWith
+                { left = paddingX isMobile + answerGroupOutlineWidth + answerGroupOutlineOffset
+                , right = paddingX isMobile
+                , top = 0
+                , bottom = 0
+                }
+            ]
 
 
-{-| Where everyone stands once this question has been counted, as a bar each measured
-against what the winner finishes on.
+answerGroupOutlineWidth : number
+answerGroupOutlineWidth =
+    2
+
+
+answerGroupOutlineOffset : number
+answerGroupOutlineOffset =
+    -1
+
+
+answerGroupOutlineColor : Ui.Color
+answerGroupOutlineColor =
+    Ui.rgb 76 80 100
+
+
+{-| What an answer or a note is called on the results screen, which is what the reactions on
+it hang off.
 -}
-scoreTableView : LocalUser -> Int -> List AnswerResult -> Element msg
-scoreTableView localUser maxPoints answers =
+reactionTargetId : ReactionTarget -> HtmlId
+reactionTargetId target =
+    case target of
+        AnswerReaction userId questionId ->
+            Dom.id ("sheepGame_revealedAnswer_" ++ Id.toString questionId ++ "_" ++ Id.toString userId)
+
+        NotesReaction questionId ->
+            Dom.id ("sheepGame_revealedNotes_" ++ Id.toString questionId)
+
+
+{-| An answer or a note, drawn with the reactions it has and, while the pointer is over it,
+the menu for adding one. That menu is all that's on offer: editing, replying and the rest of
+what a message's menu does belong to the conversation a message is in.
+-}
+reactableResult : Int -> LocalUser -> Int -> ReactionTarget -> Maybe ReactionTarget -> Reactions -> Element GameMsg -> Element GameMsg
+reactableResult paddingX2 localUser contentWidth target hoveredResult reactions content =
+    let
+        isHovered : Bool
+        isHovered =
+            hoveredResult == Just target
+    in
+    Ui.column
+        [ Ui.id (Dom.idToString (reactionTargetId target))
+        , Ui.paddingXY paddingX2 4
+        , Ui.spacing 4
+        , Ui.attrIf isHovered (Ui.background MyUi.hoverHighlight)
+        , Ui.Events.onMouseEnter (ReactionMsg target MessageView.MessageView_MouseEnteredMessage)
+        , Ui.Events.onMouseLeave (ReactionMsg target MessageView.MessageView_MouseExitedMessage)
+        , if isHovered then
+            MessageView.reactionsMiniViewNearEdge
+                localUser.user
+                localUser.user.availableCustomEmojis
+                localUser.customEmojis
+                |> Ui.map (ReactionMsg target)
+                |> Ui.inFront
+
+          else
+            Ui.noAttr
+        ]
+        (content
+            :: (case
+                    MessageView.reactionEmojiView
+                        localUser.emojiData
+                        (if isHovered then
+                            MessageView.ReactionsHovered
+
+                         else
+                            MessageView.ReactionsNotHovered
+                        )
+                        localUser.session.userId
+                        localUser.customEmojis
+                        (User.allUsers localUser)
+                        Sticker.LoopAFewTimesOnLoad
+                        (contentWidth - paddingX2 * 2)
+                        reactions
+                of
+                    Just reactionRow ->
+                        [ Ui.map (ReactionMsg target) reactionRow ]
+
+                    Nothing ->
+                        []
+               )
+        )
+
+
+scoreTableView : Bool -> LocalUser -> Int -> List AnswerResult -> Element msg
+scoreTableView isMobile localUser maxPoints answers =
     List.sortWith
         (\a b ->
             case compare b.score a.score of
@@ -2372,7 +2933,7 @@ scoreTableView localUser maxPoints answers =
         )
         answers
         |> List.map (scoreRowView localUser maxPoints)
-        |> Ui.column [ Ui.spacing 2, Ui.Font.bold ]
+        |> Ui.column [ Ui.spacing 2, Ui.Font.bold, Ui.paddingXY (paddingX isMobile) 0 ]
 
 
 scoreRowView : LocalUser -> Int -> AnswerResult -> Element msg
@@ -2390,32 +2951,40 @@ scoreRowView localUser maxPoints answerResult =
                 round (toFloat score / toFloat maxPoints * 1000)
     in
     Ui.row
-        [ Ui.spacing 4 ]
-        [ User.profileImage (User.getUser userId localUser)
+        [ Ui.spacing 1 ]
+        [ User.smallProfileImage (User.getUser userId localUser)
         , Ui.row
             [ Ui.height Ui.fill ]
             [ Ui.el
                 [ Ui.width (Ui.portion filled)
                 , Ui.height Ui.fill
-                , Ui.rounded 2
+                , Ui.paddingWith { left = 6, right = 4, top = 0, bottom = 0 }
+                , Ui.Font.color GuildIcon.iconFontColor
+                , Ui.roundedWith
+                    { topLeft = 0
+                    , topRight = User.smallProfileImageRounding
+                    , bottomLeft = 0
+                    , bottomRight = User.smallProfileImageRounding
+                    }
                 , Ui.background (userColor userId localUser)
                 , Ui.onRight
                     (Ui.row
-                        [ Ui.width Ui.shrink, Ui.move (Ui.right 8), Ui.centerY, Ui.spacing 4 ]
+                        [ Ui.width Ui.shrink, Ui.move (Ui.right 8), Ui.centerY, Ui.spacing 4, Ui.Font.color MyUi.font1 ]
                         [ Ui.text (String.fromInt score)
                         , case rankChange of
                             RankUp ->
-                                Ui.el [ Ui.Font.color (Ui.rgb 25 230 25) ] (Ui.text "▲")
+                                Ui.el [ Ui.Font.color (Ui.rgb 25 230 25), Ui.move { x = 0, y = -1, z = 0 } ] (Ui.text "▲")
 
                             RankDown ->
-                                Ui.el [ Ui.Font.color (Ui.rgb 230 25 25) ] (Ui.text "▼")
+                                Ui.el [ Ui.Font.color (Ui.rgb 230 25 25), Ui.move { x = 0, y = -1, z = 0 } ] (Ui.text "▼")
 
                             RankUnchanged ->
                                 Ui.none
                         ]
                     )
+                , Ui.clipWithEllipsis
                 ]
-                Ui.none
+                (Ui.text (User.toStringAlt userId localUser))
             , Ui.el [ Ui.width (Ui.portion (1000 - filled)) ] Ui.none
             ]
         , Ui.el [ Ui.width (Ui.px 40) ] Ui.none
@@ -2425,9 +2994,9 @@ scoreRowView localUser maxPoints answerResult =
 finalResultsView : LocalUser -> List (Id UserId) -> Element msg
 finalResultsView localUser winners =
     Ui.column
-        [ Ui.spacing 16 ]
+        [ Ui.spacing 48, Ui.Font.size 24 ]
         [ Ui.Prose.paragraph
-            [ Ui.Font.size 20, Ui.Font.center ]
+            [ Ui.Font.center ]
             (Ui.text "🐑 And the winner is "
                 :: (case winners of
                         [] ->
@@ -2457,12 +3026,13 @@ It's turned on its side so that the diagonal runs along the bottom and each play
 sits at the end of their own row and column.
 -}
 resultsGridView :
-    LocalUser
+    Bool
+    -> LocalUser
     -> ValidatedSetup
     -> Shared
     -> Maybe ( Id UserId, Id UserId )
     -> Element GameMsg
-resultsGridView localUser setup shared gridHovered =
+resultsGridView isMobile localUser setup shared gridHovered =
     let
         everyone : List (Id UserId)
         everyone =
@@ -2508,38 +3078,42 @@ resultsGridView localUser setup shared gridHovered =
                 )
                 everyone
             )
-        , case gridHovered |> Maybe.andThen (\pair -> SeqDict.get pair overlap |> Maybe.map (Tuple.pair pair)) of
-            Just ( ( userIdA, userIdB ), count ) ->
-                Ui.column
-                    [ Ui.spacing 16, Ui.Font.size 16 ]
-                    [ Ui.Prose.paragraph
-                        []
-                        [ Ui.text (User.toStringAlt userIdA localUser)
-                        , Ui.text " and "
-                        , Ui.text (User.toStringAlt userIdB localUser)
-                        , Ui.text " have "
-                        , Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.text (String.fromInt count))
-                        , Ui.text
-                            (if count == 1 then
-                                " matching answer."
+        , if isMobile then
+            Ui.none
 
-                             else
-                                " matching answers."
-                            )
-                        ]
-                    , if count == highestMatchCount && count > 0 then
-                        Ui.Prose.paragraph
+          else
+            case gridHovered |> Maybe.andThen (\pair -> SeqDict.get pair overlap |> Maybe.map (Tuple.pair pair)) of
+                Just ( ( userIdA, userIdB ), count ) ->
+                    Ui.column
+                        [ Ui.spacing 16, Ui.Font.size 16 ]
+                        [ Ui.Prose.paragraph
                             []
-                            [ Ui.text "🐑 This is the highest number of matching answers! 🐑" ]
+                            [ Ui.text (User.toStringAlt userIdA localUser)
+                            , Ui.text " and "
+                            , Ui.text (User.toStringAlt userIdB localUser)
+                            , Ui.text " have "
+                            , Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.text (String.fromInt count))
+                            , Ui.text
+                                (if count == 1 then
+                                    " matching answer."
 
-                      else
-                        Ui.none
-                    ]
+                                 else
+                                    " matching answers."
+                                )
+                            ]
+                        , if count == highestMatchCount && count > 0 then
+                            Ui.Prose.paragraph
+                                []
+                                [ Ui.text "🐑 This is the highest number of matching answers! 🐑" ]
 
-            Nothing ->
-                Ui.Prose.paragraph
-                    [ Ui.widthMax 400, Ui.Font.size 16, Ui.Font.color MyUi.font3 ]
-                    [ Ui.text "Move your cursor over a grid square to see how many matching answers two players got." ]
+                          else
+                            Ui.none
+                        ]
+
+                Nothing ->
+                    Ui.Prose.paragraph
+                        [ Ui.widthMax 400, Ui.Font.size 16, Ui.Font.color MyUi.font3 ]
+                        [ Ui.text "Move your cursor over a grid square to see how many matching answers two players got." ]
         ]
 
 
@@ -2598,7 +3172,7 @@ resultsGridCell localUser gridHovered overlap highestMatchCount { columnIndex, r
                 Ui.rgba 0 0 0 0
             )
          , if columnIndex == 0 && rowIndex > 0 then
-            Ui.above (resultsGridLabel localUser gridHovered Tuple.second otherUserId)
+            Ui.above (resultsGridLabel localUser gridHovered Tuple.second otherUserId |> Ui.el [ Ui.rotate (Ui.turns -0.25) ])
 
            else
             Ui.noAttr

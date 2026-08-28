@@ -45,8 +45,11 @@ module User exposing
     , setLastDmViewed
     , setLastViewedMessage
     , setName
+    , smallProfileImage
+    , smallProfileImageRounding
     , toString
     , toStringAlt
+    , toStringView
     , userColor
     )
 
@@ -919,6 +922,18 @@ toString userId allUsers2 =
             "<missing>"
 
 
+toStringView : userId -> SeqDict userId { a | name : PersonName, color : UserColor } -> Element msg
+toStringView userId allUsers2 =
+    case SeqDict.get userId allUsers2 of
+        Just user ->
+            PersonName.toString user.name
+                |> Ui.text
+                |> Ui.el [ Ui.Font.bold, Ui.Font.color (UserColor.toColor user.color), Ui.clipWithEllipsis ]
+
+        Nothing ->
+            Ui.text "<missing>"
+
+
 toStringAlt : Id UserId -> LocalUser -> String
 toStringAlt userId local =
     if local.session.userId == userId then
@@ -948,6 +963,11 @@ profileImageRounding =
     8
 
 
+smallProfileImageRounding : Int
+smallProfileImageRounding =
+    4
+
+
 userColor : LocalUser -> Id UserId -> UserColor
 userColor localUser userId =
     case getUser userId localUser of
@@ -968,52 +988,87 @@ discordUserColor localUser userId =
             UserColor.default
 
 
+profileOutlineColor : UserColor -> String
+profileOutlineColor userColor2 =
+    UserColor.toColor userColor2
+        |> MyUi.colorWithAlpha 0.5
+        |> MyUi.colorToStyle
+
+
 profileImage : Maybe { a | color : UserColor, icon : Maybe FileHash } -> Element msg
 profileImage user =
+    profileImageHtml user |> Ui.html
+
+
+smallProfileImage : Maybe { a | color : UserColor, icon : Maybe FileHash } -> Element msg
+smallProfileImage user =
+    let
+        rounding =
+            Ui.roundedWith
+                { topLeft = smallProfileImageRounding
+                , bottomLeft = smallProfileImageRounding
+                , topRight = 0
+                , bottomRight = 0
+                }
+    in
     case user of
         Just user2 ->
             case user2.icon of
                 Just fileHash ->
                     Ui.imageLazy
-                        [ Ui.rounded profileImageRounding
-                        , Ui.width (Ui.px profileImageSize)
-                        , Ui.height (Ui.px profileImageSize)
-                        , Ui.clip
-                        , -- We need no pointer events here so drawing anchoring gets the offset of the parent
-                          MyUi.noPointerEvents
+                        [ Ui.width (Ui.px (smallProfileImageSize + 4))
+                        , Ui.height (Ui.px (smallProfileImageSize + 4))
+                        , Ui.move { x = -2, y = -2, z = 0 }
                         ]
                         { source = FileStatus.fileUrl FileStatus.pngContent fileHash
                         , description = ""
                         , onLoad = Nothing
                         }
+                        |> Ui.el
+                            [ Ui.width (Ui.px smallProfileImageSize)
+                            , Ui.height (Ui.px smallProfileImageSize)
+                            , Ui.clip
+                            , rounding
+                            , MyUi.htmlStyle "outline" ("solid 1px " ++ profileOutlineColor user2.color)
+                            , MyUi.htmlStyle "outline-offset" "-1px"
+                            , MyUi.noPointerEvents
+                            ]
 
                 Nothing ->
-                    GuildIcon.defaultUser False profileImageSize 8 user2.color
+                    GuildIcon.defaultUser False smallProfileImageSize rounding user2.color
 
         Nothing ->
-            GuildIcon.defaultUser False profileImageSize 8 UserColor.default
+            GuildIcon.defaultUser False smallProfileImageSize rounding UserColor.default
 
 
-profileImageHtml : Maybe FrontendUser -> Html msg
+profileImageHtml : Maybe { a | color : UserColor, icon : Maybe FileHash } -> Html msg
 profileImageHtml user =
     case user of
         Just user2 ->
             case user2.icon of
                 Just fileHash ->
-                    Html.img
-                        [ Html.Attributes.style "border-radius" (String.fromInt profileImageRounding ++ "px")
-                        , Html.Attributes.style "width" (String.fromInt profileImageSize ++ "px")
-                        , Html.Attributes.style "height" (String.fromInt profileImageSize ++ "px")
-                        , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
-                        , MyUi.lazyLoading
-                        ]
-                        []
+                    profileImgHtml fileHash user2.color
 
                 Nothing ->
                     GuildIcon.defaultUserHtml profileImageSize 8 user2.color
 
         Nothing ->
             GuildIcon.defaultUserHtml profileImageSize 8 UserColor.default
+
+
+profileImgHtml : FileHash -> UserColor -> Html msg
+profileImgHtml fileHash color =
+    Html.img
+        [ Html.Attributes.style "border-radius" (String.fromInt profileImageRounding ++ "px")
+        , Html.Attributes.style "width" (String.fromInt profileImageSize ++ "px")
+        , Html.Attributes.style "height" (String.fromInt profileImageSize ++ "px")
+        , Html.Attributes.style "outline" ("solid 1px " ++ profileOutlineColor color)
+        , Html.Attributes.style "outline-offset" "-1px"
+        , Html.Attributes.style "flex-shrink" "0"
+        , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+        , MyUi.lazyLoading
+        ]
+        []
 
 
 discordProfileImage : Discord.Id Discord.UserId -> Maybe FileHash -> Element msg
@@ -1052,10 +1107,10 @@ profileImageNoRounding user =
                         }
 
                 Nothing ->
-                    GuildIcon.defaultUser False profileImageSize 0 user2.color
+                    GuildIcon.defaultUser False profileImageSize Ui.noAttr user2.color
 
         Nothing ->
-            GuildIcon.defaultUser False profileImageSize 0 UserColor.default
+            GuildIcon.defaultUser False profileImageSize Ui.noAttr UserColor.default
 
 
 multipleProfileImages : List ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
@@ -1071,8 +1126,8 @@ multipleProfileImages profileImages =
             Ui.el
                 [ Ui.width (Ui.px 40)
                 , Ui.height (Ui.px 40)
-                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (smallProfileImage two))
-                , Ui.inFront (smallProfileImage one)
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (discordSmallProfileImage two))
+                , Ui.inFront (discordSmallProfileImage one)
                 ]
                 Ui.none
 
@@ -1080,9 +1135,9 @@ multipleProfileImages profileImages =
             Ui.el
                 [ Ui.width (Ui.px 55)
                 , Ui.height (Ui.px 40)
-                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (smallProfileImage three))
-                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (smallProfileImage two))
-                , Ui.inFront (smallProfileImage one)
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (discordSmallProfileImage three))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (discordSmallProfileImage two))
+                , Ui.inFront (discordSmallProfileImage one)
                 ]
                 Ui.none
 
@@ -1090,10 +1145,10 @@ multipleProfileImages profileImages =
             Ui.el
                 [ Ui.width (Ui.px 70)
                 , Ui.height (Ui.px 40)
-                , Ui.inFront (Ui.el [ Ui.move { x = 45, y = 15, z = 0 } ] (smallProfileImage four))
-                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (smallProfileImage three))
-                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (smallProfileImage two))
-                , Ui.inFront (smallProfileImage one)
+                , Ui.inFront (Ui.el [ Ui.move { x = 45, y = 15, z = 0 } ] (discordSmallProfileImage four))
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (discordSmallProfileImage three))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (discordSmallProfileImage two))
+                , Ui.inFront (discordSmallProfileImage one)
                 ]
                 Ui.none
 
@@ -1101,9 +1156,9 @@ multipleProfileImages profileImages =
             Ui.el
                 [ Ui.width (Ui.px 70)
                 , Ui.height (Ui.px 40)
-                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (smallProfileImage three))
-                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (smallProfileImage two))
-                , Ui.inFront (smallProfileImage one)
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (discordSmallProfileImage three))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (discordSmallProfileImage two))
+                , Ui.inFront (discordSmallProfileImage one)
                 , Ui.inFront
                     (Ui.el
                         [ Ui.move { x = 45, y = 15, z = 0 }
@@ -1124,10 +1179,10 @@ multipleProfileImages profileImages =
                 Ui.none
 
 
-smallProfileImage : ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
-smallProfileImage ( userId, maybeFileHash ) =
+discordSmallProfileImage : ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
+discordSmallProfileImage ( userId, maybeFileHash ) =
     Ui.imageLazy
-        [ Ui.rounded 8
+        [ Ui.rounded smallProfileImageRounding
         , Ui.width (Ui.px smallProfileImageSize)
         , Ui.height (Ui.px smallProfileImageSize)
         , Ui.clip

@@ -9,6 +9,7 @@ module GuildIcon exposing
     , discordNotificationView
     , discordUserView
     , discordView
+    , iconFontColor
     , notificationHelper
     , notificationView
     , showFriendsButton
@@ -270,7 +271,7 @@ userView notification maybeIcon color =
                 iconView (Normal notification) (FileStatus.fileUrl FileStatus.pngContent icon)
 
             Nothing ->
-                defaultUser True size (round (toFloat size * 8 / 50)) color
+                defaultUser True size (Ui.rounded (round (toFloat size * 8 / 50))) color
         )
 
 
@@ -287,11 +288,11 @@ discordUserView notification maybeIcon userId =
         |> Ui.el [ discordNotificationView 0 -3 notification ]
 
 
-defaultUser : Bool -> Int -> Int -> UserColor -> Element msg
-defaultUser centerX size2 rounded color =
+defaultUser : Bool -> Int -> Ui.Attribute msg -> UserColor -> Element msg
+defaultUser centerX size2 rounding color =
     Ui.el
         [ Ui.contentCenterY
-        , Ui.rounded rounded
+        , rounding
         , Ui.background (UserColor.toColor color)
         , if centerX then
             Ui.centerX
@@ -317,6 +318,7 @@ defaultUserHtml size2 rounded color =
         , Html.Attributes.style "height" (String.fromInt (size2 - 8) ++ "px")
         , Html.Attributes.style "padding" "4px"
         , Html.Attributes.style "color" (MyUi.colorToStyle iconFontColor)
+        , Html.Attributes.style "flex-shrink" "0"
         ]
         [ Icons.person ]
 
@@ -358,7 +360,7 @@ guild/user tiles
 -}
 iconFontColor : Ui.Color
 iconFontColor =
-    Ui.rgba 10 10 10 0.8
+    Ui.rgba 0 0 0 0.8
 
 
 size : number

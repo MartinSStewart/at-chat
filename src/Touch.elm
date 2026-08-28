@@ -1,5 +1,7 @@
 module Touch exposing
-    ( ScreenCoordinate(..)
+    ( Drag(..)
+    , DragTarget(..)
+    , ScreenCoordinate(..)
     , Touch
     , averageTouchMove
     , decodeTouchEvent
@@ -12,6 +14,7 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Time as Time
 import Json.Decode exposing (Decoder)
 import List.Nonempty exposing (Nonempty(..))
 import NonemptyDict exposing (NonemptyDict)
@@ -24,6 +27,18 @@ type alias Touch =
     { client : Point2d CssPixels ScreenCoordinate
     , target : Maybe HtmlId
     }
+
+
+type Drag
+    = NoDrag
+    | DragStart Time.Posix (NonemptyDict Int Touch)
+    | Dragging { horizontalStart : Bool, touches : NonemptyDict Int Touch, target : DragTarget }
+
+
+type DragTarget
+    = Drag_Channel
+    | Drag_CallThumbnail
+    | Drag_Game
 
 
 touchCentroid : NonemptyDict Int Touch -> Coord CssPixels

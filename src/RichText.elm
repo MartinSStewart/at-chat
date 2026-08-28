@@ -26,6 +26,7 @@ module RichText exposing
     , escapedCharToString
     , fromDiscord
     , fromNonemptyString
+    , hasLargeContent
     , hyperlinks
     , maxLength
     , mentionsUser
@@ -3314,6 +3315,80 @@ type ShowLargeContent
     | NoLargeContent
 
 
+hasLargeContent : Nonempty (RichText userId) -> Bool
+hasLargeContent richText =
+    List.Nonempty.any
+        (\richText2 ->
+            case richText2 of
+                Bold a ->
+                    hasLargeContent a
+
+                UserMention _ ->
+                    False
+
+                NormalText _ _ ->
+                    False
+
+                Italic a ->
+                    hasLargeContent a
+
+                Underline a ->
+                    hasLargeContent a
+
+                Strikethrough a ->
+                    hasLargeContent a
+
+                Spoiler a ->
+                    hasLargeContent a
+
+                BlockQuote _ _ ->
+                    True
+
+                Heading _ _ a ->
+                    hasLargeContent a
+
+                Hyperlink _ ->
+                    False
+
+                MarkdownLink _ _ ->
+                    False
+
+                InlineCode _ _ ->
+                    False
+
+                CodeBlock _ _ ->
+                    True
+
+                AttachedFile _ ->
+                    True
+
+                EscapedChar _ ->
+                    False
+
+                Sticker _ ->
+                    True
+
+                CustomEmoji _ ->
+                    False
+
+                BulletPoint _ a ->
+                    List.Nonempty.any
+                        (\list ->
+                            case List.Nonempty.fromList list of
+                                Just nonempty ->
+                                    hasLargeContent nonempty
+
+                                Nothing ->
+                                    False
+                        )
+                        a
+
+                Timestamp _ ->
+                    False
+        )
+        richText
+
+
 view :
     HtmlId
     -> Int
@@ -4808,6 +4883,8 @@ fileDownloadView maybeHtmlId isSpoilered fileData =
           else
             Html.Attributes.href fileUrl
         , Html.Attributes.download (FileName.toString fileData.fileName)
+        , Html.Attributes.target "_blank"
+        , Html.Attributes.rel "noreferrer"
         , Html.Attributes.style "font-size" "14px"
         , Html.Attributes.style "padding" "4px 8px 4px 8px"
         ]

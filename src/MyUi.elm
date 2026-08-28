@@ -13,6 +13,7 @@ module MyUi exposing
     , bounceScroll
     , buttonBackground
     , buttonBorder
+    , canScroll
     , channelAndGuildColumnWidth
     , channelHeaderHeight
     , colorToHex
@@ -38,6 +39,7 @@ module MyUi exposing
     , emailAddress
     , errorBox
     , errorColor
+    , fadeIn
     , font1
     , font2
     , font3
@@ -122,6 +124,7 @@ import SeqDict exposing (SeqDict)
 import Svg
 import Svg.Attributes
 import Time exposing (Month(..))
+import Touch exposing (Drag(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -712,6 +715,15 @@ radioRowWithSeparators attrs selected onPress separator children =
         |> Ui.row attrs
 
 
+{-| Slides whatever it's on into place, once. Elm only builds an element the first time it
+appears, so this animates what has just turned up and leaves everything already on screen
+where it is.
+-}
+fadeIn : Ui.Attribute msg
+fadeIn =
+    Ui.htmlAttribute (Html.Attributes.class "fade-in")
+
+
 noPointerEvents : Ui.Attribute msg
 noPointerEvents =
     htmlStyle "pointer-events" "none"
@@ -813,7 +825,7 @@ container isExpanded htmlId onPressedExpand backgroundColor isMobile2 label2 con
             (Ui.column
                 [ Ui.border 1
                 , Ui.rounded 4
-                , Ui.padding 16
+                , Ui.paddingXY 0 16
                 , Ui.spacing 16
                 ]
                 contents
@@ -934,13 +946,15 @@ deleteButton htmlId onPress =
         [ Ui.Input.button onPress
         , Dom.idToString htmlId |> Ui.id
         , hoverText "Delete"
-        , Ui.padding 3
+        , Ui.width (Ui.px 40)
+        , Ui.height (Ui.px 40)
+        , Ui.contentCenterX
+        , Ui.contentCenterY
         , Ui.background deleteButtonBackground
         , Ui.border 1
         , Ui.borderColor deleteButtonBorder
         , Ui.Font.color deleteButtonFont
         , Ui.rounded 4
-        , Ui.width Ui.shrink
         , Ui.Shadow.shadows
             [ { x = 0, y = 1, size = 0, blur = 2, color = Ui.rgba 0 0 0 0.1 } ]
         ]
@@ -1228,6 +1242,28 @@ body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+/* Icons in the menu that hovering a message brings up are sized by the box they're given
+   rather than by whatever the svg says, since browsers don't agree on how to size an svg
+   that leaves one of its dimensions to them. */
+.mini-button-icon {
+  width: 24px;
+  height: 24px;
+}
+.mini-button-icon > svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* A section of a sheep game's results turning up. It waits a moment before sliding into
+   place, so that the room has a chance to look up before the answer appears. */
+.fade-in {
+  animation: fade-in 2s;
+}
+@keyframes fade-in {
+  0% { opacity: 0; transform: translate(0px, -20px); }
+  50% { opacity: 0; transform: translate(0px, -20px); }
+  100% { opacity: 1; }
+}
 /* The custom emoji tooltip hangs above its emoji, centred on it. The arrow is a
    sibling of the tooltip rather than a child of it so that it keeps pointing at
    the emoji when the tooltip below slides sideways. */
@@ -1456,6 +1492,22 @@ scrollable canScroll2 =
 
     else
         Ui.clip
+
+
+canScroll : Bool -> Drag -> Bool
+canScroll isMobile2 drag =
+    if isMobile2 then
+        case drag of
+            Dragging dragging ->
+                not dragging.horizontalStart
+
+            _ ->
+                True
+
+    else
+        -- On desktop there's no horizontal drag gesture, so keep scrolling
+        -- enabled to stop scrollbars flickering while other drags happen.
+        True
 
 
 isMobileAlt : Coord CssPixels -> Bool

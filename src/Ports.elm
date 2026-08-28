@@ -33,6 +33,7 @@ port module Ports exposing
     , selectionChanged
     , serviceWorkerData
     , serviceWorkerMessage
+    , setAppBadge
     , setCursorPosition
     , setFavicon
     , shiftScrollByElementDelta
@@ -395,6 +396,9 @@ port service_worker_message_from_js : (Json.Decode.Value -> msg) -> Sub msg
 port close_notifications_to_js : Json.Encode.Value -> Cmd msg
 
 
+port set_app_badge_to_js : Json.Encode.Value -> Cmd msg
+
+
 port visual_viewport_resized_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
@@ -480,6 +484,16 @@ gotDevicePixelRatio msg =
 closeNotifications : Command FrontendOnly toMsg msg
 closeNotifications =
     Command.sendToJs "close_notifications_to_js" close_notifications_to_js Json.Encode.null
+
+
+{-| Show the number of unread messages on the app icon (home screen, dock, taskbar).
+Zero removes the badge. The service worker keeps this count up to date on its own
+while the app is closed and push notifications arrive, so sending it here also tells
+the service worker what to count up from (see public/service-worker.js).
+-}
+setAppBadge : Int -> Command FrontendOnly toMsg msg
+setAppBadge count =
+    Command.sendToJs "set_app_badge_to_js" set_app_badge_to_js (Json.Encode.int count)
 
 
 serviceWorkerMessage : (String -> msg) -> Subscription FrontendOnly msg

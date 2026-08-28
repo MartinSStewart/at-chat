@@ -544,6 +544,14 @@ anchorHighlight :
 anchorHighlight htmlId userIdToColor onPress isSelectingAnchor drawings =
     [ Ui.Lazy.lazy2 overlayAttribute userIdToColor drawings |> Ui.inFront
     , Ui.width Ui.shrink
+    , {- This needs to always be included (even though the outline isn't shown when isSelectingAnchor == False)
+         because it creates a div that causes any child nodes to get recreated.
+      -}
+      Ui.Anim.hovered
+        (Ui.Anim.ms 10)
+        [ Ui.Anim.backgroundColor (Ui.rgba 96 165 250 0.3)
+        , Ui.Anim.outlineColor (Ui.rgba 96 165 250 1)
+        ]
     ]
         ++ (if isSelectingAnchor then
                 selectingAnchorHighlight htmlId onPress
@@ -555,12 +563,7 @@ anchorHighlight htmlId userIdToColor onPress isSelectingAnchor drawings =
 
 selectingAnchorHighlight : HtmlId -> (Point2d CssPixels ScreenCoordinate -> ( Float, Float ) -> msg) -> List (Ui.Attribute msg)
 selectingAnchorHighlight htmlId onPress =
-    [ Ui.Anim.hovered
-        (Ui.Anim.ms 10)
-        [ Ui.Anim.backgroundColor (Ui.rgba 96 165 250 0.3)
-        , Ui.Anim.outlineColor (Ui.rgba 96 165 250 1)
-        ]
-    , MyUi.htmlStyle "outline-style" "solid"
+    [ MyUi.htmlStyle "outline-style" "solid"
     , MyUi.htmlStyle "outline-width" "2px"
     , MyUi.htmlStyle "outline-color" "rgba(0,0,0,0)"
     , Ui.pointer

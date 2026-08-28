@@ -146,6 +146,26 @@ imageViewerTests imageUploadConfig =
                     , admin.checkView
                         100
                         (Test.Html.Query.hasNot [ Test.Html.Selector.id "imageViewer_close" ])
+
+                    -- Reopened, the 128x128 image is centered in the 1000x600
+                    -- window, so it covers (436, 236) to (564, 364). Clicking on
+                    -- the image itself leaves the overlay open.
+                    , admin.click 100 (Dom.id "spoiler_1_image_1")
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.id "imageViewer_overlay" ])
+                    , admin.mouseDown 100 (Dom.id "imageViewer_overlay") ( 500, 300 ) []
+                    , admin.mouseUp 100 (Dom.id "imageViewer_overlay") ( 500, 300 ) []
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.id "imageViewer_overlay" ])
+
+                    -- Clicking the backdrop outside of the image closes it.
+                    , admin.mouseDown 100 (Dom.id "imageViewer_overlay") ( 100, 100 ) []
+                    , admin.mouseUp 100 (Dom.id "imageViewer_overlay") ( 100, 100 ) []
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.id "imageViewer_overlay" ])
                     ]
                 )
             ]
@@ -227,6 +247,22 @@ imageViewerTests imageUploadConfig =
                     -- Dragging the image off the top of the screen dismisses it.
                     , admin.touchStart 100 (Dom.id "imageViewer_overlay") (touchEvent [ ( 200, 400 ) ])
                     , admin.touchMove 100 (Dom.id "imageViewer_overlay") (touchEvent [ ( 200, -3000 ) ])
+                    , admin.touchEnd 100 (Dom.id "imageViewer_overlay") (touchEvent [])
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.id "imageViewer_overlay" ])
+
+                    -- Reopened, the 128x128 image is centered in the 400x800
+                    -- window, so it covers (136, 336) to (264, 464). Tapping the
+                    -- image leaves the overlay open, tapping outside of it
+                    -- dismisses the overlay.
+                    , admin.click 100 (Dom.id "spoiler_1_image_1")
+                    , admin.touchStart 100 (Dom.id "imageViewer_overlay") (touchEvent [ ( 200, 400 ) ])
+                    , admin.touchEnd 100 (Dom.id "imageViewer_overlay") (touchEvent [])
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.id "imageViewer_overlay" ])
+                    , admin.touchStart 100 (Dom.id "imageViewer_overlay") (touchEvent [ ( 50, 50 ) ])
                     , admin.touchEnd 100 (Dom.id "imageViewer_overlay") (touchEvent [])
                     , admin.checkView
                         100

@@ -189,6 +189,16 @@ exports.init = async function init(app)
                 }
             }
 
+            // The count the service worker shows on the app icon, also kept in
+            // Cache Storage (see incrementAppBadge in public/service-worker.js).
+            try {
+                const badgeCache = await caches.open('app_badge_count');
+                const badgeCount = await badgeCache.matchAll();
+                result.appBadgeCount = badgeCount[0] ? await badgeCount[0].text() : "0";
+            } catch (e) {
+                result.appBadgeCount = "Error: " + e.toString();
+            }
+
             if ("Notification" in window) {
                 result.notificationPermission = Notification.permission;
             }
@@ -428,6 +438,38 @@ exports.init = async function init(app)
 
             activeNotifications.forEach((notification) => { try { notification.close(); } catch(error) {} });
             activeNotifications = [];
+        }
+    });
+
+    app.ports.set_app_badge_to_js.subscribe(async (count) => {
+        if (!("setAppBadge" in navigator)) {
+            return;
+        }
+
+        try {
+            if (count > 0) {
+                // The service worker counts up from this value when push
+                // notifications arrive while the app is closed, so it's stored in
+                // the same Cache Storage entry the worker reads (see
+                // public/service-worker.js).
+                const cache = await caches.open('app_badge_count');
+                await cache.put(
+                    'count',
+                    new Response(String(count), {
+                        status: 200,
+                        statusText: 'OK',
+                        headers: { 'Content-Type': 'text/plain' }
+                    })
+                );
+                await navigator.setAppBadge(count);
+            } else {
+                await caches.delete('app_badge_count');
+                await navigator.clearAppBadge();
+            }
+        } catch (error) {
+            // Browsers that only badge installed apps reject this when the site is
+            // running in a normal tab, which is nothing to worry about.
+            console.log(error);
         }
     });
 

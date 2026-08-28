@@ -29,17 +29,16 @@ module UserSession exposing
     , setPreviouslyLastViewedThreadMessage
     , setSheepGameQuestions
     , setViewingToCurrentlyViewing
-    , toFrontend
     , unreadOverviewMessageLimit
     )
 
-import Array exposing (Array)
 import Discord
 import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import FileStatus exposing (FileHash, FileId, FileStatus)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_ChannelThreadId, Viewing_DiscordChannelId, Viewing_DiscordChannelThreadId, Viewing_DiscordDmId, Viewing_DmId, Viewing_DmThreadId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, QuestionId, ThreadMessageId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_ChannelThreadId, Viewing_DiscordChannelId, Viewing_DiscordChannelThreadId, Viewing_DiscordDmId, Viewing_DmId, Viewing_DmThreadId)
+import IdArray exposing (IdArray)
 import Message exposing (Message)
 import PersonName exposing (PersonName)
 import Ports exposing (SubscribeData)
@@ -57,8 +56,9 @@ type alias UserSession =
     , userAgent : UserAgent
     , sessionIdHash : SessionIdHash
     , signedInAt : Time.Posix
+    , lastClientDisconnect : Maybe Time.Posix
     , expandedUserOptions : SeqSet UserOptionSection
-    , savedSheepGameQuestions : Array SheepGameQuestion
+    , savedSheepGameQuestions : IdArray QuestionId SheepGameQuestion
     }
 
 
@@ -79,6 +79,7 @@ type alias FrontendUserSession =
     { notificationMode : NotificationMode
     , currentlyViewing : SeqDict ClientId Viewing
     , userAgent : UserAgent
+    , lastActiveAt : Time.Posix
     }
 
 
@@ -430,8 +431,9 @@ init time sessionId userId userAgent =
     , userAgent = userAgent
     , sessionIdHash = SessionIdHash.fromSessionId sessionId
     , signedInAt = time
+    , lastClientDisconnect = Nothing
     , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
-    , savedSheepGameQuestions = Array.empty
+    , savedSheepGameQuestions = IdArray.empty
     }
 
 
@@ -445,19 +447,6 @@ collapseUserOptionSection section session =
     { session | expandedUserOptions = SeqSet.remove section session.expandedUserOptions }
 
 
-setSheepGameQuestions : Array SheepGameQuestion -> UserSession -> UserSession
+setSheepGameQuestions : IdArray QuestionId SheepGameQuestion -> UserSession -> UserSession
 setSheepGameQuestions questions session =
     { session | savedSheepGameQuestions = questions }
-
-
-toFrontend : Id UserId -> SeqDict ClientId Viewing -> UserSession -> Maybe FrontendUserSession
-toFrontend currentUserId currentlyViewing userSession =
-    if currentUserId == userSession.userId then
-        { notificationMode = userSession.notificationMode
-        , currentlyViewing = currentlyViewing
-        , userAgent = userSession.userAgent
-        }
-            |> Just
-
-    else
-        Nothing
