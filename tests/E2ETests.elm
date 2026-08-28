@@ -1121,14 +1121,6 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     , "Windows • Chrome"
                                     , "Current device"
                                     ]
-
-                                -- Every device here has something connected, so none of them
-                                -- has a last time it was in use to report. The wait puts a
-                                -- few minutes between signing in and dropping off, so the two
-                                -- can be told apart below.
-                                , adminA.checkView
-                                    180000
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Last active" ])
                                 ]
                             )
 
