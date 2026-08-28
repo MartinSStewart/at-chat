@@ -175,7 +175,7 @@ loginTests isMobile normalConfig =
                                                     100
                                                     (Test.Html.Query.has
                                                         [ Test.Html.Selector.exactText (PersonName.toString Backend.adminUser.name)
-                                                        , Test.Html.Selector.exactText "Two factor authentication was enabled "
+                                                        , Test.Html.Selector.exactText TwoFactorAuthentication.twoFactorEnabledAtText
                                                         ]
                                                     )
                                                 , E2EHelper.tallSnapshot user 100 { name = "user overview with two factor already complete" }
@@ -194,7 +194,7 @@ loginTests isMobile normalConfig =
                                                 , user.checkView
                                                     100
                                                     (Test.Html.Query.has
-                                                        [ Test.Html.Selector.exactText "Add two factor authentication" ]
+                                                        [ Test.Html.Selector.exactText TwoFactorAuthentication.addTwoFactorText ]
                                                     )
                                                 , T.checkState
                                                     100
@@ -240,12 +240,12 @@ loginTests isMobile normalConfig =
                     (\data -> [ client.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time userAgent) ])
                 , client.checkView
                     100
-                    (Test.Html.Query.has [ Test.Html.Selector.exactText "Recovery login" ])
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText RecoveryLogin.recoveryLoginTitle ])
                 , client.input 100 RecoveryLogin.passwordInputId "not the recovery password"
                 , client.click 100 RecoveryLogin.submitButtonId
                 , client.checkView
                     100
-                    (Test.Html.Query.has [ Test.Html.Selector.exactText "Incorrect password" ])
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText RecoveryLogin.incorrectPasswordText ])
                 , T.checkState
                     100
                     (\data ->

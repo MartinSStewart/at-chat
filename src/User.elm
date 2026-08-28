@@ -25,6 +25,7 @@ module User exposing
     , getUser
     , init
     , linkDiscordDataCodec
+    , missingName
     , multipleProfileImages
     , privateKeyForAccount
     , profileImage
@@ -89,6 +90,13 @@ import UserAgent exposing (UserAgent)
 import UserColor exposing (UserColor)
 import UserSession exposing (DiscordFrontendUser, UserSession)
 import X25519
+
+
+{-| Stands in for somebody whose account this client hasn't been told about yet.
+-}
+missingName : String
+missingName =
+    "<missing>"
 
 
 {-| Contains sensitive data that should only be accessible by admins, the backend, and the user themselves.
@@ -1013,7 +1021,7 @@ toString userId allUsers2 =
             PersonName.toString user.name
 
         Nothing ->
-            "<missing>"
+            missingName
 
 
 toStringView : userId -> SeqDict userId { a | name : PersonName, color : UserColor } -> Element msg
@@ -1025,7 +1033,7 @@ toStringView userId allUsers2 =
                 |> Ui.el [ Ui.Font.bold, Ui.Font.color (UserColor.toColor user.color), Ui.clipWithEllipsis ]
 
         Nothing ->
-            Ui.text "<missing>"
+            Ui.text missingName
 
 
 toStringAlt : Id UserId -> LocalUser -> String
@@ -1039,7 +1047,7 @@ toStringAlt userId local =
                 PersonName.toString user.name
 
             Nothing ->
-                "<missing>"
+                missingName
 
 
 profileImageSize : number

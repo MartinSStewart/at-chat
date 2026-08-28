@@ -32,6 +32,7 @@ module Go exposing
     , initSetup
     , inputBackgroundColor
     , joinedUser
+    , lossOnTimeText
     , numberInput
     , pressedKey
     , publicGoMatchUrl
@@ -75,6 +76,19 @@ import Ui.Input
 import Ui.Lazy
 import Ui.Shadow
 import User exposing (FrontendUser, LocalUser)
+
+
+{-| Shown when a player's clock runs out. Named so the end-to-end tests read the same
+value rather than checking their own copy of it.
+-}
+lossOnTimeText : Stone -> String
+lossOnTimeText ranOutOfTime =
+    case ranOutOfTime of
+        White ->
+            "Black wins! White loses on time."
+
+        Black ->
+            "White wins! Black loses on time."
 
 
 type alias PublicGoMatchData =
@@ -2153,12 +2167,7 @@ statusView currentTime state =
                             ++ " to move"
 
                     else
-                        case state.currentPlayer of
-                            White ->
-                                "Black wins! White loses on time."
-
-                            Black ->
-                                "White wins! Black loses on time."
+                        lossOnTimeText state.currentPlayer
 
                 Marking ->
                     stoneName state.currentPlayer

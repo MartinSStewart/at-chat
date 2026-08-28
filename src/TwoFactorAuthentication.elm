@@ -8,10 +8,12 @@ module TwoFactorAuthentication exposing
     , TwoFactorSecret(..)
     , TwoFactorSetupData
     , TwoFactorState(..)
+    , addTwoFactorText
     , getCode
     , getConfig
     , isPressMsg
     , isValidCode
+    , twoFactorEnabledAtText
     , update
     , updateFromBackend
     , view
@@ -37,6 +39,19 @@ import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
 import Ui.Prose
+
+
+{-| Text the end-to-end tests look for, named so that both sides read the same value
+rather than a test checking its own copy of it.
+-}
+addTwoFactorText : String
+addTwoFactorText =
+    "Add two factor authentication"
+
+
+twoFactorEnabledAtText : String
+twoFactorEnabledAtText =
+    "Two factor authentication was enabled "
 
 
 type alias TwoFactorAuthentication =
@@ -273,7 +288,7 @@ view windowSize textInputFocus timezone time twoFactorStatus =
             MyUi.simpleButton
                 (Dom.id "userOverview_start2FaSetup")
                 PressedStart2FaSetup
-                (Ui.text "Add two factor authentication")
+                (Ui.text addTwoFactorText)
 
         TwoFactorLoading ->
             MyUi.simpleButton
@@ -296,7 +311,7 @@ view windowSize textInputFocus timezone time twoFactorStatus =
                 [ Ui.spacing 12 ]
                 [ Ui.Prose.paragraph
                     [ Ui.paddingXY 0 4 ]
-                    [ Ui.text "Two factor authentication was enabled "
+                    [ Ui.text twoFactorEnabledAtText
                     , MyUi.timeElapsedView timezone time enabledAt
                     , Ui.text "."
                     ]

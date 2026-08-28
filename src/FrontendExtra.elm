@@ -24,12 +24,14 @@ module FrontendExtra exposing
     , layout
     , logout
     , newPrivateKeyWarning
+    , pastedMessageFileName
     , pingUserNameSoFar
     , playNotificationSound
     , playNotificationSoundForDiscordMessage
     , routePush
     , routeReplace
     , routeRequest
+    , savePrivateKeyTitle
     , setFocus
     , updateLoggedIn
     )
@@ -123,6 +125,19 @@ import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, Notifica
 import VisibleMessages
 import WordSpellingGame
 import X25519
+
+
+{-| Text the end-to-end tests look for, named so that both sides read the same value
+rather than a test checking its own copy of it.
+-}
+savePrivateKeyTitle : String
+savePrivateKeyTitle =
+    "Save your private key now"
+
+
+pastedMessageFileName : String
+pastedMessageFileName =
+    "message.txt"
 
 
 {-| The messages out of what the backend fills in when a Discord channel or thread is
@@ -1007,7 +1022,7 @@ editMessage_gotPastedText guildOrDmId { textBeforePaste, pastedText, textAfterPa
 pastedTextFileStatus : String -> FileStatus
 pastedTextFileStatus pastedText =
     FileUploading
-        (FileName.fromString "message.txt")
+        (FileName.fromString pastedMessageFileName)
         { sent = 0, size = Bytes.Encode.getStringWidth pastedText }
         (FileStatus.contentType "text/plain")
         IsNotEncrypted
@@ -1137,7 +1152,7 @@ newPrivateKeyWarning isMobile loaded email privateKey =
                 [ Ui.spacing 8 ]
                 [ Ui.row
                     [ Ui.Font.color MyUi.font3, Ui.spacing 16, Ui.contentCenterY, Ui.Font.bold ]
-                    [ Ui.html (Icons.warning 36), Ui.text "Save your private key now" ]
+                    [ Ui.html (Icons.warning 36), Ui.text savePrivateKeyTitle ]
                 , Ui.Prose.paragraph
                     []
                     [ Ui.text "Put this in a password manager. It is not stored anywhere else, so this is the only chance you have to save it. Without it your encrypted messages can't be decrypted." ]

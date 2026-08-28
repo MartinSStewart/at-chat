@@ -49,6 +49,7 @@ module LocalState exposing
     , addReactionEmojiFrontendHelper
     , addReactionEmojiHelper
     , announcementChannel
+    , callEndedText
     , callStartedText
     , canSendDiscordMessage
     , canViewDiscordChannel
@@ -62,6 +63,7 @@ module LocalState exposing
     , createGuild
     , createThreadMessageBackend
     , createThreadMessageFrontend
+    , defaultChannelName
     , deleteChannel
     , deleteChannelFrontend
     , deleteForumPostFrontend
@@ -125,6 +127,7 @@ module LocalState exposing
     , messageReactionsHelper
     , messageReactionsNoThread
     , messageToString
+    , notEnoughDiscordMessagesError
     , ownMessageIsReadFrontend
     , removeInvite
     , removeReactionEmoji
@@ -192,6 +195,19 @@ import Url exposing (Url)
 import User exposing (BackendUser, FrontendCurrentUser, LocalUser)
 import UserSession exposing (ChannelHeaderTab, FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
+
+
+{-| Text the end-to-end tests look for, named so that both sides read the same value
+rather than a test checking its own copy of it.
+-}
+callEndedText : String
+callEndedText =
+    "Call ended"
+
+
+notEnoughDiscordMessagesError : String
+notEnoughDiscordMessagesError =
+    "Send at least 4 messages using Discord first"
 
 
 type alias LocalState =
@@ -537,7 +553,7 @@ callStartedText : Maybe Time.Posix -> String
 callStartedText endedAt =
     case endedAt of
         Just _ ->
-            "Call ended"
+            callEndedText
 
         Nothing ->
             "Call started"
@@ -2983,7 +2999,7 @@ canSendDiscordMessage local guildOrDmId =
                                     Ok ()
 
                                 else
-                                    Err "Send at least 4 messages using Discord first"
+                                    Err notEnoughDiscordMessagesError
 
                             Nothing ->
                                 Err "Channel not found"

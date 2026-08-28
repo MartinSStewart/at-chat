@@ -3,6 +3,7 @@ module E2EDiscord exposing (discordTests)
 import Array
 import Audio
 import Backend
+import ChannelHeader
 import Codec
 import CustomEmoji exposing (CustomEmojiData)
 import Discord
@@ -48,6 +49,7 @@ import Time
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
 import Unsafe
 import User
+import UserOptions
 import UserSession exposing (SetViewing(..))
 
 
@@ -668,13 +670,13 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , admin.checkView
                             100
                             (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.exactText "Typing..." ]
+                                [ Test.Html.Selector.exactText Pages.Guild.typingText ]
                             )
                         , T.websocketSendString 100 connection "{\"t\":\"TYPING_START\",\"s\":3,\"op\":0,\"d\":{\"channel_id\":\"185574444641550336\",\"user_id\":\"161098476632014848\",\"timestamp\":1}}"
                         , admin.checkView
                             100
                             (Test.Html.Query.has
-                                [ Test.Html.Selector.exactText "Typing..." ]
+                                [ Test.Html.Selector.exactText Pages.Guild.typingText ]
                             )
                         ]
                     )
@@ -946,7 +948,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , admin.checkView
                             100
                             (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.text "Sticker failed to load"
+                                [ Test.Html.Selector.text Sticker.stickerFailedToLoadText
                                 , Test.Html.Selector.tag "lottie-player"
                                 ]
                             )
@@ -985,7 +987,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     (\data -> [ admin.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                 , admin.checkView
                     100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Sticker failed to load" ])
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text Sticker.stickerFailedToLoadText ])
                 , admin.checkView
                     100
                     (Test.Html.Query.has
@@ -1071,7 +1073,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 , adminA.click 100 (Dom.id "userOptions_discordSection")
                 , adminA.checkView
                     100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Loading user data" ])
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText UserOptions.loadingUserDataText ])
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId0
@@ -1083,7 +1085,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             (\data -> [ adminB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                         , adminA.checkView
                             200
-                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Loading user data" ])
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText UserOptions.loadingUserDataText ])
                         , E2EHelper.andThenWebsocket 120
                             (\connection _ ->
                                 [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
@@ -2101,7 +2103,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                             (E2EHelper.drawingAnchorClick 30 25)
                                         , admin.checkView
                                             100
-                                            (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
+                                            (Test.Html.Query.has [ Test.Html.Selector.text ChannelHeader.startDrawingText ])
                                         , E2EHelper.drawZigzagStroke admin
                                         , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
 
@@ -2125,7 +2127,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                         , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
                                         , admin.checkView
                                             100
-                                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Start drawing!" ])
+                                            (Test.Html.Query.hasNot [ Test.Html.Selector.text ChannelHeader.startDrawingText ])
                                         ]
 
                                     Nothing ->
@@ -2248,11 +2250,11 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "While you watch" ])
                         , admin.click 100 (Dom.id "guildIcon_showFriends")
-                        , E2EHelper.hasExactText admin [ "You have no unread messages!" ]
+                        , E2EHelper.hasExactText admin [ Pages.Guild.noUnreadMessagesText ]
 
                         -- The same message arriving while the admin is elsewhere does count
                         , discordGuildMessageFromGuildOnlyUser connection "While you are away"
-                        , E2EHelper.hasNotExactText admin [ "You have no unread messages!" ]
+                        , E2EHelper.hasNotExactText admin [ Pages.Guild.noUnreadMessagesText ]
                         , E2EHelper.hasExactText admin [ "While you are away" ]
 
                         -- And a Discord DM behaves the same way
@@ -2282,7 +2284,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                           -- at-chat user with a Discord account linked.
                           discordGuildMessageFromGuildOnlyUser connection "Written before the second user linked"
                         , admin.click 100 (Dom.id "guildIcon_showFriends")
-                        , E2EHelper.hasNotExactText admin [ "You have no unread messages!" ]
+                        , E2EHelper.hasNotExactText admin [ Pages.Guild.noUnreadMessagesText ]
                         ]
                     )
 
@@ -2306,7 +2308,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         [ T.andThen
                             10
                             (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
-                        , E2EHelper.hasExactText userB [ "You have no unread messages!" ]
+                        , E2EHelper.hasExactText userB [ Pages.Guild.noUnreadMessagesText ]
 
                         -- Sanity check: the second user really can see the guild and the message that
                         -- was marked as read, so the check above isn't passing for lack of data.
@@ -2606,7 +2608,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             10
                             (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                         , userB.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "secret-channel" ])
-                        , userB.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Channel does not exist" ])
+                        , userB.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText Pages.Guild.channelDoesNotExistText ])
                         , userB.snapshotView 100 { name = "Shouldn't see private channel even when directly linked" }
                         ]
                     )
@@ -2939,7 +2941,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , -- The message brought its writer along, so the overview can name them
                           admin.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "<missing>" ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text User.missingName ])
                         , admin.checkModel
                             100
                             (checkDiscordUserLoaded "Discord guild-only member AT" True guildOnlyDiscordUserId)
@@ -2994,7 +2996,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , admin.checkView
                             100
                             (Test.Html.Query.has
-                                [ Test.Html.Selector.text "Send at least 4 messages using Discord first" ]
+                                [ Test.Html.Selector.text LocalState.notEnoughDiscordMessagesError ]
                             )
                         , -- A tampered with frontend can skip the disabled message input, so the backend
                           -- has to check the restriction as well.

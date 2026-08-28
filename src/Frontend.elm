@@ -1,4 +1,9 @@
-module Frontend exposing (app, app_)
+module Frontend exposing
+    ( app
+    , app_
+    , discordLinkExpiredText
+    , goMatchNotFoundText
+    )
 
 import AiChat
 import Array
@@ -97,6 +102,19 @@ import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), SetView
 import Vector2d
 import WordSpellingGame
 import X25519
+
+
+{-| Text the end-to-end tests look for, named so that both sides read the same value
+rather than a test checking its own copy of it.
+-}
+discordLinkExpiredText : String
+discordLinkExpiredText =
+    "This Discord link has expired"
+
+
+goMatchNotFoundText : String
+goMatchNotFoundText =
+    "Go match not found"
 
 
 app :
@@ -8493,7 +8511,7 @@ view _ model =
                                         loaded
                                         (case error of
                                             LinkDiscordExpired ->
-                                                "This Discord link has expired"
+                                                discordLinkExpiredText
 
                                             LinkDiscordServerError ->
                                                 "Failed to link your Discord account due to a server error"
@@ -8519,7 +8537,7 @@ view _ model =
                                             ]
 
                                 PublicGoMatch_Missing ->
-                                    errorPage loaded "Go match not found"
+                                    errorPage loaded goMatchNotFoundText
 
                                 PublicGoMatch_Loading ->
                                     Ui.el

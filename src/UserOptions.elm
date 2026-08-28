@@ -1,4 +1,11 @@
-module UserOptions exposing (discordBookmarkletId, domainWhitelistToString, init, view)
+module UserOptions exposing
+    ( currentDeviceText
+    , discordBookmarkletId
+    , domainWhitelistToString
+    , init
+    , loadingUserDataText
+    , view
+    )
 
 import Codec
 import Coord exposing (Coord)
@@ -44,6 +51,19 @@ import UserAgent exposing (Browser(..), Device(..), UserAgent)
 import UserColor exposing (UserColor)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), UserOptionSection(..))
 import X25519
+
+
+{-| Text the end-to-end tests look for, named so that both sides read the same value
+rather than a test checking its own copy of it.
+-}
+currentDeviceText : String
+currentDeviceText =
+    "Current device"
+
+
+loadingUserDataText : String
+loadingUserDataText =
+    "Loading user data"
 
 
 init : SeqSet RichText.Domain -> UserOptionsModel
@@ -170,7 +190,7 @@ viewConnectedDevice isMobile time sessionId otherSession userAgent =
                            )
 
                 Nothing ->
-                    "Current device"
+                    currentDeviceText
               )
                 |> Ui.text
                 |> Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
@@ -871,7 +891,7 @@ discordUserCard loaded discordUserId data =
                     ]
                     (case data.isLoadingData of
                         DiscordUserLoadingData _ ->
-                            Ui.row [ Ui.spacing 8, Ui.contentCenterY ] [ Ui.text "Loading user data", Icons.spinner ]
+                            Ui.row [ Ui.spacing 8, Ui.contentCenterY ] [ Ui.text loadingUserDataText, Icons.spinner ]
 
                         _ ->
                             Ui.text "Reload user data"

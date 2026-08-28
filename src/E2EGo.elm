@@ -5,6 +5,7 @@ import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Env
+import Frontend
 import Game
 import Go
 import Id exposing (ChannelMessageId, Id)
@@ -114,13 +115,13 @@ goMatchTest normalConfig =
                                 , user2.input 100 (Dom.id "game_matchSwitcher") "0"
                                 , user2.checkView
                                     500
-                                    (Test.Html.Query.has [ Test.Html.Selector.exactText "Loading match" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.exactText Game.loadingMatchText ])
                                 , user2.snapshotView 0 { name = "Go match still loading" }
 
                                 -- Once the match lands the board takes the placeholder's place.
                                 , user2.checkView
                                     3000
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Loading match" ])
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText Game.loadingMatchText ])
                                 , user2.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
                                 , user2.setNetworkLatency 100 { toBackendLatency = 0, toFrontendLatency = 0 }
 
@@ -227,10 +228,10 @@ goTimeoutTest normalConfig =
                         -- Both players see the same loss-on-time result.
                         , admin.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text "Black wins! White loses on time." ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text (Go.lossOnTimeText Go.White) ])
                         , user.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text "Black wins! White loses on time." ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text (Go.lossOnTimeText Go.White) ])
 
                         -- And neither player still sees a "to move" prompt.
                         , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "White to move" ])
@@ -363,7 +364,7 @@ publicGoMatchViewTest normalConfig =
                                     (\data -> [ missingViewer.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                                 , missingViewer.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Go match not found" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text Frontend.goMatchNotFoundText ])
                                 ]
                             )
                         , E2EHelper.openDm user 1000 "0"

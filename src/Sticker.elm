@@ -5,6 +5,7 @@ module Sticker exposing
     , addUrl
     , animatedImageView
     , idToString
+    , stickerFailedToLoadText
     , toBase4
     , view
     , viewHelper
@@ -20,6 +21,14 @@ import Html.Attributes
 import Id exposing (Id, StickerId)
 import MyUi
 import SeqDict exposing (SeqDict)
+
+
+{-| Text the end-to-end tests look for, named so that both sides read the same value
+rather than a test checking its own copy of it.
+-}
+stickerFailedToLoadText : String
+stickerFailedToLoadText =
+    "Sticker failed to load"
 
 
 type StickerUrl
@@ -68,7 +77,7 @@ view stickerSize2 stickerId stickers2 animationMode =
                 , Html.Attributes.style "height" stickerSize2
                 , Html.Attributes.style "background-color" "gray"
                 ]
-                [ Html.text "Sticker failed to load" ]
+                [ Html.text stickerFailedToLoadText ]
 
 
 viewHelper : String -> StickerData -> AnimationMode -> Html msg

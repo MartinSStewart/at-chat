@@ -24,6 +24,7 @@ module Game exposing
     , insideBoard
     , isAnimating
     , isNotLoaded
+    , loadingMatchText
     , matchNotLoaded
     , pressedKey
     , routeRequest
@@ -70,6 +71,14 @@ import Ui.Shadow
 import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame
+
+
+{-| Text the end-to-end tests look for, named so that both sides read the same value
+rather than a test checking its own copy of it.
+-}
+loadingMatchText : String
+loadingMatchText =
+    "Loading match"
 
 
 type alias Model =
@@ -1149,7 +1158,7 @@ view currentTime windowSize showMemberTab drag startupData lastCopied localUser 
                 ( Just (MatchNotLoaded _), _ ) ->
                     Ui.el
                         [ Ui.Font.center, Ui.paddingXY 0 16, Ui.Font.bold, Ui.Font.size 20, Ui.background MyUi.background1 ]
-                        (Ui.text "Loading match")
+                        (Ui.text loadingMatchText)
 
                 ( Just (MatchData match), Just game ) ->
                     case match.data of

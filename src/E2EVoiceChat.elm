@@ -15,6 +15,7 @@ import Local
 import LocalState exposing (CallStatus(..))
 import MyUi
 import NonemptyDict
+import Pages.Guild
 import RPC
 import SeqDict
 import Test.Html.Query
@@ -155,16 +156,16 @@ voiceChatTest normalConfig =
                     , E2EHelper.openDm user 100 "0"
                     , admin.checkView
                         100
-                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.startedACallText ])
                     , admin.click 100 (Dom.id "guild_voiceChat")
                     , startCall admin
                     , E2EHelper.tallSnapshot admin 100 { name = "Started a DM call with self" }
                     , admin.checkView
                         100
-                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
+                        (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.startedACallText ])
                     , admin.checkView
                         100
-                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.text LocalState.callEndedText ])
                     , E2EHelper.tallSnapshot admin 100 { name = "Ended a DM call with self" }
 
                     -- Three steps back to the channel each time: the voice chat tab, the
@@ -175,27 +176,27 @@ voiceChatTest normalConfig =
                     , E2EHelper.openDm admin 100 "2"
                     , user.checkView
                         100
-                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.startedACallText ])
                     , admin.click 100 (Dom.id "guild_voiceChat")
                     , startCall admin
                     , user.checkView
                         100
-                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
+                        (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.startedACallText ])
                     , user.checkView
                         100
-                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.text LocalState.callEndedText ])
                     , admin.navigateBack 100
                     , admin.navigateBack 100
                     , admin.navigateBack 100
                     , E2EHelper.openDm admin 100 "0"
                     , admin.checkView
                         100
-                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
+                        (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.startedACallText, Test.Html.Selector.text LocalState.callEndedText ])
                     , admin.click 100 (Dom.id "guild_voiceChat")
                     , startCall admin
                     , user.checkView
                         100
-                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
+                        (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.startedACallText, Test.Html.Selector.text LocalState.callEndedText ])
                     ]
                 )
             ]
@@ -380,7 +381,7 @@ dmCallTest isMobile normalConfig =
                     , admin.checkView
                         50
                         (\html ->
-                            Test.Html.Query.findAll [ Test.Html.Selector.exactText "started a call" ] html
+                            Test.Html.Query.findAll [ Test.Html.Selector.exactText Pages.Guild.startedACallText ] html
                                 |> Test.Html.Query.count (Expect.equal 1)
                         )
                     , T.checkBackend 150

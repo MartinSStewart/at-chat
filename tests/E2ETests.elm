@@ -4,6 +4,7 @@ import Array exposing (Array)
 import Audio
 import Backend
 import Bytes exposing (Bytes)
+import ChannelName
 import Codec
 import Coord
 import Dict
@@ -35,10 +36,13 @@ import IdArray
 import Json.Decode
 import Json.Encode
 import Local exposing (ChangeId(..))
+import LocalState
 import LoginForm
 import MembersAndOwner
+import MessageMenu
 import MuteSettings
 import NonemptyDict
+import Pages.Admin
 import Pages.Guild
 import Pages.Home
 import PersonName
@@ -54,6 +58,7 @@ import Test.Html.Selector
 import Time
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
 import User exposing (NotificationLevel(..))
+import UserOptions
 import UserSession exposing (SetViewing(..))
 import VisibleMessages
 
@@ -352,7 +357,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.click 100 (Dom.id "admin_expandSectionButton_Users")
                 , admin.checkView
                     100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "Discord account linking enabled" ])
+                    (Test.Html.Query.has [ Test.Html.Selector.text Pages.Admin.discordLinkingEnabledText ])
                 , T.checkState
                     100
                     (\data ->
@@ -394,7 +399,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 -- lands back on the link-discord error page instead of linking.
                 , user.checkView
                     1000
-                    (Test.Html.Query.has [ Test.Html.Selector.text "This Discord link has expired" ])
+                    (Test.Html.Query.has [ Test.Html.Selector.text Frontend.discordLinkExpiredText ])
                 , T.checkState
                     100
                     (\data ->
@@ -421,7 +426,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.click 100 (Dom.id "guild_showUserOptions")
                 , admin.click 100 (Dom.id "userOptions_gotoAdmin")
                 , admin.click 100 (Dom.id "admin_expandSectionButton_API keys")
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Not regenerated" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text Pages.Admin.notRegeneratedText ])
                 , admin.click 100 (Dom.id "admin_regenerateServerSecret")
                 , T.checkState
                     100
@@ -457,12 +462,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     ++ SecretId.toString (E2EHelper.unwrapBackend data.backend).serverSecret
                                 )
                     )
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Last regenerated at " ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text Pages.Admin.lastRegeneratedAtText ])
                 , admin.checkView
                     100
                     (Test.Html.Query.hasNot
-                        [ Test.Html.Selector.exactText "Not regenerated"
-                        , Test.Html.Selector.exactText "Regenerating"
+                        [ Test.Html.Selector.exactText Pages.Admin.notRegeneratedText
+                        , Test.Html.Selector.exactText Pages.Admin.regeneratingText
                         ]
                     )
                 ]
@@ -701,18 +706,18 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , user.checkView
                     100
                     (Test.Html.Query.hasNot
-                        [ Test.Html.Selector.exactText "Typing...", Test.Html.Selector.exactText "Editing..." ]
+                        [ Test.Html.Selector.exactText Pages.Guild.typingText, Test.Html.Selector.exactText Pages.Guild.editingText ]
                     )
 
                 -- Admin types in DM, user sees "Typing..." but admin does not
                 , admin.input 100 (Dom.id "channel_textinput") "I am typing"
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Typing..." ])
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Typing..." ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText Pages.Guild.typingText ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText Pages.Guild.typingText ])
 
                 -- Admin sends the message, typing indicator disappears
                 , admin.click 100 (Dom.id "guild_friendLabel_2")
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Typing..." ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText Pages.Guild.typingText ])
 
                 -- Admin edits a message, user sees "Editing..." but admin does not
                 , admin.custom
@@ -726,14 +731,14 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     )
                 , admin.click 2000 (Dom.id "messageMenu_editMessage")
                 , admin.input 200 (Dom.id "editMessageTextInput") "Edited message"
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Editing..." ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText Pages.Guild.editingText ])
                 , admin.click 100 (Dom.id "guildIcon_showFriends")
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Editing..." ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText Pages.Guild.editingText ])
 
                 -- Admin finishes editing, editing indicator disappears
                 , admin.click 100 (Dom.id "guild_friendLabel_2")
                 , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
-                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Editing..." ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText Pages.Guild.editingText ])
                 ]
             )
         ]
@@ -1090,7 +1095,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminA
                 , adminA.click 100 (Dom.id "guild_showUserOptions")
                 , adminA.click 100 (Dom.id "userOptions_connectedDevices")
-                , E2EHelper.hasExactText adminA [ "Windows • Firefox", "Current device" ]
+                , E2EHelper.hasExactText adminA [ "Windows • Firefox", UserOptions.currentDeviceText ]
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
@@ -1098,7 +1103,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     E2EHelper.desktopWindow
                     (\adminB ->
                         [ E2EHelper.handleLogin E2EHelper.safariIphone E2EHelper.adminEmail adminB
-                        , E2EHelper.hasExactText adminA [ "iPhone • Safari", "Windows • Firefox", "Current device" ]
+                        , E2EHelper.hasExactText adminA [ "iPhone • Safari", "Windows • Firefox", UserOptions.currentDeviceText ]
                         , adminB.click 100 (Dom.id "guild_showUserOptions")
                         , adminB.click 100 (Dom.id "userOptions_connectedDevices")
                         , T.connectFrontend
@@ -1135,7 +1140,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             (Test.Html.Query.has [ Test.Html.Selector.text "Last active 1\u{00A0}minute" ])
                         , adminB.click 100 (Dom.id "options_logout")
                         , E2EHelper.hasNotExactText adminA [ "iPhone • Safari" ]
-                        , E2EHelper.hasExactText adminA [ "Windows • Chrome", "Windows • Firefox", "Current device" ]
+                        , E2EHelper.hasExactText adminA [ "Windows • Chrome", "Windows • Firefox", UserOptions.currentDeviceText ]
                         ]
                     )
                 ]
@@ -1163,21 +1168,21 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         [ E2EHelper.handleLogin E2EHelper.safariIphone E2EHelper.adminEmail adminB
 
                         -- adminA sees adminB's session in the connected devices list
-                        , E2EHelper.hasExactText adminA [ "iPhone • Safari", "Windows • Firefox", "Current device" ]
+                        , E2EHelper.hasExactText adminA [ "iPhone • Safari", "Windows • Firefox", UserOptions.currentDeviceText ]
 
                         -- adminB is logged in (it's viewing the app, not the login page)
-                        , E2EHelper.hasNotText adminB [ "Login/Signup" ]
+                        , E2EHelper.hasNotText adminB [ Pages.Home.loginSignupText ]
 
                         -- adminA logs out adminB's session
                         , adminA.click 100 (E2EHelper.logoutOtherSessionButtonId E2EHelper.sessionId1)
 
                         -- adminB has been logged out and is shown the login page
-                        , E2EHelper.hasText adminB [ "Login/Signup" ]
+                        , E2EHelper.hasText adminB [ Pages.Home.loginSignupText ]
 
                         -- adminB's session is removed from adminA's connected devices list, and adminA
                         -- itself stays logged in
                         , E2EHelper.hasNotExactText adminA [ "iPhone • Safari" ]
-                        , E2EHelper.hasExactText adminA [ "Windows • Firefox", "Current device" ]
+                        , E2EHelper.hasExactText adminA [ "Windows • Firefox", UserOptions.currentDeviceText ]
                         ]
                     )
                 ]
@@ -1267,9 +1272,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , ( "clientY", Json.Encode.float 150 )
                         ]
                     )
-                , E2EHelper.hasExactText admin [ "Edit message" ]
+                , E2EHelper.hasExactText admin [ MessageMenu.editMessageText ]
                 , admin.click 2000 (Dom.id "messageMenu_editMessage")
-                , E2EHelper.hasNotExactText admin [ "Edit message" ]
+                , E2EHelper.hasNotExactText admin [ MessageMenu.editMessageText ]
                 , admin.input 1000 (Dom.id "editMessageTextInput") "Test Edited"
                 , admin.input 200 (Dom.id "editMessageTextInput") "Test Edited\nLinebreak"
                 , E2EHelper.hasText admin [ "to cancel edit" ]
@@ -1694,7 +1699,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             100
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.exactText "My new guild!"
-                                , Test.Html.Selector.exactText "general"
+                                , Test.Html.Selector.exactText (ChannelName.toString LocalState.defaultChannelName)
                                 ]
                             )
                         , E2EHelper.tallSnapshot userReload 100 { name = "Unread overview" }
@@ -1735,7 +1740,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread in a different channel" ])
                         , userReload.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.exactText "1 older unread message" ])
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText (Pages.Guild.olderUnreadMessagesText 1) ])
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.text "Unread again" ])
@@ -1796,7 +1801,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     html
                                     |> Test.Html.Query.has
                                         [ Test.Html.Selector.exactText "My new guild!"
-                                        , Test.Html.Selector.exactText "general"
+                                        , Test.Html.Selector.exactText (ChannelName.toString LocalState.defaultChannelName)
                                         , Test.Html.Selector.exactText "Unread in the channel"
                                         ]
                             )
@@ -1821,7 +1826,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread in the thread" ])
                         , userReload.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.exactText "You have no unread messages!" ])
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText Pages.Guild.noUnreadMessagesText ])
                         , E2EHelper.tallSnapshot userReload 100 { name = "Unread overview with nothing unread" }
 
                         -- The thread stays read once the page is loaded from scratch again.
@@ -1836,7 +1841,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     (\data -> [ userReload2.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                                 , userReload2.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.exactText "You have no unread messages!" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.exactText Pages.Guild.noUnreadMessagesText ])
                                 ]
                             )
                         ]
@@ -1925,7 +1930,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , userReload.checkView
                             500
                             (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.exactText "Start of thread" ]
+                                [ Test.Html.Selector.exactText Pages.Guild.startOfThreadText ]
                             )
 
                         -- The thread starter is the channel message the thread hangs off, so
@@ -1941,7 +1946,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , userReload.checkView
                             3000
                             (Test.Html.Query.has
-                                [ Test.Html.Selector.exactText "Start of thread"
+                                [ Test.Html.Selector.exactText Pages.Guild.startOfThreadText
                                 , Test.Html.Selector.exactText "A reply in the thread"
                                 ]
                             )
@@ -2288,9 +2293,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , user.click 100 LoginForm.submitEmailButtonId
 
                 -- We should now be on the login code screen. Press cancel instead of entering the code.
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Check your email for a code" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text LoginForm.checkYourEmailText ])
                 , user.click 100 LoginForm.cancelButtonId
-                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Check your email for a code" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text LoginForm.checkYourEmailText ])
 
                 -- Try again with the same email and use the new login code that gets sent.
                 , user.click 100 Pages.Home.loginButtonId
@@ -2516,7 +2521,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , admin.click 300 (Dom.id "admin_importBackendButton")
                         , admin.checkView
                             500
-                            (Test.Html.Query.has [ Test.Html.Selector.text "Imported!" ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Admin.importedText ])
                         , T.checkState
                             100
                             (\afterImportData ->
@@ -2658,7 +2663,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , admin.click 300 (Dom.id "admin_importBackendButton")
                         , admin.checkView
                             500
-                            (Test.Html.Query.has [ Test.Html.Selector.text "Imported!" ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Admin.importedText ])
                         , T.checkState
                             100
                             (\afterImportData ->
@@ -2819,7 +2824,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                                     Nothing ->
                                                                         Err "Guild missing"
                                                             )
-                                                        , E2EHelper.hasText thirdUser [ "Guild not found" ]
+                                                        , E2EHelper.hasText thirdUser [ Pages.Guild.guildNotFoundText ]
                                                         ]
                                                     )
                                                 ]

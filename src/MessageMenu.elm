@@ -1,6 +1,7 @@
 module MessageMenu exposing
     ( availableCustomEmojisAndStickers
     , close
+    , editMessageText
     , editMessageTextInputId
     , messageMenuSpeed
     , mobileMenuMaxHeight
@@ -41,6 +42,14 @@ import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
 import User
+
+
+{-| Text the end-to-end tests look for, named so that both sides read the same value
+rather than a test checking its own copy of it.
+-}
+editMessageText : String
+editMessageText =
+    "Edit message"
 
 
 width : number
@@ -665,7 +674,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                     isMobile
                     (Dom.id "messageMenu_editMessage")
                     Icons.pencil
-                    "Edit message"
+                    editMessageText
                     (MessageMenu_PressedEditMessage guildOrDmId threadRoute)
                     |> ButtonItem
 

@@ -1,6 +1,7 @@
 module E2EDrawing exposing (drawOnMessages, drawWithTouch, drawingScalesWithImages, newMessagesWhileDrawing)
 
 import Audio
+import ChannelHeader
 import Coord
 import Date exposing (Date)
 import Drawing
@@ -72,7 +73,7 @@ drawOnMessages imageUploadConfig =
                                     (E2EHelper.drawingAnchorClick 30 25)
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text ChannelHeader.startDrawingText ])
                                 , E2EHelper.drawZigzagStroke admin
 
                                 -- The stroke is visible for the user that drew it and, in
@@ -120,7 +121,7 @@ drawOnMessages imageUploadConfig =
                                 , admin.click 100 Drawing.zoomButtonId
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Zoom out" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text ChannelHeader.zoomOutText ])
                                 , admin.snapshotView 100 { name = "Drawing zoomed in on an anchor" }
 
                                 -- A stroke drawn while zoomed in is mapped back through the zoom so
@@ -158,14 +159,14 @@ drawOnMessages imageUploadConfig =
                                 , admin.click 100 Drawing.zoomButtonId
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Zoom in" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text ChannelHeader.zoomInText ])
 
                                 -- Clicking the channel text input stops drawing by deselecting the
                                 -- anchor, so the drawing tab goes back to asking for an anchor
                                 , admin.click 100 Pages.Guild.channelTextInputId
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Start drawing!" ])
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text ChannelHeader.startDrawingText ])
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text "Click on a profile image" ])
@@ -187,7 +188,7 @@ drawOnMessages imageUploadConfig =
                                     (E2EHelper.drawingAnchorClick 100 50)
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text ChannelHeader.startDrawingText ])
                                 , E2EHelper.drawZigzagStroke admin
                                 , admin.checkView 100 (E2EHelper.expectPolylineCount 2)
                                 , user.checkView 100 (E2EHelper.expectPolylineCount 2)
@@ -226,7 +227,7 @@ drawOnMessages imageUploadConfig =
                                     (E2EHelper.drawingAnchorClick 400 300)
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text ChannelHeader.startDrawingText ])
                                 , E2EHelper.drawZigzagStroke admin
                                 , admin.checkView 100 (E2EHelper.expectPolylineCount 3)
                                 , user.checkView 100 (E2EHelper.expectPolylineCount 3)
@@ -263,7 +264,7 @@ drawOnMessages imageUploadConfig =
                                     (E2EHelper.drawingAnchorClick 100 100)
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text ChannelHeader.startDrawingText ])
                                 , E2EHelper.drawWideZigzagStroke admin
                                 , admin.checkView 100 (E2EHelper.expectPolylineCount 4)
                                 , user.checkView 100 (E2EHelper.expectPolylineCount 4)
@@ -293,7 +294,7 @@ drawOnMessages imageUploadConfig =
                                 , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Start drawing!" ])
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text ChannelHeader.startDrawingText ])
 
                                 -- All four drawings are persisted so they survive loading the page again
                                 , T.connectFrontend
@@ -397,7 +398,7 @@ drawingScalesWithImages imageUploadConfig =
                                     (E2EHelper.drawingAnchorClick 100 50)
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text ChannelHeader.startDrawingText ])
                                 , E2EHelper.drawZigzagStroke admin
                                 , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
                                 , user.checkView 100 (E2EHelper.expectPolylineCount 1)
@@ -506,7 +507,7 @@ newMessagesWhileDrawing config =
                                     (E2EHelper.drawingAnchorClick 30 25)
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text ChannelHeader.startDrawingText ])
 
                                 -- Nothing has arrived yet so there's no warning
                                 , admin.checkView
@@ -530,7 +531,7 @@ newMessagesWhileDrawing config =
                                 , admin.click 100 Pages.Guild.newMessagesId
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Start drawing!" ])
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text ChannelHeader.startDrawingText ])
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text "Click on a profile image" ])
@@ -579,7 +580,7 @@ drawWithTouch config =
                                     (E2EHelper.drawingAnchorClick 30 25)
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text ChannelHeader.startDrawingText ])
                                 , E2EHelper.drawZigzagStroke admin
                                 , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
                                 , user.checkView 100 (E2EHelper.expectPolylineCount 1)

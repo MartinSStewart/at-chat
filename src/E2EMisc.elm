@@ -44,6 +44,7 @@ import Emoji
 import Encryption
 import Expect
 import FileStatus
+import FrontendExtra
 import Html.Attributes
 import Id
 import IdArray
@@ -53,6 +54,7 @@ import Local
 import LocalState exposing (LocalState)
 import MembersAndOwner
 import Message
+import MessageDropdown
 import NonemptyDict
 import Pages.Guild
 import RichText
@@ -132,7 +134,7 @@ largePasteBecomesAttachment config =
                     )
                 , admin.checkView
                     100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "message.txt" ])
+                    (Test.Html.Query.has [ Test.Html.Selector.text FrontendExtra.pastedMessageFileName ])
                 ]
             )
         ]
@@ -336,29 +338,29 @@ endToEndEncryptionRequestTest config =
                 , admin.click 100 (Dom.id "guild_showMembers")
                 , admin.checkView
                     100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "End-to-end encryption" ])
+                    (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.e2eeSectionTitle ])
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text warning ])
                 , admin.click 100 (Dom.id "guild_e2eeSection")
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text warning ])
                 , admin.checkView
                     100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Enable end-to-end encryption" ])
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
                 , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
 
                 -- Encrypting anything needs a key pair on the account first, so that
                 -- stands in front of enabling it.
                 , admin.checkView
                     100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Enable end-to-end encryption" ])
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
                 , addPrivateKeyToAccount admin
                     (\adminPrivateKey ->
                         [ admin.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text "Enable end-to-end encryption" ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
                         , admin.click 100 (Dom.id "guild_enableE2ee")
                         , admin.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Enable end-to-end encryption" ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
                         , admin.checkView
                             100
                             (Test.Html.Query.has
@@ -406,7 +408,7 @@ endToEndEncryptionRequestTest config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text "Enable end-to-end encryption" ]
+                                        [ Test.Html.Selector.text Pages.Guild.enableE2eeText ]
                                     )
 
                                 -- Accepting the risks is answered once for the account rather than once
@@ -424,7 +426,7 @@ endToEndEncryptionRequestTest config =
                                     100
                                     (Test.Html.Query.has
                                         [ Test.Html.Selector.text warning
-                                        , Test.Html.Selector.text "Enable end-to-end encryption"
+                                        , Test.Html.Selector.text Pages.Guild.enableE2eeText
                                         ]
                                     )
 
@@ -862,7 +864,7 @@ addPrivateKeyToAccount client continueWith =
         , client.checkView
             100
             (Test.Html.Query.has
-                [ Test.Html.Selector.text "Save your private key now"
+                [ Test.Html.Selector.text FrontendExtra.savePrivateKeyTitle
                 , Test.Html.Selector.text "It is not stored anywhere else"
                 , Test.Html.Selector.id "frontend_newPrivateKey_copy"
                 ]
@@ -876,7 +878,7 @@ addPrivateKeyToAccount client continueWith =
                             :: client.checkView
                                 100
                                 (Test.Html.Query.hasNot
-                                    [ Test.Html.Selector.text "Save your private key now" ]
+                                    [ Test.Html.Selector.text FrontendExtra.savePrivateKeyTitle ]
                                 )
                             :: continueWith privateKeyText
 
@@ -980,7 +982,7 @@ friendsSearchTest config =
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.id "guild_friendLabel_0"
                                 , Test.Html.Selector.id "guild_friendLabel_2"
-                                , Test.Html.Selector.exactText "Direct messages"
+                                , Test.Html.Selector.exactText Pages.Guild.directMessagesText
                                 ]
                             )
                         , admin.checkView 100
@@ -1078,7 +1080,7 @@ channelSearchTest config =
                 , admin.checkView 100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_openChannel_6" ])
                 , admin.checkView 100
-                    (Test.Html.Query.has [ Test.Html.Selector.exactText "No matching channels\u{00A0}found" ])
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText Pages.Guild.noMatchingChannelsText ])
 
                 -- Clearing the text shows all channels again.
                 , admin.click 100 (Dom.id "guild_clearChannelSearch")
@@ -1281,36 +1283,36 @@ staysReadWhileViewingTest config =
                   E2EHelper.writeMessage admin 100 "In the channel"
                 , checkChannelIsCaughtUp guildChannelId user
                 , user.click 100 (Dom.id "guildIcon_showFriends")
-                , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+                , E2EHelper.hasExactText user [ Pages.Guild.noUnreadMessagesText ]
 
                 -- A message arriving while the reader is elsewhere is still unread
                 , E2EHelper.writeMessage admin 100 "While away"
-                , E2EHelper.hasNotExactText user [ "You have no unread messages!" ]
+                , E2EHelper.hasNotExactText user [ Pages.Guild.noUnreadMessagesText ]
                 , E2EHelper.hasExactText user [ "While away" ]
 
                 -- Opening the channel catches them up again, and a thread started from a
                 -- message counts separately from the channel it hangs off
                 , user.click 100 (Dom.id "guild_openGuild_1")
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "new" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText Pages.Guild.newMessagesBadgeText ])
                 , E2EHelper.createThread admin (Id.fromInt 1)
                 , E2EHelper.writeMessage admin 100 "Starting a thread"
                 , user.click 100 (Dom.id "guild_viewThread_0_1")
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "new" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText Pages.Guild.newMessagesBadgeText ])
                 , E2EHelper.writeMessage admin 100 "In the thread"
                 , checkThreadIsCaughtUp guildChannelId (Id.fromInt 1) user
                 , user.click 100 (Dom.id "guildIcon_showFriends")
-                , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+                , E2EHelper.hasExactText user [ Pages.Guild.noUnreadMessagesText ]
 
                 -- The same in a DM, where the reader knows the conversation by the person
                 -- writing to them
                 , E2EHelper.openDm admin 100 "2"
                 , E2EHelper.writeMessage admin 100 "Hello in a DM!"
                 , user.click 100 (Dom.id "guild_friendLabel_0")
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "new" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText Pages.Guild.newMessagesBadgeText ])
                 , E2EHelper.writeMessage admin 100 "And another one"
                 , checkChannelIsCaughtUp dmWithAdminId user
                 , user.click 100 (Dom.id "guildIcon_showFriends")
-                , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+                , E2EHelper.hasExactText user [ Pages.Guild.noUnreadMessagesText ]
 
                 -- A reader who is behind stays where they are. Marking "While away" as
                 -- unread puts them one message back, and a message arriving while they are
@@ -1319,7 +1321,7 @@ staysReadWhileViewingTest config =
                 , user.click 100 (Dom.id "guild_openGuild_1")
                 , user.click 100 (Dom.id "guild_openChannel_0")
                 , markAsUnread user (Id.fromInt 2)
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "new" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText Pages.Guild.newMessagesBadgeText ])
                 , user.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
                 , admin.click 100 (Dom.id "guild_openGuild_1")
                 , admin.click 100 (Dom.id "guild_openChannel_0")
@@ -1365,7 +1367,7 @@ reloadingAConversationLeavesItUnreadTest config =
                 -- The reader goes elsewhere and a message turns up without them
                 , user.click 100 (Dom.id "guildIcon_showFriends")
                 , E2EHelper.writeMessage admin 100 "While away"
-                , E2EHelper.hasNotExactText user [ "You have no unread messages!" ]
+                , E2EHelper.hasNotExactText user [ Pages.Guild.noUnreadMessagesText ]
 
                 -- Loading the channel's url puts them back in it with that message still
                 -- unread, so the divider above it is what they see
@@ -1399,7 +1401,7 @@ reloadingAConversationLeavesItUnreadTest config =
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "While away" ])
                         , reloaded.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.exactText "new" ])
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText Pages.Guild.newMessagesBadgeText ])
                         , reloaded.checkModel 100 (checkLastViewedMessageIs guildChannelId (Id.fromInt 1))
                         ]
                     )
@@ -1539,7 +1541,7 @@ checkChannelIsCaughtUp :
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 checkChannelIsCaughtUp guildOrDmId user =
     T.group
-        [ user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
+        [ user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText Pages.Guild.newMessagesBadgeText ])
         , user.checkModel
             0
             (\model ->
@@ -1579,7 +1581,7 @@ checkThreadIsCaughtUp :
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 checkThreadIsCaughtUp guildOrDmId threadId user =
     T.group
-        [ user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
+        [ user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText Pages.Guild.newMessagesBadgeText ])
         , user.checkModel
             0
             (\model ->
@@ -1672,7 +1674,7 @@ markMessageAsUnreadTest config =
 
                 -- Leaving the channel marks everything in it as read
                 , user.click 100 (Dom.id "guildIcon_showFriends")
-                , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+                , E2EHelper.hasExactText user [ Pages.Guild.noUnreadMessagesText ]
                 , user.checkView 100 (Test.Html.Query.hasNot [ twoUnread ])
 
                 -- Marking the second of the three messages as unread leaves it and the
@@ -1720,7 +1722,7 @@ markMessageAsUnreadTest config =
                 -- Reading the channel for real puts the unread count away again
                 , user.click 100 (Dom.id "guild_openGuild_1")
                 , user.click 100 (Dom.id "guildIcon_showFriends")
-                , E2EHelper.hasExactText user [ "You have no unread messages!" ]
+                , E2EHelper.hasExactText user [ Pages.Guild.noUnreadMessagesText ]
                 , user.checkView 100 (Test.Html.Query.hasNot [ twoUnread ])
                 ]
             )
@@ -1881,7 +1883,7 @@ dmThreadsTest config =
                             [ Test.Html.Selector.id "guild_unreadOverviewOpenChannel_dm_0" ]
                             html
                             |> Test.Html.Query.has
-                                [ Test.Html.Selector.exactText "Chat with"
+                                [ Test.Html.Selector.exactText Pages.Guild.chatWithText
                                 , Test.Html.Selector.exactText E2EHelper.adminName
                                 ]
                     )
@@ -1892,7 +1894,7 @@ dmThreadsTest config =
                             [ Test.Html.Selector.id "guild_unreadOverviewOpenChannel_dm_0_thread_0" ]
                             html
                             |> Test.Html.Query.has
-                                [ Test.Html.Selector.exactText "Chat with"
+                                [ Test.Html.Selector.exactText Pages.Guild.chatWithText
                                 , Test.Html.Selector.exactText E2EHelper.adminName
                                 , Test.Html.Selector.exactText "Hello in a DM!"
                                 ]
@@ -2087,7 +2089,7 @@ timeOfDaySuggestionTest config =
                 , admin.click 100 Pages.Guild.channelTextInputId
                 , admin.input 100 Pages.Guild.channelTextInputId "Meet at 18:00"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 13, end = 13 }
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Add a timestamp" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.addTimestampText ])
 
                 -- Suggestions that land on another day read as a date, which is the same text
                 -- that picking them writes into the message.
@@ -2099,7 +2101,7 @@ timeOfDaySuggestionTest config =
                 -- before the message can be sent. Writing out a whole timestamp shuts it,
                 -- since the time of day on the end of one is already part of a timestamp.
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 30, end = 30 }
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a timestamp" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.addTimestampText ])
                 , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
                 , T.checkState 100 (expectLastMessageTimestamps [ summerNoon ])
                 , admin.input 100 Pages.Guild.channelTextInputId "Meet at December 15, 2026 at 12:00"
@@ -2134,13 +2136,13 @@ timeOffsetSuggestionTest config =
                 , admin.click 100 Pages.Guild.channelTextInputId
                 , admin.input 100 Pages.Guild.channelTextInputId "Remind me in 5 hours"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 20, end = 20 }
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Add a timestamp" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.addTimestampText ])
 
                 -- Picking a suggestion closes the dropdown. What it writes into the message is
                 -- put there by js, which these tests don't run, so the text it would have left
                 -- behind is typed in its place.
                 , admin.click 100 (Pages.Guild.dropdownButtonId 0)
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a timestamp" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.addTimestampText ])
                 , admin.input 100 Pages.Guild.channelTextInputId withTimestamp
                 , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
                 , T.checkState 100 (expectLastMessageTimestamps [ 17 * 60 ])
@@ -2184,23 +2186,23 @@ noTimestampSuggestionTest config =
                 , admin.click 100 Pages.Guild.channelTextInputId
                 , admin.input 100 Pages.Guild.channelTextInputId "see you later"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 13, end = 13 }
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a timestamp" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.addTimestampText ])
 
                 -- A unit needs a number in front of it to be an offset.
                 , admin.input 100 Pages.Guild.channelTextInputId "later that day"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 14, end = 14 }
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a timestamp" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.addTimestampText ])
 
                 -- The 18:00 on the end of a timestamp is already part of one, so offering to
                 -- turn it into another would nest a timestamp inside the one that's there.
                 , admin.input 100 Pages.Guild.channelTextInputId "Meet at January 1, 1970 at 18:00"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 32, end = 32 }
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a timestamp" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.addTimestampText ])
 
                 -- Away from the end of the words it reads, there's nothing to replace.
                 , admin.input 100 Pages.Guild.channelTextInputId "Remind me in 5 hours and also buy milk"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 38, end = 38 }
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a timestamp" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.addTimestampText ])
                 ]
             )
         ]
@@ -2249,13 +2251,13 @@ mentionSuggestionTest config =
                 -- far, so the admin's own name isn't among them.
                 , admin.input 100 Pages.Guild.channelTextInputId "Hey @S"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 6, end = 6 }
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Mention a user" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Stevie Steve" ])
 
                 -- A name nobody in the guild has leaves nothing to suggest.
                 , admin.input 100 Pages.Guild.channelTextInputId "Hey @Zz"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 7, end = 7 }
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Mention a user" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
 
                 -- Picking a suggestion closes the dropdown. The name it writes into the message
                 -- is put there by js, which these tests don't run, so the text it would have
@@ -2263,7 +2265,7 @@ mentionSuggestionTest config =
                 , admin.input 100 Pages.Guild.channelTextInputId "Hey @S"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 6, end = 6 }
                 , admin.click 100 (Pages.Guild.dropdownButtonId 0)
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Mention a user" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionUserText ])
                 , admin.input 100 Pages.Guild.channelTextInputId "Hey @Stevie Steve"
                 , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
                 , T.checkState
@@ -2303,17 +2305,17 @@ emojiSuggestionTest config =
                 -- Two characters match too much of the emoji list to be worth showing.
                 , admin.input 100 Pages.Guild.channelTextInputId "Party :ta"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 9, end = 9 }
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a sticker or emoji" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.addStickerOrEmojiText ])
                 , admin.input 100 Pages.Guild.channelTextInputId "Party :tada"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 11, end = 11 }
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Add a sticker or emoji" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.addStickerOrEmojiText ])
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText ":tada:" ])
 
                 -- Picking a suggestion closes the dropdown. As with a mention, what it writes
                 -- into the message is put there by js, so the emoji it would have left behind
                 -- is typed in its place.
                 , admin.click 100 (Pages.Guild.dropdownButtonId 0)
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a sticker or emoji" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.addStickerOrEmojiText ])
                 , admin.input 100 Pages.Guild.channelTextInputId "Party 🎉"
                 , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "🎉" ])
@@ -2420,15 +2422,15 @@ startingACallOrGameStaysReadTest config =
             (\admin user ->
                 [ -- The admin is caught up in the channel both of them are looking at
                   E2EHelper.writeMessage user 100 "In the channel"
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText Pages.Guild.newMessagesBadgeText ])
 
                 -- Starting a call from it leaves them caught up on the card it wrote
                 , admin.click 100 (Dom.id "guild_voiceChat")
                 , E2EVoiceChat.startCall admin
                 , admin.navigateBack 100
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.startedACallText ])
                 , admin.checkModel 100 (checkChannelIsCaughtUpModel guildChannelId)
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText Pages.Guild.newMessagesBadgeText ])
 
                 -- And so does starting a game
                 , admin.click 100 (Dom.id "guild_openGamesTab")
@@ -2436,7 +2438,7 @@ startingACallOrGameStaysReadTest config =
                 , admin.click 100 (Dom.id "go_start")
                 , admin.navigateBack 100
                 , admin.checkModel 100 (checkChannelIsCaughtUpModel guildChannelId)
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "new" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText Pages.Guild.newMessagesBadgeText ])
                 , E2EHelper.tallSnapshot admin 100 { name = "Started a call and a game without either turning up unread" }
                 ]
             )
@@ -2487,18 +2489,18 @@ leaveGuildTest config =
                 in
                 [ -- The owner can delete the guild but has no way to leave it
                   admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
-                , E2EHelper.hasExactText admin [ "Delete guild" ]
-                , E2EHelper.hasNotExactText admin [ "Leave guild" ]
+                , E2EHelper.hasExactText admin [ Pages.Guild.deleteGuildText ]
+                , E2EHelper.hasNotExactText admin [ Pages.Guild.leaveGuildText ]
 
                 -- A member gets the leave button instead
                 , user.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
-                , E2EHelper.hasExactText user [ "Leave guild" ]
-                , E2EHelper.hasNotExactText user [ "Delete guild" ]
+                , E2EHelper.hasExactText user [ Pages.Guild.leaveGuildText ]
+                , E2EHelper.hasNotExactText user [ Pages.Guild.deleteGuildText ]
                 , user.snapshotView 100 { name = "Guild settings for a member who isn't the owner" }
 
                 -- The first press only asks for confirmation
                 , user.click 100 (Dom.id "guild_leaveGuild")
-                , E2EHelper.hasExactText user [ "Yes, leave guild" ]
+                , E2EHelper.hasExactText user [ Pages.Guild.confirmLeaveGuildText ]
                 , T.checkBackend 100 (checkGuildMemberCount guildId 1)
 
                 -- The second press leaves the guild

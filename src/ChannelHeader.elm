@@ -6,7 +6,10 @@ module ChannelHeader exposing
     , discordThread
     , drawingCanUndoOrRedo
     , headerBackButton
+    , startDrawingText
     , thread
+    , zoomInText
+    , zoomOutText
     )
 
 import Call exposing (CallId(..))
@@ -40,6 +43,24 @@ import Ui.Font
 import Ui.Lazy
 import User exposing (LocalUser)
 import UserSession exposing (ChannelHeaderTab(..))
+
+
+{-| Text the end-to-end tests look for, named so that both sides read the same value
+rather than a test checking its own copy of it.
+-}
+startDrawingText : String
+startDrawingText =
+    "Start drawing!"
+
+
+zoomInText : String
+zoomInText =
+    "Zoom in"
+
+
+zoomOutText : String
+zoomOutText =
+    "Zoom out"
 
 
 channel : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
@@ -1027,7 +1048,7 @@ drawingTabView isMobile model local =
                 in
                 Ui.column
                     [ Ui.spacing 8 ]
-                    [ Ui.text "Start drawing!"
+                    [ Ui.text startDrawingText
                     , Ui.row
                         [ if isMobile then
                             Ui.spacing 8
@@ -1042,10 +1063,10 @@ drawingTabView isMobile model local =
                             Drawing.zoomButtonId
                             Drawing.PressedZoom
                             (if selected.zoom == 1 then
-                                "Zoom in"
+                                zoomInText
 
                              else
-                                "Zoom out"
+                                zoomOutText
                             )
                             True
                         ]

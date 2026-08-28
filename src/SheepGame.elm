@@ -20,9 +20,11 @@ module SheepGame exposing
     , UnvalidatedInput
     , ValidatedInput
     , ValidatedSetup
+    , answeredCountText
     , attachedFileTrackerId
     , changedInputs
     , clampSavedQuestions
+    , emptyQuestionError
     , fileUploadPreview
     , fileUploadPreviewSize
     , gameView
@@ -34,7 +36,11 @@ module SheepGame exposing
     , inputContainerId
     , inputId
     , mapQuestionRichText
+    , newQuestionRevealedText
+    , noQuestionsError
     , questionRevealed
+    , rankDownArrow
+    , rankUpArrow
     , reactionTargetId
     , removeAttachedFileFromText
     , resultsData
@@ -42,6 +48,7 @@ module SheepGame exposing
     , saveInputAction
     , scoresThroughQuestion
     , scoringId
+    , scoringText
     , setupView
     , updateAction
     , updateGame
@@ -100,6 +107,42 @@ import Ui.Prose
 import Ui.Shadow
 import User exposing (FrontendUser, LocalUser)
 import UserColor
+
+
+{-| Text the end-to-end tests look for, named so that both sides read the same value
+rather than a test checking its own copy of it.
+-}
+rankUpArrow : String
+rankUpArrow =
+    "▲"
+
+
+rankDownArrow : String
+rankDownArrow =
+    "▼"
+
+
+{-| Text the end-to-end tests look for, named so that both sides read the same value
+rather than a test checking its own copy of it.
+-}
+scoringText : String
+scoringText =
+    "Scoring"
+
+
+newQuestionRevealedText : String
+newQuestionRevealedText =
+    "New question revealed!"
+
+
+noQuestionsError : String
+noQuestionsError =
+    "Write at least one question before starting"
+
+
+emptyQuestionError : String
+emptyQuestionError =
+    "Can't be empty"
 
 
 type alias ValidatedSetup =
@@ -430,7 +473,7 @@ validateInput timezone users question =
                 |> Ok
 
         ( Nothing, _ ) ->
-            Err "Can't be empty"
+            Err emptyQuestionError
 
         ( _, True ) ->
             Err "Attached files not finished uploading"
@@ -453,7 +496,7 @@ validateSetup timezone users createdBy model =
                 Err ""
 
         Nothing ->
-            Err "Write at least one question before starting"
+            Err noQuestionsError
 
 
 {-| What the setup and the game can't do for themselves. Everything about an input works
@@ -1757,7 +1800,7 @@ newQuestionRevealedView isMobile =
         , Ui.pointer
         , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.highlightedBorder ]
         ]
-        (Ui.text "New question revealed!")
+        (Ui.text newQuestionRevealedText)
 
 
 tabBodyHeight : Bool -> Coord CssPixels -> Int
@@ -2623,7 +2666,7 @@ revealingView isMobile time contentWidth localUser setup shared model =
             [ Ui.spacing 32 ]
             (Ui.column
                 [ Ui.spacing 8, Ui.id (Dom.idToString scoringId), MyUi.fadeIn, padding ]
-                [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Scoring")
+                [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text scoringText)
                 , Ui.column
                     [ Ui.spacing 12, Ui.padding 8, Ui.Font.color MyUi.font3 ]
                     [ Ui.text "For each question you get points equal to the number of people who picked the same answer as you (including yourself). For example, if you pick a unique answer, you get 1 point. If you and two others pick the same answer, you three get 3 points."
@@ -2974,10 +3017,10 @@ scoreRowView localUser maxPoints answerResult =
                         [ Ui.text (String.fromInt score)
                         , case rankChange of
                             RankUp ->
-                                Ui.el [ Ui.Font.color (Ui.rgb 25 230 25), Ui.move { x = 0, y = -1, z = 0 } ] (Ui.text "▲")
+                                Ui.el [ Ui.Font.color (Ui.rgb 25 230 25), Ui.move { x = 0, y = -1, z = 0 } ] (Ui.text rankUpArrow)
 
                             RankDown ->
-                                Ui.el [ Ui.Font.color (Ui.rgb 230 25 25), Ui.move { x = 0, y = -1, z = 0 } ] (Ui.text "▼")
+                                Ui.el [ Ui.Font.color (Ui.rgb 230 25 25), Ui.move { x = 0, y = -1, z = 0 } ] (Ui.text rankDownArrow)
 
                             RankUnchanged ->
                                 Ui.none

@@ -105,7 +105,7 @@ sheepGameDmTest normalConfig =
                         -- has stopped typing it for a moment, which is what this waits out.
                         , admin.checkView
                             2000
-                            (Test.Html.Query.has [ Test.Html.Selector.text "1 player has answered so far" ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text (SheepGame.answeredCountText 1) ])
 
                         -- Saving as they're typed is what makes a refresh survivable, so
                         -- opening the match fresh puts them back in the boxes.
@@ -165,7 +165,7 @@ sheepGameDmTest normalConfig =
                         , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
                         , admin.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text "Scoring" ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text SheepGame.scoringText ])
                         , admin.checkView
                             100
                             (Test.Html.Query.hasNot [ Test.Html.Selector.text "colour" ])
@@ -173,7 +173,7 @@ sheepGameDmTest normalConfig =
                         , admin.checkView
                             100
                             (Test.Html.Query.has
-                                [ Test.Html.Selector.text "Scoring"
+                                [ Test.Html.Selector.text SheepGame.scoringText
                                 , Test.Html.Selector.text "colour"
                                 ]
                             )
@@ -183,7 +183,7 @@ sheepGameDmTest normalConfig =
                         , user.checkView
                             100
                             (Test.Html.Query.has
-                                [ Test.Html.Selector.text "Scoring"
+                                [ Test.Html.Selector.text SheepGame.scoringText
                                 , Test.Html.Selector.text "blue"
                                 ]
                             )
@@ -256,12 +256,12 @@ setupNeedsAQuestionTest normalConfig =
                 , admin.click 100 (Dom.id "sheepGame_start")
                 , admin.checkView
                     100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "Write at least one question before starting" ])
+                    (Test.Html.Query.has [ Test.Html.Selector.text SheepGame.noQuestionsError ])
 
                 -- A question left blank stops the rest from starting.
                 , admin.input 100 (Dom.id "sheepGame_question_0") "Name a colour"
                 , admin.click 100 (Dom.id "sheepGame_start")
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Can't be empty" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text SheepGame.emptyQuestionError ])
 
                 -- Writing every question and starting leaves the setup view for the game
                 -- itself, where the host locks the answers rather than writing one.
@@ -409,7 +409,7 @@ threePlayerMatchTest normalConfig =
                                 -- so there's no button to press here either.
                                 , admin.checkView
                                     2000
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "1 player has answered so far" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text (SheepGame.answeredCountText 1) ])
 
                                 -- Case doesn't matter to the grouping, so blue scores together with Blue.
                                 , joe.input 100 (Dom.id "sheepGame_answer_0") "blue"
@@ -442,7 +442,7 @@ threePlayerMatchTest normalConfig =
                                 , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
                                 , wanda.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Scoring" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text SheepGame.scoringText ])
                                 , wanda.checkView
                                     100
                                     (Test.Html.Query.hasNot [ Test.Html.Selector.text "Name\na\ncolour" ])
@@ -472,8 +472,8 @@ threePlayerMatchTest normalConfig =
                                             |> Test.Html.Query.count (Expect.greaterThan 0)
                                     )
                                 , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Name an animal" ])
-                                , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "▲" ])
-                                , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "▼" ])
+                                , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text SheepGame.rankUpArrow ])
+                                , wanda.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text SheepGame.rankDownArrow ])
 
                                 -- An answer can be reacted to the way a message can: the menu
                                 -- comes up while the pointer is over it, and the reaction is
@@ -521,26 +521,26 @@ threePlayerMatchTest normalConfig =
                                 , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
                                 , joe.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.exactText "New question revealed!" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.exactText SheepGame.newQuestionRevealedText ])
 
                                 -- Stevie stayed at the bottom, so the question is already in front of
                                 -- him and there's nothing to announce
                                 , stevie.checkView
                                     100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "New question revealed!" ])
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText SheepGame.newQuestionRevealedText ])
 
                                 -- Pressing it takes Joe down to the question, so it has nothing left to say
                                 , joe.click 100 (Dom.id "sheepGame_newQuestionRevealed")
                                 , joe.checkView
                                     100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "New question revealed!" ])
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText SheepGame.newQuestionRevealedText ])
                                 , wanda.checkView
                                     100
                                     (Test.Html.Query.has
                                         [ Test.Html.Selector.text "Cat"
                                         , Test.Html.Selector.text "Dog"
-                                        , Test.Html.Selector.text "▲"
-                                        , Test.Html.Selector.text "▼"
+                                        , Test.Html.Selector.text SheepGame.rankUpArrow
+                                        , Test.Html.Selector.text SheepGame.rankDownArrow
                                         ]
                                     )
 
@@ -658,7 +658,7 @@ mobileHostMatchTest normalConfig =
                                 -- How the scoring works is revealed on its own first, without
                                 -- giving away any of the questions.
                                 , admin.click 100 (Dom.id "sheepGame_showNextQuestion")
-                                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Scoring" ])
+                                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text SheepGame.scoringText ])
                                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "drink" ])
 
                                 -- Pressing the button is the host catching up with a reveal the

@@ -1,4 +1,14 @@
-module MessageDropdown exposing (discordUserDropdownList, emojiDropdownList, pressedArrowInDropdown, pressedDropdownItem, userDropdownList, view)
+module MessageDropdown exposing
+    ( addStickerOrEmojiText
+    , addTimestampText
+    , discordUserDropdownList
+    , emojiDropdownList
+    , mentionUserText
+    , pressedArrowInDropdown
+    , pressedDropdownItem
+    , userDropdownList
+    , view
+    )
 
 import Array
 import CustomEmoji
@@ -35,6 +45,24 @@ import Ui.Events
 import Ui.Font
 import User exposing (FrontendUser, LocalUser)
 import UserSession exposing (DiscordFrontendUser)
+
+
+{-| Text the end-to-end tests look for, named so that both sides read the same value
+rather than a test checking its own copy of it.
+-}
+mentionUserText : String
+mentionUserText =
+    "Mention a user"
+
+
+addStickerOrEmojiText : String
+addStickerOrEmojiText =
+    "Add a sticker or emoji"
+
+
+addTimestampText : String
+addTimestampText =
+    "Add a timestamp"
 
 
 pressedArrowInDropdown :
@@ -600,13 +628,13 @@ dropdownContainer nameSoFar dropdown contentHeight content =
             (Ui.text
                 (case nameSoFar of
                     NameSoFar _ ->
-                        "Mention a user"
+                        mentionUserText
 
                     EmojiSoFar _ ->
-                        "Add a sticker or emoji"
+                        addStickerOrEmojiText
 
                     TimestampSoFar _ _ ->
-                        "Add a timestamp"
+                        addTimestampText
                 )
             )
         , Ui.column [] content

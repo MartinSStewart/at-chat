@@ -20,10 +20,15 @@ module Pages.Admin exposing
     , disconnectClient
     , discordChannelReloadUser
     , expandSectionButtonId
+    , discordLinkingEnabledText
+    , importedText
     , initForAdmin
     , initForUser
+    , lastRegeneratedAtText
     , logSectionId
+    , notRegeneratedText
     , pendingChangesText
+    , regeneratingText
     , rolesToDict
     , update
     , updateAdmin
@@ -97,6 +102,34 @@ import Ui.Table
 import User exposing (AdminUiSection(..), BackendUser, EmailNotifications(..), LocalUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserSession)
+
+
+{-| Text the end-to-end tests look for, named so that both sides read the same value
+rather than a test checking its own copy of it.
+-}
+importedText : String
+importedText =
+    "Imported!"
+
+
+notRegeneratedText : String
+notRegeneratedText =
+    "Not regenerated"
+
+
+regeneratingText : String
+regeneratingText =
+    "Regenerating"
+
+
+lastRegeneratedAtText : String
+lastRegeneratedAtText =
+    "Last regenerated at "
+
+
+discordLinkingEnabledText : String
+discordLinkingEnabledText =
+    "Discord account linking enabled"
 
 
 type Msg
@@ -2664,7 +2697,7 @@ exportSection isMobile timezone user adminData model =
                     Ui.text "Importing..."
 
                 ImportedBackendSuccessfully ->
-                    Ui.text "Imported!"
+                    Ui.text importedText
             ]
         , Ui.row
             [ Ui.spacing 8 ]
@@ -3000,17 +3033,17 @@ apiKeysSection isMobile local user adminData2 model =
                 NotBeingRegenerated time ->
                     case time of
                         Just time2 ->
-                            "Last regenerated at "
+                            lastRegeneratedAtText
                                 ++ MyUi.datestamp local.localUser.timezone time2
                                 ++ " "
                                 ++ MyUi.timestamp time2 local.localUser.timezone
                                 |> Ui.text
 
                         Nothing ->
-                            Ui.text "Not regenerated"
+                            Ui.text notRegeneratedText
 
                 BeingRegenerated ->
-                    Ui.text "Regenerating"
+                    Ui.text regeneratingText
 
                 RegenerationFailed error ->
                     MyUi.errorBox (Dom.id "Admin_serverSecretError") PressedCopyText (Log.httpErrorToString error)
@@ -3040,7 +3073,7 @@ userSection isMobile timezone user adminData model =
             MyUi.label
                 (Dom.id "discordLinkingEnabledId")
                 []
-                (Ui.text "Discord account linking enabled")
+                (Ui.text discordLinkingEnabledText)
     in
     section
         isMobile

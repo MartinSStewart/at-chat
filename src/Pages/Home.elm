@@ -1,6 +1,7 @@
 module Pages.Home exposing
     ( header
     , loginButtonId
+    , loginSignupText
     , view
     )
 
@@ -13,6 +14,14 @@ import Ui.Anim
 import Ui.Font
 import Ui.Input
 import Ui.Shadow
+
+
+{-| Text the end-to-end tests look for, named so that both sides read the same value
+rather than a test checking its own copy of it.
+-}
+loginSignupText : String
+loginSignupText =
+    "Login/Signup"
 
 
 header : Bool -> Route -> LoginStatus -> Element FrontendMsg_
@@ -46,7 +55,7 @@ header isMobile route loginStatus =
                         loginButtonId
                         PressedShowLogin
                         (buttonAttributes isMobile (notLoggedIn.loginForm /= Nothing || Route.requiresLogin route))
-                        (Ui.text "Login/Signup")
+                        (Ui.text loginSignupText)
             ]
         )
 

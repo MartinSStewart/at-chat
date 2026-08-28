@@ -2,25 +2,42 @@ module Pages.Guild exposing
     ( DmChannelSelection(..)
     , HighlightMessage(..)
     , IsHovered(..)
+    , channelDoesNotExistText
     , channelMessageHtmlId
     , channelSearchInputId
     , channelTextInputId
+    , chatWithText
+    , confirmLeaveGuildText
     , conversationContainerId
     , decodeMessageView
+    , deleteGuildText
+    , directMessagesText
     , discordGuildView
     , dropdownButtonId
     , e2eeSectionIsExpanded
+    , e2eeSectionTitle
+    , editingText
+    , enableE2eeText
     , encodeMessageView
     , friendLabel
     , friendsSearchInputId
+    , guildNotFoundText
     , guildView
     , homePageLoggedInView
+    , leaveGuildText
     , newGuildFormInit
     , newGuildFormView
+    , newMessagesBadgeText
     , newMessagesId
+    , noMatchingChannelsText
+    , noUnreadMessagesText
+    , olderUnreadMessagesText
     , profileImageButtonId
+    , startOfThreadText
+    , startedACallText
     , threadMessageHtmlId
     , typingDebouncerDelay
+    , typingText
     , userTextMessageContent
     )
 
@@ -99,6 +116,102 @@ import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, Notification
 import UserColor exposing (UserColor)
 import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, PreviouslyLastViewedMessage(..), Viewing(..))
 import VisibleMessages exposing (VisibleMessages)
+
+
+{-| Text the end-to-end tests look for.
+
+A test that spells the text out again is checking a copy of it, so rewording anything in
+here used to mean hunting down the tests that quoted it. Naming it once and letting both
+sides read the same value is what stops that.
+
+-}
+newMessagesBadgeText : String
+newMessagesBadgeText =
+    "new"
+
+
+noUnreadMessagesText : String
+noUnreadMessagesText =
+    "You have no unread messages!"
+
+
+startedACallText : String
+startedACallText =
+    "started a call"
+
+
+typingText : String
+typingText =
+    "Typing..."
+
+
+editingText : String
+editingText =
+    "Editing..."
+
+
+e2eeSectionTitle : String
+e2eeSectionTitle =
+    "End-to-end encryption"
+
+
+enableE2eeText : String
+enableE2eeText =
+    "Enable end-to-end encryption"
+
+
+chatWithText : String
+chatWithText =
+    "Chat with"
+
+
+deleteGuildText : String
+deleteGuildText =
+    "Delete guild"
+
+
+leaveGuildText : String
+leaveGuildText =
+    "Leave guild"
+
+
+confirmLeaveGuildText : String
+confirmLeaveGuildText =
+    "Yes, leave guild"
+
+
+startOfThreadText : String
+startOfThreadText =
+    "Start of thread"
+
+
+channelDoesNotExistText : String
+channelDoesNotExistText =
+    "Channel does not exist"
+
+
+guildNotFoundText : String
+guildNotFoundText =
+    "Guild not found"
+
+
+directMessagesText : String
+directMessagesText =
+    "Direct messages"
+
+
+noMatchingChannelsText : String
+noMatchingChannelsText =
+    "No matching channels\u{00A0}found"
+
+
+olderUnreadMessagesText : Int -> String
+olderUnreadMessagesText count =
+    if count == 1 then
+        "1 older unread message"
+
+    else
+        String.fromInt count ++ " older unread messages"
 
 
 loggedInAsView : LocalUser -> Element FrontendMsg_
@@ -506,7 +619,7 @@ unreadOverviewNotMobile local loggedIn model =
                             , Ui.Font.bold
                             , Ui.Font.size 20
                             ]
-                            (Ui.text "You have no unread messages!")
+                            (Ui.text noUnreadMessagesText)
                         )
                     ]
                     [ Ui.image
@@ -1012,7 +1125,7 @@ dmSource : Id UserId -> LocalUser -> Element msg
 dmSource otherUserId localUser =
     Ui.row
         [ Ui.spacing 4, Ui.width Ui.shrink, MyUi.noShrinking ]
-        [ Ui.el [ Ui.Font.weight 400, Ui.width Ui.shrink ] (Ui.text "Chat with")
+        [ Ui.el [ Ui.Font.weight 400, Ui.width Ui.shrink ] (Ui.text chatWithText)
         , Ui.text (User.toStringAlt otherUserId localUser)
         ]
 
@@ -1093,14 +1206,7 @@ unreadOverviewContainer unread messageViews =
                         , Ui.Font.italic
                         , Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 4 }
                         ]
-                        (Ui.text
-                            (if unread.additionalUnread == 1 then
-                                "1 older unread message"
-
-                             else
-                                String.fromInt unread.additionalUnread ++ " older unread messages"
-                            )
-                        )
+                        (Ui.text (olderUnreadMessagesText unread.additionalUnread))
 
                 else
                     Ui.none
@@ -1587,7 +1693,7 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
                                 [ GuildColumn.guildColumnLazy True model local
-                                , pageMissingMobile "Guild not found"
+                                , pageMissingMobile guildNotFoundText
                                 ]
                             , Ui.Lazy.lazy loggedInAsView local.localUser
                             ]
@@ -1612,7 +1718,7 @@ guildView model guildId channelRoute loggedIn local =
                                     ]
                                 , Ui.Lazy.lazy loggedInAsView local.localUser
                                 ]
-                            , pageMissing "Guild not found"
+                            , pageMissing guildNotFoundText
                             ]
 
 
@@ -2364,7 +2470,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
         (PressedExpandE2eeSection otherUserId)
         MyUi.background2
         True
-        "End-to-end encryption"
+        e2eeSectionTitle
         [ Ui.column
             [ Ui.paddingWith { left = 8, right = 8, top = 8, bottom = 0 }, Ui.spacing 16 ]
             [ Ui.column
@@ -2397,7 +2503,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                 MyUi.simpleButton
                                     (Dom.id "guild_enableE2ee")
                                     (PressedEnableE2ee otherUserId)
-                                    (Ui.text "Enable end-to-end encryption")
+                                    (Ui.text enableE2eeText)
 
                 DmChannel.E2eeRequestedBy requestedBy ->
                     if requestedByOtherUser then
@@ -2877,7 +2983,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                 channel
 
                 Nothing ->
-                    pageMissing "Channel does not exist"
+                    pageMissing channelDoesNotExistText
 
         NewChannelRoute ->
             SeqDict.get guildId loggedIn.newChannelForm
@@ -2994,7 +3100,7 @@ discordChannelView routeData guild loggedIn local model =
                                 availableStickers
 
                 Nothing ->
-                    pageMissing "Channel does not exist"
+                    pageMissing channelDoesNotExistText
 
         DiscordChannel_NewChannelRoute ->
             pageMissing "Adding Discord channels not supported yet"
@@ -3343,7 +3449,7 @@ deleteGuildSection guildId guild form =
                 )
             , Ui.border 1
             ]
-            (Ui.text "Delete guild")
+            (Ui.text deleteGuildText)
         ]
 
 
@@ -3378,10 +3484,10 @@ leaveGuildSection guildId form =
             ]
             (Ui.text
                 (if form.showLeaveConfirmation then
-                    "Yes, leave guild"
+                    confirmLeaveGuildText
 
                  else
-                    "Leave guild"
+                    leaveGuildText
                 )
             )
         ]
@@ -4667,7 +4773,7 @@ newContentLabel =
             , Ui.Font.bold
             , Ui.Font.size 14
             ]
-            (Ui.text "new")
+            (Ui.text newMessagesBadgeText)
         )
     , Ui.inFront
         (Ui.el
@@ -5688,7 +5794,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     (if VisibleMessages.startIsVisible channel.visibleMessages then
                         [ Ui.el
                             [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                            (Ui.text "Start of thread")
+                            (Ui.text startOfThreadText)
                         , case guildOrDmIdNoThread of
                             GuildOrDmId_Guild { guildId, channelId } ->
                                 case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
@@ -5873,7 +5979,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     (if VisibleMessages.startIsVisible channel.visibleMessages then
                         [ Ui.el
                             [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                            (Ui.text "Start of thread")
+                            (Ui.text startOfThreadText)
                         , case guildOrDmIdNoThread of
                             DiscordGuildOrDmId_Guild { guildId, channelId } ->
                                 case LocalState.getDiscordGuildAndChannel guildId channelId local of
@@ -8240,7 +8346,7 @@ callStartedCard userIdToColor isSelectingAnchor messageId drawings userId starte
         MessageViewMsg_PressedCallStartedCard
         (Ui.html Icons.phone)
         (User.toString userId allUsers)
-        ("started a call" ++ eventDurationText startedAt endedAt)
+        (startedACallText ++ eventDurationText startedAt endedAt)
 
 
 goMatchStartedCard :
@@ -9200,7 +9306,7 @@ channelColumnNoResults searchFilter channelRows =
             , Ui.Font.color MyUi.font2
             , Ui.paddingXY 8 8
             ]
-            [ Ui.text "No matching channels\u{00A0}found" ]
+            [ Ui.text noMatchingChannelsText ]
         ]
 
     else
@@ -10212,7 +10318,7 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                     , Ui.paddingXY 8 8
                     , Ui.Font.color MyUi.font1
                     ]
-                    (Ui.text "Direct messages")
+                    (Ui.text directMessagesText)
                 , Ui.el
                     [ Ui.Font.color MyUi.font2
                     , Ui.width (Ui.px 40)
@@ -10326,10 +10432,10 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
         messagePreview =
             case someoneIsTyping time (SeqDict.remove localUser.session.userId channel.lastTypedAt) of
                 SomeoneIsTyping ->
-                    "Typing..."
+                    typingText
 
                 SomeoneIsEditing ->
-                    "Editing..."
+                    editingText
 
                 NoOneIsTyping ->
                     case message of
@@ -10455,10 +10561,10 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
         messagePreview =
             case someoneIsTyping time (SeqDict.diff channel.lastTypedAt (LinkedAndOtherDiscordUsers.linkedUsers localUser.discordUsers)) of
                 SomeoneIsTyping ->
-                    "Typing..."
+                    typingText
 
                 SomeoneIsEditing ->
-                    "Editing..."
+                    editingText
 
                 NoOneIsTyping ->
                     case message of
