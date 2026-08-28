@@ -82,7 +82,7 @@ import Local
 import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import LoginForm
 import MembersAndOwner
-import Message exposing (ChangeAttachments(..), GameType(..), Message(..), MessageNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments(..), ContentAndEmbeds, GameType(..), Message(..), MessageNoReply(..), UserTextMessageDataNoReply)
 import MessageArray exposing (MessageArray)
 import MessageDropdown
 import MessageInput exposing (NameSoFar(..), TimestampData)
@@ -143,7 +143,7 @@ that a channel still waiting on its messages is marked as loading.
 -}
 discordViewMessages :
     ToBeFilledInByBackend (UserSession.ViewDiscordGuildData messageId)
-    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId)))
+    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId) Never))
 discordViewMessages backendData =
     case backendData of
         FilledInByBackend data ->
@@ -1331,7 +1331,7 @@ playNotificationSound :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : MessageArray ChannelMessageId (Id UserId)
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Id UserId))
         }
     -> LocalState
@@ -1388,7 +1388,7 @@ playNotificationSoundForDiscordMessage :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
+            | messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId)
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Discord.Id Discord.UserId))
         }
     -> LocalState
@@ -5331,7 +5331,7 @@ changeUpdate localMsg local =
                     }
 
 
-callStartedMessage : Time.Posix -> Id UserId -> Message ChannelMessageId (Id UserId)
+callStartedMessage : Time.Posix -> Id UserId -> Message ChannelMessageId (Id UserId) ContentAndEmbeds
 callStartedMessage time startedBy =
     CallStarted
         { startedAt = time
@@ -5643,14 +5643,14 @@ gameChangeUpdateChannel :
     -> Game.LocalChange
     ->
         { c
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : MessageArray ChannelMessageId (Id UserId)
             , visibleMessages : VisibleMessages.VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.MatchData
         }
     ->
         { c
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : MessageArray ChannelMessageId (Id UserId)
             , visibleMessages : VisibleMessages.VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.MatchData
@@ -7114,12 +7114,12 @@ addEncryptedDmMessage :
     Time.Posix
     -> Id UserId
     -> Id UserId
-    -> EncryptedData (Nonempty (RichText (Id UserId)))
+    -> EncryptedData Message.ContentAndEmbeds
     -> ThreadRouteWithMaybeMessage
     -> SeqDict (Id FileId) FileData
     -> LocalState
     -> LocalState
-addEncryptedDmMessage createdAt createdBy otherUserId content threadRouteWithRepliedTo attachedFiles local =
+addEncryptedDmMessage createdAt createdBy otherUserId contentAndEmbeds threadRouteWithRepliedTo attachedFiles local =
     let
         dmChannel : FrontendDmChannel
         dmChannel =
@@ -7136,7 +7136,7 @@ addEncryptedDmMessage createdAt createdBy otherUserId content threadRouteWithRep
                             (Message.encryptedUserTextMessageFrontend
                                 createdAt
                                 createdBy
-                                content
+                                contentAndEmbeds
                                 maybeReplyTo
                                 attachedFiles
                             )
@@ -7147,7 +7147,7 @@ addEncryptedDmMessage createdAt createdBy otherUserId content threadRouteWithRep
                             (Message.encryptedUserTextMessageFrontend
                                 createdAt
                                 createdBy
-                                content
+                                contentAndEmbeds
                                 maybeReplyTo
                                 attachedFiles
                             )

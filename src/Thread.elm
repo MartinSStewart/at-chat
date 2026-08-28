@@ -21,7 +21,7 @@ import Drawing
 import Effect.Time as Time
 import Id exposing (Id, ThreadMessageId, UserId)
 import IdArray exposing (IdArray)
-import Message exposing (Message)
+import Message exposing (ContentAndEmbeds, Message)
 import MessageArray exposing (MessageArray)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
@@ -29,14 +29,14 @@ import VisibleMessages exposing (VisibleMessages)
 
 
 type alias BackendThread =
-    { messages : IdArray ThreadMessageId (Message ThreadMessageId (Id UserId))
+    { messages : IdArray ThreadMessageId (Message ThreadMessageId (Id UserId) Never)
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
     }
 
 
 type alias DiscordBackendThread =
-    { messages : IdArray ThreadMessageId (Message ThreadMessageId (Discord.Id Discord.UserId))
+    { messages : IdArray ThreadMessageId (Message ThreadMessageId (Discord.Id Discord.UserId) Never)
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
     , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
@@ -44,7 +44,7 @@ type alias DiscordBackendThread =
 
 
 type alias FrontendGenericThread userId =
-    { messages : MessageArray ThreadMessageId (Message ThreadMessageId userId)
+    { messages : MessageArray ThreadMessageId userId
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing userId)
@@ -52,7 +52,7 @@ type alias FrontendGenericThread userId =
 
 
 type alias FrontendThread =
-    { messages : MessageArray ThreadMessageId (Message ThreadMessageId (Id UserId))
+    { messages : MessageArray ThreadMessageId (Id UserId)
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
@@ -60,7 +60,7 @@ type alias FrontendThread =
 
 
 type alias DiscordFrontendThread =
-    { messages : MessageArray ThreadMessageId (Message ThreadMessageId (Discord.Id Discord.UserId))
+    { messages : MessageArray ThreadMessageId (Discord.Id Discord.UserId)
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
@@ -124,7 +124,7 @@ discordToFrontend preloadMessages thread =
     }
 
 
-loadMessages : Bool -> IdArray messageId (Message messageId userId) -> MessageArray messageId (Message messageId userId)
+loadMessages : Bool -> IdArray messageId (Message messageId userId Never) -> MessageArray messageId userId
 loadMessages preloadMessages messages =
     let
         messageCount : Int
@@ -140,11 +140,11 @@ loadMessages preloadMessages messages =
                 -- Load the latest message for each channel/thread in case it's needed for a preview somewhere
                 messageCount - 1 |> max 0
 
-        messagesToLoad : Array (Message messageId userId)
+        messagesToLoad : Array (Message messageId userId Never)
         messagesToLoad =
             IdArray.toArray messages |> Array.slice oldestLoaded messageCount
 
-        referencedMessages : List ( Id messageId, Message messageId userId )
+        referencedMessages : List ( Id messageId, Message messageId userId ContentAndEmbeds )
         referencedMessages =
             Array.foldl
                 (\message list ->
@@ -154,7 +154,7 @@ loadMessages preloadMessages messages =
                                 Just repliedToId ->
                                     case IdArray.get repliedToId messages of
                                         Just repliedTo ->
-                                            ( repliedToId, repliedTo ) :: list
+                                            ( repliedToId, Message.toDecryptable repliedTo ) :: list
 
                                         Nothing ->
                                             list
@@ -168,5 +168,5 @@ loadMessages preloadMessages messages =
                 []
                 messagesToLoad
     in
-    MessageArray.fromArray messageCount (Id.fromInt oldestLoaded) messagesToLoad
+    MessageArray.fromArray messageCount (Id.fromInt oldestLoaded) (Array.map Message.toDecryptable messagesToLoad)
         |> MessageArray.setMany referencedMessages

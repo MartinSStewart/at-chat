@@ -1045,7 +1045,7 @@ type ServerChange
     | Server_E2eeRequestCancelled Viewing_DmId
     | Server_E2eeAccepted Viewing_DmId Time.Posix
     | Server_SetPublicKey (Id UserId) X25519.PublicKey
-    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (EncryptedData (Nonempty (RichText (Id UserId)))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (EncryptedData Message.ContentAndEmbeds) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
 
 
 type LocalChange
@@ -1074,10 +1074,10 @@ type LocalChange
     | Local_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
     | Local_CurrentlyViewing { markMessagesAsViewed : Bool } SetViewing
     | Local_SetName PersonName
-    | Local_LoadChannelMessages GuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
-    | Local_LoadThreadMessages GuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
-    | Local_Discord_LoadChannelMessages DiscordGuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
-    | Local_Discord_LoadThreadMessages DiscordGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId))))
+    | Local_LoadChannelMessages GuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) Never)))
+    | Local_LoadThreadMessages GuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) Never)))
+    | Local_Discord_LoadChannelMessages DiscordGuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) Never)))
+    | Local_Discord_LoadThreadMessages DiscordGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId) Never)))
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Local_SetDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
     | Local_SetNotificationMode NotificationMode
@@ -1108,4 +1108,4 @@ type LocalChange
     | Local_SetPublicKey X25519.PublicKey
     | Local_SetE2eeRisksAccepted Bool
     | Local_AcceptE2ee Viewing_DmId Time.Posix
-    | Local_SendEncryptedMessage Time.Posix Viewing_DmId (EncryptedData (Nonempty (RichText (Id UserId)))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Local_SendEncryptedMessage Time.Posix Viewing_DmId (EncryptedData Message.ContentAndEmbeds) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)

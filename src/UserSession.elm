@@ -105,11 +105,11 @@ type NotificationMode
 
 
 type SetViewing
-    = ViewDm Viewing_DmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
-    | ViewDmThread Viewing_DmThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
-    | ViewDiscordDm Viewing_DiscordDmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
-    | ViewChannel Viewing_ChannelData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
-    | ViewChannelThread Viewing_ChannelThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
+    = ViewDm Viewing_DmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) Never)))
+    | ViewDmThread Viewing_DmThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) Never)))
+    | ViewDiscordDm Viewing_DiscordDmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) Never)))
+    | ViewChannel Viewing_ChannelData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) Never)))
+    | ViewChannelThread Viewing_ChannelThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) Never)))
     | ViewDiscordChannel Viewing_DiscordChannelData (ToBeFilledInByBackend (ViewDiscordGuildData ChannelMessageId))
     | ViewDiscordChannelThread Viewing_DiscordChannelThreadData (ToBeFilledInByBackend (ViewDiscordGuildData ThreadMessageId))
     | StopViewingChannel
@@ -204,34 +204,34 @@ type alias UnreadOverviewData =
     { guildChannels :
         SeqDict
             ( Id GuildId, Id ChannelId )
-            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) Never))
     , guildThreads :
         SeqDict
             ( Id GuildId, Id ChannelId, Id ChannelMessageId )
-            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
-    , dmChannels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) Never))
+    , dmChannels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) Never))
     , dmThreads :
         SeqDict
             ( Id UserId, Id ChannelMessageId )
-            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) Never))
     , discordGuildChannels :
         SeqDict
             ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId )
-            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) Never))
     , discordGuildThreads :
         SeqDict
             ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId, Id ChannelMessageId )
-            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId)))
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId) Never))
     , discordDmChannels :
         SeqDict
             (Discord.Id Discord.PrivateChannelId)
-            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) Never))
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     }
 
 
 type alias ViewDiscordGuildData messageId =
-    { messages : SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId))
+    { messages : SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId) Never)
     , newUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     }
 

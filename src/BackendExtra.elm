@@ -380,11 +380,11 @@ unreadOverviewData userId user model =
             { channels :
                 SeqDict
                     ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId )
-                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) Never))
             , threads :
                 SeqDict
                     ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId, Id ChannelMessageId )
-                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId)))
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId) Never))
             }
         discordGuilds =
             SeqDict.foldl
@@ -461,7 +461,7 @@ unreadOverviewData userId user model =
         discordDmChannels :
             SeqDict
                 (Discord.Id Discord.PrivateChannelId)
-                (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+                (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) Never))
         discordDmChannels =
             SeqDict.foldl
                 (\channelId dmChannel dict ->
@@ -495,11 +495,11 @@ unreadOverviewData userId user model =
             { channels :
                 SeqDict
                     ( Id GuildId, Id ChannelId )
-                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) Never))
             , threads :
                 SeqDict
                     ( Id GuildId, Id ChannelId, Id ChannelMessageId )
-                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) Never))
             }
         guilds =
             SeqDict.foldl
@@ -553,11 +553,11 @@ unreadOverviewData userId user model =
                 model.guilds
 
         dms :
-            { channels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+            { channels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) Never))
             , threads :
                 SeqDict
                     ( Id UserId, Id ChannelMessageId )
-                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) Never))
             }
         dms =
             SeqDict.foldl
@@ -620,7 +620,7 @@ in one list and are added in two passes instead.
 -}
 discordUsersInMessages :
     BackendModel
-    -> List (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId)))
+    -> List (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId) Never))
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
 discordUsersInMessages model messageDicts foundSoFar =
@@ -652,7 +652,7 @@ discordUsersInMessages model messageDicts foundSoFar =
 
 {-| The users a message shows the name of: whoever wrote it, plus anyone it mentions.
 -}
-messageUserIds : Message messageId userId -> List userId
+messageUserIds : Message messageId userId Never -> List userId
 messageUserIds message =
     case message of
         UserTextMessage data ->
@@ -679,8 +679,8 @@ of them, keyed by the index they sit at. `Nothing` when the user has read it to 
 -}
 unreadMessages :
     Maybe (Id messageId)
-    -> { a | messages : IdArray messageId (Message messageId userId) }
-    -> Maybe (SeqDict (Id messageId) (Message messageId userId))
+    -> { a | messages : IdArray messageId (Message messageId userId Never) }
+    -> Maybe (SeqDict (Id messageId) (Message messageId userId Never))
 unreadMessages maybeLastViewed channel =
     let
         messageCount : Int
@@ -1910,7 +1910,7 @@ sendEncryptedDm :
     -> ClientId
     -> ChangeId
     -> Viewing_DmId
-    -> EncryptedData (Nonempty (RichText (Id UserId)))
+    -> EncryptedData Message.ContentAndEmbeds
     -> ThreadRouteWithMaybeMessage
     -> SeqDict (Id FileId) FileData
     -> UserSession
@@ -1919,38 +1919,22 @@ sendEncryptedDm :
     -> DmChannel
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendEncryptedDm time clientId changeId id content threadRouteWithReplyTo attachedFiles session user dmChannelId dmChannel model =
+sendEncryptedDm time clientId changeId id contentAndEmbeds threadRouteWithReplyTo attachedFiles session user dmChannelId dmChannel model =
     case RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits of
         Ok sendMessageRateLimits ->
             let
-                messageData : Message.EncryptedUserTextMessageData messageId (Id UserId)
-                messageData =
-                    { createdAt = time
-                    , createdBy = session.userId
-                    , content = content
-                    , reactions = SeqDict.empty
-                    , editedAt = Nothing
-                    , repliedTo = Nothing
-                    , attachedFiles = attachedFiles
-                    , embeds = Encryption.empty
-                    , timestampDrawings = Drawing.emptyDrawing
-                    , userIconDrawings = Drawing.emptyDrawing
-                    , imageAttachmentDrawings = SeqDict.empty
-                    , embedDrawings = SeqDict.empty
-                    }
-
                 ( threadRouteWithMessage, dmChannel2 ) =
                     case threadRouteWithReplyTo of
                         ViewThreadWithMaybeMessage threadId repliedTo ->
                             LocalState.createThreadMessageBackend
                                 threadId
-                                (Message.EncryptedUserTextMessage { messageData | repliedTo = repliedTo })
+                                (Message.encryptedUserTextMessageFrontend time session.userId contentAndEmbeds repliedTo attachedFiles)
                                 dmChannel
                                 |> Tuple.mapFirst (ViewThreadWithMessage threadId)
 
                         NoThreadWithMaybeMessage repliedTo ->
                             LocalState.createChannelMessageBackend
-                                (Message.EncryptedUserTextMessage { messageData | repliedTo = repliedTo })
+                                (Message.encryptedUserTextMessageFrontend time session.userId contentAndEmbeds repliedTo attachedFiles)
                                 dmChannel
                                 |> Tuple.mapFirst NoThreadWithMessage
 
@@ -1972,7 +1956,7 @@ sendEncryptedDm time clientId changeId id content threadRouteWithReplyTo attache
                 , sessions = sessions
               }
             , Command.batch
-                [ Local_SendEncryptedMessage time id content threadRouteWithReplyTo attachedFiles
+                [ Local_SendEncryptedMessage time id contentAndEmbeds threadRouteWithReplyTo attachedFiles
                     |> LocalChangeResponse changeId
                     |> Lamdera.sendToFrontend clientId
                 , Broadcast.toDmChannelExcludingOne
@@ -1985,7 +1969,7 @@ sendEncryptedDm time clientId changeId id content threadRouteWithReplyTo attache
                             (User.backendToFrontendForUser user)
                             time
                             id2
-                            content
+                            contentAndEmbeds
                             threadRouteWithReplyTo
                             attachedFiles
                     )

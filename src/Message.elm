@@ -1,6 +1,8 @@
 module Message exposing
     ( CallStartedData
     , ChangeAttachments(..)
+    , ContentAndEmbeds
+    , EncryptedMessageStatus(..)
     , EncryptedUserTextMessageData
     , GameStartedData
     , GameType(..)
@@ -17,6 +19,7 @@ module Message exposing
     , handleDrawingChange
     , reactionEmojis
     , removeReactionEmoji
+    , toDecryptable
     , userJoined
     , userTextMessageBackend
     , userTextMessageFrontend
@@ -32,7 +35,7 @@ import Embed exposing (Embed(..), EmbedData)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
 import FileStatus exposing (FileData, FileId)
-import Id exposing (Id, StickerId)
+import Id exposing (Id, StickerId, UserId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
 import RichText exposing (RichText)
@@ -46,9 +49,9 @@ import Time
 import Url exposing (Url)
 
 
-type Message messageId userId
+type Message messageId userId decryptable
     = UserTextMessage (UserTextMessageData messageId userId)
-    | EncryptedUserTextMessage (EncryptedUserTextMessageData messageId userId)
+    | EncryptedUserTextMessage (EncryptedUserTextMessageData messageId userId decryptable)
     | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
     | DeletedMessage Time.Posix
     | CallStarted (CallStartedData userId)
@@ -168,21 +171,20 @@ can do.
 -}
 encryptedUserTextMessageFrontend :
     Time.Posix
-    -> userId
-    -> EncryptedData (Nonempty (RichText userId))
+    -> Id UserId
+    -> EncryptedData ContentAndEmbeds
     -> Maybe (Id messageId)
     -> SeqDict (Id FileId) FileData
-    -> Message messageId userId
-encryptedUserTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
+    -> Message messageId (Id UserId) decryptable
+encryptedUserTextMessageFrontend createdAt2 createdBy contentAndEmbeds repliedTo attachedFiles =
     EncryptedUserTextMessage
-        { createdAt = createdAt2
+        { encryptedStatus = MessageEncrypted contentAndEmbeds
+        , createdAt = createdAt2
         , createdBy = createdBy
-        , content = content
         , reactions = SeqDict.empty
         , editedAt = Nothing
         , repliedTo = repliedTo
         , attachedFiles = attachedFiles
-        , embeds = Encryption.empty
         , timestampDrawings = Drawing.emptyDrawing
         , userIconDrawings = Drawing.emptyDrawing
         , imageAttachmentDrawings = SeqDict.empty
@@ -196,7 +198,7 @@ userTextMessageFrontend :
     -> Nonempty (RichText userId)
     -> Maybe (Id messageId)
     -> SeqDict (Id FileId) FileData
-    -> Message messageId userId
+    -> Message messageId userId decryptable
 userTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
     let
         hyperlinks : List Url
@@ -271,7 +273,7 @@ editUserTextMessage time newContent attachedFiles data =
     }
 
 
-addEmbed : ( Url, Result e EmbedData ) -> Message messageId userId -> Message messageId userId
+addEmbed : ( Url, Result e EmbedData ) -> Message messageId userId decryptable -> Message messageId userId decryptable
 addEmbed ( url, result ) message =
     case message of
         UserTextMessage message2 ->
@@ -333,15 +335,24 @@ type alias UserTextMessageData messageId userId =
     }
 
 
-type alias EncryptedUserTextMessageData messageId userId =
-    { createdAt : Time.Posix
+type EncryptedMessageStatus decryptable
+    = MessageEncrypted (EncryptedData ContentAndEmbeds)
+    | MessageDecrypted decryptable
+    | MessageDecryptFailed (EncryptedData ContentAndEmbeds)
+
+
+type alias ContentAndEmbeds =
+    { content : Nonempty (RichText (Id UserId)), embeds : Array Embed }
+
+
+type alias EncryptedUserTextMessageData messageId userId decryptable =
+    { encryptedStatus : EncryptedMessageStatus decryptable
+    , createdAt : Time.Posix
     , createdBy : userId
-    , content : EncryptedData (Nonempty (RichText userId))
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , repliedTo : Maybe (Id messageId)
     , attachedFiles : SeqDict (Id FileId) FileData
-    , embeds : EncryptedData (Array Embed)
     , timestampDrawings : Drawing userId
     , userIconDrawings : Drawing userId
     , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing userId)
@@ -368,7 +379,7 @@ type alias UserTextMessageDataNoReply userId =
     }
 
 
-userJoined : Time.Posix -> userId -> Message messageId userId
+userJoined : Time.Posix -> userId -> Message messageId userId decryptable
 userJoined time userId =
     UserJoinedMessage time userId SeqDict.empty Drawing.emptyDrawing
 
@@ -429,7 +440,7 @@ handleDrawingChangeHelper changeBy change anchorType data =
             data
 
 
-handleDrawingChange : userId -> Drawing.MessageAnchor -> Drawing.LocalChange -> Message messageId userId -> Message messageId userId
+handleDrawingChange : userId -> Drawing.MessageAnchor -> Drawing.LocalChange -> Message messageId userId decryptable -> Message messageId userId decryptable
 handleDrawingChange changeBy anchorType change message =
     case message of
         UserTextMessage data ->
@@ -513,7 +524,7 @@ userTextMessageDrawing anchor data =
             Drawing.emptyDrawing
 
 
-drawing : Drawing.MessageAnchor -> Message messageId userId -> Drawing userId
+drawing : Drawing.MessageAnchor -> Message messageId userId decryptable -> Drawing userId
 drawing anchor message =
     case message of
         UserTextMessage data ->
@@ -563,7 +574,7 @@ drawing anchor message =
                     gameStarted.cardDrawings
 
 
-createdAt : Message messageId userId -> Time.Posix
+createdAt : Message messageId userId decryptable -> Time.Posix
 createdAt message =
     case message of
         UserTextMessage data ->
@@ -585,7 +596,7 @@ createdAt message =
             gameStarted.startedAt
 
 
-addReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId
+addReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId decryptable -> Message messageId userId decryptable
 addReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
@@ -612,7 +623,7 @@ addReactionEmojiHelper userId emoji reactions =
     SeqDictHelper.addToSet emoji userId reactions
 
 
-removeReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId
+removeReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId decryptable -> Message messageId userId decryptable
 removeReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
@@ -651,7 +662,7 @@ removeReactionEmojiHelper userId emoji reactions =
         reactions
 
 
-reactionEmojis : Message messageId userId -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+reactionEmojis : Message messageId userId decryptable -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 reactionEmojis message =
     case message of
         UserTextMessage data ->
@@ -671,3 +682,46 @@ reactionEmojis message =
 
         GameStarted gameStarted ->
             gameStarted.reactions
+
+
+toDecryptable : Message messageId userId Never -> Message messageId userId ContentAndEmbeds
+toDecryptable message =
+    case message of
+        UserTextMessage userTextMessageData ->
+            UserTextMessage userTextMessageData
+
+        EncryptedUserTextMessage data ->
+            EncryptedUserTextMessage
+                { encryptedStatus =
+                    case data.encryptedStatus of
+                        MessageEncrypted data2 ->
+                            MessageEncrypted data2
+
+                        MessageDecrypted a ->
+                            never a
+
+                        MessageDecryptFailed encryptedData ->
+                            MessageDecryptFailed encryptedData
+                , createdAt = data.createdAt
+                , createdBy = data.createdBy
+                , reactions = data.reactions
+                , editedAt = data.editedAt
+                , repliedTo = data.repliedTo
+                , attachedFiles = data.attachedFiles
+                , timestampDrawings = data.timestampDrawings
+                , userIconDrawings = data.userIconDrawings
+                , imageAttachmentDrawings = data.imageAttachmentDrawings
+                , embedDrawings = data.embedDrawings
+                }
+
+        UserJoinedMessage posix userId seqDict a ->
+            UserJoinedMessage posix userId seqDict a
+
+        DeletedMessage posix ->
+            DeletedMessage posix
+
+        CallStarted callStartedData ->
+            CallStarted callStartedData
+
+        GameStarted gameStartedData ->
+            GameStarted gameStartedData

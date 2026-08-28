@@ -23,7 +23,7 @@ import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), G
 import LinkedAndOtherDiscordUsers
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
-import Message exposing (Message(..))
+import Message exposing (ContentAndEmbeds, Message(..))
 import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageView
@@ -438,7 +438,7 @@ menuItems :
     -> { items : List (Element FrontendMsg_), height : Int }
 menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl position local model =
     let
-        helper : Bool -> Id messageId -> { a | messages : MessageArray messageId (Message messageId (Id UserId)) } -> Maybe MenuItemsData
+        helper : Bool -> Id messageId -> { a | messages : MessageArray messageId (Id UserId) } -> Maybe MenuItemsData
         helper isPrivateDm messageId thread =
             case MessageArray.get messageId thread.messages of
                 Just message ->
@@ -480,7 +480,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                 _ ->
                     Nothing
 
-        discordHelper : Bool -> Id messageId -> { a | messages : MessageArray messageId (Message messageId (Discord.Id Discord.UserId)) } -> Maybe MenuItemsData
+        discordHelper : Bool -> Id messageId -> { a | messages : MessageArray messageId (Discord.Id Discord.UserId) } -> Maybe MenuItemsData
         discordHelper isPrivateDm messageId thread =
             case MessageArray.get messageId thread.messages of
                 Just message ->
@@ -936,7 +936,7 @@ button isMobile htmlId icon text msg =
         [ Ui.el [ Ui.width (Ui.px 24) ] (Ui.html icon), Ui.text text ]
 
 
-messageCustomEmojiIds : Message messageId userId -> List (Id CustomEmojiId)
+messageCustomEmojiIds : Message messageId userId ContentAndEmbeds -> List (Id CustomEmojiId)
 messageCustomEmojiIds message =
     let
         reactionIds : SeqDict EmojiOrCustomEmoji a -> List (Id CustomEmojiId)

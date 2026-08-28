@@ -593,7 +593,7 @@ discordGuildMessageNotification :
     -> Discord.Id Discord.GuildId
     -> Discord.Id Discord.ChannelId
     -> ThreadRoute
-    -> Message messageId (Discord.Id Discord.UserId)
+    -> Message messageId (Discord.Id Discord.UserId) Never
     -> List (Discord.Id Discord.UserId)
     -> BackendModel
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
@@ -857,7 +857,7 @@ notification :
     -> Maybe FileHash
     -> (userId -> String)
     -> String
-    -> Message messageId userId
+    -> Message messageId userId Never
     -> Maybe Route
     -> SeqDict SessionId UserSession
     ->
@@ -1019,7 +1019,7 @@ messageNotificationEmail :
     -> (userId -> String)
     -> Maybe Route
     -> String
-    -> Message messageId userId
+    -> Message messageId userId Never
     -> Postmark.ApiKey
     -> Command BackendOnly toMsg BackendMsg
 messageNotificationEmail time email senderName userToString navigateTo plainText message postmarkApiKey =
@@ -1780,7 +1780,7 @@ gameStartedGuildNotification time sender id gameType members model =
         plainText =
             LocalState.gameStartedText gameType
 
-        message : Message messageId (Id UserId)
+        message : Message messageId (Id UserId) Never
         message =
             GameStarted
                 { startedAt = time
