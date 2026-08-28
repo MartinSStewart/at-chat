@@ -1,0 +1,121 @@
+module Evergreen.V363.Call exposing (..)
+
+import Bytes
+import Effect.Lamdera
+import Effect.Time
+import Evergreen.V363.Id
+import Evergreen.V363.IdString
+import Evergreen.V363.NonemptyDict
+import List.Nonempty
+import SeqDict
+import SeqSet
+
+
+type MediaDeviceId
+    = MediaDeviceId Never
+
+
+type DeviceKind
+    = AudioInput
+    | VideoInput
+    | AudioOutput
+
+
+type alias MediaDevice =
+    { deviceId : Evergreen.V363.IdString.IdString MediaDeviceId
+    , groupId : String
+    , kind : DeviceKind
+    , label : String
+    }
+
+
+type CallId
+    = DmRoomId Evergreen.V363.Id.Viewing_DmId
+    | GuildRoomId Evergreen.V363.Id.Viewing_ChannelId
+
+
+type alias ConnectionId =
+    { roomId : CallId
+    , otherClientId : ( Evergreen.V363.Id.Id Evergreen.V363.Id.UserId, Effect.Lamdera.ClientId )
+    }
+
+
+type LocalOrConnection
+    = IsLocal
+    | IsConnection ConnectionId
+
+
+type FromJs
+    = FromJs_GotUserMediaDevices (List MediaDevice) (List (Evergreen.V363.IdString.IdString MediaDeviceId))
+    | FromJs_GotUserMediaDevicesError String
+    | FromJs_SpeakingChanged LocalOrConnection Bool
+    | FromJs_StartConnectionError String
+
+
+type Msg
+    = SelectedAudioInputDevice (Evergreen.V363.IdString.IdString MediaDeviceId)
+    | SelectedVideoInputDevice (Evergreen.V363.IdString.IdString MediaDeviceId)
+    | PressedToggleMute
+    | PressedTogglePauseVideo
+    | PressedJoinCall CallId
+    | PressedLeaveCall
+    | PressedDownloadRecording CallId
+    | PressedCopyError String
+    | ChangedVolume ConnectionId Float
+    | MouseEnterVideoNode LocalOrConnection
+    | MouseExitVideoNode LocalOrConnection
+    | DoubleClickedVideoNode
+
+
+type alias RemoteCallData =
+    { audioInputEnabled : Bool
+    , videoInputEnabled : Bool
+    }
+
+
+type LocalChange
+    = Local_Leave Effect.Time.Posix
+    | Local_SetRemoteCallData RemoteCallData
+
+
+type ServerChange
+    = Server_YouJoined Effect.Time.Posix CallId
+    | Server_OtherJoined Effect.Time.Posix ConnectionId
+    | Server_Left Effect.Time.Posix ConnectionId
+    | Server_SetRemoteCallData ConnectionId RemoteCallData
+
+
+type alias Local =
+    { currentRoom : Maybe CallId
+    , voiceChats : SeqDict.SeqDict CallId (Evergreen.V363.NonemptyDict.NonemptyDict ( Evergreen.V363.Id.Id Evergreen.V363.Id.UserId, Effect.Lamdera.ClientId ) RemoteCallData)
+    }
+
+
+type MediaDevicesStatus
+    = MediaDevicesNotLoaded
+    | HasMediaDevices (List MediaDevice)
+    | FailedToGetMediaDevices String
+
+
+type alias Recording =
+    { mimeType : String
+    , extraData : String
+    , startTime : Effect.Time.Posix
+    , endTime : Effect.Time.Posix
+    , data : Bytes.Bytes
+    }
+
+
+type alias Model =
+    { userMediaDevices : MediaDevicesStatus
+    , selectedAudioInputDevice : Maybe (Evergreen.V363.IdString.IdString MediaDeviceId)
+    , selectedVideoInputDevice : Maybe (Evergreen.V363.IdString.IdString MediaDeviceId)
+    , remoteCallData : RemoteCallData
+    , isSpeaking : SeqSet.SeqSet ConnectionId
+    , recordings : SeqDict.SeqDict CallId (List.Nonempty.Nonempty Recording)
+    , localIsSpeaking : Bool
+    , startConnectionError : Maybe String
+    , volume : SeqDict.SeqDict ( Evergreen.V363.Id.Id Evergreen.V363.Id.UserId, Effect.Lamdera.ClientId ) Float
+    , videoHover : Maybe LocalOrConnection
+    , thumbnailPosition : ( Float, Float )
+    }
