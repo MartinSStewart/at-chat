@@ -4,11 +4,11 @@ port module Encryption exposing
     , ToJs(..)
     , empty
     , encode
+    , encryptMessage
     , fromBase64
     , fromJs
     , fromJsCodec
     , toBase64
-    , toJs
     , toJsCodec
     )
 
@@ -33,9 +33,10 @@ import Bytes.Encode
 import Codec exposing (Codec)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
-import Id exposing (Id, UserId)
+import Id exposing (Id, UserId, Viewing_DmId)
 import Json.Decode
 import Json.Encode
+import Serialize
 
 
 {-| A message that has been encrypted. The type parameter records what it will be once
@@ -73,9 +74,27 @@ fromBase64 text =
 -- PORTS
 
 
-type ToJs
-    = ToJs_StoreSharedSecret { otherUserId : Id UserId, sharedSecret : String }
-    | ToJs_EncryptMessage { requestId : Int, otherUserId : Id UserId, plainText : String }
+type ToJs data
+    = ToJs_StoreSharedSecret { otherUserId : Id UserId, sharedSecret : Bytes }
+    | ToJs_EncryptMessage { requestId : Int, otherUserId : Id UserId, data : data }
+
+
+encryptMessage : Int -> Viewing_DmId -> Serialize.Codec e a -> a -> Command FrontendOnly toMsg msg
+encryptMessage requestId id dataCodec data =
+    Serialize.encodeToBytes
+        (toJsCodec dataCodec)
+        (ToJs_EncryptMessage { requestId = requestId, otherUserId = id.otherUserId, data = data })
+        |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
+
+
+toJsCodec : Serialize.Codec e data -> Serialize.Codec e (ToJs data)
+toJsCodec dataCodec =
+    Debug.todo ""
+
+
+idCodec : Serialize.Codec e Int -> Serialize.Codec e (Id a)
+idCodec =
+    Serialize.map Id.fromInt Id.toInt
 
 
 type FromJs
@@ -85,18 +104,10 @@ type FromJs
     | FromJs_MessageEncryptFailed Int String
 
 
-port encryption_to_js : Json.Encode.Value -> Cmd msg
+port encryption_to_js : Bytes -> Cmd msg
 
 
 port encryption_from_js : (Json.Decode.Value -> msg) -> Sub msg
-
-
-toJs : ToJs -> Command FrontendOnly toMsg msg
-toJs msg =
-    Command.sendToJs
-        "encryption_to_js"
-        encryption_to_js
-        (Codec.encoder toJsCodec msg)
 
 
 fromJs : (Result String FromJs -> msg) -> Subscription FrontendOnly msg
@@ -109,40 +120,6 @@ fromJs msg =
                 |> Result.mapError Json.Decode.errorToString
                 |> msg
         )
-
-
-userIdCodec : Codec (Id UserId)
-userIdCodec =
-    Codec.map Id.fromInt Id.toInt Codec.int
-
-
-toJsCodec : Codec ToJs
-toJsCodec =
-    Codec.custom
-        (\eStore eEncrypt value ->
-            case value of
-                ToJs_StoreSharedSecret a ->
-                    eStore a
-
-                ToJs_EncryptMessage a ->
-                    eEncrypt a
-        )
-        |> Codec.variant1 "store-shared-secret"
-            ToJs_StoreSharedSecret
-            (Codec.object (\a b -> { otherUserId = a, sharedSecret = b })
-                |> Codec.field "otherUserId" .otherUserId userIdCodec
-                |> Codec.field "sharedSecret" .sharedSecret Codec.string
-                |> Codec.buildObject
-            )
-        |> Codec.variant1 "encrypt-message"
-            ToJs_EncryptMessage
-            (Codec.object (\a b c -> { requestId = a, otherUserId = b, plainText = c })
-                |> Codec.field "requestId" .requestId Codec.int
-                |> Codec.field "otherUserId" .otherUserId userIdCodec
-                |> Codec.field "plainText" .plainText Codec.string
-                |> Codec.buildObject
-            )
-        |> Codec.buildCustom
 
 
 fromJsCodec : Codec FromJs

@@ -6,7 +6,7 @@ module Frontend exposing
     )
 
 import AiChat
-import Array
+import Array exposing (Array)
 import Audio exposing (AudioCmd, AudioData)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
@@ -34,6 +34,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
+import Embed exposing (Embed)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji(..), EmojiOrSticker(..))
 import Encryption
 import FileStatus exposing (FileData, FileId, FileStatus(..))
@@ -44,7 +45,7 @@ import GuildColumn
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DmId)
 import ImageEditor
 import ImageViewer
 import Json.Decode
@@ -55,6 +56,7 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
+import Message exposing (ContentAndEmbeds)
 import MessageDropdown
 import MessageInput exposing (NameSoFar(..), TextInputFocus)
 import MessageMenu
@@ -4162,9 +4164,6 @@ updateLoaded msg model =
 
                                         nonempty : String.Nonempty.NonemptyString
                                         nonempty =
-                                            -- Sending someone your own private key would hand
-                                            -- them everything that was ever encrypted to it, so
-                                            -- it is taken out on the way past rather than sent.
                                             User.redactPrivateKeys local.localUser.user draft
 
                                         safeToSend : Bool
@@ -4190,92 +4189,96 @@ updateLoaded msg model =
                                     if not safeToSend then
                                         ( loggedIn, Command.none )
 
-                                    else if encryptedDmOtherUser guildOrDmId local /= Nothing then
-                                        -- An encrypted conversation cannot send anything
-                                        -- until the browser hands back the ciphertext, so
-                                        -- the draft stays put until it does.
-                                        startEncryptingMessage
-                                            guildOrDmIdWithThread
-                                            threadRoute
-                                            nonempty
-                                            (encryptedDmOtherUser guildOrDmId local)
-                                            loggedIn
-
                                     else
-                                        FrontendExtra.handleLocalChange
-                                            model.time
-                                            ((case guildOrDmId of
-                                                GuildOrDmId guildOrDmId2 ->
-                                                    Local_SendMessage
-                                                        model.time
-                                                        model.timezone
-                                                        guildOrDmId2
-                                                        nonempty
-                                                        (case threadRoute of
-                                                            ViewThread threadId ->
-                                                                ViewThreadWithMaybeMessage
-                                                                    threadId
-                                                                    (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
+                                        case encryptedDmOtherUser guildOrDmId local of
+                                            Just dmId ->
+                                                startEncryptingMessage
+                                                    dmId
+                                                    threadRoute
+                                                    { content =
+                                                        RichText.fromNonemptyString
+                                                            local.localUser.timezone
+                                                            (User.allUsers local.localUser)
+                                                            nonempty
+                                                    , embeds = Array.empty
+                                                    }
+                                                    loggedIn
 
-                                                            NoThread ->
-                                                                NoThreadWithMaybeMessage
-                                                                    (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
-                                                        )
-                                                        (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
-                                                            Just dict ->
-                                                                NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+                                            Nothing ->
+                                                FrontendExtra.handleLocalChange
+                                                    model.time
+                                                    ((case guildOrDmId of
+                                                        GuildOrDmId guildOrDmId2 ->
+                                                            Local_SendMessage
+                                                                model.time
+                                                                model.timezone
+                                                                guildOrDmId2
+                                                                nonempty
+                                                                (case threadRoute of
+                                                                    ViewThread threadId ->
+                                                                        ViewThreadWithMaybeMessage
+                                                                            threadId
+                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
 
-                                                            Nothing ->
-                                                                SeqDict.empty
-                                                        )
-                                                        (case model.emojiData of
-                                                            Just emojiData2 ->
-                                                                RichText.fromNonemptyString Time.utc SeqDict.empty nonempty
-                                                                    |> RichText.emojisAndCustomEmojis emojiData2
-                                                                    |> SeqSet.fromList
-                                                                    |> SeqSet.toList
+                                                                    NoThread ->
+                                                                        NoThreadWithMaybeMessage
+                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
+                                                                )
+                                                                (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
+                                                                    Just dict ->
+                                                                        NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
 
-                                                            Nothing ->
-                                                                []
-                                                        )
+                                                                    Nothing ->
+                                                                        SeqDict.empty
+                                                                )
+                                                                (case model.emojiData of
+                                                                    Just emojiData2 ->
+                                                                        RichText.fromNonemptyString Time.utc SeqDict.empty nonempty
+                                                                            |> RichText.emojisAndCustomEmojis emojiData2
+                                                                            |> SeqSet.fromList
+                                                                            |> SeqSet.toList
 
-                                                DiscordGuildOrDmId guildOrDmId2 ->
-                                                    Local_Discord_SendMessage
-                                                        model.time
-                                                        model.timezone
-                                                        guildOrDmId2
-                                                        nonempty
-                                                        (case threadRoute of
-                                                            ViewThread threadId ->
-                                                                ViewThreadWithMaybeMessage
-                                                                    threadId
-                                                                    (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
+                                                                    Nothing ->
+                                                                        []
+                                                                )
 
-                                                            NoThread ->
-                                                                NoThreadWithMaybeMessage
-                                                                    (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
-                                                        )
-                                                        (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
-                                                            Just dict ->
-                                                                NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+                                                        DiscordGuildOrDmId guildOrDmId2 ->
+                                                            Local_Discord_SendMessage
+                                                                model.time
+                                                                model.timezone
+                                                                guildOrDmId2
+                                                                nonempty
+                                                                (case threadRoute of
+                                                                    ViewThread threadId ->
+                                                                        ViewThreadWithMaybeMessage
+                                                                            threadId
+                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
 
-                                                            Nothing ->
-                                                                SeqDict.empty
-                                                        )
-                                             )
-                                                |> Just
-                                            )
-                                            { loggedIn
-                                                | drafts = SeqDict.remove guildOrDmIdWithThread loggedIn.drafts
-                                                , replyTo = SeqDict.remove guildOrDmIdWithThread loggedIn.replyTo
-                                                , filesToUpload = SeqDict.remove guildOrDmIdWithThread loggedIn.filesToUpload
-                                            }
-                                            (if MyUi.isMobile model then
-                                                Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
+                                                                    NoThread ->
+                                                                        NoThreadWithMaybeMessage
+                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
+                                                                )
+                                                                (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
+                                                                    Just dict ->
+                                                                        NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
 
-                                             else
-                                                Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
-                                            )
+                                                                    Nothing ->
+                                                                        SeqDict.empty
+                                                                )
+                                                     )
+                                                        |> Just
+                                                    )
+                                                    { loggedIn
+                                                        | drafts = SeqDict.remove guildOrDmIdWithThread loggedIn.drafts
+                                                        , replyTo = SeqDict.remove guildOrDmIdWithThread loggedIn.replyTo
+                                                        , filesToUpload = SeqDict.remove guildOrDmIdWithThread loggedIn.filesToUpload
+                                                    }
+                                                    (if MyUi.isMobile model then
+                                                        Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
+
+                                                     else
+                                                        Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+                                                    )
 
                                 Nothing ->
                                     ( loggedIn, Command.none )
@@ -8859,13 +8862,13 @@ storeSharedSecret otherUserId privateKey loggedIn =
 {-| The other person in the conversation, when this is a DM that has been encrypted.
 `Nothing` for anything that goes to the server in the clear.
 -}
-encryptedDmOtherUser : AnyGuildOrDmId -> LocalState -> Maybe (Id UserId)
+encryptedDmOtherUser : AnyGuildOrDmId -> LocalState -> Maybe Viewing_DmId
 encryptedDmOtherUser guildOrDmId local =
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
             case SeqDict.get otherUserId local.dmChannels |> Maybe.map .e2ee of
                 Just (DmChannel.E2eeEnabled _) ->
-                    Just otherUserId
+                    Just { otherUserId = otherUserId }
 
                 _ ->
                     Nothing
@@ -8874,53 +8877,43 @@ encryptedDmOtherUser guildOrDmId local =
             Nothing
 
 
-{-| Hand a message to the browser to be encrypted. Everything the message needs besides
-its contents is put aside under the request id, since that is all the answer carries.
--}
 startEncryptingMessage :
-    ( AnyGuildOrDmId, ThreadRoute )
+    Viewing_DmId
     -> ThreadRoute
-    -> String.Nonempty.NonemptyString
-    -> Maybe (Id UserId)
+    -> ContentAndEmbeds
     -> LoggedIn2
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-startEncryptingMessage draft threadRoute text maybeOtherUserId loggedIn =
-    case maybeOtherUserId of
-        Nothing ->
-            ( loggedIn, Command.none )
+startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
+    let
+        guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
+        guildOrDmId =
+            ( GuildOrDmId (GuildOrDmId_Dm id), threadRoute )
+    in
+    ( { loggedIn
+        | e2eeError = Nothing
+        , nextEncryptionRequestId = loggedIn.nextEncryptionRequestId + 1
+        , pendingEncryptedMessages =
+            SeqDict.insert
+                loggedIn.nextEncryptionRequestId
+                { otherUserId = id.otherUserId
+                , threadRoute =
+                    case threadRoute of
+                        ViewThread threadId ->
+                            ViewThreadWithMaybeMessage
+                                threadId
+                                (SeqDict.get guildOrDmId loggedIn.replyTo |> Maybe.map Id.changeType)
 
-        Just otherUserId ->
-            ( { loggedIn
-                | e2eeError = Nothing
-                , nextEncryptionRequestId = loggedIn.nextEncryptionRequestId + 1
-                , pendingEncryptedMessages =
-                    SeqDict.insert
-                        loggedIn.nextEncryptionRequestId
-                        { otherUserId = otherUserId
-                        , threadRoute =
-                            case threadRoute of
-                                ViewThread threadId ->
-                                    ViewThreadWithMaybeMessage
-                                        threadId
-                                        (SeqDict.get draft loggedIn.replyTo |> Maybe.map Id.changeType)
+                        NoThread ->
+                            NoThreadWithMaybeMessage (SeqDict.get guildOrDmId loggedIn.replyTo)
+                , attachedFiles =
+                    case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                        Just dict ->
+                            NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
 
-                                NoThread ->
-                                    NoThreadWithMaybeMessage (SeqDict.get draft loggedIn.replyTo)
-                        , attachedFiles =
-                            case SeqDict.get draft loggedIn.filesToUpload of
-                                Just dict ->
-                                    NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
-
-                                Nothing ->
-                                    SeqDict.empty
-                        , draft = draft
-                        }
-                        loggedIn.pendingEncryptedMessages
-              }
-            , Encryption.ToJs_EncryptMessage
-                { requestId = loggedIn.nextEncryptionRequestId
-                , otherUserId = otherUserId
-                , plainText = String.Nonempty.toString text
+                        Nothing ->
+                            SeqDict.empty
                 }
-                |> Encryption.toJs
-            )
+                loggedIn.pendingEncryptedMessages
+      }
+    , Encryption.encryptMessage loggedIn.nextEncryptionRequestId id Message.contentAndEmbedsCodec contentAndEmbeds
+    )

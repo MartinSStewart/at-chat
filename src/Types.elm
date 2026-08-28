@@ -285,9 +285,6 @@ type alias PendingEncryptedMessage =
     { otherUserId : Id UserId
     , threadRoute : ThreadRouteWithMaybeMessage
     , attachedFiles : SeqDict (Id FileId) FileData
-    , -- What the draft is filed under, so it can be cleared once the message has
-      -- actually gone, and left alone if the encryption failed.
-      draft : ( AnyGuildOrDmId, ThreadRoute )
     }
 
 

@@ -262,19 +262,6 @@ type alias FrontendCurrentUser =
     BackendUser
 
 
-{-| Take out anything in a message that turns out to be the sender's own private key,
-before it goes anywhere.
-
-Only words ending in "=" are looked at closely. That is how the base64 of a 32 byte key
-always ends, and it keeps the check cheap: working out whether a word really is the key
-means deriving a public key from it, which is far too slow to do for every word of every
-message.
-
-The message is left exactly as it was apart from the offending word, since replacing it
-in the original text rather than rebuilding the text from its words keeps every line
-break and run of spaces where the sender put it.
-
--}
 redactPrivateKeys : { a | publicKey : Maybe X25519.PublicKey } -> NonemptyString -> NonemptyString
 redactPrivateKeys user text =
     case user.publicKey of

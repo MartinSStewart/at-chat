@@ -12,6 +12,7 @@ module Message exposing
     , UserTextMessageDataNoReply
     , addEmbed
     , addReactionEmoji
+    , contentAndEmbedsCodec
     , createdAt
     , drawing
     , editUserTextMessage
@@ -725,3 +726,8 @@ toDecryptable message =
 
         GameStarted gameStartedData ->
             GameStarted gameStartedData
+
+
+contentAndEmbedsCodec : Serialize.Codec e ContentAndEmbeds
+contentAndEmbedsCodec =
+    Debug.todo ""
