@@ -54,9 +54,6 @@ import Ui.Shadow
 import UserAgent exposing (Browser(..))
 
 
-{-| Text the end-to-end tests look for, named so that both sides read the same value
-rather than a test checking its own copy of it.
--}
 checkYourEmailText : String
 checkYourEmailText =
     "Check your email for a code"

@@ -16,9 +16,6 @@ import Ui.Input
 import Ui.Shadow
 
 
-{-| Text the end-to-end tests look for, named so that both sides read the same value
-rather than a test checking its own copy of it.
--}
 loginSignupText : String
 loginSignupText =
     "Login/Signup"

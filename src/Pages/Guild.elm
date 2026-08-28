@@ -118,13 +118,6 @@ import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, Previous
 import VisibleMessages exposing (VisibleMessages)
 
 
-{-| Text the end-to-end tests look for.
-
-A test that spells the text out again is checking a copy of it, so rewording anything in
-here used to mean hunting down the tests that quoted it. Naming it once and letting both
-sides read the same value is what stops that.
-
--}
 newMessagesBadgeText : String
 newMessagesBadgeText =
     "new"

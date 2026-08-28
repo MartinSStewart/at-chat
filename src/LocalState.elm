@@ -197,9 +197,6 @@ import UserSession exposing (ChannelHeaderTab, FrontendUserSession, PreviouslyLa
 import VisibleMessages exposing (VisibleMessages)
 
 
-{-| Text the end-to-end tests look for, named so that both sides read the same value
-rather than a test checking its own copy of it.
--}
 callEndedText : String
 callEndedText =
     "Call ended"

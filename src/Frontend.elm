@@ -104,9 +104,6 @@ import WordSpellingGame
 import X25519
 
 
-{-| Text the end-to-end tests look for, named so that both sides read the same value
-rather than a test checking its own copy of it.
--}
 discordLinkExpiredText : String
 discordLinkExpiredText =
     "This Discord link has expired"

@@ -47,9 +47,6 @@ import User exposing (FrontendUser, LocalUser)
 import UserSession exposing (DiscordFrontendUser)
 
 
-{-| Text the end-to-end tests look for, named so that both sides read the same value
-rather than a test checking its own copy of it.
--}
 mentionUserText : String
 mentionUserText =
     "Mention a user"

@@ -21,6 +21,7 @@ module E2EMisc exposing
     , profileImageOpensDm
     , reactionPopupNamesEmojiTest
     , reloadingAConversationLeavesItUnreadTest
+    , soloDmEncryptionTest
     , startingACallOrGameStaysReadTest
     , staysReadWhileViewingTest
     , swipedAwayConversationStopsBeingViewedTest
@@ -841,6 +842,128 @@ encryptedMessageContents backend =
 
         Nothing ->
             []
+
+
+soloDmEncryptionTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+soloDmEncryptionTest config =
+    E2EHelper.startTest
+        "Encrypt a DM with yourself"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.openDm admin 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
+                        , admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "to accept message encryption" ])
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_cancelE2ee" ])
+                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") (String.dropRight 5 adminPrivateKey)
+                        , T.checkState 100 (checkNoSharedSecretsYet 0)
+                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                        , E2EHelper.respondToEncryptionPort admin
+                        , T.checkBackend 100 checkSoloDmIsEncrypted
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "E2EE was enabled on" ])
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.text "This conversation is missing a private key" ]
+                            )
+                        , admin.click 100 (Dom.id "guild_hideMembers")
+                        , E2EHelper.writeMessage admin 100 "Note to self"
+                        , T.checkBackend 100 (checkSoloDmHasNoPlainText "Note to self")
+                        , E2EHelper.respondToEncryptionPort admin
+                        , T.checkBackend 100 (checkSoloDmMessageStored "Note to self")
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+checkSoloDmIsEncrypted : E2EHelper.BackendModel2 -> Result String ()
+checkSoloDmIsEncrypted backend =
+    case soloDmChannel backend |> Maybe.map .e2ee of
+        Just (DmChannel.E2eeEnabled _) ->
+            Ok ()
+
+        _ ->
+            Err "The DM with yourself should have been marked as encrypted on the backend"
+
+
+checkSoloDmHasNoPlainText : String -> E2EHelper.BackendModel2 -> Result String ()
+checkSoloDmHasNoPlainText text backend =
+    if List.any (String.contains text) (soloDmEncryptedContents backend) then
+        Err "The message reached the server as plain text"
+
+    else
+        Ok ()
+
+
+checkSoloDmMessageStored : String -> E2EHelper.BackendModel2 -> Result String ()
+checkSoloDmMessageStored text backend =
+    let
+        expected : String
+        expected =
+            Base64.fromString text |> Maybe.withDefault "not base64"
+    in
+    if List.member expected (soloDmEncryptedContents backend) then
+        Ok ()
+
+    else
+        Err
+            ("The stored message isn't what the browser handed back. Stored: "
+                ++ String.join ", " (soloDmEncryptedContents backend)
+            )
+
+
+soloDmEncryptedContents : E2EHelper.BackendModel2 -> List String
+soloDmEncryptedContents backend =
+    case soloDmChannel backend of
+        Just dmChannel ->
+            IdArray.toList dmChannel.messages
+                |> List.filterMap
+                    (\message ->
+                        case message of
+                            Message.EncryptedUserTextMessage data ->
+                                Just (Encryption.toBase64 data.content)
+
+                            _ ->
+                                Nothing
+                    )
+
+        Nothing ->
+            []
+
+
+soloDmChannel : E2EHelper.BackendModel2 -> Maybe DmChannel.DmChannel
+soloDmChannel backend =
+    SeqDict.get
+        (DmChannelId.fromUserIds (Id.fromInt 0) (Id.fromInt 0))
+        (E2EHelper.unwrapBackend backend).dmChannels
 
 
 adminDmChannel : E2EHelper.BackendModel2 -> Maybe DmChannel.DmChannel

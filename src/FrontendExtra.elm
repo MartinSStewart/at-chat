@@ -127,9 +127,6 @@ import WordSpellingGame
 import X25519
 
 
-{-| Text the end-to-end tests look for, named so that both sides read the same value
-rather than a test checking its own copy of it.
--}
 savePrivateKeyTitle : String
 savePrivateKeyTitle =
     "Save your private key now"

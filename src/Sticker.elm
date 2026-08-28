@@ -23,9 +23,6 @@ import MyUi
 import SeqDict exposing (SeqDict)
 
 
-{-| Text the end-to-end tests look for, named so that both sides read the same value
-rather than a test checking its own copy of it.
--}
 stickerFailedToLoadText : String
 stickerFailedToLoadText =
     "Sticker failed to load"

@@ -44,9 +44,6 @@ import Ui.Font
 import User
 
 
-{-| Text the end-to-end tests look for, named so that both sides read the same value
-rather than a test checking its own copy of it.
--}
 editMessageText : String
 editMessageText =
     "Edit message"

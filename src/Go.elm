@@ -78,9 +78,6 @@ import Ui.Shadow
 import User exposing (FrontendUser, LocalUser)
 
 
-{-| Shown when a player's clock runs out. Named so the end-to-end tests read the same
-value rather than checking their own copy of it.
--}
 lossOnTimeText : Stone -> String
 lossOnTimeText ranOutOfTime =
     case ranOutOfTime of

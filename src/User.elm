@@ -92,8 +92,6 @@ import UserSession exposing (DiscordFrontendUser, UserSession)
 import X25519
 
 
-{-| Stands in for somebody whose account this client hasn't been told about yet.
--}
 missingName : String
 missingName =
     "<missing>"

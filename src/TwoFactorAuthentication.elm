@@ -41,9 +41,6 @@ import Ui.Input
 import Ui.Prose
 
 
-{-| Text the end-to-end tests look for, named so that both sides read the same value
-rather than a test checking its own copy of it.
--}
 addTwoFactorText : String
 addTwoFactorText =
     "Add two factor authentication"
