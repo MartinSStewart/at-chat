@@ -6156,10 +6156,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         (\session _ _ dmChannelId dmChannel ->
                             case dmChannel.e2ee of
                                 DmChannel.E2eeRequestedBy requestedBy ->
-                                    if requestedBy == session.userId then
-                                        -- Accepting your own request would encrypt the
-                                        -- conversation without the other person ever
-                                        -- having agreed to it, or having a key.
+                                    if requestedBy == session.userId && not (session.userId == id.otherUserId) then
                                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                     else

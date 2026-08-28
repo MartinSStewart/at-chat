@@ -3113,7 +3113,13 @@ updateLoaded msg model =
             ( model, Lamdera.sendToBackend (ExportChannelRequest exportChannelId) )
 
         PressedAddPrivateKeyToAccount ->
-            case X25519.privateKeyFromListInt model.startupData.randomSeed of
+            case
+                X25519.privateKeyFromListInt
+                    (List.indexedMap
+                        (\index value -> (index + 1) * Time.posixToMillis model.time + value)
+                        model.startupData.randomSeed
+                    )
+            of
                 Just privateKey ->
                     let
                         startupData : Ports.StartupData
@@ -3246,11 +3252,12 @@ updateLoaded msg model =
                                         | e2eeKeysOnThisDevice =
                                             SeqSet.insert otherUserId loggedIn.e2eeKeysOnThisDevice
                                     }
+
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn2.localState
                             in
-                            -- Whoever was asked is the one who still owes an answer. The
-                            -- person who did the asking is only catching up with an
-                            -- answer that already arrived, so they have nothing to send.
-                            if LocalState.dmE2eeRequestedByOtherUser otherUserId (Local.model loggedIn2.localState) then
+                            if LocalState.dmE2eeRequestedByOtherUser otherUserId local || otherUserId == local.localUser.session.userId then
                                 FrontendExtra.handleLocalChange
                                     model.time
                                     (Local_AcceptE2ee { otherUserId = otherUserId } model.time |> Just)

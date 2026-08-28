@@ -2489,6 +2489,12 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                     , risksLabel.element
                     ]
                 ]
+            , case localUser.user.publicKey of
+                Just _ ->
+                    Ui.text "1. Create private key: completed!"
+
+                Nothing ->
+                    Ui.none
             , case e2ee of
                 DmChannel.E2eeDisabled ->
                     if not risksAccepted then
@@ -2518,13 +2524,13 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                 Just _ ->
                                     privateKeyInput
                                         otherUserId
-                                        "Enter your private key to start encrypting this conversation."
+                                        "2. Enter your private key to start encrypting this conversation."
                                         keyInput
 
                     else if otherUserId == localUser.session.userId then
                         privateKeyInput
                             otherUserId
-                            "Enter your private key to start encrypting this conversation."
+                            "2. Enter your private key to start encrypting this conversation."
                             keyInput
 
                     else
@@ -2533,7 +2539,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                             [ Ui.Prose.paragraph
                                 []
                                 [ Ui.text
-                                    ("Waiting for "
+                                    ("2. Waiting for "
                                         ++ User.toStringAlt otherUserId localUser
                                         ++ " to accept message encryption."
                                     )
@@ -2547,14 +2553,14 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                 DmChannel.E2eeEnabled time ->
                     Ui.column
                         [ Ui.spacing 16 ]
-                        [ Ui.text ("E2EE was enabled on " ++ MyUi.datestamp localUser.timezone time)
+                        [ Ui.text ("2. E2EE was enabled on " ++ MyUi.datestamp localUser.timezone time)
                         , if keyInput.hasKeyOnThisDevice then
                             Ui.none
 
                           else
                             privateKeyInput
                                 otherUserId
-                                "This conversation is missing a private key in order to decrypt messages. Enter your private key here."
+                                "3. This conversation is missing a private key in order to decrypt messages. Enter your private key here."
                                 keyInput
                         ]
             ]
