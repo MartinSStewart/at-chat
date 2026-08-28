@@ -3186,31 +3186,24 @@ updateLoaded msg model =
                         trimmed =
                             String.trim text
                     in
-                    -- Base64 of 32 bytes always ends in "=", so that is what says a whole
-                    -- key has arrived rather than a prefix of one. It has to be the value
-                    -- that decides rather than a paste event, because a password manager
-                    -- may type a key in one character at a time to defeat keyloggers.
                     if String.endsWith "=" trimmed then
                         let
                             result : Result String (Command FrontendOnly ToBackend FrontendMsg_)
                             result =
-                                User.privateKeyForAccount
-                                    trimmed
-                                    (Local.model loggedIn.localState).localUser.user
-                                    |> Result.andThen
-                                        (\privateKey ->
-                                            Result.map
-                                                (\command ->
-                                                    Command.batch
-                                                        (command
-                                                            :: storeRemainingSharedSecrets otherUserId privateKey loggedIn
-                                                        )
-                                                )
-                                                (storeSharedSecret otherUserId privateKey loggedIn)
-                                        )
+                                case User.privateKeyForAccount trimmed (Local.model loggedIn.localState).localUser.user of
+                                    Ok privateKey ->
+                                        case storeSharedSecret otherUserId privateKey loggedIn of
+                                            Ok command ->
+                                                (command :: storeRemainingSharedSecrets otherUserId privateKey loggedIn)
+                                                    |> Command.batch
+                                                    |> Ok
+
+                                            Err error ->
+                                                Err error
+
+                                    Err error ->
+                                        Err error
                         in
-                        -- The typed key is dropped either way, so a mistake means typing
-                        -- it again rather than leaving it sitting in the field.
                         case result of
                             Ok command ->
                                 ( { loggedIn | e2eeError = Nothing, e2eePrivateKeyText = "" }, command )
@@ -8788,19 +8781,6 @@ handleGameOutMsgs outMsgs model =
         outMsgs
 
 
-{-| Every other conversation this device still has no key for.
-
-Working a shared key out needs nothing but the private key and the other person's public
-key, so one visit to one conversation's key box is enough to set up the whole device
-rather than leaving the same key to be typed in again in each of the others. Anything
-that went wrong in one of these is dropped: the box reports on the key that was typed,
-and an unrelated conversation whose other side has no public key yet shouldn't be made to
-look like a bad key.
-
-Conversations that are only waiting on an answer are left alone. Accepting is a decision
-the user makes, not something typing a key elsewhere should make for them.
-
--}
 storeRemainingSharedSecrets :
     Id UserId
     -> X25519.PrivateKey

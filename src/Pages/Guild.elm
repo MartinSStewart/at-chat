@@ -2412,8 +2412,14 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                 Just _ ->
                                     privateKeyInput
                                         otherUserId
-                                        "Type or paste your private key to start encrypting this conversation."
+                                        "Enter your private key to start encrypting this conversation."
                                         keyInput
+
+                    else if otherUserId == localUser.session.userId then
+                        privateKeyInput
+                            otherUserId
+                            "Enter your private key to start encrypting this conversation."
+                            keyInput
 
                     else
                         Ui.column
@@ -2422,7 +2428,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                 []
                                 [ Ui.text
                                     ("Waiting for "
-                                        ++ waitingOnName requestedBy otherUserId localUser
+                                        ++ User.toStringAlt otherUserId localUser
                                         ++ " to accept message encryption."
                                     )
                                 ]
@@ -2517,23 +2523,6 @@ createPrivateKeyButton =
         (Dom.id "guild_addPrivateKey")
         PressedAddPrivateKeyToAccount
         (Ui.text "Create a private key")
-
-
-{-| The name of whoever is being waited on. In a DM with yourself that's you, which is
-also the only time the request and the person it's addressed to come from the same user.
--}
-waitingOnName : Id UserId -> Id UserId -> LocalUser -> String
-waitingOnName requestedBy otherUserId localUser =
-    case User.getUser otherUserId localUser of
-        Just user ->
-            if requestedBy == otherUserId then
-                "yourself"
-
-            else
-                PersonName.toString user.name
-
-        Nothing ->
-            "them"
 
 
 dmChannelSettingsNotMobile :

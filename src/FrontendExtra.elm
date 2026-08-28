@@ -1250,7 +1250,7 @@ externalLinkWarning domainWhitelist isMobile url =
                 ]
             , Ui.row
                 []
-                [ MyUi.secondaryButton
+                [ MyUi.secondaryButtonTall
                     (Dom.id "frontend_cancelLeaveExternal")
                     PressedCloseExternalLinkWarning
                     "Back"

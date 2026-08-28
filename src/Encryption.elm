@@ -74,12 +74,8 @@ fromBase64 text =
 
 
 type ToJs
-    = -- The shared secret both people in a DM worked out. JS turns it into a key it
-      -- won't hand back and keeps it under the other person's id.
-      ToJs_StoreSharedSecret { otherUserId : Id UserId, sharedSecret : String }
-    | -- The request id comes back with the answer, since a reply cannot be matched to
-      -- what asked for it otherwise.
-      ToJs_EncryptMessage { requestId : Int, otherUserId : Id UserId, plainText : String }
+    = ToJs_StoreSharedSecret { otherUserId : Id UserId, sharedSecret : String }
+    | ToJs_EncryptMessage { requestId : Int, otherUserId : Id UserId, plainText : String }
 
 
 type FromJs

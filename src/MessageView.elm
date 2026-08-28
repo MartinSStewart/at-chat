@@ -701,9 +701,6 @@ reactionPopup emojiData customEmojis allUsers placement emoji users =
                 Ui.el [ Ui.Font.size 40, Ui.width Ui.shrink, MyUi.noShrinking ] (Ui.text (Emoji.toString emoji2))
 
             EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
-                -- The image is a flex item beside a column of names that wraps to fill
-                -- the popup's width, so without this it gets squashed sideways once
-                -- enough people have reacted to make the names the wider of the two.
                 Ui.el
                     [ Ui.width Ui.shrink, MyUi.noShrinking ]
                     (CustomEmoji.view "40px" "0em" customEmojiId customEmojis LoopForever |> Ui.html)
