@@ -61,6 +61,76 @@ function e2eeBytesToBase64(bytes) {
     return btoa(binary);
 }
 
+// Both encryption ports carry Bytes rather than JSON, so what arrives here is a DataView
+// holding an elm-serialize encoding and what goes back has to be one too. The format is
+// all big endian: a one byte version, then a two byte variant tag counting from zero,
+// then the variant's fields in order. An Int is a float64, and a String or Bytes field is
+// a four byte length followed by that many bytes.
+
+const e2eeSerializeVersion = 1;
+
+// The ToJs variants, in the order Encryption.toJsCodec defines them.
+const e2eeToJsStoreSharedSecret = 0;
+const e2eeToJsEncryptMessage = 1;
+
+// The FromJs variants, in the order Encryption.fromJsCodec defines them.
+const e2eeFromJsSharedSecretStored = 0;
+const e2eeFromJsSharedSecretFailed = 1;
+const e2eeFromJsMessageEncrypted = 2;
+const e2eeFromJsMessageEncryptFailed = 3;
+
+function e2eeReadToJs(dataView) {
+    if (dataView.byteLength < 3 || dataView.getUint8(0) !== e2eeSerializeVersion) { return null; }
+
+    switch (dataView.getUint16(1, false)) {
+        case e2eeToJsStoreSharedSecret: {
+            const secretLength = dataView.getUint32(11, false);
+            return {
+                tag: "store-shared-secret",
+                otherUserId: dataView.getFloat64(3, false),
+                sharedSecret: new Uint8Array(
+                    dataView.buffer, dataView.byteOffset + 15, secretLength),
+            };
+        }
+
+        case e2eeToJsEncryptMessage:
+            // Whatever Elm serialized the message into is the last field, so it runs to
+            // the end of the buffer. It stays opaque here: this side only encrypts it.
+            return {
+                tag: "encrypt-message",
+                requestId: dataView.getFloat64(3, false),
+                otherUserId: dataView.getFloat64(11, false),
+                data: new Uint8Array(
+                    dataView.buffer, dataView.byteOffset + 19, dataView.byteLength - 19),
+            };
+
+        default:
+            return null;
+    }
+}
+
+function e2eeIdMessage(variant, id) {
+    const out = new DataView(new ArrayBuffer(11));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, variant, false);
+    out.setFloat64(3, id, false);
+    return out;
+}
+
+function e2eeIdAndBytesMessage(variant, id, bytes) {
+    const out = new DataView(new ArrayBuffer(15 + bytes.length));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, variant, false);
+    out.setFloat64(3, id, false);
+    out.setUint32(11, bytes.length, false);
+    new Uint8Array(out.buffer).set(bytes, 15);
+    return out;
+}
+
+function e2eeIdAndTextMessage(variant, id, text) {
+    return e2eeIdAndBytesMessage(variant, id, new TextEncoder().encode(text));
+}
+
 // The ids of every conversation this browser holds a key for. Sent along with the rest of
 // the startup data so that Elm knows from the first render which conversations still need
 // a private key typed in, without having to ask and wait.
@@ -771,16 +841,20 @@ exports.init = async function init(app)
             });
     });
 
-    app.ports.encryption_to_js.subscribe(async (message) => {
+    app.ports.encryption_to_js.subscribe(async (dataView) => {
+        const message = e2eeReadToJs(dataView);
+
+        if (message === null) {
+            console.error("Couldn't read what Elm sent over the encryption port");
+            return;
+        }
+
         try {
             if (message.tag === "store-shared-secret") {
-                const data = message.args[0];
-                const secret = e2eeBase64ToBytes(data.sharedSecret);
-
                 // The raw X25519 output is not a key, it is a number both sides happen to
                 // agree on, so it goes through HKDF before anything encrypts with it.
                 const hkdfKey = await crypto.subtle.importKey(
-                    "raw", secret, "HKDF", false, ["deriveKey"]);
+                    "raw", message.sharedSecret, "HKDF", false, ["deriveKey"]);
 
                 const aesKey = await crypto.subtle.deriveKey(
                     { name: "HKDF"
@@ -793,19 +867,20 @@ exports.init = async function init(app)
                     false, // not exportable, which is why it is safe to keep around
                     ["encrypt", "decrypt"]);
 
-                await e2eeWithStore("readwrite", store => store.put(aesKey, data.otherUserId));
+                await e2eeWithStore("readwrite", store => store.put(aesKey, message.otherUserId));
                 app.ports.encryption_from_js.send(
-                    { tag: "shared-secret-stored", args: [ data.otherUserId ] });
+                    e2eeIdMessage(e2eeFromJsSharedSecretStored, message.otherUserId));
 
             } else if (message.tag === "encrypt-message") {
-                const data = message.args[0];
-                const key = await e2eeWithStore("readonly", store => store.get(data.otherUserId));
+                const key = await e2eeWithStore(
+                    "readonly", store => store.get(message.otherUserId));
 
                 if (!key) {
                     app.ports.encryption_from_js.send(
-                        { tag: "message-encrypt-failed"
-                        , args: [ data.requestId, "No encryption key is stored on this device for that conversation" ]
-                        });
+                        e2eeIdAndTextMessage(
+                            e2eeFromJsMessageEncryptFailed,
+                            message.requestId,
+                            "No encryption key is stored on this device for that conversation"));
                     return;
                 }
 
@@ -813,24 +888,25 @@ exports.init = async function init(app)
                 // only needs the one blob.
                 const iv = crypto.getRandomValues(new Uint8Array(12));
                 const cipherText = await crypto.subtle.encrypt(
-                    { name: "AES-GCM", iv: iv },
-                    key,
-                    new TextEncoder().encode(data.plainText));
+                    { name: "AES-GCM", iv: iv }, key, message.data);
 
                 const combined = new Uint8Array(iv.length + cipherText.byteLength);
                 combined.set(iv, 0);
                 combined.set(new Uint8Array(cipherText), iv.length);
 
                 app.ports.encryption_from_js.send(
-                    { tag: "message-encrypted", args: [ data.requestId, e2eeBytesToBase64(combined) ] });
+                    e2eeIdAndBytesMessage(
+                        e2eeFromJsMessageEncrypted, message.requestId, combined));
             }
         } catch (e) {
             if (message.tag === "store-shared-secret") {
                 app.ports.encryption_from_js.send(
-                    { tag: "shared-secret-failed", args: [ message.args[0].otherUserId, e.toString() ] });
+                    e2eeIdAndTextMessage(
+                        e2eeFromJsSharedSecretFailed, message.otherUserId, e.toString()));
             } else if (message.tag === "encrypt-message") {
                 app.ports.encryption_from_js.send(
-                    { tag: "message-encrypt-failed", args: [ message.args[0].requestId, e.toString() ] });
+                    e2eeIdAndTextMessage(
+                        e2eeFromJsMessageEncryptFailed, message.requestId, e.toString()));
             }
         }
     });
