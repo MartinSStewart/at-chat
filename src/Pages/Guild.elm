@@ -59,7 +59,7 @@ import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Embed exposing (Embed, EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiConfig, EmojiOrCustomEmoji)
-import Encryption exposing (BytesHash, DecryptError)
+import Encryption exposing (BytesHash)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
 import GuildColumn
@@ -711,6 +711,7 @@ unreadOverviewNotMobile local loggedIn model =
                                                     local.localUser.session.userId
                                                     local.localUser
                                                     Nothing
+                                                    loggedIn.decryptedMessages
                                                     messageId
                                                     message
                                                     |> Ui.map (UnreadOverviewThreadMsg unread.guildOrDmId threadId messageId)
@@ -4438,6 +4439,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         local.localUser.session.userId
                                         local.localUser
                                         maybeRepliedTo2
+                                        loggedIn.decryptedMessages
                                         messageId
                                         message
                                         |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
@@ -4489,16 +4491,18 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                             local.localUser.session.userId
                                             local.localUser
                                             maybeRepliedTo2
+                                            loggedIn.decryptedMessages
                                             messageId
                                             message
                                             |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                     Nothing ->
-                                        Ui.Lazy.lazy5
+                                        Ui.Lazy.lazy6
                                             threadMessageViewLazy
                                             (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                             revealedSpoilers
                                             local.localUser
+                                            loggedIn.decryptedMessages
                                             index
                                             message
                                             |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
@@ -6615,7 +6619,7 @@ messageViewNotThreadStarter :
     Int
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> LocalUser
-    -> SeqDict BytesHash (Result DecryptError ContentAndEmbeds)
+    -> SeqDict BytesHash (Result () ContentAndEmbeds)
     -> Int
     -> Message ChannelMessageId (Id UserId)
     -> Element MessageViewMsg
@@ -6716,10 +6720,11 @@ threadMessageViewLazy :
     Int
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
     -> LocalUser
+    -> SeqDict BytesHash (Result () ContentAndEmbeds)
     -> Int
     -> Message ThreadMessageId (Id UserId)
     -> Element MessageViewMsg
-threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
+threadMessageViewLazy data revealedSpoilers localUser decrypted messageIndex message =
     let
         { containerWidth, isEditing, highlight, isHovered, isMobile, time } =
             decodeMessageView data
@@ -6736,6 +6741,7 @@ threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
         localUser.session.userId
         localUser
         Nothing
+        decrypted
         (Id.fromInt messageIndex)
         message
 
@@ -6805,7 +6811,7 @@ messageView :
     -> LocalUser
     -> Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
     -> Maybe (FrontendGenericThread (Id UserId))
-    -> SeqDict BytesHash (Result DecryptError ContentAndEmbeds)
+    -> SeqDict BytesHash (Result () ContentAndEmbeds)
     -> Id ChannelMessageId
     -> Message ChannelMessageId (Id UserId)
     -> Element MessageViewMsg
@@ -6852,46 +6858,49 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                     (User.userColor localUser)
                     isHovered
                     messageId
-                    data.content
-                    data.embeds
+                    { content = data.content, embeds = data.embeds }
                     data
                 )
 
         EncryptedUserTextMessage data ->
-            messageContainer
-                containerWidth
-                isThreadStarter
-                localUser.timezone
-                time
-                localUser.user.availableCustomEmojis
-                localUser.customEmojis
-                localUser.emojiData
-                allUsers
-                highlight
-                messageId
-                (currentUserId == data.createdBy)
-                currentUserId
-                localUser.user
-                data.reactions
-                maybeThreadStarter
-                isHovered
-                (userTextMessageContent
-                    time
-                    (Dom.id "spoiler")
-                    containerWidth
-                    isBeingEdited
-                    isMobile
-                    maybeRepliedTo2
-                    localUser
-                    revealedSpoilers
-                    allUsers
-                    (User.userColor localUser)
-                    isHovered
-                    messageId
-                    RichText.failedToDecryptMessage
-                    Array.empty
-                    data
-                )
+            case SeqDict.get (Encryption.hash data.encryptedData) decrypted of
+                Just result ->
+                    messageContainer
+                        containerWidth
+                        isThreadStarter
+                        localUser.timezone
+                        time
+                        localUser.user.availableCustomEmojis
+                        localUser.customEmojis
+                        localUser.emojiData
+                        allUsers
+                        highlight
+                        messageId
+                        (currentUserId == data.createdBy)
+                        currentUserId
+                        localUser.user
+                        data.reactions
+                        maybeThreadStarter
+                        isHovered
+                        (userTextMessageContent
+                            time
+                            (Dom.id "spoiler")
+                            containerWidth
+                            isBeingEdited
+                            isMobile
+                            maybeRepliedTo2
+                            localUser
+                            revealedSpoilers
+                            allUsers
+                            (User.userColor localUser)
+                            isHovered
+                            messageId
+                            (Result.withDefault { content = RichText.failedToDecryptMessage, embeds = Array.empty } result)
+                            data
+                        )
+
+                Nothing ->
+                    Ui.none
 
         UserJoinedMessage joinedAt userId reactions drawings ->
             messageContainer
@@ -7277,10 +7286,11 @@ threadMessageView :
     -> Id UserId
     -> LocalUser
     -> Maybe ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) )
+    -> SeqDict BytesHash (Result () ContentAndEmbeds)
     -> Id ThreadMessageId
     -> Message ThreadMessageId (Id UserId)
     -> Element MessageViewMsg
-threadMessageView time isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited allUsers currentUserId localUser maybeRepliedTo2 messageId message =
+threadMessageView time isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited allUsers currentUserId localUser maybeRepliedTo2 decrypted messageId message =
     case message of
         UserTextMessage message2 ->
             threadMessageContainer
@@ -7319,42 +7329,45 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                     (User.userColor localUser)
                     isHovered
                     messageId
-                    message2.content
-                    message2.embeds
+                    { content = message2.content, embeds = message2.embeds }
                     message2
                 )
 
         EncryptedUserTextMessage message2 ->
-            threadMessageContainer
-                containerWidth
-                highlight
-                messageId
-                (currentUserId == message2.createdBy)
-                currentUserId
-                localUser.user
-                message2.reactions
-                localUser.user.availableCustomEmojis
-                localUser.customEmojis
-                localUser.emojiData
-                allUsers
-                isHovered
-                (userTextMessageContent
-                    time
-                    (Dom.id "threadSpoiler")
-                    containerWidth
-                    isBeingEdited
-                    isMobile
-                    maybeRepliedTo2
-                    localUser
-                    revealedSpoilers
-                    allUsers
-                    (User.userColor localUser)
-                    isHovered
-                    messageId
-                    RichText.failedToDecryptMessage
-                    Array.empty
-                    message2
-                )
+            case SeqDict.get (Encryption.hash message2.encryptedData) decrypted of
+                Just result ->
+                    threadMessageContainer
+                        containerWidth
+                        highlight
+                        messageId
+                        (currentUserId == message2.createdBy)
+                        currentUserId
+                        localUser.user
+                        message2.reactions
+                        localUser.user.availableCustomEmojis
+                        localUser.customEmojis
+                        localUser.emojiData
+                        allUsers
+                        isHovered
+                        (userTextMessageContent
+                            time
+                            (Dom.id "threadSpoiler")
+                            containerWidth
+                            isBeingEdited
+                            isMobile
+                            maybeRepliedTo2
+                            localUser
+                            revealedSpoilers
+                            allUsers
+                            (User.userColor localUser)
+                            isHovered
+                            messageId
+                            (Result.withDefault { content = RichText.failedToDecryptMessage, embeds = Array.empty } result)
+                            message2
+                        )
+
+                Nothing ->
+                    Ui.none
 
         UserJoinedMessage joinedAt userId reactions drawings ->
             threadMessageContainer
@@ -7749,8 +7762,7 @@ userTextMessageContent :
     -> (Id UserId -> UserColor)
     -> IsHovered
     -> Id messageId
-    -> Nonempty (RichText (Id UserId))
-    -> Array Embed
+    -> ContentAndEmbeds
     ->
         { a
             | createdAt : Time.Posix
@@ -7765,7 +7777,7 @@ userTextMessageContent :
             , embedDrawings : SeqDict Int (Drawing (Id UserId))
         }
     -> Element MessageViewMsg
-userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId content embeds message2 =
+userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId { content, embeds } message2 =
     Ui.row
         []
         [ User.profileImage (SeqDict.get message2.createdBy allUsers)

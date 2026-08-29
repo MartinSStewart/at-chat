@@ -1,6 +1,7 @@
 port module Encryption exposing
-    ( BytesHash
-    , DecryptError(..)
+    ( BytesHash(..)
+    , DecryptRequestId
+    , EncryptRequestId
     , EncryptedData(..)
     , FromJs(..)
     , ToJs(..)
@@ -8,6 +9,7 @@ port module Encryption exposing
     , encode
     , encryptMessage
     , fromJs
+    , hash
     , storeSharedSecret
     , toBase64
     )
@@ -42,12 +44,18 @@ type EncryptedData a
     = EncryptedData BytesHash Bytes
 
 
+{-| OpaqueVariants.
+-}
 type BytesHash
     = BytesHash Int
 
 
-type DecryptError
-    = AddErrorsHere
+type EncryptRequestId
+    = EncryptRequestId Never
+
+
+type DecryptRequestId
+    = DecryptRequestId Never
 
 
 encode : EncryptedData a -> Json.Encode.Value
@@ -58,6 +66,11 @@ encode data =
 toBase64 : EncryptedData a -> String
 toBase64 (EncryptedData _ bytes) =
     Base64.fromBytes bytes |> Maybe.withDefault ""
+
+
+hash : EncryptedData a -> BytesHash
+hash (EncryptedData hash2 _) =
+    hash2
 
 
 
@@ -78,19 +91,19 @@ storeSharedSecret otherUserId sharedSecret =
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
-encryptMessage : Int -> Viewing_DmId -> Serialize.Codec e a -> a -> Command FrontendOnly toMsg msg
+encryptMessage : Id EncryptRequestId -> Viewing_DmId -> Serialize.Codec e a -> a -> Command FrontendOnly toMsg msg
 encryptMessage requestId id dataCodec data =
     Serialize.encodeToBytes
         (toJsCodec dataCodec)
-        (ToJs_EncryptMessage { requestId = requestId, otherUserId = id.otherUserId, data = data })
+        (ToJs_EncryptMessage { requestId = Id.toInt requestId, otherUserId = id.otherUserId, data = data })
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
-decryptMessage : Int -> Viewing_DmId -> Bytes -> Command FrontendOnly toMsg msg
-decryptMessage requestId id data =
+decryptMessage : Id DecryptRequestId -> Viewing_DmId -> EncryptedData a -> Command FrontendOnly toMsg msg
+decryptMessage requestId id (EncryptedData _ data) =
     Serialize.encodeToBytes
         (toJsCodec Serialize.unit)
-        (ToJs_DecryptMessage { requestId = requestId, otherUserId = id.otherUserId, data = data })
+        (ToJs_DecryptMessage { requestId = Id.toInt requestId, otherUserId = id.otherUserId, data = data })
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
@@ -139,10 +152,10 @@ toJsCodec dataCodec =
 type FromJs a
     = FromJs_SharedSecretStored (Id UserId)
     | FromJs_SharedSecretFailed (Id UserId) String
-    | FromJs_MessageEncrypted Int BytesHash (EncryptedData a)
-    | FromJs_MessageEncryptFailed Int String
-    | FromJs_MessageDecrypted BytesHash a
-    | FromJs_MessageDecryptFailed BytesHash DecryptError
+    | FromJs_MessageEncrypted (Id EncryptRequestId) BytesHash (EncryptedData a)
+    | FromJs_MessageEncryptFailed (Id EncryptRequestId) String
+    | FromJs_MessageDecrypted (Id DecryptRequestId) BytesHash a
+    | FromJs_MessageDecryptFailed (Id DecryptRequestId) BytesHash
 
 
 port encryption_to_js : Bytes -> Cmd msg
@@ -183,24 +196,19 @@ fromJsCodec aCodec =
                 FromJs_MessageEncryptFailed argA argB ->
                     d argA argB
 
-                FromJs_MessageDecrypted argA argB ->
-                    e argA argB
+                FromJs_MessageDecrypted argA argB arcC ->
+                    e argA argB arcC
 
                 FromJs_MessageDecryptFailed argA argB ->
                     f argA argB
         )
         |> Serialize.variant1 FromJs_SharedSecretStored Id.codec
         |> Serialize.variant2 FromJs_SharedSecretFailed Id.codec Serialize.string
-        |> Serialize.variant3 FromJs_MessageEncrypted Serialize.int bytesHashCodec encryptedDataCodec
-        |> Serialize.variant2 FromJs_MessageEncryptFailed Serialize.int Serialize.string
-        |> Serialize.variant2 FromJs_MessageDecrypted bytesHashCodec aCodec
-        |> Serialize.variant2 FromJs_MessageDecryptFailed bytesHashCodec decryptErrorCodec
+        |> Serialize.variant3 FromJs_MessageEncrypted Id.codec bytesHashCodec encryptedDataCodec
+        |> Serialize.variant2 FromJs_MessageEncryptFailed Id.codec Serialize.string
+        |> Serialize.variant3 FromJs_MessageDecrypted Id.codec bytesHashCodec aCodec
+        |> Serialize.variant2 FromJs_MessageDecryptFailed Id.codec bytesHashCodec
         |> Serialize.finishCustomType
-
-
-decryptErrorCodec : Serialize.Codec e DecryptError
-decryptErrorCodec =
-    Debug.todo ""
 
 
 encryptedDataCodec : Serialize.Codec e (EncryptedData a)

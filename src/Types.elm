@@ -38,6 +38,7 @@ module Types exposing
     , NewChannelForm
     , NewGuildForm
     , PendingGatewayReconnect
+    , PendingDecryptedMessage
     , PendingEncryptedMessage
     , PublicGoMatch(..)
     , RevealedSpoilers
@@ -79,7 +80,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
-import Encryption exposing (BytesHash, DecryptError, EncryptedData)
+import Encryption exposing (BytesHash, DecryptRequestId, EncryptRequestId, EncryptedData)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import Game
 import Go
@@ -268,25 +269,32 @@ type alias LoggedIn2 =
     , e2eeError : Maybe String
     , e2eePrivateKeyText : String
     , e2eeKeysOnThisDevice : SeqSet (Id UserId)
-    , pendingEncryptedMessages : SeqDict Int PendingEncryptedMessage
-    , nextEncryptionRequestId : Int
+    , pendingEncryptedMessages : SeqDict (Id EncryptRequestId) PendingEncryptedMessage
+    , nextEncryptionRequestId : Id EncryptRequestId
+    , pendingDecryptedMessages : SeqDict (Id DecryptRequestId) PendingDecryptedMessage
+    , nextDecryptionRequestId : Id DecryptRequestId
     , e2eeSectionsExpanded : SeqDict (Id UserId) Bool
     , {- We want to slightly change the letter spacing for textarea's on Safari in order to force it to recalculate word wrap.
          This is to work around this bug https://github.com/panphora/overtype/issues/116
       -}
       typedTextCounter : Int
-    , decryptedMessages : SeqDict BytesHash (Result DecryptError ContentAndEmbeds)
+    , decryptedMessages : SeqDict BytesHash (Result () ContentAndEmbeds)
     }
 
 
-{-| What a message needs in order to be sent, minus the content, which is off being
-encrypted.
--}
 type alias PendingEncryptedMessage =
     { otherUserId : Id UserId
     , threadRoute : ThreadRouteWithMaybeMessage
     , attachedFiles : SeqDict (Id FileId) FileData
     , contentAndEmbeds : ContentAndEmbeds
+    }
+
+
+type alias PendingDecryptedMessage =
+    { id : Viewing_DmId
+    , senderId : Id UserId
+    , threadRoute : ThreadRouteWithMaybeMessage
+    , attachedFiles : SeqDict (Id FileId) FileData
     }
 
 

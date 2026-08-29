@@ -13,11 +13,13 @@ module FrontendExtra exposing
     , fileDragOverlayOpacity
     , gotFiles
     , gotPastedText
+    , handleDecryptedMessage
     , handleEscapeKey
     , handleLocalChange
     , handlePressedArrowUpInEmptyInput
     , handlePressedTextInput
     , handleRedo
+    , handleServerSendMessage
     , handleUndo
     , initAdminData
     , isPressMsg
@@ -102,7 +104,7 @@ import Range exposing (Range)
 import RecoveryLogin
 import RichText exposing (Domain, RichText)
 import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
-import Scroll
+import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
@@ -7155,3 +7157,119 @@ addEncryptedDmMessage createdAt createdBy otherUserId contentAndEmbeds threadRou
                 )
                 local.dmChannels
     }
+
+
+handleServerSendMessage :
+    Id UserId
+    -> GuildOrDmId
+    -> Nonempty (RichText (Id UserId))
+    -> ThreadRouteWithMaybeMessage
+    -> LocalState
+    -> LoggedIn2
+    -> LoadedFrontend
+    -> ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg_ )
+handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local loggedIn2 model =
+    let
+        scrolledToBottom : Bool
+        scrolledToBottom =
+            -- The drawing tab holds the scroll position, otherwise the
+            -- new message would throw off the stroke the user is drawing
+            (Route.toChannelHeaderTab model.route /= Just ChannelHeaderTab_Draw)
+                && (loggedIn2.channelScrollPosition == ScrolledToBottom)
+
+        isViewingConversation : Bool
+        isViewingConversation =
+            Route.toGuildOrDmId local.localUser.session.userId model.route
+                == Just
+                    ( GuildOrDmId guildOrDmId
+                    , Id.threadRouteWithoutMaybeMessage maybeRepliedTo
+                    )
+
+        helper channel =
+            Command.batch
+                [ playNotificationSound
+                    senderId
+                    guildOrDmId
+                    maybeRepliedTo
+                    channel
+                    local
+                    content
+                    model
+                , if scrolledToBottom then
+                    if MyUi.isMobile model then
+                        Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
+
+                    else
+                        Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+
+                  else
+                    Command.none
+                ]
+    in
+    ( if isViewingConversation && not scrolledToBottom then
+        { loggedIn2
+            | newMessagesWhileNotScrolledToBottom =
+                loggedIn2.newMessagesWhileNotScrolledToBottom + 1
+            , channelScrollPosition =
+                case loggedIn2.channelScrollPosition of
+                    ScrolledToBottom ->
+                        ScrolledToMiddle
+
+                    ScrolledToTop ->
+                        loggedIn2.channelScrollPosition
+
+                    ScrolledToMiddle ->
+                        loggedIn2.channelScrollPosition
+        }
+
+      else
+        loggedIn2
+    , case guildOrDmId of
+        GuildOrDmId_Guild { guildId, channelId } ->
+            case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
+                Just ( _, channel ) ->
+                    helper channel
+
+                Nothing ->
+                    Command.none
+
+        GuildOrDmId_Dm { otherUserId } ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just channel ->
+                    helper channel
+
+                Nothing ->
+                    Command.none
+    )
+
+
+handleDecryptedMessage :
+    Id Encryption.DecryptRequestId
+    -> Encryption.BytesHash
+    -> Result () ContentAndEmbeds
+    -> LoadedFrontend
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg_ )
+handleDecryptedMessage requestId bytesHash result model loggedIn =
+    case SeqDict.get requestId loggedIn.pendingDecryptedMessages of
+        Just request ->
+            handleServerSendMessage
+                request.senderId
+                (GuildOrDmId_Dm request.id)
+                (case result of
+                    Ok contentAndEmbeds ->
+                        contentAndEmbeds.content
+
+                    Err () ->
+                        RichText.failedToDecryptMessage
+                )
+                request.threadRoute
+                (Local.model loggedIn.localState)
+                { loggedIn
+                    | decryptedMessages =
+                        SeqDict.insert bytesHash result loggedIn.decryptedMessages
+                }
+                model
+
+        Nothing ->
+            ( loggedIn, Command.none )

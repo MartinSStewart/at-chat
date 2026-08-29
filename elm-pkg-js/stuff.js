@@ -68,11 +68,6 @@ const e2eeFromJsMessageEncryptFailed = 3;
 const e2eeFromJsMessageDecrypted = 4;
 const e2eeFromJsMessageDecryptFailed = 5;
 
-// The variants of Encryption.DecryptError. It only has the one placeholder so far, so
-// every way decrypting can go wrong is reported as that; when real errors are named there
-// this is the list to grow alongside them.
-const e2eeDecryptErrorAddErrorsHere = 0;
-
 function e2eeReadToJs(dataView) {
     if (dataView.byteLength < 3 || dataView.getUint8(0) !== e2eeSerializeVersion) { return null; }
 
@@ -172,12 +167,11 @@ function e2eeMessageDecryptedMessage(hash, bytes) {
     return out;
 }
 
-function e2eeMessageDecryptFailedMessage(hash, error) {
+function e2eeMessageDecryptFailedMessage(hash) {
     const out = new DataView(new ArrayBuffer(13));
     out.setUint8(0, e2eeSerializeVersion);
     out.setUint16(1, e2eeFromJsMessageDecryptFailed, false);
     out.setFloat64(3, hash, false);
-    out.setUint16(11, error, false);
     return out;
 }
 
@@ -957,7 +951,7 @@ exports.init = async function init(app)
 
                 if (!key) {
                     app.ports.encryption_from_js.send(
-                        e2eeMessageDecryptFailedMessage(hash, e2eeDecryptErrorAddErrorsHere));
+                        e2eeMessageDecryptFailedMessage(hash));
                     return;
                 }
 

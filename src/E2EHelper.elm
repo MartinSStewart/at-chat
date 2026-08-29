@@ -132,7 +132,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed
 import Emoji exposing (EmojiOrCustomEmoji(..), SkinTone(..))
-import Encryption exposing (EncryptedData(..))
+import Encryption exposing (BytesHash(..), EncryptedData(..))
 import Env
 import Expect
 import FileStatus
@@ -3073,7 +3073,7 @@ allAttackerLocalChanges =
     , Local_SendEncryptedMessage
         startTime
         { otherUserId = Broadcast.adminUserId }
-        (EncryptedData 0 (Bytes.Encode.encode (Bytes.Encode.sequence [])))
+        (EncryptedData (BytesHash 0) (Bytes.Encode.encode (Bytes.Encode.sequence [])))
         (NoThreadWithMaybeMessage Nothing)
         SeqDict.empty
     ]

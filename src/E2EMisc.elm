@@ -708,6 +708,9 @@ storedSharedSecrets data =
 
                     Encryption.ToJs_EncryptMessage _ ->
                         Nothing
+
+                    Encryption.ToJs_DecryptMessage record ->
+                        Nothing
             )
 
 
@@ -836,15 +839,7 @@ encryptedMessageContents backend =
                     (\message ->
                         case message of
                             Message.EncryptedUserTextMessage data ->
-                                case data.encryptedStatus of
-                                    Message.MessageEncrypted content ->
-                                        Just (Encryption.toBase64 content)
-
-                                    Message.MessageDecrypted _ ->
-                                        Nothing
-
-                                    Message.MessageDecryptFailed content ->
-                                        Just (Encryption.toBase64 content)
+                                Just (Encryption.toBase64 data.encryptedData)
 
                             _ ->
                                 Nothing
@@ -959,15 +954,7 @@ soloDmEncryptedContents backend =
                     (\message ->
                         case message of
                             Message.EncryptedUserTextMessage data ->
-                                case data.encryptedStatus of
-                                    Message.MessageEncrypted content ->
-                                        Just (Encryption.toBase64 content)
-
-                                    Message.MessageDecrypted _ ->
-                                        Nothing
-
-                                    Message.MessageDecryptFailed content ->
-                                        Just (Encryption.toBase64 content)
+                                Just (Encryption.toBase64 data.encryptedData)
 
                             _ ->
                                 Nothing

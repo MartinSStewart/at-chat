@@ -587,7 +587,9 @@ loadedInitHelper startupData emojiData loginData loading =
             , e2eePrivateKeyText = ""
             , e2eeKeysOnThisDevice = SeqSet.fromList startupData.e2eeKeys
             , pendingEncryptedMessages = SeqDict.empty
-            , nextEncryptionRequestId = 0
+            , nextEncryptionRequestId = Id.fromInt 0
+            , pendingDecryptedMessages = SeqDict.empty
+            , nextDecryptionRequestId = Id.fromInt 0
             , e2eeSectionsExpanded = SeqDict.empty
             , typedTextCounter = 0
             , decryptedMessages = SeqDict.empty
@@ -3317,21 +3319,11 @@ updateLoaded msg model =
                             , Command.none
                             )
 
-                        Ok (Encryption.FromJs_MessageDecrypted bytesHash contentAndEmbeds) ->
-                            ( { loggedIn
-                                | decryptedMessages =
-                                    SeqDict.insert bytesHash (Ok contentAndEmbeds) loggedIn.decryptedMessages
-                              }
-                            , Command.none
-                            )
+                        Ok (Encryption.FromJs_MessageDecrypted requestId bytesHash contentAndEmbeds) ->
+                            FrontendExtra.handleDecryptedMessage requestId bytesHash (Ok contentAndEmbeds) model loggedIn
 
-                        Ok (Encryption.FromJs_MessageDecryptFailed bytesHash error) ->
-                            ( { loggedIn
-                                | decryptedMessages =
-                                    SeqDict.insert bytesHash (Err error) loggedIn.decryptedMessages
-                              }
-                            , Command.none
-                            )
+                        Ok (Encryption.FromJs_MessageDecryptFailed requestId bytesHash) ->
+                            FrontendExtra.handleDecryptedMessage requestId bytesHash (Err ()) model loggedIn
 
                         Err error ->
                             ( { loggedIn | e2eeError = Just error }, Command.none )
@@ -7848,77 +7840,22 @@ updateLoadedFromBackend msg model =
                                     )
 
                                 Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ ->
-                                    let
-                                        scrolledToBottom : Bool
-                                        scrolledToBottom =
-                                            -- The drawing tab holds the scroll position, otherwise the
-                                            -- new message would throw off the stroke the user is drawing
-                                            (Route.toChannelHeaderTab model.route /= Just ChannelHeaderTab_Draw)
-                                                && (loggedIn2.channelScrollPosition == ScrolledToBottom)
+                                    FrontendExtra.handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local loggedIn2 model
 
-                                        isViewingConversation : Bool
-                                        isViewingConversation =
-                                            Route.toGuildOrDmId local.localUser.session.userId model.route
-                                                == Just
-                                                    ( GuildOrDmId guildOrDmId
-                                                    , Id.threadRouteWithoutMaybeMessage maybeRepliedTo
-                                                    )
-
-                                        helper channel =
-                                            Command.batch
-                                                [ FrontendExtra.playNotificationSound
-                                                    senderId
-                                                    guildOrDmId
-                                                    maybeRepliedTo
-                                                    channel
-                                                    local
-                                                    content
-                                                    model
-                                                , if scrolledToBottom then
-                                                    if MyUi.isMobile model then
-                                                        Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
-
-                                                    else
-                                                        Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
-
-                                                  else
-                                                    Command.none
-                                                ]
-                                    in
-                                    ( if isViewingConversation && not scrolledToBottom then
-                                        { loggedIn2
-                                            | newMessagesWhileNotScrolledToBottom =
-                                                loggedIn2.newMessagesWhileNotScrolledToBottom + 1
-                                            , channelScrollPosition =
-                                                case loggedIn2.channelScrollPosition of
-                                                    ScrolledToBottom ->
-                                                        ScrolledToMiddle
-
-                                                    ScrolledToTop ->
-                                                        loggedIn2.channelScrollPosition
-
-                                                    ScrolledToMiddle ->
-                                                        loggedIn2.channelScrollPosition
-                                        }
-
-                                      else
-                                        loggedIn2
-                                    , case guildOrDmId of
-                                        GuildOrDmId_Guild { guildId, channelId } ->
-                                            case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
-                                                Just ( _, channel ) ->
-                                                    helper channel
-
-                                                Nothing ->
-                                                    Command.none
-
-                                        GuildOrDmId_Dm { otherUserId } ->
-                                            case SeqDict.get otherUserId local.dmChannels of
-                                                Just channel ->
-                                                    helper channel
-
-                                                Nothing ->
-                                                    Command.none
+                                Server_SendEncryptedMessage senderId _ _ id content maybeRepliedTo attachedFiles ->
+                                    ( { loggedIn
+                                        | nextDecryptionRequestId = Id.increment loggedIn.nextDecryptionRequestId
+                                        , pendingDecryptedMessages =
+                                            SeqDict.insert
+                                                loggedIn.nextDecryptionRequestId
+                                                { id = id
+                                                , senderId = senderId
+                                                , threadRoute = maybeRepliedTo
+                                                , attachedFiles = attachedFiles
+                                                }
+                                                loggedIn.pendingDecryptedMessages
+                                      }
+                                    , Encryption.decryptMessage loggedIn2.nextDecryptionRequestId id content
                                     )
 
                                 Server_Discord_SendMessage _ guildOrDmId _ content maybeRepliedTo _ _ ->
@@ -8895,7 +8832,7 @@ startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
     in
     ( { loggedIn
         | e2eeError = Nothing
-        , nextEncryptionRequestId = loggedIn.nextEncryptionRequestId + 1
+        , nextEncryptionRequestId = Id.increment loggedIn.nextEncryptionRequestId
         , pendingEncryptedMessages =
             SeqDict.insert
                 loggedIn.nextEncryptionRequestId
