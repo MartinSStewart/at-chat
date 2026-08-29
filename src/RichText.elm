@@ -26,6 +26,7 @@ module RichText exposing
     , emptyPlaceholder
     , escapedCharToString
     , failedToDecryptMessage
+    , failedToDecryptMessageText
     , fromDiscord
     , fromNonemptyString
     , hasLargeContent
@@ -3319,6 +3320,11 @@ domainToString (Domain domain) =
 failedToDecryptMessage : Nonempty (RichText userId)
 failedToDecryptMessage =
     Nonempty (Italic (Nonempty (NormalText 'F' "ailed to decrypt message") [])) []
+
+
+failedToDecryptMessageText : String
+failedToDecryptMessageText =
+    "Failed to decrypt message"
 
 
 messageIsEncrypted : Nonempty (RichText userId)

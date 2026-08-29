@@ -172,7 +172,7 @@ can do.
 encryptedUserTextMessageFrontend :
     Time.Posix
     -> Id UserId
-    -> EncryptedData ContentAndEmbeds
+    -> EncryptedData (ContentAndEmbeds (Id UserId))
     -> Maybe (Id messageId)
     -> SeqDict (Id FileId) FileData
     -> Message messageId (Id UserId)
@@ -335,12 +335,12 @@ type alias UserTextMessageData messageId userId =
     }
 
 
-type alias ContentAndEmbeds =
-    { content : Nonempty (RichText (Id UserId)), embeds : Array Embed }
+type alias ContentAndEmbeds userId =
+    { content : Nonempty (RichText userId), embeds : Array Embed }
 
 
 type alias EncryptedUserTextMessageData messageId userId =
-    { encryptedData : EncryptedData ContentAndEmbeds
+    { encryptedData : EncryptedData (ContentAndEmbeds userId)
     , createdAt : Time.Posix
     , createdBy : userId
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
@@ -500,6 +500,16 @@ handleDrawingChange changeBy anchorType change message =
                         }
 
 
+userTextMessageDrawing :
+    Drawing.MessageAnchor
+    ->
+        { a
+            | userIconDrawings : Drawing userId
+            , timestampDrawings : Drawing userId
+            , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing userId)
+            , embedDrawings : SeqDict Int (Drawing userId)
+        }
+    -> Drawing userId
 userTextMessageDrawing anchor data =
     case anchor of
         Drawing.UserIconAnchor ->
@@ -639,7 +649,11 @@ removeReactionEmoji userId emoji message =
             GameStarted { gameStarted | reactions = removeReactionEmojiHelper userId emoji gameStarted.reactions }
 
 
-removeReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+removeReactionEmojiHelper :
+    userId
+    -> EmojiOrCustomEmoji
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 removeReactionEmojiHelper userId emoji reactions =
     SeqDict.update
         emoji
@@ -678,7 +692,7 @@ reactionEmojis message =
             gameStarted.reactions
 
 
-contentAndEmbedsCodec : Serialize.Codec e ContentAndEmbeds
+contentAndEmbedsCodec : Serialize.Codec e (ContentAndEmbeds (Id UserId))
 contentAndEmbedsCodec =
     Serialize.record ContentAndEmbeds
         |> Serialize.field .content (nonemptyCodec (RichText.codec Id.codec))

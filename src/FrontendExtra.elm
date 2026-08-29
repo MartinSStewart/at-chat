@@ -7108,15 +7108,11 @@ audio _ model =
                     Audio.silence
 
 
-{-| Put an encrypted DM message into the conversation it belongs to. The sender's own copy
-and the copy that arrives from the other person are the same thing here, only differing in
-who is recorded as having written it.
--}
 addEncryptedDmMessage :
     Time.Posix
     -> Id UserId
     -> Id UserId
-    -> EncryptedData Message.ContentAndEmbeds
+    -> EncryptedData (Message.ContentAndEmbeds (Id UserId))
     -> ThreadRouteWithMaybeMessage
     -> SeqDict (Id FileId) FileData
     -> LocalState
@@ -7246,7 +7242,7 @@ handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local logged
 handleDecryptedMessage :
     Id Encryption.DecryptRequestId
     -> Encryption.BytesHash
-    -> Result () ContentAndEmbeds
+    -> Result () (ContentAndEmbeds (Id UserId))
     -> LoadedFrontend
     -> LoggedIn2
     -> ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg_ )

@@ -1910,7 +1910,7 @@ sendEncryptedDm :
     -> ClientId
     -> ChangeId
     -> Viewing_DmId
-    -> EncryptedData Message.ContentAndEmbeds
+    -> EncryptedData (Message.ContentAndEmbeds (Id UserId))
     -> ThreadRouteWithMaybeMessage
     -> SeqDict (Id FileId) FileData
     -> UserSession

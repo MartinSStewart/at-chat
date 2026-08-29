@@ -278,7 +278,7 @@ type alias LoggedIn2 =
          This is to work around this bug https://github.com/panphora/overtype/issues/116
       -}
       typedTextCounter : Int
-    , decryptedMessages : SeqDict BytesHash (Result () ContentAndEmbeds)
+    , decryptedMessages : SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     }
 
 
@@ -286,7 +286,7 @@ type alias PendingEncryptedMessage =
     { otherUserId : Id UserId
     , threadRoute : ThreadRouteWithMaybeMessage
     , attachedFiles : SeqDict (Id FileId) FileData
-    , contentAndEmbeds : ContentAndEmbeds
+    , contentAndEmbeds : ContentAndEmbeds (Id UserId)
     }
 
 
@@ -662,7 +662,7 @@ type FrontendMsg_
     | UnreadOverviewChannelMsg AnyGuildOrDmId (Id ChannelMessageId) MessageViewMsg
     | UnreadOverviewThreadMsg AnyGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) MessageViewMsg
     | ValidatedE2eePrivateKey String E2eeKeysValid
-    | EncryptionFromJs (Result String (Encryption.FromJs ContentAndEmbeds))
+    | EncryptionFromJs (Result String (Encryption.FromJs (ContentAndEmbeds (Id UserId))))
 
 
 type alias NewChannelForm =
@@ -1052,7 +1052,7 @@ type ServerChange
     | Server_E2eeRequestCancelled Viewing_DmId
     | Server_E2eeAccepted Viewing_DmId Time.Posix
     | Server_SetPublicKey (Id UserId) X25519.PublicKey
-    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (EncryptedData Message.ContentAndEmbeds) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (EncryptedData (Message.ContentAndEmbeds (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
 
 
 type LocalChange
@@ -1115,4 +1115,4 @@ type LocalChange
     | Local_SetPublicKey X25519.PublicKey
     | Local_SetE2eeRisksAccepted Bool
     | Local_AcceptE2ee Viewing_DmId Time.Posix
-    | Local_SendEncryptedMessage Time.Posix Viewing_DmId (EncryptedData Message.ContentAndEmbeds) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Local_SendEncryptedMessage Time.Posix Viewing_DmId (EncryptedData (Message.ContentAndEmbeds (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)

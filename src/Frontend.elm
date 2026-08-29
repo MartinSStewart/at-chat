@@ -8821,7 +8821,7 @@ encryptedDmOtherUser guildOrDmId local =
 startEncryptingMessage :
     Viewing_DmId
     -> ThreadRoute
-    -> ContentAndEmbeds
+    -> ContentAndEmbeds (Id UserId)
     -> LoggedIn2
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
