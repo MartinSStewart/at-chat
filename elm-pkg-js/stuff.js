@@ -47,20 +47,6 @@ function e2eeWithStore(mode, run) {
     }));
 }
 
-function e2eeBase64ToBytes(base64) {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
-    return bytes;
-}
-
-function e2eeBytesToBase64(bytes) {
-    let binary = "";
-    const view = new Uint8Array(bytes);
-    for (let i = 0; i < view.length; i++) { binary += String.fromCharCode(view[i]); }
-    return btoa(binary);
-}
-
 // Both encryption ports carry Bytes rather than JSON, so what arrives here is a DataView
 // holding an elm-serialize encoding and what goes back has to be one too. The format is
 // all big endian: a one byte version, then a two byte variant tag counting from zero,
@@ -72,6 +58,7 @@ const e2eeSerializeVersion = 1;
 // The ToJs variants, in the order Encryption.toJsCodec defines them.
 const e2eeToJsStoreSharedSecret = 0;
 const e2eeToJsEncryptMessage = 1;
+const e2eeToJsDecryptMessage = 2;
 
 // The FromJs variants, in the order Encryption.fromJsCodec defines them.
 const e2eeFromJsSharedSecretStored = 0;
@@ -83,19 +70,18 @@ function e2eeReadToJs(dataView) {
     if (dataView.byteLength < 3 || dataView.getUint8(0) !== e2eeSerializeVersion) { return null; }
 
     switch (dataView.getUint16(1, false)) {
-        case e2eeToJsStoreSharedSecret: {
-            const secretLength = dataView.getUint32(11, false);
+        case e2eeToJsStoreSharedSecret:
             return {
                 tag: "store-shared-secret",
                 otherUserId: dataView.getFloat64(3, false),
-                sharedSecret: new Uint8Array(
-                    dataView.buffer, dataView.byteOffset + 15, secretLength),
+                sharedSecret: e2eeReadBytesField(dataView, 11),
             };
-        }
 
         case e2eeToJsEncryptMessage:
-            // Whatever Elm serialized the message into is the last field, so it runs to
-            // the end of the buffer. It stays opaque here: this side only encrypts it.
+            // Whatever Elm serialized the message into is the last field and is written
+            // by its own codec rather than as Bytes, so it has no length of its own and
+            // runs to the end of the buffer. It stays opaque here: this side only
+            // encrypts it.
             return {
                 tag: "encrypt-message",
                 requestId: dataView.getFloat64(3, false),
@@ -104,9 +90,34 @@ function e2eeReadToJs(dataView) {
                     dataView.buffer, dataView.byteOffset + 19, dataView.byteLength - 19),
             };
 
+        case e2eeToJsDecryptMessage:
+            return {
+                tag: "decrypt-message",
+                requestId: dataView.getFloat64(3, false),
+                otherUserId: dataView.getFloat64(11, false),
+                data: e2eeReadBytesField(dataView, 19),
+            };
+
         default:
             return null;
     }
+}
+
+// A Bytes field: four bytes of length, then that many bytes.
+function e2eeReadBytesField(dataView, offset) {
+    return new Uint8Array(
+        dataView.buffer,
+        dataView.byteOffset + offset + 4,
+        dataView.getUint32(offset, false));
+}
+
+// The 48 bits Elm keys its cache of decrypted messages by. It has to survive a round trip
+// through Serialize.int, which is a float64, so it can be at most 53 bits; 32 would be
+// small enough that two messages colliding is a real possibility, and 64 doesn't fit.
+// The top 6 bytes of a SHA-256 give 48 of them.
+async function e2eeBytesHash(bytes) {
+    const digest = new DataView(await crypto.subtle.digest("SHA-256", bytes));
+    return digest.getUint16(0, false) * 4294967296 + digest.getUint32(2, false);
 }
 
 function e2eeIdMessage(variant, id) {
@@ -117,7 +128,8 @@ function e2eeIdMessage(variant, id) {
     return out;
 }
 
-function e2eeIdAndBytesMessage(variant, id, bytes) {
+function e2eeIdAndTextMessage(variant, id, text) {
+    const bytes = new TextEncoder().encode(text);
     const out = new DataView(new ArrayBuffer(15 + bytes.length));
     out.setUint8(0, e2eeSerializeVersion);
     out.setUint16(1, variant, false);
@@ -127,8 +139,18 @@ function e2eeIdAndBytesMessage(variant, id, bytes) {
     return out;
 }
 
-function e2eeIdAndTextMessage(variant, id, text) {
-    return e2eeIdAndBytesMessage(variant, id, new TextEncoder().encode(text));
+// FromJs_MessageEncrypted carries the hash twice: once on its own, which is what Elm keys
+// its cache by, and once inside the EncryptedData beside the bytes it belongs to.
+function e2eeMessageEncryptedMessage(requestId, hash, bytes) {
+    const out = new DataView(new ArrayBuffer(31 + bytes.length));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, e2eeFromJsMessageEncrypted, false);
+    out.setFloat64(3, requestId, false);
+    out.setFloat64(11, hash, false);
+    out.setFloat64(19, hash, false);
+    out.setUint32(27, bytes.length, false);
+    new Uint8Array(out.buffer).set(bytes, 31);
+    return out;
 }
 
 // The ids of every conversation this browser holds a key for. Sent along with the rest of
@@ -895,8 +917,14 @@ exports.init = async function init(app)
                 combined.set(new Uint8Array(cipherText), iv.length);
 
                 app.ports.encryption_from_js.send(
-                    e2eeIdAndBytesMessage(
-                        e2eeFromJsMessageEncrypted, message.requestId, combined));
+                    e2eeMessageEncryptedMessage(
+                        message.requestId, await e2eeBytesHash(combined), combined));
+
+            } else if (message.tag === "decrypt-message") {
+                // FromJs has no variant for a decrypted message yet, so there is nothing
+                // to answer this with. Nothing calls Encryption.decryptMessage either, so
+                // this can only be reached once both ends are added.
+                console.error("Elm asked for a message to be decrypted, but FromJs has no variant to return one through");
             }
         } catch (e) {
             if (message.tag === "store-shared-secret") {
@@ -907,6 +935,8 @@ exports.init = async function init(app)
                 app.ports.encryption_from_js.send(
                     e2eeIdAndTextMessage(
                         e2eeFromJsMessageEncryptFailed, message.requestId, e.toString()));
+            } else {
+                console.error(e);
             }
         }
     });
