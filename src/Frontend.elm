@@ -34,7 +34,6 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
-import Embed exposing (Embed)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji(..), EmojiOrSticker(..))
 import Encryption
 import FileStatus exposing (FileData, FileId, FileStatus(..))
@@ -264,7 +263,7 @@ subscriptions _ model =
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
         , Call.fromJs GotVoiceChatSignalFromJs
-        , Encryption.fromJs EncryptionFromJs
+        , Encryption.fromJs Message.contentAndEmbedsCodec EncryptionFromJs
         , case model of
             Loading _ ->
                 Subscription.none
@@ -3241,10 +3240,10 @@ updateLoaded msg model =
                 model
 
         EncryptionFromJs result ->
-            case result of
-                Ok (Encryption.FromJs_SharedSecretStored otherUserId) ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case result of
+                        Ok (Encryption.FromJs_SharedSecretStored otherUserId) ->
                             let
                                 loggedIn2 : LoggedIn2
                                 loggedIn2 =
@@ -3266,17 +3265,11 @@ updateLoaded msg model =
 
                             else
                                 ( loggedIn2, Command.none )
-                        )
-                        model
 
-                Ok (Encryption.FromJs_SharedSecretFailed _ error) ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn -> ( { loggedIn | e2eeError = Just error }, Command.none ))
-                        model
+                        Ok (Encryption.FromJs_SharedSecretFailed _ error) ->
+                            ( { loggedIn | e2eeError = Just error }, Command.none )
 
-                Ok (Encryption.FromJs_MessageEncrypted requestId bytesHash cipherText) ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
+                        Ok (Encryption.FromJs_MessageEncrypted requestId bytesHash cipherText) ->
                             case SeqDict.get requestId loggedIn.pendingEncryptedMessages of
                                 Just pending ->
                                     let
@@ -3303,7 +3296,7 @@ updateLoaded msg model =
                                             , replyTo = SeqDict.remove draft loggedIn.replyTo
                                             , filesToUpload = SeqDict.remove draft loggedIn.filesToUpload
                                             , decryptedMessages =
-                                                SeqDict.insert bytesHash pending.contentAndEmbeds loggedIn.decryptedMessages
+                                                SeqDict.insert bytesHash (Ok pending.contentAndEmbeds) loggedIn.decryptedMessages
                                         }
                                         (Scroll.toBottomOfChannel
                                             Pages.Guild.conversationContainerId
@@ -3312,12 +3305,8 @@ updateLoaded msg model =
 
                                 Nothing ->
                                     ( loggedIn, Command.none )
-                        )
-                        model
 
-                Ok (Encryption.FromJs_MessageEncryptFailed requestId error) ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
+                        Ok (Encryption.FromJs_MessageEncryptFailed requestId error) ->
                             -- The draft is deliberately left where it is, so that a
                             -- message that could not be encrypted is not also lost.
                             ( { loggedIn
@@ -3327,13 +3316,27 @@ updateLoaded msg model =
                               }
                             , Command.none
                             )
-                        )
-                        model
 
-                Err error ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn -> ( { loggedIn | e2eeError = Just error }, Command.none ))
-                        model
+                        Ok (Encryption.FromJs_MessageDecrypted bytesHash contentAndEmbeds) ->
+                            ( { loggedIn
+                                | decryptedMessages =
+                                    SeqDict.insert bytesHash (Ok contentAndEmbeds) loggedIn.decryptedMessages
+                              }
+                            , Command.none
+                            )
+
+                        Ok (Encryption.FromJs_MessageDecryptFailed bytesHash error) ->
+                            ( { loggedIn
+                                | decryptedMessages =
+                                    SeqDict.insert bytesHash (Err error) loggedIn.decryptedMessages
+                              }
+                            , Command.none
+                            )
+
+                        Err error ->
+                            ( { loggedIn | e2eeError = Just error }, Command.none )
+                )
+                model
 
         PageHasFocusChanged hasFocus ->
             let

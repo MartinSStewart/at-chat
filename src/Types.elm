@@ -79,7 +79,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
-import Encryption exposing (BytesHash, EncryptedData)
+import Encryption exposing (BytesHash, DecryptError, EncryptedData)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import Game
 import Go
@@ -275,7 +275,7 @@ type alias LoggedIn2 =
          This is to work around this bug https://github.com/panphora/overtype/issues/116
       -}
       typedTextCounter : Int
-    , decryptedMessages : SeqDict BytesHash ContentAndEmbeds
+    , decryptedMessages : SeqDict BytesHash (Result DecryptError ContentAndEmbeds)
     }
 
 

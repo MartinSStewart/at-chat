@@ -59,7 +59,7 @@ import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Embed exposing (Embed, EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiConfig, EmojiOrCustomEmoji)
-import Encryption exposing (BytesHash)
+import Encryption exposing (BytesHash, DecryptError)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
 import GuildColumn
@@ -6615,7 +6615,7 @@ messageViewNotThreadStarter :
     Int
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> LocalUser
-    -> SeqDict BytesHash ContentAndEmbeds
+    -> SeqDict BytesHash (Result DecryptError ContentAndEmbeds)
     -> Int
     -> Message ChannelMessageId (Id UserId)
     -> Element MessageViewMsg
@@ -6805,7 +6805,7 @@ messageView :
     -> LocalUser
     -> Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
     -> Maybe (FrontendGenericThread (Id UserId))
-    -> SeqDict BytesHash ContentAndEmbeds
+    -> SeqDict BytesHash (Result DecryptError ContentAndEmbeds)
     -> Id ChannelMessageId
     -> Message ChannelMessageId (Id UserId)
     -> Element MessageViewMsg
