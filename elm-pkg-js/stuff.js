@@ -65,6 +65,13 @@ const e2eeFromJsSharedSecretStored = 0;
 const e2eeFromJsSharedSecretFailed = 1;
 const e2eeFromJsMessageEncrypted = 2;
 const e2eeFromJsMessageEncryptFailed = 3;
+const e2eeFromJsMessageDecrypted = 4;
+const e2eeFromJsMessageDecryptFailed = 5;
+
+// The variants of Encryption.DecryptError. It only has the one placeholder so far, so
+// every way decrypting can go wrong is reported as that; when real errors are named there
+// this is the list to grow alongside them.
+const e2eeDecryptErrorAddErrorsHere = 0;
 
 function e2eeReadToJs(dataView) {
     if (dataView.byteLength < 3 || dataView.getUint8(0) !== e2eeSerializeVersion) { return null; }
@@ -150,6 +157,27 @@ function e2eeMessageEncryptedMessage(requestId, hash, bytes) {
     out.setFloat64(19, hash, false);
     out.setUint32(27, bytes.length, false);
     new Uint8Array(out.buffer).set(bytes, 31);
+    return out;
+}
+
+// There is no request id on the way back: Elm files a decrypted message under the hash of
+// the bytes it came from. The plaintext is whatever Elm serialized in the first place, so
+// it goes back as it is for Elm's own codec to read, with no length of its own.
+function e2eeMessageDecryptedMessage(hash, bytes) {
+    const out = new DataView(new ArrayBuffer(11 + bytes.length));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, e2eeFromJsMessageDecrypted, false);
+    out.setFloat64(3, hash, false);
+    new Uint8Array(out.buffer).set(bytes, 11);
+    return out;
+}
+
+function e2eeMessageDecryptFailedMessage(hash, error) {
+    const out = new DataView(new ArrayBuffer(13));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, e2eeFromJsMessageDecryptFailed, false);
+    out.setFloat64(3, hash, false);
+    out.setUint16(11, error, false);
     return out;
 }
 
@@ -921,10 +949,26 @@ exports.init = async function init(app)
                         message.requestId, await e2eeBytesHash(combined), combined));
 
             } else if (message.tag === "decrypt-message") {
-                // FromJs has no variant for a decrypted message yet, so there is nothing
-                // to answer this with. Nothing calls Encryption.decryptMessage either, so
-                // this can only be reached once both ends are added.
-                console.error("Elm asked for a message to be decrypted, but FromJs has no variant to return one through");
+                // The reply is filed under the hash of the bytes that came in, which is
+                // the same hash the EncryptedData holding them already carries.
+                const hash = await e2eeBytesHash(message.data);
+                const key = await e2eeWithStore(
+                    "readonly", store => store.get(message.otherUserId));
+
+                if (!key) {
+                    app.ports.encryption_from_js.send(
+                        e2eeMessageDecryptFailedMessage(hash, e2eeDecryptErrorAddErrorsHere));
+                    return;
+                }
+
+                // The IV was prepended when this was encrypted, so it comes off the front.
+                const plainText = await crypto.subtle.decrypt(
+                    { name: "AES-GCM", iv: message.data.slice(0, 12) },
+                    key,
+                    message.data.slice(12));
+
+                app.ports.encryption_from_js.send(
+                    e2eeMessageDecryptedMessage(hash, new Uint8Array(plainText)));
             }
         } catch (e) {
             if (message.tag === "store-shared-secret") {
@@ -935,8 +979,10 @@ exports.init = async function init(app)
                 app.ports.encryption_from_js.send(
                     e2eeIdAndTextMessage(
                         e2eeFromJsMessageEncryptFailed, message.requestId, e.toString()));
-            } else {
-                console.error(e);
+            } else if (message.tag === "decrypt-message") {
+                app.ports.encryption_from_js.send(
+                    e2eeMessageDecryptFailedMessage(
+                        await e2eeBytesHash(message.data), e2eeDecryptErrorAddErrorsHere));
             }
         }
     });
