@@ -1710,7 +1710,7 @@ background1 =
 
 background2 : Ui.Color
 background2 =
-    Ui.rgb 21 28 53
+    Ui.rgb 28 35 60
 
 
 background3 : Ui.Color

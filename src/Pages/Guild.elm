@@ -7987,10 +7987,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                 allUsers
             , Ui.row
                 []
-                [ User.toString message2.createdBy allUsers
-                    ++ " "
-                    |> Ui.text
-                    |> Ui.el [ Ui.Font.bold ]
+                [ User.toStringView message2.createdBy allUsers
                 , messageTimestamp
                     (User.discordUserColor localUser)
                     message2.timestampDrawings
@@ -9363,7 +9360,7 @@ channelSearchRow isMobile channelSearch =
         ]
         (Ui.Input.text
             [ Ui.id (Dom.idToString channelSearchInputId)
-            , Ui.background MyUi.inputBackground
+            , Ui.background (Ui.rgba 0 0 0 0)
             , Ui.border 0
             , Ui.paddingWith { left = 8, top = 8, bottom = 8, right = clearPaddingX * 2 + 24 + 8 }
             , Ui.Font.color MyUi.font1
