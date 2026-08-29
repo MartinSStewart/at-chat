@@ -674,22 +674,6 @@ checkNotification title body =
         )
 
 
-{-| Blocked: `lamdera/program-test` doesn't simulate `Bytes` ports. Outgoing data is
-dropped rather than recorded in `portRequests`, and `SubPortBytes` never fires, so now
-that the encryption port carries bytes a test can neither see what a client asked the
-browser for nor answer it.
-
-The three helpers below are left in place so the rest of the suite still compiles and
-runs. Every end-to-end test that drives encryption fails on the first of them, saying
-why. Making them work again needs a decision about the port: teach the harness to
-simulate bytes ports, or carry the serialized payload through a JSON port instead.
-
--}
-bytesPortsNotSimulated : String
-bytesPortsNotSimulated =
-    "lamdera/program-test doesn't simulate Bytes ports, so the encryption port can't be observed or answered from a test"
-
-
 encryptionPortRequests : Lamdera.ClientId -> T.Data frontendModel backendModel -> List (Encryption.ToJs ())
 encryptionPortRequests _ _ =
     []
