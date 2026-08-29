@@ -616,11 +616,11 @@ handleDiscordDeleteGuildMessage discordGuildId discordChannelId discordMessageId
 
 deleteMessageHelper :
     Discord.Id Discord.MessageId
-    -> { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId) Never) }
+    -> { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId)) }
     ->
         Maybe
             ( Id messageId
-            , { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId) Never) }
+            , { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId)) }
             )
 deleteMessageHelper discordMessageId channel =
     case OneToOne.second discordMessageId channel.linkedMessageIds of
@@ -746,7 +746,7 @@ addDiscordChannel discordChannel =
 
 messagesAndLinks :
     { a
-        | messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId) Never)
+        | messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId))
         , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
     }
     -> List Discord.Message
@@ -754,7 +754,7 @@ messagesAndLinks :
     -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
     ->
-        ( IdArray messageId (Message messageId (Discord.Id Discord.UserId) Never)
+        ( IdArray messageId (Message messageId (Discord.Id Discord.UserId))
         , OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         )
 messagesAndLinks existingChannelOrThread messages customEmojis discordStickers discordAttachments =
@@ -1226,7 +1226,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
 
                             Discord.GuildMemberJoin ->
                                 let
-                                    message : Message messageId (Discord.Id Discord.UserId) Never
+                                    message : Message messageId (Discord.Id Discord.UserId)
                                     message =
                                         Message.userJoined discordMessage.timestamp discordMessage.author.id
                                 in
@@ -1677,7 +1677,7 @@ addForumPost authentication post guild channel model =
         richText =
             RichText.fromDiscord post.name SeqDict.empty Missing model.discordCustomEmojis [] Missing
 
-        message : Message ChannelMessageId (Discord.Id Discord.UserId) Never
+        message : Message ChannelMessageId (Discord.Id Discord.UserId)
         message =
             Message.userTextMessageNoEmbeds createdAt post.ownerId richText SeqDict.empty Nothing SeqDict.empty
                 |> UserTextMessage

@@ -391,7 +391,7 @@ encodeMessages :
     (userId -> String)
     -> SeqDict userId String
     -> (Id messageId -> Maybe Json.Encode.Value)
-    -> IdArray messageId (Message messageId userId Never)
+    -> IdArray messageId (Message messageId userId)
     -> Json.Encode.Value
 encodeMessages userIdToString userNames threadMessages messages =
     IdArray.toList messages
@@ -406,7 +406,7 @@ encodeMessage :
     (userId -> String)
     -> SeqDict userId String
     -> Maybe Json.Encode.Value
-    -> Message messageId userId Never
+    -> Message messageId userId
     -> Json.Encode.Value
 encodeMessage userIdToString userNames maybeThread message =
     ((case message of
@@ -426,17 +426,7 @@ encodeMessage userIdToString userNames maybeThread message =
                 ++ encodeEmbeds data.embeds
 
         EncryptedUserTextMessage data ->
-            [ ( "encryptStatus"
-              , case data.encryptedStatus of
-                    Message.MessageEncrypted encryptedData ->
-                        Encrypted.encode encryptedData
-
-                    Message.MessageDecrypted a ->
-                        never a
-
-                    Message.MessageDecryptFailed encryptedData ->
-                        Encrypted.encode encryptedData
-              )
+            [ ( "encryptedData", Encrypted.encode data.encryptedData )
             , ( "type", Json.Encode.string "userTextMessage" )
             , ( "createdAt", encodeTime data.createdAt )
             , ( "createdBy", Json.Encode.string (userIdToString data.createdBy) )

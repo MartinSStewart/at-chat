@@ -513,10 +513,10 @@ rather than our own users, and thread messages are kept apart from channel messa
 they are numbered separately.
 -}
 type UnreadOverviewMessages
-    = UnreadOverviewMessages (List ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) ContentAndEmbeds ))
-    | UnreadOverviewThreadMessages (Id ChannelMessageId) (List ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) ContentAndEmbeds ))
-    | UnreadOverviewDiscordMessages (Discord.Id Discord.UserId) (List ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id Discord.UserId) ContentAndEmbeds ))
-    | UnreadOverviewDiscordThreadMessages (Id ChannelMessageId) (Discord.Id Discord.UserId) (List ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) ContentAndEmbeds ))
+    = UnreadOverviewMessages (List ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) ))
+    | UnreadOverviewThreadMessages (Id ChannelMessageId) (List ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) ))
+    | UnreadOverviewDiscordMessages (Discord.Id Discord.UserId) (List ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id Discord.UserId) ))
+    | UnreadOverviewDiscordThreadMessages (Id ChannelMessageId) (Discord.Id Discord.UserId) (List ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) ))
 
 
 unreadOverviewNotMobile : LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
@@ -1312,7 +1312,7 @@ unreadMessages :
     -> { a | messages : MessageArray messageId userId }
     ->
         Maybe
-            { messages : List ( Id messageId, Message messageId userId ContentAndEmbeds )
+            { messages : List ( Id messageId, Message messageId userId )
             , additionalUnread : Int
             , newestMessageId : Id messageId
             , oldestAt : Time.Posix
@@ -1327,7 +1327,7 @@ unreadMessages maybeLastViewed channel =
         unreadCount =
             GuildColumn.newMessageCount maybeLastViewed channel
 
-        loaded : List ( Id messageId, Message messageId userId ContentAndEmbeds )
+        loaded : List ( Id messageId, Message messageId userId )
         loaded =
             MessageArray.slice
                 (messageCount - unreadCount |> Id.fromInt)
@@ -1335,7 +1335,7 @@ unreadMessages maybeLastViewed channel =
                 channel.messages
                 |> MessageArray.toList
 
-        shown : List ( Id messageId, Message messageId userId ContentAndEmbeds )
+        shown : List ( Id messageId, Message messageId userId )
         shown =
             List.drop (List.length loaded - UserSession.unreadOverviewMessageLimit) loaded
     in
@@ -3739,7 +3739,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                             else
                                 NoHighlight
 
-                        maybeRepliedTo2 : Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) ContentAndEmbeds )
+                        maybeRepliedTo2 : Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
                         maybeRepliedTo2 =
                             maybeRepliedTo message channel
 
@@ -3914,7 +3914,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
 userTextMessageRepliedTo :
     { a | repliedTo : Maybe (Id messageId) }
     -> { b | messages : MessageArray messageId userId }
-    -> Maybe ( Id messageId, Message messageId userId ContentAndEmbeds )
+    -> Maybe ( Id messageId, Message messageId userId )
 userTextMessageRepliedTo data channel =
     case data.repliedTo of
         Just repliedToIndex ->
@@ -3929,7 +3929,7 @@ userTextMessageRepliedTo data channel =
             Nothing
 
 
-maybeRepliedTo : Message messageId userId ContentAndEmbeds -> { a | messages : MessageArray messageId userId } -> Maybe ( Id messageId, Message messageId userId ContentAndEmbeds )
+maybeRepliedTo : Message messageId userId -> { a | messages : MessageArray messageId userId } -> Maybe ( Id messageId, Message messageId userId )
 maybeRepliedTo message channel =
     case message of
         UserTextMessage data ->
@@ -4412,7 +4412,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                             else
                                 NoHighlight
 
-                        maybeRepliedTo2 : Maybe ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) ContentAndEmbeds )
+                        maybeRepliedTo2 : Maybe ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) )
                         maybeRepliedTo2 =
                             maybeRepliedTo message thread
 
@@ -4626,7 +4626,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                             else
                                 NoHighlight
 
-                        maybeRepliedTo2 : Maybe ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) ContentAndEmbeds )
+                        maybeRepliedTo2 : Maybe ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) )
                         maybeRepliedTo2 =
                             maybeRepliedTo message thread
 
@@ -6322,8 +6322,8 @@ messageEditingView :
     -> Bool
     -> ( AnyGuildOrDmId, ThreadRoute )
     -> ThreadRouteWithMessage
-    -> Message ChannelMessageId userId ContentAndEmbeds
-    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId userId ContentAndEmbeds )
+    -> Message ChannelMessageId userId
+    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId userId )
     -> Maybe (FrontendGenericThread userId)
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> Int
@@ -6474,8 +6474,8 @@ threadMessageEditingView :
     -> ( AnyGuildOrDmId, ThreadRoute )
     -> Id ChannelMessageId
     -> Id ThreadMessageId
-    -> Message ThreadMessageId userId ContentAndEmbeds
-    -> Maybe ( Id ThreadMessageId, Message ThreadMessageId userId ContentAndEmbeds )
+    -> Message ThreadMessageId userId
+    -> Maybe ( Id ThreadMessageId, Message ThreadMessageId userId )
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
     -> Int
     -> EditMessage
@@ -6617,7 +6617,7 @@ messageViewNotThreadStarter :
     -> LocalUser
     -> SeqDict BytesHash ContentAndEmbeds
     -> Int
-    -> Message ChannelMessageId (Id UserId) ContentAndEmbeds
+    -> Message ChannelMessageId (Id UserId)
     -> Element MessageViewMsg
 messageViewNotThreadStarter data revealedSpoilers localUser decryptedMessages messageIndex message =
     let
@@ -6649,7 +6649,7 @@ discordMessageViewNotThreadStarter :
     -> Discord.Id Discord.UserId
     -> LocalUser
     -> Int
-    -> Message ChannelMessageId (Discord.Id Discord.UserId) ContentAndEmbeds
+    -> Message ChannelMessageId (Discord.Id Discord.UserId)
     -> Element MessageViewMsg
 discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId localUser messageIndex message =
     let
@@ -6688,7 +6688,7 @@ discordMessageViewThreadStarter :
     -> LocalUser
     -> Int
     -> DiscordFrontendThread
-    -> Message ChannelMessageId (Discord.Id Discord.UserId) ContentAndEmbeds
+    -> Message ChannelMessageId (Discord.Id Discord.UserId)
     -> Element MessageViewMsg
 discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId localUser messageIndex thread message =
     let
@@ -6717,7 +6717,7 @@ threadMessageViewLazy :
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
     -> LocalUser
     -> Int
-    -> Message ThreadMessageId (Id UserId) ContentAndEmbeds
+    -> Message ThreadMessageId (Id UserId)
     -> Element MessageViewMsg
 threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
     let
@@ -6746,7 +6746,7 @@ discordThreadMessageViewLazy :
     -> Discord.Id Discord.UserId
     -> LocalUser
     -> Int
-    -> Message ThreadMessageId (Discord.Id Discord.UserId) ContentAndEmbeds
+    -> Message ThreadMessageId (Discord.Id Discord.UserId)
     -> Element MessageViewMsg
 discordThreadMessageViewLazy data revealedSpoilers currentDiscordUserId localUser messageIndex message =
     let
@@ -6803,11 +6803,11 @@ messageView :
     -> Id UserId
     -> SeqDict (Id UserId) FrontendUser
     -> LocalUser
-    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) ContentAndEmbeds )
+    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
     -> Maybe (FrontendGenericThread (Id UserId))
     -> SeqDict BytesHash ContentAndEmbeds
     -> Id ChannelMessageId
-    -> Message ChannelMessageId (Id UserId) ContentAndEmbeds
+    -> Message ChannelMessageId (Id UserId)
     -> Element MessageViewMsg
 messageView time isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter decrypted messageId message =
     case message of
@@ -7042,10 +7042,10 @@ discordMessageView :
     -> Discord.Id Discord.UserId
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> LocalUser
-    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id Discord.UserId) ContentAndEmbeds )
+    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id Discord.UserId) )
     -> Maybe (FrontendGenericThread (Discord.Id Discord.UserId))
     -> Id ChannelMessageId
-    -> Message ChannelMessageId (Discord.Id Discord.UserId) ContentAndEmbeds
+    -> Message ChannelMessageId (Discord.Id Discord.UserId)
     -> Element MessageViewMsg
 discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter messageId message =
     case message of
@@ -7276,9 +7276,9 @@ threadMessageView :
     -> SeqDict (Id UserId) FrontendUser
     -> Id UserId
     -> LocalUser
-    -> Maybe ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) ContentAndEmbeds )
+    -> Maybe ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) )
     -> Id ThreadMessageId
-    -> Message ThreadMessageId (Id UserId) ContentAndEmbeds
+    -> Message ThreadMessageId (Id UserId)
     -> Element MessageViewMsg
 threadMessageView time isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited allUsers currentUserId localUser maybeRepliedTo2 messageId message =
     case message of
@@ -7485,9 +7485,9 @@ discordThreadMessageView :
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> Discord.Id Discord.UserId
     -> LocalUser
-    -> Maybe ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) ContentAndEmbeds )
+    -> Maybe ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) )
     -> Id ThreadMessageId
-    -> Message ThreadMessageId (Discord.Id Discord.UserId) ContentAndEmbeds
+    -> Message ThreadMessageId (Discord.Id Discord.UserId)
     -> Element MessageViewMsg
 discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight isHovered allUsers currentUserId localUser maybeRepliedTo2 messageId message =
     case message of
@@ -7742,7 +7742,7 @@ userTextMessageContent :
     -> Int
     -> Bool
     -> Bool
-    -> Maybe ( Id messageId, Message messageId (Id UserId) ContentAndEmbeds )
+    -> Maybe ( Id messageId, Message messageId (Id UserId) )
     -> LocalUser
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id UserId) FrontendUser
@@ -7901,7 +7901,7 @@ discordUserTextMessageContent :
     -> HtmlId
     -> Int
     -> Bool
-    -> Maybe ( Id messageId, Message messageId (Discord.Id Discord.UserId) ContentAndEmbeds )
+    -> Maybe ( Id messageId, Message messageId (Discord.Id Discord.UserId) )
     -> LocalUser
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
@@ -8156,7 +8156,7 @@ replyToHeaderAboveMessage :
     Bool
     -> Time.Zone
     -> Time.Posix
-    -> Maybe ( Id messageId, Message messageId userId ContentAndEmbeds )
+    -> Maybe ( Id messageId, Message messageId userId )
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
@@ -10412,7 +10412,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
         allUsers =
             User.allUsers localUser
 
-        message : Maybe (Message ChannelMessageId (Id UserId) ContentAndEmbeds)
+        message : Maybe (Message ChannelMessageId (Id UserId))
         message =
             MessageArray.last channel.messages
 
@@ -10493,7 +10493,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
         ]
 
 
-friendLabelMessagePreview : Time.Posix -> String -> Maybe (Message messageId userId ContentAndEmbeds) -> Element msg
+friendLabelMessagePreview : Time.Posix -> String -> Maybe (Message messageId userId) -> Element msg
 friendLabelMessagePreview time messagePreview message =
     Ui.row
         [ Ui.Font.size 13, Ui.spacing 4 ]
@@ -10541,7 +10541,7 @@ discordFriendLabel :
     -> Element FrontendMsg_
 discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
     let
-        message : Maybe (Message ChannelMessageId (Discord.Id Discord.UserId) ContentAndEmbeds)
+        message : Maybe (Message ChannelMessageId (Discord.Id Discord.UserId))
         message =
             MessageArray.last channel.messages
 

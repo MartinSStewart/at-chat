@@ -2,7 +2,6 @@ module Message exposing
     ( CallStartedData
     , ChangeAttachments(..)
     , ContentAndEmbeds
-    , EncryptedMessageStatus(..)
     , EncryptedUserTextMessageData
     , GameStartedData
     , GameType(..)
@@ -20,7 +19,6 @@ module Message exposing
     , handleDrawingChange
     , reactionEmojis
     , removeReactionEmoji
-    , toDecryptable
     , userJoined
     , userTextMessageBackend
     , userTextMessageFrontend
@@ -51,9 +49,9 @@ import Time
 import Url exposing (Url)
 
 
-type Message messageId userId decryptable
+type Message messageId userId
     = UserTextMessage (UserTextMessageData messageId userId)
-    | EncryptedUserTextMessage (EncryptedUserTextMessageData messageId userId decryptable)
+    | EncryptedUserTextMessage (EncryptedUserTextMessageData messageId userId)
     | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
     | DeletedMessage Time.Posix
     | CallStarted (CallStartedData userId)
@@ -177,10 +175,10 @@ encryptedUserTextMessageFrontend :
     -> EncryptedData ContentAndEmbeds
     -> Maybe (Id messageId)
     -> SeqDict (Id FileId) FileData
-    -> Message messageId (Id UserId) decryptable
+    -> Message messageId (Id UserId)
 encryptedUserTextMessageFrontend createdAt2 createdBy contentAndEmbeds repliedTo attachedFiles =
     EncryptedUserTextMessage
-        { encryptedStatus = MessageEncrypted contentAndEmbeds
+        { encryptedData = contentAndEmbeds
         , createdAt = createdAt2
         , createdBy = createdBy
         , reactions = SeqDict.empty
@@ -200,7 +198,7 @@ userTextMessageFrontend :
     -> Nonempty (RichText userId)
     -> Maybe (Id messageId)
     -> SeqDict (Id FileId) FileData
-    -> Message messageId userId decryptable
+    -> Message messageId userId
 userTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
     let
         hyperlinks : List Url
@@ -275,7 +273,7 @@ editUserTextMessage time newContent attachedFiles data =
     }
 
 
-addEmbed : ( Url, Result e EmbedData ) -> Message messageId userId decryptable -> Message messageId userId decryptable
+addEmbed : ( Url, Result e EmbedData ) -> Message messageId userId -> Message messageId userId
 addEmbed ( url, result ) message =
     case message of
         UserTextMessage message2 ->
@@ -337,18 +335,12 @@ type alias UserTextMessageData messageId userId =
     }
 
 
-type EncryptedMessageStatus decryptable
-    = MessageEncrypted (EncryptedData ContentAndEmbeds)
-    | MessageDecrypted decryptable
-    | MessageDecryptFailed (EncryptedData ContentAndEmbeds)
-
-
 type alias ContentAndEmbeds =
     { content : Nonempty (RichText (Id UserId)), embeds : Array Embed }
 
 
-type alias EncryptedUserTextMessageData messageId userId decryptable =
-    { encryptedStatus : EncryptedMessageStatus decryptable
+type alias EncryptedUserTextMessageData messageId userId =
+    { encryptedData : EncryptedData ContentAndEmbeds
     , createdAt : Time.Posix
     , createdBy : userId
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
@@ -381,7 +373,7 @@ type alias UserTextMessageDataNoReply userId =
     }
 
 
-userJoined : Time.Posix -> userId -> Message messageId userId decryptable
+userJoined : Time.Posix -> userId -> Message messageId userId
 userJoined time userId =
     UserJoinedMessage time userId SeqDict.empty Drawing.emptyDrawing
 
@@ -442,7 +434,7 @@ handleDrawingChangeHelper changeBy change anchorType data =
             data
 
 
-handleDrawingChange : userId -> Drawing.MessageAnchor -> Drawing.LocalChange -> Message messageId userId decryptable -> Message messageId userId decryptable
+handleDrawingChange : userId -> Drawing.MessageAnchor -> Drawing.LocalChange -> Message messageId userId -> Message messageId userId
 handleDrawingChange changeBy anchorType change message =
     case message of
         UserTextMessage data ->
@@ -526,7 +518,7 @@ userTextMessageDrawing anchor data =
             Drawing.emptyDrawing
 
 
-drawing : Drawing.MessageAnchor -> Message messageId userId decryptable -> Drawing userId
+drawing : Drawing.MessageAnchor -> Message messageId userId -> Drawing userId
 drawing anchor message =
     case message of
         UserTextMessage data ->
@@ -576,7 +568,7 @@ drawing anchor message =
                     gameStarted.cardDrawings
 
 
-createdAt : Message messageId userId decryptable -> Time.Posix
+createdAt : Message messageId userId -> Time.Posix
 createdAt message =
     case message of
         UserTextMessage data ->
@@ -598,7 +590,7 @@ createdAt message =
             gameStarted.startedAt
 
 
-addReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId decryptable -> Message messageId userId decryptable
+addReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId
 addReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
@@ -625,7 +617,7 @@ addReactionEmojiHelper userId emoji reactions =
     SeqDictHelper.addToSet emoji userId reactions
 
 
-removeReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId decryptable -> Message messageId userId decryptable
+removeReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId
 removeReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
@@ -664,7 +656,7 @@ removeReactionEmojiHelper userId emoji reactions =
         reactions
 
 
-reactionEmojis : Message messageId userId decryptable -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+reactionEmojis : Message messageId userId -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 reactionEmojis message =
     case message of
         UserTextMessage data ->
@@ -684,49 +676,6 @@ reactionEmojis message =
 
         GameStarted gameStarted ->
             gameStarted.reactions
-
-
-toDecryptable : Message messageId userId Never -> Message messageId userId ContentAndEmbeds
-toDecryptable message =
-    case message of
-        UserTextMessage userTextMessageData ->
-            UserTextMessage userTextMessageData
-
-        EncryptedUserTextMessage data ->
-            EncryptedUserTextMessage
-                { encryptedStatus =
-                    case data.encryptedStatus of
-                        MessageEncrypted data2 ->
-                            MessageEncrypted data2
-
-                        MessageDecrypted a ->
-                            never a
-
-                        MessageDecryptFailed encryptedData ->
-                            MessageDecryptFailed encryptedData
-                , createdAt = data.createdAt
-                , createdBy = data.createdBy
-                , reactions = data.reactions
-                , editedAt = data.editedAt
-                , repliedTo = data.repliedTo
-                , attachedFiles = data.attachedFiles
-                , timestampDrawings = data.timestampDrawings
-                , userIconDrawings = data.userIconDrawings
-                , imageAttachmentDrawings = data.imageAttachmentDrawings
-                , embedDrawings = data.embedDrawings
-                }
-
-        UserJoinedMessage posix userId seqDict a ->
-            UserJoinedMessage posix userId seqDict a
-
-        DeletedMessage posix ->
-            DeletedMessage posix
-
-        CallStarted callStartedData ->
-            CallStarted callStartedData
-
-        GameStarted gameStartedData ->
-            GameStarted gameStartedData
 
 
 contentAndEmbedsCodec : Serialize.Codec e ContentAndEmbeds

@@ -380,11 +380,11 @@ unreadOverviewData userId user model =
             { channels :
                 SeqDict
                     ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId )
-                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) Never))
+                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
             , threads :
                 SeqDict
                     ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId, Id ChannelMessageId )
-                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId) Never))
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId)))
             }
         discordGuilds =
             SeqDict.foldl
@@ -461,7 +461,7 @@ unreadOverviewData userId user model =
         discordDmChannels :
             SeqDict
                 (Discord.Id Discord.PrivateChannelId)
-                (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) Never))
+                (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
         discordDmChannels =
             SeqDict.foldl
                 (\channelId dmChannel dict ->
@@ -495,11 +495,11 @@ unreadOverviewData userId user model =
             { channels :
                 SeqDict
                     ( Id GuildId, Id ChannelId )
-                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) Never))
+                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
             , threads :
                 SeqDict
                     ( Id GuildId, Id ChannelId, Id ChannelMessageId )
-                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) Never))
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
             }
         guilds =
             SeqDict.foldl
@@ -553,11 +553,11 @@ unreadOverviewData userId user model =
                 model.guilds
 
         dms :
-            { channels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) Never))
+            { channels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
             , threads :
                 SeqDict
                     ( Id UserId, Id ChannelMessageId )
-                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) Never))
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
             }
         dms =
             SeqDict.foldl
@@ -620,7 +620,7 @@ in one list and are added in two passes instead.
 -}
 discordUsersInMessages :
     BackendModel
-    -> List (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId) Never))
+    -> List (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId)))
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
 discordUsersInMessages model messageDicts foundSoFar =
@@ -652,7 +652,7 @@ discordUsersInMessages model messageDicts foundSoFar =
 
 {-| The users a message shows the name of: whoever wrote it, plus anyone it mentions.
 -}
-messageUserIds : Message messageId userId Never -> List userId
+messageUserIds : Message messageId userId -> List userId
 messageUserIds message =
     case message of
         UserTextMessage data ->
@@ -679,8 +679,8 @@ of them, keyed by the index they sit at. `Nothing` when the user has read it to 
 -}
 unreadMessages :
     Maybe (Id messageId)
-    -> { a | messages : IdArray messageId (Message messageId userId Never) }
-    -> Maybe (SeqDict (Id messageId) (Message messageId userId Never))
+    -> { a | messages : IdArray messageId (Message messageId userId) }
+    -> Maybe (SeqDict (Id messageId) (Message messageId userId))
 unreadMessages maybeLastViewed channel =
     let
         messageCount : Int

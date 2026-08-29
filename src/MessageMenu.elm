@@ -936,7 +936,7 @@ button isMobile htmlId icon text msg =
         [ Ui.el [ Ui.width (Ui.px 24) ] (Ui.html icon), Ui.text text ]
 
 
-messageCustomEmojiIds : Message messageId userId ContentAndEmbeds -> List (Id CustomEmojiId)
+messageCustomEmojiIds : Message messageId userId -> List (Id CustomEmojiId)
 messageCustomEmojiIds message =
     let
         reactionIds : SeqDict EmojiOrCustomEmoji a -> List (Id CustomEmojiId)

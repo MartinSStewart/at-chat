@@ -143,7 +143,7 @@ that a channel still waiting on its messages is marked as loading.
 -}
 discordViewMessages :
     ToBeFilledInByBackend (UserSession.ViewDiscordGuildData messageId)
-    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId) Never))
+    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId)))
 discordViewMessages backendData =
     case backendData of
         FilledInByBackend data ->
@@ -5331,7 +5331,7 @@ changeUpdate localMsg local =
                     }
 
 
-callStartedMessage : Time.Posix -> Id UserId -> Message ChannelMessageId (Id UserId) ContentAndEmbeds
+callStartedMessage : Time.Posix -> Id UserId -> Message ChannelMessageId (Id UserId)
 callStartedMessage time startedBy =
     CallStarted
         { startedAt = time

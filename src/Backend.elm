@@ -6881,13 +6881,13 @@ handleSheepGame :
     -> GuildOrDmId
     ->
         { c
-            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) Never)
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
         }
     ->
         ({ c
-            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) Never)
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
          }
@@ -7037,13 +7037,13 @@ handleWordSpellingGame :
     -> GuildOrDmId
     ->
         { c
-            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) Never)
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
         }
     ->
         ({ c
-            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) Never)
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
          }
@@ -7918,8 +7918,8 @@ threadRouteToDiscordMessageId channelId channel threadRoute =
 
 
 loadMessagesHelper :
-    { a | messages : IdArray messageId (Message messageId userId Never) }
-    -> SeqDict (Id messageId) (Message messageId userId Never)
+    { a | messages : IdArray messageId (Message messageId userId) }
+    -> SeqDict (Id messageId) (Message messageId userId)
 loadMessagesHelper channel =
     let
         messageCount : Int
@@ -7941,8 +7941,8 @@ loadMessagesHelper channel =
 
 handleMessagesRequest :
     Id messageId
-    -> { b | messages : IdArray messageId (Message messageId userId Never) }
-    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId Never))
+    -> { b | messages : IdArray messageId (Message messageId userId) }
+    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
 handleMessagesRequest oldestVisibleMessage channel =
     let
         oldestVisibleMessage2 =
