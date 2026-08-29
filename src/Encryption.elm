@@ -1,5 +1,6 @@
 port module Encryption exposing
     ( BytesHash(..)
+    , DecryptManyRequestId
     , DecryptRequestId
     , EncryptRequestId
     , EncryptedData(..)
@@ -9,9 +10,11 @@ port module Encryption exposing
     , encode
     , encryptMessage
     , fromJs
+    , fromJsCodec
     , hash
     , storeSharedSecret
     , toBase64
+    , toJsCodec
     )
 
 {-| The symmetric half of end-to-end encrypted DMs, which lives in the browser rather

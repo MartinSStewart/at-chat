@@ -62,6 +62,7 @@ import RichText
 import Route exposing (ChannelsVisibleOnMobile(..))
 import SeqDict
 import SeqSet
+import Serialize
 import String.Nonempty
 import Test.Html.Query
 import Test.Html.Selector
@@ -491,9 +492,9 @@ endToEndEncryptionAcceptTest config =
                                   -- trailing "=" says, so that a password manager typing
                                   -- it one character at a time still works.
                                   user.input 100 (Dom.id "guild_e2eePrivateKey") (String.dropRight 5 userPrivateKey)
-                                , T.checkState 100 (checkNoSharedSecretsYet 0)
+                                , T.checkState 100 (checkSharedSecretsAskedFor user [])
                                 , user.input 100 (Dom.id "guild_e2eePrivateKey") userPrivateKey
-                                , E2EHelper.respondToEncryptionPort user
+                                , E2EHelper.respondToSharedSecretStored user Broadcast.adminUserId
 
                                 -- Accepting reaches the other side, but the private key
                                 -- was never kept, so that side has to be asked for it too.
@@ -503,8 +504,7 @@ endToEndEncryptionAcceptTest config =
                                         [ Test.Html.Selector.text "This conversation is missing a private key" ]
                                     )
                                 , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
-                                , E2EHelper.respondToEncryptionPort admin
-                                , T.checkState 100 checkBothSidesDerivedTheSameSecret
+                                , E2EHelper.respondToSharedSecretStored admin (Id.fromInt 2)
                                 , T.checkBackend 100 checkDmIsEncrypted
                                 , admin.checkView
                                     100
@@ -523,7 +523,7 @@ endToEndEncryptionAcceptTest config =
                                 , admin.click 100 (Dom.id "guild_hideMembers")
                                 , E2EHelper.writeMessage admin 100 "Hello in secret"
                                 , T.checkBackend 100 (checkNoPlainTextReachedTheServer "Hello in secret")
-                                , E2EHelper.respondToEncryptionPort admin
+                                , E2EHelper.respondToMessageEncrypted admin
                                 , T.checkBackend 100 (checkEncryptedMessageStored "Hello in secret")
 
                                 -- Without a key on this device the message is not sent,
@@ -573,7 +573,7 @@ oneKeySetsUpEveryConversationTest config =
                         , addPrivateKeyToAccount userA
                             (\userAPrivateKey ->
                                 [ userA.input 100 (Dom.id "guild_e2eePrivateKey") userAPrivateKey
-                                , E2EHelper.respondToEncryptionPort userA
+                                , E2EHelper.respondToSharedSecretStored userA Broadcast.adminUserId
 
                                 -- That conversation is encrypted now, and the admin's
                                 -- device has no key for it because their private key was
@@ -595,10 +595,6 @@ oneKeySetsUpEveryConversationTest config =
                                     (\_ ->
                                         [ userB.click 100 (Dom.id "guild_enableE2ee")
 
-                                        -- Only the one person who has typed a key in so
-                                        -- far has worked a secret out.
-                                        , T.checkState 100 (checkNoSharedSecretsYet 1)
-
                                         -- The admin answers in the conversation they were
                                         -- asked in, and types their key there.
                                         , admin.click 100 (Dom.id "guild_hideMembers")
@@ -608,8 +604,11 @@ oneKeySetsUpEveryConversationTest config =
 
                                         -- That one entry covered the other conversation
                                         -- as well, which was never on screen for it.
-                                        , T.checkState 100 (checkNoSharedSecretsYet 3)
-                                        , E2EHelper.respondToAllSharedSecretPorts admin
+                                        , T.checkState
+                                            100
+                                            (checkSharedSecretsAskedFor admin [ Id.fromInt 2, Id.fromInt 3 ])
+                                        , E2EHelper.respondToSharedSecretStored admin (Id.fromInt 3)
+                                        , E2EHelper.respondToSharedSecretStored admin (Id.fromInt 2)
                                         , admin.checkModel
                                             100
                                             (checkKeysOnThisDeviceFor [ Id.fromInt 2, Id.fromInt 3 ])
@@ -627,7 +626,7 @@ oneKeySetsUpEveryConversationTest config =
                                         , admin.click 100 (Dom.id "guild_hideMembers")
                                         , E2EHelper.writeMessage admin 100 "Hello in secret"
                                         , T.checkBackend 100 (checkNoPlainTextReachedTheServer "Hello in secret")
-                                        , E2EHelper.respondToEncryptionPort admin
+                                        , E2EHelper.respondToMessageEncrypted admin
                                         , T.checkBackend 100 (checkEncryptedMessageStored "Hello in secret")
                                         ]
                                     )
@@ -672,75 +671,35 @@ checkKeysOnThisDeviceFor expected model =
             Err "Frontend hasn't loaded"
 
 
-{-| How many shared secrets have been handed to a browser so far. Used to check that a
-partly typed key does nothing at all.
+{-| The conversations a client has asked the browser to work a shared secret out for.
+Order doesn't matter, so both sides are sorted before comparing.
 -}
-checkNoSharedSecretsYet : Int -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
-checkNoSharedSecretsYet expected data =
+checkSharedSecretsAskedFor :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> List (Id.Id Id.UserId)
+    -> T.Data FrontendModel E2EHelper.BackendModel2
+    -> Result String ()
+checkSharedSecretsAskedFor client expected data =
     let
-        actual : Int
+        sorted : List (Id.Id Id.UserId) -> String
+        sorted ids =
+            List.map Id.toInt ids |> List.sort |> List.map String.fromInt |> String.join ", "
+
+        actual : List (Id.Id Id.UserId)
         actual =
-            List.length (storedSharedSecrets data)
+            E2EHelper.sharedSecretsAskedFor client.clientId data
     in
-    if actual == expected then
+    if sorted expected == sorted actual then
         Ok ()
 
     else
         Err
-            ("Expected "
-                ++ String.fromInt expected
-                ++ " shared secrets to have been worked out by now, found "
-                ++ String.fromInt actual
+            ("Expected the browser to have been asked for shared secrets for ["
+                ++ sorted expected
+                ++ "], was asked for ["
+                ++ sorted actual
+                ++ "]"
             )
-
-
-storedSharedSecrets : T.Data FrontendModel E2EHelper.BackendModel2 -> List String
-storedSharedSecrets data =
-    SeqDict.keys data.frontends
-        |> List.concatMap (\clientId -> E2EHelper.encryptionPortRequests clientId data)
-        |> List.filterMap
-            (\request ->
-                case request of
-                    Encryption.ToJs_StoreSharedSecret { sharedSecret } ->
-                        -- Base64 rather than the bytes themselves, because `==` on Bytes
-                        -- compares object properties and so is true of any two of them.
-                        Base64.fromBytes sharedSecret
-
-                    Encryption.ToJs_EncryptMessage _ ->
-                        Nothing
-
-                    Encryption.ToJs_DecryptMessage _ ->
-                        Nothing
-
-                    Encryption.ToJs_DecryptManyMessages _ ->
-                        Nothing
-            )
-
-
-{-| Both people should have handed the browser the same secret. They each work it out
-from their own private key and the other's public one, so this failing means the key
-agreement disagreed across the two clients.
--}
-checkBothSidesDerivedTheSameSecret : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
-checkBothSidesDerivedTheSameSecret data =
-    let
-        secrets : List String
-        secrets =
-            storedSharedSecrets data
-    in
-    case secrets of
-        [ first, second ] ->
-            if first == second then
-                Ok ()
-
-            else
-                Err "The two sides worked out different shared secrets"
-
-        _ ->
-            Err
-                ("Expected both sides to store a shared secret, instead got "
-                    ++ String.fromInt (List.length secrets)
-                )
 
 
 checkDmIsEncrypted : E2EHelper.BackendModel2 -> Result String ()
@@ -786,25 +745,27 @@ checkPrivateKeyNeverReachedTheServer privateKeyText backend =
             )
 
 
-{-| The server should never have been handed the message as it was typed.
+{-| The server should never have been handed the message as it was typed. An encrypted
+conversation only ever stores EncryptedUserTextMessage, so a plain one carrying the text
+means it went out before the browser had it.
 -}
 checkNoPlainTextReachedTheServer : String -> E2EHelper.BackendModel2 -> Result String ()
 checkNoPlainTextReachedTheServer text backend =
-    if List.any (String.contains text) (encryptedMessageContents backend) then
-        Err "The message reached the server as plain text"
+    case adminDmChannel backend of
+        Just dmChannel ->
+            if List.any (String.contains text) (plainTextMessages dmChannel) then
+                Err "The message reached the server as plain text"
 
-    else
-        Ok ()
+            else
+                Ok ()
+
+        Nothing ->
+            Ok ()
 
 
 checkEncryptedMessageStored : String -> E2EHelper.BackendModel2 -> Result String ()
 checkEncryptedMessageStored text backend =
-    let
-        expected : String
-        expected =
-            Base64.fromString text |> Maybe.withDefault "not base64"
-    in
-    if List.member expected (encryptedMessageContents backend) then
+    if List.member text (encryptedMessageContents backend) then
         Ok ()
 
     else
@@ -812,6 +773,46 @@ checkEncryptedMessageStored text backend =
             ("The stored message isn't what the browser handed back. Stored: "
                 ++ String.join ", " (encryptedMessageContents backend)
             )
+
+
+{-| What every plain message in a channel says.
+-}
+plainTextMessages : DmChannel.DmChannel -> List String
+plainTextMessages dmChannel =
+    IdArray.toList dmChannel.messages
+        |> List.filterMap
+            (\message ->
+                case message of
+                    Message.UserTextMessage data ->
+                        RichText.toString Time.utc False SeqDict.empty data.content |> Just
+
+                    _ ->
+                        Nothing
+            )
+
+
+{-| What every encrypted message in a channel says. The stand-in for encryption leaves
+the message serialized but readable, which is what lets a test see whether what reached
+the server is what the app handed over rather than what was typed.
+-}
+encryptedMessageText : Message.Message Id.ChannelMessageId (Id.Id Id.UserId) -> Maybe String
+encryptedMessageText message =
+    case message of
+        Message.EncryptedUserTextMessage data ->
+            case Base64.toBytes (Encryption.toBase64 data.encryptedData) of
+                Just bytes ->
+                    case Serialize.decodeFromBytes Message.contentAndEmbedsCodec bytes of
+                        Ok contentAndEmbeds ->
+                            RichText.toString Time.utc False SeqDict.empty contentAndEmbeds.content |> Just
+
+                        Err _ ->
+                            Just "<not a message the test could read>"
+
+                Nothing ->
+                    Just "<not base64>"
+
+        _ ->
+            Nothing
 
 
 checkEncryptedMessageCount : Int -> E2EHelper.BackendModel2 -> Result String ()
@@ -837,16 +838,7 @@ encryptedMessageContents : E2EHelper.BackendModel2 -> List String
 encryptedMessageContents backend =
     case adminDmChannel backend of
         Just dmChannel ->
-            IdArray.toList dmChannel.messages
-                |> List.filterMap
-                    (\message ->
-                        case message of
-                            Message.EncryptedUserTextMessage data ->
-                                Just (Encryption.toBase64 data.encryptedData)
-
-                            _ ->
-                                Nothing
-                    )
+            IdArray.toList dmChannel.messages |> List.filterMap encryptedMessageText
 
         Nothing ->
             []
@@ -888,9 +880,9 @@ soloDmEncryptionTest config =
                             100
                             (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_cancelE2ee" ])
                         , admin.input 100 (Dom.id "guild_e2eePrivateKey") (String.dropRight 5 adminPrivateKey)
-                        , T.checkState 100 (checkNoSharedSecretsYet 0)
+                        , T.checkState 100 (checkSharedSecretsAskedFor admin [])
                         , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
-                        , E2EHelper.respondToEncryptionPort admin
+                        , E2EHelper.respondToSharedSecretStored admin Broadcast.adminUserId
                         , T.checkBackend 100 checkSoloDmIsEncrypted
                         , admin.checkView
                             100
@@ -903,7 +895,7 @@ soloDmEncryptionTest config =
                         , admin.click 100 (Dom.id "guild_hideMembers")
                         , E2EHelper.writeMessage admin 100 "Note to self"
                         , T.checkBackend 100 (checkSoloDmHasNoPlainText "Note to self")
-                        , E2EHelper.respondToEncryptionPort admin
+                        , E2EHelper.respondToMessageEncrypted admin
                         , T.checkBackend 100 (checkSoloDmMessageStored "Note to self")
                         ]
                     )
@@ -924,21 +916,21 @@ checkSoloDmIsEncrypted backend =
 
 checkSoloDmHasNoPlainText : String -> E2EHelper.BackendModel2 -> Result String ()
 checkSoloDmHasNoPlainText text backend =
-    if List.any (String.contains text) (soloDmEncryptedContents backend) then
-        Err "The message reached the server as plain text"
+    case soloDmChannel backend of
+        Just dmChannel ->
+            if List.any (String.contains text) (plainTextMessages dmChannel) then
+                Err "The message reached the server as plain text"
 
-    else
-        Ok ()
+            else
+                Ok ()
+
+        Nothing ->
+            Ok ()
 
 
 checkSoloDmMessageStored : String -> E2EHelper.BackendModel2 -> Result String ()
 checkSoloDmMessageStored text backend =
-    let
-        expected : String
-        expected =
-            Base64.fromString text |> Maybe.withDefault "not base64"
-    in
-    if List.member expected (soloDmEncryptedContents backend) then
+    if List.member text (soloDmEncryptedContents backend) then
         Ok ()
 
     else
@@ -952,16 +944,7 @@ soloDmEncryptedContents : E2EHelper.BackendModel2 -> List String
 soloDmEncryptedContents backend =
     case soloDmChannel backend of
         Just dmChannel ->
-            IdArray.toList dmChannel.messages
-                |> List.filterMap
-                    (\message ->
-                        case message of
-                            Message.EncryptedUserTextMessage data ->
-                                Just (Encryption.toBase64 data.encryptedData)
-
-                            _ ->
-                                Nothing
-                    )
+            IdArray.toList dmChannel.messages |> List.filterMap encryptedMessageText
 
         Nothing ->
             []

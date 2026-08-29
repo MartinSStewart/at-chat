@@ -34,7 +34,6 @@ module E2EHelper exposing
     , drawingAnchorClick
     , editMostRecentMessageViaArrowUp
     , enableNotifications
-    , encryptionPortRequests
     , expectPointsCloseTo
     , expectPolylineCount
     , expectPolylineScale
@@ -80,9 +79,9 @@ module E2EHelper exposing
     , regularDiscordChannelBecomesPrivateEvent
     , regularDiscordChannelCreateEvent
     , regularDiscordChannelId
-    , respondToAllSharedSecretPorts
-    , respondToEncryptionPort
     , respondToEncryptionPortWithMissingKey
+    , respondToMessageEncrypted
+    , respondToSharedSecretStored
     , safariIphone
     , scrollToBottom
     , scrollToMiddle
@@ -95,6 +94,7 @@ module E2EHelper exposing
     , sessionId2
     , sessionId4
     , sessionIdAttacker
+    , sharedSecretsAskedFor
     , startTest
     , startTime
     , startupDataJson
@@ -114,6 +114,7 @@ import Array
 import Audio
 import Backend
 import Broadcast
+import Bytes exposing (Bytes)
 import Bytes.Encode
 import Call
 import ChannelDescription
@@ -165,6 +166,7 @@ import RichText exposing (Domain(..))
 import SafeJson exposing (SafeJson(..))
 import SecretId exposing (SecretId(..))
 import SeqDict
+import Serialize
 import SessionIdHash exposing (SessionIdHash(..))
 import Slack
 import String.Nonempty exposing (NonemptyString(..))
@@ -674,30 +676,146 @@ checkNotification title body =
         )
 
 
-encryptionPortRequests : Lamdera.ClientId -> T.Data frontendModel backendModel -> List (Encryption.ToJs ())
-encryptionPortRequests _ _ =
-    []
+{-| Everything a client has asked the browser to do with encryption so far, most recent
+first, which is the order `portBytesRequests` keeps them in.
+-}
+encryptionPortRequests :
+    Lamdera.ClientId
+    -> T.Data FrontendModel BackendModel2
+    -> List (Encryption.ToJs ())
+encryptionPortRequests clientId data =
+    List.filterMap
+        (\request ->
+            if request.clientId == clientId && request.portName == "encryption_to_js" then
+                Serialize.decodeFromBytes (Encryption.toJsCodec Serialize.unit) request.value
+                    |> Result.toMaybe
+
+            else
+                Nothing
+        )
+        data.portBytesRequests
 
 
-respondToEncryptionPort :
-    T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-    -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-respondToEncryptionPort _ =
-    T.checkState 0 (\_ -> Err bytesPortsNotSimulated)
+{-| The conversations a client has asked the browser to keep a shared secret for.
+-}
+sharedSecretsAskedFor : Lamdera.ClientId -> T.Data FrontendModel BackendModel2 -> List (Id UserId)
+sharedSecretsAskedFor clientId data =
+    List.filterMap
+        (\request ->
+            case request of
+                Encryption.ToJs_StoreSharedSecret { otherUserId } ->
+                    Just otherUserId
+
+                _ ->
+                    Nothing
+        )
+        (encryptionPortRequests clientId data)
 
 
-respondToAllSharedSecretPorts :
-    T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-    -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-respondToAllSharedSecretPorts _ =
-    T.checkState 0 (\_ -> Err bytesPortsNotSimulated)
+{-| Stands in for the browser after it has kept a shared secret.
+
+program-test records that a bytes port was sent but not what was in it, so a test can't
+read back which conversation the app asked about. That is always the one the test just
+set up, so it says which rather than looking.
+
+-}
+respondToSharedSecretStored :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> Id UserId
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+respondToSharedSecretStored client otherUserId =
+    Encryption.FromJs_SharedSecretStored otherUserId
+        |> Serialize.encodeToBytes (Encryption.fromJsCodec Message.contentAndEmbedsCodec)
+        |> client.portEventBytes 100 "encryption_from_js"
 
 
+{-| Stands in for the browser encrypting a message.
+
+The stand-in ciphertext is the message serialized and left as it is, which is not
+encryption at all but does let a test check that what reaches the server is what the app
+handed over rather than what was typed. What was handed over is read off the pending
+request in the model, since the port itself can't be read back.
+
+-}
+respondToMessageEncrypted :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+respondToMessageEncrypted client =
+    T.andThen
+        100
+        (\data ->
+            case pendingEncryptedMessage client.clientId data of
+                Just ( requestId, pending ) ->
+                    let
+                        bytes : Bytes
+                        bytes =
+                            Serialize.encodeToBytes Message.contentAndEmbedsCodec pending.contentAndEmbeds
+                    in
+                    [ Encryption.FromJs_MessageEncrypted
+                        requestId
+                        (stubBytesHash bytes)
+                        (EncryptedData (stubBytesHash bytes) bytes)
+                        |> Serialize.encodeToBytes (Encryption.fromJsCodec Message.contentAndEmbedsCodec)
+                        |> client.portEventBytes 100 "encryption_from_js"
+                    ]
+
+                Nothing ->
+                    [ T.checkState 0 (\_ -> Err "The client isn't waiting on a message to be encrypted") ]
+        )
+
+
+{-| Answers an encryption request with the failure the browser gives when this device has
+no key for the conversation.
+-}
 respondToEncryptionPortWithMissingKey :
-    T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-    -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-respondToEncryptionPortWithMissingKey _ =
-    T.checkState 0 (\_ -> Err bytesPortsNotSimulated)
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+respondToEncryptionPortWithMissingKey client =
+    T.andThen
+        100
+        (\data ->
+            case pendingEncryptedMessage client.clientId data of
+                Just ( requestId, _ ) ->
+                    [ Encryption.FromJs_MessageEncryptFailed
+                        requestId
+                        "No encryption key is stored on this device for that conversation"
+                        |> Serialize.encodeToBytes (Encryption.fromJsCodec Message.contentAndEmbedsCodec)
+                        |> client.portEventBytes 100 "encryption_from_js"
+                    ]
+
+                Nothing ->
+                    [ T.checkState 0 (\_ -> Err "The client isn't waiting on a message to be encrypted") ]
+        )
+
+
+{-| The message a client is waiting to have encrypted. Only ever one at a time in these
+tests, so the oldest is the one being answered.
+-}
+pendingEncryptedMessage :
+    Lamdera.ClientId
+    -> T.Data FrontendModel BackendModel2
+    -> Maybe ( Id Encryption.EncryptRequestId, Types.PendingEncryptedMessage )
+pendingEncryptedMessage clientId data =
+    case SeqDict.get clientId data.frontends |> Maybe.map Audio.userModel of
+        Just (Types.Loaded loaded) ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    SeqDict.toList loggedIn.pendingEncryptedMessages |> List.head
+
+                Types.NotLoggedIn _ ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
+{-| Real ciphertext is hashed by the browser. Nothing here encrypts, so this stands in
+with something just as deterministic: the width of the bytes and their first few values.
+The app only ever uses it as a key to look a message up by.
+-}
+stubBytesHash : Bytes -> BytesHash
+stubBytesHash bytes =
+    BytesHash (Bytes.width bytes)
 
 
 httpBasic : String -> Int -> String -> HttpResponse
