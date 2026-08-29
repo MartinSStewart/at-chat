@@ -4,7 +4,7 @@ import Array exposing (Array)
 import Expect
 import Fuzz exposing (Fuzzer)
 import Id
-import Message exposing (ContentAndEmbeds, Message)
+import Message exposing (Message)
 import MessageArray exposing (MessageArray)
 import Test exposing (Test)
 import Time
@@ -53,12 +53,12 @@ applyToReference op array =
 {-| A `MessageArray` only holds messages, so the Int the reference model works in is
 carried through one, and read back out again on the way past.
 -}
-message : Int -> Message () Int ContentAndEmbeds
+message : Int -> Message () Int
 message value =
     Message.DeletedMessage (Time.millisToPosix value)
 
 
-messageValue : Message () Int ContentAndEmbeds -> Int
+messageValue : Message () Int -> Int
 messageValue message2 =
     case message2 of
         Message.DeletedMessage time ->
@@ -208,7 +208,7 @@ tests =
                     ( reference, array ) =
                         fromOps ops
 
-                    entries : List ( Id.Id (), Message () Int ContentAndEmbeds )
+                    entries : List ( Id.Id (), Message () Int )
                     entries =
                         List.map (Tuple.mapBoth Id.fromInt message) batch
                 in

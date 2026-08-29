@@ -155,23 +155,26 @@ function e2eeMessageEncryptedMessage(requestId, hash, bytes) {
     return out;
 }
 
-// There is no request id on the way back: Elm files a decrypted message under the hash of
-// the bytes it came from. The plaintext is whatever Elm serialized in the first place, so
-// it goes back as it is for Elm's own codec to read, with no length of its own.
-function e2eeMessageDecryptedMessage(hash, bytes) {
-    const out = new DataView(new ArrayBuffer(11 + bytes.length));
+// The hash comes back beside the request id because Elm files a decrypted message under
+// the hash of the bytes it came from. The plaintext is whatever Elm serialized in the
+// first place, so it goes back as it is for Elm's own codec to read, with no length of
+// its own.
+function e2eeMessageDecryptedMessage(requestId, hash, bytes) {
+    const out = new DataView(new ArrayBuffer(19 + bytes.length));
     out.setUint8(0, e2eeSerializeVersion);
     out.setUint16(1, e2eeFromJsMessageDecrypted, false);
-    out.setFloat64(3, hash, false);
-    new Uint8Array(out.buffer).set(bytes, 11);
+    out.setFloat64(3, requestId, false);
+    out.setFloat64(11, hash, false);
+    new Uint8Array(out.buffer).set(bytes, 19);
     return out;
 }
 
-function e2eeMessageDecryptFailedMessage(hash) {
-    const out = new DataView(new ArrayBuffer(13));
+function e2eeMessageDecryptFailedMessage(requestId, hash) {
+    const out = new DataView(new ArrayBuffer(19));
     out.setUint8(0, e2eeSerializeVersion);
     out.setUint16(1, e2eeFromJsMessageDecryptFailed, false);
-    out.setFloat64(3, hash, false);
+    out.setFloat64(3, requestId, false);
+    out.setFloat64(11, hash, false);
     return out;
 }
 
@@ -951,7 +954,7 @@ exports.init = async function init(app)
 
                 if (!key) {
                     app.ports.encryption_from_js.send(
-                        e2eeMessageDecryptFailedMessage(hash));
+                        e2eeMessageDecryptFailedMessage(message.requestId, hash));
                     return;
                 }
 
@@ -962,7 +965,8 @@ exports.init = async function init(app)
                     message.data.slice(12));
 
                 app.ports.encryption_from_js.send(
-                    e2eeMessageDecryptedMessage(hash, new Uint8Array(plainText)));
+                    e2eeMessageDecryptedMessage(
+                        message.requestId, hash, new Uint8Array(plainText)));
             }
         } catch (e) {
             if (message.tag === "store-shared-secret") {
@@ -976,7 +980,7 @@ exports.init = async function init(app)
             } else if (message.tag === "decrypt-message") {
                 app.ports.encryption_from_js.send(
                     e2eeMessageDecryptFailedMessage(
-                        await e2eeBytesHash(message.data), e2eeDecryptErrorAddErrorsHere));
+                        message.requestId, await e2eeBytesHash(message.data)));
             }
         }
     });
