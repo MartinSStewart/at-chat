@@ -58,6 +58,10 @@ type DecryptRequestId
     = DecryptRequestId Never
 
 
+type DecryptManyRequestId
+    = DecryptManyRequestId Never
+
+
 encode : EncryptedData a -> Json.Encode.Value
 encode data =
     Json.Encode.string (toBase64 data)
@@ -79,8 +83,9 @@ hash (EncryptedData hash2 _) =
 
 type ToJs data
     = ToJs_StoreSharedSecret { otherUserId : Id UserId, sharedSecret : Bytes }
-    | ToJs_EncryptMessage { requestId : Int, otherUserId : Id UserId, data : data }
-    | ToJs_DecryptMessage { requestId : Int, otherUserId : Id UserId, data : Bytes }
+    | ToJs_EncryptMessage { requestId : Id EncryptRequestId, otherUserId : Id UserId, data : data }
+    | ToJs_DecryptMessage { requestId : Id DecryptRequestId, otherUserId : Id UserId, data : Bytes }
+    | ToJs_DecryptManyMessages { requestId : Id DecryptManyRequestId, otherUserId : Id UserId, data : List Bytes }
 
 
 storeSharedSecret : Id UserId -> Bytes -> Command FrontendOnly toMsg msg
@@ -95,7 +100,7 @@ encryptMessage : Id EncryptRequestId -> Viewing_DmId -> Serialize.Codec e a -> a
 encryptMessage requestId id dataCodec data =
     Serialize.encodeToBytes
         (toJsCodec dataCodec)
-        (ToJs_EncryptMessage { requestId = Id.toInt requestId, otherUserId = id.otherUserId, data = data })
+        (ToJs_EncryptMessage { requestId = requestId, otherUserId = id.otherUserId, data = data })
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
@@ -103,14 +108,14 @@ decryptMessage : Id DecryptRequestId -> Viewing_DmId -> EncryptedData a -> Comma
 decryptMessage requestId id (EncryptedData _ data) =
     Serialize.encodeToBytes
         (toJsCodec Serialize.unit)
-        (ToJs_DecryptMessage { requestId = Id.toInt requestId, otherUserId = id.otherUserId, data = data })
+        (ToJs_DecryptMessage { requestId = requestId, otherUserId = id.otherUserId, data = data })
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
 toJsCodec : Serialize.Codec e data -> Serialize.Codec e (ToJs data)
 toJsCodec dataCodec =
     Serialize.customType
-        (\a b c value ->
+        (\a b c d value ->
             case value of
                 ToJs_StoreSharedSecret argA ->
                     a argA
@@ -120,6 +125,9 @@ toJsCodec dataCodec =
 
                 ToJs_DecryptMessage argA ->
                     c argA
+
+                ToJs_DecryptManyMessages argA ->
+                    d argA
         )
         |> Serialize.variant1
             ToJs_StoreSharedSecret
@@ -132,7 +140,7 @@ toJsCodec dataCodec =
             ToJs_EncryptMessage
             (Serialize.record
                 (\requestId otherUserId data -> { requestId = requestId, otherUserId = otherUserId, data = data })
-                |> Serialize.field .requestId Serialize.int
+                |> Serialize.field .requestId Id.codec
                 |> Serialize.field .otherUserId Id.codec
                 |> Serialize.field .data dataCodec
                 |> Serialize.finishRecord
@@ -141,9 +149,18 @@ toJsCodec dataCodec =
             ToJs_DecryptMessage
             (Serialize.record
                 (\requestId otherUserId data -> { requestId = requestId, otherUserId = otherUserId, data = data })
-                |> Serialize.field .requestId Serialize.int
+                |> Serialize.field .requestId Id.codec
                 |> Serialize.field .otherUserId Id.codec
                 |> Serialize.field .data Serialize.bytes
+                |> Serialize.finishRecord
+            )
+        |> Serialize.variant1
+            ToJs_DecryptManyMessages
+            (Serialize.record
+                (\requestId otherUserId data -> { requestId = requestId, otherUserId = otherUserId, data = data })
+                |> Serialize.field .requestId Id.codec
+                |> Serialize.field .otherUserId Id.codec
+                |> Serialize.field .data (Serialize.list Serialize.bytes)
                 |> Serialize.finishRecord
             )
         |> Serialize.finishCustomType
