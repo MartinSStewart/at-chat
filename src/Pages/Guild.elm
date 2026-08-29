@@ -380,6 +380,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 loggedIn.friendsSearch
                                 (Maybe.map .htmlId loggedIn.textInputFocus == Just friendsSearchInputId)
                                 local
+                                loggedIn.decryptedMessages
                             ]
                         , Ui.Lazy.lazy loggedInAsView local.localUser
                         ]
@@ -403,6 +404,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 loggedIn.friendsSearch
                                 (Maybe.map .htmlId loggedIn.textInputFocus == Just friendsSearchInputId)
                                 local
+                                loggedIn.decryptedMessages
                             ]
                         , Ui.Lazy.lazy loggedInAsView local.localUser
                         ]
@@ -4935,6 +4937,46 @@ decodeMessageView packed =
     , isMobile = Bitwise.shiftRightBy 6 value |> Bitwise.and 0x01 |> (==) 1
     , containerWidth = Bitwise.shiftRightBy 7 value
     , time = packed // timePackingOffset * msInMinute |> Time.millisToPosix
+    }
+
+
+{-| The friends column and the labels in it are both one argument over what their lazy
+wrappers take, so each packs its one flag in with the time the same way a message view
+packs its own. The time is already rounded to the minute by the time it gets here.
+-}
+encodeFriendsColumn : Bool -> Int -> Int
+encodeFriendsColumn canScroll time =
+    (if canScroll then
+        1
+
+     else
+        0
+    )
+        + (time // msInMinute * 2)
+
+
+decodeFriendsColumn : Int -> { canScroll : Bool, time : Int }
+decodeFriendsColumn packed =
+    { canScroll = modBy 2 packed == 1
+    , time = packed // 2 * msInMinute
+    }
+
+
+encodeFriendLabel : Bool -> Int -> Int
+encodeFriendLabel isSelected time =
+    (if isSelected then
+        1
+
+     else
+        0
+    )
+        + (time // msInMinute * 2)
+
+
+decodeFriendLabel : Int -> { isSelected : Bool, time : Time.Posix }
+decodeFriendLabel packed =
+    { isSelected = modBy 2 packed == 1
+    , time = packed // 2 * msInMinute |> Time.millisToPosix
     }
 
 
@@ -10059,12 +10101,17 @@ friendsColumnLazy :
     -> String
     -> Bool
     -> LocalState
+    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> Element FrontendMsg_
-friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearch friendsSearchHasFocus local =
+friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearch friendsSearchHasFocus local decrypted =
     let
         currentTimeRoundedToMinute : Int
         currentTimeRoundedToMinute =
             Time.posixToMillis currentTime // msInMinute |> (*) msInMinute
+
+        packed : Int
+        packed =
+            encodeFriendsColumn canScroll2 currentTimeRoundedToMinute
     in
     if (friendsSearch /= "") || friendsSearchHasFocus then
         -- The search text changes too often for laziness to be worth it here
@@ -10078,18 +10125,19 @@ friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearc
             local.dmChannels
             local.discordDmChannels
             local.localUser
+            decrypted
 
     else
         case openedOtherUserId of
             NoDmChannelSelected ->
                 Ui.Lazy.lazy6
                     friendsColumn_NoDmChannelSelected
-                    canScroll2
+                    packed
                     isMobile
-                    currentTimeRoundedToMinute
                     local.dmChannels
                     local.discordDmChannels
                     local.localUser
+                    decrypted
 
             SelectedDmChannel dmRouteData ->
                 Ui.Lazy.lazy6
@@ -10099,12 +10147,12 @@ friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearc
                      else
                         friendsColumn_SelectedDmChannel_NotMobile
                     )
-                    canScroll2
-                    currentTimeRoundedToMinute
+                    packed
                     dmRouteData
                     local.dmChannels
                     local.discordDmChannels
                     local.localUser
+                    decrypted
 
             SelectedDiscordDmChannel discordDmRouteData ->
                 Ui.Lazy.lazy6
@@ -10114,37 +10162,57 @@ friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearc
                      else
                         friendsColumn_SelectedDiscordDmChannel_NotMobile
                     )
-                    canScroll2
-                    currentTimeRoundedToMinute
+                    packed
                     discordDmRouteData
                     local.dmChannels
                     local.discordDmChannels
                     local.localUser
+                    decrypted
 
 
-friendsColumn_NoDmChannelSelected : Bool -> Bool -> Int -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
-friendsColumn_NoDmChannelSelected canScroll2 isMobile currentTime dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 isMobile currentTime "" False NoDmChannelSelected dmChannels discordDmChannels localUser
+friendsColumn_NoDmChannelSelected : Int -> Bool -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId))) -> Element FrontendMsg_
+friendsColumn_NoDmChannelSelected packed isMobile dmChannels discordDmChannels localUser decrypted =
+    let
+        { canScroll, time } =
+            decodeFriendsColumn packed
+    in
+    friendsColumn canScroll isMobile time "" False NoDmChannelSelected dmChannels discordDmChannels localUser decrypted
 
 
-friendsColumn_SelectedDiscordDmChannel_Mobile : Bool -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
-friendsColumn_SelectedDiscordDmChannel_Mobile canScroll2 currentTime discordDmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 True currentTime "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
+friendsColumn_SelectedDiscordDmChannel_Mobile : Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId))) -> Element FrontendMsg_
+friendsColumn_SelectedDiscordDmChannel_Mobile packed discordDmRoute dmChannels discordDmChannels localUser decrypted =
+    let
+        { canScroll, time } =
+            decodeFriendsColumn packed
+    in
+    friendsColumn canScroll True time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser decrypted
 
 
-friendsColumn_SelectedDiscordDmChannel_NotMobile : Bool -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
-friendsColumn_SelectedDiscordDmChannel_NotMobile canScroll2 currentTime discordDmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 False currentTime "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
+friendsColumn_SelectedDiscordDmChannel_NotMobile : Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId))) -> Element FrontendMsg_
+friendsColumn_SelectedDiscordDmChannel_NotMobile packed discordDmRoute dmChannels discordDmChannels localUser decrypted =
+    let
+        { canScroll, time } =
+            decodeFriendsColumn packed
+    in
+    friendsColumn canScroll False time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser decrypted
 
 
-friendsColumn_SelectedDmChannel_Mobile : Bool -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
-friendsColumn_SelectedDmChannel_Mobile canScroll2 currentTime dmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 True currentTime "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
+friendsColumn_SelectedDmChannel_Mobile : Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId))) -> Element FrontendMsg_
+friendsColumn_SelectedDmChannel_Mobile packed dmRoute dmChannels discordDmChannels localUser decrypted =
+    let
+        { canScroll, time } =
+            decodeFriendsColumn packed
+    in
+    friendsColumn canScroll True time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser decrypted
 
 
-friendsColumn_SelectedDmChannel_NotMobile : Bool -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
-friendsColumn_SelectedDmChannel_NotMobile canScroll2 currentTime dmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 False currentTime "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
+friendsColumn_SelectedDmChannel_NotMobile : Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId))) -> Element FrontendMsg_
+friendsColumn_SelectedDmChannel_NotMobile packed dmRoute dmChannels discordDmChannels localUser decrypted =
+    let
+        { canScroll, time } =
+            decodeFriendsColumn packed
+    in
+    friendsColumn canScroll False time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser decrypted
 
 
 friendsColumn :
@@ -10157,8 +10225,9 @@ friendsColumn :
     -> SeqDict (Id UserId) FrontendDmChannel
     -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> LocalUser
+    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> Element FrontendMsg_
-friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocus dmChannelSelection dmChannels discordDmChannels localUser =
+friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocus dmChannelSelection dmChannels discordDmChannels localUser decrypted =
     let
         dmChannelsIncludingCurrentUser : SeqDict (Id UserId) FrontendDmChannel
         dmChannelsIncludingCurrentUser =
@@ -10223,18 +10292,20 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                                          else
                                             friendLabelNotMobile
                                         )
-                                        currentTime
-                                        (case threadRoute of
-                                            Just (NoThreadWithFriends _ _) ->
-                                                True
+                                        (encodeFriendLabel
+                                            (case threadRoute of
+                                                Just (NoThreadWithFriends _ _) ->
+                                                    True
 
-                                            _ ->
-                                                False
+                                                _ ->
+                                                    False
+                                            )
+                                            currentTime
                                         )
                                         localUser
                                         otherUserId
                                         otherUser
-                                        loggedIn.decryptedMessages
+                                        decrypted
                                         dmChannel
                                     , dmColumnThreads
                                         isMobile
@@ -10416,28 +10487,34 @@ friendsSearchInputId =
 
 friendLabelMobile :
     Int
-    -> Bool
     -> LocalUser
     -> Id UserId
     -> FrontendUser
     -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> FrontendDmChannel
     -> Element FrontendMsg_
-friendLabelMobile time isSelected localUser otherUserId otherUser decrypted channel =
-    friendLabel True (Time.millisToPosix time) isSelected localUser otherUserId otherUser decrypted channel
+friendLabelMobile packed localUser otherUserId otherUser decrypted channel =
+    let
+        { isSelected, time } =
+            decodeFriendLabel packed
+    in
+    friendLabel True time isSelected localUser otherUserId otherUser decrypted channel
 
 
 friendLabelNotMobile :
     Int
-    -> Bool
     -> LocalUser
     -> Id UserId
     -> FrontendUser
     -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> FrontendDmChannel
     -> Element FrontendMsg_
-friendLabelNotMobile time isSelected localUser otherUserId otherUser decrypted channel =
-    friendLabel False (Time.millisToPosix time) isSelected localUser otherUserId otherUser decrypted channel
+friendLabelNotMobile packed localUser otherUserId otherUser decrypted channel =
+    let
+        { isSelected, time } =
+            decodeFriendLabel packed
+    in
+    friendLabel False time isSelected localUser otherUserId otherUser decrypted channel
 
 
 type SomeoneIsTyping
@@ -10530,7 +10607,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser decrypted c
                                                                 ok.content
 
                                                             Err () ->
-                                                                RichText.failedToDecryptMessageText
+                                                                RichText.failedToDecryptMessage
                                                         )
 
                                                 Nothing ->

@@ -709,7 +709,10 @@ storedSharedSecrets data =
                     Encryption.ToJs_EncryptMessage _ ->
                         Nothing
 
-                    Encryption.ToJs_DecryptMessage record ->
+                    Encryption.ToJs_DecryptMessage _ ->
+                        Nothing
+
+                    Encryption.ToJs_DecryptManyMessages _ ->
                         Nothing
             )
 

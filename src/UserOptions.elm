@@ -540,6 +540,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                                         local.localUser
                                                         otherUserId
                                                         otherUser
+                                                        loggedIn.decryptedMessages
                                                         channel
                                                         |> Just
 
