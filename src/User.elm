@@ -65,6 +65,7 @@ import DiscordUserData exposing (DiscordUserData, DiscordUserLoadingData)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..), SkinTone)
+import Encryption exposing (BytesHash)
 import FileStatus exposing (FileHash)
 import GuildIcon
 import Html exposing (Html)
@@ -72,6 +73,7 @@ import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId)
 import Json.Decode
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
+import Message exposing (ContentAndEmbeds)
 import MuteSettings
 import MyUi
 import NonemptyDict exposing (NonemptyDict)

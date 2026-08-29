@@ -591,6 +591,7 @@ loadedInitHelper startupData emojiData loginData loading =
             , nextEncryptionRequestId = 0
             , e2eeSectionsExpanded = SeqDict.empty
             , typedTextCounter = 0
+            , decryptedMessages = SeqDict.empty
             }
     in
     ( loggedIn
@@ -3273,7 +3274,7 @@ updateLoaded msg model =
                         (\loggedIn -> ( { loggedIn | e2eeError = Just error }, Command.none ))
                         model
 
-                Ok (Encryption.FromJs_MessageEncrypted requestId cipherText) ->
+                Ok (Encryption.FromJs_MessageEncrypted requestId bytesHash cipherText) ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             case SeqDict.get requestId loggedIn.pendingEncryptedMessages of
@@ -3290,7 +3291,7 @@ updateLoaded msg model =
                                         (Local_SendEncryptedMessage
                                             model.time
                                             { otherUserId = pending.otherUserId }
-                                            (Encryption.EncryptedData cipherText)
+                                            cipherText
                                             pending.threadRoute
                                             pending.attachedFiles
                                             |> Just
@@ -3301,6 +3302,8 @@ updateLoaded msg model =
                                             , drafts = SeqDict.remove draft loggedIn.drafts
                                             , replyTo = SeqDict.remove draft loggedIn.replyTo
                                             , filesToUpload = SeqDict.remove draft loggedIn.filesToUpload
+                                            , decryptedMessages =
+                                                SeqDict.insert bytesHash pending.contentAndEmbeds loggedIn.decryptedMessages
                                         }
                                         (Scroll.toBottomOfChannel
                                             Pages.Guild.conversationContainerId
@@ -8910,6 +8913,7 @@ startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
 
                         Nothing ->
                             SeqDict.empty
+                , contentAndEmbeds = contentAndEmbeds
                 }
                 loggedIn.pendingEncryptedMessages
       }

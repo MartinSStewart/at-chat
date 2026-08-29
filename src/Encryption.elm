@@ -1,8 +1,9 @@
 port module Encryption exposing
-    ( EncryptedData(..)
+    ( BytesHash
+    , EncryptedData(..)
     , FromJs(..)
     , ToJs(..)
-    , empty
+    , decryptMessage
     , encode
     , encryptMessage
     , fromJs
@@ -27,7 +28,6 @@ the plaintext of a message is the only secret that crosses the port after that.
 
 import Base64
 import Bytes exposing (Bytes)
-import Bytes.Encode
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Id exposing (Id, UserId, Viewing_DmId)
@@ -35,20 +35,14 @@ import Json.Encode
 import Serialize
 
 
-{-| A message that has been encrypted. The type parameter records what it will be once
-decrypted, which is only a note to the reader: nothing in Elm can see inside it.
+{-| OpaqueVariants.
 -}
 type EncryptedData a
-    = EncryptedData Bytes
+    = EncryptedData BytesHash Bytes
 
 
-{-| Stands in for a field that has nothing in it yet. Embeds are the case that needs
-this: working them out means reading the message, which only the two people in the
-conversation can do, so the server has none to store.
--}
-empty : EncryptedData a
-empty =
-    EncryptedData (Bytes.Encode.encode (Bytes.Encode.sequence []))
+type BytesHash
+    = BytesHash Int
 
 
 encode : EncryptedData a -> Json.Encode.Value
@@ -57,7 +51,7 @@ encode data =
 
 
 toBase64 : EncryptedData a -> String
-toBase64 (EncryptedData bytes) =
+toBase64 (EncryptedData _ bytes) =
     Base64.fromBytes bytes |> Maybe.withDefault ""
 
 
@@ -68,6 +62,7 @@ toBase64 (EncryptedData bytes) =
 type ToJs data
     = ToJs_StoreSharedSecret { otherUserId : Id UserId, sharedSecret : Bytes }
     | ToJs_EncryptMessage { requestId : Int, otherUserId : Id UserId, data : data }
+    | ToJs_DecryptMessage { requestId : Int, otherUserId : Id UserId, data : Bytes }
 
 
 storeSharedSecret : Id UserId -> Bytes -> Command FrontendOnly toMsg msg
@@ -86,16 +81,27 @@ encryptMessage requestId id dataCodec data =
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
+decryptMessage : Int -> Viewing_DmId -> Bytes -> Command FrontendOnly toMsg msg
+decryptMessage requestId id data =
+    Serialize.encodeToBytes
+        (toJsCodec Serialize.unit)
+        (ToJs_DecryptMessage { requestId = requestId, otherUserId = id.otherUserId, data = data })
+        |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
+
+
 toJsCodec : Serialize.Codec e data -> Serialize.Codec e (ToJs data)
 toJsCodec dataCodec =
     Serialize.customType
-        (\toJs_StoreSharedSecretEncoder toJs_EncryptMessageEncoder value ->
+        (\a b c value ->
             case value of
                 ToJs_StoreSharedSecret argA ->
-                    toJs_StoreSharedSecretEncoder argA
+                    a argA
 
                 ToJs_EncryptMessage argA ->
-                    toJs_EncryptMessageEncoder argA
+                    b argA
+
+                ToJs_DecryptMessage argA ->
+                    c argA
         )
         |> Serialize.variant1
             ToJs_StoreSharedSecret
@@ -113,13 +119,22 @@ toJsCodec dataCodec =
                 |> Serialize.field .data dataCodec
                 |> Serialize.finishRecord
             )
+        |> Serialize.variant1
+            ToJs_DecryptMessage
+            (Serialize.record
+                (\requestId otherUserId data -> { requestId = requestId, otherUserId = otherUserId, data = data })
+                |> Serialize.field .requestId Serialize.int
+                |> Serialize.field .otherUserId Id.codec
+                |> Serialize.field .data Serialize.bytes
+                |> Serialize.finishRecord
+            )
         |> Serialize.finishCustomType
 
 
-type FromJs
+type FromJs a
     = FromJs_SharedSecretStored (Id UserId)
     | FromJs_SharedSecretFailed (Id UserId) String
-    | FromJs_MessageEncrypted Int Bytes
+    | FromJs_MessageEncrypted Int BytesHash (EncryptedData a)
     | FromJs_MessageEncryptFailed Int String
 
 
@@ -129,7 +144,7 @@ port encryption_to_js : Bytes -> Cmd msg
 port encryption_from_js : (Bytes -> msg) -> Sub msg
 
 
-fromJs : (Result String FromJs -> msg) -> Subscription FrontendOnly msg
+fromJs : (Result String (FromJs a) -> msg) -> Subscription FrontendOnly msg
 fromJs msg =
     Subscription.fromJsBytes
         "encryption_from_js"
@@ -144,7 +159,7 @@ fromJs msg =
         )
 
 
-fromJsCodec : Serialize.Codec e FromJs
+fromJsCodec : Serialize.Codec e (FromJs a)
 fromJsCodec =
     Serialize.customType
         (\fromJs_SharedSecretStoredEncoder fromJs_SharedSecretFailedEncoder fromJs_MessageEncryptedEncoder fromJs_MessageEncryptFailedEncoder value ->
@@ -155,14 +170,27 @@ fromJsCodec =
                 FromJs_SharedSecretFailed argA argB ->
                     fromJs_SharedSecretFailedEncoder argA argB
 
-                FromJs_MessageEncrypted argA argB ->
-                    fromJs_MessageEncryptedEncoder argA argB
+                FromJs_MessageEncrypted argA argB argC ->
+                    fromJs_MessageEncryptedEncoder argA argB argC
 
                 FromJs_MessageEncryptFailed argA argB ->
                     fromJs_MessageEncryptFailedEncoder argA argB
         )
         |> Serialize.variant1 FromJs_SharedSecretStored Id.codec
         |> Serialize.variant2 FromJs_SharedSecretFailed Id.codec Serialize.string
-        |> Serialize.variant2 FromJs_MessageEncrypted Serialize.int Serialize.bytes
+        |> Serialize.variant3 FromJs_MessageEncrypted Serialize.int bytesHashCodec encryptedDataCodec
         |> Serialize.variant2 FromJs_MessageEncryptFailed Serialize.int Serialize.string
         |> Serialize.finishCustomType
+
+
+encryptedDataCodec : Serialize.Codec e (EncryptedData a)
+encryptedDataCodec =
+    Serialize.map
+        (\( a, b ) -> EncryptedData a b)
+        (\(EncryptedData a b) -> ( a, b ))
+        (Serialize.tuple bytesHashCodec Serialize.bytes)
+
+
+bytesHashCodec : Serialize.Codec e BytesHash
+bytesHashCodec =
+    Serialize.map BytesHash (\(BytesHash a) -> a) Serialize.int

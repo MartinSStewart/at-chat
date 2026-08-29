@@ -114,6 +114,7 @@ import Array
 import Audio
 import Backend
 import Broadcast
+import Bytes.Encode
 import Call
 import ChannelDescription
 import Codec
@@ -131,7 +132,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed
 import Emoji exposing (EmojiOrCustomEmoji(..), SkinTone(..))
-import Encryption
+import Encryption exposing (EncryptedData(..))
 import Env
 import Expect
 import FileStatus
@@ -3072,7 +3073,7 @@ allAttackerLocalChanges =
     , Local_SendEncryptedMessage
         startTime
         { otherUserId = Broadcast.adminUserId }
-        Encryption.empty
+        (EncryptedData 0 (Bytes.Encode.encode (Bytes.Encode.sequence [])))
         (NoThreadWithMaybeMessage Nothing)
         SeqDict.empty
     ]

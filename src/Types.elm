@@ -79,7 +79,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
-import Encryption exposing (EncryptedData)
+import Encryption exposing (BytesHash, EncryptedData)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import Game
 import Go
@@ -96,7 +96,7 @@ import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
 import MembersAndOwner exposing (MembersAndOwner)
-import Message exposing (Message)
+import Message exposing (ContentAndEmbeds, Message)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView exposing (MessageViewMsg)
 import MuteSettings exposing (IsMuted)
@@ -275,6 +275,7 @@ type alias LoggedIn2 =
          This is to work around this bug https://github.com/panphora/overtype/issues/116
       -}
       typedTextCounter : Int
+    , decryptedMessages : SeqDict BytesHash ContentAndEmbeds
     }
 
 
@@ -285,6 +286,7 @@ type alias PendingEncryptedMessage =
     { otherUserId : Id UserId
     , threadRoute : ThreadRouteWithMaybeMessage
     , attachedFiles : SeqDict (Id FileId) FileData
+    , contentAndEmbeds : ContentAndEmbeds
     }
 
 
@@ -652,7 +654,7 @@ type FrontendMsg_
     | UnreadOverviewChannelMsg AnyGuildOrDmId (Id ChannelMessageId) MessageViewMsg
     | UnreadOverviewThreadMsg AnyGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) MessageViewMsg
     | ValidatedE2eePrivateKey String E2eeKeysValid
-    | EncryptionFromJs (Result String Encryption.FromJs)
+    | EncryptionFromJs (Result String (Encryption.FromJs ContentAndEmbeds))
 
 
 type alias NewChannelForm =

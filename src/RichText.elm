@@ -52,6 +52,7 @@ module RichText exposing
 
 import Array exposing (Array)
 import Basics.Extra
+import Bitwise
 import Char
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -6707,7 +6708,7 @@ codec userIdCodec =
 
 charCodec : Serialize.Codec e Char
 charCodec =
-    Serialize.map Char.fromCode Char.toCode Serialize.int
+    Serialize.map Char.fromCode Char.toCode Serialize.unsignedInt32
 
 
 nonemptyCodec : Serialize.Codec e a -> Serialize.Codec e (Nonempty a)
@@ -6767,7 +6768,7 @@ urlCodec =
     Serialize.record Url
         |> Serialize.field .protocol protocolCodec
         |> Serialize.field .host Serialize.string
-        |> Serialize.field .port_ (Serialize.maybe Serialize.int)
+        |> Serialize.field .port_ (Serialize.maybe Serialize.unsignedInt16)
         |> Serialize.field .path Serialize.string
         |> Serialize.field .query (Serialize.maybe Serialize.string)
         |> Serialize.field .fragment (Serialize.maybe Serialize.string)

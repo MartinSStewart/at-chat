@@ -59,6 +59,7 @@ import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Embed exposing (Embed, EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiConfig, EmojiOrCustomEmoji)
+import Encryption exposing (BytesHash)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
 import GuildColumn
@@ -677,6 +678,7 @@ unreadOverviewNotMobile local loggedIn model =
                                                     local.localUser
                                                     Nothing
                                                     Nothing
+                                                    loggedIn.decryptedMessages
                                                     messageId
                                                     message
                                                     |> Ui.map (UnreadOverviewChannelMsg unread.guildOrDmId messageId)
@@ -3765,6 +3767,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         local.localUser
                                         maybeRepliedTo2
                                         (SeqDict.get threadId channel.threads)
+                                        loggedIn.decryptedMessages
                                         messageId
                                         message
                                         |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
@@ -3823,16 +3826,18 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     local.localUser
                                                     maybeRepliedTo2
                                                     Nothing
+                                                    loggedIn.decryptedMessages
                                                     messageId
                                                     message
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                             Nothing ->
-                                                Ui.Lazy.lazy5
+                                                Ui.Lazy.lazy6
                                                     messageViewNotThreadStarter
                                                     (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                                     revealedSpoilers
                                                     local.localUser
+                                                    loggedIn.decryptedMessages
                                                     index
                                                     message
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
@@ -3854,18 +3859,28 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     local.localUser
                                                     maybeRepliedTo2
                                                     (Just thread)
+                                                    loggedIn.decryptedMessages
                                                     messageId
                                                     message
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                             Nothing ->
-                                                Ui.Lazy.lazy6
-                                                    messageViewThreadStarter
-                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
+                                                messageView
+                                                    model.time
+                                                    isMobile
+                                                    containerWidth
+                                                    False
                                                     revealedSpoilers
+                                                    highlight
+                                                    messageHover2
+                                                    otherUserIsEditing
+                                                    local.localUser.session.userId
+                                                    (User.allUsers local.localUser)
                                                     local.localUser
-                                                    index
-                                                    thread
+                                                    Nothing
+                                                    (Just thread)
+                                                    loggedIn.decryptedMessages
+                                                    (Id.fromInt index)
                                                     message
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
                       )
@@ -6151,6 +6166,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                             local.localUser
                             Nothing
                             Nothing
+                            loggedIn.decryptedMessages
                             threadMessageIndex
                             message
                             |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute)
@@ -6170,6 +6186,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                         local.localUser
                         Nothing
                         Nothing
+                        loggedIn.decryptedMessages
                         threadMessageIndex
                         message
                         |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute)
@@ -6598,10 +6615,11 @@ messageViewNotThreadStarter :
     Int
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> LocalUser
+    -> SeqDict BytesHash ContentAndEmbeds
     -> Int
     -> Message ChannelMessageId (Id UserId) ContentAndEmbeds
     -> Element MessageViewMsg
-messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message =
+messageViewNotThreadStarter data revealedSpoilers localUser decryptedMessages messageIndex message =
     let
         { containerWidth, isEditing, highlight, isHovered, isMobile, time } =
             decodeMessageView data
@@ -6620,6 +6638,7 @@ messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message
         localUser
         Nothing
         Nothing
+        decryptedMessages
         (Id.fromInt messageIndex)
         message
 
@@ -6658,37 +6677,6 @@ discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId lo
         localUser
         Nothing
         Nothing
-        (Id.fromInt messageIndex)
-        message
-
-
-messageViewThreadStarter :
-    Int
-    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
-    -> LocalUser
-    -> Int
-    -> FrontendThread
-    -> Message ChannelMessageId (Id UserId) ContentAndEmbeds
-    -> Element MessageViewMsg
-messageViewThreadStarter data revealedSpoilers localUser messageIndex thread message =
-    let
-        { containerWidth, isEditing, highlight, isHovered, isMobile, time } =
-            decodeMessageView data
-    in
-    messageView
-        time
-        isMobile
-        containerWidth
-        False
-        revealedSpoilers
-        highlight
-        isHovered
-        isEditing
-        localUser.session.userId
-        (User.allUsers localUser)
-        localUser
-        Nothing
-        (Just thread)
         (Id.fromInt messageIndex)
         message
 
@@ -6817,10 +6805,11 @@ messageView :
     -> LocalUser
     -> Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) ContentAndEmbeds )
     -> Maybe (FrontendGenericThread (Id UserId))
+    -> SeqDict BytesHash ContentAndEmbeds
     -> Id ChannelMessageId
     -> Message ChannelMessageId (Id UserId) ContentAndEmbeds
     -> Element MessageViewMsg
-messageView time isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter messageId message =
+messageView time isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter decrypted messageId message =
     case message of
         UserTextMessage data ->
             messageContainer
