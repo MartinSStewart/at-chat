@@ -152,7 +152,7 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
 import LocalState exposing (CallStatus(..))
 import LoginForm
-import Message
+import Message exposing (ContentAndEmbeds)
 import MuteSettings
 import NonemptyDict
 import NonemptySet
@@ -679,16 +679,22 @@ checkNotification title body =
 
 {-| Everything a client has asked the browser to do with encryption so far, most recent
 first, which is the order `portBytesRequests` keeps them in.
+
+The message being encrypted is decoded here too, since it is the only thing a reply needs
+that isn't already in the request.
+
 -}
 encryptionPortRequests :
     Lamdera.ClientId
     -> T.Data FrontendModel BackendModel2
-    -> List (Encryption.ToJs ())
+    -> List (Encryption.ToJs (ContentAndEmbeds (Id UserId)))
 encryptionPortRequests clientId data =
     List.filterMap
         (\request ->
             if request.clientId == clientId && request.portName == "encryption_to_js" then
-                Serialize.decodeFromBytes (Encryption.toJsCodec Serialize.unit) request.value
+                Serialize.decodeFromBytes
+                    (Encryption.toJsCodec Message.contentAndEmbedsCodec)
+                    request.value
                     |> Result.toMaybe
 
             else
@@ -715,9 +721,8 @@ sharedSecretsAskedFor clientId data =
 
 {-| Stands in for the browser after it has kept a shared secret.
 
-program-test records that a bytes port was sent but not what was in it, so a test can't
-read back which conversation the app asked about. That is always the one the test just
-set up, so it says which rather than looking.
+The request says which conversation, but so does the test, and saying so reads better at
+the call site than picking the most recent one out of the list.
 
 -}
 respondToSharedSecretStored :
@@ -726,42 +731,32 @@ respondToSharedSecretStored :
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 respondToSharedSecretStored client otherUserId =
     Encryption.FromJs_SharedSecretStored otherUserId
-        |> Serialize.encodeToBytes (Encryption.fromJsCodec Message.contentAndEmbedsCodec)
-        |> client.portEventBytes 100 "encryption_from_js"
+        |> sendFromJs client
 
 
 {-| Stands in for the browser encrypting a message.
 
 The stand-in ciphertext is the message serialized and left as it is, which is not
 encryption at all but does let a test check that what reaches the server is what the app
-handed over rather than what was typed. What was handed over is read off the pending
-request in the model, since the port itself can't be read back.
+handed over rather than what was typed.
 
 -}
 respondToMessageEncrypted :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 respondToMessageEncrypted client =
-    T.andThen
-        100
-        (\data ->
-            case pendingEncryptedMessage client.clientId data of
-                Just ( requestId, pending ) ->
-                    let
-                        bytes : Bytes
-                        bytes =
-                            Serialize.encodeToBytes Message.contentAndEmbedsCodec pending.contentAndEmbeds
-                    in
-                    [ Encryption.FromJs_MessageEncrypted
-                        requestId
-                        (stubBytesHash bytes)
-                        (EncryptedData (stubBytesHash bytes) bytes)
-                        |> Serialize.encodeToBytes (Encryption.fromJsCodec Message.contentAndEmbedsCodec)
-                        |> client.portEventBytes 100 "encryption_from_js"
-                    ]
-
-                Nothing ->
-                    [ T.checkState 0 (\_ -> Err "The client isn't waiting on a message to be encrypted") ]
+    answerEncryptRequest
+        client
+        (\requestId contentAndEmbeds ->
+            let
+                bytes : Bytes
+                bytes =
+                    Serialize.encodeToBytes Message.contentAndEmbedsCodec contentAndEmbeds
+            in
+            Encryption.FromJs_MessageEncrypted
+                requestId
+                (stubBytesHash bytes)
+                (EncryptedData (stubBytesHash bytes) bytes)
         )
 
 
@@ -772,23 +767,18 @@ respondToEncryptionPortWithMissingKey :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 respondToEncryptionPortWithMissingKey client =
-    T.andThen
-        100
-        (\data ->
-            case pendingEncryptedMessage client.clientId data of
-                Just ( requestId, _ ) ->
-                    [ Encryption.FromJs_MessageEncryptFailed
-                        requestId
-                        "No encryption key is stored on this device for that conversation"
-                        |> Serialize.encodeToBytes (Encryption.fromJsCodec Message.contentAndEmbedsCodec)
-                        |> client.portEventBytes 100 "encryption_from_js"
-                    ]
-
-                Nothing ->
-                    [ T.checkState 0 (\_ -> Err "The client isn't waiting on a message to be encrypted") ]
+    answerEncryptRequest
+        client
+        (\requestId _ ->
+            Encryption.FromJs_MessageEncryptFailed
+                requestId
+                "No encryption key is stored on this device for that conversation"
         )
 
 
+{-| Stands in for the browser decrypting a message. Nothing encrypted it in the first
+place, so reading it back is a matter of decoding the bytes that were handed over.
+-}
 respondToMessageDecrypted :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
@@ -796,45 +786,73 @@ respondToMessageDecrypted client =
     T.andThen
         100
         (\data ->
-            case pendingDecryptedMessage client.clientId data of
-                Just ( requestId, pending ) ->
-                    let
-                        bytes : Bytes
-                        bytes =
-                            Serialize.encodeToBytes Message.contentAndEmbedsCodec pending.contentAndEmbeds
-                    in
-                    [ Encryption.FromJs_MessageDecrypted
-                        requestId
-                        (stubBytesHash bytes)
-                        (EncryptedData (stubBytesHash bytes) bytes)
-                        |> Serialize.encodeToBytes (Encryption.fromJsCodec Message.contentAndEmbedsCodec)
-                        |> client.portEventBytes 100 "encryption_from_js"
-                    ]
+            case List.filterMap decryptRequest (encryptionPortRequests client.clientId data) of
+                ( requestId, bytes ) :: _ ->
+                    case Serialize.decodeFromBytes Message.contentAndEmbedsCodec bytes of
+                        Ok contentAndEmbeds ->
+                            [ Encryption.FromJs_MessageDecrypted requestId (stubBytesHash bytes) contentAndEmbeds
+                                |> sendFromJs client
+                            ]
 
-                Nothing ->
-                    [ T.checkState 0 (\_ -> Err "The client isn't waiting on a message to be encrypted") ]
+                        Err _ ->
+                            [ T.checkState 0 (\_ -> Err "The bytes handed over to be decrypted aren't a message") ]
+
+                [] ->
+                    [ T.checkState 0 (\_ -> Err "The client didn't ask for a message to be decrypted") ]
         )
 
 
-{-| The message a client is waiting to have encrypted. Only ever one at a time in these
-tests, so the oldest is the one being answered.
+{-| The most recent message a client asked to have encrypted. Answering the newest is
+what the browser does, since a test only ever leaves one outstanding.
 -}
-pendingEncryptedMessage :
-    Lamdera.ClientId
-    -> T.Data FrontendModel BackendModel2
-    -> Maybe ( Id Encryption.EncryptRequestId, Types.PendingEncryptedMessage )
-pendingEncryptedMessage clientId data =
-    case SeqDict.get clientId data.frontends |> Maybe.map Audio.userModel of
-        Just (Types.Loaded loaded) ->
-            case loaded.loginStatus of
-                Types.LoggedIn loggedIn ->
-                    SeqDict.toList loggedIn.pendingEncryptedMessages |> List.head
+answerEncryptRequest :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> (Id Encryption.EncryptRequestId -> ContentAndEmbeds (Id UserId) -> Encryption.FromJs (ContentAndEmbeds (Id UserId)))
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+answerEncryptRequest client toReply =
+    T.andThen
+        100
+        (\data ->
+            case List.filterMap encryptRequest (encryptionPortRequests client.clientId data) of
+                ( requestId, contentAndEmbeds ) :: _ ->
+                    [ toReply requestId contentAndEmbeds |> sendFromJs client ]
 
-                Types.NotLoggedIn _ ->
-                    Nothing
+                [] ->
+                    [ T.checkState 0 (\_ -> Err "The client didn't ask for a message to be encrypted") ]
+        )
+
+
+encryptRequest :
+    Encryption.ToJs (ContentAndEmbeds (Id UserId))
+    -> Maybe ( Id Encryption.EncryptRequestId, ContentAndEmbeds (Id UserId) )
+encryptRequest request =
+    case request of
+        Encryption.ToJs_EncryptMessage { requestId, data } ->
+            Just ( requestId, data )
 
         _ ->
             Nothing
+
+
+decryptRequest :
+    Encryption.ToJs (ContentAndEmbeds (Id UserId))
+    -> Maybe ( Id Encryption.DecryptRequestId, Bytes )
+decryptRequest request =
+    case request of
+        Encryption.ToJs_DecryptMessage { requestId, data } ->
+            Just ( requestId, data )
+
+        _ ->
+            Nothing
+
+
+sendFromJs :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> Encryption.FromJs (ContentAndEmbeds (Id UserId))
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+sendFromJs client fromJs =
+    Serialize.encodeToBytes (Encryption.fromJsCodec Message.contentAndEmbedsCodec) fromJs
+        |> client.portEventBytes 100 "encryption_from_js"
 
 
 {-| Real ciphertext is hashed by the browser. Nothing here encrypts, so this stands in
