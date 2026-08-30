@@ -609,7 +609,6 @@ loadedInitHelper startupData emojiData loginData loading =
             , nextDecryptManyRequestId = Id.fromInt (List.length backlog)
             , e2eeSectionsExpanded = SeqDict.empty
             , typedTextCounter = 0
-            , decryptedMessages = SeqDict.empty
             }
     in
     ( loggedIn
@@ -671,6 +670,7 @@ loginDataToLocalState startupData emojiData loginData =
         , stickers = loginData.stickers
         , customEmojis = loginData.customEmojis
         , emojiData = emojiData
+        , decryptedMessages = SeqDict.empty
         }
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
@@ -3314,15 +3314,16 @@ updateLoaded msg model =
                                             pending.attachedFiles
                                             |> Just
                                         )
-                                        { loggedIn
-                                            | pendingEncryptedMessages =
-                                                SeqDict.remove requestId loggedIn.pendingEncryptedMessages
-                                            , drafts = SeqDict.remove draft loggedIn.drafts
-                                            , replyTo = SeqDict.remove draft loggedIn.replyTo
-                                            , filesToUpload = SeqDict.remove draft loggedIn.filesToUpload
-                                            , decryptedMessages =
-                                                SeqDict.insert bytesHash (Ok pending.contentAndEmbeds) loggedIn.decryptedMessages
-                                        }
+                                        (FrontendExtra.fileDecryptedMessages
+                                            [ ( bytesHash, Ok pending.contentAndEmbeds ) ]
+                                            { loggedIn
+                                                | pendingEncryptedMessages =
+                                                    SeqDict.remove requestId loggedIn.pendingEncryptedMessages
+                                                , drafts = SeqDict.remove draft loggedIn.drafts
+                                                , replyTo = SeqDict.remove draft loggedIn.replyTo
+                                                , filesToUpload = SeqDict.remove draft loggedIn.filesToUpload
+                                            }
+                                        )
                                         (Scroll.toBottomOfChannel
                                             Pages.Guild.conversationContainerId
                                             SetScrollToBottom
@@ -3352,15 +3353,12 @@ updateLoaded msg model =
                             -- These were already in the conversation, so unlike a message
                             -- that has just arrived there is nowhere to put them. Filing
                             -- their contents is the whole of it.
-                            ( { loggedIn
-                                | decryptedMessages =
-                                    List.foldl
-                                        (\( bytesHash, decrypted ) dict -> SeqDict.insert bytesHash decrypted dict)
-                                        loggedIn.decryptedMessages
-                                        results
-                                , pendingDecryptedManyMessages =
-                                    SeqDict.remove requestId loggedIn.pendingDecryptedManyMessages
-                              }
+                            ( FrontendExtra.fileDecryptedMessages
+                                results
+                                { loggedIn
+                                    | pendingDecryptedManyMessages =
+                                        SeqDict.remove requestId loggedIn.pendingDecryptedManyMessages
+                                }
                             , Command.none
                             )
 

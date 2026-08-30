@@ -10,6 +10,7 @@ module FrontendExtra exposing
     , editMessage_gotFiles
     , editMessage_gotPastedText
     , externalLinkWarning
+    , fileDecryptedMessages
     , fileDragOverlayOpacity
     , gotFiles
     , gotPastedText
@@ -62,7 +63,7 @@ import Effect.Task as Task
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
-import Encryption exposing (EncryptedData)
+import Encryption exposing (BytesHash, EncryptedData)
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..), IsEncrypted(..))
 import Game
@@ -7183,7 +7184,7 @@ handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local logged
 
 handleDecryptedMessage :
     Id Encryption.DecryptRequestId
-    -> Encryption.BytesHash
+    -> BytesHash
     -> Result () (ContentAndEmbeds (Id UserId))
     -> LoadedFrontend
     -> LoggedIn2
@@ -7191,6 +7192,11 @@ handleDecryptedMessage :
 handleDecryptedMessage requestId bytesHash result model loggedIn =
     case SeqDict.get requestId loggedIn.pendingDecryptedMessages of
         Just request ->
+            let
+                loggedIn2 : LoggedIn2
+                loggedIn2 =
+                    fileDecryptedMessages [ ( bytesHash, result ) ] loggedIn
+            in
             handleServerSendMessage
                 request.senderId
                 (GuildOrDmId_Dm request.id)
@@ -7202,15 +7208,45 @@ handleDecryptedMessage requestId bytesHash result model loggedIn =
                         RichText.failedToDecryptMessage
                 )
                 request.threadRoute
-                (Local.model loggedIn.localState)
-                { loggedIn
-                    | decryptedMessages =
-                        SeqDict.insert bytesHash result loggedIn.decryptedMessages
-                }
+                (Local.model loggedIn2.localState)
+                loggedIn2
                 model
 
         Nothing ->
             ( loggedIn, Command.none )
+
+
+{-| Files what the browser worked out encrypted messages to say. Only this device can
+work them out, so they sit outside the Local\_/Server\_ changes and both copies of the
+local state are given them.
+-}
+fileDecryptedMessages :
+    List ( BytesHash, Result () (ContentAndEmbeds (Id UserId)) )
+    -> LoggedIn2
+    -> LoggedIn2
+fileDecryptedMessages decrypted loggedIn =
+    { loggedIn
+        | localState =
+            Local.mapModel
+                (\local ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | decryptedMessages =
+                                    List.foldl
+                                        (\( bytesHash, result ) dict -> SeqDict.insert bytesHash result dict)
+                                        localUser.decryptedMessages
+                                        decrypted
+                            }
+                    }
+                )
+                loggedIn.localState
+    }
 
 
 handleServerSendDmMessage :

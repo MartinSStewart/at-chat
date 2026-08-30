@@ -540,7 +540,6 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                                         local.localUser
                                                         otherUserId
                                                         otherUser
-                                                        loggedIn.decryptedMessages
                                                         channel
                                                         |> Just
 
@@ -1015,7 +1014,6 @@ colorPreview time isMobile local allUsers color =
         IsNotHovered
         (Id.fromInt 0)
         { content = message.content, embeds = message.embeds }
-        SeqDict.empty
         False
         { message | userIconDrawings = exampleDrawing local.localUser.session.userId }
         |> Ui.map (\_ -> FrontendNoOp)

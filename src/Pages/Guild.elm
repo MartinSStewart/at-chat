@@ -380,7 +380,6 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 loggedIn.friendsSearch
                                 (Maybe.map .htmlId loggedIn.textInputFocus == Just friendsSearchInputId)
                                 local
-                                loggedIn.decryptedMessages
                             ]
                         , Ui.Lazy.lazy loggedInAsView local.localUser
                         ]
@@ -404,7 +403,6 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 loggedIn.friendsSearch
                                 (Maybe.map .htmlId loggedIn.textInputFocus == Just friendsSearchInputId)
                                 local
-                                loggedIn.decryptedMessages
                             ]
                         , Ui.Lazy.lazy loggedInAsView local.localUser
                         ]
@@ -538,7 +536,7 @@ unreadOverviewNotMobile local loggedIn model =
 
         unreads : List UnreadOverviewChannel
         unreads =
-            unreadOverviewChannels loggedIn.decryptedMessages local allDiscordUsers
+            unreadOverviewChannels local allDiscordUsers
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -680,7 +678,6 @@ unreadOverviewNotMobile local loggedIn model =
                                                     local.localUser
                                                     Nothing
                                                     Nothing
-                                                    loggedIn.decryptedMessages
                                                     messageId
                                                     message
                                                     |> Ui.map (UnreadOverviewChannelMsg unread.guildOrDmId messageId)
@@ -713,7 +710,6 @@ unreadOverviewNotMobile local loggedIn model =
                                                     local.localUser.session.userId
                                                     local.localUser
                                                     Nothing
-                                                    loggedIn.decryptedMessages
                                                     messageId
                                                     message
                                                     |> Ui.map (UnreadOverviewThreadMsg unread.guildOrDmId threadId messageId)
@@ -797,11 +793,10 @@ messages arriving while the overview is open add to a channel where it already i
 moving it.
 -}
 unreadOverviewChannels :
-    SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
-    -> LocalState
+    LocalState
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> List UnreadOverviewChannel
-unreadOverviewChannels decrypted local allDiscordUsers =
+unreadOverviewChannels local allDiscordUsers =
     let
         currentUser : FrontendCurrentUser
         currentUser =
@@ -857,7 +852,7 @@ unreadOverviewChannels decrypted local allDiscordUsers =
                                                         threadSource
                                                             guild.name
                                                             channel.name
-                                                            (threadPreviewText local.localUser.timezone allUsers threadId decrypted channel)
+                                                            (threadPreviewText local.localUser.timezone allUsers threadId local.localUser.decryptedMessages channel)
                                                     , route =
                                                         GuildRoute
                                                             guildId
@@ -930,7 +925,7 @@ unreadOverviewChannels decrypted local allDiscordUsers =
                                                     dmThreadSource
                                                         otherUserId
                                                         local.localUser
-                                                        (threadPreviewText local.localUser.timezone allUsers threadId decrypted dmChannel)
+                                                        (threadPreviewText local.localUser.timezone allUsers threadId local.localUser.decryptedMessages dmChannel)
                                                 , route =
                                                     DmRoute
                                                         { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
@@ -1431,7 +1426,7 @@ dmChannelView dmRoute loggedIn local model =
                                         local.localUser.timezone
                                         (User.allUsers local.localUser)
                                         threadMessageIndex
-                                        loggedIn.decryptedMessages
+                                        local.localUser.decryptedMessages
                                         dmChannel
                                     )
 
@@ -2960,7 +2955,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                         local.localUser.timezone
                                         (User.allUsers local.localUser)
                                         threadMessageIndex
-                                        loggedIn.decryptedMessages
+                                        local.localUser.decryptedMessages
                                         channel
                                     )
 
@@ -3778,7 +3773,6 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         local.localUser
                                         maybeRepliedTo2
                                         (SeqDict.get threadId channel.threads)
-                                        loggedIn.decryptedMessages
                                         messageId
                                         message
                                         |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
@@ -3814,7 +3808,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         edit
                                         editRichText
                                         loggedIn
-                                        loggedIn.decryptedMessages
+                                        local.localUser.decryptedMessages
                                         local.localUser.session.userId
                                         allUsers
                                         local
@@ -3838,18 +3832,16 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     local.localUser
                                                     maybeRepliedTo2
                                                     Nothing
-                                                    loggedIn.decryptedMessages
                                                     messageId
                                                     message
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                             Nothing ->
-                                                Ui.Lazy.lazy6
+                                                Ui.Lazy.lazy5
                                                     messageViewNotThreadStarter
                                                     (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                                     revealedSpoilers
                                                     local.localUser
-                                                    loggedIn.decryptedMessages
                                                     index
                                                     message
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
@@ -3871,28 +3863,18 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     local.localUser
                                                     maybeRepliedTo2
                                                     (Just thread)
-                                                    loggedIn.decryptedMessages
                                                     messageId
                                                     message
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                             Nothing ->
-                                                messageView
-                                                    model.time
-                                                    isMobile
-                                                    containerWidth
-                                                    False
+                                                Ui.Lazy.lazy6
+                                                    messageViewThreadStarter
+                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                                     revealedSpoilers
-                                                    highlight
-                                                    messageHover2
-                                                    otherUserIsEditing
-                                                    local.localUser.session.userId
-                                                    (User.allUsers local.localUser)
                                                     local.localUser
-                                                    Nothing
-                                                    (Just thread)
-                                                    loggedIn.decryptedMessages
-                                                    (Id.fromInt index)
+                                                    index
+                                                    thread
                                                     message
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
                       )
@@ -4451,7 +4433,6 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         local.localUser.session.userId
                                         local.localUser
                                         maybeRepliedTo2
-                                        loggedIn.decryptedMessages
                                         messageId
                                         message
                                         |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
@@ -4484,7 +4465,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         editing
                                         editRichText
                                         loggedIn
-                                        loggedIn.decryptedMessages
+                                        local.localUser.decryptedMessages
                                         local.localUser.session.userId
                                         allUsers
                                         local
@@ -4504,18 +4485,16 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                             local.localUser.session.userId
                                             local.localUser
                                             maybeRepliedTo2
-                                            loggedIn.decryptedMessages
                                             messageId
                                             message
                                             |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                     Nothing ->
-                                        Ui.Lazy.lazy6
+                                        Ui.Lazy.lazy5
                                             threadMessageViewLazy
                                             (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                             revealedSpoilers
                                             local.localUser
-                                            loggedIn.decryptedMessages
                                             index
                                             message
                                             |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
@@ -6205,7 +6184,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                             edit
                             editRichText
                             loggedIn
-                            loggedIn.decryptedMessages
+                            local.localUser.decryptedMessages
                             local.localUser.session.userId
                             allUsers
                             local
@@ -6225,7 +6204,6 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                             local.localUser
                             Nothing
                             Nothing
-                            loggedIn.decryptedMessages
                             threadMessageIndex
                             message
                             |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute)
@@ -6245,7 +6223,6 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                         local.localUser
                         Nothing
                         Nothing
-                        loggedIn.decryptedMessages
                         threadMessageIndex
                         message
                         |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute)
@@ -6686,11 +6663,10 @@ messageViewNotThreadStarter :
     Int
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> LocalUser
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> Int
     -> Message ChannelMessageId (Id UserId)
     -> Element MessageViewMsg
-messageViewNotThreadStarter data revealedSpoilers localUser decryptedMessages messageIndex message =
+messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message =
     let
         { containerWidth, isEditing, highlight, isHovered, isMobile, time } =
             decodeMessageView data
@@ -6709,7 +6685,37 @@ messageViewNotThreadStarter data revealedSpoilers localUser decryptedMessages me
         localUser
         Nothing
         Nothing
-        decryptedMessages
+        (Id.fromInt messageIndex)
+        message
+
+
+messageViewThreadStarter :
+    Int
+    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
+    -> LocalUser
+    -> Int
+    -> FrontendGenericThread (Id UserId)
+    -> Message ChannelMessageId (Id UserId)
+    -> Element MessageViewMsg
+messageViewThreadStarter data revealedSpoilers localUser messageIndex thread message =
+    let
+        { containerWidth, isEditing, highlight, isHovered, isMobile, time } =
+            decodeMessageView data
+    in
+    messageView
+        time
+        isMobile
+        containerWidth
+        False
+        revealedSpoilers
+        highlight
+        isHovered
+        isEditing
+        localUser.session.userId
+        (User.allUsers localUser)
+        localUser
+        Nothing
+        (Just thread)
         (Id.fromInt messageIndex)
         message
 
@@ -6787,11 +6793,10 @@ threadMessageViewLazy :
     Int
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
     -> LocalUser
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> Int
     -> Message ThreadMessageId (Id UserId)
     -> Element MessageViewMsg
-threadMessageViewLazy data revealedSpoilers localUser decrypted messageIndex message =
+threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
     let
         { containerWidth, isEditing, highlight, isHovered, isMobile, time } =
             decodeMessageView data
@@ -6808,7 +6813,6 @@ threadMessageViewLazy data revealedSpoilers localUser decrypted messageIndex mes
         localUser.session.userId
         localUser
         Nothing
-        decrypted
         (Id.fromInt messageIndex)
         message
 
@@ -6878,11 +6882,15 @@ messageView :
     -> LocalUser
     -> Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
     -> Maybe (FrontendGenericThread (Id UserId))
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> Id ChannelMessageId
     -> Message ChannelMessageId (Id UserId)
     -> Element MessageViewMsg
-messageView time isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter decrypted messageId message =
+messageView time isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter messageId message =
+    let
+        decrypted : SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
+        decrypted =
+            localUser.decryptedMessages
+    in
     case message of
         UserTextMessage data ->
             messageContainer
@@ -6927,7 +6935,6 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                     isHovered
                     messageId
                     { content = data.content, embeds = data.embeds }
-                    decrypted
                     False
                     data
                 )
@@ -6967,7 +6974,6 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                             isHovered
                             messageId
                             (Result.withDefault { content = RichText.failedToDecryptMessage, embeds = Array.empty } result)
-                            decrypted
                             True
                             data
                         )
@@ -7369,11 +7375,15 @@ threadMessageView :
     -> Id UserId
     -> LocalUser
     -> Maybe ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) )
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> Id ThreadMessageId
     -> Message ThreadMessageId (Id UserId)
     -> Element MessageViewMsg
-threadMessageView time isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited allUsers currentUserId localUser maybeRepliedTo2 decrypted messageId message =
+threadMessageView time isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited allUsers currentUserId localUser maybeRepliedTo2 messageId message =
+    let
+        decrypted : SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
+        decrypted =
+            localUser.decryptedMessages
+    in
     case message of
         UserTextMessage message2 ->
             threadMessageContainer
@@ -7413,7 +7423,6 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                     isHovered
                     messageId
                     { content = message2.content, embeds = message2.embeds }
-                    decrypted
                     False
                     message2
                 )
@@ -7448,7 +7457,6 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                             isHovered
                             messageId
                             (Result.withDefault { content = RichText.failedToDecryptMessage, embeds = Array.empty } result)
-                            decrypted
                             True
                             message2
                         )
@@ -7850,7 +7858,6 @@ userTextMessageContent :
     -> IsHovered
     -> Id messageId
     -> ContentAndEmbeds (Id UserId)
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> Bool
     ->
         { a
@@ -7866,7 +7873,12 @@ userTextMessageContent :
             , embedDrawings : SeqDict Int (Drawing (Id UserId))
         }
     -> Element MessageViewMsg
-userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId { content, embeds } decrypted showEncryptionIcon message2 =
+userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId { content, embeds } showEncryptionIcon message2 =
+    let
+        decrypted : SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
+        decrypted =
+            localUser.decryptedMessages
+    in
     Ui.row
         []
         [ User.profileImage (SeqDict.get message2.createdBy allUsers)
@@ -9230,14 +9242,13 @@ channelColumn :
     Bool
     -> Time.Posix
     -> LocalUser
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Bool
     -> String
     -> Element FrontendMsg_
-channelColumn isMobile time localUser decrypted guildId guild channelRoute canScroll2 channelSearch =
+channelColumn isMobile time localUser guildId guild channelRoute canScroll2 channelSearch =
     let
         guildName : String
         guildName =
@@ -9351,7 +9362,6 @@ channelColumn isMobile time localUser decrypted guildId guild channelRoute canSc
                                 channelRoute
                                 directMentions
                                 localUser
-                                decrypted
                                 guildId
                                 channelId
                                 channel
@@ -9635,11 +9645,10 @@ dmColumnThreads :
     -> Maybe ThreadRouteWithFriends
     -> LocalUser
     -> Id UserId
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> { b | messages : MessageArray ChannelMessageId (Id UserId) }
     -> SeqDict (Id ChannelMessageId) FrontendThread
     -> Element FrontendMsg_
-dmColumnThreads isMobile now threadRoute localUser otherUserId decrypted channel threads =
+dmColumnThreads isMobile now threadRoute localUser otherUserId channel threads =
     let
         threads2 : List ( Id ChannelMessageId, ( IsMuted, ChannelNotificationType ), Bool )
         threads2 =
@@ -9719,7 +9728,7 @@ dmColumnThreads isMobile now threadRoute localUser otherUserId decrypted channel
                     , channelsVisible = ChannelsHiddenOnMobile
                     }
                 )
-                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex decrypted channel)
+                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex localUser.decryptedMessages channel)
         )
         threads2
         |> Ui.column []
@@ -9731,13 +9740,12 @@ channelColumnThreads :
     -> ChannelRoute
     -> Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     -> LocalUser
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> Id GuildId
     -> Id ChannelId
     -> FrontendChannel
     -> SeqDict (Id ChannelMessageId) FrontendThread
     -> Element FrontendMsg_
-channelColumnThreads isMobile now channelRoute directMentions localUser decrypted guildId channelId channel threads =
+channelColumnThreads isMobile now channelRoute directMentions localUser guildId channelId channel threads =
     let
         threads2 : List ( Id ChannelMessageId, ( IsMuted, ChannelNotificationType ), Bool )
         threads2 =
@@ -9805,7 +9813,7 @@ channelColumnThreads isMobile now channelRoute directMentions localUser decrypte
                     (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideChannelSettings) Nothing)
                     ChannelsHiddenOnMobile
                 )
-                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex decrypted channel)
+                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex localUser.decryptedMessages channel)
         )
         threads2
         |> Ui.column []
@@ -9959,7 +9967,7 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
                     , channelsVisible = ChannelsHiddenOnMobile
                     }
                 )
-                (threadPreviewText localUser.timezone (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers) threadMessageIndex channel)
+                (threadPreviewText localUser.timezone (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers) threadMessageIndex SeqDict.empty channel)
         )
         threads2
         |> Ui.column []
@@ -10118,9 +10126,8 @@ friendsColumnLazy :
     -> String
     -> Bool
     -> LocalState
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> Element FrontendMsg_
-friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearch friendsSearchHasFocus local decrypted =
+friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearch friendsSearchHasFocus local =
     let
         currentTimeRoundedToMinute : Int
         currentTimeRoundedToMinute =
@@ -10142,22 +10149,20 @@ friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearc
             local.dmChannels
             local.discordDmChannels
             local.localUser
-            decrypted
 
     else
         case openedOtherUserId of
             NoDmChannelSelected ->
-                Ui.Lazy.lazy6
+                Ui.Lazy.lazy5
                     friendsColumn_NoDmChannelSelected
                     packed
                     isMobile
                     local.dmChannels
                     local.discordDmChannels
                     local.localUser
-                    decrypted
 
             SelectedDmChannel dmRouteData ->
-                Ui.Lazy.lazy6
+                Ui.Lazy.lazy5
                     (if isMobile then
                         friendsColumn_SelectedDmChannel_Mobile
 
@@ -10169,10 +10174,9 @@ friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearc
                     local.dmChannels
                     local.discordDmChannels
                     local.localUser
-                    decrypted
 
             SelectedDiscordDmChannel discordDmRouteData ->
-                Ui.Lazy.lazy6
+                Ui.Lazy.lazy5
                     (if isMobile then
                         friendsColumn_SelectedDiscordDmChannel_Mobile
 
@@ -10184,52 +10188,51 @@ friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearc
                     local.dmChannels
                     local.discordDmChannels
                     local.localUser
-                    decrypted
 
 
-friendsColumn_NoDmChannelSelected : Int -> Bool -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId))) -> Element FrontendMsg_
-friendsColumn_NoDmChannelSelected packed isMobile dmChannels discordDmChannels localUser decrypted =
+friendsColumn_NoDmChannelSelected : Int -> Bool -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
+friendsColumn_NoDmChannelSelected packed isMobile dmChannels discordDmChannels localUser =
     let
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll isMobile time "" False NoDmChannelSelected dmChannels discordDmChannels localUser decrypted
+    friendsColumn canScroll isMobile time "" False NoDmChannelSelected dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDiscordDmChannel_Mobile : Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId))) -> Element FrontendMsg_
-friendsColumn_SelectedDiscordDmChannel_Mobile packed discordDmRoute dmChannels discordDmChannels localUser decrypted =
+friendsColumn_SelectedDiscordDmChannel_Mobile : Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
+friendsColumn_SelectedDiscordDmChannel_Mobile packed discordDmRoute dmChannels discordDmChannels localUser =
     let
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll True time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser decrypted
+    friendsColumn canScroll True time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDiscordDmChannel_NotMobile : Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId))) -> Element FrontendMsg_
-friendsColumn_SelectedDiscordDmChannel_NotMobile packed discordDmRoute dmChannels discordDmChannels localUser decrypted =
+friendsColumn_SelectedDiscordDmChannel_NotMobile : Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
+friendsColumn_SelectedDiscordDmChannel_NotMobile packed discordDmRoute dmChannels discordDmChannels localUser =
     let
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll False time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser decrypted
+    friendsColumn canScroll False time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDmChannel_Mobile : Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId))) -> Element FrontendMsg_
-friendsColumn_SelectedDmChannel_Mobile packed dmRoute dmChannels discordDmChannels localUser decrypted =
+friendsColumn_SelectedDmChannel_Mobile : Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
+friendsColumn_SelectedDmChannel_Mobile packed dmRoute dmChannels discordDmChannels localUser =
     let
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll True time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser decrypted
+    friendsColumn canScroll True time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDmChannel_NotMobile : Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId))) -> Element FrontendMsg_
-friendsColumn_SelectedDmChannel_NotMobile packed dmRoute dmChannels discordDmChannels localUser decrypted =
+friendsColumn_SelectedDmChannel_NotMobile : Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
+friendsColumn_SelectedDmChannel_NotMobile packed dmRoute dmChannels discordDmChannels localUser =
     let
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn canScroll False time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser decrypted
+    friendsColumn canScroll False time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
 
 
 friendsColumn :
@@ -10242,9 +10245,8 @@ friendsColumn :
     -> SeqDict (Id UserId) FrontendDmChannel
     -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> LocalUser
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> Element FrontendMsg_
-friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocus dmChannelSelection dmChannels discordDmChannels localUser decrypted =
+friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocus dmChannelSelection dmChannels discordDmChannels localUser =
     let
         dmChannelsIncludingCurrentUser : SeqDict (Id UserId) FrontendDmChannel
         dmChannelsIncludingCurrentUser =
@@ -10302,7 +10304,7 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                                         Time.millisToPosix 0
                                 , Ui.column
                                     []
-                                    [ Ui.Lazy.lazy6
+                                    [ Ui.Lazy.lazy5
                                         (if isMobile then
                                             friendLabelMobile
 
@@ -10322,7 +10324,6 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                                         localUser
                                         otherUserId
                                         otherUser
-                                        decrypted
                                         dmChannel
                                     , dmColumnThreads
                                         isMobile
@@ -10330,7 +10331,6 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                                         threadRoute
                                         localUser
                                         otherUserId
-                                        decrypted
                                         dmChannel
                                         (case threadRoute of
                                             -- A thread that was just opened isn't in the local
@@ -10508,15 +10508,14 @@ friendLabelMobile :
     -> LocalUser
     -> Id UserId
     -> FrontendUser
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> FrontendDmChannel
     -> Element FrontendMsg_
-friendLabelMobile packed localUser otherUserId otherUser decrypted channel =
+friendLabelMobile packed localUser otherUserId otherUser channel =
     let
         { isSelected, time } =
             decodeFriendLabel packed
     in
-    friendLabel True time isSelected localUser otherUserId otherUser decrypted channel
+    friendLabel True time isSelected localUser otherUserId otherUser channel
 
 
 friendLabelNotMobile :
@@ -10524,15 +10523,14 @@ friendLabelNotMobile :
     -> LocalUser
     -> Id UserId
     -> FrontendUser
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> FrontendDmChannel
     -> Element FrontendMsg_
-friendLabelNotMobile packed localUser otherUserId otherUser decrypted channel =
+friendLabelNotMobile packed localUser otherUserId otherUser channel =
     let
         { isSelected, time } =
             decodeFriendLabel packed
     in
-    friendLabel False time isSelected localUser otherUserId otherUser decrypted channel
+    friendLabel False time isSelected localUser otherUserId otherUser channel
 
 
 type SomeoneIsTyping
@@ -10572,14 +10570,17 @@ friendLabel :
     -> LocalUser
     -> Id UserId
     -> FrontendUser
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> FrontendDmChannel
     -> Element FrontendMsg_
-friendLabel isMobile time isSelected localUser otherUserId otherUser decrypted channel =
+friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
             User.allUsers localUser
+
+        decrypted : SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
+        decrypted =
+            localUser.decryptedMessages
 
         message : Maybe (Message ChannelMessageId (Id UserId))
         message =

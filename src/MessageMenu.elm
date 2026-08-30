@@ -449,7 +449,12 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
                             _ ->
                                 False
-                    , text = LocalState.messageToString local.localUser.timezone (User.allUsers local.localUser) message
+                    , text =
+                        LocalState.messageToString
+                            local.localUser.timezone
+                            (User.allUsers local.localUser)
+                            local.localUser.decryptedMessages
+                            message
                     , messageCustomEmojiIdsList = messageCustomEmojiIds message
                     , openDm =
                         if isPrivateDm then
@@ -517,6 +522,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         LocalState.messageToString
                             local.localUser.timezone
                             (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                            SeqDict.empty
                             message
                     , messageCustomEmojiIdsList = messageCustomEmojiIds message
                     , openDm =

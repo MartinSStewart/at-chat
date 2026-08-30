@@ -281,7 +281,6 @@ type alias LoggedIn2 =
          This is to work around this bug https://github.com/panphora/overtype/issues/116
       -}
       typedTextCounter : Int
-    , decryptedMessages : SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     }
 
 

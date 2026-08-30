@@ -3619,7 +3619,7 @@ firstMessageView channel =
                     , Ui.background MyUi.background2
                     , Ui.height (Ui.px channelRowHeight)
                     ]
-                    { text = LocalState.messageToString Time.utc SeqDict.empty firstMessage
+                    { text = LocalState.messageToString Time.utc SeqDict.empty SeqDict.empty firstMessage
                     , onChange = \_ -> TypedInReadOnlyTextInput
                     , label = firstMessageLabel.id
                     , placeholder = Nothing
