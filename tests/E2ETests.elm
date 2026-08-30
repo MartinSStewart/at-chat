@@ -11,6 +11,7 @@ import Dict
 import Duration
 import E2EDiscord
 import E2EDrawing
+import E2EEncryption
 import E2EGo
 import E2EHelper
 import E2ELogin
@@ -312,10 +313,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.noTimestampSuggestionTest normalConfig
     , E2EMisc.mentionSuggestionTest normalConfig
     , E2EMisc.emojiSuggestionTest normalConfig
-    , E2EMisc.endToEndEncryptionAcceptTest normalConfig
-    , E2EMisc.endToEndEncryptionRequestTest normalConfig
-    , E2EMisc.oneKeySetsUpEveryConversationTest normalConfig
-    , E2EMisc.soloDmEncryptionTest normalConfig
+    , E2EEncryption.endToEndEncryptionAcceptTest normalConfig
+    , E2EEncryption.endToEndEncryptionRequestTest normalConfig
+    , E2EEncryption.oneKeySetsUpEveryConversationTest normalConfig
+    , E2EEncryption.soloDmEncryptionTest normalConfig
     , E2EMisc.codeBlockInputTest normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig
     , E2EHelper.startTest
