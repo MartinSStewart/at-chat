@@ -35,6 +35,13 @@ cover):
 node tests/EndToEndTestsRunner.js
 ```
 
+Pass part of a test's name to run just that one, or `--list` to see the names:
+
+```
+node tests/EndToEndTestsRunner.js "Single player go"
+node tests/EndToEndTestsRunner.js --list
+```
+
 The workers run compiled Elm, so that command compiles `tests/EndToEndTestsRunner.elm`
 first and stops if it doesn't build. Don't skip past that step by requiring the
 compiled output some other way — a runner that starts without compiling reports on
