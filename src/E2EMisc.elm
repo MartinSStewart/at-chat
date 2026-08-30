@@ -905,6 +905,9 @@ soloDmEncryptionTest config =
                                 , E2EHelper.respondToMessageEncrypted admin
                                 , T.checkBackend 100 (checkSoloDmMessageStored "Note to self")
                                 , E2EHelper.respondToMessageDecrypted adminB
+                                , adminB.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Note to self" ])
+                                , adminB.click 100 (Dom.id "guild_friendLabel_0")
+                                , adminB.snapshotView 100 { name = "Second tab views decrypted message" }
                                 ]
                             )
                         ]

@@ -7843,17 +7843,17 @@ updateLoadedFromBackend msg model =
                                     FrontendExtra.handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local loggedIn2 model
 
                                 Server_SendEncryptedMessage senderId _ _ id content maybeRepliedTo attachedFiles ->
-                                    ( { loggedIn
-                                        | nextDecryptionRequestId = Id.increment loggedIn.nextDecryptionRequestId
+                                    ( { loggedIn2
+                                        | nextDecryptionRequestId = Id.increment loggedIn2.nextDecryptionRequestId
                                         , pendingDecryptedMessages =
                                             SeqDict.insert
-                                                loggedIn.nextDecryptionRequestId
+                                                loggedIn2.nextDecryptionRequestId
                                                 { id = id
                                                 , senderId = senderId
                                                 , threadRoute = maybeRepliedTo
                                                 , attachedFiles = attachedFiles
                                                 }
-                                                loggedIn.pendingDecryptedMessages
+                                                loggedIn2.pendingDecryptedMessages
                                       }
                                     , Encryption.decryptMessage loggedIn2.nextDecryptionRequestId id content
                                     )

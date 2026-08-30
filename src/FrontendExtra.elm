@@ -72,7 +72,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DmId)
 import ImageEditor
 import ImageViewer
 import Json.Decode
@@ -109,6 +109,7 @@ import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SheepGame
+import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import Thread exposing (FrontendGenericThread)
@@ -3971,81 +3972,30 @@ changeUpdate localMsg local =
                                 Nothing ->
                                     local
 
-                        GuildOrDmId_Dm { otherUserId } ->
-                            let
-                                localUser : LocalUser
-                                localUser =
-                                    local.localUser
-
-                                user : FrontendCurrentUser
-                                user =
-                                    localUser.user
-
-                                dmChannel : FrontendDmChannel
-                                dmChannel =
-                                    SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit
-
-                                dmChannel2 : FrontendDmChannel
-                                dmChannel2 =
-                                    case threadRouteWithRepliedTo of
-                                        ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                            LocalState.createThreadMessageFrontend
-                                                threadId
-                                                (Message.userTextMessageFrontend
-                                                    createdAt
-                                                    createdBy
-                                                    text
-                                                    maybeReplyTo
-                                                    attachedFiles
-                                                )
-                                                dmChannel
-
-                                        NoThreadWithMaybeMessage maybeReplyTo ->
-                                            LocalState.createChannelMessageFrontend
-                                                (Message.userTextMessageFrontend
-                                                    createdAt
-                                                    createdBy
-                                                    text
-                                                    maybeReplyTo
-                                                    attachedFiles
-                                                )
-                                                dmChannel
-
-                                threadRouteNoReply : ThreadRoute
-                                threadRouteNoReply =
-                                    case threadRouteWithRepliedTo of
-                                        ViewThreadWithMaybeMessage threadId _ ->
-                                            ViewThread threadId
-
-                                        NoThreadWithMaybeMessage _ ->
-                                            NoThread
-
-                                ( currentlyViewing2, user2 ) =
-                                    if createdBy == localUser.session.userId then
-                                        LocalState.ownMessageIsReadFrontend
-                                            (GuildOrDmId guildOrDmId)
-                                            (latestMessageThreadRoute threadRouteWithRepliedTo dmChannel2)
-                                            ( localUser.currentlyViewing, user )
-
-                                    else if isViewing (GuildOrDmId guildOrDmId) threadRouteNoReply local then
-                                        LocalState.incrementLastViewedMessageFrontend
-                                            (GuildOrDmId guildOrDmId)
-                                            (latestMessageThreadRoute threadRouteWithRepliedTo dmChannel2)
-                                            ( localUser.currentlyViewing, user )
-
-                                    else
-                                        ( localUser.currentlyViewing, user )
-                            in
-                            { local
-                                | dmChannels = SeqDict.insert otherUserId dmChannel2 local.dmChannels
-                                , localUser =
-                                    { localUser
-                                        | user = user2
-                                        , currentlyViewing = currentlyViewing2
-                                        , otherUsers = addMessageSender createdBy createdByUser localUser
-                                        , stickers = SeqDict.union stickers localUser.stickers
-                                    }
-                            }
+                        GuildOrDmId_Dm id ->
+                            handleServerSendDmMessage
+                                id
+                                createdBy
+                                createdByUser
+                                stickers
+                                (\maybeReplyTo ->
+                                    Message.userTextMessageFrontend
+                                        createdAt
+                                        createdBy
+                                        text
+                                        maybeReplyTo
+                                        attachedFiles
+                                )
+                                (\maybeReplyTo ->
+                                    Message.userTextMessageFrontend
+                                        createdAt
+                                        createdBy
+                                        text
+                                        maybeReplyTo
+                                        attachedFiles
+                                )
+                                threadRouteWithRepliedTo
+                                local
 
                 Server_Discord_SendMessage createdAt guildOrDmId createdByUser text threadRouteWithRepliedTo attachedFiles stickers ->
                     case guildOrDmId of
@@ -5287,28 +5237,21 @@ changeUpdate localMsg local =
                 Server_E2eeAccepted { otherUserId } time ->
                     LocalState.setDmE2ee otherUserId (DmChannel.E2eeEnabled time) local
 
-                Server_SendEncryptedMessage createdBy createdByUser createdAt { otherUserId } content threadRouteWithRepliedTo attachedFiles ->
-                    let
-                        localUser : LocalUser
-                        localUser =
-                            local.localUser
-                    in
-                    addEncryptedDmMessage
-                        createdAt
+                Server_SendEncryptedMessage createdBy createdByUser createdAt id content threadRouteWithRepliedTo attachedFiles ->
+                    handleServerSendDmMessage
+                        id
                         createdBy
-                        otherUserId
-                        content
+                        createdByUser
+                        -- TODO, solve stickers
+                        SeqDict.empty
+                        (\maybeReplyTo ->
+                            Message.encryptedUserTextMessageFrontend createdAt createdBy content maybeReplyTo attachedFiles |> Debug.log "asdf"
+                        )
+                        (\maybeReplyTo ->
+                            Message.encryptedUserTextMessageFrontend createdAt createdBy content maybeReplyTo attachedFiles |> Debug.log "asdf"
+                        )
                         threadRouteWithRepliedTo
-                        attachedFiles
-                        -- The sender comes along with the message because the receiver
-                        -- might not have them loaded, the same way a plain message does it.
-                        { local
-                            | localUser =
-                                { localUser
-                                    | otherUsers =
-                                        SeqDict.insert createdBy createdByUser localUser.otherUsers
-                                }
-                        }
+                        local
 
                 Server_DiscordAvatarsLoaded discordUserId discordUser ->
                     let
@@ -7269,3 +7212,76 @@ handleDecryptedMessage requestId bytesHash result model loggedIn =
 
         Nothing ->
             ( loggedIn, Command.none )
+
+
+handleServerSendDmMessage :
+    Viewing_DmId
+    -> Id UserId
+    -> FrontendUser
+    -> SeqDict (Id StickerId) StickerData
+    -> (Maybe (Id ChannelMessageId) -> Message ChannelMessageId (Id UserId))
+    -> (Maybe (Id ThreadMessageId) -> Message ThreadMessageId (Id UserId))
+    -> ThreadRouteWithMaybeMessage
+    -> LocalState
+    -> LocalState
+handleServerSendDmMessage id createdBy createdByUser stickers messageForChannel messageForThread threadRouteWithRepliedTo local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        user : FrontendCurrentUser
+        user =
+            localUser.user
+
+        dmChannel : FrontendDmChannel
+        dmChannel =
+            SeqDict.get id.otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit
+
+        dmChannel2 : FrontendDmChannel
+        dmChannel2 =
+            case threadRouteWithRepliedTo of
+                ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+                    LocalState.createThreadMessageFrontend threadId (messageForThread maybeReplyTo) dmChannel
+
+                NoThreadWithMaybeMessage maybeReplyTo ->
+                    LocalState.createChannelMessageFrontend (messageForChannel maybeReplyTo) dmChannel
+
+        threadRouteNoReply : ThreadRoute
+        threadRouteNoReply =
+            case threadRouteWithRepliedTo of
+                ViewThreadWithMaybeMessage threadId _ ->
+                    ViewThread threadId
+
+                NoThreadWithMaybeMessage _ ->
+                    NoThread
+
+        guildOrDmId =
+            GuildOrDmId (GuildOrDmId_Dm id)
+
+        ( currentlyViewing2, user2 ) =
+            if createdBy == localUser.session.userId then
+                LocalState.ownMessageIsReadFrontend
+                    guildOrDmId
+                    (latestMessageThreadRoute threadRouteWithRepliedTo dmChannel2)
+                    ( localUser.currentlyViewing, user )
+
+            else if isViewing guildOrDmId threadRouteNoReply local then
+                LocalState.incrementLastViewedMessageFrontend
+                    guildOrDmId
+                    (latestMessageThreadRoute threadRouteWithRepliedTo dmChannel2)
+                    ( localUser.currentlyViewing, user )
+
+            else
+                ( localUser.currentlyViewing, user )
+    in
+    { local
+        | dmChannels = SeqDict.insert id.otherUserId dmChannel2 local.dmChannels
+        , localUser =
+            { localUser
+                | user = user2
+                , currentlyViewing = currentlyViewing2
+                , otherUsers = addMessageSender createdBy createdByUser localUser
+                , stickers = SeqDict.union stickers localUser.stickers
+            }
+    }
