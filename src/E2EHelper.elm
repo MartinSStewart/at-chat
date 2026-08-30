@@ -81,6 +81,7 @@ module E2EHelper exposing
     , regularDiscordChannelCreateEvent
     , regularDiscordChannelId
     , respondToEncryptionPortWithMissingKey
+    , respondToManyMessagesDecrypted
     , respondToMessageDecrypted
     , respondToMessageEncrypted
     , respondToSharedSecretStored
@@ -100,6 +101,7 @@ module E2EHelper exposing
     , startTest
     , startTime
     , startupDataJson
+    , startupDataJsonWithE2eeKeys
     , startupDataJsonWithInset
     , tallDesktopWindow
     , tallSnapshot
@@ -220,6 +222,27 @@ startupDataJsonWithInset time userAgent safeAreaInsetTop isPwa =
         , ( "randomSeed", testRandomSeed time )
         , -- A browser in a test starts out with nothing stored.
           ( "e2eeKeys", Json.Encode.list Json.Encode.int [] )
+        ]
+
+
+{-| Like [`startupDataJson`](#startupDataJson) but with encryption keys already in the
+browser's store, the way a device that has been used for an encrypted conversation before
+starts up.
+-}
+startupDataJsonWithE2eeKeys : Time.Posix -> String -> List (Id UserId) -> Json.Encode.Value
+startupDataJsonWithE2eeKeys time userAgent e2eeKeys =
+    Json.Encode.object
+        [ ( "timeOrigin", Time.posixToMillis time |> toFloat |> Json.Encode.float )
+        , ( "loadStartupDataTime", Time.posixToMillis time |> toFloat |> Json.Encode.float )
+        , ( "userAgent", Json.Encode.string userAgent )
+        , ( "scrollbarWidth", Json.Encode.int 20 )
+        , ( "isPwa", Json.Encode.bool False )
+        , ( "notificationPermission", Json.Encode.string "denied" )
+        , ( "safeAreaInsetTop", Json.Encode.int 0 )
+        , ( "devicePixelRatio", Json.Encode.float 2 )
+        , ( "timezone", testTimezone )
+        , ( "randomSeed", testRandomSeed time )
+        , ( "e2eeKeys", Json.Encode.list (\userId -> Json.Encode.int (Id.toInt userId)) e2eeKeys )
         ]
 
 
@@ -818,6 +841,46 @@ respondToMessageDecrypted client =
                 [] ->
                     [ T.checkState 0 (\_ -> Err "The client didn't ask for a message to be decrypted") ]
         )
+
+
+{-| Stands in for the browser reading a whole conversation's backlog. Nothing encrypted
+it, so every message comes back readable.
+-}
+respondToManyMessagesDecrypted :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+respondToManyMessagesDecrypted client =
+    T.andThen
+        100
+        (\data ->
+            case List.filterMap decryptManyRequest (encryptionPortRequests client.clientId data) of
+                ( requestId, messages ) :: _ ->
+                    [ List.filterMap
+                        (\bytes ->
+                            Serialize.decodeFromBytes Message.contentAndEmbedsCodec bytes
+                                |> Result.toMaybe
+                                |> Maybe.map (\contentAndEmbeds -> ( stubBytesHash bytes, Ok contentAndEmbeds ))
+                        )
+                        messages
+                        |> Encryption.FromJs_ManyMessagesDecrypted requestId
+                        |> sendFromJs client
+                    ]
+
+                [] ->
+                    [ T.checkState 0 (\_ -> Err "The client didn't ask for a conversation to be decrypted") ]
+        )
+
+
+decryptManyRequest :
+    Encryption.ToJs (ContentAndEmbeds (Id UserId))
+    -> Maybe ( Id Encryption.DecryptManyRequestId, List Bytes )
+decryptManyRequest request =
+    case request of
+        Encryption.ToJs_DecryptManyMessages { requestId, data } ->
+            Just ( requestId, data )
+
+        _ ->
+            Nothing
 
 
 {-| The most recent message a client asked to have encrypted. Answering the newest is

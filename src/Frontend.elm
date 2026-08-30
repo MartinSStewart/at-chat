@@ -56,6 +56,7 @@ import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
 import Message exposing (ContentAndEmbeds)
+import MessageArray
 import MessageDropdown
 import MessageInput exposing (NameSoFar(..), TextInputFocus)
 import MessageMenu
@@ -516,6 +517,10 @@ loadedInitHelper startupData emojiData loginData loading =
         local =
             loginDataToLocalState startupData emojiData loginData
 
+        backlog : List { id : Viewing_DmId, messages : List (Encryption.EncryptedData (ContentAndEmbeds (Id UserId))) }
+        backlog =
+            encryptedBacklog (SeqSet.fromList startupData.e2eeKeys) local
+
         loggedIn : LoggedIn2
         loggedIn =
             { localState = Local.init local
@@ -590,6 +595,18 @@ loadedInitHelper startupData emojiData loginData loading =
             , nextEncryptionRequestId = Id.fromInt 0
             , pendingDecryptedMessages = SeqDict.empty
             , nextDecryptionRequestId = Id.fromInt 0
+            , pendingDecryptedManyMessages =
+                List.indexedMap
+                    (\index conversation ->
+                        ( Id.fromInt index
+                        , { id = conversation.id
+                          , messageHashes = List.map Encryption.hash conversation.messages
+                          }
+                        )
+                    )
+                    backlog
+                    |> SeqDict.fromList
+            , nextDecryptManyRequestId = Id.fromInt (List.length backlog)
             , e2eeSectionsExpanded = SeqDict.empty
             , typedTextCounter = 0
             , decryptedMessages = SeqDict.empty
@@ -597,7 +614,13 @@ loadedInitHelper startupData emojiData loginData loading =
     in
     ( loggedIn
     , Command.batch
-        [ case loading.route of
+        [ List.indexedMap
+            (\index conversation ->
+                Encryption.decryptManyMessages (Id.fromInt index) conversation.id conversation.messages
+            )
+            backlog
+            |> Command.batch
+        , case loading.route of
             AdminRoute params ->
                 case params.highlightLog of
                     Just _ ->
@@ -3324,6 +3347,22 @@ updateLoaded msg model =
 
                         Ok (Encryption.FromJs_MessageDecryptFailed requestId bytesHash) ->
                             FrontendExtra.handleDecryptedMessage requestId bytesHash (Err ()) model loggedIn
+
+                        Ok (Encryption.FromJs_ManyMessagesDecrypted requestId results) ->
+                            -- These were already in the conversation, so unlike a message
+                            -- that has just arrived there is nowhere to put them. Filing
+                            -- their contents is the whole of it.
+                            ( { loggedIn
+                                | decryptedMessages =
+                                    List.foldl
+                                        (\( bytesHash, decrypted ) dict -> SeqDict.insert bytesHash decrypted dict)
+                                        loggedIn.decryptedMessages
+                                        results
+                                , pendingDecryptedManyMessages =
+                                    SeqDict.remove requestId loggedIn.pendingDecryptedManyMessages
+                              }
+                            , Command.none
+                            )
 
                         Err error ->
                             ( { loggedIn | e2eeError = Just error }, Command.none )
@@ -8778,6 +8817,61 @@ storeRemainingSharedSecrets alreadyHandled privateKey loggedIn =
                     DmChannel.E2eeDisabled ->
                         Nothing
             )
+
+
+{-| Every encrypted message already sitting in a conversation this device holds a key
+for, which on a page load is the whole backlog of it.
+
+Conversations without a key on this device are left out: the browser would only say it
+can't read them, and the view already knows to ask for the private key instead.
+
+-}
+encryptedBacklog :
+    SeqSet (Id UserId)
+    -> LocalState
+    -> List { id : Viewing_DmId, messages : List (Encryption.EncryptedData (ContentAndEmbeds (Id UserId))) }
+encryptedBacklog keysOnThisDevice local =
+    SeqDict.toList local.dmChannels
+        |> List.filterMap
+            (\( otherUserId, dmChannel ) ->
+                if SeqSet.member otherUserId keysOnThisDevice then
+                    case encryptedMessagesIn dmChannel of
+                        [] ->
+                            Nothing
+
+                        messages ->
+                            Just { id = { otherUserId = otherUserId }, messages = messages }
+
+                else
+                    Nothing
+            )
+
+
+{-| Threads hang off a conversation rather than sitting in it, so their messages need
+collecting too.
+-}
+encryptedMessagesIn : FrontendDmChannel -> List (Encryption.EncryptedData (ContentAndEmbeds (Id UserId)))
+encryptedMessagesIn dmChannel =
+    (MessageArray.toList dmChannel.messages
+        |> List.filterMap (\( _, message ) -> encryptedMessageData message)
+    )
+        ++ (SeqDict.values dmChannel.threads
+                |> List.concatMap
+                    (\thread ->
+                        MessageArray.toList thread.messages
+                            |> List.filterMap (\( _, message ) -> encryptedMessageData message)
+                    )
+           )
+
+
+encryptedMessageData : Message.Message messageId (Id UserId) -> Maybe (Encryption.EncryptedData (ContentAndEmbeds (Id UserId)))
+encryptedMessageData message =
+    case message of
+        Message.EncryptedUserTextMessage data ->
+            Just data.encryptedData
+
+        _ ->
+            Nothing
 
 
 storeSharedSecret : Id UserId -> X25519.PrivateKey -> LoggedIn2 -> Result String (Command FrontendOnly ToBackend FrontendMsg_)

@@ -6,6 +6,7 @@ port module Encryption exposing
     , EncryptedData(..)
     , FromJs(..)
     , ToJs(..)
+    , decryptManyMessages
     , decryptMessage
     , encode
     , encryptMessage
@@ -115,6 +116,25 @@ decryptMessage requestId id (EncryptedData _ data) =
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
+{-| Everything in one conversation that still needs decrypting, asked for in one go.
+
+A page load can find hundreds of messages waiting, and asking about them one at a time
+would mean a port round trip each. The browser only has to look the key up once this way.
+
+-}
+decryptManyMessages : Id DecryptManyRequestId -> Viewing_DmId -> List (EncryptedData a) -> Command FrontendOnly toMsg msg
+decryptManyMessages requestId id messages =
+    Serialize.encodeToBytes
+        (toJsCodec Serialize.unit)
+        (ToJs_DecryptManyMessages
+            { requestId = requestId
+            , otherUserId = id.otherUserId
+            , data = List.map (\(EncryptedData _ bytes) -> bytes) messages
+            }
+        )
+        |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
+
+
 toJsCodec : Serialize.Codec e data -> Serialize.Codec e (ToJs data)
 toJsCodec dataCodec =
     Serialize.customType
@@ -176,6 +196,7 @@ type FromJs a
     | FromJs_MessageEncryptFailed (Id EncryptRequestId) String
     | FromJs_MessageDecrypted (Id DecryptRequestId) BytesHash a
     | FromJs_MessageDecryptFailed (Id DecryptRequestId) BytesHash
+    | FromJs_ManyMessagesDecrypted (Id DecryptManyRequestId) (List ( BytesHash, Result () a ))
 
 
 port encryption_to_js : Bytes -> Cmd msg
@@ -202,7 +223,7 @@ fromJs aCodec msg =
 fromJsCodec : Serialize.Codec e a -> Serialize.Codec e (FromJs a)
 fromJsCodec aCodec =
     Serialize.customType
-        (\a b c d e f value ->
+        (\a b c d e f g value ->
             case value of
                 FromJs_SharedSecretStored argA ->
                     a argA
@@ -221,6 +242,9 @@ fromJsCodec aCodec =
 
                 FromJs_MessageDecryptFailed argA argB ->
                     f argA argB
+
+                FromJs_ManyMessagesDecrypted argA argB ->
+                    g argA argB
         )
         |> Serialize.variant1 FromJs_SharedSecretStored Id.codec
         |> Serialize.variant2 FromJs_SharedSecretFailed Id.codec Serialize.string
@@ -228,6 +252,10 @@ fromJsCodec aCodec =
         |> Serialize.variant2 FromJs_MessageEncryptFailed Id.codec Serialize.string
         |> Serialize.variant3 FromJs_MessageDecrypted Id.codec bytesHashCodec aCodec
         |> Serialize.variant2 FromJs_MessageDecryptFailed Id.codec bytesHashCodec
+        |> Serialize.variant2
+            FromJs_ManyMessagesDecrypted
+            Id.codec
+            (Serialize.list (Serialize.tuple bytesHashCodec (Serialize.result Serialize.unit aCodec)))
         |> Serialize.finishCustomType
 
 

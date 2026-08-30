@@ -1,5 +1,6 @@
 module E2EEncryption exposing
-    ( endToEndEncryptionAcceptTest
+    ( backlogDecryptedOnLoadTest
+    , endToEndEncryptionAcceptTest
     , endToEndEncryptionRequestTest
     , oneKeySetsUpEveryConversationTest
     , soloDmEncryptionTest
@@ -613,6 +614,91 @@ soloDmEncryptionTest config =
                 ]
             )
         ]
+
+
+{-| A device that already has the key for a conversation has to work out what the
+messages waiting in it say, since only their encrypted form is kept anywhere. That is the
+whole conversation at once rather than one request per message, so the page asks for the
+backlog as it loads and fills the contents in when the answer comes back.
+-}
+backlogDecryptedOnLoadTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+backlogDecryptedOnLoadTest config =
+    E2EHelper.startTest
+        "Decrypt the messages already in a conversation when the page loads"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.openDm admin 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                        , E2EHelper.respondToSharedSecretStored admin Broadcast.adminUserId
+                        , admin.click 100 (Dom.id "guild_hideMembers")
+                        , E2EHelper.writeMessage admin 100 backlogMessage
+                        , E2EHelper.respondToMessageEncrypted admin
+                        , T.checkBackend 100 (checkSoloDmHasNoPlainText backlogMessage)
+
+                        -- A second device with the key for this conversation loads with
+                        -- the message already sitting in it.
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId0
+                            "/"
+                            E2EHelper.desktopWindow
+                            (\adminB ->
+                                [ T.andThen
+                                    10
+                                    (\data ->
+                                        [ adminB.portEvent
+                                            0
+                                            "load_startup_data_from_js"
+                                            (E2EHelper.startupDataJsonWithE2eeKeys
+                                                data.time
+                                                E2EHelper.firefoxDesktop
+                                                [ Broadcast.adminUserId ]
+                                            )
+                                        ]
+                                    )
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text backlogMessage ])
+                                , E2EHelper.respondToManyMessagesDecrypted adminB
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text backlogMessage ])
+                                , adminB.click 100 (Dom.id "guild_friendLabel_0")
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text backlogMessage ])
+                                , adminB.snapshotView 100 { name = "Backlog decrypted on page load" }
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+backlogMessage : String
+backlogMessage =
+    "Written before this device loaded"
 
 
 checkSoloDmIsEncrypted : E2EHelper.BackendModel2 -> Result String ()

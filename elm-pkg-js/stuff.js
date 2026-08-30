@@ -59,6 +59,7 @@ const e2eeSerializeVersion = 1;
 const e2eeToJsStoreSharedSecret = 0;
 const e2eeToJsEncryptMessage = 1;
 const e2eeToJsDecryptMessage = 2;
+const e2eeToJsDecryptManyMessages = 3;
 
 // The FromJs variants, in the order Encryption.fromJsCodec defines them.
 const e2eeFromJsSharedSecretStored = 0;
@@ -67,6 +68,7 @@ const e2eeFromJsMessageEncrypted = 2;
 const e2eeFromJsMessageEncryptFailed = 3;
 const e2eeFromJsMessageDecrypted = 4;
 const e2eeFromJsMessageDecryptFailed = 5;
+const e2eeFromJsManyMessagesDecrypted = 6;
 
 function e2eeReadToJs(dataView) {
     if (dataView.byteLength < 3 || dataView.getUint8(0) !== e2eeSerializeVersion) { return null; }
@@ -99,6 +101,27 @@ function e2eeReadToJs(dataView) {
                 otherUserId: dataView.getFloat64(11, false),
                 data: e2eeReadBytesField(dataView, 19),
             };
+
+        case e2eeToJsDecryptManyMessages: {
+            // A List is four bytes of length, then that many Bytes fields one after
+            // another.
+            const count = dataView.getUint32(19, false);
+            const messages = [];
+            let offset = 23;
+
+            for (let i = 0; i < count; i++) {
+                const message = e2eeReadBytesField(dataView, offset);
+                messages.push(message);
+                offset += 4 + message.length;
+            }
+
+            return {
+                tag: "decrypt-many-messages",
+                requestId: dataView.getFloat64(3, false),
+                otherUserId: dataView.getFloat64(11, false),
+                data: messages,
+            };
+        }
 
         default:
             return null;
@@ -166,6 +189,33 @@ function e2eeMessageDecryptedMessage(requestId, hash, bytes) {
     out.setFloat64(3, requestId, false);
     out.setFloat64(11, hash, false);
     new Uint8Array(out.buffer).set(bytes, 19);
+    return out;
+}
+
+// One reply for a whole conversation: the request id, then a list of the hash each
+// message was filed under beside whether it could be read. A Result is a variant tag,
+// with Err first, and an Err () has nothing after it.
+function e2eeManyMessagesDecryptedMessage(requestId, results) {
+    const bodies = results.map(({ plainText }) =>
+        plainText === null ? new Uint8Array(0) : plainText);
+    const size = 11 + 4 + results.reduce((n, _, i) => n + 8 + 2 + bodies[i].length, 0);
+    const out = new DataView(new ArrayBuffer(size));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, e2eeFromJsManyMessagesDecrypted, false);
+    out.setFloat64(3, requestId, false);
+    out.setUint32(11, results.length, false);
+
+    let offset = 15;
+
+    for (let i = 0; i < results.length; i++) {
+        out.setFloat64(offset, results[i].hash, false);
+        offset += 8;
+        out.setUint16(offset, results[i].plainText === null ? 0 : 1, false);
+        offset += 2;
+        new Uint8Array(out.buffer).set(bodies[i], offset);
+        offset += bodies[i].length;
+    }
+
     return out;
 }
 
@@ -967,6 +1017,31 @@ exports.init = async function init(app)
                 app.ports.encryption_from_js.send(
                     e2eeMessageDecryptedMessage(
                         message.requestId, hash, new Uint8Array(plainText)));
+
+            } else if (message.tag === "decrypt-many-messages") {
+                const key = await e2eeWithStore(
+                    "readonly", store => store.get(message.otherUserId));
+
+                // The key is looked up once for the whole conversation, which is the
+                // point of asking about them together.
+                const results = await Promise.all(message.data.map(async (bytes) => {
+                    const hash = await e2eeBytesHash(bytes);
+
+                    if (!key) { return { hash: hash, plainText: null }; }
+
+                    try {
+                        const plainText = await crypto.subtle.decrypt(
+                            { name: "AES-GCM", iv: bytes.slice(0, 12) }, key, bytes.slice(12));
+                        return { hash: hash, plainText: new Uint8Array(plainText) };
+                    } catch (e) {
+                        // One message that can't be read shouldn't cost the rest of the
+                        // conversation, so it is reported on its own.
+                        return { hash: hash, plainText: null };
+                    }
+                }));
+
+                app.ports.encryption_from_js.send(
+                    e2eeManyMessagesDecryptedMessage(message.requestId, results));
             }
         } catch (e) {
             if (message.tag === "store-shared-secret") {

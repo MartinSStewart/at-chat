@@ -38,6 +38,7 @@ module Types exposing
     , NewChannelForm
     , NewGuildForm
     , PendingGatewayReconnect
+    , PendingDecryptedManyMessages
     , PendingDecryptedMessage
     , PendingEncryptedMessage
     , PublicGoMatch(..)
@@ -80,7 +81,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
-import Encryption exposing (BytesHash, DecryptRequestId, EncryptRequestId, EncryptedData)
+import Encryption exposing (BytesHash, DecryptManyRequestId, DecryptRequestId, EncryptRequestId, EncryptedData)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import Game
 import Go
@@ -273,6 +274,8 @@ type alias LoggedIn2 =
     , nextEncryptionRequestId : Id EncryptRequestId
     , pendingDecryptedMessages : SeqDict (Id DecryptRequestId) PendingDecryptedMessage
     , nextDecryptionRequestId : Id DecryptRequestId
+    , pendingDecryptedManyMessages : SeqDict (Id DecryptManyRequestId) PendingDecryptedManyMessages
+    , nextDecryptManyRequestId : Id DecryptManyRequestId
     , e2eeSectionsExpanded : SeqDict (Id UserId) Bool
     , {- We want to slightly change the letter spacing for textarea's on Safari in order to force it to recalculate word wrap.
          This is to work around this bug https://github.com/panphora/overtype/issues/116
@@ -295,6 +298,19 @@ type alias PendingDecryptedMessage =
     , senderId : Id UserId
     , threadRoute : ThreadRouteWithMaybeMessage
     , attachedFiles : SeqDict (Id FileId) FileData
+    }
+
+
+{-| A conversation's backlog, handed over to be decrypted in one go when the page loads.
+
+Unlike a message that has just arrived, these are already sitting in the local state and
+only need their contents worked out, so the hashes they will be filed under is all there
+is to remember.
+
+-}
+type alias PendingDecryptedManyMessages =
+    { id : Viewing_DmId
+    , messageHashes : List BytesHash
     }
 
 
