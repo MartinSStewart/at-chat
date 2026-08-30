@@ -113,8 +113,6 @@ import Array
 import Audio
 import Backend
 import Broadcast
-import Bytes exposing (Bytes)
-import Bytes.Decode
 import Bytes.Encode
 import Call
 import ChannelDescription
@@ -151,7 +149,7 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
 import LocalState exposing (CallStatus(..))
 import LoginForm
-import Message exposing (ContentAndEmbeds)
+import Message
 import MuteSettings
 import NonemptyDict
 import NonemptySet
@@ -166,7 +164,6 @@ import RichText exposing (Domain(..))
 import SafeJson exposing (SafeJson(..))
 import SecretId exposing (SecretId(..))
 import SeqDict
-import Serialize
 import SessionIdHash exposing (SessionIdHash(..))
 import Slack
 import String.Nonempty exposing (NonemptyString(..))

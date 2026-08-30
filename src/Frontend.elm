@@ -602,7 +602,7 @@ loadedInitHelper startupData emojiData loginData loading =
                             PendingEncryption _ ->
                                 Just ( Id.fromInt index, { shiftScrollFrom = Nothing } )
 
-                            MissingKeys record ->
+                            MissingKeys _ ->
                                 Nothing
                     )
                     backlog
@@ -621,7 +621,7 @@ loadedInitHelper startupData emojiData loginData loading =
                     PendingEncryption conversation ->
                         Encryption.decryptManyMessages (Id.fromInt index) conversation.id conversation.messages |> Just
 
-                    MissingKeys record ->
+                    MissingKeys _ ->
                         Nothing
             )
             backlog
@@ -7644,24 +7644,24 @@ updateLoadedFromBackend msg model =
                         local =
                             Local.model localState
 
-                        olderEncryptedMessages : Maybe OlderEncryptedMessages
-                        olderEncryptedMessages =
-                            encryptedMessagesJustLoaded localChange loggedIn
+                        loadedEncryptedMessages : Maybe LoadedEncryptedMessages
+                        loadedEncryptedMessages =
+                            encryptedMessagesJustLoaded localChange
                     in
                     ( { loggedIn
                         | localState = localState
                         , pendingDecryptedManyMessages =
-                            case olderEncryptedMessages of
-                                Just older ->
+                            case loadedEncryptedMessages of
+                                Just loaded ->
                                     SeqDict.insert
                                         loggedIn.nextDecryptManyRequestId
-                                        { shiftScrollFrom = Just older.shiftScrollFrom }
+                                        { shiftScrollFrom = loaded.shiftScrollFrom }
                                         loggedIn.pendingDecryptedManyMessages
 
                                 Nothing ->
                                     loggedIn.pendingDecryptedManyMessages
                         , nextDecryptManyRequestId =
-                            case olderEncryptedMessages of
+                            case loadedEncryptedMessages of
                                 Just _ ->
                                     Id.increment loggedIn.nextDecryptManyRequestId
 
@@ -7686,12 +7686,12 @@ updateLoadedFromBackend msg model =
                     , Command.batch
                         [ -- The scroll shift that goes with these waits for the answer,
                           -- since they take up no room in the conversation until then.
-                          case olderEncryptedMessages of
-                            Just older ->
+                          case loadedEncryptedMessages of
+                            Just loaded ->
                                 Encryption.decryptManyMessages
                                     loggedIn.nextDecryptManyRequestId
-                                    older.id
-                                    older.messages
+                                    loaded.id
+                                    loaded.messages
 
                             Nothing ->
                                 Command.none
@@ -8903,37 +8903,49 @@ storeRemainingSharedSecrets alreadyHandled privateKey loggedIn =
             )
 
 
-{-| Encrypted messages that have just been loaded by scrolling up, and where the scroll
-should be measured from once the browser says what they contain.
+{-| Encrypted messages that have just arrived, and where the scroll should be measured
+from once the browser says what they contain.
 -}
-type alias OlderEncryptedMessages =
+type alias LoadedEncryptedMessages =
     { id : Viewing_DmId
     , messages : List (Encryption.EncryptedData (ContentAndEmbeds (Id UserId)))
-    , shiftScrollFrom : HtmlId
+    , shiftScrollFrom : Maybe HtmlId
     }
 
 
 {-| An encrypted message shows nothing until this device works out what it says, so a
-batch of older ones arrives taking up no room at all and only pushes the conversation
-down when the answer comes back. The scroll is shifted then rather than now, so that the
-reader stays where they were rather than being moved twice.
+batch of them arrives taking up no room at all and only pushes the conversation around
+when the answer comes back.
+
+A page of older ones, fetched by scrolling up, is the case where that matters: the scroll
+is shifted when the answer lands rather than when the page does, so that the reader stays
+where they were rather than being moved twice. Opening a conversation puts them at the
+bottom of it, so there is nothing there to keep them level with.
+
 -}
-encryptedMessagesJustLoaded : LocalChange -> LoggedIn2 -> Maybe OlderEncryptedMessages
-encryptedMessagesJustLoaded localChange loggedIn =
+encryptedMessagesJustLoaded : LocalChange -> Maybe LoadedEncryptedMessages
+encryptedMessagesJustLoaded localChange =
     case localChange of
         Local_LoadChannelMessages guildOrDmId previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
             encryptedMessagesLoadedInto
                 guildOrDmId
-                (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage)
+                (Just (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage))
                 (SeqDict.values messagesLoaded)
-                loggedIn
 
         Local_LoadThreadMessages guildOrDmId _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
             encryptedMessagesLoadedInto
                 guildOrDmId
-                (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage)
+                (Just (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage))
                 (SeqDict.values messagesLoaded)
-                loggedIn
+
+        Local_CurrentlyViewing _ (ViewDm data (FilledInByBackend messagesLoaded)) ->
+            encryptedMessagesInConversation data.id Nothing (SeqDict.values messagesLoaded)
+
+        Local_CurrentlyViewing _ (ViewDmThread data (FilledInByBackend messagesLoaded)) ->
+            encryptedMessagesInConversation
+                { otherUserId = data.id.otherUserId }
+                Nothing
+                (SeqDict.values messagesLoaded)
 
         _ ->
             Nothing
@@ -8941,30 +8953,35 @@ encryptedMessagesJustLoaded localChange loggedIn =
 
 encryptedMessagesLoadedInto :
     GuildOrDmId
-    -> HtmlId
+    -> Maybe HtmlId
     -> List (Message.Message messageId (Id UserId))
-    -> LoggedIn2
-    -> Maybe OlderEncryptedMessages
-encryptedMessagesLoadedInto guildOrDmId shiftScrollFrom messagesLoaded loggedIn =
+    -> Maybe LoadedEncryptedMessages
+encryptedMessagesLoadedInto guildOrDmId shiftScrollFrom messagesLoaded =
     case guildOrDmId of
-        GuildOrDmId_Dm { otherUserId } ->
-            if SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice then
-                case List.filterMap encryptedMessageData messagesLoaded of
-                    [] ->
-                        Nothing
-
-                    messages ->
-                        Just
-                            { id = { otherUserId = otherUserId }
-                            , messages = messages
-                            , shiftScrollFrom = shiftScrollFrom
-                            }
-
-            else
-                Nothing
+        GuildOrDmId_Dm id ->
+            encryptedMessagesInConversation id shiftScrollFrom messagesLoaded
 
         GuildOrDmId_Guild _ ->
             Nothing
+
+
+{-| A conversation this device has no key for is handed over all the same. Only the
+browser knows what it can read, which is why it answers for each message separately, and
+being told so is how the view learns to say the message can't be read rather than showing
+nothing at all.
+-}
+encryptedMessagesInConversation :
+    Viewing_DmId
+    -> Maybe HtmlId
+    -> List (Message.Message messageId (Id UserId))
+    -> Maybe LoadedEncryptedMessages
+encryptedMessagesInConversation id shiftScrollFrom messagesLoaded =
+    case List.filterMap encryptedMessageData messagesLoaded of
+        [] ->
+            Nothing
+
+        messages ->
+            Just { id = id, messages = messages, shiftScrollFrom = shiftScrollFrom }
 
 
 type EncryptedBacklog

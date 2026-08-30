@@ -51,8 +51,8 @@ encryption before it can be turned on, so asking for it leaves the asker waiting
 the request in front of the other person.
 -}
 endToEndEncryptionRequestTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 endToEndEncryptionRequestTest config =
     let
         warning : String
@@ -191,8 +191,8 @@ same shared secret from their own private key and the other's public one, hand i
 browser to keep, and from then on messages go through the browser before they are sent.
 -}
 endToEndEncryptionAcceptTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 endToEndEncryptionAcceptTest config =
     E2EHelper.startTest
         "Accept an encryption request and send an encrypted message"
@@ -279,8 +279,8 @@ the same private key over and over, once per conversation, would be a poor way t
 up. Typing it in once works out every shared secret the device is short of.
 -}
 oneKeySetsUpEveryConversationTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 oneKeySetsUpEveryConversationTest config =
     E2EHelper.startTest
         "One private key sets up every conversation on a device"
@@ -379,17 +379,17 @@ oneKeySetsUpEveryConversationTest config =
 Order doesn't matter, so both sides are sorted before comparing.
 -}
 checkSharedSecretsAskedFor :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-    -> List (Id.Id Id.UserId)
-    -> T.Data FrontendModel E2EHelper.BackendModel2
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> List (Id UserId)
+    -> T.Data FrontendModel BackendModel2
     -> Result String ()
 checkSharedSecretsAskedFor client expected data =
     let
-        sorted : List (Id.Id Id.UserId) -> String
+        sorted : List (Id UserId) -> String
         sorted ids =
             List.map Id.toInt ids |> List.sort |> List.map String.fromInt |> String.join ", "
 
-        actual : List (Id.Id Id.UserId)
+        actual : List (Id UserId)
         actual =
             sharedSecretsAskedFor client.clientId data
     in
@@ -406,7 +406,7 @@ checkSharedSecretsAskedFor client expected data =
             )
 
 
-checkDmIsEncrypted : E2EHelper.BackendModel2 -> Result String ()
+checkDmIsEncrypted : BackendModel2 -> Result String ()
 checkDmIsEncrypted backend =
     case adminDmChannel backend |> Maybe.map .e2ee of
         Just (DmChannel.E2eeEnabled _) ->
@@ -419,7 +419,7 @@ checkDmIsEncrypted backend =
 {-| No message the server stored anywhere should contain the sender's private key, and
 the one that tried to give it away should carry the warning in its place instead.
 -}
-checkPrivateKeyNeverReachedTheServer : String -> E2EHelper.BackendModel2 -> Result String ()
+checkPrivateKeyNeverReachedTheServer : String -> BackendModel2 -> Result String ()
 checkPrivateKeyNeverReachedTheServer privateKeyText backend =
     let
         messages : List String
@@ -453,7 +453,7 @@ checkPrivateKeyNeverReachedTheServer privateKeyText backend =
 conversation only ever stores EncryptedUserTextMessage, so a plain one carrying the text
 means it went out before the browser had it.
 -}
-checkNoPlainTextReachedTheServer : String -> E2EHelper.BackendModel2 -> Result String ()
+checkNoPlainTextReachedTheServer : String -> BackendModel2 -> Result String ()
 checkNoPlainTextReachedTheServer text backend =
     case adminDmChannel backend of
         Just dmChannel ->
@@ -467,7 +467,7 @@ checkNoPlainTextReachedTheServer text backend =
             Ok ()
 
 
-checkEncryptedMessageStored : String -> E2EHelper.BackendModel2 -> Result String ()
+checkEncryptedMessageStored : String -> BackendModel2 -> Result String ()
 checkEncryptedMessageStored text backend =
     if List.member text (encryptedMessageContents backend) then
         Ok ()
@@ -499,7 +499,7 @@ plainTextMessages dmChannel =
 the message serialized but readable, which is what lets a test see whether what reached
 the server is what the app handed over rather than what was typed.
 -}
-encryptedMessageText : Message.Message Id.ChannelMessageId (Id.Id Id.UserId) -> Maybe String
+encryptedMessageText : Message.Message Id.ChannelMessageId (Id UserId) -> Maybe String
 encryptedMessageText message =
     case message of
         Message.EncryptedUserTextMessage data ->
@@ -519,7 +519,7 @@ encryptedMessageText message =
             Nothing
 
 
-checkEncryptedMessageCount : Int -> E2EHelper.BackendModel2 -> Result String ()
+checkEncryptedMessageCount : Int -> BackendModel2 -> Result String ()
 checkEncryptedMessageCount expected backend =
     let
         actual : Int
@@ -538,7 +538,7 @@ checkEncryptedMessageCount expected backend =
             )
 
 
-encryptedMessageContents : E2EHelper.BackendModel2 -> List String
+encryptedMessageContents : BackendModel2 -> List String
 encryptedMessageContents backend =
     case adminDmChannel backend of
         Just dmChannel ->
@@ -549,8 +549,8 @@ encryptedMessageContents backend =
 
 
 soloDmEncryptionTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 soloDmEncryptionTest config =
     E2EHelper.startTest
         "Encrypt a DM with yourself"
@@ -652,8 +652,8 @@ whole conversation at once rather than one request per message, so the page asks
 backlog as it loads and fills the contents in when the answer comes back.
 -}
 backlogDecryptedOnLoadTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 backlogDecryptedOnLoadTest config =
     E2EHelper.startTest
         "Decrypt the messages already in a conversation when the page loads"
@@ -732,8 +732,8 @@ scroll then would move the reader by nothing and leave them jumping when the con
 turn up, so it waits for the answer.
 -}
 olderMessagesDecryptedTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 olderMessagesDecryptedTest config =
     E2EHelper.startTest
         "Decrypt older messages loaded by scrolling up"
@@ -847,9 +847,9 @@ olderMessage index =
 
 
 checkScrollShifts :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> Int
-    -> T.Data FrontendModel E2EHelper.BackendModel2
+    -> T.Data FrontendModel BackendModel2
     -> Result String ()
 checkScrollShifts client expected data =
     let
@@ -875,7 +875,7 @@ backlogMessage =
     "Written before this device loaded"
 
 
-checkSoloDmIsEncrypted : E2EHelper.BackendModel2 -> Result String ()
+checkSoloDmIsEncrypted : BackendModel2 -> Result String ()
 checkSoloDmIsEncrypted backend =
     case soloDmChannel backend |> Maybe.map .e2ee of
         Just (DmChannel.E2eeEnabled _) ->
@@ -885,7 +885,7 @@ checkSoloDmIsEncrypted backend =
             Err "The DM with yourself should have been marked as encrypted on the backend"
 
 
-checkSoloDmHasNoPlainText : String -> E2EHelper.BackendModel2 -> Result String ()
+checkSoloDmHasNoPlainText : String -> BackendModel2 -> Result String ()
 checkSoloDmHasNoPlainText text backend =
     case soloDmChannel backend of
         Just dmChannel ->
@@ -899,7 +899,7 @@ checkSoloDmHasNoPlainText text backend =
             Ok ()
 
 
-checkSoloDmMessageStored : String -> E2EHelper.BackendModel2 -> Result String ()
+checkSoloDmMessageStored : String -> BackendModel2 -> Result String ()
 checkSoloDmMessageStored text backend =
     if List.member text (soloDmEncryptedContents backend) then
         Ok ()
@@ -911,7 +911,7 @@ checkSoloDmMessageStored text backend =
             )
 
 
-checkSoloDmMessageCount : Int -> E2EHelper.BackendModel2 -> Result String ()
+checkSoloDmMessageCount : Int -> BackendModel2 -> Result String ()
 checkSoloDmMessageCount expected backend =
     let
         actual : Int
@@ -930,7 +930,7 @@ checkSoloDmMessageCount expected backend =
             )
 
 
-soloDmEncryptedContents : E2EHelper.BackendModel2 -> List String
+soloDmEncryptedContents : BackendModel2 -> List String
 soloDmEncryptedContents backend =
     case soloDmChannel backend of
         Just dmChannel ->
@@ -940,14 +940,14 @@ soloDmEncryptedContents backend =
             []
 
 
-soloDmChannel : E2EHelper.BackendModel2 -> Maybe DmChannel.DmChannel
+soloDmChannel : BackendModel2 -> Maybe DmChannel.DmChannel
 soloDmChannel backend =
     SeqDict.get
         (DmChannelId.fromUserIds (Id.fromInt 0) (Id.fromInt 0))
         (E2EHelper.unwrapBackend backend).dmChannels
 
 
-adminDmChannel : E2EHelper.BackendModel2 -> Maybe DmChannel.DmChannel
+adminDmChannel : BackendModel2 -> Maybe DmChannel.DmChannel
 adminDmChannel backend =
     SeqDict.get
         (DmChannelId.fromUserIds (Id.fromInt 0) (Id.fromInt 2))
@@ -959,9 +959,9 @@ private half once. The showing is checked on the way past, since it is the only 
 anybody gets to save the key.
 -}
 addPrivateKeyToAccount :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-    -> (String -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2))
-    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> (String -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2))
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 addPrivateKeyToAccount client continueWith =
     T.group
         [ client.click 100 (Dom.id "guild_addPrivateKey")
@@ -997,7 +997,7 @@ addPrivateKeyToAccount client continueWith =
 they are generated from the random words each client started with, so a shared seed would
 quietly give two people the same private key.
 -}
-checkBothKeysStoredAndDifferent : E2EHelper.BackendModel2 -> Result String ()
+checkBothKeysStoredAndDifferent : BackendModel2 -> Result String ()
 checkBothKeysStoredAndDifferent backend =
     let
         keyOf : Int -> Maybe X25519.PublicKey

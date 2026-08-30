@@ -59,6 +59,7 @@ config =
     , OpaqueTypes.rule
         |> Review.Rule.ignoreErrorsForFiles
             [ "tests/E2ETests.elm"
+            , "src/E2EEncryption.elm"
             , "src/E2EHelper.elm"
             , "src/E2EDiscord.elm"
             ]
