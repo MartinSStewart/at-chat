@@ -80,6 +80,7 @@ module E2EHelper exposing
     , regularDiscordChannelCreateEvent
     , regularDiscordChannelId
     , respondToEncryptionPortWithMissingKey
+    , respondToMessageDecrypted
     , respondToMessageEncrypted
     , respondToSharedSecretStored
     , safariIphone
@@ -779,6 +780,33 @@ respondToEncryptionPortWithMissingKey client =
                     [ Encryption.FromJs_MessageEncryptFailed
                         requestId
                         "No encryption key is stored on this device for that conversation"
+                        |> Serialize.encodeToBytes (Encryption.fromJsCodec Message.contentAndEmbedsCodec)
+                        |> client.portEventBytes 100 "encryption_from_js"
+                    ]
+
+                Nothing ->
+                    [ T.checkState 0 (\_ -> Err "The client isn't waiting on a message to be encrypted") ]
+        )
+
+
+respondToMessageDecrypted :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+respondToMessageDecrypted client =
+    T.andThen
+        100
+        (\data ->
+            case pendingDecryptedMessage client.clientId data of
+                Just ( requestId, pending ) ->
+                    let
+                        bytes : Bytes
+                        bytes =
+                            Serialize.encodeToBytes Message.contentAndEmbedsCodec pending.contentAndEmbeds
+                    in
+                    [ Encryption.FromJs_MessageDecrypted
+                        requestId
+                        (stubBytesHash bytes)
+                        (EncryptedData (stubBytesHash bytes) bytes)
                         |> Serialize.encodeToBytes (Encryption.fromJsCodec Message.contentAndEmbedsCodec)
                         |> client.portEventBytes 100 "encryption_from_js"
                     ]

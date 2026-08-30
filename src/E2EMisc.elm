@@ -893,10 +893,20 @@ soloDmEncryptionTest config =
                                 [ Test.Html.Selector.text "This conversation is missing a private key" ]
                             )
                         , admin.click 100 (Dom.id "guild_hideMembers")
-                        , E2EHelper.writeMessage admin 100 "Note to self"
-                        , T.checkBackend 100 (checkSoloDmHasNoPlainText "Note to self")
-                        , E2EHelper.respondToMessageEncrypted admin
-                        , T.checkBackend 100 (checkSoloDmMessageStored "Note to self")
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId0
+                            "/"
+                            E2EHelper.desktopWindow
+                            (\adminB ->
+                                [ T.andThen 10 (\data -> [ adminB.portEvent 0 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                                , E2EHelper.writeMessage admin 100 "Note to self"
+                                , T.checkBackend 100 (checkSoloDmHasNoPlainText "Note to self")
+                                , E2EHelper.respondToMessageEncrypted admin
+                                , T.checkBackend 100 (checkSoloDmMessageStored "Note to self")
+                                , E2EHelper.respondToMessageDecrypted adminB
+                                ]
+                            )
                         ]
                     )
                 ]
