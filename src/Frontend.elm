@@ -597,13 +597,7 @@ loadedInitHelper startupData emojiData loginData loading =
             , nextDecryptionRequestId = Id.fromInt 0
             , pendingDecryptedManyMessages =
                 List.indexedMap
-                    (\index conversation ->
-                        ( Id.fromInt index
-                        , { id = conversation.id
-                          , messageHashes = List.map Encryption.hash conversation.messages
-                          }
-                        )
-                    )
+                    (\index _ -> ( Id.fromInt index, { shiftScrollFrom = Nothing } ))
                     backlog
                     |> SeqDict.fromList
             , nextDecryptManyRequestId = Id.fromInt (List.length backlog)
@@ -3351,15 +3345,27 @@ updateLoaded msg model =
 
                         Ok (Encryption.FromJs_ManyMessagesDecrypted requestId results) ->
                             -- These were already in the conversation, so unlike a message
-                            -- that has just arrived there is nowhere to put them. Filing
-                            -- their contents is the whole of it.
+                            -- that has just arrived there is nowhere to put them.
                             ( FrontendExtra.fileDecryptedMessages
                                 results
                                 { loggedIn
                                     | pendingDecryptedManyMessages =
                                         SeqDict.remove requestId loggedIn.pendingDecryptedManyMessages
                                 }
-                            , Command.none
+                            , -- Older messages loaded by scrolling up take up no room
+                              -- until now, so this is the moment the conversation grows
+                              -- and the scroll has to be shifted to match.
+                              case
+                                SeqDict.get requestId loggedIn.pendingDecryptedManyMessages
+                                    |> Maybe.andThen .shiftScrollFrom
+                              of
+                                Just anchor ->
+                                    Ports.shiftScrollByElementDelta
+                                        Pages.Guild.conversationContainerId
+                                        anchor
+
+                                Nothing ->
+                                    Command.none
                             )
 
                         Err error ->
@@ -7603,9 +7609,30 @@ updateLoadedFromBackend msg model =
                         local : LocalState
                         local =
                             Local.model localState
+
+                        olderEncryptedMessages : Maybe OlderEncryptedMessages
+                        olderEncryptedMessages =
+                            encryptedMessagesJustLoaded localChange loggedIn
                     in
                     ( { loggedIn
                         | localState = localState
+                        , pendingDecryptedManyMessages =
+                            case olderEncryptedMessages of
+                                Just older ->
+                                    SeqDict.insert
+                                        loggedIn.nextDecryptManyRequestId
+                                        { shiftScrollFrom = Just older.shiftScrollFrom }
+                                        loggedIn.pendingDecryptedManyMessages
+
+                                Nothing ->
+                                    loggedIn.pendingDecryptedManyMessages
+                        , nextDecryptManyRequestId =
+                            case olderEncryptedMessages of
+                                Just _ ->
+                                    Id.increment loggedIn.nextDecryptManyRequestId
+
+                                Nothing ->
+                                    loggedIn.nextDecryptManyRequestId
                         , games =
                             case localChange of
                                 -- The match has arrived, so there's finally something for the
@@ -7622,203 +7649,216 @@ updateLoadedFromBackend msg model =
                                 _ ->
                                     loggedIn.games
                       }
-                    , case localChange of
-                        Local_Game guildOrDmId game ->
-                            case game of
-                                Game.CreatePublicLink _ _ ->
-                                    Command.none
+                    , Command.batch
+                        [ -- The scroll shift that goes with these waits for the answer,
+                          -- since they take up no room in the conversation until then.
+                          case olderEncryptedMessages of
+                            Just older ->
+                                Encryption.decryptManyMessages
+                                    loggedIn.nextDecryptManyRequestId
+                                    older.id
+                                    older.messages
 
-                                Game.LoadMatch matchId (FilledInByBackend _) ->
-                                    case FrontendExtra.currentGamesTab local model.route of
-                                        Just gamesTab ->
-                                            if gamesTab.guildOrDmId == guildOrDmId && gamesTab.maybeMatchId == Just matchId then
-                                                Scroll.toBottomOfChannelIfAtBottom
-                                                    WordSpellingGame.pastWordsContainerId
-                                                    SetScrollToBottom
-                                                    ScrolledToBottom
+                            Nothing ->
+                                Command.none
+                        , case localChange of
+                            Local_Game guildOrDmId game ->
+                                case game of
+                                    Game.CreatePublicLink _ _ ->
+                                        Command.none
 
-                                            else
+                                    Game.LoadMatch matchId (FilledInByBackend _) ->
+                                        case FrontendExtra.currentGamesTab local model.route of
+                                            Just gamesTab ->
+                                                if gamesTab.guildOrDmId == guildOrDmId && gamesTab.maybeMatchId == Just matchId then
+                                                    Scroll.toBottomOfChannelIfAtBottom
+                                                        WordSpellingGame.pastWordsContainerId
+                                                        SetScrollToBottom
+                                                        ScrolledToBottom
+
+                                                else
+                                                    Command.none
+
+                                            Nothing ->
                                                 Command.none
 
-                                        Nothing ->
-                                            Command.none
+                                    Game.LoadMatch _ EmptyPlaceholder ->
+                                        Command.none
 
-                                Game.LoadMatch _ EmptyPlaceholder ->
-                                    Command.none
+                                    Game.LocalChange_Go _ _ ->
+                                        Command.none
 
-                                Game.LocalChange_Go _ _ ->
-                                    Command.none
+                                    Game.LocalChange_WordSpellingGame _ _ ->
+                                        Command.none
 
-                                Game.LocalChange_WordSpellingGame _ _ ->
-                                    Command.none
+                                    Game.LocalChange_SheepGame _ _ ->
+                                        Command.none
 
-                                Game.LocalChange_SheepGame _ _ ->
-                                    Command.none
+                            Local_VoiceChatChange callChange ->
+                                case callChange of
+                                    Call.Local_Leave _ ->
+                                        Command.none
 
-                        Local_VoiceChatChange callChange ->
-                            case callChange of
-                                Call.Local_Leave _ ->
-                                    Command.none
+                                    Call.Local_SetRemoteCallData _ ->
+                                        Command.none
 
-                                Call.Local_SetRemoteCallData _ ->
-                                    Command.none
+                            Local_TextEditor TextEditor.Local_Undo ->
+                                case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
+                                    Just range ->
+                                        Ports.setCursorPosition TextEditor.inputId range
 
-                        Local_TextEditor TextEditor.Local_Undo ->
-                            case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
-                                Just range ->
-                                    Ports.setCursorPosition TextEditor.inputId range
+                                    Nothing ->
+                                        Command.none
 
-                                Nothing ->
-                                    Command.none
-
-                        Local_NewGuild _ _ (FilledInByBackend guildId) ->
-                            case SeqDict.get guildId local.guilds of
-                                Just guild ->
-                                    FrontendExtra.routeReplace
-                                        model
-                                        (GuildRoute
-                                            guildId
-                                            (ChannelRoute
-                                                (LocalState.announcementChannel guild)
-                                                (NoThreadWithFriends Nothing HideChannelSettings)
-                                                Nothing
+                            Local_NewGuild _ _ (FilledInByBackend guildId) ->
+                                case SeqDict.get guildId local.guilds of
+                                    Just guild ->
+                                        FrontendExtra.routeReplace
+                                            model
+                                            (GuildRoute
+                                                guildId
+                                                (ChannelRoute
+                                                    (LocalState.announcementChannel guild)
+                                                    (NoThreadWithFriends Nothing HideChannelSettings)
+                                                    Nothing
+                                                )
+                                                ChannelsHiddenOnMobile
                                             )
-                                            ChannelsHiddenOnMobile
-                                        )
 
-                                Nothing ->
+                                    Nothing ->
+                                        Command.none
+
+                            Local_CurrentlyViewing _ viewing ->
+                                case viewing of
+                                    ViewChannel data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }), NoThread ) ->
+                                                if data.id.guildId == guildId && data.id.channelId == channelId then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    ViewDm data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( GuildOrDmId (GuildOrDmId_Dm { otherUserId }), NoThread ) ->
+                                                if data.id.otherUserId == otherUserId then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    ViewChannelThread data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }), ViewThread threadIdRoute ) ->
+                                                if data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadIdRoute then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    ViewDmThread data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( GuildOrDmId (GuildOrDmId_Dm { otherUserId }), ViewThread threadIdRoute ) ->
+                                                if data.id.otherUserId == otherUserId && data.id.threadId == threadIdRoute then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    StopViewingChannel ->
+                                        Command.none
+
+                                    ViewDiscordChannel data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }), NoThread ) ->
+                                                if data.id.currentUserId == currentUserId && data.id.guildId == guildId && data.id.channelId == channelId then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    ViewDiscordChannelThread data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }), ViewThread threadIdRoute ) ->
+                                                if data.id.currentUserId == currentUserId && data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadIdRoute then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    ViewDiscordDm data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm dmRoute), NoThread ) ->
+                                                if data.id.channelId == dmRoute.channelId then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    ViewOverview _ ->
+                                        Command.none
+
+                            Local_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                                if SeqDict.isEmpty messagesLoaded then
                                     Command.none
 
-                        Local_CurrentlyViewing _ viewing ->
-                            case viewing of
-                                ViewChannel data _ ->
-                                    case Route.toGuildOrDmId userId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }), NoThread ) ->
-                                            if data.id.guildId == guildId && data.id.channelId == channelId then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+                                else
+                                    Ports.shiftScrollByElementDelta
+                                        Pages.Guild.conversationContainerId
+                                        (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage)
 
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewDm data _ ->
-                                    case Route.toGuildOrDmId userId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Dm { otherUserId }), NoThread ) ->
-                                            if data.id.otherUserId == otherUserId then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewChannelThread data _ ->
-                                    case Route.toGuildOrDmId userId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }), ViewThread threadIdRoute ) ->
-                                            if data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadIdRoute then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewDmThread data _ ->
-                                    case Route.toGuildOrDmId userId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Dm { otherUserId }), ViewThread threadIdRoute ) ->
-                                            if data.id.otherUserId == otherUserId && data.id.threadId == threadIdRoute then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                StopViewingChannel ->
+                            Local_LoadThreadMessages _ _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                                if SeqDict.isEmpty messagesLoaded then
                                     Command.none
 
-                                ViewDiscordChannel data _ ->
-                                    case Route.toGuildOrDmId userId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }), NoThread ) ->
-                                            if data.id.currentUserId == currentUserId && data.id.guildId == guildId && data.id.channelId == channelId then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+                                else
+                                    Ports.shiftScrollByElementDelta
+                                        Pages.Guild.conversationContainerId
+                                        (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage)
 
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewDiscordChannelThread data _ ->
-                                    case Route.toGuildOrDmId userId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }), ViewThread threadIdRoute ) ->
-                                            if data.id.currentUserId == currentUserId && data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadIdRoute then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewDiscordDm data _ ->
-                                    case Route.toGuildOrDmId userId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm dmRoute), NoThread ) ->
-                                            if data.id.channelId == dmRoute.channelId then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewOverview _ ->
+                            Local_Discord_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                                if SeqDict.isEmpty messagesLoaded then
                                     Command.none
 
-                        Local_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
-                            if SeqDict.isEmpty messagesLoaded then
+                                else
+                                    Ports.shiftScrollByElementDelta
+                                        Pages.Guild.conversationContainerId
+                                        (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage)
+
+                            Local_Discord_LoadThreadMessages _ _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                                if SeqDict.isEmpty messagesLoaded then
+                                    Command.none
+
+                                else
+                                    Ports.shiftScrollByElementDelta
+                                        Pages.Guild.conversationContainerId
+                                        (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage)
+
+                            _ ->
                                 Command.none
-
-                            else
-                                Ports.shiftScrollByElementDelta
-                                    Pages.Guild.conversationContainerId
-                                    (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage)
-
-                        Local_LoadThreadMessages _ _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
-                            if SeqDict.isEmpty messagesLoaded then
-                                Command.none
-
-                            else
-                                Ports.shiftScrollByElementDelta
-                                    Pages.Guild.conversationContainerId
-                                    (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage)
-
-                        Local_Discord_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
-                            if SeqDict.isEmpty messagesLoaded then
-                                Command.none
-
-                            else
-                                Ports.shiftScrollByElementDelta
-                                    Pages.Guild.conversationContainerId
-                                    (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage)
-
-                        Local_Discord_LoadThreadMessages _ _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
-                            if SeqDict.isEmpty messagesLoaded then
-                                Command.none
-
-                            else
-                                Ports.shiftScrollByElementDelta
-                                    Pages.Guild.conversationContainerId
-                                    (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage)
-
-                        _ ->
-                            Command.none
+                        ]
                     )
                 )
                 model
@@ -8815,6 +8855,70 @@ storeRemainingSharedSecrets alreadyHandled privateKey loggedIn =
                     DmChannel.E2eeDisabled ->
                         Nothing
             )
+
+
+{-| Encrypted messages that have just been loaded by scrolling up, and where the scroll
+should be measured from once the browser says what they contain.
+-}
+type alias OlderEncryptedMessages =
+    { id : Viewing_DmId
+    , messages : List (Encryption.EncryptedData (ContentAndEmbeds (Id UserId)))
+    , shiftScrollFrom : HtmlId
+    }
+
+
+{-| An encrypted message shows nothing until this device works out what it says, so a
+batch of older ones arrives taking up no room at all and only pushes the conversation
+down when the answer comes back. The scroll is shifted then rather than now, so that the
+reader stays where they were rather than being moved twice.
+-}
+encryptedMessagesJustLoaded : LocalChange -> LoggedIn2 -> Maybe OlderEncryptedMessages
+encryptedMessagesJustLoaded localChange loggedIn =
+    case localChange of
+        Local_LoadChannelMessages guildOrDmId previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+            encryptedMessagesLoadedInto
+                guildOrDmId
+                (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage)
+                (SeqDict.values messagesLoaded)
+                loggedIn
+
+        Local_LoadThreadMessages guildOrDmId _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+            encryptedMessagesLoadedInto
+                guildOrDmId
+                (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage)
+                (SeqDict.values messagesLoaded)
+                loggedIn
+
+        _ ->
+            Nothing
+
+
+encryptedMessagesLoadedInto :
+    GuildOrDmId
+    -> HtmlId
+    -> List (Message.Message messageId (Id UserId))
+    -> LoggedIn2
+    -> Maybe OlderEncryptedMessages
+encryptedMessagesLoadedInto guildOrDmId shiftScrollFrom messagesLoaded loggedIn =
+    case guildOrDmId of
+        GuildOrDmId_Dm { otherUserId } ->
+            if SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice then
+                case List.filterMap encryptedMessageData messagesLoaded of
+                    [] ->
+                        Nothing
+
+                    messages ->
+                        Just
+                            { id = { otherUserId = otherUserId }
+                            , messages = messages
+                            , shiftScrollFrom = shiftScrollFrom
+                            }
+
+            else
+                Nothing
+
+        GuildOrDmId_Guild _ ->
+            Nothing
 
 
 {-| Every encrypted message already sitting in a conversation this device holds a key

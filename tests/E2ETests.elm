@@ -317,6 +317,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EEncryption.endToEndEncryptionAcceptTest normalConfig
     , E2EEncryption.endToEndEncryptionRequestTest normalConfig
     , E2EEncryption.oneKeySetsUpEveryConversationTest normalConfig
+    , E2EEncryption.olderMessagesDecryptedTest normalConfig
     , E2EEncryption.soloDmEncryptionTest normalConfig
     , E2EMisc.codeBlockInputTest normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig

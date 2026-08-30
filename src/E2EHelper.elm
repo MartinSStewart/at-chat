@@ -86,6 +86,7 @@ module E2EHelper exposing
     , respondToMessageEncrypted
     , respondToSharedSecretStored
     , safariIphone
+    , scrollShiftCount
     , scrollToBottom
     , scrollToMiddle
     , scrollToTop
@@ -119,6 +120,7 @@ import Audio
 import Backend
 import Broadcast
 import Bytes exposing (Bytes)
+import Bytes.Decode
 import Bytes.Encode
 import Call
 import ChannelDescription
@@ -744,6 +746,19 @@ encryptionPortRequests clientId data =
         data.portBytesRequests
 
 
+{-| How many times a client has asked the browser to shift the scroll, which is what
+keeps the reader in place when messages are added above them.
+-}
+scrollShiftCount : Lamdera.ClientId -> T.Data FrontendModel BackendModel2 -> Int
+scrollShiftCount clientId data =
+    List.filter
+        (\request ->
+            request.clientId == clientId && request.portName == "shift_scroll_by_element_delta_to_js"
+        )
+        data.portRequests
+        |> List.length
+
+
 {-| The conversations a client has asked the browser to keep a shared secret for.
 -}
 sharedSecretsAskedFor : Lamdera.ClientId -> T.Data FrontendModel BackendModel2 -> List (Id UserId)
@@ -883,8 +898,14 @@ decryptManyRequest request =
             Nothing
 
 
-{-| The most recent message a client asked to have encrypted. Answering the newest is
-what the browser does, since a test only ever leaves one outstanding.
+{-| Answers every encryption request the client has made rather than only the most recent
+one.
+
+A browser answers each request as it finishes with it, and a test that writes several
+messages in a row can otherwise sample the requests a moment before the newest one is
+recorded, answer the one before it, and quietly lose a message. An answer to a request
+that was already dealt with is ignored by the app, so there is no cost to repeating them.
+
 -}
 answerEncryptRequest :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
@@ -895,11 +916,15 @@ answerEncryptRequest client toReply =
         100
         (\data ->
             case List.filterMap encryptRequest (encryptionPortRequests client.clientId data) of
-                ( requestId, contentAndEmbeds ) :: _ ->
-                    [ toReply requestId contentAndEmbeds |> sendFromJs client ]
-
                 [] ->
                     [ T.checkState 0 (\_ -> Err "The client didn't ask for a message to be encrypted") ]
+
+                requests ->
+                    List.map
+                        (\( requestId, contentAndEmbeds ) ->
+                            toReply requestId contentAndEmbeds |> sendFromJs client
+                        )
+                        requests
         )
 
 
@@ -937,12 +962,31 @@ sendFromJs client fromJs =
 
 
 {-| Real ciphertext is hashed by the browser. Nothing here encrypts, so this stands in
-with something just as deterministic: the width of the bytes and their first few values.
-The app only ever uses it as a key to look a message up by.
+with something just as deterministic, running over the bytes the same way. The app uses
+it as the key to look a message up by, so two different messages must not land on the
+same one: two of the same length would, if this only counted them.
 -}
 stubBytesHash : Bytes -> BytesHash
 stubBytesHash bytes =
-    BytesHash (Bytes.width bytes)
+    Bytes.Decode.decode
+        (Bytes.Decode.loop
+            ( Bytes.width bytes, 0 )
+            (\( bytesLeft, soFar ) ->
+                if bytesLeft <= 0 then
+                    Bytes.Decode.succeed (Bytes.Decode.Done soFar)
+
+                else
+                    Bytes.Decode.map
+                        (\byte ->
+                            Bytes.Decode.Loop
+                                ( bytesLeft - 1, modBy 281474976710656 (soFar * 31 + byte) )
+                        )
+                        Bytes.Decode.unsignedInt8
+            )
+        )
+        bytes
+        |> Maybe.withDefault 0
+        |> BytesHash
 
 
 httpBasic : String -> Int -> String -> HttpResponse

@@ -2,6 +2,7 @@ module E2EEncryption exposing
     ( backlogDecryptedOnLoadTest
     , endToEndEncryptionAcceptTest
     , endToEndEncryptionRequestTest
+    , olderMessagesDecryptedTest
     , oneKeySetsUpEveryConversationTest
     , soloDmEncryptionTest
     )
@@ -38,6 +39,7 @@ import Serialize
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import VisibleMessages
 import X25519
 
 
@@ -696,6 +698,150 @@ backlogDecryptedOnLoadTest config =
         ]
 
 
+{-| An encrypted message shows nothing until this device works out what it says, so a
+page of older ones loaded by scrolling up arrives taking up no room at all. Shifting the
+scroll then would move the reader by nothing and leave them jumping when the contents
+turn up, so it waits for the answer.
+-}
+olderMessagesDecryptedTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+olderMessagesDecryptedTest config =
+    E2EHelper.startTest
+        "Decrypt older messages loaded by scrolling up"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.openDm admin 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                        , E2EHelper.respondToSharedSecretStored admin Broadcast.adminUserId
+                        , admin.click 100 (Dom.id "guild_hideMembers")
+
+                        -- More messages than fit in a page, so a device loading the
+                        -- conversation gets the most recent ones and has to scroll up for
+                        -- the rest.
+                        , List.range 1 (VisibleMessages.pageSize + 5)
+                            |> List.map
+                                (\index ->
+                                    T.group
+                                        [ E2EHelper.writeMessage admin 100 (olderMessage index)
+                                        , E2EHelper.respondToMessageEncrypted admin
+                                        ]
+                                )
+                            |> T.group
+                        , T.checkBackend
+                            100
+                            (checkSoloDmMessageCount (VisibleMessages.pageSize + 5))
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId0
+                            "/"
+                            E2EHelper.desktopWindow
+                            (\adminB ->
+                                [ T.andThen
+                                    10
+                                    (\data ->
+                                        [ adminB.portEvent
+                                            0
+                                            "load_startup_data_from_js"
+                                            (E2EHelper.startupDataJsonWithE2eeKeys
+                                                data.time
+                                                E2EHelper.firefoxDesktop
+                                                [ Broadcast.adminUserId ]
+                                            )
+                                        ]
+                                    )
+                                , adminB.click 100 (Dom.id "guild_friendLabel_0")
+                                , E2EHelper.respondToManyMessagesDecrypted adminB
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.exactText (olderMessage (VisibleMessages.pageSize + 5)) ]
+                                    )
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.hasNot
+                                        [ Test.Html.Selector.exactText (olderMessage 1) ]
+                                    )
+                                , T.checkState 100 (checkScrollShifts adminB 0)
+
+                                -- Scrolling up loads the rest of the conversation. The
+                                -- page arrives showing nothing at all, since nothing has
+                                -- worked out what any of it says yet: the one shift here
+                                -- is for the messages that were never encrypted, and it
+                                -- moves the reader by nothing.
+                                , E2EHelper.scrollToTop adminB
+                                , adminB.checkView
+                                    1000
+                                    (Test.Html.Query.hasNot
+                                        [ Test.Html.Selector.exactText (olderMessage 1) ]
+                                    )
+                                , T.checkState 100 (checkScrollShifts adminB 1)
+
+                                -- The answer is what actually grows the conversation, so
+                                -- the shift that keeps the reader in place belongs here.
+                                , E2EHelper.respondToManyMessagesDecrypted adminB
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.exactText (olderMessage 1) ]
+                                    )
+                                , T.checkState 100 (checkScrollShifts adminB 2)
+                                , adminB.snapshotView 100 { name = "Older encrypted messages decrypted" }
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+olderMessage : Int -> String
+olderMessage index =
+    "Message " ++ String.fromInt index
+
+
+checkScrollShifts :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> Int
+    -> T.Data FrontendModel E2EHelper.BackendModel2
+    -> Result String ()
+checkScrollShifts client expected data =
+    let
+        actual : Int
+        actual =
+            E2EHelper.scrollShiftCount client.clientId data
+    in
+    if actual == expected then
+        Ok ()
+
+    else
+        Err
+            ("Expected the scroll to have been shifted "
+                ++ String.fromInt expected
+                ++ " times, was shifted "
+                ++ String.fromInt actual
+                ++ " times"
+            )
+
+
 backlogMessage : String
 backlogMessage =
     "Written before this device loaded"
@@ -734,6 +880,25 @@ checkSoloDmMessageStored text backend =
         Err
             ("The stored message isn't what the browser handed back. Stored: "
                 ++ String.join ", " (soloDmEncryptedContents backend)
+            )
+
+
+checkSoloDmMessageCount : Int -> E2EHelper.BackendModel2 -> Result String ()
+checkSoloDmMessageCount expected backend =
+    let
+        actual : Int
+        actual =
+            List.length (soloDmEncryptedContents backend)
+    in
+    if actual == expected then
+        Ok ()
+
+    else
+        Err
+            ("Expected "
+                ++ String.fromInt expected
+                ++ " encrypted messages in the DM with yourself, found "
+                ++ String.fromInt actual
             )
 
 

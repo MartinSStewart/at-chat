@@ -81,7 +81,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
-import Encryption exposing (BytesHash, DecryptManyRequestId, DecryptRequestId, EncryptRequestId, EncryptedData)
+import Encryption exposing (DecryptManyRequestId, DecryptRequestId, EncryptRequestId, EncryptedData)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import Game
 import Go
@@ -300,16 +300,17 @@ type alias PendingDecryptedMessage =
     }
 
 
-{-| A conversation's backlog, handed over to be decrypted in one go when the page loads.
+{-| What is left to do once the browser says what a batch of encrypted messages contains.
 
-Unlike a message that has just arrived, these are already sitting in the local state and
-only need their contents worked out, so the hashes they will be filed under is all there
-is to remember.
+An encrypted message shows nothing at all until its contents are worked out, so a batch
+of older ones loaded by scrolling up takes up no room when it arrives and only pushes the
+conversation down once the answer comes back. The message to measure the scroll from
+waits here until then. The backlog handed over as the page loads has nothing waiting on
+it.
 
 -}
 type alias PendingDecryptedManyMessages =
-    { id : Viewing_DmId
-    , messageHashes : List BytesHash
+    { shiftScrollFrom : Maybe HtmlId
     }
 
 
