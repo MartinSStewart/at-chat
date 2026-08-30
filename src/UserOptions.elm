@@ -532,7 +532,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                     List.filterMap
                                         (\( otherUserId, channel ) ->
                                             case ( channel.e2ee, User.getUser otherUserId local.localUser ) of
-                                                ( E2eeEnabled enabledAt, Just otherUser ) ->
+                                                ( E2eeEnabled _, Just otherUser ) ->
                                                     Pages.Guild.friendLabel
                                                         isMobile
                                                         time
@@ -1016,6 +1016,7 @@ colorPreview time isMobile local allUsers color =
         (Id.fromInt 0)
         { content = message.content, embeds = message.embeds }
         SeqDict.empty
+        False
         { message | userIconDrawings = exampleDrawing local.localUser.session.userId }
         |> Ui.map (\_ -> FrontendNoOp)
         |> Ui.el [ Ui.background MyUi.background3, Ui.widthMax 400, Ui.paddingXY 8 4 ]

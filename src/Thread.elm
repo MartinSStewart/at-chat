@@ -21,7 +21,7 @@ import Drawing
 import Effect.Time as Time
 import Id exposing (Id, ThreadMessageId, UserId)
 import IdArray exposing (IdArray)
-import Message exposing (ContentAndEmbeds, Message)
+import Message exposing (Message)
 import MessageArray exposing (MessageArray)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)

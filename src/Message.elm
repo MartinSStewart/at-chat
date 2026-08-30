@@ -26,7 +26,6 @@ module Message exposing
     )
 
 import Array exposing (Array)
-import Bytes exposing (Bytes)
 import Drawing exposing (Drawing)
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http

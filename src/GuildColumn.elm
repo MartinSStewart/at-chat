@@ -22,7 +22,6 @@ import LinkedAndOtherDiscordUsers
 import List.Extra
 import LocalState exposing (DiscordFrontendGuild, FrontendGuild, LocalState)
 import MembersAndOwner exposing (IsMember(..))
-import Message exposing (ContentAndEmbeds, Message)
 import MessageArray exposing (MessageArray)
 import MuteSettings exposing (IsMuted(..))
 import MyUi

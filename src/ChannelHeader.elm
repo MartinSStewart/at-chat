@@ -26,7 +26,7 @@ import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_DiscordDmId)
 import LinkedAndOtherDiscordUsers
 import LocalState exposing (LocalState)
-import Message exposing (Message)
+import Message
 import MessageArray exposing (MessageArray)
 import MyUi
 import NonemptyDict

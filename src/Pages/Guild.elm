@@ -57,7 +57,7 @@ import DmChannelId
 import Drawing exposing (Drawing)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Embed exposing (Embed, EmbedData)
+import Embed exposing (Embed)
 import Emoji exposing (CachedEmojiData, EmojiConfig, EmojiOrCustomEmoji)
 import Encryption exposing (BytesHash)
 import Env
@@ -78,13 +78,13 @@ import List.Nonempty exposing (Nonempty)
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (ContentAndEmbeds, GameType(..), Message(..), UserTextMessageData)
+import Message exposing (ContentAndEmbeds, GameType(..), Message(..))
 import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
 import MuteSettings exposing (IsMuted(..))
-import MyUi exposing (Copied(..))
+import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
@@ -538,7 +538,7 @@ unreadOverviewNotMobile local loggedIn model =
 
         unreads : List UnreadOverviewChannel
         unreads =
-            unreadOverviewChannels local allDiscordUsers
+            unreadOverviewChannels loggedIn.decryptedMessages local allDiscordUsers
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -796,8 +796,12 @@ each. A channel's place in the overview is decided by when it started being unre
 messages arriving while the overview is open add to a channel where it already is instead of
 moving it.
 -}
-unreadOverviewChannels : LocalState -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser -> List UnreadOverviewChannel
-unreadOverviewChannels local allDiscordUsers =
+unreadOverviewChannels :
+    SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
+    -> LocalState
+    -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+    -> List UnreadOverviewChannel
+unreadOverviewChannels decrypted local allDiscordUsers =
     let
         currentUser : FrontendCurrentUser
         currentUser =
@@ -853,7 +857,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                         threadSource
                                                             guild.name
                                                             channel.name
-                                                            (threadPreviewText local.localUser.timezone allUsers threadId channel)
+                                                            (threadPreviewText local.localUser.timezone allUsers threadId decrypted channel)
                                                     , route =
                                                         GuildRoute
                                                             guildId
@@ -926,7 +930,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                     dmThreadSource
                                                         otherUserId
                                                         local.localUser
-                                                        (threadPreviewText local.localUser.timezone allUsers threadId dmChannel)
+                                                        (threadPreviewText local.localUser.timezone allUsers threadId decrypted dmChannel)
                                                 , route =
                                                     DmRoute
                                                         { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
@@ -1004,7 +1008,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                                     threadSource
                                                                         guild.name
                                                                         channel.name
-                                                                        (threadPreviewText local.localUser.timezone allDiscordUsers threadId channel)
+                                                                        (threadPreviewText local.localUser.timezone allDiscordUsers threadId SeqDict.empty channel)
                                                                 , route =
                                                                     DiscordGuildRoute
                                                                         { currentDiscordUserId = currentDiscordUserId
@@ -1427,6 +1431,7 @@ dmChannelView dmRoute loggedIn local model =
                                         local.localUser.timezone
                                         (User.allUsers local.localUser)
                                         threadMessageIndex
+                                        loggedIn.decryptedMessages
                                         dmChannel
                                     )
 
@@ -2458,7 +2463,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                 DmChannel.E2eeDisabled ->
                     False
 
-                DmChannel.E2eeEnabled posix ->
+                DmChannel.E2eeEnabled _ ->
                     False
     in
     MyUi.container
@@ -2509,7 +2514,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                     (PressedEnableE2ee otherUserId)
                                     (Ui.text enableE2eeText)
 
-                DmChannel.E2eeRequestedBy requestedBy ->
+                DmChannel.E2eeRequestedBy _ ->
                     if requestedByOtherUser then
                         if not risksAccepted then
                             Ui.none
@@ -2896,12 +2901,13 @@ threadPreviewText :
     Time.Zone
     -> SeqDict userId { a | name : PersonName }
     -> Id ChannelMessageId
+    -> SeqDict BytesHash (Result () (ContentAndEmbeds userId))
     -> { b | messages : MessageArray ChannelMessageId userId }
     -> String
-threadPreviewText timezone allUsers threadMessageIndex channel =
+threadPreviewText timezone allUsers threadMessageIndex decrypted channel =
     case MessageArray.get threadMessageIndex channel.messages of
         Just message ->
-            LocalState.messageToString timezone allUsers message
+            LocalState.messageToString timezone allUsers decrypted message
 
         _ ->
             "Thread not found"
@@ -2954,6 +2960,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                         local.localUser.timezone
                                         (User.allUsers local.localUser)
                                         threadMessageIndex
+                                        loggedIn.decryptedMessages
                                         channel
                                     )
 
@@ -3058,6 +3065,7 @@ discordChannelView routeData guild loggedIn local model =
                                             local.localUser.timezone
                                             (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                             threadMessageIndex
+                                            SeqDict.empty
                                             channel
                                     )
                                     availableCustomEmojis
@@ -6920,6 +6928,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                     messageId
                     { content = data.content, embeds = data.embeds }
                     decrypted
+                    False
                     data
                 )
 
@@ -6959,6 +6968,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                             messageId
                             (Result.withDefault { content = RichText.failedToDecryptMessage, embeds = Array.empty } result)
                             decrypted
+                            True
                             data
                         )
 
@@ -7404,6 +7414,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                     messageId
                     { content = message2.content, embeds = message2.embeds }
                     decrypted
+                    False
                     message2
                 )
 
@@ -7438,6 +7449,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                             messageId
                             (Result.withDefault { content = RichText.failedToDecryptMessage, embeds = Array.empty } result)
                             decrypted
+                            True
                             message2
                         )
 
@@ -7839,6 +7851,7 @@ userTextMessageContent :
     -> Id messageId
     -> ContentAndEmbeds (Id UserId)
     -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
+    -> Bool
     ->
         { a
             | createdAt : Time.Posix
@@ -7853,7 +7866,7 @@ userTextMessageContent :
             , embedDrawings : SeqDict Int (Drawing (Id UserId))
         }
     -> Element MessageViewMsg
-userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId { content, embeds } decrypted message2 =
+userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId { content, embeds } decrypted showEncryptionIcon message2 =
     Ui.row
         []
         [ User.profileImage (SeqDict.get message2.createdBy allUsers)
@@ -7901,6 +7914,11 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
             , Ui.row
                 []
                 [ User.toStringView message2.createdBy allUsers
+                , if showEncryptionIcon then
+                    Ui.html Icons.lockClosed
+
+                  else
+                    Ui.none
                 , messageTimestamp
                     drawingColor
                     message2.timestampDrawings
@@ -7908,7 +7926,6 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                     messageId
                     message2.createdAt
                     localUser.timezone
-                , messageIdView messageId
                 ]
             , Html.div
                 [ Html.Attributes.style "white-space" "pre-wrap" ]
@@ -8895,7 +8912,7 @@ previewThreadLastMessage_userTextMessage :
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> Nonempty (RichText userId)
-    -> { c | createdBy : userId, attachedFiles : SeqDict (Id FileId) FileStatus.FileData }
+    -> { c | createdBy : userId, attachedFiles : SeqDict (Id FileId) FileData }
     -> List (Html MessageViewMsg)
 previewThreadLastMessage_userTextMessage time timezone customEmojis allUsers content data =
     Html.span
@@ -9213,13 +9230,14 @@ channelColumn :
     Bool
     -> Time.Posix
     -> LocalUser
+    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Bool
     -> String
     -> Element FrontendMsg_
-channelColumn isMobile time localUser guildId guild channelRoute canScroll2 channelSearch =
+channelColumn isMobile time localUser decrypted guildId guild channelRoute canScroll2 channelSearch =
     let
         guildName : String
         guildName =
@@ -9333,6 +9351,7 @@ channelColumn isMobile time localUser guildId guild channelRoute canScroll2 chan
                                 channelRoute
                                 directMentions
                                 localUser
+                                decrypted
                                 guildId
                                 channelId
                                 channel
@@ -9610,20 +9629,17 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
         )
 
 
-{-| The threads of one DM, listed underneath it in the friends column. The
-`threadRoute` is the one being viewed in this DM, or Nothing when another DM (or
-no DM at all) is open.
--}
 dmColumnThreads :
     Bool
     -> Time.Posix
     -> Maybe ThreadRouteWithFriends
     -> LocalUser
     -> Id UserId
+    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> { b | messages : MessageArray ChannelMessageId (Id UserId) }
     -> SeqDict (Id ChannelMessageId) FrontendThread
     -> Element FrontendMsg_
-dmColumnThreads isMobile now threadRoute localUser otherUserId channel threads =
+dmColumnThreads isMobile now threadRoute localUser otherUserId decrypted channel threads =
     let
         threads2 : List ( Id ChannelMessageId, ( IsMuted, ChannelNotificationType ), Bool )
         threads2 =
@@ -9703,7 +9719,7 @@ dmColumnThreads isMobile now threadRoute localUser otherUserId channel threads =
                     , channelsVisible = ChannelsHiddenOnMobile
                     }
                 )
-                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex channel)
+                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex decrypted channel)
         )
         threads2
         |> Ui.column []
@@ -9715,12 +9731,13 @@ channelColumnThreads :
     -> ChannelRoute
     -> Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     -> LocalUser
+    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     -> Id GuildId
     -> Id ChannelId
     -> FrontendChannel
     -> SeqDict (Id ChannelMessageId) FrontendThread
     -> Element FrontendMsg_
-channelColumnThreads isMobile now channelRoute directMentions localUser guildId channelId channel threads =
+channelColumnThreads isMobile now channelRoute directMentions localUser decrypted guildId channelId channel threads =
     let
         threads2 : List ( Id ChannelMessageId, ( IsMuted, ChannelNotificationType ), Bool )
         threads2 =
@@ -9788,7 +9805,7 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
                     (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideChannelSettings) Nothing)
                     ChannelsHiddenOnMobile
                 )
-                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex channel)
+                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex decrypted channel)
         )
         threads2
         |> Ui.column []
@@ -10313,6 +10330,7 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                                         threadRoute
                                         localUser
                                         otherUserId
+                                        decrypted
                                         dmChannel
                                         (case threadRoute of
                                             -- A thread that was just opened isn't in the local
@@ -10742,10 +10760,10 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
 
                                 EncryptedUserTextMessage a ->
                                     if LinkedAndOtherDiscordUsers.isLinkedUser a.createdBy localUser.discordUsers then
-                                        "You: Failed to decrypt message"
+                                        "You: " ++ RichText.failedToDecryptMessageText
 
                                     else
-                                        "Failed to decrypt message"
+                                        RichText.failedToDecryptMessageText
 
                                 UserJoinedMessage _ userId _ _ ->
                                     User.toString

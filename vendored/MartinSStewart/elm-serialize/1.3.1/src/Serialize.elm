@@ -1,5 +1,5 @@
 module Serialize exposing
-    ( encodeToJson, decodeFromJson, encodeToBytes, decodeFromBytes, encodeToString, decodeFromString, getJsonDecoder
+    ( encodeToJson, decodeFromJson, encodeToBytes, decodeFromBytes, encodeToString, decodeFromString
     , Codec, Error(..)
     , string, bool, float, int, unit, bytes, byte
     , maybe, list, array, dict, set, tuple, triple, result, enum
@@ -7,7 +7,7 @@ module Serialize exposing
     , CustomTypeCodec, customType, variant0, variant1, variant2, variant3, variant4, variant5, variant6, variant7, variant8, finishCustomType, VariantEncoder
     , map, mapValid, mapError
     , lazy
-    , unsignedInt16, unsignedInt32
+    , decodeGetJson, unsignedInt16, unsignedInt32
     )
 
 {-|
@@ -251,8 +251,8 @@ decodeFromJson codec json =
         Serialize.getJsonDecoder never pointCodec
 
 -}
-getJsonDecoder : (e -> String) -> Codec e a -> JD.Decoder a
-getJsonDecoder errorToString codec =
+decodeGetJson : (e -> String) -> Codec e a -> JD.Decoder a
+decodeGetJson errorToString codec =
     JD.value
         |> JD.andThen
             (\value ->
@@ -578,7 +578,7 @@ maybe justCodec =
 list : Codec e a -> Codec e (List a)
 list codec =
     build
-        (listEncode (getBytesEncoderHelper codec))
+        (encodeList (getBytesEncoderHelper codec))
         (BD.unsignedInt32 endian
             |> BD.andThen
                 (\length -> BD.loop ( length, [] ) (listStep (getBytesDecoderHelper codec)))
@@ -603,8 +603,8 @@ list codec =
         )
 
 
-listEncode : (a -> BE.Encoder) -> List a -> BE.Encoder
-listEncode encoder_ list_ =
+encodeList : (a -> BE.Encoder) -> List a -> BE.Encoder
+encodeList encoder_ list_ =
     list_
         |> List.map encoder_
         |> (::) (BE.unsignedInt32 endian (List.length list_))

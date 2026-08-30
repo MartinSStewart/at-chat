@@ -28,7 +28,7 @@ import Effect.Time as Time
 import Game exposing (BackendGameData)
 import Id exposing (ChannelMessageId, GamePublicId, Id, ThreadMessageId, ThreadRoute(..), UserId)
 import IdArray exposing (IdArray)
-import Message exposing (ContentAndEmbeds, Message)
+import Message exposing (Message)
 import MessageArray exposing (MessageArray)
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)

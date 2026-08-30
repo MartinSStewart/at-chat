@@ -23,7 +23,7 @@ import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), G
 import LinkedAndOtherDiscordUsers
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
-import Message exposing (ContentAndEmbeds, Message(..))
+import Message exposing (Message(..))
 import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageView

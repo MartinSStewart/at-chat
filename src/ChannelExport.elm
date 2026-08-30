@@ -29,7 +29,7 @@ import DmChannel exposing (DiscordDmChannel, DmChannel)
 import Effect.Time as Time
 import Embed exposing (Embed(..))
 import Emoji exposing (EmojiOrCustomEmoji(..))
-import Encryption as Encrypted exposing (EncryptedData)
+import Encryption as Encrypted
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName

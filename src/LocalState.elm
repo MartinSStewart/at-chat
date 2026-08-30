@@ -163,7 +163,7 @@ import Encryption exposing (BytesHash)
 import FileStatus exposing (FileHash)
 import Game
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId)
 import IdArray exposing (IdArray)
 import LinkedAndOtherDiscordUsers
 import List.Extra
@@ -524,14 +524,29 @@ messageReactionsNoThread messageId channel =
             SeqDict.empty
 
 
-messageToString : Time.Zone -> SeqDict userId { a | name : PersonName } -> Message messageId userId -> String
-messageToString timezone allUsers3 message =
+messageToString :
+    Time.Zone
+    -> SeqDict userId { a | name : PersonName }
+    -> SeqDict BytesHash (Result () (ContentAndEmbeds userId))
+    -> Message messageId userId
+    -> String
+messageToString timezone allUsers3 decrypted message =
     case message of
         UserTextMessage a ->
             RichText.toString timezone False allUsers3 a.content
 
-        EncryptedUserTextMessage _ ->
-            "Failed to decrypt message"
+        EncryptedUserTextMessage a ->
+            case SeqDict.get (Encryption.hash a.encryptedData) decrypted of
+                Just result ->
+                    case result of
+                        Ok ok ->
+                            RichText.toString timezone False allUsers3 ok.content
+
+                        Err () ->
+                            RichText.failedToDecryptMessageText
+
+                Nothing ->
+                    ""
 
         UserJoinedMessage _ userId _ _ ->
             User.toString userId allUsers3

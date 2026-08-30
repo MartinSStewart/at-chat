@@ -28,7 +28,6 @@ module FrontendExtra exposing
     , newPrivateKeyWarning
     , pastedMessageFileName
     , pingUserNameSoFar
-    , playNotificationSound
     , playNotificationSoundForDiscordMessage
     , routePush
     , routeReplace
@@ -2677,7 +2676,7 @@ before the message was added, since that is what the message handlers have on ha
 -}
 newMessageThreadRoute :
     ThreadRouteWithMaybeMessage
-    -> { a | messages : MessageArray ChannelMessageId c, threads : SeqDict (Id ChannelMessageId) { d | messages : MessageArray Id.ThreadMessageId e } }
+    -> { a | messages : MessageArray ChannelMessageId c, threads : SeqDict (Id ChannelMessageId) { d | messages : MessageArray ThreadMessageId e } }
     -> ThreadRouteWithMessage
 newMessageThreadRoute threadRouteWithRepliedTo channel =
     case threadRouteWithRepliedTo of
@@ -7055,7 +7054,7 @@ addEncryptedDmMessage :
     Time.Posix
     -> Id UserId
     -> Id UserId
-    -> EncryptedData (Message.ContentAndEmbeds (Id UserId))
+    -> EncryptedData (ContentAndEmbeds (Id UserId))
     -> ThreadRouteWithMaybeMessage
     -> SeqDict (Id FileId) FileData
     -> LocalState

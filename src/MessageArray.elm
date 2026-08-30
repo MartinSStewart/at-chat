@@ -40,7 +40,7 @@ the size of the slice instead of the size of the channel.
 
 import Array exposing (Array)
 import Id exposing (Id)
-import Message exposing (ContentAndEmbeds, Message)
+import Message exposing (Message)
 
 
 {-| OpaqueVariants

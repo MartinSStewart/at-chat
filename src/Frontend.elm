@@ -6,7 +6,7 @@ module Frontend exposing
     )
 
 import AiChat
-import Array exposing (Array)
+import Array
 import Audio exposing (AudioCmd, AudioData)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation

@@ -53,7 +53,6 @@ module RichText exposing
 
 import Array exposing (Array)
 import Basics.Extra
-import Bitwise
 import Char
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)

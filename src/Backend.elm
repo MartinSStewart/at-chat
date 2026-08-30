@@ -2470,7 +2470,7 @@ discordStartThread timezone discordUser channel channelId threadId messageId mod
                         UserTextMessage a ->
                             RichText.toStringWithGetter timezone DiscordUserData.username True model.discordUsers a.content
 
-                        EncryptedUserTextMessage a ->
+                        EncryptedUserTextMessage _ ->
                             ""
 
                         UserJoinedMessage _ userId _ _ ->
@@ -6065,7 +6065,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 DmChannel.E2eeRequestedBy _ ->
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
-                                DmChannel.E2eeEnabled posix ->
+                                DmChannel.E2eeEnabled _ ->
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
@@ -6156,7 +6156,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         (\session _ _ dmChannelId dmChannel ->
                             case dmChannel.e2ee of
                                 DmChannel.E2eeRequestedBy requestedBy ->
-                                    if requestedBy == session.userId && not (session.userId == id.otherUserId) then
+                                    if requestedBy == session.userId && (session.userId /= id.otherUserId) then
                                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                     else

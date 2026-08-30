@@ -113,8 +113,7 @@ type FileStatus
 
 
 type IsEncrypted
-    = IsEncrypted
-    | IsNotEncrypted
+    = IsNotEncrypted
 
 
 {-| OpaqueVariants
