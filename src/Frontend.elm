@@ -35,7 +35,7 @@ import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji(..), EmojiOrSticker(..))
-import Encryption
+import Encryption exposing (BytesHash)
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
 import Game
@@ -513,13 +513,13 @@ loadedInitHelper :
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 loadedInitHelper startupData emojiData loginData loading =
     let
+        backlog : List EncryptedBacklog
+        backlog =
+            encryptedBacklog (SeqSet.fromList startupData.e2eeKeys) loginData.dmChannels
+
         local : LocalState
         local =
-            loginDataToLocalState startupData emojiData loginData
-
-        backlog : List { id : Viewing_DmId, messages : List (Encryption.EncryptedData (ContentAndEmbeds (Id UserId))) }
-        backlog =
-            encryptedBacklog (SeqSet.fromList startupData.e2eeKeys) local
+            loginDataToLocalState startupData SeqDict.empty backlog emojiData loginData
 
         loggedIn : LoggedIn2
         loggedIn =
@@ -597,8 +597,16 @@ loadedInitHelper startupData emojiData loginData loading =
             , nextDecryptionRequestId = Id.fromInt 0
             , pendingDecryptedManyMessages =
                 List.indexedMap
-                    (\index _ -> ( Id.fromInt index, { shiftScrollFrom = Nothing } ))
+                    (\index backlog2 ->
+                        case backlog2 of
+                            PendingEncryption _ ->
+                                Just ( Id.fromInt index, { shiftScrollFrom = Nothing } )
+
+                            MissingKeys record ->
+                                Nothing
+                    )
                     backlog
+                    |> List.filterMap identity
                     |> SeqDict.fromList
             , nextDecryptManyRequestId = Id.fromInt (List.length backlog)
             , e2eeSectionsExpanded = SeqDict.empty
@@ -608,10 +616,16 @@ loadedInitHelper startupData emojiData loginData loading =
     ( loggedIn
     , Command.batch
         [ List.indexedMap
-            (\index conversation ->
-                Encryption.decryptManyMessages (Id.fromInt index) conversation.id conversation.messages
+            (\index backlog2 ->
+                case backlog2 of
+                    PendingEncryption conversation ->
+                        Encryption.decryptManyMessages (Id.fromInt index) conversation.id conversation.messages |> Just
+
+                    MissingKeys record ->
+                        Nothing
             )
             backlog
+            |> List.filterMap identity
             |> Command.batch
         , case loading.route of
             AdminRoute params ->
@@ -635,8 +649,14 @@ loadedInitHelper startupData emojiData loginData loading =
     )
 
 
-loginDataToLocalState : Ports.StartupData -> Maybe CachedEmojiData -> LoginData -> LocalState
-loginDataToLocalState startupData emojiData loginData =
+loginDataToLocalState :
+    Ports.StartupData
+    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
+    -> List EncryptedBacklog
+    -> Maybe CachedEmojiData
+    -> LoginData
+    -> LocalState
+loginDataToLocalState startupData decrypted encryptionBacklog emojiData loginData =
     { adminData =
         case loginData.adminData of
             IsAdminLoginData adminData ->
@@ -664,7 +684,21 @@ loginDataToLocalState startupData emojiData loginData =
         , stickers = loginData.stickers
         , customEmojis = loginData.customEmojis
         , emojiData = emojiData
-        , decryptedMessages = SeqDict.empty
+        , decryptedMessages =
+            List.foldl
+                (\backlog decrypted2 ->
+                    case backlog of
+                        PendingEncryption _ ->
+                            decrypted2
+
+                        MissingKeys conversation ->
+                            List.foldl
+                                (\message decrypted3 -> SeqDict.insert (Encryption.hash message) (Err ()) decrypted3)
+                                decrypted2
+                                conversation.messages
+                )
+                decrypted
+                encryptionBacklog
         }
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
@@ -8184,8 +8218,20 @@ updateLoadedFromBackend msg model =
                 Ok loginData ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
+                            let
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn.localState
+                            in
                             ( { loggedIn
-                                | localState = loginDataToLocalState model.startupData model.emojiData loginData |> Local.init
+                                | localState =
+                                    loginDataToLocalState
+                                        model.startupData
+                                        local.localUser.decryptedMessages
+                                        (encryptedBacklog (SeqSet.fromList model.startupData.e2eeKeys) loginData.dmChannels)
+                                        model.emojiData
+                                        loginData
+                                        |> Local.init
                                 , isReloading = False
                               }
                             , Command.none
@@ -8921,42 +8967,38 @@ encryptedMessagesLoadedInto guildOrDmId shiftScrollFrom messagesLoaded loggedIn 
             Nothing
 
 
-{-| Every encrypted message already sitting in a conversation this device holds a key
-for, which on a page load is the whole backlog of it.
+type EncryptedBacklog
+    = PendingEncryption { id : Viewing_DmId, messages : List (Encryption.EncryptedData (ContentAndEmbeds (Id UserId))) }
+    | MissingKeys { id : Viewing_DmId, messages : List (Encryption.EncryptedData (ContentAndEmbeds (Id UserId))) }
 
-Conversations without a key on this device are left out: the browser would only say it
-can't read them, and the view already knows to ask for the private key instead.
 
--}
-encryptedBacklog :
-    SeqSet (Id UserId)
-    -> LocalState
-    -> List { id : Viewing_DmId, messages : List (Encryption.EncryptedData (ContentAndEmbeds (Id UserId))) }
-encryptedBacklog keysOnThisDevice local =
-    SeqDict.toList local.dmChannels
-        |> List.filterMap
-            (\( otherUserId, dmChannel ) ->
-                if SeqSet.member otherUserId keysOnThisDevice then
-                    case encryptedMessagesIn dmChannel of
-                        [] ->
-                            Nothing
-
-                        messages ->
-                            Just { id = { otherUserId = otherUserId }, messages = messages }
-
-                else
+encryptedBacklog : SeqSet (Id UserId) -> SeqDict (Id UserId) FrontendDmChannel -> List EncryptedBacklog
+encryptedBacklog keysOnThisDevice dmChannels =
+    List.filterMap
+        (\( otherUserId, dmChannel ) ->
+            case encryptedMessagesIn dmChannel of
+                [] ->
                     Nothing
-            )
+
+                messages ->
+                    let
+                        id =
+                            { otherUserId = otherUserId }
+                    in
+                    (if SeqSet.member otherUserId keysOnThisDevice then
+                        PendingEncryption { id = id, messages = messages }
+
+                     else
+                        MissingKeys { id = id, messages = messages }
+                    )
+                        |> Just
+        )
+        (SeqDict.toList dmChannels)
 
 
-{-| Threads hang off a conversation rather than sitting in it, so their messages need
-collecting too.
--}
 encryptedMessagesIn : FrontendDmChannel -> List (Encryption.EncryptedData (ContentAndEmbeds (Id UserId)))
 encryptedMessagesIn dmChannel =
-    (MessageArray.toList dmChannel.messages
-        |> List.filterMap (\( _, message ) -> encryptedMessageData message)
-    )
+    List.filterMap (\( _, message ) -> encryptedMessageData message) (MessageArray.toList dmChannel.messages)
         ++ (SeqDict.values dmChannel.threads
                 |> List.concatMap
                     (\thread ->

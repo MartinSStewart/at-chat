@@ -19,18 +19,21 @@ reaches the server is the transformed version rather than what was typed.
 
 import Base64
 import Broadcast
+import Bytes exposing (Bytes)
+import Bytes.Decode
 import DmChannel
 import DmChannelId
-import E2EHelper
+import E2EHelper exposing (BackendModel2)
 import Effect.Browser.Dom as Dom
+import Effect.Lamdera exposing (ClientId)
 import Effect.Test as T
 import Effect.Time as Time
-import Encryption
+import Encryption exposing (BytesHash(..), EncryptedData(..))
 import FrontendExtra
 import Html.Attributes
-import Id
+import Id exposing (Id, UserId)
 import IdArray
-import Message
+import Message exposing (ContentAndEmbeds)
 import NonemptyDict
 import Pages.Guild
 import RichText
@@ -222,7 +225,7 @@ endToEndEncryptionAcceptTest config =
                                   user.input 100 (Dom.id "guild_e2eePrivateKey") (String.dropRight 5 userPrivateKey)
                                 , T.checkState 100 (checkSharedSecretsAskedFor user [])
                                 , user.input 100 (Dom.id "guild_e2eePrivateKey") userPrivateKey
-                                , E2EHelper.respondToSharedSecretStored user Broadcast.adminUserId
+                                , respondToSharedSecretStored user Broadcast.adminUserId
 
                                 -- Accepting reaches the other side, but the private key
                                 -- was never kept, so that side has to be asked for it too.
@@ -232,7 +235,7 @@ endToEndEncryptionAcceptTest config =
                                         [ Test.Html.Selector.text "This conversation is missing a private key" ]
                                     )
                                 , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
-                                , E2EHelper.respondToSharedSecretStored admin (Id.fromInt 2)
+                                , respondToSharedSecretStored admin (Id.fromInt 2)
                                 , T.checkBackend 100 checkDmIsEncrypted
                                 , admin.checkView
                                     100
@@ -251,13 +254,13 @@ endToEndEncryptionAcceptTest config =
                                 , admin.click 100 (Dom.id "guild_hideMembers")
                                 , E2EHelper.writeMessage admin 100 "Hello in secret"
                                 , T.checkBackend 100 (checkNoPlainTextReachedTheServer "Hello in secret")
-                                , E2EHelper.respondToMessageEncrypted admin
+                                , respondToMessageEncrypted admin
                                 , T.checkBackend 100 (checkEncryptedMessageStored "Hello in secret")
 
                                 -- Without a key on this device the message is not sent,
                                 -- and the draft is left alone so nothing is lost.
                                 , E2EHelper.writeMessage admin 100 "This one cannot go"
-                                , E2EHelper.respondToEncryptionPortWithMissingKey admin
+                                , respondToEncryptionPortWithMissingKey admin
                                 , T.checkBackend 100 (checkEncryptedMessageCount 1)
                                 , admin.checkView
                                     100
@@ -301,7 +304,7 @@ oneKeySetsUpEveryConversationTest config =
                         , addPrivateKeyToAccount userA
                             (\userAPrivateKey ->
                                 [ userA.input 100 (Dom.id "guild_e2eePrivateKey") userAPrivateKey
-                                , E2EHelper.respondToSharedSecretStored userA Broadcast.adminUserId
+                                , respondToSharedSecretStored userA Broadcast.adminUserId
 
                                 -- That conversation is encrypted now, and the admin's
                                 -- device has no key for it because their private key was
@@ -335,8 +338,8 @@ oneKeySetsUpEveryConversationTest config =
                                         , T.checkState
                                             100
                                             (checkSharedSecretsAskedFor admin [ Id.fromInt 2, Id.fromInt 3 ])
-                                        , E2EHelper.respondToSharedSecretStored admin (Id.fromInt 3)
-                                        , E2EHelper.respondToSharedSecretStored admin (Id.fromInt 2)
+                                        , respondToSharedSecretStored admin (Id.fromInt 3)
+                                        , respondToSharedSecretStored admin (Id.fromInt 2)
 
                                         -- The conversation that was on screen stops
                                         -- asking for a key,
@@ -359,7 +362,7 @@ oneKeySetsUpEveryConversationTest config =
                                         , admin.click 100 (Dom.id "guild_hideMembers")
                                         , E2EHelper.writeMessage admin 100 "Hello in secret"
                                         , T.checkBackend 100 (checkNoPlainTextReachedTheServer "Hello in secret")
-                                        , E2EHelper.respondToMessageEncrypted admin
+                                        , respondToMessageEncrypted admin
                                         , T.checkBackend 100 (checkEncryptedMessageStored "Hello in secret")
                                         ]
                                     )
@@ -388,7 +391,7 @@ checkSharedSecretsAskedFor client expected data =
 
         actual : List (Id.Id Id.UserId)
         actual =
-            E2EHelper.sharedSecretsAskedFor client.clientId data
+            sharedSecretsAskedFor client.clientId data
     in
     if sorted expected == sorted actual then
         Ok ()
@@ -583,7 +586,7 @@ soloDmEncryptionTest config =
                         , admin.input 100 (Dom.id "guild_e2eePrivateKey") (String.dropRight 5 adminPrivateKey)
                         , T.checkState 100 (checkSharedSecretsAskedFor admin [])
                         , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
-                        , E2EHelper.respondToSharedSecretStored admin Broadcast.adminUserId
+                        , respondToSharedSecretStored admin Broadcast.adminUserId
                         , T.checkBackend 100 checkSoloDmIsEncrypted
                         , admin.checkView
                             100
@@ -601,20 +604,45 @@ soloDmEncryptionTest config =
                             E2EHelper.desktopWindow
                             (\adminB ->
                                 [ T.andThen 10 (\data -> [ adminB.portEvent 0 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
-                                , E2EHelper.writeMessage admin 100 "Note to self"
+                                , writeEncryptedMessage admin 100 "Note to self"
                                 , T.checkBackend 100 (checkSoloDmHasNoPlainText "Note to self")
-                                , E2EHelper.respondToMessageEncrypted admin
                                 , T.checkBackend 100 (checkSoloDmMessageStored "Note to self")
-                                , E2EHelper.respondToMessageDecrypted adminB
+                                , respondToMessageDecrypted adminB
                                 , adminB.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Note to self" ])
                                 , adminB.click 100 (Dom.id "guild_friendLabel_0")
+                                , writeEncryptedMessage adminB 100 "Note to self from adminB"
+                                , respondToMessageDecrypted admin
                                 , adminB.snapshotView 100 { name = "Second tab views decrypted message" }
+                                ]
+                            )
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId1
+                            "/"
+                            E2EHelper.desktopWindow
+                            (\adminC ->
+                                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminC
+                                , adminC.click 100 (Dom.id "guild_friendLabel_0")
+                                , respondToManyMessagesDecryptedFailed adminC
+                                , writeEncryptedMessage adminC 100 "Another session"
                                 ]
                             )
                         ]
                     )
                 ]
             )
+        ]
+
+
+writeEncryptedMessage :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.DelayInMs
+    -> String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+writeEncryptedMessage user delay text =
+    T.group
+        [ E2EHelper.writeMessage user delay text
+        , respondToMessageEncrypted user
         ]
 
 
@@ -650,10 +678,10 @@ backlogDecryptedOnLoadTest config =
                     (\adminPrivateKey ->
                         [ admin.click 100 (Dom.id "guild_enableE2ee")
                         , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
-                        , E2EHelper.respondToSharedSecretStored admin Broadcast.adminUserId
+                        , respondToSharedSecretStored admin Broadcast.adminUserId
                         , admin.click 100 (Dom.id "guild_hideMembers")
                         , E2EHelper.writeMessage admin 100 backlogMessage
-                        , E2EHelper.respondToMessageEncrypted admin
+                        , respondToMessageEncrypted admin
                         , T.checkBackend 100 (checkSoloDmHasNoPlainText backlogMessage)
 
                         -- A second device with the key for this conversation loads with
@@ -680,7 +708,7 @@ backlogDecryptedOnLoadTest config =
                                 , adminB.checkView
                                     100
                                     (Test.Html.Query.hasNot [ Test.Html.Selector.text backlogMessage ])
-                                , E2EHelper.respondToManyMessagesDecrypted adminB
+                                , respondToManyMessagesDecrypted adminB
                                 , adminB.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text backlogMessage ])
@@ -730,7 +758,7 @@ olderMessagesDecryptedTest config =
                     (\adminPrivateKey ->
                         [ admin.click 100 (Dom.id "guild_enableE2ee")
                         , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
-                        , E2EHelper.respondToSharedSecretStored admin Broadcast.adminUserId
+                        , respondToSharedSecretStored admin Broadcast.adminUserId
                         , admin.click 100 (Dom.id "guild_hideMembers")
 
                         -- More messages than fit in a page, so a device loading the
@@ -741,7 +769,7 @@ olderMessagesDecryptedTest config =
                                 (\index ->
                                     T.group
                                         [ E2EHelper.writeMessage admin 100 (olderMessage index)
-                                        , E2EHelper.respondToMessageEncrypted admin
+                                        , respondToMessageEncrypted admin
                                         ]
                                 )
                             |> T.group
@@ -768,7 +796,7 @@ olderMessagesDecryptedTest config =
                                         ]
                                     )
                                 , adminB.click 100 (Dom.id "guild_friendLabel_0")
-                                , E2EHelper.respondToManyMessagesDecrypted adminB
+                                , respondToManyMessagesDecrypted adminB
                                 , adminB.checkView
                                     100
                                     (Test.Html.Query.has
@@ -796,7 +824,7 @@ olderMessagesDecryptedTest config =
 
                                 -- The answer is what actually grows the conversation, so
                                 -- the shift that keeps the reader in place belongs here.
-                                , E2EHelper.respondToManyMessagesDecrypted adminB
+                                , respondToManyMessagesDecrypted adminB
                                 , adminB.checkView
                                     100
                                     (Test.Html.Query.has
@@ -990,3 +1018,267 @@ checkBothKeysStoredAndDifferent backend =
 
         ( _, Nothing ) ->
             Err "The user's public key wasn't stored on the backend"
+
+
+{-| The conversations a client has asked the browser to keep a shared secret for.
+-}
+sharedSecretsAskedFor : ClientId -> T.Data FrontendModel BackendModel2 -> List (Id UserId)
+sharedSecretsAskedFor clientId data =
+    List.filterMap
+        (\request ->
+            case request of
+                Encryption.ToJs_StoreSharedSecret { otherUserId } ->
+                    Just otherUserId
+
+                _ ->
+                    Nothing
+        )
+        (encryptionPortRequests clientId data)
+
+
+{-| Stands in for the browser after it has kept a shared secret.
+
+The request says which conversation, but so does the test, and saying so reads better at
+the call site than picking the most recent one out of the list.
+
+-}
+respondToSharedSecretStored :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> Id UserId
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+respondToSharedSecretStored client otherUserId =
+    Encryption.FromJs_SharedSecretStored otherUserId
+        |> sendFromJs client
+
+
+{-| Stands in for the browser encrypting a message.
+
+The stand-in ciphertext is the message serialized and left as it is, which is not
+encryption at all but does let a test check that what reaches the server is what the app
+handed over rather than what was typed.
+
+-}
+respondToMessageEncrypted :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+respondToMessageEncrypted client =
+    answerEncryptRequest
+        client
+        (\requestId contentAndEmbeds ->
+            let
+                bytes : Bytes
+                bytes =
+                    Serialize.encodeToBytes Message.contentAndEmbedsCodec contentAndEmbeds
+            in
+            Encryption.FromJs_MessageEncrypted
+                requestId
+                (stubBytesHash bytes)
+                (EncryptedData (stubBytesHash bytes) bytes)
+        )
+
+
+{-| Answers an encryption request with the failure the browser gives when this device has
+no key for the conversation.
+-}
+respondToEncryptionPortWithMissingKey :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+respondToEncryptionPortWithMissingKey client =
+    answerEncryptRequest
+        client
+        (\requestId _ ->
+            Encryption.FromJs_MessageEncryptFailed
+                requestId
+                "No encryption key is stored on this device for that conversation"
+        )
+
+
+{-| Stands in for the browser decrypting a message. Nothing encrypted it in the first
+place, so reading it back is a matter of decoding the bytes that were handed over.
+-}
+respondToMessageDecrypted :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+respondToMessageDecrypted client =
+    T.andThen
+        100
+        (\data ->
+            case List.filterMap decryptRequest (encryptionPortRequests client.clientId data) of
+                ( requestId, bytes ) :: _ ->
+                    case Serialize.decodeFromBytes Message.contentAndEmbedsCodec bytes of
+                        Ok contentAndEmbeds ->
+                            [ Encryption.FromJs_MessageDecrypted requestId (stubBytesHash bytes) contentAndEmbeds
+                                |> sendFromJs client
+                            ]
+
+                        Err _ ->
+                            [ T.checkState 0 (\_ -> Err "The bytes handed over to be decrypted aren't a message") ]
+
+                [] ->
+                    [ T.checkState 0 (\_ -> Err "The client didn't ask for a message to be decrypted") ]
+        )
+
+
+respondToManyMessagesDecrypted :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+respondToManyMessagesDecrypted client =
+    T.andThen
+        100
+        (\data ->
+            case List.filterMap decryptManyRequest (encryptionPortRequests client.clientId data) of
+                ( requestId, messages ) :: _ ->
+                    [ List.filterMap
+                        (\bytes ->
+                            Serialize.decodeFromBytes Message.contentAndEmbedsCodec bytes
+                                |> Result.toMaybe
+                                |> Maybe.map (\contentAndEmbeds -> ( stubBytesHash bytes, Ok contentAndEmbeds ))
+                        )
+                        messages
+                        |> Encryption.FromJs_ManyMessagesDecrypted requestId
+                        |> sendFromJs client
+                    ]
+
+                [] ->
+                    [ T.checkState 0 (\_ -> Err "The client didn't ask for a conversation to be decrypted") ]
+        )
+
+
+respondToManyMessagesDecryptedFailed :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+respondToManyMessagesDecryptedFailed client =
+    T.andThen
+        100
+        (\data ->
+            case List.filterMap decryptManyRequest (encryptionPortRequests client.clientId data) of
+                ( requestId, messages ) :: _ ->
+                    [ List.map (\bytes -> ( stubBytesHash bytes, Err () ))
+                        messages
+                        |> Encryption.FromJs_ManyMessagesDecrypted requestId
+                        |> sendFromJs client
+                    ]
+
+                [] ->
+                    [ T.checkState 0 (\_ -> Err "The client didn't ask for a conversation to be decrypted") ]
+        )
+
+
+decryptManyRequest :
+    Encryption.ToJs (ContentAndEmbeds (Id UserId))
+    -> Maybe ( Id Encryption.DecryptManyRequestId, List Bytes )
+decryptManyRequest request =
+    case request of
+        Encryption.ToJs_DecryptManyMessages { requestId, data } ->
+            Just ( requestId, data )
+
+        _ ->
+            Nothing
+
+
+{-| Real ciphertext is hashed by the browser. Nothing here encrypts, so this stands in
+with something just as deterministic, running over the bytes the same way. The app uses
+it as the key to look a message up by, so two different messages must not land on the
+same one: two of the same length would, if this only counted them.
+-}
+stubBytesHash : Bytes -> BytesHash
+stubBytesHash bytes =
+    Bytes.Decode.decode
+        (Bytes.Decode.loop
+            ( Bytes.width bytes, 0 )
+            (\( bytesLeft, soFar ) ->
+                if bytesLeft <= 0 then
+                    Bytes.Decode.succeed (Bytes.Decode.Done soFar)
+
+                else
+                    Bytes.Decode.map
+                        (\byte ->
+                            Bytes.Decode.Loop
+                                ( bytesLeft - 1, modBy 281474976710656 (soFar * 31 + byte) )
+                        )
+                        Bytes.Decode.unsignedInt8
+            )
+        )
+        bytes
+        |> Maybe.withDefault 0
+        |> BytesHash
+
+
+{-| Everything a client has asked the browser to do with encryption so far, most recent
+first, which is the order `portBytesRequests` keeps them in.
+
+The message being encrypted is decoded here too, since it is the only thing a reply needs
+that isn't already in the request.
+
+-}
+encryptionPortRequests :
+    ClientId
+    -> T.Data FrontendModel BackendModel2
+    -> List (Encryption.ToJs (ContentAndEmbeds (Id UserId)))
+encryptionPortRequests clientId data =
+    List.filterMap
+        (\request ->
+            if request.clientId == clientId && request.portName == "encryption_to_js" then
+                Serialize.decodeFromBytes
+                    (Encryption.toJsCodec Message.contentAndEmbedsCodec)
+                    request.value
+                    |> Result.toMaybe
+
+            else
+                Nothing
+        )
+        data.portBytesRequests
+
+
+answerEncryptRequest :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> (Id Encryption.EncryptRequestId -> ContentAndEmbeds (Id UserId) -> Encryption.FromJs (ContentAndEmbeds (Id UserId)))
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+answerEncryptRequest client toReply =
+    T.andThen
+        100
+        (\data ->
+            case List.filterMap encryptRequest (encryptionPortRequests client.clientId data) of
+                [] ->
+                    [ T.checkState 0 (\_ -> Err "The client didn't ask for a message to be encrypted") ]
+
+                requests ->
+                    List.map
+                        (\( requestId, contentAndEmbeds ) ->
+                            toReply requestId contentAndEmbeds |> sendFromJs client
+                        )
+                        requests
+        )
+
+
+encryptRequest :
+    Encryption.ToJs (ContentAndEmbeds (Id UserId))
+    -> Maybe ( Id Encryption.EncryptRequestId, ContentAndEmbeds (Id UserId) )
+encryptRequest request =
+    case request of
+        Encryption.ToJs_EncryptMessage { requestId, data } ->
+            Just ( requestId, data )
+
+        _ ->
+            Nothing
+
+
+decryptRequest :
+    Encryption.ToJs (ContentAndEmbeds (Id UserId))
+    -> Maybe ( Id Encryption.DecryptRequestId, Bytes )
+decryptRequest request =
+    case request of
+        Encryption.ToJs_DecryptMessage { requestId, data } ->
+            Just ( requestId, data )
+
+        _ ->
+            Nothing
+
+
+sendFromJs :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> Encryption.FromJs (ContentAndEmbeds (Id UserId))
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+sendFromJs client fromJs =
+    Serialize.encodeToBytes (Encryption.fromJsCodec Message.contentAndEmbedsCodec) fromJs
+        |> client.portEventBytes 100 "encryption_from_js"
