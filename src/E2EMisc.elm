@@ -529,44 +529,20 @@ profileImageOpensDm config =
                     100
                     (\data ->
                         case E2EHelper.lastGuildChannelMessage data.backend of
-                            Just ( _, messageId, Message.UserTextMessage message ) ->
+                            Just ( _, messageId, Message.UserTextMessage _ ) ->
                                 [ admin.click 100 (Pages.Guild.profileImageButtonId messageId)
-                                , admin.checkModel 100 (checkDmRouteWithUser message.createdBy)
+                                , E2EHelper.hasText admin [ Pages.Guild.chatWithText, "Stevie Steve" ]
                                 ]
 
                             _ ->
-                                [ admin.checkModel
-                                    100
+                                [ T.checkState
+                                    0
                                     (\_ -> Err "Expected the guild channel to contain the other user's message")
                                 ]
                     )
                 ]
             )
         ]
-
-
-checkDmThreadRoute : Id.Id Id.ChannelMessageId -> FrontendModel -> Result String ()
-checkDmThreadRoute threadMessageIndex model =
-    case Audio.userModel model of
-        Types.Loaded loaded ->
-            case loaded.route of
-                Route.DmRoute dmRoute ->
-                    case dmRoute.threadRoute of
-                        Route.ViewThreadWithFriends index _ _ ->
-                            if index == threadMessageIndex then
-                                Ok ()
-
-                            else
-                                Err "The DM thread route points at the wrong message"
-
-                        Route.NoThreadWithFriends _ _ ->
-                            Err "Expected the DM route to be viewing a thread"
-
-                _ ->
-                    Err "Expected to be viewing a DM channel"
-
-        Types.Loading _ ->
-            Err "Expected the frontend to have finished loading"
 
 
 {-| Writing a message counts as reading it, so the thread it went into holds nothing
@@ -601,33 +577,6 @@ checkDmThreadIsRead otherUserId threadMessageIndex model =
                         Err "Expected the newest message in the DM thread to have been read"
 
                 Types.NotLoggedIn _ ->
-                    Err "Expected the frontend to be logged in"
-
-        Types.Loading _ ->
-            Err "Expected the frontend to have finished loading"
-
-
-checkDmRouteWithUser : Id.Id Id.UserId -> FrontendModel -> Result String ()
-checkDmRouteWithUser otherUserId model =
-    case Audio.userModel model of
-        Types.Loaded loaded ->
-            case ( loaded.loginStatus, loaded.route ) of
-                ( Types.LoggedIn loggedIn, Route.DmRoute dmRoute ) ->
-                    let
-                        currentUserId : Id.Id Id.UserId
-                        currentUserId =
-                            (Local.model loggedIn.localState).localUser.session.userId
-                    in
-                    if DmChannelId.otherUserId currentUserId dmRoute.channelId == Just otherUserId then
-                        Ok ()
-
-                    else
-                        Err "Opened a DM channel with the wrong user"
-
-                ( Types.LoggedIn _, _ ) ->
-                    Err "Expected to be viewing a DM channel"
-
-                ( Types.NotLoggedIn _, _ ) ->
                     Err "Expected the frontend to be logged in"
 
         Types.Loading _ ->
@@ -1060,7 +1009,6 @@ markMessageAsUnreadTest config =
                 -- offers to react to it. Editing, replying and the full menu belong to the
                 -- channel the message came from, so the menu here leaves them out
                 , user.mouseEnter 100 (Dom.id "guild_message_2") ( 10, 10 ) []
-                , user.checkModel 100 (checkMessageIsHovered (Id.fromInt 2))
                 , user.checkView
                     100
                     (Test.Html.Query.has
@@ -1117,30 +1065,6 @@ markAsUnread user messageId =
             )
         , user.click 100 (Dom.id "messageMenu_markAsUnread")
         ]
-
-
-checkMessageIsHovered : Id.Id Id.ChannelMessageId -> FrontendModel -> Result String ()
-checkMessageIsHovered messageId model =
-    case Audio.userModel model of
-        Types.Loaded loaded ->
-            case loaded.loginStatus of
-                Types.LoggedIn loggedIn ->
-                    if
-                        loggedIn.messageHover
-                            == Types.MessageHover
-                                (Id.GuildOrDmId (Id.GuildOrDmId_Guild { guildId = Id.fromInt 1, channelId = Id.fromInt 0 }))
-                                (Id.NoThreadWithMessage messageId)
-                    then
-                        Ok ()
-
-                    else
-                        Err "Expected the message in the unread overview to be hovered"
-
-                Types.NotLoggedIn _ ->
-                    Err "Expected the frontend to be logged in"
-
-        Types.Loading _ ->
-            Err "Expected the frontend to have finished loading"
 
 
 inactiveThreadsAreHiddenTest : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
@@ -1230,8 +1154,8 @@ dmThreadsTest config =
                 , E2EHelper.writeMessage admin 100 "First message in the DM thread"
                 , E2EHelper.writeMessage admin 100 "Second message in the DM thread"
 
-                -- Opening a thread from a DM message puts the thread in the route
-                , admin.checkModel 100 (checkDmThreadRoute (Id.fromInt 0))
+                -- Opening a thread from a DM message puts the thread on screen
+                , E2EHelper.hasText admin [ Pages.Guild.startOfThreadText ]
 
                 -- The admin wrote those two thread messages, so neither is unread for them
                 , admin.checkModel 100 (checkDmThreadIsRead (Id.fromInt 2) (Id.fromInt 0))

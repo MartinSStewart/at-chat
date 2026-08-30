@@ -23,6 +23,7 @@ module E2EHelper exposing
     , clickSpoiler
     , connectFourUsersAndJoinNewGuild
     , connectTwoUsersAndJoinNewGuild
+    , copiedText
     , createThread
     , currentDiscordUserId
     , decodeCustomRequest
@@ -677,6 +678,23 @@ checkNotification title body =
         )
 
 
+{-| The last thing a client put on the clipboard. Pressing a copy button is how a test
+gets hold of something the app only shows on screen, like an invite link or a private
+key, without having to read it back out of the model.
+-}
+copiedText : Lamdera.ClientId -> T.Data frontendModel backendModel -> Maybe String
+copiedText clientId data =
+    List.Extra.findMap
+        (\request ->
+            if request.clientId == clientId && request.portName == "copy_to_clipboard_to_js" then
+                Json.Decode.decodeValue Json.Decode.string request.value |> Result.toMaybe
+
+            else
+                Nothing
+        )
+        data.portRequests
+
+
 {-| Everything a client has asked the browser to do with encryption so far, most recent
 first, which is the order `portBytesRequests` keeps them in.
 
@@ -1226,17 +1244,7 @@ connectFourUsersAndJoinNewGuild windowSize continueFunc =
             , T.andThen
                 100
                 (\data ->
-                    case
-                        List.Extra.findMap
-                            (\request ->
-                                if request.clientId == admin.clientId && request.portName == "copy_to_clipboard_to_js" then
-                                    Json.Decode.decodeValue Json.Decode.string request.value |> Result.toMaybe
-
-                                else
-                                    Nothing
-                            )
-                            data.portRequests
-                    of
+                    case copiedText admin.clientId data of
                         Just inviteUrl ->
                             [ joinGuildFromInvite
                                 inviteUrl
@@ -1358,17 +1366,7 @@ connectTwoUsersAndJoinNewGuild windowSize continueFunc =
             , T.andThen
                 100
                 (\data ->
-                    case
-                        List.Extra.findMap
-                            (\request ->
-                                if request.clientId == admin.clientId && request.portName == "copy_to_clipboard_to_js" then
-                                    Json.Decode.decodeValue Json.Decode.string request.value |> Result.toMaybe
-
-                                else
-                                    Nothing
-                            )
-                            data.portRequests
-                    of
+                    case copiedText admin.clientId data of
                         Just text ->
                             [ T.connectFrontend
                                 100
@@ -3505,40 +3503,31 @@ inviteUser admin continueWith =
     , T.andThen
         100
         (\data ->
-            case
-                List.filter
-                    (\portRequest -> portRequest.clientId == admin.clientId && portRequest.portName == "copy_to_clipboard_to_js")
-                    data.portRequests
-            of
-                [ portRequest ] ->
-                    case Json.Decode.decodeValue Json.Decode.string portRequest.value of
-                        Ok copyText ->
-                            [ if String.startsWith Env.domain copyText then
-                                T.connectFrontend
-                                    100
-                                    sessionId1
-                                    (String.dropLeft (String.length Env.domain) copyText)
-                                    desktopWindow
-                                    (\user ->
-                                        [ T.andThen
-                                            10
-                                            (\data2 -> [ user.portEvent 10 "load_startup_data_from_js" (startupDataJson data2.time firefoxDesktop) ])
-                                        , handleLoginFromLoginPage userEmail user
-                                        , user.input 100 (Dom.id "loginForm_name") "Sven"
-                                        , user.click 100 (Dom.id "loginForm_submit")
-                                        , T.group (continueWith user)
-                                        ]
-                                    )
+            case copiedText admin.clientId data of
+                Just copyText ->
+                    [ if String.startsWith Env.domain copyText then
+                        T.connectFrontend
+                            100
+                            sessionId1
+                            (String.dropLeft (String.length Env.domain) copyText)
+                            desktopWindow
+                            (\user ->
+                                [ T.andThen
+                                    10
+                                    (\data2 -> [ user.portEvent 10 "load_startup_data_from_js" (startupDataJson data2.time firefoxDesktop) ])
+                                , handleLoginFromLoginPage userEmail user
+                                , user.input 100 (Dom.id "loginForm_name") "Sven"
+                                , user.click 100 (Dom.id "loginForm_submit")
+                                , T.group (continueWith user)
+                                ]
+                            )
 
-                              else
-                                admin.checkModel 100 (\_ -> Err "Copied invalid link")
-                            ]
+                      else
+                        T.checkState 0 (\_ -> Err "Copied invalid link")
+                    ]
 
-                        Err _ ->
-                            [ admin.checkModel 100 (\_ -> Err "Didn't decode port") ]
-
-                _ ->
-                    [ admin.checkModel 100 (\_ -> Err "Didn't copy link") ]
+                Nothing ->
+                    [ T.checkState 0 (\_ -> Err "Didn't copy link") ]
         )
     ]
         |> T.collapsableGroup "Invite user"

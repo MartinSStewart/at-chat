@@ -15,14 +15,12 @@ reaches the server is the transformed version rather than what was typed.
 
 -}
 
-import Audio
 import Base64
 import Broadcast
 import DmChannel
 import DmChannelId
 import E2EHelper
 import Effect.Browser.Dom as Dom
-import Effect.Lamdera as Lamdera
 import Effect.Test as T
 import Effect.Time as Time
 import Encryption
@@ -35,7 +33,6 @@ import NonemptyDict
 import Pages.Guild
 import RichText
 import SeqDict
-import SeqSet
 import Serialize
 import Test.Html.Query
 import Test.Html.Selector
@@ -337,12 +334,17 @@ oneKeySetsUpEveryConversationTest config =
                                             (checkSharedSecretsAskedFor admin [ Id.fromInt 2, Id.fromInt 3 ])
                                         , E2EHelper.respondToSharedSecretStored admin (Id.fromInt 3)
                                         , E2EHelper.respondToSharedSecretStored admin (Id.fromInt 2)
-                                        , admin.checkModel
-                                            100
-                                            (checkKeysOnThisDeviceFor [ Id.fromInt 2, Id.fromInt 3 ])
 
-                                        -- So it stops asking for a key, and messages in
-                                        -- it now go past the browser on the way out.
+                                        -- The conversation that was on screen stops
+                                        -- asking for a key,
+                                        , admin.checkView
+                                            100
+                                            (Test.Html.Query.hasNot
+                                                [ Test.Html.Selector.text "This conversation is missing a private key" ]
+                                            )
+
+                                        -- and so does the one that wasn't, where messages
+                                        -- now go past the browser on the way out.
                                         , admin.click 100 (Dom.id "guild_hideMembers")
                                         , admin.click 100 (Dom.id "guild_friendLabel_2")
                                         , admin.click 100 (Dom.id "guild_showMembers")
@@ -365,38 +367,6 @@ oneKeySetsUpEveryConversationTest config =
                 ]
             )
         ]
-
-
-{-| The conversations this device worked a key out for. The point of checking it is that
-one of them was never on screen when the key was typed in.
--}
-checkKeysOnThisDeviceFor : List (Id.Id Id.UserId) -> FrontendModel -> Result String ()
-checkKeysOnThisDeviceFor expected model =
-    let
-        sorted : List (Id.Id Id.UserId) -> String
-        sorted ids =
-            List.map Id.toInt ids |> List.sort |> List.map String.fromInt |> String.join ", "
-    in
-    case Audio.userModel model of
-        Types.Loaded loaded ->
-            case loaded.loginStatus of
-                Types.LoggedIn loggedIn ->
-                    if sorted expected == sorted (SeqSet.toList loggedIn.e2eeKeysOnThisDevice) then
-                        Ok ()
-
-                    else
-                        Err
-                            ("Expected this device to have keys for "
-                                ++ sorted expected
-                                ++ ", found "
-                                ++ sorted (SeqSet.toList loggedIn.e2eeKeysOnThisDevice)
-                            )
-
-                Types.NotLoggedIn _ ->
-                    Err "Not logged in"
-
-        _ ->
-            Err "Frontend hasn't loaded"
 
 
 {-| The conversations a client has asked the browser to work a shared secret out for.
@@ -724,10 +694,11 @@ addPrivateKeyToAccount client continueWith =
                 , Test.Html.Selector.id "frontend_newPrivateKey_copy"
                 ]
             )
+        , client.click 100 (Dom.id "frontend_newPrivateKey_copy")
         , T.andThen
             100
             (\data ->
-                case privateKeyOnScreen client.clientId data of
+                case E2EHelper.copiedText client.clientId data of
                     Just privateKeyText ->
                         client.click 100 (Dom.id "frontend_closeNewPrivateKey")
                             :: client.checkView
@@ -738,28 +709,9 @@ addPrivateKeyToAccount client continueWith =
                             :: continueWith privateKeyText
 
                     Nothing ->
-                        [ T.checkState 0 (\_ -> Err "The private key wasn't on screen to be read") ]
+                        [ T.checkState 0 (\_ -> Err "The copy button didn't put the private key on the clipboard") ]
             )
         ]
-
-
-{-| Reads the private key out of the popup while it is up. The app forgets it the moment
-that closes, so this is the only chance a test gets to hold onto it either, which is the
-same position the person using it is in.
--}
-privateKeyOnScreen : Lamdera.ClientId -> T.Data FrontendModel E2EHelper.BackendModel2 -> Maybe String
-privateKeyOnScreen clientId data =
-    case SeqDict.get clientId data.frontends |> Maybe.map Audio.userModel of
-        Just (Types.Loaded loaded) ->
-            case loaded.loginStatus of
-                Types.LoggedIn loggedIn ->
-                    Maybe.map X25519.privateKeyToString loggedIn.showNewPrivateKey
-
-                Types.NotLoggedIn _ ->
-                    Nothing
-
-        _ ->
-            Nothing
 
 
 {-| Both accounts should have ended up with a public key, and crucially not the same one:

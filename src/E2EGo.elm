@@ -9,7 +9,6 @@ import Frontend
 import Game
 import Go
 import Id exposing (ChannelMessageId, Id)
-import Json.Decode
 import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
@@ -383,48 +382,37 @@ publicGoMatchViewTest normalConfig =
                         , T.andThen
                             100
                             (\data ->
-                                let
-                                    copyRequests =
-                                        List.filter
-                                            (\portRequest -> portRequest.portName == "copy_to_clipboard_to_js")
-                                            data.portRequests
-                                in
-                                case copyRequests |> List.head of
-                                    Just portRequest ->
-                                        case Json.Decode.decodeValue Json.Decode.string portRequest.value of
-                                            Ok shareUrl ->
-                                                if String.startsWith Env.domain shareUrl then
-                                                    [ T.connectFrontend
+                                case E2EHelper.copiedText admin.clientId data of
+                                    Just shareUrl ->
+                                        if String.startsWith Env.domain shareUrl then
+                                            [ T.connectFrontend
+                                                100
+                                                E2EHelper.sessionId2
+                                                (String.dropLeft (String.length Env.domain) shareUrl)
+                                                E2EHelper.tallDesktopWindow
+                                                (\viewer ->
+                                                    [ T.andThen
+                                                        10
+                                                        (\data2 -> [ viewer.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data2.time E2EHelper.firefoxDesktop) ])
+                                                    , viewer.checkView
                                                         100
-                                                        E2EHelper.sessionId2
-                                                        (String.dropLeft (String.length Env.domain) shareUrl)
-                                                        E2EHelper.tallDesktopWindow
-                                                        (\viewer ->
-                                                            [ T.andThen
-                                                                10
-                                                                (\data2 -> [ viewer.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data2.time E2EHelper.firefoxDesktop) ])
-                                                            , viewer.checkView
-                                                                100
-                                                                (Test.Html.Query.has [ Test.Html.Selector.id "public_go_container" ])
-                                                            , viewer.checkView
-                                                                100
-                                                                (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
-                                                            , viewer.checkView
-                                                                100
-                                                                (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_pass" ])
-                                                            , E2EHelper.tallSnapshot viewer 100 { name = "Spectating Go match" }
-                                                            ]
-                                                        )
+                                                        (Test.Html.Query.has [ Test.Html.Selector.id "public_go_container" ])
+                                                    , viewer.checkView
+                                                        100
+                                                        (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
+                                                    , viewer.checkView
+                                                        100
+                                                        (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_pass" ])
+                                                    , E2EHelper.tallSnapshot viewer 100 { name = "Spectating Go match" }
                                                     ]
+                                                )
+                                            ]
 
-                                                else
-                                                    [ admin.checkModel 100 (\_ -> Err ("Share URL didn't start with domain: " ++ shareUrl)) ]
-
-                                            Err _ ->
-                                                [ admin.checkModel 100 (\_ -> Err "Failed to decode share URL port value") ]
+                                        else
+                                            [ T.checkState 0 (\_ -> Err ("Share URL didn't start with domain: " ++ shareUrl)) ]
 
                                     Nothing ->
-                                        [ admin.checkModel 100 (\_ -> Err "Expected a copy_to_clipboard_to_js port request after pressing share") ]
+                                        [ T.checkState 0 (\_ -> Err "Pressing share should have copied a link to the clipboard") ]
                             )
                         ]
                     )
