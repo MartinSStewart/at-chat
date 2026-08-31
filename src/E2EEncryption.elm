@@ -304,7 +304,7 @@ tests config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text Pages.Guild.missingPrivateKeyText ]
+                                        [ Test.Html.Selector.text (E2EHelper.userName ++ " " ++ Pages.Guild.requestAcceptedText) ]
                                     )
                                 , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
                                 , respondToSharedSecretStored admin (Id.fromInt 2)
@@ -370,43 +370,43 @@ tests config =
                         , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
                         , addPrivateKeyToAccount user
                             (\userPrivateKey ->
-                                [ -- Accepting is what turns encryption on, and until it
-                                  -- does there is nothing in the conversation to encrypt.
-                                  user.input 100 (Dom.id "guild_e2eePrivateKey") userPrivateKey
+                                [ user.input 100 (Dom.id "guild_e2eePrivateKey") userPrivateKey
                                 , respondToSharedSecretStored user Broadcast.adminUserId
-                                , respondToManyMessagesEncrypted user
                                 , T.checkBackend 100 checkDmIsEncrypted
-                                , T.checkBackend 100 (checkPlainTextMessageStored writtenByAdmin)
 
-                                -- The admin's device is handed a key next, and with it
-                                -- everything the conversation was holding in the clear.
-                                , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
-                                , respondToSharedSecretStored admin (Id.fromInt 2)
+                                -- Accepting is what turns encryption on, and the device
+                                -- that does it is holding a key, so what the conversation
+                                -- was keeping in the clear goes over straight away.
+                                , respondToManyMessagesEncrypted user
                                 , T.checkBackend 100 (checkNoPlainTextReachedTheServer writtenByAdmin)
                                 , T.checkBackend 100 (checkNoPlainTextReachedTheServer writtenByUser)
                                 , T.checkBackend 100 (checkEncryptedMessageStored writtenByAdmin)
                                 , T.checkBackend 100 (checkEncryptedMessageStored writtenByUser)
 
                                 -- Nothing was lost on the way: the conversation still
-                                -- holds the same two messages, and this device can read
-                                -- them back.
+                                -- holds the same two messages.
                                 , T.checkBackend 100 (checkEncryptedMessageCount 2)
 
                                 -- The device that encrypted them read them out to do it,
-                                -- so it can go on showing them without asking anything.
-                                , admin.click 100 (Dom.id "guild_hideMembers")
-                                , admin.checkView
+                                -- so it goes on showing them without asking anything.
+                                , user.click 100 (Dom.id "guild_hideMembers")
+                                , user.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text writtenByAdmin ])
-                                , admin.checkView
+                                , user.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text writtenByUser ])
 
-                                -- The other person's copy was swapped out underneath
-                                -- them, so their device has to be told what it says.
-                                , respondToManyMessagesDecrypted user
-                                , user.click 100 (Dom.id "guild_hideMembers")
-                                , user.checkView
+                                -- The admin's device is handed a key next and asks for the
+                                -- same work over again, off what it still has loaded. The
+                                -- server has had it done already and leaves it alone.
+                                , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                                , respondToSharedSecretStored admin (Id.fromInt 2)
+                                , respondToManyMessagesEncrypted admin
+                                , T.checkBackend 100 (checkEncryptedMessageCount 2)
+                                , T.checkBackend 100 (checkEncryptedMessageStored writtenByAdmin)
+                                , admin.click 100 (Dom.id "guild_hideMembers")
+                                , admin.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text writtenByAdmin ])
                                 , admin.snapshotView 100 { name = "Older messages encrypted after the fact" }
@@ -447,7 +447,7 @@ tests config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text Pages.Guild.missingPrivateKeyText ]
+                                        [ Test.Html.Selector.text (E2EHelper.userName ++ " " ++ Pages.Guild.requestAcceptedText) ]
                                     )
 
                                 -- The second of the others asks the admin to encrypt,

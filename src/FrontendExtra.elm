@@ -26,6 +26,7 @@ module FrontendExtra exposing
     , isPressMsg
     , layout
     , logout
+    , mapEncryptionRequests
     , newPrivateKeyWarning
     , pastedMessageFileName
     , pingUserNameSoFar
@@ -116,7 +117,7 @@ import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch exposing (Drag(..), DragTarget(..))
 import TwoFactorAuthentication
-import Types exposing (EmojiSelector(..), FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
+import Types exposing (EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -1843,6 +1844,14 @@ routeRequest previousRoute newRoute model =
             )
     )
         |> Tuple.mapSecond (\a -> Command.batch [ viewCmd, a ])
+
+
+{-| The requests this device has out with the browser are a record of their own, so
+anything that starts or finishes one reaches through this.
+-}
+mapEncryptionRequests : (EncryptionRequests -> EncryptionRequests) -> LoggedIn2 -> LoggedIn2
+mapEncryptionRequests func loggedIn =
+    { loggedIn | encryptionRequests = func loggedIn.encryptionRequests }
 
 
 updateLoggedIn :
@@ -7240,7 +7249,7 @@ handleDecryptedMessage :
     -> LoggedIn2
     -> ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg_ )
 handleDecryptedMessage requestId bytesHash result model loggedIn =
-    case SeqDict.get requestId loggedIn.pendingDecryptedMessages of
+    case SeqDict.get requestId loggedIn.encryptionRequests.pendingDecryptedMessages of
         Just request ->
             let
                 loggedIn2 : LoggedIn2

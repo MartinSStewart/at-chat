@@ -36,6 +36,7 @@ module Pages.Guild exposing
     , noUnreadMessagesText
     , olderUnreadMessagesText
     , profileImageButtonId
+    , requestAcceptedText
     , startOfThreadText
     , startedACallText
     , threadMessageHtmlId
@@ -174,6 +175,15 @@ e2eeDeclinedText =
 youDeclinedE2eeText : String
 youDeclinedE2eeText =
     "You declined the request to to enable E2EE."
+
+
+{-| Shown to whoever asked, on the device they asked from, once the other person has
+accepted. It says what happened as well as what to do, since this is the first they hear
+of the answer.
+-}
+requestAcceptedText : String
+requestAcceptedText =
+    "accepted and E2EE is now enabled. Enter your private key here to decrypted messages"
 
 
 missingPrivateKeyText : String
@@ -2624,7 +2634,8 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                 (if data.requestedBy == ( localUser.session.userId, localUser.session.sessionIdHash ) then
                                     "3. "
                                         ++ User.toStringAlt otherUserId localUser
-                                        ++ " accepted and E2EE is now enabled. Enter your private key here to decrypted messages"
+                                        ++ " "
+                                        ++ requestAcceptedText
                                         |> Ui.text
 
                                  else

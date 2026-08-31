@@ -56,7 +56,7 @@ import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
 import Message exposing (ContentAndEmbeds)
-import MessageArray
+import MessageArray exposing (MessageArray)
 import MessageDropdown
 import MessageInput exposing (NameSoFar(..), TextInputFocus)
 import MessageMenu
@@ -89,7 +89,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Drag(..), DragTarget(..), ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -591,26 +591,28 @@ loadedInitHelper startupData emojiData loginData loading =
             , e2eeError = Nothing
             , e2eePrivateKeyText = ""
             , e2eeKeysOnThisDevice = SeqSet.fromList startupData.e2eeKeys
-            , pendingEncryptedMessages = SeqDict.empty
-            , nextEncryptionRequestId = Id.fromInt 0
-            , pendingDecryptedMessages = SeqDict.empty
-            , nextDecryptionRequestId = Id.fromInt 0
-            , pendingDecryptedManyMessages =
-                List.indexedMap
-                    (\index backlog2 ->
-                        case backlog2 of
-                            PendingEncryption _ ->
-                                Just ( Id.fromInt index, { shiftScrollFrom = Nothing } )
+            , encryptionRequests =
+                { pendingEncryptedMessages = SeqDict.empty
+                , nextEncryptionRequestId = Id.fromInt 0
+                , pendingDecryptedMessages = SeqDict.empty
+                , nextDecryptionRequestId = Id.fromInt 0
+                , pendingDecryptedManyMessages =
+                    List.indexedMap
+                        (\index backlog2 ->
+                            case backlog2 of
+                                PendingEncryption _ ->
+                                    Just ( Id.fromInt index, { shiftScrollFrom = Nothing } )
 
-                            MissingKeys _ ->
-                                Nothing
-                    )
-                    backlog
-                    |> List.filterMap identity
-                    |> SeqDict.fromList
-            , nextDecryptManyRequestId = Id.fromInt (List.length backlog)
-            , pendingEncryptedManyMessages = SeqDict.empty
-            , nextEncryptManyRequestId = Id.fromInt 0
+                                MissingKeys _ ->
+                                    Nothing
+                        )
+                        backlog
+                        |> List.filterMap identity
+                        |> SeqDict.fromList
+                , nextDecryptManyRequestId = Id.fromInt (List.length backlog)
+                , pendingEncryptedManyMessages = SeqDict.empty
+                , nextEncryptManyRequestId = Id.fromInt 0
+                }
             , e2eeSectionsExpanded = SeqDict.empty
             , typedTextCounter = 0
             }
@@ -3297,16 +3299,26 @@ updateLoaded msg model =
                         in
                         case result of
                             Ok ( publicKey, command ) ->
-                                -- Setting the key that is already on the account is how
-                                -- the server is asked for anything in this user's
-                                -- encrypted conversations that it is still holding as
-                                -- plain text, now that this device can do something
-                                -- about it.
+                                let
+                                    -- Setting the key that is already on the account is
+                                    -- how the server is asked for anything in this user's
+                                    -- encrypted conversations that it is still holding as
+                                    -- plain text. What this device has already loaded
+                                    -- doesn't have to wait for that answer.
+                                    toEncrypt : List ( Id EncryptManyRequestId, OldMessagesToEncrypt )
+                                    toEncrypt =
+                                        conversationsToEncrypt
+                                            loggedIn.encryptionRequests.nextEncryptManyRequestId
+                                            (locallyLoadedMessagesToEncrypt (Local.model loggedIn.localState))
+                                in
                                 FrontendExtra.handleLocalChange
                                     model.time
                                     (Local_SetPublicKey publicKey EmptyPlaceholder |> Just)
-                                    { loggedIn | e2eeError = Nothing, e2eePrivateKeyText = "" }
-                                    command
+                                    (FrontendExtra.mapEncryptionRequests
+                                        (rememberEncryptManyRequests toEncrypt)
+                                        { loggedIn | e2eeError = Nothing, e2eePrivateKeyText = "" }
+                                    )
+                                    (command :: List.map encryptConversation toEncrypt |> Command.batch)
 
                             Err error ->
                                 ( { loggedIn | e2eeError = Just error, e2eePrivateKeyText = text }, Command.none )
@@ -3370,7 +3382,7 @@ updateLoaded msg model =
                             ( { loggedIn | e2eeError = Just error }, Command.none )
 
                         Ok (Encryption.FromJs_NewMessageEncrypted requestId bytesHash cipherText) ->
-                            case SeqDict.get requestId loggedIn.pendingEncryptedMessages of
+                            case SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedMessages of
                                 Just pending ->
                                     let
                                         draft : ( AnyGuildOrDmId, ThreadRoute )
@@ -3391,13 +3403,14 @@ updateLoaded msg model =
                                         )
                                         (FrontendExtra.fileDecryptedMessages
                                             [ ( bytesHash, Ok pending.contentAndEmbeds ) ]
-                                            { loggedIn
-                                                | pendingEncryptedMessages =
-                                                    SeqDict.remove requestId loggedIn.pendingEncryptedMessages
-                                                , drafts = SeqDict.remove draft loggedIn.drafts
-                                                , replyTo = SeqDict.remove draft loggedIn.replyTo
-                                                , filesToUpload = SeqDict.remove draft loggedIn.filesToUpload
-                                            }
+                                            (FrontendExtra.mapEncryptionRequests
+                                                (forgetEncryptRequest requestId)
+                                                { loggedIn
+                                                    | drafts = SeqDict.remove draft loggedIn.drafts
+                                                    , replyTo = SeqDict.remove draft loggedIn.replyTo
+                                                    , filesToUpload = SeqDict.remove draft loggedIn.filesToUpload
+                                                }
+                                            )
                                         )
                                         (Scroll.toBottomOfChannel
                                             Pages.Guild.conversationContainerId
@@ -3410,11 +3423,9 @@ updateLoaded msg model =
                         Ok (Encryption.FromJs_NewMessageEncryptFailed requestId error) ->
                             -- The draft is deliberately left where it is, so that a
                             -- message that could not be encrypted is not also lost.
-                            ( { loggedIn
-                                | e2eeError = Just error
-                                , pendingEncryptedMessages =
-                                    SeqDict.remove requestId loggedIn.pendingEncryptedMessages
-                              }
+                            ( FrontendExtra.mapEncryptionRequests
+                                (forgetEncryptRequest requestId)
+                                { loggedIn | e2eeError = Just error }
                             , Command.none
                             )
 
@@ -3429,15 +3440,20 @@ updateLoaded msg model =
                             -- that has just arrived there is nowhere to put them.
                             ( FrontendExtra.fileDecryptedMessages
                                 results
-                                { loggedIn
-                                    | pendingDecryptedManyMessages =
-                                        SeqDict.remove requestId loggedIn.pendingDecryptedManyMessages
-                                }
+                                (FrontendExtra.mapEncryptionRequests
+                                    (\requests ->
+                                        { requests
+                                            | pendingDecryptedManyMessages =
+                                                SeqDict.remove requestId requests.pendingDecryptedManyMessages
+                                        }
+                                    )
+                                    loggedIn
+                                )
                             , -- Older messages loaded by scrolling up take up no room
                               -- until now, so this is the moment the conversation grows
                               -- and the scroll has to be shifted to match.
                               case
-                                SeqDict.get requestId loggedIn.pendingDecryptedManyMessages
+                                SeqDict.get requestId loggedIn.encryptionRequests.pendingDecryptedManyMessages
                                     |> Maybe.andThen .shiftScrollFrom
                               of
                                 Just anchor ->
@@ -3450,7 +3466,7 @@ updateLoaded msg model =
                             )
 
                         Ok (Encryption.FromJs_ManyMessagesEncrypted requestId encrypted) ->
-                            case SeqDict.get requestId loggedIn.pendingEncryptedManyMessages of
+                            case SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedManyMessages of
                                 Just pending ->
                                     let
                                         -- The browser answers in the order it was asked,
@@ -3484,10 +3500,10 @@ updateLoaded msg model =
                                                 )
                                                 pairs
                                             )
-                                            { loggedIn
-                                                | pendingEncryptedManyMessages =
-                                                    SeqDict.remove requestId loggedIn.pendingEncryptedManyMessages
-                                            }
+                                            (FrontendExtra.mapEncryptionRequests
+                                                (forgetEncryptManyRequest requestId)
+                                                loggedIn
+                                            )
                                         )
                                         Command.none
 
@@ -3497,11 +3513,9 @@ updateLoaded msg model =
                         Ok (Encryption.FromJs_ManyMessagesEncryptFailed requestId error) ->
                             -- The messages stay as they were, so nothing is lost by this
                             -- and the next device to hold the key can try again.
-                            ( { loggedIn
-                                | e2eeError = Just error
-                                , pendingEncryptedManyMessages =
-                                    SeqDict.remove requestId loggedIn.pendingEncryptedManyMessages
-                              }
+                            ( FrontendExtra.mapEncryptionRequests
+                                (forgetEncryptManyRequest requestId)
+                                { loggedIn | e2eeError = Just error }
                             , Command.none
                             )
 
@@ -7753,40 +7767,24 @@ updateLoadedFromBackend msg model =
 
                         oldMessagesToEncrypt : List ( Id EncryptManyRequestId, OldMessagesToEncrypt )
                         oldMessagesToEncrypt =
-                            messagesNeedingEncryption loggedIn.nextEncryptManyRequestId localChange
+                            messagesNeedingEncryption
+                                loggedIn.encryptionRequests.nextEncryptManyRequestId
+                                localChange
                     in
                     ( { loggedIn
                         | localState = localState
-                        , pendingDecryptedManyMessages =
-                            case loadedEncryptedMessages of
-                                Just loaded ->
-                                    SeqDict.insert
-                                        loggedIn.nextDecryptManyRequestId
-                                        { shiftScrollFrom = loaded.shiftScrollFrom }
-                                        loggedIn.pendingDecryptedManyMessages
-
-                                Nothing ->
-                                    loggedIn.pendingDecryptedManyMessages
-                        , nextDecryptManyRequestId =
-                            case loadedEncryptedMessages of
-                                Just _ ->
-                                    Id.increment loggedIn.nextDecryptManyRequestId
-
-                                Nothing ->
-                                    loggedIn.nextDecryptManyRequestId
-                        , pendingEncryptedManyMessages =
-                            List.foldl
-                                (\( requestId, conversation ) dict ->
-                                    SeqDict.insert
-                                        requestId
-                                        { id = conversation.id, messages = conversation.messages }
-                                        dict
-                                )
-                                loggedIn.pendingEncryptedManyMessages
+                        , encryptionRequests =
+                            rememberEncryptManyRequests
                                 oldMessagesToEncrypt
-                        , nextEncryptManyRequestId =
-                            Id.fromInt
-                                (Id.toInt loggedIn.nextEncryptManyRequestId + List.length oldMessagesToEncrypt)
+                                (case loadedEncryptedMessages of
+                                    Just loaded ->
+                                        rememberDecryptManyRequest
+                                            { shiftScrollFrom = loaded.shiftScrollFrom }
+                                            loggedIn.encryptionRequests
+
+                                    Nothing ->
+                                        loggedIn.encryptionRequests
+                                )
                         , games =
                             case localChange of
                                 -- The match has arrived, so there's finally something for the
@@ -7806,22 +7804,13 @@ updateLoadedFromBackend msg model =
                     , Command.batch
                         [ -- Everything written before the conversation was encrypted, now
                           -- that this device is holding a key that can encrypt it.
-                          List.map
-                            (\( requestId, conversation ) ->
-                                Encryption.encryptManyMessages
-                                    requestId
-                                    conversation.id
-                                    Message.contentAndEmbedsCodec
-                                    (List.map Tuple.second conversation.messages)
-                            )
-                            oldMessagesToEncrypt
-                            |> Command.batch
+                          List.map encryptConversation oldMessagesToEncrypt |> Command.batch
                         , -- The scroll shift that goes with these waits for the answer,
                           -- since they take up no room in the conversation until then.
                           case loadedEncryptedMessages of
                             Just loaded ->
                                 Encryption.decryptManyMessages
-                                    loggedIn.nextDecryptManyRequestId
+                                    loggedIn.encryptionRequests.nextDecryptManyRequestId
                                     loaded.id
                                     loaded.messages
 
@@ -8048,25 +8037,6 @@ updateLoadedFromBackend msg model =
                     case change of
                         ServerChange serverChange ->
                             case serverChange of
-                                -- Somebody else has replaced what the conversation was
-                                -- holding in the clear, so this device has to be told
-                                -- what the ciphertext says to go on showing it.
-                                Server_MessagesEncrypted id messages ->
-                                    ( { loggedIn2
-                                        | pendingDecryptedManyMessages =
-                                            SeqDict.insert
-                                                loggedIn2.nextDecryptManyRequestId
-                                                { shiftScrollFrom = Nothing }
-                                                loggedIn2.pendingDecryptedManyMessages
-                                        , nextDecryptManyRequestId =
-                                            Id.increment loggedIn2.nextDecryptManyRequestId
-                                      }
-                                    , Encryption.decryptManyMessages
-                                        loggedIn2.nextDecryptManyRequestId
-                                        id
-                                        (List.map Tuple.second messages)
-                                    )
-
                                 Server_TextEditor _ ->
                                     ( loggedIn2
                                     , case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
@@ -8105,19 +8075,27 @@ updateLoadedFromBackend msg model =
                                     FrontendExtra.handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local loggedIn2 model
 
                                 Server_SendEncryptedMessage senderId _ _ id content maybeRepliedTo attachedFiles ->
-                                    ( { loggedIn2
-                                        | nextDecryptionRequestId = Id.increment loggedIn2.nextDecryptionRequestId
-                                        , pendingDecryptedMessages =
-                                            SeqDict.insert
-                                                loggedIn2.nextDecryptionRequestId
-                                                { id = id
-                                                , senderId = senderId
-                                                , threadRoute = maybeRepliedTo
-                                                , attachedFiles = attachedFiles
-                                                }
-                                                loggedIn2.pendingDecryptedMessages
-                                      }
-                                    , Encryption.decryptMessage loggedIn2.nextDecryptionRequestId id content
+                                    ( FrontendExtra.mapEncryptionRequests
+                                        (\requests ->
+                                            { requests
+                                                | nextDecryptionRequestId =
+                                                    Id.increment requests.nextDecryptionRequestId
+                                                , pendingDecryptedMessages =
+                                                    SeqDict.insert
+                                                        requests.nextDecryptionRequestId
+                                                        { id = id
+                                                        , senderId = senderId
+                                                        , threadRoute = maybeRepliedTo
+                                                        , attachedFiles = attachedFiles
+                                                        }
+                                                        requests.pendingDecryptedMessages
+                                            }
+                                        )
+                                        loggedIn2
+                                    , Encryption.decryptMessage
+                                        loggedIn2.encryptionRequests.nextDecryptionRequestId
+                                        id
+                                        content
                                     )
 
                                 Server_Discord_SendMessage _ guildOrDmId _ content maybeRepliedTo _ _ ->
@@ -9057,6 +9035,51 @@ storeRemainingSharedSecrets alreadyHandled privateKey loggedIn =
             )
 
 
+{-| Notes that a conversation has gone off to be decrypted in one go, so that the answer
+can be matched to what was waiting on it.
+-}
+rememberDecryptManyRequest : PendingDecryptedManyMessages -> EncryptionRequests -> EncryptionRequests
+rememberDecryptManyRequest pending requests =
+    { requests
+        | pendingDecryptedManyMessages =
+            SeqDict.insert requests.nextDecryptManyRequestId pending requests.pendingDecryptedManyMessages
+        , nextDecryptManyRequestId = Id.increment requests.nextDecryptManyRequestId
+    }
+
+
+{-| Notes the conversations that have gone off to be encrypted, each under the number it
+was sent out with.
+-}
+rememberEncryptManyRequests :
+    List ( Id EncryptManyRequestId, OldMessagesToEncrypt )
+    -> EncryptionRequests
+    -> EncryptionRequests
+rememberEncryptManyRequests conversations requests =
+    { requests
+        | pendingEncryptedManyMessages =
+            List.foldl
+                (\( requestId, conversation ) dict -> SeqDict.insert requestId conversation dict)
+                requests.pendingEncryptedManyMessages
+                conversations
+        , nextEncryptManyRequestId =
+            Id.fromInt (Id.toInt requests.nextEncryptManyRequestId + List.length conversations)
+    }
+
+
+forgetEncryptRequest : Id Encryption.EncryptRequestId -> EncryptionRequests -> EncryptionRequests
+forgetEncryptRequest requestId requests =
+    { requests
+        | pendingEncryptedMessages = SeqDict.remove requestId requests.pendingEncryptedMessages
+    }
+
+
+forgetEncryptManyRequest : Id EncryptManyRequestId -> EncryptionRequests -> EncryptionRequests
+forgetEncryptManyRequest requestId requests =
+    { requests
+        | pendingEncryptedManyMessages = SeqDict.remove requestId requests.pendingEncryptedManyMessages
+    }
+
+
 {-| One conversation's worth of messages written before it was encrypted, ready to be
 handed to the browser.
 -}
@@ -9079,39 +9102,129 @@ messagesNeedingEncryption :
     -> LocalChange
     -> List ( Id EncryptManyRequestId, OldMessagesToEncrypt )
 messagesNeedingEncryption nextRequestId localChange =
-    let
-        helper conversations =
-            List.indexedMap
-                (\index ( id, conversation ) ->
-                    ( Id.fromInt (Id.toInt nextRequestId + index)
-                    , { id = id
-                      , messages =
-                            List.map
-                                (\( messageId, content ) -> ( NoThreadWithMessage messageId, content ))
-                                (SeqDict.toList conversation.channel)
-                                ++ List.concatMap
-                                    (\( threadId, thread ) ->
-                                        List.map
-                                            (\( messageId, content ) ->
-                                                ( ViewThreadWithMessage threadId messageId, content )
-                                            )
-                                            (SeqDict.toList thread)
-                                    )
-                                    (SeqDict.toList conversation.threads)
-                      }
-                    )
-                )
-                (SeqDict.toList conversations)
-    in
     case localChange of
         Local_SetPublicKey _ (FilledInByBackend conversations) ->
-            helper conversations
+            conversationsToEncrypt nextRequestId conversations
 
         Local_AcceptE2ee _ _ (FilledInByBackend conversations) ->
-            helper conversations
+            conversationsToEncrypt nextRequestId conversations
 
         _ ->
             []
+
+
+{-| Flattens each conversation into the order it will be handed over in, since the browser
+answers in that order and says nothing else about which message is which.
+-}
+conversationsToEncrypt :
+    Id EncryptManyRequestId
+    -> SeqDict Viewing_DmId ChannelDataToEncrypt
+    -> List ( Id EncryptManyRequestId, OldMessagesToEncrypt )
+conversationsToEncrypt nextRequestId conversations =
+    List.indexedMap
+        (\index ( id, conversation ) ->
+            ( Id.fromInt (Id.toInt nextRequestId + index)
+            , { id = id
+              , messages =
+                    List.map
+                        (\( messageId, content ) -> ( NoThreadWithMessage messageId, content ))
+                        (SeqDict.toList conversation.channel)
+                        ++ List.concatMap
+                            (\( threadId, thread ) ->
+                                List.map
+                                    (\( messageId, content ) ->
+                                        ( ViewThreadWithMessage threadId messageId, content )
+                                    )
+                                    (SeqDict.toList thread)
+                            )
+                            (SeqDict.toList conversation.threads)
+              }
+            )
+        )
+        (SeqDict.toList conversations)
+
+
+{-| Everything in the conversations this device has loaded that is still sitting on the
+server as plain text.
+
+The server is asked for the same thing, but its answer takes a round trip and an encrypted
+message shows nothing at all until this device works out what it says. Encrypting what is
+already loaded means the reader watches their own messages turn into ciphertext they can
+still read rather than into nothing. Whatever the server names that had not been loaded is
+picked up when its answer arrives, and anything named twice is encrypted twice, which
+costs a little work and no correctness.
+
+-}
+locallyLoadedMessagesToEncrypt : LocalState -> SeqDict Viewing_DmId ChannelDataToEncrypt
+locallyLoadedMessagesToEncrypt local =
+    SeqDict.foldl
+        (\otherUserId dmChannel dict ->
+            case dmChannel.e2ee of
+                DmChannel.E2eeEnabled _ ->
+                    let
+                        conversation : ChannelDataToEncrypt
+                        conversation =
+                            { channel = plainTextLoaded dmChannel.messages
+                            , threads =
+                                SeqDict.foldl
+                                    (\threadId thread threads ->
+                                        let
+                                            plainText : SeqDict (Id Id.ThreadMessageId) (ContentAndEmbeds (Id UserId))
+                                            plainText =
+                                                plainTextLoaded thread.messages
+                                        in
+                                        if SeqDict.isEmpty plainText then
+                                            threads
+
+                                        else
+                                            SeqDict.insert threadId plainText threads
+                                    )
+                                    SeqDict.empty
+                                    dmChannel.threads
+                            }
+                    in
+                    if SeqDict.isEmpty conversation.channel && SeqDict.isEmpty conversation.threads then
+                        dict
+
+                    else
+                        SeqDict.insert { otherUserId = otherUserId } conversation dict
+
+                _ ->
+                    dict
+        )
+        SeqDict.empty
+        local.dmChannels
+
+
+plainTextLoaded :
+    MessageArray messageId (Id UserId)
+    -> SeqDict (Id messageId) (ContentAndEmbeds (Id UserId))
+plainTextLoaded messages =
+    MessageArray.toList messages
+        |> List.filterMap
+            (\( messageId, message ) ->
+                case message of
+                    Message.UserTextMessage data ->
+                        Just ( messageId, { content = data.content, embeds = data.embeds } )
+
+                    _ ->
+                        Nothing
+            )
+        |> SeqDict.fromList
+
+
+{-| Hands one conversation's worth of messages to the browser to be turned into
+ciphertext.
+-}
+encryptConversation :
+    ( Id EncryptManyRequestId, OldMessagesToEncrypt )
+    -> Command FrontendOnly ToBackend FrontendMsg_
+encryptConversation ( requestId, conversation ) =
+    Encryption.encryptManyMessages
+        requestId
+        conversation.id
+        Message.contentAndEmbedsCodec
+        (List.map Tuple.second conversation.messages)
 
 
 {-| Encrypted messages that have just arrived, and where the scroll should be measured
@@ -9297,32 +9410,39 @@ startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
         guildOrDmId =
             ( GuildOrDmId (GuildOrDmId_Dm id), threadRoute )
     in
-    ( { loggedIn
-        | e2eeError = Nothing
-        , nextEncryptionRequestId = Id.increment loggedIn.nextEncryptionRequestId
-        , pendingEncryptedMessages =
-            SeqDict.insert
-                loggedIn.nextEncryptionRequestId
-                { otherUserId = id.otherUserId
-                , threadRoute =
-                    case threadRoute of
-                        ViewThread threadId ->
-                            ViewThreadWithMaybeMessage
-                                threadId
-                                (SeqDict.get guildOrDmId loggedIn.replyTo |> Maybe.map Id.changeType)
+    ( FrontendExtra.mapEncryptionRequests
+        (\requests ->
+            { requests
+                | nextEncryptionRequestId = Id.increment requests.nextEncryptionRequestId
+                , pendingEncryptedMessages =
+                    SeqDict.insert
+                        requests.nextEncryptionRequestId
+                        { otherUserId = id.otherUserId
+                        , threadRoute =
+                            case threadRoute of
+                                ViewThread threadId ->
+                                    ViewThreadWithMaybeMessage
+                                        threadId
+                                        (SeqDict.get guildOrDmId loggedIn.replyTo |> Maybe.map Id.changeType)
 
-                        NoThread ->
-                            NoThreadWithMaybeMessage (SeqDict.get guildOrDmId loggedIn.replyTo)
-                , attachedFiles =
-                    case SeqDict.get guildOrDmId loggedIn.filesToUpload of
-                        Just dict ->
-                            NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+                                NoThread ->
+                                    NoThreadWithMaybeMessage (SeqDict.get guildOrDmId loggedIn.replyTo)
+                        , attachedFiles =
+                            case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                                Just dict ->
+                                    NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
 
-                        Nothing ->
-                            SeqDict.empty
-                , contentAndEmbeds = contentAndEmbeds
-                }
-                loggedIn.pendingEncryptedMessages
-      }
-    , Encryption.encryptMessage loggedIn.nextEncryptionRequestId id Message.contentAndEmbedsCodec contentAndEmbeds
+                                Nothing ->
+                                    SeqDict.empty
+                        , contentAndEmbeds = contentAndEmbeds
+                        }
+                        requests.pendingEncryptedMessages
+            }
+        )
+        { loggedIn | e2eeError = Nothing }
+    , Encryption.encryptMessage
+        loggedIn.encryptionRequests.nextEncryptionRequestId
+        id
+        Message.contentAndEmbedsCodec
+        contentAndEmbeds
     )

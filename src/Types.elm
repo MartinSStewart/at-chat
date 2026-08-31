@@ -11,6 +11,7 @@ module Types exposing
     , EditGuildForm
     , EditMessage
     , EmojiSelector(..)
+    , EncryptionRequests
     , ExportState
     , ExportStateProgress
     , ExportStep(..)
@@ -272,7 +273,24 @@ type alias LoggedIn2 =
     , e2eeError : Maybe String
     , e2eePrivateKeyText : String
     , e2eeKeysOnThisDevice : SeqSet (Id UserId)
-    , pendingEncryptedMessages : SeqDict (Id EncryptRequestId) PendingEncryptedMessage
+    , encryptionRequests : EncryptionRequests
+    , e2eeSectionsExpanded : SeqDict (Id UserId) Bool
+    , {- We want to slightly change the letter spacing for textarea's on Safari in order to force it to recalculate word wrap.
+         This is to work around this bug https://github.com/panphora/overtype/issues/116
+      -}
+      typedTextCounter : Int
+    }
+
+
+{-| What this device has asked the browser to encrypt or decrypt and hasn't heard back
+about, along with the number the next request of each kind will go out under.
+
+The browser answers with the number it was asked under and nothing else, so what a reply
+is about is only knowable from what is kept here.
+
+-}
+type alias EncryptionRequests =
+    { pendingEncryptedMessages : SeqDict (Id EncryptRequestId) PendingEncryptedMessage
     , nextEncryptionRequestId : Id EncryptRequestId
     , pendingDecryptedMessages : SeqDict (Id DecryptRequestId) PendingDecryptedMessage
     , nextDecryptionRequestId : Id DecryptRequestId
@@ -280,11 +298,6 @@ type alias LoggedIn2 =
     , nextDecryptManyRequestId : Id DecryptManyRequestId
     , pendingEncryptedManyMessages : SeqDict (Id EncryptManyRequestId) PendingEncryptedManyMessages
     , nextEncryptManyRequestId : Id EncryptManyRequestId
-    , e2eeSectionsExpanded : SeqDict (Id UserId) Bool
-    , {- We want to slightly change the letter spacing for textarea's on Safari in order to force it to recalculate word wrap.
-         This is to work around this bug https://github.com/panphora/overtype/issues/116
-      -}
-      typedTextCounter : Int
     }
 
 
