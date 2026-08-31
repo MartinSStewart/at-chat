@@ -54,8 +54,11 @@ jobs:
 
       - uses: sparksp/elm-format-action@v1
 
+      # Run the binaries with npx rather than yarn: `yarn elm-review` runs the
+      # package.json script of that name, which already passes --compiler, and
+      # elm-review rejects the flag being given twice.
       - name: Elm-review check
-        run: yarn elm-review --compiler node_modules/.bin/lamdera
+        run: npx --no-install elm-review --compiler node_modules/.bin/lamdera
   Test:
     name: Compile the code and run tests
     runs-on: ubuntu-latest
@@ -103,10 +106,14 @@ jobs:
           echo "time=$(grep "Done in" < lamdera.log | grep -o '[0-9.]*s')" >> $GITHUB_OUTPUT
 
       - name: Tests (elm-test)
-        run: yarn elm-test-rs --compiler node_modules/.bin/lamdera
+        run: npx --no-install elm-test-rs --compiler node_modules/.bin/lamdera
 
+      # yarn runs from the directory holding package.json, so `cd review && yarn`
+      # would still run in the repository root and resolve ../node_modules
+      # outside the checkout. npx keeps the working directory we set here.
       - name: Tests (review elm-test)
-        run: cd review && yarn elm-test-rs --compiler ../node_modules/.bin/lamdera
+        working-directory: review
+        run: npx --no-install elm-test-rs --compiler ../node_modules/.bin/lamdera
 
       - name: Tests (end-to-end)
         run: yarn end-to-end-tests
