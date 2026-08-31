@@ -362,7 +362,7 @@ pendingChangesText localChange =
         Local_DeclineE2eeRequest _ ->
             "Declined the end-to-end encryption request"
 
-        Local_SetPublicKey _ ->
+        Local_SetPublicKey _ _ ->
             "Added a private key to the account"
 
         Local_SetE2eeRisksAccepted _ ->
@@ -3881,7 +3881,7 @@ changeUpdate localMsg local =
                     in
                     { local | localUser = { localUser | user = { user | e2eeRisksAccepted = isAccepted } } }
 
-                Local_SetPublicKey publicKey ->
+                Local_SetPublicKey publicKey _ ->
                     let
                         localUser : LocalUser
                         localUser =

@@ -3,6 +3,7 @@ module IdArray exposing
     , append
     , empty
     , foldl
+    , foldlWithId
     , fromArray
     , fromList
     , get
@@ -56,6 +57,15 @@ update key updateFunc (IdArray array) =
 foldl : (a -> b -> b) -> b -> IdArray k a -> b
 foldl foldFunc startingValue (IdArray array) =
     Array.foldl foldFunc startingValue array
+
+
+foldlWithId : (Id k -> a -> b -> b) -> b -> IdArray k a -> b
+foldlWithId foldFunc startingValue (IdArray array) =
+    Array.foldl
+        (\v ( id, a ) -> ( id + 1, foldFunc (Id.fromInt id) v a ))
+        ( 0, startingValue )
+        array
+        |> Tuple.second
 
 
 empty : IdArray k a

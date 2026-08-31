@@ -6100,11 +6100,39 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
-                Local_SetPublicKey publicKey ->
+                Local_SetPublicKey publicKey _ ->
                     BackendExtra.asUser
                         model
                         sessionId
                         (\session user ->
+                            let
+                                response : () -> Command BackendOnly ToFrontend backendMsg
+                                response () =
+                                    SeqDict.foldl
+                                        (\dmChannelId dmChannel dict ->
+                                            case DmChannelId.otherUserId session.userId dmChannelId of
+                                                Just otherUserId ->
+                                                    SeqDict.insert
+                                                        { otherUserId = otherUserId }
+                                                        { channel =
+                                                            IdArray.foldlWithId
+                                                                (\id message dict2 -> Deubg.todo "")
+                                                                SeqDict.empty
+                                                                dmChannel.messages
+                                                        , threads = SeqDict.empty
+                                                        }
+                                                        dict
+
+                                                Nothing ->
+                                                    dict
+                                        )
+                                        SeqDict.empty
+                                        model.dmChannels
+                                        |> FilledInByBackend
+                                        |> Local_SetPublicKey publicKey
+                                        |> LocalChangeResponse changeId
+                                        |> Lamdera.sendToFrontend clientId
+                            in
                             case user.publicKey of
                                 Nothing ->
                                     ( { model
@@ -6115,11 +6143,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 model.users
                                       }
                                     , Command.batch
-                                        [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
-
-                                        -- Anyone who might want to encrypt something to
-                                        -- this person needs their public key, so it goes
-                                        -- out the same way a name or an icon does.
+                                        [ response ()
                                         , Broadcast.toEveryoneWhoCanSeeUser
                                             clientId
                                             session.userId
@@ -6128,11 +6152,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         ]
                                     )
 
-                                Just _ ->
-                                    -- Replacing a key would orphan everything encrypted to the old
-                                    -- one, so a second attempt (another tab, say) is refused rather
-                                    -- than allowed to overwrite.
-                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                Just existingPublicKey ->
+                                    if publicKey == existingPublicKey then
+                                        ( model, response () )
+
+                                    else
+                                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
                 Local_SendEncryptedMessage _ id content threadRoute attachedFiles ->

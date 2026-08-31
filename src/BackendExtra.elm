@@ -2524,7 +2524,7 @@ toBackendLog toBackend =
                 Local_DeclineE2eeRequest _ ->
                     ToBackendLog_Local_DeclineE2eeRequest
 
-                Local_SetPublicKey _ ->
+                Local_SetPublicKey _ _ ->
                     ToBackendLog_Local_SetPublicKey
 
                 Local_SetE2eeRisksAccepted _ ->

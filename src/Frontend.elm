@@ -3182,7 +3182,7 @@ updateLoaded msg model =
                         (\loggedIn ->
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (X25519.toPublicKey privateKey |> Local_SetPublicKey |> Just)
+                                (Local_SetPublicKey (X25519.toPublicKey privateKey) EmptyPlaceholder |> Just)
                                 { loggedIn | showNewPrivateKey = Just privateKey }
                                 Command.none
                         )

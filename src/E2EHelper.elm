@@ -2540,7 +2540,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_DeclineE2eeRequest _ ->
                     True
 
-                Local_SetPublicKey _ ->
+                Local_SetPublicKey _ _ ->
                     -- Setting the key on your own account is what this is for, so the
                     -- attacker succeeding at it against themselves is not a leak.
                     False
@@ -3063,7 +3063,7 @@ allAttackerLocalChanges =
     , Local_RequestE2ee { otherUserId = Broadcast.adminUserId }
     , Local_CancelE2eeRequest { otherUserId = Broadcast.adminUserId }
     , Local_DeclineE2eeRequest { otherUserId = Broadcast.adminUserId }
-    , Local_SetPublicKey attackerPublicKey
+    , Local_SetPublicKey attackerPublicKey EmptyPlaceholder
     , Local_SetE2eeRisksAccepted True
     , Local_AcceptE2ee { otherUserId = Broadcast.adminUserId } startTime
     , Local_SendEncryptedMessage

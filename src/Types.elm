@@ -1131,7 +1131,16 @@ type LocalChange
     | Local_RequestE2ee Viewing_DmId
     | Local_CancelE2eeRequest Viewing_DmId
     | Local_DeclineE2eeRequest Viewing_DmId
-    | Local_SetPublicKey X25519.PublicKey
+    | Local_SetPublicKey
+        X25519.PublicKey
+        (ToBeFilledInByBackend
+            (SeqDict
+                Viewing_DmId
+                { channel : SeqDict (Id ChannelMessageId) (Nonempty (RichText (Id UserId)))
+                , threads : SeqDict (Id ChannelMessageId) (SeqDict (Id ThreadMessageId) (Nonempty (RichText (Id UserId))))
+                }
+            )
+        )
     | Local_SetE2eeRisksAccepted Bool
     | Local_AcceptE2ee Viewing_DmId Time.Posix
     | Local_SendEncryptedMessage Time.Posix Viewing_DmId (EncryptedData (ContentAndEmbeds (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
