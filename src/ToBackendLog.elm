@@ -84,6 +84,7 @@ type ToBackendLog
     | ToBackendLog_Local_CancelE2eeRequest
     | ToBackendLog_Local_DeclineE2eeRequest
     | ToBackendLog_Local_SetPublicKey
+    | ToBackendLog_Local_EncryptOldMessages
     | ToBackendLog_Local_SetE2eeRisksAccepted
     | ToBackendLog_Local_AcceptE2ee
     | ToBackendLog_Local_SendEncryptedMessage
@@ -316,6 +317,9 @@ toBackendLogToString log =
 
         ToBackendLog_Local_SetPublicKey ->
             "Local_SetPublicKey"
+
+        ToBackendLog_Local_EncryptOldMessages ->
+            "Local_EncryptOldMessages"
 
         ToBackendLog_Local_SetE2eeRisksAccepted ->
             "Local_SetE2eeRisksAccepted"

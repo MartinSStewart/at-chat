@@ -18,6 +18,7 @@ module BackendExtra exposing
     , discordDmChannelToFrontend
     , discordGuildToFrontend
     , discordGuildToFrontendForUser
+    , encryptOldMessages
     , getLinkedDiscordUsersAndOtherUsers
     , getLoginCode
     , getLoginData
@@ -27,6 +28,7 @@ module BackendExtra exposing
     , loginEmailSubject
     , loginWithToken
     , ownMessageIsReadBackend
+    , plainTextMessages
     , requestedForToGuildOrDmId
     , sendDm
     , sendEncryptedDm
@@ -77,7 +79,7 @@ import Log exposing (Log)
 import LoginForm
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..))
-import Message exposing (Message(..))
+import Message exposing (ContentAndEmbeds, Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import Pages.Admin exposing (InitAdminData)
 import Pagination exposing (PageId)
@@ -1897,6 +1899,77 @@ readerIsViewingDm readerId senderId threadRoute model =
         model.users
 
 
+{-| Swaps the plain text a conversation was holding for the ciphertext a device made of
+it.
+
+Both people in the conversation are handed the same backlog, so the second of them to get
+around to it finds the work already done. `Message.toEncrypted` leaves anything that is
+no longer plain text alone, which is what makes that harmless.
+
+-}
+encryptOldMessages :
+    List ( ThreadRouteWithMessage, EncryptedData (ContentAndEmbeds (Id UserId)) )
+    -> DmChannel
+    -> DmChannel
+encryptOldMessages messages dmChannel =
+    List.foldl
+        (\( threadRoute, encryptedData ) channel ->
+            case threadRoute of
+                NoThreadWithMessage messageId ->
+                    { channel
+                        | messages =
+                            DmChannel.updateArray
+                                messageId
+                                (Message.toEncrypted encryptedData)
+                                channel.messages
+                    }
+
+                ViewThreadWithMessage threadId messageId ->
+                    { channel
+                        | threads =
+                            SeqDict.updateIfExists
+                                threadId
+                                (\thread ->
+                                    { thread
+                                        | messages =
+                                            DmChannel.updateArray
+                                                messageId
+                                                (Message.toEncrypted encryptedData)
+                                                thread.messages
+                                    }
+                                )
+                                channel.threads
+                    }
+        )
+        dmChannel
+        messages
+
+
+{-| The messages in a conversation that are still stored as plain text.
+
+Encryption is turned on partway through a conversation rather than at the start of one,
+so everything written before then is sitting on the server in the clear. A device holding
+the key is the only thing that can do anything about that, so it is handed the contents
+to encrypt.
+
+-}
+plainTextMessages :
+    IdArray messageId (Message messageId (Id UserId))
+    -> SeqDict (Id messageId) (Nonempty (RichText (Id UserId)))
+plainTextMessages messages =
+    IdArray.foldlWithId
+        (\messageId message dict ->
+            case message of
+                UserTextMessage data ->
+                    SeqDict.insert messageId data.content dict
+
+                _ ->
+                    dict
+        )
+        SeqDict.empty
+        messages
+
+
 {-| Store and pass on a DM whose contents the server cannot read.
 
 Almost everything `sendDm` does with a message needs the text: working out who was
@@ -1910,7 +1983,7 @@ sendEncryptedDm :
     -> ClientId
     -> ChangeId
     -> Viewing_DmId
-    -> EncryptedData (Message.ContentAndEmbeds (Id UserId))
+    -> EncryptedData (ContentAndEmbeds (Id UserId))
     -> ThreadRouteWithMaybeMessage
     -> SeqDict (Id FileId) FileData
     -> UserSession
@@ -2526,6 +2599,9 @@ toBackendLog toBackend =
 
                 Local_SetPublicKey _ _ ->
                     ToBackendLog_Local_SetPublicKey
+
+                Local_EncryptOldMessages _ _ ->
+                    ToBackendLog_Local_EncryptOldMessages
 
                 Local_SetE2eeRisksAccepted _ ->
                     ToBackendLog_Local_SetE2eeRisksAccepted

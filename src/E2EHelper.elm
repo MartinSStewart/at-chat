@@ -2545,6 +2545,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                     -- attacker succeeding at it against themselves is not a leak.
                     False
 
+                Local_EncryptOldMessages _ _ ->
+                    True
+
                 Local_SetE2eeRisksAccepted _ ->
                     False
 
@@ -2802,6 +2805,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_E2eeRequestDeclined _ _ ->
+                            True
+
+                        Types.Server_MessagesEncrypted _ _ ->
                             True
 
                         Types.Server_E2eeAccepted _ _ ->
@@ -3064,6 +3070,7 @@ allAttackerLocalChanges =
     , Local_CancelE2eeRequest { otherUserId = Broadcast.adminUserId }
     , Local_DeclineE2eeRequest { otherUserId = Broadcast.adminUserId }
     , Local_SetPublicKey attackerPublicKey EmptyPlaceholder
+    , Local_EncryptOldMessages { otherUserId = Broadcast.adminUserId } []
     , Local_SetE2eeRisksAccepted True
     , Local_AcceptE2ee { otherUserId = Broadcast.adminUserId } startTime
     , Local_SendEncryptedMessage

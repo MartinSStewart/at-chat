@@ -3,6 +3,7 @@ module E2EEncryption exposing
     , declineE2eeRequestTest
     , endToEndEncryptionAcceptTest
     , endToEndEncryptionRequestTest
+    , oldMessagesEncryptedTest
     , olderMessagesDecryptedTest
     , oneKeySetsUpEveryConversationTest
     , soloDmEncryptionTest
@@ -416,6 +417,119 @@ endToEndEncryptionAcceptTest config =
                 ]
             )
         ]
+
+
+{-| Encryption gets turned on partway through a conversation rather than at the start of
+one, so everything written before then is sitting on the server in the clear. A device
+that holds the key is the only thing that can do anything about that, so the server hands
+it the lot the moment one turns up.
+-}
+oldMessagesEncryptedTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+oldMessagesEncryptedTest config =
+    E2EHelper.startTest
+        "Encrypt the messages written before a conversation was encrypted"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.openDm admin 100 "2"
+                , E2EHelper.openDm user 100 "0"
+
+                -- A conversation nobody has encrypted yet, so the server can read all of
+                -- it and both people's messages are stored as they were typed.
+                , E2EHelper.writeMessage admin 100 writtenByAdmin
+                , E2EHelper.writeMessage user 100 writtenByUser
+                , T.checkBackend 100 (checkPlainTextMessageStored writtenByAdmin)
+                , T.checkBackend 100 (checkPlainTextMessageStored writtenByUser)
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , user.click 100 (Dom.id "guild_showMembers")
+                        , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                        , addPrivateKeyToAccount user
+                            (\userPrivateKey ->
+                                [ -- Accepting is what turns encryption on, and until it
+                                  -- does there is nothing in the conversation to encrypt.
+                                  user.input 100 (Dom.id "guild_e2eePrivateKey") userPrivateKey
+                                , respondToSharedSecretStored user Broadcast.adminUserId
+                                , T.checkBackend 100 checkDmIsEncrypted
+                                , T.checkBackend 100 (checkPlainTextMessageStored writtenByAdmin)
+
+                                -- The admin's device is handed a key next, and with it
+                                -- everything the conversation was holding in the clear.
+                                , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                                , respondToSharedSecretStored admin (Id.fromInt 2)
+                                , respondToManyMessagesEncrypted admin
+                                , T.checkBackend 100 (checkNoPlainTextReachedTheServer writtenByAdmin)
+                                , T.checkBackend 100 (checkNoPlainTextReachedTheServer writtenByUser)
+                                , T.checkBackend 100 (checkEncryptedMessageStored writtenByAdmin)
+                                , T.checkBackend 100 (checkEncryptedMessageStored writtenByUser)
+
+                                -- Nothing was lost on the way: the conversation still
+                                -- holds the same two messages, and this device can read
+                                -- them back.
+                                , T.checkBackend 100 (checkEncryptedMessageCount 2)
+
+                                -- The device that encrypted them read them out to do it,
+                                -- so it can go on showing them without asking anything.
+                                , admin.click 100 (Dom.id "guild_hideMembers")
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text writtenByAdmin ])
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text writtenByUser ])
+
+                                -- The other person's copy was swapped out underneath
+                                -- them, so their device has to be told what it says.
+                                , respondToManyMessagesDecrypted user
+                                , user.click 100 (Dom.id "guild_hideMembers")
+                                , user.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text writtenByAdmin ])
+                                , admin.snapshotView 100 { name = "Older messages encrypted after the fact" }
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+writtenByAdmin : String
+writtenByAdmin =
+    "Written before we encrypted anything"
+
+
+writtenByUser : String
+writtenByUser =
+    "And this one was mine"
+
+
+checkPlainTextMessageStored : String -> BackendModel2 -> Result String ()
+checkPlainTextMessageStored text backend =
+    case adminDmChannel backend of
+        Just dmChannel ->
+            if List.member text (plainTextMessages dmChannel) then
+                Ok ()
+
+            else
+                Err
+                    ("Expected the server to be holding \""
+                        ++ text
+                        ++ "\" as plain text. Holding: "
+                        ++ String.join ", " (plainTextMessages dmChannel)
+                    )
+
+        Nothing ->
+            Err "The DM isn't on the backend"
 
 
 {-| A device that has no keys has none for any of its conversations, so being asked for
@@ -1323,6 +1437,42 @@ respondToManyMessagesDecryptedFailed client =
                 [] ->
                     [ T.checkState 0 (\_ -> Err "The client didn't ask for a conversation to be decrypted") ]
         )
+
+
+{-| Stands in for the browser encrypting a whole conversation's worth of messages that
+were written before it was encrypted. Nothing here encrypts, so the ciphertext is the
+message left as it is, which is enough to see that what reaches the server is what the
+app handed over rather than what was typed.
+-}
+respondToManyMessagesEncrypted :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+respondToManyMessagesEncrypted client =
+    T.andThen
+        100
+        (\data ->
+            case List.filterMap encryptManyRequest (encryptionPortRequests client.clientId data) of
+                ( requestId, messages ) :: _ ->
+                    [ List.map (\bytes -> EncryptedData (stubBytesHash bytes) bytes) messages
+                        |> Encryption.FromJs_ManyMessagesEncrypted requestId
+                        |> sendFromJs client
+                    ]
+
+                [] ->
+                    [ T.checkState 0 (\_ -> Err "The client didn't ask for a conversation to be encrypted") ]
+        )
+
+
+encryptManyRequest :
+    Encryption.ToJs (ContentAndEmbeds (Id UserId))
+    -> Maybe ( Id Encryption.EncryptManyRequestId, List Bytes )
+encryptManyRequest request =
+    case request of
+        Encryption.ToJs_EncryptManyMessages { requestId, data } ->
+            Just ( requestId, data )
+
+        _ ->
+            Nothing
 
 
 decryptManyRequest :

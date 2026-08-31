@@ -60,6 +60,7 @@ const e2eeToJsStoreSharedSecret = 0;
 const e2eeToJsEncryptMessage = 1;
 const e2eeToJsDecryptMessage = 2;
 const e2eeToJsDecryptManyMessages = 3;
+const e2eeToJsEncryptManyMessages = 4;
 
 // The FromJs variants, in the order Encryption.fromJsCodec defines them.
 const e2eeFromJsSharedSecretStored = 0;
@@ -69,6 +70,8 @@ const e2eeFromJsMessageEncryptFailed = 3;
 const e2eeFromJsMessageDecrypted = 4;
 const e2eeFromJsMessageDecryptFailed = 5;
 const e2eeFromJsManyMessagesDecrypted = 6;
+const e2eeFromJsManyMessagesEncrypted = 7;
+const e2eeFromJsManyMessagesEncryptFailed = 8;
 
 function e2eeReadToJs(dataView) {
     if (dataView.byteLength < 3 || dataView.getUint8(0) !== e2eeSerializeVersion) { return null; }
@@ -117,6 +120,27 @@ function e2eeReadToJs(dataView) {
 
             return {
                 tag: "decrypt-many-messages",
+                requestId: dataView.getFloat64(3, false),
+                otherUserId: dataView.getFloat64(11, false),
+                data: messages,
+            };
+        }
+
+        case e2eeToJsEncryptManyMessages: {
+            // Elm serialized each message on its own before sending, so unlike the single
+            // message case these do carry a length and can be told apart here.
+            const count = dataView.getUint32(19, false);
+            const messages = [];
+            let offset = 23;
+
+            for (let i = 0; i < count; i++) {
+                const message = e2eeReadBytesField(dataView, offset);
+                messages.push(message);
+                offset += 4 + message.length;
+            }
+
+            return {
+                tag: "encrypt-many-messages",
                 requestId: dataView.getFloat64(3, false),
                 otherUserId: dataView.getFloat64(11, false),
                 data: messages,
@@ -214,6 +238,31 @@ function e2eeManyMessagesDecryptedMessage(requestId, results) {
         offset += 2;
         new Uint8Array(out.buffer).set(bodies[i], offset);
         offset += bodies[i].length;
+    }
+
+    return out;
+}
+
+// One reply for a whole conversation: the request id, then a list of EncryptedData, each
+// of which is the hash the ciphertext will be filed under followed by the ciphertext
+// itself.
+function e2eeManyMessagesEncryptedMessage(requestId, results) {
+    const size = 11 + 4 + results.reduce((n, r) => n + 8 + 4 + r.cipherText.length, 0);
+    const out = new DataView(new ArrayBuffer(size));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, e2eeFromJsManyMessagesEncrypted, false);
+    out.setFloat64(3, requestId, false);
+    out.setUint32(11, results.length, false);
+
+    let offset = 15;
+
+    for (const result of results) {
+        out.setFloat64(offset, result.hash, false);
+        offset += 8;
+        out.setUint32(offset, result.cipherText.length, false);
+        offset += 4;
+        new Uint8Array(out.buffer).set(result.cipherText, offset);
+        offset += result.cipherText.length;
     }
 
     return out;
@@ -1042,6 +1091,37 @@ exports.init = async function init(app)
 
                 app.ports.encryption_from_js.send(
                     e2eeManyMessagesDecryptedMessage(message.requestId, results));
+
+            } else if (message.tag === "encrypt-many-messages") {
+                const key = await e2eeWithStore(
+                    "readonly", store => store.get(message.otherUserId));
+
+                // Unlike decrypting, one message failing here means the key is missing
+                // and every other one would fail the same way, so the whole conversation
+                // is reported at once rather than message by message.
+                if (!key) {
+                    app.ports.encryption_from_js.send(
+                        e2eeIdAndTextMessage(
+                            e2eeFromJsManyMessagesEncryptFailed,
+                            message.requestId,
+                            "No encryption key is stored on this device for that conversation"));
+                    return;
+                }
+
+                const results = await Promise.all(message.data.map(async (bytes) => {
+                    const iv = crypto.getRandomValues(new Uint8Array(12));
+                    const cipherText = await crypto.subtle.encrypt(
+                        { name: "AES-GCM", iv: iv }, key, bytes);
+
+                    const combined = new Uint8Array(iv.length + cipherText.byteLength);
+                    combined.set(iv, 0);
+                    combined.set(new Uint8Array(cipherText), iv.length);
+
+                    return { hash: await e2eeBytesHash(combined), cipherText: combined };
+                }));
+
+                app.ports.encryption_from_js.send(
+                    e2eeManyMessagesEncryptedMessage(message.requestId, results));
             }
         } catch (e) {
             if (message.tag === "store-shared-secret") {
@@ -1056,6 +1136,10 @@ exports.init = async function init(app)
                 app.ports.encryption_from_js.send(
                     e2eeMessageDecryptFailedMessage(
                         message.requestId, await e2eeBytesHash(message.data)));
+            } else if (message.tag === "encrypt-many-messages") {
+                app.ports.encryption_from_js.send(
+                    e2eeIdAndTextMessage(
+                        e2eeFromJsManyMessagesEncryptFailed, message.requestId, e.toString()));
             }
         }
     });

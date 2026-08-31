@@ -365,6 +365,9 @@ pendingChangesText localChange =
         Local_SetPublicKey _ _ ->
             "Added a private key to the account"
 
+        Local_EncryptOldMessages _ _ ->
+            "Encrypted the messages written before this conversation was encrypted"
+
         Local_SetE2eeRisksAccepted _ ->
             "Accepted the end-to-end encryption risks"
 
@@ -3881,6 +3884,15 @@ changeUpdate localMsg local =
                     in
                     { local | localUser = { localUser | user = { user | e2eeRisksAccepted = isAccepted } } }
 
+                Local_EncryptOldMessages { otherUserId } messages ->
+                    { local
+                        | dmChannels =
+                            SeqDict.updateIfExists
+                                otherUserId
+                                (encryptOldMessages messages)
+                                local.dmChannels
+                    }
+
                 Local_SetPublicKey publicKey _ ->
                     let
                         localUser : LocalUser
@@ -5227,6 +5239,15 @@ changeUpdate localMsg local =
 
                 Server_E2eeRequestDeclined { otherUserId } declinedBy ->
                     LocalState.setDmE2ee otherUserId (DmChannel.E2eeDeclinedBy declinedBy) local
+
+                Server_MessagesEncrypted { otherUserId } messages ->
+                    { local
+                        | dmChannels =
+                            SeqDict.updateIfExists
+                                otherUserId
+                                (encryptOldMessages messages)
+                                local.dmChannels
+                    }
 
                 Server_SetPublicKey userId publicKey ->
                     let
@@ -7225,6 +7246,52 @@ handleDecryptedMessage requestId bytesHash result model loggedIn =
 
         Nothing ->
             ( loggedIn, Command.none )
+
+
+{-| Swaps the plain text messages a conversation was holding for the ciphertext somebody
+made of them.
+
+Both people in an encrypted conversation are handed the same backlog to encrypt, so the
+second of them to get around to it finds the work already done. Message.toEncrypted
+leaves anything that is no longer plain text alone, which is what makes that harmless.
+
+-}
+encryptOldMessages :
+    List ( ThreadRouteWithMessage, EncryptedData (ContentAndEmbeds (Id UserId)) )
+    -> FrontendDmChannel
+    -> FrontendDmChannel
+encryptOldMessages messages dmChannel =
+    List.foldl
+        (\( threadRoute, encryptedData ) channel ->
+            case threadRoute of
+                NoThreadWithMessage messageId ->
+                    { channel
+                        | messages =
+                            MessageArray.updateIfExists
+                                messageId
+                                (Message.toEncrypted encryptedData)
+                                channel.messages
+                    }
+
+                ViewThreadWithMessage threadId messageId ->
+                    { channel
+                        | threads =
+                            SeqDict.updateIfExists
+                                threadId
+                                (\thread ->
+                                    { thread
+                                        | messages =
+                                            MessageArray.updateIfExists
+                                                messageId
+                                                (Message.toEncrypted encryptedData)
+                                                thread.messages
+                                    }
+                                )
+                                channel.threads
+                    }
+        )
+        dmChannel
+        messages
 
 
 {-| Files what the browser worked out encrypted messages to say. Only this device can

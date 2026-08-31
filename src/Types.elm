@@ -40,6 +40,7 @@ module Types exposing
     , PendingGatewayReconnect
     , PendingDecryptedManyMessages
     , PendingDecryptedMessage
+    , PendingEncryptedManyMessages
     , PendingEncryptedMessage
     , PublicGoMatch(..)
     , RevealedSpoilers
@@ -81,7 +82,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
-import Encryption exposing (DecryptManyRequestId, DecryptRequestId, EncryptRequestId, EncryptedData)
+import Encryption exposing (DecryptManyRequestId, DecryptRequestId, EncryptManyRequestId, EncryptRequestId, EncryptedData)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import Game
 import Go
@@ -276,6 +277,8 @@ type alias LoggedIn2 =
     , nextDecryptionRequestId : Id DecryptRequestId
     , pendingDecryptedManyMessages : SeqDict (Id DecryptManyRequestId) PendingDecryptedManyMessages
     , nextDecryptManyRequestId : Id DecryptManyRequestId
+    , pendingEncryptedManyMessages : SeqDict (Id EncryptManyRequestId) PendingEncryptedManyMessages
+    , nextEncryptManyRequestId : Id EncryptManyRequestId
     , e2eeSectionsExpanded : SeqDict (Id UserId) Bool
     , {- We want to slightly change the letter spacing for textarea's on Safari in order to force it to recalculate word wrap.
          This is to work around this bug https://github.com/panphora/overtype/issues/116
@@ -297,6 +300,19 @@ type alias PendingDecryptedMessage =
     , senderId : Id UserId
     , threadRoute : ThreadRouteWithMaybeMessage
     , attachedFiles : SeqDict (Id FileId) FileData
+    }
+
+
+{-| The messages handed over to be encrypted after the fact, and where each one came
+from.
+
+The browser answers in the order it was asked rather than naming anything, so this is
+what turns its answer back into a change the server can apply.
+
+-}
+type alias PendingEncryptedManyMessages =
+    { id : Viewing_DmId
+    , messages : List ( ThreadRouteWithMessage, ContentAndEmbeds (Id UserId) )
     }
 
 
@@ -1068,6 +1084,7 @@ type ServerChange
     | Server_E2eeRequested Viewing_DmId (Id UserId)
     | Server_E2eeRequestCancelled Viewing_DmId
     | Server_E2eeRequestDeclined Viewing_DmId (Id UserId)
+    | Server_MessagesEncrypted Viewing_DmId (List ( ThreadRouteWithMessage, EncryptedData (ContentAndEmbeds (Id UserId)) ))
     | Server_E2eeAccepted Viewing_DmId Time.Posix
     | Server_SetPublicKey (Id UserId) X25519.PublicKey
     | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (EncryptedData (ContentAndEmbeds (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
@@ -1141,6 +1158,9 @@ type LocalChange
                 }
             )
         )
+    | -- Replaces messages written before the conversation was encrypted with the
+      -- ciphertext this device made of them.
+      Local_EncryptOldMessages Viewing_DmId (List ( ThreadRouteWithMessage, EncryptedData (ContentAndEmbeds (Id UserId)) ))
     | Local_SetE2eeRisksAccepted Bool
     | Local_AcceptE2ee Viewing_DmId Time.Posix
     | Local_SendEncryptedMessage Time.Posix Viewing_DmId (EncryptedData (ContentAndEmbeds (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)

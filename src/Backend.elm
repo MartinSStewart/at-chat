@@ -6084,6 +6084,44 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
+                Local_EncryptOldMessages id messages ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session _ _ dmChannelId dmChannel ->
+                            case dmChannel.e2ee of
+                                DmChannel.E2eeEnabled _ ->
+                                    let
+                                        model2 : BackendModel
+                                        model2 =
+                                            { model
+                                                | dmChannels =
+                                                    SeqDict.insert
+                                                        dmChannelId
+                                                        (BackendExtra.encryptOldMessages messages dmChannel)
+                                                        model.dmChannels
+                                            }
+                                    in
+                                    ( model2
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toDmChannelExcludingOne
+                                            clientId
+                                            session.userId
+                                            id
+                                            (\id2 -> Server_MessagesEncrypted id2 messages)
+                                            model2
+                                        ]
+                                    )
+
+                                _ ->
+                                    -- Nothing has agreed to encrypt this conversation, so
+                                    -- replacing what it holds with something nobody can
+                                    -- read would only lose it.
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
                 Local_SetE2eeRisksAccepted isAccepted ->
                     BackendExtra.asUser
                         model
@@ -6110,20 +6148,44 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 response () =
                                     SeqDict.foldl
                                         (\dmChannelId dmChannel dict ->
-                                            case DmChannelId.otherUserId session.userId dmChannelId of
-                                                Just otherUserId ->
-                                                    SeqDict.insert
-                                                        { otherUserId = otherUserId }
-                                                        { channel =
-                                                            IdArray.foldlWithId
-                                                                (\id message dict2 -> Deubg.todo "")
-                                                                SeqDict.empty
-                                                                dmChannel.messages
-                                                        , threads = SeqDict.empty
-                                                        }
+                                            case
+                                                ( DmChannelId.otherUserId session.userId dmChannelId
+                                                , dmChannel.e2ee
+                                                )
+                                            of
+                                                ( Just otherUserId, DmChannel.E2eeEnabled _ ) ->
+                                                    let
+                                                        conversation :
+                                                            { channel : SeqDict (Id ChannelMessageId) (Nonempty (RichText (Id UserId)))
+                                                            , threads : SeqDict (Id ChannelMessageId) (SeqDict (Id Id.ThreadMessageId) (Nonempty (RichText (Id UserId))))
+                                                            }
+                                                        conversation =
+                                                            { channel = BackendExtra.plainTextMessages dmChannel.messages
+                                                            , threads =
+                                                                SeqDict.foldl
+                                                                    (\threadId thread threads ->
+                                                                        let
+                                                                            plainText : SeqDict (Id Id.ThreadMessageId) (Nonempty (RichText (Id UserId)))
+                                                                            plainText =
+                                                                                BackendExtra.plainTextMessages thread.messages
+                                                                        in
+                                                                        if SeqDict.isEmpty plainText then
+                                                                            threads
+
+                                                                        else
+                                                                            SeqDict.insert threadId plainText threads
+                                                                    )
+                                                                    SeqDict.empty
+                                                                    dmChannel.threads
+                                                            }
+                                                    in
+                                                    if SeqDict.isEmpty conversation.channel && SeqDict.isEmpty conversation.threads then
                                                         dict
 
-                                                Nothing ->
+                                                    else
+                                                        SeqDict.insert { otherUserId = otherUserId } conversation dict
+
+                                                _ ->
                                                     dict
                                         )
                                         SeqDict.empty

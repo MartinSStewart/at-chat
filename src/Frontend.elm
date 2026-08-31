@@ -35,7 +35,7 @@ import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji(..), EmojiOrSticker(..))
-import Encryption exposing (BytesHash)
+import Encryption exposing (BytesHash, EncryptManyRequestId)
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
 import Game
@@ -609,6 +609,8 @@ loadedInitHelper startupData emojiData loginData loading =
                     |> List.filterMap identity
                     |> SeqDict.fromList
             , nextDecryptManyRequestId = Id.fromInt (List.length backlog)
+            , pendingEncryptedManyMessages = SeqDict.empty
+            , nextEncryptManyRequestId = Id.fromInt 0
             , e2eeSectionsExpanded = SeqDict.empty
             , typedTextCounter = 0
             }
@@ -3275,15 +3277,17 @@ updateLoaded msg model =
                     in
                     if String.endsWith "=" trimmed then
                         let
-                            result : Result String (Command FrontendOnly ToBackend FrontendMsg_)
+                            result : Result String ( X25519.PublicKey, Command FrontendOnly ToBackend FrontendMsg_ )
                             result =
                                 case User.privateKeyForAccount trimmed (Local.model loggedIn.localState).localUser.user of
                                     Ok privateKey ->
                                         case storeSharedSecret otherUserId privateKey loggedIn of
                                             Ok command ->
-                                                (command :: storeRemainingSharedSecrets otherUserId privateKey loggedIn)
-                                                    |> Command.batch
-                                                    |> Ok
+                                                Ok
+                                                    ( X25519.toPublicKey privateKey
+                                                    , (command :: storeRemainingSharedSecrets otherUserId privateKey loggedIn)
+                                                        |> Command.batch
+                                                    )
 
                                             Err error ->
                                                 Err error
@@ -3292,8 +3296,17 @@ updateLoaded msg model =
                                         Err error
                         in
                         case result of
-                            Ok command ->
-                                ( { loggedIn | e2eeError = Nothing, e2eePrivateKeyText = "" }, command )
+                            Ok ( publicKey, command ) ->
+                                -- Setting the key that is already on the account is how
+                                -- the server is asked for anything in this user's
+                                -- encrypted conversations that it is still holding as
+                                -- plain text, now that this device can do something
+                                -- about it.
+                                FrontendExtra.handleLocalChange
+                                    model.time
+                                    (Local_SetPublicKey publicKey EmptyPlaceholder |> Just)
+                                    { loggedIn | e2eeError = Nothing, e2eePrivateKeyText = "" }
+                                    command
 
                             Err error ->
                                 ( { loggedIn | e2eeError = Just error, e2eePrivateKeyText = text }, Command.none )
@@ -3434,6 +3447,62 @@ updateLoaded msg model =
 
                                 Nothing ->
                                     Command.none
+                            )
+
+                        Ok (Encryption.FromJs_ManyMessagesEncrypted requestId encrypted) ->
+                            case SeqDict.get requestId loggedIn.pendingEncryptedManyMessages of
+                                Just pending ->
+                                    let
+                                        -- The browser answers in the order it was asked,
+                                        -- so pairing the two lists up is what says which
+                                        -- message each piece of ciphertext belongs to.
+                                        pairs :
+                                            List
+                                                ( ( ThreadRouteWithMessage, ContentAndEmbeds (Id UserId) )
+                                                , Encryption.EncryptedData (ContentAndEmbeds (Id UserId))
+                                                )
+                                        pairs =
+                                            List.map2 Tuple.pair pending.messages encrypted
+                                    in
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (List.map
+                                            (\( ( threadRoute, _ ), encryptedData ) ->
+                                                ( threadRoute, encryptedData )
+                                            )
+                                            pairs
+                                            |> Local_EncryptOldMessages pending.id
+                                            |> Just
+                                        )
+                                        -- This device just read these out to encrypt
+                                        -- them, so it doesn't have to ask what they say
+                                        -- to go on showing them.
+                                        (FrontendExtra.fileDecryptedMessages
+                                            (List.map
+                                                (\( ( _, contentAndEmbeds ), encryptedData ) ->
+                                                    ( Encryption.hash encryptedData, Ok contentAndEmbeds )
+                                                )
+                                                pairs
+                                            )
+                                            { loggedIn
+                                                | pendingEncryptedManyMessages =
+                                                    SeqDict.remove requestId loggedIn.pendingEncryptedManyMessages
+                                            }
+                                        )
+                                        Command.none
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+
+                        Ok (Encryption.FromJs_ManyMessagesEncryptFailed requestId error) ->
+                            -- The messages stay as they were, so nothing is lost by this
+                            -- and the next device to hold the key can try again.
+                            ( { loggedIn
+                                | e2eeError = Just error
+                                , pendingEncryptedManyMessages =
+                                    SeqDict.remove requestId loggedIn.pendingEncryptedManyMessages
+                              }
+                            , Command.none
                             )
 
                         Err error ->
@@ -7681,6 +7750,10 @@ updateLoadedFromBackend msg model =
                         loadedEncryptedMessages : Maybe LoadedEncryptedMessages
                         loadedEncryptedMessages =
                             encryptedMessagesJustLoaded localChange
+
+                        oldMessagesToEncrypt : List ( Id EncryptManyRequestId, OldMessagesToEncrypt )
+                        oldMessagesToEncrypt =
+                            messagesNeedingEncryption loggedIn.nextEncryptManyRequestId localChange
                     in
                     ( { loggedIn
                         | localState = localState
@@ -7701,6 +7774,19 @@ updateLoadedFromBackend msg model =
 
                                 Nothing ->
                                     loggedIn.nextDecryptManyRequestId
+                        , pendingEncryptedManyMessages =
+                            List.foldl
+                                (\( requestId, conversation ) dict ->
+                                    SeqDict.insert
+                                        requestId
+                                        { id = conversation.id, messages = conversation.messages }
+                                        dict
+                                )
+                                loggedIn.pendingEncryptedManyMessages
+                                oldMessagesToEncrypt
+                        , nextEncryptManyRequestId =
+                            Id.fromInt
+                                (Id.toInt loggedIn.nextEncryptManyRequestId + List.length oldMessagesToEncrypt)
                         , games =
                             case localChange of
                                 -- The match has arrived, so there's finally something for the
@@ -7718,7 +7804,19 @@ updateLoadedFromBackend msg model =
                                     loggedIn.games
                       }
                     , Command.batch
-                        [ -- The scroll shift that goes with these waits for the answer,
+                        [ -- Everything written before the conversation was encrypted, now
+                          -- that this device is holding a key that can encrypt it.
+                          List.map
+                            (\( requestId, conversation ) ->
+                                Encryption.encryptManyMessages
+                                    requestId
+                                    conversation.id
+                                    Message.contentAndEmbedsCodec
+                                    (List.map Tuple.second conversation.messages)
+                            )
+                            oldMessagesToEncrypt
+                            |> Command.batch
+                        , -- The scroll shift that goes with these waits for the answer,
                           -- since they take up no room in the conversation until then.
                           case loadedEncryptedMessages of
                             Just loaded ->
@@ -7950,6 +8048,25 @@ updateLoadedFromBackend msg model =
                     case change of
                         ServerChange serverChange ->
                             case serverChange of
+                                -- Somebody else has replaced what the conversation was
+                                -- holding in the clear, so this device has to be told
+                                -- what the ciphertext says to go on showing it.
+                                Server_MessagesEncrypted id messages ->
+                                    ( { loggedIn2
+                                        | pendingDecryptedManyMessages =
+                                            SeqDict.insert
+                                                loggedIn2.nextDecryptManyRequestId
+                                                { shiftScrollFrom = Nothing }
+                                                loggedIn2.pendingDecryptedManyMessages
+                                        , nextDecryptManyRequestId =
+                                            Id.increment loggedIn2.nextDecryptManyRequestId
+                                      }
+                                    , Encryption.decryptManyMessages
+                                        loggedIn2.nextDecryptManyRequestId
+                                        id
+                                        (List.map Tuple.second messages)
+                                    )
+
                                 Server_TextEditor _ ->
                                     ( loggedIn2
                                     , case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
@@ -8938,6 +9055,68 @@ storeRemainingSharedSecrets alreadyHandled privateKey loggedIn =
                     DmChannel.E2eeDisabled ->
                         Nothing
             )
+
+
+{-| One conversation's worth of messages written before it was encrypted, ready to be
+handed to the browser.
+-}
+type alias OldMessagesToEncrypt =
+    { id : Viewing_DmId
+    , messages : List ( ThreadRouteWithMessage, ContentAndEmbeds (Id UserId) )
+    }
+
+
+{-| The server answers a private key being set with everything in the user's encrypted
+conversations that is still sitting on it as plain text, since this device is the only
+thing that can do anything about that.
+
+Each conversation is a request of its own, so the browser only looks a key up once per
+conversation and an answer says which one it is about.
+
+-}
+messagesNeedingEncryption :
+    Id EncryptManyRequestId
+    -> LocalChange
+    -> List ( Id EncryptManyRequestId, OldMessagesToEncrypt )
+messagesNeedingEncryption nextRequestId localChange =
+    case localChange of
+        Local_SetPublicKey _ (FilledInByBackend conversations) ->
+            SeqDict.toList conversations
+                |> List.indexedMap
+                    (\index ( id, conversation ) ->
+                        ( Id.fromInt (Id.toInt nextRequestId + index)
+                        , { id = id
+                          , messages =
+                                List.map
+                                    (\( messageId, content ) ->
+                                        ( NoThreadWithMessage messageId, contentToEncrypt content )
+                                    )
+                                    (SeqDict.toList conversation.channel)
+                                    ++ List.concatMap
+                                        (\( threadId, thread ) ->
+                                            List.map
+                                                (\( messageId, content ) ->
+                                                    ( ViewThreadWithMessage threadId messageId
+                                                    , contentToEncrypt content
+                                                    )
+                                                )
+                                                (SeqDict.toList thread)
+                                        )
+                                        (SeqDict.toList conversation.threads)
+                          }
+                        )
+                    )
+
+        _ ->
+            []
+
+
+{-| The server sends the text of a message and nothing else, so a link preview that was
+worked out for it before the conversation was encrypted is not carried across.
+-}
+contentToEncrypt : Nonempty (RichText (Id UserId)) -> ContentAndEmbeds (Id UserId)
+contentToEncrypt content =
+    { content = content, embeds = Array.empty }
 
 
 {-| Encrypted messages that have just arrived, and where the scroll should be measured
