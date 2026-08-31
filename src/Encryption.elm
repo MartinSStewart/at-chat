@@ -63,7 +63,7 @@ import UserColor
 {-| OpaqueVariants.
 -}
 type EncryptedData a
-    = EncryptedData BytesHash Bytes
+    = EncryptedData Bytes
 
 
 {-| OpaqueVariants.
@@ -94,24 +94,14 @@ encode data =
 
 
 toBase64 : EncryptedData a -> String
-toBase64 (EncryptedData _ bytes) =
+toBase64 (EncryptedData bytes) =
     Base64.fromBytes bytes |> Maybe.withDefault ""
-
-
-hash : EncryptedData a -> BytesHash
-hash (EncryptedData hash2 _) =
-    hash2
-
-
-encryptedData : Bytes -> EncryptedData a
-encryptedData bytes =
-    EncryptedData (bytesHash bytes) bytes
 
 
 {-| A very low effort hash of the encrypted data since the data is already randomly distributed.
 -}
-bytesHash : Bytes -> BytesHash
-bytesHash bytes =
+hash : EncryptedData a -> BytesHash
+hash (EncryptedData bytes) =
     Bytes.Decode.decode
         (Bytes.Decode.map2
             (\high low -> BytesHash (high * 4294967296 + low))
@@ -120,6 +110,11 @@ bytesHash bytes =
         )
         bytes
         |> Maybe.withDefault (BytesHash 0)
+
+
+encryptedData : Bytes -> EncryptedData a
+encryptedData =
+    EncryptedData
 
 
 info : msg -> Ui.Element msg
@@ -204,7 +199,7 @@ encryptMessage requestId id dataCodec data =
 
 
 decryptMessage : Id DecryptRequestId -> Viewing_DmId -> EncryptedData a -> Command FrontendOnly toMsg msg
-decryptMessage requestId id (EncryptedData _ data) =
+decryptMessage requestId id (EncryptedData data) =
     Serialize.encodeToBytes
         (toJsCodec Serialize.unit)
         (ToJs_DecryptNewMessage { requestId = requestId, otherUserId = id.otherUserId, data = data })
@@ -236,7 +231,7 @@ decryptManyMessages requestId id messages =
         (ToJs_DecryptManyMessages
             { requestId = requestId
             , otherUserId = id.otherUserId
-            , data = List.map (\(EncryptedData _ bytes) -> bytes) messages
+            , data = List.map (\(EncryptedData bytes) -> bytes) messages
             }
         )
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
@@ -392,5 +387,5 @@ encryptedDataCodec : Serialize.Codec e (EncryptedData a)
 encryptedDataCodec =
     Serialize.map
         encryptedData
-        (\(EncryptedData _ bytes) -> bytes)
+        (\(EncryptedData bytes) -> bytes)
         Serialize.bytes

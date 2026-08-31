@@ -3073,7 +3073,7 @@ allAttackerLocalChanges =
     , Local_SendEncryptedMessage
         startTime
         { otherUserId = Broadcast.adminUserId }
-        (EncryptedData (BytesHash 0) (Bytes.Encode.encode (Bytes.Encode.sequence [])))
+        (EncryptedData (Bytes.Encode.encode (Bytes.Encode.sequence [])))
         (NoThreadWithMaybeMessage Nothing)
         SeqDict.empty
     ]
