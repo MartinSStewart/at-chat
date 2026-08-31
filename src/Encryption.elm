@@ -89,16 +89,13 @@ hash (EncryptedData hash2 _) =
     hash2
 
 
-{-| Ciphertext starts with the random 12 byte IV that AES-GCM was given, and reusing an IV
-with the same key breaks GCM outright, so those bytes are already the one thing about a
-message that is guaranteed not to repeat. The first six of them are the number a message
-is filed under.
--}
 encryptedData : Bytes -> EncryptedData a
 encryptedData bytes =
     EncryptedData (bytesHash bytes) bytes
 
 
+{-| A very low effort hash of the encrypted data since the data is already randomly distributed.
+-}
 bytesHash : Bytes -> BytesHash
 bytesHash bytes =
     Bytes.Decode.decode

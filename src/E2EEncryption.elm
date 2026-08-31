@@ -847,9 +847,6 @@ checkPlainTextMessageStored text backend =
             Err "The DM isn't on the backend"
 
 
-{-| The conversations a client has asked the browser to work a shared secret out for.
-Order doesn't matter, so both sides are sorted before comparing.
--}
 checkSharedSecretsAskedFor :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> List (Id UserId)
@@ -888,9 +885,6 @@ checkDmIsEncrypted backend =
             Err "The DM should have been marked as encrypted on the backend"
 
 
-{-| No message the server stored anywhere should contain the sender's private key, and
-the one that tried to give it away should carry the warning in its place instead.
--}
 checkPrivateKeyNeverReachedTheServer : String -> BackendModel2 -> Result String ()
 checkPrivateKeyNeverReachedTheServer privateKeyText backend =
     let
@@ -921,10 +915,6 @@ checkPrivateKeyNeverReachedTheServer privateKeyText backend =
             )
 
 
-{-| The server should never have been handed the message as it was typed. An encrypted
-conversation only ever stores EncryptedUserTextMessage, so a plain one carrying the text
-means it went out before the browser had it.
--}
 checkNoPlainTextReachedTheServer : String -> BackendModel2 -> Result String ()
 checkNoPlainTextReachedTheServer text backend =
     case adminDmChannel backend of
@@ -951,8 +941,6 @@ checkEncryptedMessageStored text backend =
             )
 
 
-{-| What every plain message in a channel says.
--}
 plainTextMessages : DmChannel.BackendDmChannel -> List String
 plainTextMessages dmChannel =
     IdArray.toList dmChannel.messages
@@ -967,10 +955,6 @@ plainTextMessages dmChannel =
             )
 
 
-{-| What every encrypted message in a channel says. The stand-in for encryption leaves
-the message serialized but readable, which is what lets a test see whether what reached
-the server is what the app handed over rather than what was typed.
--}
 encryptedMessageText : Message.Message Id.ChannelMessageId (Id UserId) -> Maybe String
 encryptedMessageText message =
     case message of
@@ -1145,10 +1129,6 @@ adminDmChannel backend =
         (E2EHelper.unwrapBackend backend).dmChannels
 
 
-{-| Generates a key pair, which stores the public half on the account and shows the
-private half once. The showing is checked on the way past, since it is the only chance
-anybody gets to save the key.
--}
 addPrivateKeyToAccount :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> (String -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2))
@@ -1184,10 +1164,6 @@ addPrivateKeyToAccount client continueWith =
         ]
 
 
-{-| Both accounts should have ended up with a public key, and crucially not the same one:
-they are generated from the random words each client started with, so a shared seed would
-quietly give two people the same private key.
--}
 checkBothKeysStoredAndDifferent : BackendModel2 -> Result String ()
 checkBothKeysStoredAndDifferent backend =
     let
@@ -1211,8 +1187,6 @@ checkBothKeysStoredAndDifferent backend =
             Err "The user's public key wasn't stored on the backend"
 
 
-{-| The conversations a client has asked the browser to keep a shared secret for.
--}
 sharedSecretsAskedFor : ClientId -> T.Data FrontendModel BackendModel2 -> List (Id UserId)
 sharedSecretsAskedFor clientId data =
     List.filterMap
@@ -1227,12 +1201,6 @@ sharedSecretsAskedFor clientId data =
         (encryptionPortRequests clientId data)
 
 
-{-| Stands in for the browser after it has kept a shared secret.
-
-The request says which conversation, but so does the test, and saying so reads better at
-the call site than picking the most recent one out of the list.
-
--}
 respondToSharedSecretStored :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> Id UserId
@@ -1242,13 +1210,6 @@ respondToSharedSecretStored client otherUserId =
         |> sendFromJs client
 
 
-{-| Stands in for the browser encrypting a message.
-
-The stand-in ciphertext is the message serialized and left as it is, which is not
-encryption at all but does let a test check that what reaches the server is what the app
-handed over rather than what was typed.
-
--}
 respondToMessageEncrypted :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
@@ -1267,9 +1228,6 @@ respondToMessageEncrypted client =
         )
 
 
-{-| Answers an encryption request with the failure the browser gives when this device has
-no key for the conversation.
--}
 respondToEncryptionPortWithMissingKey :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
@@ -1283,9 +1241,6 @@ respondToEncryptionPortWithMissingKey client =
         )
 
 
-{-| Stands in for the browser decrypting a message. Nothing encrypted it in the first
-place, so reading it back is a matter of decoding the bytes that were handed over.
--}
 respondToMessageDecrypted :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
@@ -1347,11 +1302,6 @@ respondToManyMessagesDecryptedFailed client =
         )
 
 
-{-| Stands in for the browser encrypting a whole conversation's worth of messages that
-were written before it was encrypted. Nothing here encrypts, so the ciphertext is the
-message left as it is, which is enough to see that what reaches the server is what the
-app handed over rather than what was typed.
--}
 respondToManyMessagesEncrypted :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
@@ -1395,10 +1345,6 @@ decryptManyRequest request =
             Nothing
 
 
-{-| Stands in for the browser's ciphertext. A real one starts with the random IV that
-AES-GCM was given, which is the part the app files a message under, so this puts
-something just as unique in the same place and leaves the message readable behind it.
--}
 stubCipherText : Bytes -> Bytes
 stubCipherText payload =
     let
@@ -1415,9 +1361,6 @@ stubCipherText payload =
         |> Bytes.Encode.encode
 
 
-{-| Two messages must not land on the same stand-in IV, or the app files them under one
-another, so this runs over the whole message rather than counting it.
--}
 stubIv : Bytes -> Int
 stubIv payload =
     Bytes.Decode.decode
