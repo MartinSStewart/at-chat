@@ -374,6 +374,7 @@ tests config =
                                   -- does there is nothing in the conversation to encrypt.
                                   user.input 100 (Dom.id "guild_e2eePrivateKey") userPrivateKey
                                 , respondToSharedSecretStored user Broadcast.adminUserId
+                                , respondToManyMessagesEncrypted user
                                 , T.checkBackend 100 checkDmIsEncrypted
                                 , T.checkBackend 100 (checkPlainTextMessageStored writtenByAdmin)
 
@@ -381,7 +382,6 @@ tests config =
                                 -- everything the conversation was holding in the clear.
                                 , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
                                 , respondToSharedSecretStored admin (Id.fromInt 2)
-                                , respondToManyMessagesEncrypted admin
                                 , T.checkBackend 100 (checkNoPlainTextReachedTheServer writtenByAdmin)
                                 , T.checkBackend 100 (checkNoPlainTextReachedTheServer writtenByUser)
                                 , T.checkBackend 100 (checkEncryptedMessageStored writtenByAdmin)
@@ -544,6 +544,7 @@ tests config =
                         , T.checkState 100 (checkSharedSecretsAskedFor admin [])
                         , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
                         , respondToSharedSecretStored admin Broadcast.adminUserId
+                        , respondToManyMessagesEncrypted admin
                         , T.checkBackend 100 checkSoloDmIsEncrypted
                         , admin.checkView
                             100
@@ -957,7 +958,7 @@ checkEncryptedMessageStored text backend =
 
 {-| What every plain message in a channel says.
 -}
-plainTextMessages : DmChannel.DmChannel -> List String
+plainTextMessages : DmChannel.BackendDmChannel -> List String
 plainTextMessages dmChannel =
     IdArray.toList dmChannel.messages
         |> List.filterMap
@@ -1135,14 +1136,14 @@ soloDmEncryptedContents backend =
             []
 
 
-soloDmChannel : BackendModel2 -> Maybe DmChannel.DmChannel
+soloDmChannel : BackendModel2 -> Maybe DmChannel.BackendDmChannel
 soloDmChannel backend =
     SeqDict.get
         (DmChannelId.fromUserIds (Id.fromInt 0) (Id.fromInt 0))
         (E2EHelper.unwrapBackend backend).dmChannels
 
 
-adminDmChannel : BackendModel2 -> Maybe DmChannel.DmChannel
+adminDmChannel : BackendModel2 -> Maybe DmChannel.BackendDmChannel
 adminDmChannel backend =
     SeqDict.get
         (DmChannelId.fromUserIds (Id.fromInt 0) (Id.fromInt 2))

@@ -25,7 +25,7 @@ import ChannelName exposing (ChannelName)
 import CustomEmoji
 import Discord
 import DiscordUserData exposing (DiscordUserData)
-import DmChannel exposing (DiscordDmChannel, DmChannel)
+import DmChannel exposing (BackendDmChannel, DiscordDmChannel)
 import Effect.Time as Time
 import Embed exposing (Embed(..))
 import Emoji exposing (EmojiOrCustomEmoji(..))
@@ -223,7 +223,7 @@ discordGuildChannel discordUsers guildId guild channel =
 {-| DM channels have no owner and no join times, so their members are only
 listed by name and profile image.
 -}
-dmChannel : NonemptyDict (Id UserId) BackendUser -> Id UserId -> Id UserId -> DmChannel -> String
+dmChannel : NonemptyDict (Id UserId) BackendUser -> Id UserId -> Id UserId -> BackendDmChannel -> String
 dmChannel users currentUserId otherUserId channel =
     let
         userNames : SeqDict (Id UserId) String

@@ -67,7 +67,7 @@ import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData)
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordUserData exposing (DiscordUserData)
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, FrontendDmChannel)
+import DmChannel exposing (BackendDmChannel, DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
 import DmChannelId exposing (DmChannelId, GuildOrFullDmId)
 import Drawing
 import Duration exposing (Duration)
@@ -436,7 +436,7 @@ type alias BackendModel =
     , deletedGuilds : SeqDict (Id GuildId) DeletedBackendGuild
     , isInitialized : Bool
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
-    , dmChannels : SeqDict DmChannelId DmChannel
+    , dmChannels : SeqDict DmChannelId BackendDmChannel
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordDmChannel
     , slackDms : OneToOne (Slack.Id Slack.ChannelId) DmChannelId
     , slackWorkspaces : OneToOne String (Id GuildId)
@@ -881,7 +881,7 @@ type alias ExportStateProgress =
     , remainingGuildChannels : List ( Id ChannelId, BackendChannel )
     , encodedGuildCount : Int
     , encodedGuilds : List Bytes
-    , remainingDmChannels : List ( DmChannelId, DmChannel )
+    , remainingDmChannels : List ( DmChannelId, BackendDmChannel )
     , encodedDmChannels : List Bytes
     , remainingDiscordGuilds : List ( Discord.Id Discord.GuildId, DiscordBackendGuild )
     , remainingDiscordGuildChannels : List ( Discord.Id Discord.ChannelId, DiscordBackendChannel )
@@ -1152,7 +1152,7 @@ type LocalChange
     | Local_SetPublicKey X25519.PublicKey (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
     | Local_EncryptOldMessages Viewing_DmId (List ( ThreadRouteWithMessage, EncryptedData (ContentAndEmbeds (Id UserId)) ))
     | Local_SetE2eeRisksAccepted Bool
-    | Local_AcceptE2ee Viewing_DmId Time.Posix
+    | Local_AcceptE2ee Viewing_DmId Time.Posix (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
     | Local_SendEncryptedMessage Time.Posix Viewing_DmId (EncryptedData (ContentAndEmbeds (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
 
 

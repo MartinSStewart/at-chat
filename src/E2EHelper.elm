@@ -2551,7 +2551,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetE2eeRisksAccepted _ ->
                     False
 
-                Local_AcceptE2ee _ _ ->
+                Local_AcceptE2ee _ _ _ ->
                     True
 
                 Local_SendEncryptedMessage _ _ _ _ _ ->
@@ -3072,7 +3072,7 @@ allAttackerLocalChanges =
     , Local_SetPublicKey attackerPublicKey EmptyPlaceholder
     , Local_EncryptOldMessages { otherUserId = Broadcast.adminUserId } []
     , Local_SetE2eeRisksAccepted True
-    , Local_AcceptE2ee { otherUserId = Broadcast.adminUserId } startTime
+    , Local_AcceptE2ee { otherUserId = Broadcast.adminUserId } startTime EmptyPlaceholder
     , Local_SendEncryptedMessage
         startTime
         { otherUserId = Broadcast.adminUserId }

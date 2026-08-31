@@ -3359,7 +3359,7 @@ updateLoaded msg model =
                             if acceptE2ee then
                                 FrontendExtra.handleLocalChange
                                     model.time
-                                    (Local_AcceptE2ee { otherUserId = otherUserId } model.time |> Just)
+                                    (Local_AcceptE2ee { otherUserId = otherUserId } model.time EmptyPlaceholder |> Just)
                                     loggedIn2
                                     Command.none
 
@@ -9079,8 +9079,8 @@ messagesNeedingEncryption :
     -> LocalChange
     -> List ( Id EncryptManyRequestId, OldMessagesToEncrypt )
 messagesNeedingEncryption nextRequestId localChange =
-    case localChange of
-        Local_SetPublicKey _ (FilledInByBackend conversations) ->
+    let
+        helper conversations =
             List.indexedMap
                 (\index ( id, conversation ) ->
                     ( Id.fromInt (Id.toInt nextRequestId + index)
@@ -9102,6 +9102,13 @@ messagesNeedingEncryption nextRequestId localChange =
                     )
                 )
                 (SeqDict.toList conversations)
+    in
+    case localChange of
+        Local_SetPublicKey _ (FilledInByBackend conversations) ->
+            helper conversations
+
+        Local_AcceptE2ee _ _ (FilledInByBackend conversations) ->
+            helper conversations
 
         _ ->
             []

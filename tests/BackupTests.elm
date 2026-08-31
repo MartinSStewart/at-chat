@@ -12,7 +12,7 @@ import Bytes exposing (Bytes)
 import Bytes.Decode
 import Bytes.Encode
 import Discord
-import DmChannel exposing (DiscordDmChannel, DmChannel)
+import DmChannel exposing (BackendDmChannel, DiscordDmChannel)
 import DmChannelId exposing (DmChannelId)
 import Expect
 import Id
@@ -102,7 +102,7 @@ are left alone. Their exports show up ahead of the DM ones, which is why the
 expectations above only look at names starting with `dm-` and `discord-dm-`.
 -}
 backupWith :
-    SeqDict DmChannelId DmChannel
+    SeqDict DmChannelId BackendDmChannel
     -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordDmChannel
     -> Result String Backup.Backup
 backupWith dmChannels discordDmChannels =
@@ -174,7 +174,7 @@ lengthPrefixed encoder items =
 {-| Each channel is a DM between user 1 and a user numbered after its message
 count, so a channel's reference name says how long it is.
 -}
-dmChannelsWithMessageCounts : List Int -> SeqDict DmChannelId DmChannel
+dmChannelsWithMessageCounts : List Int -> SeqDict DmChannelId BackendDmChannel
 dmChannelsWithMessageCounts messageCounts =
     List.map
         (\messageCount ->
@@ -210,7 +210,7 @@ discordDmChannelsWithMessageCounts messageCounts =
         |> SeqDict.fromList
 
 
-backendInit : DmChannel
+backendInit : BackendDmChannel
 backendInit =
     DmChannel.backendInit
 

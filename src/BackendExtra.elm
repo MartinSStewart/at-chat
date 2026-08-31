@@ -18,6 +18,7 @@ module BackendExtra exposing
     , discordDmChannelToFrontend
     , discordGuildToFrontend
     , discordGuildToFrontendForUser
+    , dmChannelsThatNeedEncrypting
     , getLinkedDiscordUsersAndOtherUsers
     , getLoginCode
     , getLoginData
@@ -50,7 +51,7 @@ import Bytes.Encode
 import Call exposing (CallId(..))
 import Discord
 import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, FrontendDmChannel)
+import DmChannel exposing (BackendDmChannel, DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
 import DmChannelId exposing (DmChannelId)
 import Drawing
 import Duration
@@ -94,7 +95,7 @@ import SessionIdHash
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import ToBackendLog exposing (ToBackendLog(..))
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), ChannelDataToEncrypt, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, FrontendUser)
 import UserAgent exposing (UserAgent)
@@ -1898,6 +1899,51 @@ readerIsViewingDm readerId senderId threadRoute model =
         model.users
 
 
+dmChannelsThatNeedEncrypting : UserSession -> SeqDict DmChannelId BackendDmChannel -> SeqDict Viewing_DmId ChannelDataToEncrypt
+dmChannelsThatNeedEncrypting session dmChannels =
+    SeqDict.foldl
+        (\dmChannelId dmChannel dict ->
+            case
+                ( DmChannelId.otherUserId session.userId dmChannelId
+                , dmChannel.e2ee
+                )
+            of
+                ( Just otherUserId, DmChannel.E2eeEnabled _ ) ->
+                    let
+                        conversation : ChannelDataToEncrypt
+                        conversation =
+                            { channel = plainTextMessages dmChannel.messages
+                            , threads =
+                                SeqDict.foldl
+                                    (\threadId thread threads ->
+                                        let
+                                            plainText : SeqDict (Id Id.ThreadMessageId) (ContentAndEmbeds (Id UserId))
+                                            plainText =
+                                                plainTextMessages thread.messages
+                                        in
+                                        if SeqDict.isEmpty plainText then
+                                            threads
+
+                                        else
+                                            SeqDict.insert threadId plainText threads
+                                    )
+                                    SeqDict.empty
+                                    dmChannel.threads
+                            }
+                    in
+                    if SeqDict.isEmpty conversation.channel && SeqDict.isEmpty conversation.threads then
+                        dict
+
+                    else
+                        SeqDict.insert { otherUserId = otherUserId } conversation dict
+
+                _ ->
+                    dict
+        )
+        SeqDict.empty
+        dmChannels
+
+
 {-| The messages in a conversation that are still stored as plain text.
 
 Encryption is turned on partway through a conversation rather than at the start of one,
@@ -1954,7 +2000,7 @@ sendEncryptedDm :
     -> UserSession
     -> BackendUser
     -> DmChannelId
-    -> DmChannel
+    -> BackendDmChannel
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 sendEncryptedDm time clientId changeId id contentAndEmbeds threadRouteWithReplyTo attachedFiles session user dmChannelId dmChannel model =
@@ -2035,7 +2081,7 @@ sendDm :
     -> BackendUser
     -> BackendUser
     -> DmChannelId
-    -> DmChannel
+    -> BackendDmChannel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles emojis session user otherUser dmChannelId dmChannel =
     let
@@ -2571,7 +2617,7 @@ toBackendLog toBackend =
                 Local_SetE2eeRisksAccepted _ ->
                     ToBackendLog_Local_SetE2eeRisksAccepted
 
-                Local_AcceptE2ee _ _ ->
+                Local_AcceptE2ee _ _ _ ->
                     ToBackendLog_Local_AcceptE2ee
 
                 Local_SendEncryptedMessage _ _ _ _ _ ->
@@ -2941,7 +2987,7 @@ asDmUser :
     BackendModel
     -> SessionId
     -> Viewing_DmId
-    -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> DmChannel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> BackendDmChannel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asDmUser model sessionId { otherUserId } func =
     case SeqDict.get sessionId model.sessions of
@@ -2978,7 +3024,7 @@ asDmUserRpc :
     -> SessionId
     -> ClientId
     -> Viewing_DmId
-    -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> DmChannel -> ( Result Http.Error String, BackendModel, Cmd BackendMsg ))
+    -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> BackendDmChannel -> ( Result Http.Error String, BackendModel, Cmd BackendMsg ))
     -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
 asDmUserRpc model sessionId clientId { otherUserId } func =
     case ( SeqDict.get sessionId model.sessions, SeqDict.get sessionId model.connections ) of

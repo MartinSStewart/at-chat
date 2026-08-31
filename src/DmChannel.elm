@@ -1,7 +1,7 @@
 module DmChannel exposing
-    ( DiscordDmChannel
+    ( BackendDmChannel
+    , DiscordDmChannel
     , DiscordFrontendDmChannel
-    , DmChannel
     , E2eeEnabledData
     , E2eeStatus(..)
     , FrontendDmChannel
@@ -41,7 +41,7 @@ import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend(..))
 import VisibleMessages exposing (VisibleMessages)
 
 
-type alias DmChannel =
+type alias BackendDmChannel =
     { messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
@@ -91,7 +91,7 @@ type alias FrontendDmChannel =
     }
 
 
-backendInit : DmChannel
+backendInit : BackendDmChannel
 backendInit =
     { messages = IdArray.empty
     , lastTypedAt = SeqDict.empty
@@ -118,7 +118,7 @@ toFrontend :
     Maybe ( ThreadRoute, Maybe ChannelHeaderTab )
     -> DmChannelId
     -> OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
-    -> DmChannel
+    -> BackendDmChannel
     -> FrontendDmChannel
 toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
     let

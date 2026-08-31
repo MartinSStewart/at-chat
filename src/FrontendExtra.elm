@@ -372,7 +372,7 @@ pendingChangesText localChange =
         Local_SetE2eeRisksAccepted _ ->
             "Accepted the end-to-end encryption risks"
 
-        Local_AcceptE2ee _ _ ->
+        Local_AcceptE2ee _ _ _ ->
             "Started end-to-end encryption"
 
         Local_SendEncryptedMessage _ _ _ _ _ ->
@@ -3870,7 +3870,7 @@ changeUpdate localMsg local =
                             { localUser | currentlyViewing = currentlyViewing2, user = user2 }
                     }
 
-                Local_AcceptE2ee { otherUserId } time ->
+                Local_AcceptE2ee { otherUserId } time _ ->
                     case SeqDict.get otherUserId local.dmChannels of
                         Just dmChannel ->
                             case dmChannel.e2ee of
