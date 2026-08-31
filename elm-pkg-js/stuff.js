@@ -143,11 +143,6 @@ function e2eeReadBytesField(dataView, offset) {
         dataView.getUint32(offset, false));
 }
 
-async function e2eeBytesHash(bytes) {
-    const digest = new DataView(await crypto.subtle.digest("SHA-256", bytes));
-    return digest.getUint16(0, false) * 4294967296 + digest.getUint32(2, false);
-}
-
 function e2eeIdMessage(variant, id) {
     const out = new DataView(new ArrayBuffer(11));
     out.setUint8(0, e2eeSerializeVersion);
@@ -167,32 +162,29 @@ function e2eeIdAndTextMessage(variant, id, text) {
     return out;
 }
 
-function e2eeMessageEncryptedMessage(requestId, hash, bytes) {
-    const out = new DataView(new ArrayBuffer(31 + bytes.length));
+function e2eeMessageEncryptedMessage(requestId, bytes) {
+    const out = new DataView(new ArrayBuffer(15 + bytes.length));
     out.setUint8(0, e2eeSerializeVersion);
     out.setUint16(1, e2eeFromJsMessageEncrypted, false);
     out.setFloat64(3, requestId, false);
-    out.setFloat64(11, hash, false);
-    out.setFloat64(19, hash, false);
-    out.setUint32(27, bytes.length, false);
-    new Uint8Array(out.buffer).set(bytes, 31);
+    out.setUint32(11, bytes.length, false);
+    new Uint8Array(out.buffer).set(bytes, 15);
     return out;
 }
 
-function e2eeMessageDecryptedMessage(requestId, hash, bytes) {
-    const out = new DataView(new ArrayBuffer(19 + bytes.length));
+function e2eeMessageDecryptedMessage(requestId, bytes) {
+    const out = new DataView(new ArrayBuffer(11 + bytes.length));
     out.setUint8(0, e2eeSerializeVersion);
     out.setUint16(1, e2eeFromJsMessageDecrypted, false);
     out.setFloat64(3, requestId, false);
-    out.setFloat64(11, hash, false);
-    new Uint8Array(out.buffer).set(bytes, 19);
+    new Uint8Array(out.buffer).set(bytes, 11);
     return out;
 }
 
 function e2eeManyMessagesDecryptedMessage(requestId, results) {
-    const bodies = results.map(({ plainText }) =>
+    const bodies = results.map((plainText) =>
         plainText === null ? new Uint8Array(0) : plainText);
-    const size = 11 + 4 + results.reduce((n, _, i) => n + 8 + 2 + bodies[i].length, 0);
+    const size = 11 + 4 + bodies.reduce((n, body) => n + 2 + body.length, 0);
     const out = new DataView(new ArrayBuffer(size));
     out.setUint8(0, e2eeSerializeVersion);
     out.setUint16(1, e2eeFromJsManyMessagesDecrypted, false);
@@ -201,46 +193,41 @@ function e2eeManyMessagesDecryptedMessage(requestId, results) {
 
     let offset = 15;
 
-    for (let i = 0; i < results.length; i++) {
-        out.setFloat64(offset, results[i].hash, false);
-        offset += 8;
-        out.setUint16(offset, results[i].plainText === null ? 0 : 1, false);
+    for (const body of bodies) {
+        out.setUint16(offset, body.length === 0 ? 0 : 1, false);
         offset += 2;
-        new Uint8Array(out.buffer).set(bodies[i], offset);
-        offset += bodies[i].length;
+        new Uint8Array(out.buffer).set(body, offset);
+        offset += body.length;
     }
 
     return out;
 }
 
-function e2eeManyMessagesEncryptedMessage(requestId, results) {
-    const size = 11 + 4 + results.reduce((n, r) => n + 8 + 4 + r.cipherText.length, 0);
+function e2eeManyMessagesEncryptedMessage(requestId, cipherTexts) {
+    const size = 11 + 4 + cipherTexts.reduce((n, c) => n + 4 + c.length, 0);
     const out = new DataView(new ArrayBuffer(size));
     out.setUint8(0, e2eeSerializeVersion);
     out.setUint16(1, e2eeFromJsManyMessagesEncrypted, false);
     out.setFloat64(3, requestId, false);
-    out.setUint32(11, results.length, false);
+    out.setUint32(11, cipherTexts.length, false);
 
     let offset = 15;
 
-    for (const result of results) {
-        out.setFloat64(offset, result.hash, false);
-        offset += 8;
-        out.setUint32(offset, result.cipherText.length, false);
+    for (const cipherText of cipherTexts) {
+        out.setUint32(offset, cipherText.length, false);
         offset += 4;
-        new Uint8Array(out.buffer).set(result.cipherText, offset);
-        offset += result.cipherText.length;
+        new Uint8Array(out.buffer).set(cipherText, offset);
+        offset += cipherText.length;
     }
 
     return out;
 }
 
-function e2eeMessageDecryptFailedMessage(requestId, hash) {
-    const out = new DataView(new ArrayBuffer(19));
+function e2eeMessageDecryptFailedMessage(requestId) {
+    const out = new DataView(new ArrayBuffer(11));
     out.setUint8(0, e2eeSerializeVersion);
     out.setUint16(1, e2eeFromJsMessageDecryptFailed, false);
     out.setFloat64(3, requestId, false);
-    out.setFloat64(11, hash, false);
     return out;
 }
 
@@ -1007,17 +994,15 @@ exports.init = async function init(app)
                 combined.set(new Uint8Array(cipherText), iv.length);
 
                 app.ports.encryption_from_js.send(
-                    e2eeMessageEncryptedMessage(
-                        message.requestId, await e2eeBytesHash(combined), combined));
+                    e2eeMessageEncryptedMessage(message.requestId, combined));
 
             } else if (message.tag === "decrypt-message") {
-                const hash = await e2eeBytesHash(message.data);
                 const key = await e2eeWithStore(
                     "readonly", store => store.get(message.otherUserId));
 
                 if (!key) {
                     app.ports.encryption_from_js.send(
-                        e2eeMessageDecryptFailedMessage(message.requestId, hash));
+                        e2eeMessageDecryptFailedMessage(message.requestId));
                     return;
                 }
 
@@ -1027,24 +1012,21 @@ exports.init = async function init(app)
                     message.data.slice(12));
 
                 app.ports.encryption_from_js.send(
-                    e2eeMessageDecryptedMessage(
-                        message.requestId, hash, new Uint8Array(plainText)));
+                    e2eeMessageDecryptedMessage(message.requestId, new Uint8Array(plainText)));
 
             } else if (message.tag === "decrypt-many-messages") {
                 const key = await e2eeWithStore(
                     "readonly", store => store.get(message.otherUserId));
 
                 const results = await Promise.all(message.data.map(async (bytes) => {
-                    const hash = await e2eeBytesHash(bytes);
-
-                    if (!key) { return { hash: hash, plainText: null }; }
+                    if (!key) { return null; }
 
                     try {
                         const plainText = await crypto.subtle.decrypt(
                             { name: "AES-GCM", iv: bytes.slice(0, 12) }, key, bytes.slice(12));
-                        return { hash: hash, plainText: new Uint8Array(plainText) };
+                        return new Uint8Array(plainText);
                     } catch (e) {
-                        return { hash: hash, plainText: null };
+                        return null;
                     }
                 }));
 
@@ -1073,7 +1055,7 @@ exports.init = async function init(app)
                     combined.set(iv, 0);
                     combined.set(new Uint8Array(cipherText), iv.length);
 
-                    return { hash: await e2eeBytesHash(combined), cipherText: combined };
+                    return combined;
                 }));
 
                 app.ports.encryption_from_js.send(
@@ -1090,8 +1072,7 @@ exports.init = async function init(app)
                         e2eeFromJsMessageEncryptFailed, message.requestId, e.toString()));
             } else if (message.tag === "decrypt-message") {
                 app.ports.encryption_from_js.send(
-                    e2eeMessageDecryptFailedMessage(
-                        message.requestId, await e2eeBytesHash(message.data)));
+                    e2eeMessageDecryptFailedMessage(message.requestId));
             } else if (message.tag === "encrypt-many-messages") {
                 app.ports.encryption_from_js.send(
                     e2eeIdAndTextMessage(

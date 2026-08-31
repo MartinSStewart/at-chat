@@ -600,8 +600,13 @@ loadedInitHelper startupData emojiData loginData loading =
                     List.indexedMap
                         (\index backlog2 ->
                             case backlog2 of
-                                PendingEncryption _ ->
-                                    Just ( Id.fromInt index, { shiftScrollFrom = Nothing } )
+                                PendingEncryption conversation ->
+                                    Just
+                                        ( Id.fromInt index
+                                        , { messageHashes = List.map Encryption.hash conversation.messages
+                                          , shiftScrollFrom = Nothing
+                                          }
+                                        )
 
                                 MissingKeys _ ->
                                     Nothing
@@ -3373,7 +3378,7 @@ updateLoaded msg model =
                         Ok (Encryption.FromJs_SharedSecretFailed _ error) ->
                             ( { loggedIn | e2eeError = Just error }, Command.none )
 
-                        Ok (Encryption.FromJs_NewMessageEncrypted requestId bytesHash cipherText) ->
+                        Ok (Encryption.FromJs_NewMessageEncrypted requestId cipherText) ->
                             case SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedMessages of
                                 Just pending ->
                                     let
@@ -3394,7 +3399,7 @@ updateLoaded msg model =
                                             |> Just
                                         )
                                         (FrontendExtra.fileDecryptedMessages
-                                            [ ( bytesHash, Ok pending.contentAndEmbeds ) ]
+                                            [ ( Encryption.hash cipherText, Ok pending.contentAndEmbeds ) ]
                                             (FrontendExtra.mapEncryptionRequests
                                                 (forgetEncryptRequest requestId)
                                                 { loggedIn
@@ -3421,15 +3426,21 @@ updateLoaded msg model =
                             , Command.none
                             )
 
-                        Ok (Encryption.FromJs_NewMessageDecrypted requestId bytesHash contentAndEmbeds) ->
-                            FrontendExtra.handleDecryptedMessage requestId bytesHash (Ok contentAndEmbeds) model loggedIn
+                        Ok (Encryption.FromJs_NewMessageDecrypted requestId contentAndEmbeds) ->
+                            FrontendExtra.handleDecryptedMessage requestId (Ok contentAndEmbeds) model loggedIn
 
-                        Ok (Encryption.FromJs_NewMessageDecryptFailed requestId bytesHash) ->
-                            FrontendExtra.handleDecryptedMessage requestId bytesHash (Err ()) model loggedIn
+                        Ok (Encryption.FromJs_NewMessageDecryptFailed requestId) ->
+                            FrontendExtra.handleDecryptedMessage requestId (Err ()) model loggedIn
 
                         Ok (Encryption.FromJs_ManyMessagesDecrypted requestId results) ->
                             ( FrontendExtra.fileDecryptedMessages
-                                results
+                                (case SeqDict.get requestId loggedIn.encryptionRequests.pendingDecryptedManyMessages of
+                                    Just pending ->
+                                        List.map2 Tuple.pair pending.messageHashes results
+
+                                    Nothing ->
+                                        []
+                                )
                                 (FrontendExtra.mapEncryptionRequests
                                     (\requests ->
                                         { requests
@@ -7758,7 +7769,9 @@ updateLoadedFromBackend msg model =
                                 (case loadedEncryptedMessages of
                                     Just loaded ->
                                         rememberDecryptManyRequest
-                                            { shiftScrollFrom = loaded.shiftScrollFrom }
+                                            { messageHashes = List.map Encryption.hash loaded.messages
+                                            , shiftScrollFrom = loaded.shiftScrollFrom
+                                            }
                                             loggedIn.encryptionRequests
 
                                     Nothing ->
@@ -8058,7 +8071,8 @@ updateLoadedFromBackend msg model =
                                                 , pendingDecryptedMessages =
                                                     SeqDict.insert
                                                         requests.nextDecryptionRequestId
-                                                        { id = id
+                                                        { hash = Encryption.hash content
+                                                        , id = id
                                                         , senderId = senderId
                                                         , threadRoute = maybeRepliedTo
                                                         , attachedFiles = attachedFiles

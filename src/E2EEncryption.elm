@@ -14,6 +14,7 @@ import Base64
 import Broadcast
 import Bytes exposing (Bytes)
 import Bytes.Decode
+import Bytes.Encode
 import DmChannel
 import DmChannelId
 import E2EHelper exposing (BackendModel2)
@@ -21,7 +22,7 @@ import Effect.Browser.Dom as Dom
 import Effect.Lamdera exposing (ClientId)
 import Effect.Test as T
 import Effect.Time as Time
-import Encryption exposing (BytesHash(..), EncryptedData(..))
+import Encryption
 import FrontendExtra
 import Html.Attributes
 import Id exposing (Id, UserId)
@@ -976,7 +977,7 @@ encryptedMessageText message =
         Message.EncryptedUserTextMessage data ->
             case Base64.toBytes (Encryption.toBase64 data.encryptedData) of
                 Just bytes ->
-                    case Serialize.decodeFromBytes Message.contentAndEmbedsCodec bytes of
+                    case stubPlainText bytes of
                         Ok contentAndEmbeds ->
                             RichText.toString Time.utc False SeqDict.empty contentAndEmbeds.content |> Just
 
@@ -1262,8 +1263,7 @@ respondToMessageEncrypted client =
             in
             Encryption.FromJs_NewMessageEncrypted
                 requestId
-                (stubBytesHash bytes)
-                (EncryptedData (stubBytesHash bytes) bytes)
+                (Encryption.encryptedData (stubCipherText bytes))
         )
 
 
@@ -1295,9 +1295,9 @@ respondToMessageDecrypted client =
         (\data ->
             case List.filterMap decryptRequest (encryptionPortRequests client.clientId data) of
                 ( requestId, bytes ) :: _ ->
-                    case Serialize.decodeFromBytes Message.contentAndEmbedsCodec bytes of
+                    case stubPlainText bytes of
                         Ok contentAndEmbeds ->
-                            [ Encryption.FromJs_NewMessageDecrypted requestId (stubBytesHash bytes) contentAndEmbeds
+                            [ Encryption.FromJs_NewMessageDecrypted requestId contentAndEmbeds
                                 |> sendFromJs client
                             ]
 
@@ -1318,13 +1318,7 @@ respondToManyMessagesDecrypted client =
         (\data ->
             case List.filterMap decryptManyRequest (encryptionPortRequests client.clientId data) of
                 ( requestId, messages ) :: _ ->
-                    [ List.filterMap
-                        (\bytes ->
-                            Serialize.decodeFromBytes Message.contentAndEmbedsCodec bytes
-                                |> Result.toMaybe
-                                |> Maybe.map (\contentAndEmbeds -> ( stubBytesHash bytes, Ok contentAndEmbeds ))
-                        )
-                        messages
+                    [ List.map (\bytes -> stubPlainText bytes |> Result.mapError (\_ -> ())) messages
                         |> Encryption.FromJs_ManyMessagesDecrypted requestId
                         |> sendFromJs client
                     ]
@@ -1343,8 +1337,7 @@ respondToManyMessagesDecryptedFailed client =
         (\data ->
             case List.filterMap decryptManyRequest (encryptionPortRequests client.clientId data) of
                 ( requestId, messages ) :: _ ->
-                    [ List.map (\bytes -> ( stubBytesHash bytes, Err () ))
-                        messages
+                    [ List.map (\_ -> Err ()) messages
                         |> Encryption.FromJs_ManyMessagesDecrypted requestId
                         |> sendFromJs client
                     ]
@@ -1368,7 +1361,7 @@ respondToManyMessagesEncrypted client =
         (\data ->
             case List.filterMap encryptManyRequest (encryptionPortRequests client.clientId data) of
                 ( requestId, messages ) :: _ ->
-                    [ List.map (\bytes -> EncryptedData (stubBytesHash bytes) bytes) messages
+                    [ List.map (\bytes -> Encryption.encryptedData (stubCipherText bytes)) messages
                         |> Encryption.FromJs_ManyMessagesEncrypted requestId
                         |> sendFromJs client
                     ]
@@ -1402,16 +1395,34 @@ decryptManyRequest request =
             Nothing
 
 
-{-| Real ciphertext is hashed by the browser. Nothing here encrypts, so this stands in
-with something just as deterministic, running over the bytes the same way. The app uses
-it as the key to look a message up by, so two different messages must not land on the
-same one: two of the same length would, if this only counted them.
+{-| Stands in for the browser's ciphertext. A real one starts with the random IV that
+AES-GCM was given, which is the part the app files a message under, so this puts
+something just as unique in the same place and leaves the message readable behind it.
 -}
-stubBytesHash : Bytes -> BytesHash
-stubBytesHash bytes =
+stubCipherText : Bytes -> Bytes
+stubCipherText payload =
+    let
+        iv : Int
+        iv =
+            stubIv payload
+    in
+    Bytes.Encode.sequence
+        [ Bytes.Encode.unsignedInt32 Bytes.BE iv
+        , Bytes.Encode.unsignedInt32 Bytes.BE iv
+        , Bytes.Encode.unsignedInt32 Bytes.BE 0
+        , Bytes.Encode.bytes payload
+        ]
+        |> Bytes.Encode.encode
+
+
+{-| Two messages must not land on the same stand-in IV, or the app files them under one
+another, so this runs over the whole message rather than counting it.
+-}
+stubIv : Bytes -> Int
+stubIv payload =
     Bytes.Decode.decode
         (Bytes.Decode.loop
-            ( Bytes.width bytes, 0 )
+            ( Bytes.width payload, 0 )
             (\( bytesLeft, soFar ) ->
                 if bytesLeft <= 0 then
                     Bytes.Decode.succeed (Bytes.Decode.Done soFar)
@@ -1420,14 +1431,33 @@ stubBytesHash bytes =
                     Bytes.Decode.map
                         (\byte ->
                             Bytes.Decode.Loop
-                                ( bytesLeft - 1, modBy 281474976710656 (soFar * 31 + byte) )
+                                ( bytesLeft - 1, modBy 4294967296 (soFar * 31 + byte) )
                         )
                         Bytes.Decode.unsignedInt8
             )
         )
-        bytes
+        payload
         |> Maybe.withDefault 0
-        |> BytesHash
+
+
+{-| Reads a message back out of the stand-in ciphertext it was put into.
+-}
+stubPlainText : Bytes -> Result String (ContentAndEmbeds (Id UserId))
+stubPlainText cipherText =
+    case
+        Bytes.Decode.decode
+            (Bytes.Decode.map2 (\_ rest -> rest)
+                (Bytes.Decode.bytes 12)
+                (Bytes.Decode.bytes (Bytes.width cipherText - 12))
+            )
+            cipherText
+    of
+        Just payload ->
+            Serialize.decodeFromBytes Message.contentAndEmbedsCodec payload
+                |> Result.mapError (\_ -> "The bytes handed over to be decrypted aren't a message")
+
+        Nothing ->
+            Err "The bytes handed over to be decrypted aren't a message"
 
 
 {-| Everything a client has asked the browser to do with encryption so far, most recent

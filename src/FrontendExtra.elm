@@ -7239,18 +7239,17 @@ handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local logged
 
 handleDecryptedMessage :
     Id Encryption.DecryptRequestId
-    -> BytesHash
     -> Result () (ContentAndEmbeds (Id UserId))
     -> LoadedFrontend
     -> LoggedIn2
     -> ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg_ )
-handleDecryptedMessage requestId bytesHash result model loggedIn =
+handleDecryptedMessage requestId result model loggedIn =
     case SeqDict.get requestId loggedIn.encryptionRequests.pendingDecryptedMessages of
         Just request ->
             let
                 loggedIn2 : LoggedIn2
                 loggedIn2 =
-                    fileDecryptedMessages [ ( bytesHash, result ) ] loggedIn
+                    fileDecryptedMessages [ ( request.hash, result ) ] loggedIn
             in
             handleServerSendMessage
                 request.senderId

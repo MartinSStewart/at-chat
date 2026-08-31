@@ -84,7 +84,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
-import Encryption exposing (DecryptManyRequestId, DecryptRequestId, EncryptManyRequestId, EncryptRequestId, EncryptedData)
+import Encryption exposing (BytesHash, DecryptManyRequestId, DecryptRequestId, EncryptManyRequestId, EncryptRequestId, EncryptedData)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import Game
 import Go
@@ -303,7 +303,8 @@ type alias PendingEncryptedMessage =
 
 
 type alias PendingDecryptedMessage =
-    { id : Viewing_DmId
+    { hash : BytesHash
+    , id : Viewing_DmId
     , senderId : Id UserId
     , threadRoute : ThreadRouteWithMaybeMessage
     , attachedFiles : SeqDict (Id FileId) FileData
@@ -317,7 +318,8 @@ type alias PendingEncryptedManyMessages =
 
 
 type alias PendingDecryptedManyMessages =
-    { shiftScrollFrom : Maybe HtmlId
+    { messageHashes : List BytesHash
+    , shiftScrollFrom : Maybe HtmlId
     }
 
 

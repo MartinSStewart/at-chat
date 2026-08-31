@@ -12,6 +12,7 @@ port module Encryption exposing
     , encode
     , encryptManyMessages
     , encryptMessage
+    , encryptedData
     , fromJs
     , fromJsCodec
     , hash
@@ -37,6 +38,7 @@ the plaintext of a message is the only secret that crosses the port after that.
 
 import Base64
 import Bytes exposing (Bytes)
+import Bytes.Decode
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Id exposing (Id, UserId, Viewing_DmId)
@@ -85,6 +87,28 @@ toBase64 (EncryptedData _ bytes) =
 hash : EncryptedData a -> BytesHash
 hash (EncryptedData hash2 _) =
     hash2
+
+
+{-| Ciphertext starts with the random 12 byte IV that AES-GCM was given, and reusing an IV
+with the same key breaks GCM outright, so those bytes are already the one thing about a
+message that is guaranteed not to repeat. The first six of them are the number a message
+is filed under.
+-}
+encryptedData : Bytes -> EncryptedData a
+encryptedData bytes =
+    EncryptedData (bytesHash bytes) bytes
+
+
+bytesHash : Bytes -> BytesHash
+bytesHash bytes =
+    Bytes.Decode.decode
+        (Bytes.Decode.map2
+            (\high low -> BytesHash (high * 4294967296 + low))
+            (Bytes.Decode.unsignedInt16 Bytes.BE)
+            (Bytes.Decode.unsignedInt32 Bytes.BE)
+        )
+        bytes
+        |> Maybe.withDefault (BytesHash 0)
 
 
 
@@ -223,11 +247,11 @@ toJsCodec dataCodec =
 type FromJs a
     = FromJs_SharedSecretStored (Id UserId)
     | FromJs_SharedSecretFailed (Id UserId) String
-    | FromJs_NewMessageEncrypted (Id EncryptRequestId) BytesHash (EncryptedData a)
+    | FromJs_NewMessageEncrypted (Id EncryptRequestId) (EncryptedData a)
     | FromJs_NewMessageEncryptFailed (Id EncryptRequestId) String
-    | FromJs_NewMessageDecrypted (Id DecryptRequestId) BytesHash a
-    | FromJs_NewMessageDecryptFailed (Id DecryptRequestId) BytesHash
-    | FromJs_ManyMessagesDecrypted (Id DecryptManyRequestId) (List ( BytesHash, Result () a ))
+    | FromJs_NewMessageDecrypted (Id DecryptRequestId) a
+    | FromJs_NewMessageDecryptFailed (Id DecryptRequestId)
+    | FromJs_ManyMessagesDecrypted (Id DecryptManyRequestId) (List (Result () a))
     | FromJs_ManyMessagesEncrypted (Id EncryptManyRequestId) (List (EncryptedData a))
     | FromJs_ManyMessagesEncryptFailed (Id EncryptManyRequestId) String
 
@@ -264,17 +288,17 @@ fromJsCodec aCodec =
                 FromJs_SharedSecretFailed argA argB ->
                     b argA argB
 
-                FromJs_NewMessageEncrypted argA argB argC ->
-                    c argA argB argC
+                FromJs_NewMessageEncrypted argA argB ->
+                    c argA argB
 
                 FromJs_NewMessageEncryptFailed argA argB ->
                     d argA argB
 
-                FromJs_NewMessageDecrypted argA argB arcC ->
-                    e argA argB arcC
+                FromJs_NewMessageDecrypted argA argB ->
+                    e argA argB
 
-                FromJs_NewMessageDecryptFailed argA argB ->
-                    f argA argB
+                FromJs_NewMessageDecryptFailed argA ->
+                    f argA
 
                 FromJs_ManyMessagesDecrypted argA argB ->
                     g argA argB
@@ -287,14 +311,14 @@ fromJsCodec aCodec =
         )
         |> Serialize.variant1 FromJs_SharedSecretStored Id.codec
         |> Serialize.variant2 FromJs_SharedSecretFailed Id.codec Serialize.string
-        |> Serialize.variant3 FromJs_NewMessageEncrypted Id.codec bytesHashCodec encryptedDataCodec
+        |> Serialize.variant2 FromJs_NewMessageEncrypted Id.codec encryptedDataCodec
         |> Serialize.variant2 FromJs_NewMessageEncryptFailed Id.codec Serialize.string
-        |> Serialize.variant3 FromJs_NewMessageDecrypted Id.codec bytesHashCodec aCodec
-        |> Serialize.variant2 FromJs_NewMessageDecryptFailed Id.codec bytesHashCodec
+        |> Serialize.variant2 FromJs_NewMessageDecrypted Id.codec aCodec
+        |> Serialize.variant1 FromJs_NewMessageDecryptFailed Id.codec
         |> Serialize.variant2
             FromJs_ManyMessagesDecrypted
             Id.codec
-            (Serialize.list (Serialize.tuple bytesHashCodec (Serialize.result Serialize.unit aCodec)))
+            (Serialize.list (Serialize.result Serialize.unit aCodec))
         |> Serialize.variant2 FromJs_ManyMessagesEncrypted Id.codec (Serialize.list encryptedDataCodec)
         |> Serialize.variant2 FromJs_ManyMessagesEncryptFailed Id.codec Serialize.string
         |> Serialize.finishCustomType
@@ -303,11 +327,6 @@ fromJsCodec aCodec =
 encryptedDataCodec : Serialize.Codec e (EncryptedData a)
 encryptedDataCodec =
     Serialize.map
-        (\( a, b ) -> EncryptedData a b)
-        (\(EncryptedData a b) -> ( a, b ))
-        (Serialize.tuple bytesHashCodec Serialize.bytes)
-
-
-bytesHashCodec : Serialize.Codec e BytesHash
-bytesHashCodec =
-    Serialize.map BytesHash (\(BytesHash a) -> a) Serialize.int
+        encryptedData
+        (\(EncryptedData _ bytes) -> bytes)
+        Serialize.bytes
