@@ -50,6 +50,7 @@ import Ui.Font
 import Ui.Input
 import Ui.Prose
 import Ui.Shadow
+import UserAgent exposing (Browser(..))
 
 
 {-| OpaqueVariants
@@ -342,8 +343,8 @@ errorView errorMessage =
         (Ui.text errorMessage)
 
 
-mobileWarning : Element msg
-mobileWarning =
+mobileWarning : UserAgent.Browser -> Element msg
+mobileWarning browser =
     Ui.column
         [ Ui.spacing 8 ]
         [ Html.div
@@ -357,7 +358,29 @@ mobileWarning =
                 [ Icons.addApp ]
             , Html.b
                 []
-                [ Html.text "Please install this app from the browser menu (Add\u{00A0}to\u{00A0}Home\u{00A0}Screen)" ]
+                [ Html.text
+                    ("Please install this app from the browser menu"
+                        ++ (case browser of
+                                Safari ->
+                                    " (Add\u{00A0}to\u{00A0}Home\u{00A0}Screen)"
+
+                                Chrome ->
+                                    " (Install\u{00A0}and\u{00A0}Create\u{00A0}Shortcut)"
+
+                                Firefox ->
+                                    ""
+
+                                Edge ->
+                                    ""
+
+                                Opera ->
+                                    ""
+
+                                UnknownBrowser ->
+                                    ""
+                           )
+                    )
+                ]
             ]
             |> Ui.html
         , Ui.Prose.paragraph
@@ -368,8 +391,8 @@ mobileWarning =
         ]
 
 
-view : Maybe { a | htmlId : HtmlId, selection : Range } -> LoginForm -> Coord CssPixels -> PwaStatus -> Element Msg
-view textSelection loginForm windowSize pwaStatus =
+view : Maybe { a | htmlId : HtmlId, selection : Range } -> LoginForm -> Coord CssPixels -> PwaStatus -> UserAgent.Browser -> Element Msg
+view textSelection loginForm windowSize pwaStatus browser =
     let
         isMobile =
             MyUi.isMobileAlt windowSize
@@ -408,7 +431,7 @@ view textSelection loginForm windowSize pwaStatus =
                 , Ui.padding 16
                 , Ui.Font.color MyUi.font1
                 ]
-                mobileWarning
+                (mobileWarning browser)
 
           else
             Ui.none
