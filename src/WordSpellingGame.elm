@@ -3944,7 +3944,7 @@ playerRow localUser userId highlight isSelected suffix =
             User.profileImage maybeUser
         , Ui.row
             [ MyUi.prewrap ]
-            [ Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt userId localUser))
+            [ Ui.el [ Ui.Font.bold, Ui.clipWithEllipsis, Ui.widthMax 250 ] (Ui.text (User.toStringAlt userId localUser))
             , Ui.text suffix
             ]
         ]
@@ -4404,7 +4404,7 @@ gameSummaryView windowSize localUser shared log =
                                 , Ui.Events.onMouseLeave MouseExitWord
                                 ]
                                 [ Ui.Prose.paragraph
-                                    [ Ui.alignTop ]
+                                    [ Ui.alignTop, MyUi.htmlStyle "word-wrap" "anywhere" ]
                                     [ Ui.text
                                         (bestWord.word
                                             ++ " (+"
@@ -4479,7 +4479,9 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                 [ Ui.text "Everyone passed and the game has ended!" ]
 
                             OutOfLetters userId ->
-                                [ Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt userId localUser))
+                                [ Ui.el
+                                    [ Ui.Font.bold, MyUi.htmlStyle "word-wrap" "anywhere" ]
+                                    (Ui.text (User.toStringAlt userId localUser))
                                 , Ui.text " ran out of letters and the game has ended!"
                                 ]
                         )
@@ -4530,7 +4532,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                     [ Ui.Font.color MyUi.font3, MyUi.noShrinking, Ui.alignTop, Ui.width Ui.shrink ]
                                     [ Ui.text (String.fromInt moveNumber ++ ". ") ]
                                 , Ui.Prose.paragraph
-                                    [ Ui.alignTop ]
+                                    [ Ui.alignTop, MyUi.htmlStyle "word-wrap" "anywhere" ]
                                     [ Ui.el [ Ui.Font.bold ] (Ui.text name)
                                     , Ui.text (descriptionToString description)
                                     ]
