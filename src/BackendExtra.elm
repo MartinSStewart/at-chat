@@ -18,7 +18,6 @@ module BackendExtra exposing
     , discordDmChannelToFrontend
     , discordGuildToFrontend
     , discordGuildToFrontendForUser
-    , encryptOldMessages
     , getLinkedDiscordUsersAndOtherUsers
     , getLoginCode
     , getLoginData
@@ -1899,52 +1898,6 @@ readerIsViewingDm readerId senderId threadRoute model =
         model.users
 
 
-{-| Swaps the plain text a conversation was holding for the ciphertext a device made of
-it.
-
-Both people in the conversation are handed the same backlog, so the second of them to get
-around to it finds the work already done. `Message.toEncrypted` leaves anything that is
-no longer plain text alone, which is what makes that harmless.
-
--}
-encryptOldMessages :
-    List ( ThreadRouteWithMessage, EncryptedData (ContentAndEmbeds (Id UserId)) )
-    -> DmChannel
-    -> DmChannel
-encryptOldMessages messages dmChannel =
-    List.foldl
-        (\( threadRoute, encryptedData ) channel ->
-            case threadRoute of
-                NoThreadWithMessage messageId ->
-                    { channel
-                        | messages =
-                            DmChannel.updateArray
-                                messageId
-                                (Message.toEncrypted encryptedData)
-                                channel.messages
-                    }
-
-                ViewThreadWithMessage threadId messageId ->
-                    { channel
-                        | threads =
-                            SeqDict.updateIfExists
-                                threadId
-                                (\thread ->
-                                    { thread
-                                        | messages =
-                                            DmChannel.updateArray
-                                                messageId
-                                                (Message.toEncrypted encryptedData)
-                                                thread.messages
-                                    }
-                                )
-                                channel.threads
-                    }
-        )
-        dmChannel
-        messages
-
-
 {-| The messages in a conversation that are still stored as plain text.
 
 Encryption is turned on partway through a conversation rather than at the start of one,
@@ -1955,15 +1908,27 @@ to encrypt.
 -}
 plainTextMessages :
     IdArray messageId (Message messageId (Id UserId))
-    -> SeqDict (Id messageId) (Nonempty (RichText (Id UserId)))
+    -> SeqDict (Id messageId) (ContentAndEmbeds (Id UserId))
 plainTextMessages messages =
     IdArray.foldlWithId
         (\messageId message dict ->
             case message of
                 UserTextMessage data ->
-                    SeqDict.insert messageId data.content dict
+                    SeqDict.insert messageId { content = data.content, embeds = data.embeds } dict
 
-                _ ->
+                EncryptedUserTextMessage encryptedUserTextMessageData ->
+                    dict
+
+                UserJoinedMessage posix userId seqDict drawing ->
+                    dict
+
+                DeletedMessage posix ->
+                    dict
+
+                CallStarted callStartedData ->
+                    dict
+
+                GameStarted gameStartedData ->
                     dict
         )
         SeqDict.empty

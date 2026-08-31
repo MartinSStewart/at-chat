@@ -52,7 +52,7 @@ import LocalState exposing (BackendChannel, BackendGuild, CallStatus(..), Channe
 import Log
 import LoginForm
 import MembersAndOwner
-import Message exposing (ChangeAttachments(..), GameType(..), Message(..))
+import Message exposing (ChangeAttachments(..), ContentAndEmbeds, GameType(..), Message(..))
 import MuteSettings
 import MyUi
 import NonemptyDict
@@ -6099,7 +6099,38 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 | dmChannels =
                                                     SeqDict.insert
                                                         dmChannelId
-                                                        (BackendExtra.encryptOldMessages messages dmChannel)
+                                                        (List.foldl
+                                                            (\( threadRoute, encryptedData ) channel ->
+                                                                case threadRoute of
+                                                                    NoThreadWithMessage messageId ->
+                                                                        { channel
+                                                                            | messages =
+                                                                                DmChannel.updateArray
+                                                                                    messageId
+                                                                                    (Message.toEncrypted encryptedData)
+                                                                                    channel.messages
+                                                                        }
+
+                                                                    ViewThreadWithMessage threadId messageId ->
+                                                                        { channel
+                                                                            | threads =
+                                                                                SeqDict.updateIfExists
+                                                                                    threadId
+                                                                                    (\thread ->
+                                                                                        { thread
+                                                                                            | messages =
+                                                                                                DmChannel.updateArray
+                                                                                                    messageId
+                                                                                                    (Message.toEncrypted encryptedData)
+                                                                                                    thread.messages
+                                                                                        }
+                                                                                    )
+                                                                                    channel.threads
+                                                                        }
+                                                            )
+                                                            dmChannel
+                                                            messages
+                                                        )
                                                         model.dmChannels
                                             }
                                     in
@@ -6116,9 +6147,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
 
                                 _ ->
-                                    -- Nothing has agreed to encrypt this conversation, so
-                                    -- replacing what it holds with something nobody can
-                                    -- read would only lose it.
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
@@ -6156,8 +6184,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 ( Just otherUserId, DmChannel.E2eeEnabled _ ) ->
                                                     let
                                                         conversation :
-                                                            { channel : SeqDict (Id ChannelMessageId) (Nonempty (RichText (Id UserId)))
-                                                            , threads : SeqDict (Id ChannelMessageId) (SeqDict (Id Id.ThreadMessageId) (Nonempty (RichText (Id UserId))))
+                                                            { channel : SeqDict (Id ChannelMessageId) (ContentAndEmbeds (Id UserId))
+                                                            , threads : SeqDict (Id ChannelMessageId) (SeqDict (Id Id.ThreadMessageId) (ContentAndEmbeds (Id UserId)))
                                                             }
                                                         conversation =
                                                             { channel = BackendExtra.plainTextMessages dmChannel.messages
@@ -6165,7 +6193,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 SeqDict.foldl
                                                                     (\threadId thread threads ->
                                                                         let
-                                                                            plainText : SeqDict (Id Id.ThreadMessageId) (Nonempty (RichText (Id UserId)))
+                                                                            plainText : SeqDict (Id Id.ThreadMessageId) (ContentAndEmbeds (Id UserId))
                                                                             plainText =
                                                                                 BackendExtra.plainTextMessages thread.messages
                                                                         in

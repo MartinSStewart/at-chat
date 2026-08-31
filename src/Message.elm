@@ -362,7 +362,19 @@ toEncrypted encryptedData message =
                 , embedDrawings = data.embedDrawings
                 }
 
-        _ ->
+        EncryptedUserTextMessage encryptedUserTextMessageData ->
+            message
+
+        UserJoinedMessage posix userId seqDict _ ->
+            message
+
+        DeletedMessage posix ->
+            message
+
+        CallStarted callStartedData ->
+            message
+
+        GameStarted gameStartedData ->
             message
 
 

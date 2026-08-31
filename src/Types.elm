@@ -1153,8 +1153,8 @@ type LocalChange
         (ToBeFilledInByBackend
             (SeqDict
                 Viewing_DmId
-                { channel : SeqDict (Id ChannelMessageId) (Nonempty (RichText (Id UserId)))
-                , threads : SeqDict (Id ChannelMessageId) (SeqDict (Id ThreadMessageId) (Nonempty (RichText (Id UserId))))
+                { channel : SeqDict (Id ChannelMessageId) (ContentAndEmbeds (Id UserId))
+                , threads : SeqDict (Id ChannelMessageId) (SeqDict (Id ThreadMessageId) (ContentAndEmbeds (Id UserId)))
                 }
             )
         )

@@ -52,9 +52,7 @@ type alias DmChannel =
 type E2eeStatus
     = E2eeDisabled
     | E2eeRequestedBy (Id UserId)
-    | -- Whoever turned a request down gets the next word on the matter: the person they
-      -- said no to can't simply ask again, and this holds the one who can.
-      E2eeDeclinedBy (Id UserId)
+    | E2eeDeclinedBy (Id UserId)
     | E2eeEnabled Time.Posix
 
 

@@ -3369,7 +3369,7 @@ updateLoaded msg model =
                         Ok (Encryption.FromJs_SharedSecretFailed _ error) ->
                             ( { loggedIn | e2eeError = Just error }, Command.none )
 
-                        Ok (Encryption.FromJs_MessageEncrypted requestId bytesHash cipherText) ->
+                        Ok (Encryption.FromJs_NewMessageEncrypted requestId bytesHash cipherText) ->
                             case SeqDict.get requestId loggedIn.pendingEncryptedMessages of
                                 Just pending ->
                                     let
@@ -3407,7 +3407,7 @@ updateLoaded msg model =
                                 Nothing ->
                                     ( loggedIn, Command.none )
 
-                        Ok (Encryption.FromJs_MessageEncryptFailed requestId error) ->
+                        Ok (Encryption.FromJs_NewMessageEncryptFailed requestId error) ->
                             -- The draft is deliberately left where it is, so that a
                             -- message that could not be encrypted is not also lost.
                             ( { loggedIn
@@ -3418,10 +3418,10 @@ updateLoaded msg model =
                             , Command.none
                             )
 
-                        Ok (Encryption.FromJs_MessageDecrypted requestId bytesHash contentAndEmbeds) ->
+                        Ok (Encryption.FromJs_NewMessageDecrypted requestId bytesHash contentAndEmbeds) ->
                             FrontendExtra.handleDecryptedMessage requestId bytesHash (Ok contentAndEmbeds) model loggedIn
 
-                        Ok (Encryption.FromJs_MessageDecryptFailed requestId bytesHash) ->
+                        Ok (Encryption.FromJs_NewMessageDecryptFailed requestId bytesHash) ->
                             FrontendExtra.handleDecryptedMessage requestId bytesHash (Err ()) model loggedIn
 
                         Ok (Encryption.FromJs_ManyMessagesDecrypted requestId results) ->
@@ -9081,42 +9081,30 @@ messagesNeedingEncryption :
 messagesNeedingEncryption nextRequestId localChange =
     case localChange of
         Local_SetPublicKey _ (FilledInByBackend conversations) ->
-            SeqDict.toList conversations
-                |> List.indexedMap
-                    (\index ( id, conversation ) ->
-                        ( Id.fromInt (Id.toInt nextRequestId + index)
-                        , { id = id
-                          , messages =
-                                List.map
-                                    (\( messageId, content ) ->
-                                        ( NoThreadWithMessage messageId, contentToEncrypt content )
+            List.indexedMap
+                (\index ( id, conversation ) ->
+                    ( Id.fromInt (Id.toInt nextRequestId + index)
+                    , { id = id
+                      , messages =
+                            List.map
+                                (\( messageId, content ) -> ( NoThreadWithMessage messageId, content ))
+                                (SeqDict.toList conversation.channel)
+                                ++ List.concatMap
+                                    (\( threadId, thread ) ->
+                                        List.map
+                                            (\( messageId, content ) ->
+                                                ( ViewThreadWithMessage threadId messageId, content )
+                                            )
+                                            (SeqDict.toList thread)
                                     )
-                                    (SeqDict.toList conversation.channel)
-                                    ++ List.concatMap
-                                        (\( threadId, thread ) ->
-                                            List.map
-                                                (\( messageId, content ) ->
-                                                    ( ViewThreadWithMessage threadId messageId
-                                                    , contentToEncrypt content
-                                                    )
-                                                )
-                                                (SeqDict.toList thread)
-                                        )
-                                        (SeqDict.toList conversation.threads)
-                          }
-                        )
+                                    (SeqDict.toList conversation.threads)
+                      }
                     )
+                )
+                (SeqDict.toList conversations)
 
         _ ->
             []
-
-
-{-| The server sends the text of a message and nothing else, so a link preview that was
-worked out for it before the conversation was encrypted is not carried across.
--}
-contentToEncrypt : Nonempty (RichText (Id UserId)) -> ContentAndEmbeds (Id UserId)
-contentToEncrypt content =
-    { content = content, embeds = Array.empty }
 
 
 {-| Encrypted messages that have just arrived, and where the scroll should be measured

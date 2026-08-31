@@ -1345,7 +1345,7 @@ respondToMessageEncrypted client =
                 bytes =
                     Serialize.encodeToBytes Message.contentAndEmbedsCodec contentAndEmbeds
             in
-            Encryption.FromJs_MessageEncrypted
+            Encryption.FromJs_NewMessageEncrypted
                 requestId
                 (stubBytesHash bytes)
                 (EncryptedData (stubBytesHash bytes) bytes)
@@ -1362,7 +1362,7 @@ respondToEncryptionPortWithMissingKey client =
     answerEncryptRequest
         client
         (\requestId _ ->
-            Encryption.FromJs_MessageEncryptFailed
+            Encryption.FromJs_NewMessageEncryptFailed
                 requestId
                 "No encryption key is stored on this device for that conversation"
         )
@@ -1382,7 +1382,7 @@ respondToMessageDecrypted client =
                 ( requestId, bytes ) :: _ ->
                     case Serialize.decodeFromBytes Message.contentAndEmbedsCodec bytes of
                         Ok contentAndEmbeds ->
-                            [ Encryption.FromJs_MessageDecrypted requestId (stubBytesHash bytes) contentAndEmbeds
+                            [ Encryption.FromJs_NewMessageDecrypted requestId (stubBytesHash bytes) contentAndEmbeds
                                 |> sendFromJs client
                             ]
 
@@ -1567,7 +1567,7 @@ encryptRequest :
     -> Maybe ( Id Encryption.EncryptRequestId, ContentAndEmbeds (Id UserId) )
 encryptRequest request =
     case request of
-        Encryption.ToJs_EncryptMessage { requestId, data } ->
+        Encryption.ToJs_EncryptNewMessage { requestId, data } ->
             Just ( requestId, data )
 
         _ ->
@@ -1579,7 +1579,7 @@ decryptRequest :
     -> Maybe ( Id Encryption.DecryptRequestId, Bytes )
 decryptRequest request =
     case request of
-        Encryption.ToJs_DecryptMessage { requestId, data } ->
+        Encryption.ToJs_DecryptNewMessage { requestId, data } ->
             Just ( requestId, data )
 
         _ ->

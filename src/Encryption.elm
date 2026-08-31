@@ -93,8 +93,8 @@ hash (EncryptedData hash2 _) =
 
 type ToJs data
     = ToJs_StoreSharedSecret { otherUserId : Id UserId, sharedSecret : Bytes }
-    | ToJs_EncryptMessage { requestId : Id EncryptRequestId, otherUserId : Id UserId, data : data }
-    | ToJs_DecryptMessage { requestId : Id DecryptRequestId, otherUserId : Id UserId, data : Bytes }
+    | ToJs_EncryptNewMessage { requestId : Id EncryptRequestId, otherUserId : Id UserId, data : data }
+    | ToJs_DecryptNewMessage { requestId : Id DecryptRequestId, otherUserId : Id UserId, data : Bytes }
     | ToJs_DecryptManyMessages { requestId : Id DecryptManyRequestId, otherUserId : Id UserId, data : List Bytes }
     | ToJs_EncryptManyMessages { requestId : Id EncryptManyRequestId, otherUserId : Id UserId, data : List Bytes }
 
@@ -111,7 +111,7 @@ encryptMessage : Id EncryptRequestId -> Viewing_DmId -> Serialize.Codec e a -> a
 encryptMessage requestId id dataCodec data =
     Serialize.encodeToBytes
         (toJsCodec dataCodec)
-        (ToJs_EncryptMessage { requestId = requestId, otherUserId = id.otherUserId, data = data })
+        (ToJs_EncryptNewMessage { requestId = requestId, otherUserId = id.otherUserId, data = data })
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
@@ -119,7 +119,7 @@ decryptMessage : Id DecryptRequestId -> Viewing_DmId -> EncryptedData a -> Comma
 decryptMessage requestId id (EncryptedData _ data) =
     Serialize.encodeToBytes
         (toJsCodec Serialize.unit)
-        (ToJs_DecryptMessage { requestId = requestId, otherUserId = id.otherUserId, data = data })
+        (ToJs_DecryptNewMessage { requestId = requestId, otherUserId = id.otherUserId, data = data })
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
@@ -177,10 +177,10 @@ toJsCodec dataCodec =
                 ToJs_StoreSharedSecret argA ->
                     a argA
 
-                ToJs_EncryptMessage argA ->
+                ToJs_EncryptNewMessage argA ->
                     b argA
 
-                ToJs_DecryptMessage argA ->
+                ToJs_DecryptNewMessage argA ->
                     c argA
 
                 ToJs_DecryptManyMessages argA ->
@@ -197,7 +197,7 @@ toJsCodec dataCodec =
                 |> Serialize.finishRecord
             )
         |> Serialize.variant1
-            ToJs_EncryptMessage
+            ToJs_EncryptNewMessage
             (Serialize.record
                 (\requestId otherUserId data -> { requestId = requestId, otherUserId = otherUserId, data = data })
                 |> Serialize.field .requestId Id.codec
@@ -206,7 +206,7 @@ toJsCodec dataCodec =
                 |> Serialize.finishRecord
             )
         |> Serialize.variant1
-            ToJs_DecryptMessage
+            ToJs_DecryptNewMessage
             (Serialize.record
                 (\requestId otherUserId data -> { requestId = requestId, otherUserId = otherUserId, data = data })
                 |> Serialize.field .requestId Id.codec
@@ -238,10 +238,10 @@ toJsCodec dataCodec =
 type FromJs a
     = FromJs_SharedSecretStored (Id UserId)
     | FromJs_SharedSecretFailed (Id UserId) String
-    | FromJs_MessageEncrypted (Id EncryptRequestId) BytesHash (EncryptedData a)
-    | FromJs_MessageEncryptFailed (Id EncryptRequestId) String
-    | FromJs_MessageDecrypted (Id DecryptRequestId) BytesHash a
-    | FromJs_MessageDecryptFailed (Id DecryptRequestId) BytesHash
+    | FromJs_NewMessageEncrypted (Id EncryptRequestId) BytesHash (EncryptedData a)
+    | FromJs_NewMessageEncryptFailed (Id EncryptRequestId) String
+    | FromJs_NewMessageDecrypted (Id DecryptRequestId) BytesHash a
+    | FromJs_NewMessageDecryptFailed (Id DecryptRequestId) BytesHash
     | FromJs_ManyMessagesDecrypted (Id DecryptManyRequestId) (List ( BytesHash, Result () a ))
     | FromJs_ManyMessagesEncrypted (Id EncryptManyRequestId) (List (EncryptedData a))
     | FromJs_ManyMessagesEncryptFailed (Id EncryptManyRequestId) String
@@ -279,16 +279,16 @@ fromJsCodec aCodec =
                 FromJs_SharedSecretFailed argA argB ->
                     b argA argB
 
-                FromJs_MessageEncrypted argA argB argC ->
+                FromJs_NewMessageEncrypted argA argB argC ->
                     c argA argB argC
 
-                FromJs_MessageEncryptFailed argA argB ->
+                FromJs_NewMessageEncryptFailed argA argB ->
                     d argA argB
 
-                FromJs_MessageDecrypted argA argB arcC ->
+                FromJs_NewMessageDecrypted argA argB arcC ->
                     e argA argB arcC
 
-                FromJs_MessageDecryptFailed argA argB ->
+                FromJs_NewMessageDecryptFailed argA argB ->
                     f argA argB
 
                 FromJs_ManyMessagesDecrypted argA argB ->
@@ -302,10 +302,10 @@ fromJsCodec aCodec =
         )
         |> Serialize.variant1 FromJs_SharedSecretStored Id.codec
         |> Serialize.variant2 FromJs_SharedSecretFailed Id.codec Serialize.string
-        |> Serialize.variant3 FromJs_MessageEncrypted Id.codec bytesHashCodec encryptedDataCodec
-        |> Serialize.variant2 FromJs_MessageEncryptFailed Id.codec Serialize.string
-        |> Serialize.variant3 FromJs_MessageDecrypted Id.codec bytesHashCodec aCodec
-        |> Serialize.variant2 FromJs_MessageDecryptFailed Id.codec bytesHashCodec
+        |> Serialize.variant3 FromJs_NewMessageEncrypted Id.codec bytesHashCodec encryptedDataCodec
+        |> Serialize.variant2 FromJs_NewMessageEncryptFailed Id.codec Serialize.string
+        |> Serialize.variant3 FromJs_NewMessageDecrypted Id.codec bytesHashCodec aCodec
+        |> Serialize.variant2 FromJs_NewMessageDecryptFailed Id.codec bytesHashCodec
         |> Serialize.variant2
             FromJs_ManyMessagesDecrypted
             Id.codec
