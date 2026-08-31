@@ -104,6 +104,7 @@ module E2EHelper exposing
     , unwrapBackend
     , uploadImageAttachment
     , userEmail
+    , userName
     , websocketByDiscordToken
     , writeMessage
     , writeMessageMobile
@@ -593,6 +594,14 @@ the screen don't have to be gone through every time it changes.
 adminName : String
 adminName =
     PersonName.toString Backend.adminUser.name
+
+
+{-| The display name the second person in a test signs up with. Read off the screen by
+tests that check what one of them is told about the other.
+-}
+userName : String
+userName =
+    "Stevie Steve"
 
 
 userEmail : EmailAddress
@@ -1085,7 +1094,7 @@ connectFourUsersAndJoinNewGuild windowSize continueFunc =
                                 windowSize
                                 sessionId1
                                 userEmail
-                                "Stevie Steve"
+                                userName
                                 (\userA ->
                                     [ pickUserColor 260 userA
                                     , joinGuildFromInvite
@@ -1212,7 +1221,7 @@ connectTwoUsersAndJoinNewGuild windowSize continueFunc =
                                         10
                                         (\data2 -> [ user.portEvent 10 "load_startup_data_from_js" (startupDataJson data2.time firefoxDesktop) ])
                                     , handleLoginFromLoginPage userEmail user
-                                    , user.input 100 (Dom.id "loginForm_name") "Stevie Steve"
+                                    , user.input 100 (Dom.id "loginForm_name") userName
                                     , user.click 100 (Dom.id "loginForm_submit")
                                     , user.click 100 (Dom.id "guild_openChannel_0")
                                     , enableNotifications False user
@@ -2790,6 +2799,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_E2eeRequestCancelled _ ->
+                            True
+
+                        Types.Server_E2eeRequestDeclined _ _ ->
                             True
 
                         Types.Server_E2eeAccepted _ _ ->

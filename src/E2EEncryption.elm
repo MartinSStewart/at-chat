@@ -222,29 +222,68 @@ declineE2eeRequestTest config =
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.declineE2eeText ])
                         , user.click 100 (Dom.id "guild_declineE2ee")
-                        , user.checkView
-                            100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.declineE2eeText ])
-                        , T.checkBackend 100 checkDmIsNotEncrypted
+                        , T.checkBackend 100 (checkDmE2eeDeclinedBy (Id.fromInt 2))
 
-                        -- The person who asked is left where they started rather than
-                        -- waiting on an answer that isn't coming.
+                        -- Whoever asked is told they were turned down, and the button to
+                        -- ask is gone: the next word on it belongs to the other person.
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.text
+                                    (E2EHelper.userName ++ " " ++ Pages.Guild.e2eeDeclinedText)
+                                ]
+                            )
                         , admin.checkView
                             100
                             (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_cancelE2ee" ])
                         , admin.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
-                        , admin.snapshotView 100 { name = "Encryption request was declined" }
-
-                        -- Nothing about declining stops it being asked again.
-                        , admin.click 100 (Dom.id "guild_enableE2ee")
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_enableE2ee" ])
                         , admin.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.id "guild_cancelE2ee" ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
+                        , admin.snapshotView 100 { name = "Encryption request was declined" }
+
+                        -- The person who declined has nothing left waiting on them, so
+                        -- their section closes again and has to be opened to go on.
                         , user.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.declineE2eeText ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.declineE2eeText ])
+                        , user.click 100 (Dom.id "guild_e2eeSection")
+                        , user.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.youDeclinedE2eeText ])
+
+                        -- Saying no isn't saying no forever. Asking is theirs to do now,
+                        -- and it still costs them the same steps anybody pays.
+                        , user.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
+                        , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                        , addPrivateKeyToAccount user
+                            (\_ ->
+                                [ user.click 100 (Dom.id "guild_enableE2ee")
+                                , T.checkBackend 100 (checkDmE2eeRequestedBy (Id.fromInt 2))
+                                , user.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.id "guild_cancelE2ee" ])
+
+                                -- The request goes the other way now, so the answer is
+                                -- the admin's to give.
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text Pages.Guild.declineE2eeText ]
+                                    )
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.hasNot
+                                        [ Test.Html.Selector.text
+                                            (E2EHelper.userName ++ " " ++ Pages.Guild.e2eeDeclinedText)
+                                        ]
+                                    )
+                                ]
+                            )
                         ]
                     )
                 ]
@@ -252,14 +291,43 @@ declineE2eeRequestTest config =
         ]
 
 
-checkDmIsNotEncrypted : BackendModel2 -> Result String ()
-checkDmIsNotEncrypted backend =
+checkDmE2eeDeclinedBy : Id UserId -> BackendModel2 -> Result String ()
+checkDmE2eeDeclinedBy declinedBy backend =
     case adminDmChannel backend |> Maybe.map .e2ee of
-        Just DmChannel.E2eeDisabled ->
-            Ok ()
+        Just (DmChannel.E2eeDeclinedBy actual) ->
+            if actual == declinedBy then
+                Ok ()
+
+            else
+                Err
+                    ("Expected the DM to have been declined by user "
+                        ++ String.fromInt (Id.toInt declinedBy)
+                        ++ " but it was declined by user "
+                        ++ String.fromInt (Id.toInt actual)
+                    )
 
         _ ->
-            Err "The declined request should have left the DM unencrypted on the backend"
+            Err "The declined request should have been recorded on the backend"
+
+
+checkDmE2eeRequestedBy : Id UserId -> BackendModel2 -> Result String ()
+checkDmE2eeRequestedBy requestedBy backend =
+    case adminDmChannel backend |> Maybe.map .e2ee of
+        Just (DmChannel.E2eeRequestedBy actual) ->
+            if actual == requestedBy then
+                Ok ()
+
+            else
+                Err
+                    ("Expected user "
+                        ++ String.fromInt (Id.toInt requestedBy)
+                        ++ " to have asked to encrypt the DM but user "
+                        ++ String.fromInt (Id.toInt actual)
+                        ++ " did"
+                    )
+
+        _ ->
+            Err "Nobody has asked to encrypt the DM on the backend"
 
 
 {-| Accepting a request is what actually turns encryption on: both people work out the
@@ -308,7 +376,7 @@ endToEndEncryptionAcceptTest config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text "This conversation is missing a private key" ]
+                                        [ Test.Html.Selector.text Pages.Guild.missingPrivateKeyText ]
                                     )
                                 , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
                                 , respondToSharedSecretStored admin (Id.fromInt 2)
@@ -388,7 +456,7 @@ oneKeySetsUpEveryConversationTest config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text "This conversation is missing a private key" ]
+                                        [ Test.Html.Selector.text Pages.Guild.missingPrivateKeyText ]
                                     )
 
                                 -- The second of the others asks the admin to encrypt,
@@ -422,7 +490,7 @@ oneKeySetsUpEveryConversationTest config =
                                         , admin.checkView
                                             100
                                             (Test.Html.Query.hasNot
-                                                [ Test.Html.Selector.text "This conversation is missing a private key" ]
+                                                [ Test.Html.Selector.text Pages.Guild.missingPrivateKeyText ]
                                             )
 
                                         -- and so does the one that wasn't, where messages
@@ -433,7 +501,7 @@ oneKeySetsUpEveryConversationTest config =
                                         , admin.checkView
                                             100
                                             (Test.Html.Query.hasNot
-                                                [ Test.Html.Selector.text "This conversation is missing a private key" ]
+                                                [ Test.Html.Selector.text Pages.Guild.missingPrivateKeyText ]
                                             )
                                         , admin.click 100 (Dom.id "guild_hideMembers")
                                         , E2EHelper.writeMessage admin 100 "Hello in secret"
@@ -670,7 +738,7 @@ soloDmEncryptionTest config =
                         , admin.checkView
                             100
                             (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.text "This conversation is missing a private key" ]
+                                [ Test.Html.Selector.text Pages.Guild.missingPrivateKeyText ]
                             )
                         , admin.click 100 (Dom.id "guild_hideMembers")
                         , T.connectFrontend

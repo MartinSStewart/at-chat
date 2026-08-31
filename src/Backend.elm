@@ -6033,40 +6033,55 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         sessionId
                         id
                         (\session _ _ dmChannelId dmChannel ->
-                            case dmChannel.e2ee of
-                                DmChannel.E2eeDisabled ->
-                                    let
-                                        model2 : BackendModel
-                                        model2 =
-                                            { model
-                                                | dmChannels =
-                                                    SeqDict.insert
-                                                        dmChannelId
-                                                        { dmChannel | e2ee = DmChannel.E2eeRequestedBy session.userId }
-                                                        model.dmChannels
-                                            }
+                            let
+                                canRequest : Bool
+                                canRequest =
+                                    case dmChannel.e2ee of
+                                        DmChannel.E2eeDisabled ->
+                                            True
 
-                                        ( sessions, notificationCmd ) =
-                                            Broadcast.e2eeRequestNotification time session.userId id model2
-                                    in
-                                    ( { model2 | sessions = sessions }
-                                    , Command.batch
-                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-                                        , Broadcast.toDmChannelExcludingOne
-                                            clientId
-                                            session.userId
-                                            id
-                                            (\id2 -> Server_E2eeRequested id2 session.userId)
-                                            model2
-                                        , notificationCmd
-                                        ]
-                                    )
+                                        -- Whoever turned a request down has the next word
+                                        -- on the matter, so asking again is theirs to do
+                                        -- rather than the person they said no to.
+                                        DmChannel.E2eeDeclinedBy declinedBy ->
+                                            declinedBy == session.userId
 
-                                DmChannel.E2eeRequestedBy _ ->
-                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                        DmChannel.E2eeRequestedBy _ ->
+                                            False
 
-                                DmChannel.E2eeEnabled _ ->
-                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                        DmChannel.E2eeEnabled _ ->
+                                            False
+                            in
+                            if canRequest then
+                                let
+                                    model2 : BackendModel
+                                    model2 =
+                                        { model
+                                            | dmChannels =
+                                                SeqDict.insert
+                                                    dmChannelId
+                                                    { dmChannel | e2ee = DmChannel.E2eeRequestedBy session.userId }
+                                                    model.dmChannels
+                                        }
+
+                                    ( sessions, notificationCmd ) =
+                                        Broadcast.e2eeRequestNotification time session.userId id model2
+                                in
+                                ( { model2 | sessions = sessions }
+                                , Command.batch
+                                    [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                    , Broadcast.toDmChannelExcludingOne
+                                        clientId
+                                        session.userId
+                                        id
+                                        (\id2 -> Server_E2eeRequested id2 session.userId)
+                                        model2
+                                    , notificationCmd
+                                    ]
+                                )
+
+                            else
+                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
                 Local_SetE2eeRisksAccepted isAccepted ->
@@ -6245,25 +6260,24 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     | dmChannels =
                                                         SeqDict.insert
                                                             dmChannelId
-                                                            { dmChannel | e2ee = DmChannel.E2eeDisabled }
+                                                            { dmChannel | e2ee = DmChannel.E2eeDeclinedBy session.userId }
                                                             model.dmChannels
                                                 }
                                         in
                                         ( model2
                                         , Command.batch
                                             [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-
-                                            -- The request is gone either way, so the
-                                            -- person who made it is told the same thing
-                                            -- as when they withdraw it themselves.
                                             , Broadcast.toDmChannelExcludingOne
                                                 clientId
                                                 session.userId
                                                 id
-                                                Server_E2eeRequestCancelled
+                                                (\id2 -> Server_E2eeRequestDeclined id2 session.userId)
                                                 model2
                                             ]
                                         )
+
+                                DmChannel.E2eeDeclinedBy _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                 DmChannel.E2eeDisabled ->
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )

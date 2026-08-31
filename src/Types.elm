@@ -1067,6 +1067,7 @@ type ServerChange
       -- that asked for encryption is named separately.
     | Server_E2eeRequested Viewing_DmId (Id UserId)
     | Server_E2eeRequestCancelled Viewing_DmId
+    | Server_E2eeRequestDeclined Viewing_DmId (Id UserId)
     | Server_E2eeAccepted Viewing_DmId Time.Posix
     | Server_SetPublicKey (Id UserId) X25519.PublicKey
     | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (EncryptedData (ContentAndEmbeds (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)

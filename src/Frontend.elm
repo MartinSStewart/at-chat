@@ -3328,6 +3328,12 @@ updateLoaded msg model =
                                                 DmChannel.E2eeRequestedBy requestedBy ->
                                                     requestedBy /= local.localUser.session.userId || otherUserId == local.localUser.session.userId
 
+                                                -- A request that was turned down isn't
+                                                -- waiting on an answer, so a key typed in
+                                                -- here has nothing to accept.
+                                                DmChannel.E2eeDeclinedBy _ ->
+                                                    False
+
                                                 DmChannel.E2eeDisabled ->
                                                     False
 
@@ -8924,6 +8930,9 @@ storeRemainingSharedSecrets alreadyHandled privateKey loggedIn =
                             storeSharedSecret otherUserId privateKey loggedIn |> Result.toMaybe
 
                     DmChannel.E2eeRequestedBy _ ->
+                        Nothing
+
+                    DmChannel.E2eeDeclinedBy _ ->
                         Nothing
 
                     DmChannel.E2eeDisabled ->

@@ -3828,7 +3828,10 @@ changeUpdate localMsg local =
                     LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
 
                 Local_DeclineE2eeRequest { otherUserId } ->
-                    LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
+                    LocalState.setDmE2ee
+                        otherUserId
+                        (DmChannel.E2eeDeclinedBy local.localUser.session.userId)
+                        local
 
                 Local_SendEncryptedMessage createdAt { otherUserId } content threadRouteWithRepliedTo attachedFiles ->
                     let
@@ -5221,6 +5224,9 @@ changeUpdate localMsg local =
 
                 Server_E2eeRequestCancelled { otherUserId } ->
                     LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
+
+                Server_E2eeRequestDeclined { otherUserId } declinedBy ->
+                    LocalState.setDmE2ee otherUserId (DmChannel.E2eeDeclinedBy declinedBy) local
 
                 Server_SetPublicKey userId publicKey ->
                     let

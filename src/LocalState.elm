@@ -82,7 +82,6 @@ module LocalState exposing
     , discordGuildOrDmIdToLatestMessages
     , discordGuildOrDmIdToMessage
     , discordTopicToDescription
-    , dmE2eeRequestedByOtherUser
     , drawingHandleChangeFrontend
     , drawingHandleChangeHelperBackend
     , drawingHandleChangeNoThreadBackend
@@ -438,27 +437,6 @@ messageReactions guildOrDmId threadRoute local =
 
                 Nothing ->
                     SeqDict.empty
-
-
-{-| True when the other person in the DM is the one who asked to start end-to-end
-encrypting it, which means they're waiting on an answer.
--}
-dmE2eeRequestedByOtherUser : Id UserId -> LocalState -> Bool
-dmE2eeRequestedByOtherUser otherUserId local =
-    case SeqDict.get otherUserId local.dmChannels of
-        Just dmChannel ->
-            case dmChannel.e2ee of
-                DmChannel.E2eeRequestedBy requestedBy ->
-                    requestedBy /= local.localUser.session.userId
-
-                DmChannel.E2eeDisabled ->
-                    False
-
-                DmChannel.E2eeEnabled _ ->
-                    False
-
-        Nothing ->
-            False
 
 
 {-| Records how far along the two people in a DM are with turning on end-to-end

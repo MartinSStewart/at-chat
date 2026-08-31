@@ -15,6 +15,7 @@ module Pages.Guild exposing
     , directMessagesText
     , discordGuildView
     , dropdownButtonId
+    , e2eeDeclinedText
     , e2eeSectionIsExpanded
     , e2eeSectionTitle
     , editingText
@@ -26,6 +27,7 @@ module Pages.Guild exposing
     , guildView
     , homePageLoggedInView
     , leaveGuildText
+    , missingPrivateKeyText
     , newGuildFormInit
     , newGuildFormView
     , newMessagesBadgeText
@@ -40,6 +42,7 @@ module Pages.Guild exposing
     , typingDebouncerDelay
     , typingText
     , userTextMessageContent
+    , youDeclinedE2eeText
     )
 
 import Array exposing (Array)
@@ -158,6 +161,24 @@ enableE2eeText =
 declineE2eeText : String
 declineE2eeText =
     "Decline"
+
+
+{-| Shown to whoever asked, once the other person has said no. It ends by saying who can
+ask next, since the button to do it has gone.
+-}
+e2eeDeclinedText : String
+e2eeDeclinedText =
+    "declined your request to start encrypting this conversation. Only they can start one now."
+
+
+youDeclinedE2eeText : String
+youDeclinedE2eeText =
+    "You declined the request to start encrypting this conversation."
+
+
+missingPrivateKeyText : String
+missingPrivateKeyText =
+    "3. This device is missing a private key in order to decrypt messages. Enter your private key here."
 
 
 chatWithText : String
@@ -2457,6 +2478,9 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                 DmChannel.E2eeRequestedBy requestedBy ->
                     requestedBy /= localUser.session.userId
 
+                DmChannel.E2eeDeclinedBy _ ->
+                    False
+
                 DmChannel.E2eeDisabled ->
                     False
 
@@ -2560,6 +2584,33 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                 (Ui.text "Cancel")
                             ]
 
+                DmChannel.E2eeDeclinedBy declinedBy ->
+                    if declinedBy == localUser.session.userId then
+                        Ui.column
+                            [ Ui.spacing 16 ]
+                            [ Ui.Prose.paragraph [] [ Ui.text youDeclinedE2eeText ]
+                            , if not risksAccepted then
+                                Ui.none
+
+                              else
+                                case localUser.user.publicKey of
+                                    Nothing ->
+                                        createPrivateKeyButton
+
+                                    Just _ ->
+                                        MyUi.simpleButton
+                                            (Dom.id "guild_enableE2ee")
+                                            (PressedEnableE2ee otherUserId)
+                                            (Ui.text enableE2eeText)
+                            ]
+
+                    else
+                        -- Asking again is theirs to do rather than this user's, so there
+                        -- is nothing to press underneath.
+                        Ui.Prose.paragraph
+                            []
+                            [ Ui.text (User.toStringAlt otherUserId localUser ++ " " ++ e2eeDeclinedText) ]
+
                 DmChannel.E2eeEnabled time ->
                     Ui.column
                         [ Ui.spacing 16 ]
@@ -2570,7 +2621,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                           else
                             privateKeyInput
                                 otherUserId
-                                (Ui.text "3. This device is missing a private key in order to decrypt messages. Enter your private key here.")
+                                (Ui.text missingPrivateKeyText)
                                 keyInput
                         ]
             ]
