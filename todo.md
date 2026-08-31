@@ -26,7 +26,6 @@
 * Figure out why messages can be sent before files have loaded
 * lishaduck's android phone has slow loading times and shows both a loading step with just the at-chat logo and then
   another step with a blank blue background
-* Right most channel header tab selection background overlaps with channel settings a bit
 * Add mic sensitivity slider
 * User profile not appearing when camera not connected but video is enabled
 * Had 3 person call and one person joined with video and they had extremely bad RTT. Me and the other person had no
