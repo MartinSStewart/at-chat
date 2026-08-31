@@ -29,7 +29,6 @@ module BackendExtra exposing
     , loginEmailSubject
     , loginWithToken
     , ownMessageIsReadBackend
-    , plainTextMessages
     , requestedForToGuildOrDmId
     , sendDm
     , sendEncryptedDm
@@ -1918,7 +1917,7 @@ dmChannelsThatNeedEncrypting session dmChannels =
                                 SeqDict.foldl
                                     (\threadId thread threads ->
                                         let
-                                            plainText : SeqDict (Id Id.ThreadMessageId) (ContentAndEmbeds (Id UserId))
+                                            plainText : SeqDict (Id ThreadMessageId) (ContentAndEmbeds (Id UserId))
                                             plainText =
                                                 plainTextMessages thread.messages
                                         in
@@ -1955,19 +1954,19 @@ plainTextMessages messages =
                 UserTextMessage data ->
                     SeqDict.insert messageId { content = data.content, embeds = data.embeds } dict
 
-                EncryptedUserTextMessage encryptedUserTextMessageData ->
+                EncryptedUserTextMessage _ ->
                     dict
 
-                UserJoinedMessage posix userId seqDict drawing ->
+                UserJoinedMessage _ _ _ _ ->
                     dict
 
-                DeletedMessage posix ->
+                DeletedMessage _ ->
                     dict
 
-                CallStarted callStartedData ->
+                CallStarted _ ->
                     dict
 
-                GameStarted gameStartedData ->
+                GameStarted _ ->
                     dict
         )
         SeqDict.empty

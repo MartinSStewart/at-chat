@@ -52,7 +52,7 @@ import LocalState exposing (BackendChannel, BackendGuild, CallStatus(..), Channe
 import Log
 import LoginForm
 import MembersAndOwner
-import Message exposing (ChangeAttachments(..), ContentAndEmbeds, GameType(..), Message(..))
+import Message exposing (ChangeAttachments(..), GameType(..), Message(..))
 import MuteSettings
 import MyUi
 import NonemptyDict
@@ -82,7 +82,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), ChannelDataToEncrypt, DiscordAttachmentData, ExportStateProgress, ExportStep(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), ChannelDataToEncrypt, DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
 import User exposing (BackendUser)

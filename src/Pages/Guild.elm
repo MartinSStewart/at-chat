@@ -57,7 +57,7 @@ import Coord
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
-import DmChannel exposing (DiscordFrontendDmChannel, E2eeEnabledData, FrontendDmChannel)
+import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import DmChannelId
 import Drawing exposing (Drawing)
 import Duration exposing (Duration)

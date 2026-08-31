@@ -109,7 +109,6 @@ import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
-import SessionIdHash
 import SheepGame
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
@@ -3889,10 +3888,10 @@ changeUpdate localMsg local =
                                 E2eeDisabled ->
                                     local
 
-                                E2eeDeclinedBy id ->
+                                E2eeDeclinedBy _ ->
                                     local
 
-                                E2eeEnabled e2eeEnabledData ->
+                                E2eeEnabled _ ->
                                     local
 
                         Nothing ->

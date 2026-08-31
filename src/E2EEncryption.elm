@@ -219,7 +219,7 @@ tests config =
                         , admin.checkView
                             100
                             (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
-                        , admin.snapshotView 100 { name = "Encryption request was declined" }
+                        , E2EHelper.tallSnapshot admin 100 { name = "Encryption request was declined" }
 
                         -- The person who declined has nothing left waiting on them, so
                         -- their section closes again and has to be opened to go on.
@@ -595,7 +595,7 @@ tests config =
                                 , respondToManyMessagesDecryptedFailed adminC
                                 , E2EHelper.writeMessage adminC 100 "Another session"
                                 , adminC.click 100 (Dom.id "guild_showMembers")
-                                , adminC.snapshotView 100 { name = "Enter private key on another device" }
+                                , E2EHelper.tallSnapshot adminC 100 { name = "Enter private key on another device" }
                                 , adminC.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
                                 , respondToSharedSecretStored adminC Broadcast.adminUserId
                                 , respondToManyMessagesDecrypted adminC
