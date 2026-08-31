@@ -7,7 +7,7 @@ import Json.Encode
 import Task
 
 
-{-| Sent once at startup, either `{ testCount : Int }` or `{ error : String }`.
+{-| Sent once at startup, either `{ testNames : List String }` or `{ error : String }`.
 -}
 port testsLoaded : Json.Encode.Value -> Cmd msg
 
@@ -45,7 +45,10 @@ update msg tests =
     case msg of
         GotTests (Ok list) ->
             ( Array.fromList list
-            , testsLoaded (Json.Encode.object [ ( "testCount", Json.Encode.int (List.length list) ) ])
+            , testsLoaded
+                (Json.Encode.object
+                    [ ( "testNames", Json.Encode.list (\( name, _ ) -> Json.Encode.string name) list ) ]
+                )
             )
 
         GotTests (Err error) ->
