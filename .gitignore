@@ -11,6 +11,8 @@ tests/var/lib/atchat/backups/
 index.html
 at-chat-backups/
 
+__pycache__/
+
 # Written by Claude Code when a permission is granted interactively. Shared
 # settings belong in .claude/settings.json instead.
 .claude/settings.local.json
