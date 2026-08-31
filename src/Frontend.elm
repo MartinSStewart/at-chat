@@ -4268,7 +4268,7 @@ updateLoaded msg model =
                                         ( loggedIn, Command.none )
 
                                     else
-                                        case encryptedDmOtherUser guildOrDmId local of
+                                        case encryptedDmOtherUser guildOrDmId local loggedIn of
                                             Just dmId ->
                                                 startEncryptingMessage
                                                     dmId
@@ -9055,15 +9055,16 @@ storeSharedSecret otherUserId privateKey loggedIn =
                     Encryption.storeSharedSecret otherUserId (X25519.sharedSecretToBytes secret) |> Ok
 
 
-{-| The other person in the conversation, when this is a DM that has been encrypted.
-`Nothing` for anything that goes to the server in the clear.
--}
-encryptedDmOtherUser : AnyGuildOrDmId -> LocalState -> Maybe Viewing_DmId
-encryptedDmOtherUser guildOrDmId local =
+encryptedDmOtherUser : AnyGuildOrDmId -> LocalState -> LoggedIn2 -> Maybe Viewing_DmId
+encryptedDmOtherUser guildOrDmId local loggedIn =
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
-            case SeqDict.get otherUserId local.dmChannels |> Maybe.map .e2ee of
-                Just (DmChannel.E2eeEnabled _) ->
+            case
+                ( SeqDict.get otherUserId local.dmChannels |> Maybe.map .e2ee
+                , SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice
+                )
+            of
+                ( Just (DmChannel.E2eeEnabled _), True ) ->
                     Just { otherUserId = otherUserId }
 
                 _ ->

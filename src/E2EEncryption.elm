@@ -603,7 +603,18 @@ soloDmEncryptionTest config =
                             "/"
                             E2EHelper.desktopWindow
                             (\adminB ->
-                                [ T.andThen 10 (\data -> [ adminB.portEvent 0 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                                [ T.andThen 10
+                                    (\data ->
+                                        [ adminB.portEvent
+                                            0
+                                            "load_startup_data_from_js"
+                                            (E2EHelper.startupDataJsonWithE2eeKeys
+                                                data.time
+                                                E2EHelper.firefoxDesktop
+                                                [ E2EHelper.defaultAdminId ]
+                                            )
+                                        ]
+                                    )
                                 , writeEncryptedMessage admin 100 "Note to self"
                                 , T.checkBackend 100 (checkSoloDmHasNoPlainText "Note to self")
                                 , T.checkBackend 100 (checkSoloDmMessageStored "Note to self")
@@ -624,7 +635,7 @@ soloDmEncryptionTest config =
                                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminC
                                 , adminC.click 100 (Dom.id "guild_friendLabel_0")
                                 , respondToManyMessagesDecryptedFailed adminC
-                                , writeEncryptedMessage adminC 100 "Another session"
+                                , E2EHelper.writeMessage adminC 100 "Another session"
                                 ]
                             )
                         ]

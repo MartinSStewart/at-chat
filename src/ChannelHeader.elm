@@ -35,6 +35,7 @@ import PersonName
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
+import SeqSet
 import Thread
 import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2)
 import Ui exposing (Element)
@@ -60,9 +61,28 @@ zoomOutText =
     "Zoom out"
 
 
+showDmSettingsRedDot : Id UserId -> LocalState -> LoggedIn2 -> Bool
+showDmSettingsRedDot otherUserId local loggedIn =
+    case SeqDict.get otherUserId local.dmChannels of
+        Just dmChannel ->
+            case dmChannel.e2ee of
+                DmChannel.E2eeRequestedBy requestedBy ->
+                    requestedBy /= local.localUser.session.userId
+
+                DmChannel.E2eeDisabled ->
+                    False
+
+                DmChannel.E2eeEnabled _ ->
+                    not (SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice)
+
+        Nothing ->
+            False
+
+
 channel : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
 channel isMobile name guildOrDmIdNoThread local loggedIn model =
     let
+        currentChannelHeaderTab : Maybe ChannelHeaderTab
         currentChannelHeaderTab =
             Route.toChannelHeaderTab model.route
     in
@@ -71,10 +91,22 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm { otherUserId } ->
                 if otherUserId == local.localUser.session.userId then
-                    privateChatWithYourself isMobile model.route currentChannelHeaderTab local
+                    privateChatWithYourself
+                        isMobile
+                        model.route
+                        (showDmSettingsRedDot otherUserId local loggedIn)
+                        currentChannelHeaderTab
+                        local
 
                 else
-                    privateChatWith isMobile model.route currentChannelHeaderTab otherUserId local name
+                    privateChatWith
+                        isMobile
+                        model.route
+                        (showDmSettingsRedDot otherUserId local loggedIn)
+                        currentChannelHeaderTab
+                        otherUserId
+                        local
+                        name
 
             GuildOrDmId_Guild { guildId, channelId } ->
                 Ui.row
@@ -112,12 +144,19 @@ thread isMobile name threadName guildOrDmIdNoThread local loggedIn model =
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm { otherUserId } ->
                 if otherUserId == local.localUser.session.userId then
-                    privateChatWithYourselfInThread isMobile model.route (Route.toChannelHeaderTab model.route) local threadName
+                    privateChatWithYourselfInThread
+                        isMobile
+                        model.route
+                        (showDmSettingsRedDot otherUserId local loggedIn)
+                        (Route.toChannelHeaderTab model.route)
+                        local
+                        threadName
 
                 else
                     privateChatWithInThread
                         isMobile
                         model.route
+                        (showDmSettingsRedDot otherUserId local loggedIn)
                         (Route.toChannelHeaderTab model.route)
                         otherUserId
                         local
@@ -153,7 +192,7 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
                 Ui.row
                     [ Ui.height Ui.fill, Ui.clipWithEllipsis ]
                     [ if chattingWithYourself data local then
-                        privateChatWithYourself isMobile model.route currentChannelHeaderTab local
+                        privateChatWithYourself isMobile model.route False currentChannelHeaderTab local
 
                       else
                         discordPrivateChatWith isMobile model.route currentChannelHeaderTab name
@@ -188,7 +227,7 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
         (case guildOrDmIdNoThread of
             DiscordGuildOrDmId_Dm data ->
                 if chattingWithYourself data local then
-                    privateChatWithYourself isMobile model.route (Route.toChannelHeaderTab model.route) local
+                    privateChatWithYourself isMobile model.route False (Route.toChannelHeaderTab model.route) local
 
                 else
                     discordPrivateChatWith isMobile model.route (Route.toChannelHeaderTab model.route) name
@@ -439,8 +478,8 @@ channelHeaderIconTab isMobile htmlId tab currentTab content =
     MyUi.elButton htmlId (PressedChannelHeaderTab tab) (channelHeaderTabAttributes 12 12 isMobile tab currentTab) content
 
 
-privateChatWithYourself : Bool -> Route -> Maybe ChannelHeaderTab -> LocalState -> Element FrontendMsg_
-privateChatWithYourself isMobile route currentTab local =
+privateChatWithYourself : Bool -> Route -> Bool -> Maybe ChannelHeaderTab -> LocalState -> Element FrontendMsg_
+privateChatWithYourself isMobile route showSettingsRedDot currentTab local =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
         [ channelHeaderTab
@@ -449,12 +488,20 @@ privateChatWithYourself isMobile route currentTab local =
             ChannelHeaderTab_ChannelDescription
             currentTab
             (Ui.text "Solo chat")
-        , dmHeaderButtons isMobile route currentTab local.localUser.session.userId local
+        , dmHeaderButtons isMobile route showSettingsRedDot currentTab local.localUser.session.userId local
         ]
 
 
-privateChatWith : Bool -> Route -> Maybe ChannelHeaderTab -> Id UserId -> LocalState -> String -> Element FrontendMsg_
-privateChatWith isMobile route currentTab otherUserId local name =
+privateChatWith :
+    Bool
+    -> Route
+    -> Bool
+    -> Maybe ChannelHeaderTab
+    -> Id UserId
+    -> LocalState
+    -> String
+    -> Element FrontendMsg_
+privateChatWith isMobile route showSettingsRedDot currentTab otherUserId local name =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.clipWithEllipsis, Ui.height Ui.fill ]
         [ channelHeaderTab
@@ -470,15 +517,15 @@ privateChatWith isMobile route currentTab otherUserId local name =
                     [ Ui.spacing 5 ]
                     [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ]
             )
-        , dmHeaderButtons isMobile route currentTab otherUserId local
+        , dmHeaderButtons isMobile route showSettingsRedDot currentTab otherUserId local
         ]
 
 
 {-| A thread is named after the message it started from, which can be arbitrarily long, so
 the thread name is what gets cut short when the header runs out of room.
 -}
-privateChatWithYourselfInThread : Bool -> Route -> Maybe ChannelHeaderTab -> LocalState -> String -> Element FrontendMsg_
-privateChatWithYourselfInThread isMobile route currentTab local threadName =
+privateChatWithYourselfInThread : Bool -> Route -> Bool -> Maybe ChannelHeaderTab -> LocalState -> String -> Element FrontendMsg_
+privateChatWithYourselfInThread isMobile route showSettingsRedDot currentTab local threadName =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.clipWithEllipsis, Ui.height Ui.fill ]
         [ channelHeaderTab
@@ -487,20 +534,21 @@ privateChatWithYourselfInThread isMobile route currentTab local threadName =
             ChannelHeaderTab_ChannelDescription
             currentTab
             (Ui.text ("Solo chat / " ++ threadName))
-        , dmHeaderButtons isMobile route currentTab local.localUser.session.userId local
+        , dmHeaderButtons isMobile route showSettingsRedDot currentTab local.localUser.session.userId local
         ]
 
 
 privateChatWithInThread :
     Bool
     -> Route
+    -> Bool
     -> Maybe ChannelHeaderTab
     -> Id UserId
     -> LocalState
     -> String
     -> String
     -> Element FrontendMsg_
-privateChatWithInThread isMobile route currentTab otherUserId local name threadName =
+privateChatWithInThread isMobile route showSettingsRedDot currentTab otherUserId local name threadName =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.clipWithEllipsis, Ui.height Ui.fill ]
         [ channelHeaderTab
@@ -518,29 +566,23 @@ privateChatWithInThread isMobile route currentTab otherUserId local name threadN
                     , Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text (name ++ " / " ++ threadName))
                     ]
             )
-        , dmHeaderButtons isMobile route currentTab otherUserId local
+        , dmHeaderButtons isMobile route showSettingsRedDot currentTab otherUserId local
         ]
 
 
-{-| The buttons on the right hand side of a DM's header.
--}
-dmHeaderButtons : Bool -> Route -> Maybe ChannelHeaderTab -> Id UserId -> LocalState -> Element FrontendMsg_
-dmHeaderButtons isMobile route currentTab otherUserId local =
+dmHeaderButtons : Bool -> Route -> Bool -> Maybe ChannelHeaderTab -> Id UserId -> LocalState -> Element FrontendMsg_
+dmHeaderButtons isMobile route showSettingsRedDot currentTab otherUserId local =
     Ui.row
         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
         [ voiceChatButton isMobile currentTab (DmRoomId { otherUserId = otherUserId }) local.localUser local.calls
         , Ui.Lazy.lazy2 gameButton isMobile currentTab
         , drawingTab isMobile currentTab
-        , dmChannelSettingsTab isMobile route (LocalState.dmE2eeRequestedByOtherUser otherUserId local)
+        , dmChannelSettingsTab isMobile route showSettingsRedDot
         ]
 
 
-{-| The channel settings button of a DM. Same as `channelSettingsTab` except that it
-marks itself when the other person is waiting on an answer about end-to-end encryption,
-since the settings are the only place that request can be answered from.
--}
 dmChannelSettingsTab : Bool -> Route -> Bool -> Element FrontendMsg_
-dmChannelSettingsTab isMobile route hasE2eeRequest =
+dmChannelSettingsTab isMobile route showSettingsRedDot =
     case Route.toShowMembersTab route of
         ( HideChannelSettings, isThread ) ->
             MyUi.elButton
@@ -561,7 +603,7 @@ dmChannelSettingsTab isMobile route hasE2eeRequest =
                     )
                 ]
                 (Ui.el
-                    [ if hasE2eeRequest then
+                    [ if showSettingsRedDot then
                         e2eeRequestDot
 
                       else

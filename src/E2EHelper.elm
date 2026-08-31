@@ -27,6 +27,7 @@ module E2EHelper exposing
     , createThread
     , currentDiscordUserId
     , decodeCustomRequest
+    , defaultAdminId
     , desktopWindow
     , discordUserAuth
     , domain
@@ -197,9 +198,6 @@ startupDataJson time userAgent =
     startupDataJsonWithInset time userAgent 0 False
 
 
-{-| Like [`startupDataJson`](#startupDataJson) but with a nonzero safe-area top inset (e.g. a phone
-notch), so a test can check that touch coordinates are adjusted for it.
--}
 startupDataJsonWithInset : Time.Posix -> String -> Int -> Bool -> Json.Encode.Value
 startupDataJsonWithInset time userAgent safeAreaInsetTop isPwa =
     Json.Encode.object
@@ -218,10 +216,6 @@ startupDataJsonWithInset time userAgent safeAreaInsetTop isPwa =
         ]
 
 
-{-| Like [`startupDataJson`](#startupDataJson) but with encryption keys already in the
-browser's store, the way a device that has been used for an encrypted conversation before
-starts up.
--}
 startupDataJsonWithE2eeKeys : Time.Posix -> String -> List (Id UserId) -> Json.Encode.Value
 startupDataJsonWithE2eeKeys time userAgent e2eeKeys =
     Json.Encode.object
@@ -239,13 +233,11 @@ startupDataJsonWithE2eeKeys time userAgent e2eeKeys =
         ]
 
 
-{-| Stands in for the words `crypto.getRandomValues` supplies in a browser.
+defaultAdminId : Id UserId
+defaultAdminId =
+    Id.fromInt 0
 
-Two clients must not get the same words, or they would generate the same private key, so
-these are derived from the moment the client loaded. That is the one thing that reliably
-differs between the clients in a test, since they connect a little apart from each other.
 
--}
 testRandomSeed : Time.Posix -> Json.Encode.Value
 testRandomSeed time =
     List.foldl
