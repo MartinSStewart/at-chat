@@ -343,19 +343,28 @@ errorView errorMessage =
         (Ui.text errorMessage)
 
 
-mobileWarning : UserAgent.Browser -> Element msg
-mobileWarning browser =
+mobileWarning : Coord CssPixels -> Browser -> Element msg
+mobileWarning windowSize browser =
+    let
+        wideEnoughForIcon =
+            Coord.xRaw windowSize >= 400
+    in
     Ui.column
         [ Ui.spacing 8 ]
         [ Html.div
             []
-            [ Html.div
-                [ Html.Attributes.style "float" "left"
-                , Html.Attributes.style "width" "44px"
-                , Html.Attributes.style "height" "40px"
-                , Html.Attributes.style "margin-right" "8px"
-                ]
-                [ Icons.addApp ]
+            [ if wideEnoughForIcon then
+                Html.div
+                    [ Html.Attributes.style "float" "left"
+                    , Html.Attributes.style "width" "44px"
+                    , Html.Attributes.style "height" "40px"
+                    , Html.Attributes.style "margin-right" "4px"
+                    , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
+                    ]
+                    [ Icons.addApp ]
+
+              else
+                Html.text ""
             , Html.b
                 []
                 [ Html.text
@@ -386,12 +395,17 @@ mobileWarning browser =
         , Ui.Prose.paragraph
             [ Ui.Font.color MyUi.font3
             , Ui.Font.size 16
+            , if wideEnoughForIcon then
+                Ui.padding 4
+
+              else
+                Ui.paddingXY 0 4
             ]
             [ Ui.text "You can still use it in a browser but you're not going to have a good time." ]
         ]
 
 
-view : Maybe { a | htmlId : HtmlId, selection : Range } -> LoginForm -> Coord CssPixels -> PwaStatus -> UserAgent.Browser -> Element Msg
+view : Maybe { a | htmlId : HtmlId, selection : Range } -> LoginForm -> Coord CssPixels -> PwaStatus -> Browser -> Element Msg
 view textSelection loginForm windowSize pwaStatus browser =
     let
         isMobile =
@@ -428,10 +442,10 @@ view textSelection loginForm windowSize pwaStatus browser =
                 , Ui.border 1
                 , Ui.borderColor MyUi.white
                 , Ui.rounded 8
-                , Ui.padding 16
+                , Ui.paddingXY 8 16
                 , Ui.Font.color MyUi.font1
                 ]
-                (mobileWarning browser)
+                (mobileWarning windowSize browser)
 
           else
             Ui.none

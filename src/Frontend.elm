@@ -8153,6 +8153,7 @@ view _ model =
                                             , Ui.padding 16
                                             ]
                                             (LoginForm.mobileWarning
+                                                loaded.windowSize
                                                 loaded.startupData.userAgent.browser
                                             )
                                         )
