@@ -48,7 +48,7 @@ import ChannelHeader
 import ChannelName
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
-import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannel exposing (DiscordFrontendDmChannel, E2eeStatus(..), FrontendDmChannel)
 import DmChannelId
 import Drawing
 import Duration
@@ -108,6 +108,7 @@ import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
+import SessionIdHash
 import SheepGame
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
@@ -356,7 +357,7 @@ pendingChangesText localChange =
         Local_RequestE2ee _ ->
             "Asked to start end-to-end encryption"
 
-        Local_CancelE2eeRequest _ ->
+        Local_DeclineE2eeRequestAsInitiator _ ->
             "Cancelled the end-to-end encryption request"
 
         Local_DeclineE2eeRequest _ ->
@@ -3824,10 +3825,10 @@ changeUpdate localMsg local =
                 Local_RequestE2ee { otherUserId } ->
                     LocalState.setDmE2ee
                         otherUserId
-                        (DmChannel.E2eeRequestedBy local.localUser.session.userId)
+                        (DmChannel.E2eeRequestedBy ( local.localUser.session.userId, local.localUser.session.sessionIdHash ))
                         local
 
-                Local_CancelE2eeRequest { otherUserId } ->
+                Local_DeclineE2eeRequestAsInitiator { otherUserId } ->
                     LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
 
                 Local_DeclineE2eeRequest { otherUserId } ->
@@ -3870,7 +3871,26 @@ changeUpdate localMsg local =
                     }
 
                 Local_AcceptE2ee { otherUserId } time ->
-                    LocalState.setDmE2ee otherUserId (DmChannel.E2eeEnabled time) local
+                    case SeqDict.get otherUserId local.dmChannels of
+                        Just dmChannel ->
+                            case dmChannel.e2ee of
+                                E2eeRequestedBy requestedBy ->
+                                    LocalState.setDmE2ee
+                                        otherUserId
+                                        (DmChannel.E2eeEnabled { enabledAt = time, requestedBy = requestedBy })
+                                        local
+
+                                E2eeDisabled ->
+                                    local
+
+                                E2eeDeclinedBy id ->
+                                    local
+
+                                E2eeEnabled e2eeEnabledData ->
+                                    local
+
+                        Nothing ->
+                            local
 
                 Local_SetE2eeRisksAccepted isAccepted ->
                     let
@@ -5267,7 +5287,14 @@ changeUpdate localMsg local =
                     }
 
                 Server_E2eeAccepted { otherUserId } time ->
-                    LocalState.setDmE2ee otherUserId (DmChannel.E2eeEnabled time) local
+                    LocalState.setDmE2ee
+                        otherUserId
+                        (DmChannel.E2eeEnabled
+                            { enabledAt = time
+                            , requestedBy = ( local.localUser.session.userId, local.localUser.session.sessionIdHash )
+                            }
+                        )
+                        local
 
                 Server_SendEncryptedMessage createdBy createdByUser createdAt id content threadRouteWithRepliedTo attachedFiles ->
                     handleServerSendDmMessage
@@ -5277,10 +5304,10 @@ changeUpdate localMsg local =
                         -- TODO, solve stickers
                         SeqDict.empty
                         (\maybeReplyTo ->
-                            Message.encryptedUserTextMessageFrontend createdAt createdBy content maybeReplyTo attachedFiles |> Debug.log "asdf"
+                            Message.encryptedUserTextMessageFrontend createdAt createdBy content maybeReplyTo attachedFiles
                         )
                         (\maybeReplyTo ->
-                            Message.encryptedUserTextMessageFrontend createdAt createdBy content maybeReplyTo attachedFiles |> Debug.log "asdf"
+                            Message.encryptedUserTextMessageFrontend createdAt createdBy content maybeReplyTo attachedFiles
                         )
                         threadRouteWithRepliedTo
                         local

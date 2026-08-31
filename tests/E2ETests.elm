@@ -313,14 +313,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.noTimestampSuggestionTest normalConfig
     , E2EMisc.mentionSuggestionTest normalConfig
     , E2EMisc.emojiSuggestionTest normalConfig
-    , E2EEncryption.backlogDecryptedOnLoadTest normalConfig
-    , E2EEncryption.declineE2eeRequestTest normalConfig
-    , E2EEncryption.endToEndEncryptionAcceptTest normalConfig
-    , E2EEncryption.endToEndEncryptionRequestTest normalConfig
-    , E2EEncryption.oneKeySetsUpEveryConversationTest normalConfig
-    , E2EEncryption.oldMessagesEncryptedTest normalConfig
-    , E2EEncryption.olderMessagesDecryptedTest normalConfig
-    , E2EEncryption.soloDmEncryptionTest normalConfig
+    , E2EEncryption.tests normalConfig
     , E2EMisc.codeBlockInputTest normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig
     , E2EHelper.startTest

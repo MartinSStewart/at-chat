@@ -68,7 +68,7 @@ showDmSettingsRedDot otherUserId local loggedIn =
     case SeqDict.get otherUserId local.dmChannels of
         Just dmChannel ->
             case dmChannel.e2ee of
-                DmChannel.E2eeRequestedBy requestedBy ->
+                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
                     requestedBy /= local.localUser.session.userId
 
                 DmChannel.E2eeDeclinedBy declinedBy ->

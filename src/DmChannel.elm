@@ -2,6 +2,7 @@ module DmChannel exposing
     ( DiscordDmChannel
     , DiscordFrontendDmChannel
     , DmChannel
+    , E2eeEnabledData
     , E2eeStatus(..)
     , FrontendDmChannel
     , backendInit
@@ -34,6 +35,7 @@ import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
+import SessionIdHash exposing (SessionIdHash)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
 import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend(..))
 import VisibleMessages exposing (VisibleMessages)
@@ -51,9 +53,13 @@ type alias DmChannel =
 
 type E2eeStatus
     = E2eeDisabled
-    | E2eeRequestedBy (Id UserId)
+    | E2eeRequestedBy ( Id UserId, SessionIdHash )
     | E2eeDeclinedBy (Id UserId)
-    | E2eeEnabled Time.Posix
+    | E2eeEnabled E2eeEnabledData
+
+
+type alias E2eeEnabledData =
+    { enabledAt : Time.Posix, requestedBy : ( Id UserId, SessionIdHash ) }
 
 
 type alias DiscordDmChannel =

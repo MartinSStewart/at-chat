@@ -82,7 +82,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), ChannelDataToEncrypt, DiscordAttachmentData, ExportStateProgress, ExportStep(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
 import User exposing (BackendUser)
@@ -6060,7 +6060,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             | dmChannels =
                                                 SeqDict.insert
                                                     dmChannelId
-                                                    { dmChannel | e2ee = DmChannel.E2eeRequestedBy session.userId }
+                                                    { dmChannel
+                                                        | e2ee =
+                                                            DmChannel.E2eeRequestedBy ( session.userId, session.sessionIdHash )
+                                                    }
                                                     model.dmChannels
                                         }
 
@@ -6074,7 +6077,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         clientId
                                         session.userId
                                         id
-                                        (\id2 -> Server_E2eeRequested id2 session.userId)
+                                        (\id2 -> Server_E2eeRequested id2 ( session.userId, session.sessionIdHash ))
                                         model2
                                     , notificationCmd
                                     ]
@@ -6183,10 +6186,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             of
                                                 ( Just otherUserId, DmChannel.E2eeEnabled _ ) ->
                                                     let
-                                                        conversation :
-                                                            { channel : SeqDict (Id ChannelMessageId) (ContentAndEmbeds (Id UserId))
-                                                            , threads : SeqDict (Id ChannelMessageId) (SeqDict (Id Id.ThreadMessageId) (ContentAndEmbeds (Id UserId)))
-                                                            }
+                                                        conversation : ChannelDataToEncrypt
                                                         conversation =
                                                             { channel = BackendExtra.plainTextMessages dmChannel.messages
                                                             , threads =
@@ -6206,6 +6206,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                     SeqDict.empty
                                                                     dmChannel.threads
                                                             }
+                                                                |> Debug.log "asdf"
                                                     in
                                                     if SeqDict.isEmpty conversation.channel && SeqDict.isEmpty conversation.threads then
                                                         dict
@@ -6286,7 +6287,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         (\session _ _ dmChannelId dmChannel ->
                             case dmChannel.e2ee of
                                 DmChannel.E2eeRequestedBy requestedBy ->
-                                    if requestedBy == session.userId && (session.userId /= id.otherUserId) then
+                                    if Tuple.first requestedBy == session.userId && (session.userId /= id.otherUserId) then
                                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                     else
@@ -6297,7 +6298,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     | dmChannels =
                                                         SeqDict.insert
                                                             dmChannelId
-                                                            { dmChannel | e2ee = DmChannel.E2eeEnabled time }
+                                                            { dmChannel
+                                                                | e2ee =
+                                                                    DmChannel.E2eeEnabled
+                                                                        { enabledAt = time, requestedBy = requestedBy }
+                                                            }
                                                             model.dmChannels
                                                 }
                                         in
@@ -6319,38 +6324,49 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
-                Local_CancelE2eeRequest id ->
+                Local_DeclineE2eeRequestAsInitiator id ->
                     BackendExtra.asDmUser
                         model
                         sessionId
                         id
                         (\session _ _ dmChannelId dmChannel ->
-                            if dmChannel.e2ee == DmChannel.E2eeRequestedBy session.userId then
-                                let
-                                    model2 : BackendModel
-                                    model2 =
-                                        { model
-                                            | dmChannels =
-                                                SeqDict.insert
-                                                    dmChannelId
-                                                    { dmChannel | e2ee = DmChannel.E2eeDisabled }
-                                                    model.dmChannels
-                                        }
-                                in
-                                ( model2
-                                , Command.batch
-                                    [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-                                    , Broadcast.toDmChannelExcludingOne
-                                        clientId
-                                        session.userId
-                                        id
-                                        Server_E2eeRequestCancelled
-                                        model2
-                                    ]
-                                )
+                            case dmChannel.e2ee of
+                                DmChannel.E2eeDisabled ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
-                            else
-                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                DmChannel.E2eeDeclinedBy _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                DmChannel.E2eeEnabled _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
+                                    if requestedBy == session.userId then
+                                        let
+                                            model2 : BackendModel
+                                            model2 =
+                                                { model
+                                                    | dmChannels =
+                                                        SeqDict.insert
+                                                            dmChannelId
+                                                            { dmChannel | e2ee = DmChannel.E2eeDisabled }
+                                                            model.dmChannels
+                                                }
+                                        in
+                                        ( model2
+                                        , Command.batch
+                                            [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                            , Broadcast.toDmChannelExcludingOne
+                                                clientId
+                                                session.userId
+                                                id
+                                                Server_E2eeRequestCancelled
+                                                model2
+                                            ]
+                                        )
+
+                                    else
+                                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
                 Local_DeclineE2eeRequest id ->
@@ -6360,10 +6376,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         id
                         (\session _ _ dmChannelId dmChannel ->
                             case dmChannel.e2ee of
-                                DmChannel.E2eeRequestedBy requestedBy ->
-                                    -- Turning down your own request is what cancelling is
-                                    -- for, except in a DM with yourself where there is
-                                    -- nobody else to answer it.
+                                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
                                     if requestedBy == session.userId && (session.userId /= id.otherUserId) then
                                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
 

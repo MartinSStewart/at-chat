@@ -56,7 +56,7 @@ import Coord
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
-import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannel exposing (DiscordFrontendDmChannel, E2eeEnabledData, FrontendDmChannel)
 import DmChannelId
 import Drawing exposing (Drawing)
 import Duration exposing (Duration)
@@ -168,12 +168,12 @@ ask next, since the button to do it has gone.
 -}
 e2eeDeclinedText : String
 e2eeDeclinedText =
-    "declined your request to start encrypting this conversation. Only they can start one now."
+    "declined your request to enable E2EE Only they can start one now."
 
 
 youDeclinedE2eeText : String
 youDeclinedE2eeText =
-    "You declined the request to start encrypting this conversation."
+    "You declined the request to to enable E2EE."
 
 
 missingPrivateKeyText : String
@@ -2475,7 +2475,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
         requestedByOtherUser : Bool
         requestedByOtherUser =
             case e2ee of
-                DmChannel.E2eeRequestedBy requestedBy ->
+                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
                     requestedBy /= localUser.session.userId
 
                 DmChannel.E2eeDeclinedBy _ ->
@@ -2550,7 +2550,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                     Just _ ->
                                         privateKeyInput
                                             otherUserId
-                                            (Ui.text "2. Enter your private key to start encrypting this conversation.")
+                                            (Ui.text "2. Enter your private key to enable E2EE")
                                             keyInput
 
                             -- Turning the request down takes nothing but the decision, so
@@ -2564,7 +2564,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                     else if otherUserId == localUser.session.userId then
                         privateKeyInput
                             otherUserId
-                            (Ui.text "2. Enter your private key to start encrypting this conversation.")
+                            (Ui.text "2. Enter your private key to enable E2EE")
                             keyInput
 
                     else
@@ -2611,17 +2611,25 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                             []
                             [ Ui.text (User.toStringAlt otherUserId localUser ++ " " ++ e2eeDeclinedText) ]
 
-                DmChannel.E2eeEnabled time ->
+                DmChannel.E2eeEnabled data ->
                     Ui.column
                         [ Ui.spacing 16 ]
-                        [ Ui.text ("2. E2EE was enabled on " ++ MyUi.datestamp localUser.timezone time)
+                        [ Ui.text ("2. E2EE was enabled on " ++ MyUi.datestamp localUser.timezone data.enabledAt)
                         , if keyInput.hasKeyOnThisDevice then
                             Ui.none
 
                           else
                             privateKeyInput
                                 otherUserId
-                                (Ui.text missingPrivateKeyText)
+                                (if data.requestedBy == ( localUser.session.userId, localUser.session.sessionIdHash ) then
+                                    "3. "
+                                        ++ User.toStringAlt otherUserId localUser
+                                        ++ " accepted and E2EE is now enabled. Enter your private key here to decrypted messages"
+                                        |> Ui.text
+
+                                 else
+                                    Ui.text missingPrivateKeyText
+                                )
                                 keyInput
                         ]
             ]
@@ -2649,16 +2657,6 @@ type alias E2eeKeyInput =
     }
 
 
-{-| Where someone types their private key in so a shared key can be worked out from it.
-
-Nothing watches for a paste, only for the value ending in "=", which is what the base64
-of a 32 byte key always ends in. That way a password manager typing the key one character
-at a time works as well as pasting it in one go does.
-
-It is a password field rather than a plain one so that a password manager recognises it
-and offers to fill in the key it saved when the key was first made.
-
--}
 privateKeyInput : Id UserId -> Element FrontendMsg_ -> E2eeKeyInput -> Element FrontendMsg_
 privateKeyInput otherUserId prompt keyInput =
     let

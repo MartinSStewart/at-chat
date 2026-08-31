@@ -3250,7 +3250,7 @@ updateLoaded msg model =
                 (\loggedIn ->
                     FrontendExtra.handleLocalChange
                         model.time
-                        (Local_CancelE2eeRequest { otherUserId = otherUserId } |> Just)
+                        (Local_DeclineE2eeRequestAsInitiator { otherUserId = otherUserId } |> Just)
                         loggedIn
                         Command.none
                 )
@@ -3338,7 +3338,7 @@ updateLoaded msg model =
                                     case SeqDict.get otherUserId local.dmChannels of
                                         Just dmChannel ->
                                             case dmChannel.e2ee of
-                                                DmChannel.E2eeRequestedBy requestedBy ->
+                                                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
                                                     requestedBy /= local.localUser.session.userId || otherUserId == local.localUser.session.userId
 
                                                 -- A request that was turned down isn't

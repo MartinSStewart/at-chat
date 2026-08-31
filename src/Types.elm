@@ -3,6 +3,7 @@ module Types exposing
     , BackendFileData
     , BackendModel
     , BackendMsg(..)
+    , ChannelDataToEncrypt
     , CountToFrontendState
     , DiscordAttachmentData
     , E2eeKeysValid(..)
@@ -1081,7 +1082,7 @@ type ServerChange
     | Server_DiscordAvatarsLoaded (Discord.Id Discord.UserId) DiscordFrontendUser
       -- The DM is named from the point of view of whoever is receiving this, so the user
       -- that asked for encryption is named separately.
-    | Server_E2eeRequested Viewing_DmId (Id UserId)
+    | Server_E2eeRequested Viewing_DmId ( Id UserId, SessionIdHash )
     | Server_E2eeRequestCancelled Viewing_DmId
     | Server_E2eeRequestDeclined Viewing_DmId (Id UserId)
     | Server_MessagesEncrypted Viewing_DmId (List ( ThreadRouteWithMessage, EncryptedData (ContentAndEmbeds (Id UserId)) ))
@@ -1146,21 +1147,16 @@ type LocalChange
     | Local_SetMuteGuild (Id GuildId) IsMuted
     | Local_SetMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
     | Local_RequestE2ee Viewing_DmId
-    | Local_CancelE2eeRequest Viewing_DmId
+    | Local_DeclineE2eeRequestAsInitiator Viewing_DmId
     | Local_DeclineE2eeRequest Viewing_DmId
-    | Local_SetPublicKey
-        X25519.PublicKey
-        (ToBeFilledInByBackend
-            (SeqDict
-                Viewing_DmId
-                { channel : SeqDict (Id ChannelMessageId) (ContentAndEmbeds (Id UserId))
-                , threads : SeqDict (Id ChannelMessageId) (SeqDict (Id ThreadMessageId) (ContentAndEmbeds (Id UserId)))
-                }
-            )
-        )
-    | -- Replaces messages written before the conversation was encrypted with the
-      -- ciphertext this device made of them.
-      Local_EncryptOldMessages Viewing_DmId (List ( ThreadRouteWithMessage, EncryptedData (ContentAndEmbeds (Id UserId)) ))
+    | Local_SetPublicKey X25519.PublicKey (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
+    | Local_EncryptOldMessages Viewing_DmId (List ( ThreadRouteWithMessage, EncryptedData (ContentAndEmbeds (Id UserId)) ))
     | Local_SetE2eeRisksAccepted Bool
     | Local_AcceptE2ee Viewing_DmId Time.Posix
     | Local_SendEncryptedMessage Time.Posix Viewing_DmId (EncryptedData (ContentAndEmbeds (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+
+
+type alias ChannelDataToEncrypt =
+    { channel : SeqDict (Id ChannelMessageId) (ContentAndEmbeds (Id UserId))
+    , threads : SeqDict (Id ChannelMessageId) (SeqDict (Id ThreadMessageId) (ContentAndEmbeds (Id UserId)))
+    }

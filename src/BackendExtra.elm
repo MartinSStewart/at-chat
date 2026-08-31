@@ -2556,7 +2556,7 @@ toBackendLog toBackend =
                 Local_RequestE2ee _ ->
                     ToBackendLog_Local_RequestE2ee
 
-                Local_CancelE2eeRequest _ ->
+                Local_DeclineE2eeRequestAsInitiator _ ->
                     ToBackendLog_Local_CancelE2eeRequest
 
                 Local_DeclineE2eeRequest _ ->

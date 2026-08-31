@@ -1,13 +1,4 @@
-module E2EEncryption exposing
-    ( backlogDecryptedOnLoadTest
-    , declineE2eeRequestTest
-    , endToEndEncryptionAcceptTest
-    , endToEndEncryptionRequestTest
-    , oldMessagesEncryptedTest
-    , olderMessagesDecryptedTest
-    , oneKeySetsUpEveryConversationTest
-    , soloDmEncryptionTest
-    )
+module E2EEncryption exposing (tests)
 
 {-| End-to-end tests for encrypted DMs: agreeing to encrypt a conversation, working the
 shared key out on each device, and sending a message once one is there.
@@ -48,20 +39,16 @@ import VisibleMessages
 import X25519
 
 
-{-| The two people in a DM both have to accept the risks that come with end-to-end
-encryption before it can be turned on, so asking for it leaves the asker waiting and puts
-the request in front of the other person.
--}
-endToEndEncryptionRequestTest :
+tests :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-endToEndEncryptionRequestTest config =
+tests config =
     let
         warning : String
         warning =
             "If you lose it, you'll permanently lose access to all your encrypted messages."
     in
-    E2EHelper.startTest
+    [ E2EHelper.startTest
         "Ask the other person in a DM to start end-to-end encryption"
         E2EHelper.startTime
         config
@@ -125,20 +112,20 @@ endToEndEncryptionRequestTest config =
                         , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
                         , user.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "to start encrypting this conversation" ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "to enable E2EE" ])
                         , addPrivateKeyToAccount user
                             (\_ ->
                                 [ user.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text "to start encrypting this conversation" ]
+                                        [ Test.Html.Selector.text "to enable E2EE" ]
                                     )
                                 , T.checkBackend 100 checkBothKeysStoredAndDifferent
                                 , admin.click 100 (Dom.id "guild_cancelE2ee")
                                 , user.checkView
                                     100
                                     (Test.Html.Query.hasNot
-                                        [ Test.Html.Selector.text "to start encrypting this conversation" ]
+                                        [ Test.Html.Selector.text "to enable E2EE" ]
                                     )
                                 , admin.checkView
                                     100
@@ -186,18 +173,7 @@ endToEndEncryptionRequestTest config =
                 ]
             )
         ]
-
-
-{-| Being asked to encrypt a conversation is a request rather than something done to you,
-so the person on the other end can turn it down. Nothing about the answer needs a key or
-an understanding of what encryption costs, so the button to decline sits in front of the
-steps that lead to accepting rather than behind them.
--}
-declineE2eeRequestTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-declineE2eeRequestTest config =
-    E2EHelper.startTest
+    , E2EHelper.startTest
         "Decline a request to start end-to-end encryption"
         E2EHelper.startTime
         config
@@ -290,56 +266,7 @@ declineE2eeRequestTest config =
                 ]
             )
         ]
-
-
-checkDmE2eeDeclinedBy : Id UserId -> BackendModel2 -> Result String ()
-checkDmE2eeDeclinedBy declinedBy backend =
-    case adminDmChannel backend |> Maybe.map .e2ee of
-        Just (DmChannel.E2eeDeclinedBy actual) ->
-            if actual == declinedBy then
-                Ok ()
-
-            else
-                Err
-                    ("Expected the DM to have been declined by user "
-                        ++ String.fromInt (Id.toInt declinedBy)
-                        ++ " but it was declined by user "
-                        ++ String.fromInt (Id.toInt actual)
-                    )
-
-        _ ->
-            Err "The declined request should have been recorded on the backend"
-
-
-checkDmE2eeRequestedBy : Id UserId -> BackendModel2 -> Result String ()
-checkDmE2eeRequestedBy requestedBy backend =
-    case adminDmChannel backend |> Maybe.map .e2ee of
-        Just (DmChannel.E2eeRequestedBy actual) ->
-            if actual == requestedBy then
-                Ok ()
-
-            else
-                Err
-                    ("Expected user "
-                        ++ String.fromInt (Id.toInt requestedBy)
-                        ++ " to have asked to encrypt the DM but user "
-                        ++ String.fromInt (Id.toInt actual)
-                        ++ " did"
-                    )
-
-        _ ->
-            Err "Nobody has asked to encrypt the DM on the backend"
-
-
-{-| Accepting a request is what actually turns encryption on: both people work out the
-same shared secret from their own private key and the other's public one, hand it to the
-browser to keep, and from then on messages go through the browser before they are sent.
--}
-endToEndEncryptionAcceptTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-endToEndEncryptionAcceptTest config =
-    E2EHelper.startTest
+    , E2EHelper.startTest
         "Accept an encryption request and send an encrypted message"
         E2EHelper.startTime
         config
@@ -417,18 +344,7 @@ endToEndEncryptionAcceptTest config =
                 ]
             )
         ]
-
-
-{-| Encryption gets turned on partway through a conversation rather than at the start of
-one, so everything written before then is sitting on the server in the clear. A device
-that holds the key is the only thing that can do anything about that, so the server hands
-it the lot the moment one turns up.
--}
-oldMessagesEncryptedTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-oldMessagesEncryptedTest config =
-    E2EHelper.startTest
+    , E2EHelper.startTest
         "Encrypt the messages written before a conversation was encrypted"
         E2EHelper.startTime
         config
@@ -501,46 +417,7 @@ oldMessagesEncryptedTest config =
                 ]
             )
         ]
-
-
-writtenByAdmin : String
-writtenByAdmin =
-    "Written before we encrypted anything"
-
-
-writtenByUser : String
-writtenByUser =
-    "And this one was mine"
-
-
-checkPlainTextMessageStored : String -> BackendModel2 -> Result String ()
-checkPlainTextMessageStored text backend =
-    case adminDmChannel backend of
-        Just dmChannel ->
-            if List.member text (plainTextMessages dmChannel) then
-                Ok ()
-
-            else
-                Err
-                    ("Expected the server to be holding \""
-                        ++ text
-                        ++ "\" as plain text. Holding: "
-                        ++ String.join ", " (plainTextMessages dmChannel)
-                    )
-
-        Nothing ->
-            Err "The DM isn't on the backend"
-
-
-{-| A device that has no keys has none for any of its conversations, so being asked for
-the same private key over and over, once per conversation, would be a poor way to set one
-up. Typing it in once works out every shared secret the device is short of.
--}
-oneKeySetsUpEveryConversationTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-oneKeySetsUpEveryConversationTest config =
-    E2EHelper.startTest
+    , E2EHelper.startTest
         "One private key sets up every conversation on a device"
         E2EHelper.startTime
         config
@@ -631,6 +508,347 @@ oneKeySetsUpEveryConversationTest config =
                 ]
             )
         ]
+    , E2EHelper.startTest
+        "Encrypt a DM with yourself"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.openDm admin 100 "0"
+                , E2EHelper.writeMessage admin 100 "First message"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
+                        , admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "to accept message encryption" ])
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_cancelE2ee" ])
+                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") (String.dropRight 5 adminPrivateKey)
+                        , T.checkState 100 (checkSharedSecretsAskedFor admin [])
+                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                        , respondToSharedSecretStored admin Broadcast.adminUserId
+                        , T.checkBackend 100 checkSoloDmIsEncrypted
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "E2EE was enabled on" ])
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.text Pages.Guild.missingPrivateKeyText ]
+                            )
+                        , admin.click 100 (Dom.id "guild_hideMembers")
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId0
+                            "/"
+                            E2EHelper.desktopWindow
+                            (\adminB ->
+                                [ T.andThen 10
+                                    (\data ->
+                                        [ adminB.portEvent
+                                            0
+                                            "load_startup_data_from_js"
+                                            (E2EHelper.startupDataJsonWithE2eeKeys
+                                                data.time
+                                                E2EHelper.firefoxDesktop
+                                                [ E2EHelper.defaultAdminId ]
+                                            )
+                                        ]
+                                    )
+                                , writeEncryptedMessage admin 100 "Note to self"
+                                , T.checkBackend 100 (checkSoloDmHasNoPlainText "Note to self")
+                                , T.checkBackend 100 (checkSoloDmMessageStored "Note to self")
+                                , respondToMessageDecrypted adminB
+                                , adminB.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Note to self" ])
+                                , adminB.click 100 (Dom.id "guild_friendLabel_0")
+                                , writeEncryptedMessage adminB 100 "Note to self from adminB"
+                                , respondToMessageDecrypted admin
+                                , adminB.snapshotView 100 { name = "Second tab views decrypted message" }
+                                ]
+                            )
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId1
+                            "/"
+                            E2EHelper.desktopWindow
+                            (\adminC ->
+                                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminC
+                                , adminC.click 100 (Dom.id "guild_friendLabel_0")
+                                , respondToManyMessagesDecryptedFailed adminC
+                                , E2EHelper.writeMessage adminC 100 "Another session"
+                                , adminC.click 100 (Dom.id "guild_showMembers")
+                                , adminC.snapshotView 100 { name = "Enter private key on another device" }
+                                , adminC.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                                , respondToSharedSecretStored adminC Broadcast.adminUserId
+                                , writeEncryptedMessage adminC 100 "Note to self from adminB should be encrypted"
+                                , respondToMessageDecrypted admin
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Decrypt the messages already in a conversation when the page loads"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.openDm admin 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                        , respondToSharedSecretStored admin Broadcast.adminUserId
+                        , admin.click 100 (Dom.id "guild_hideMembers")
+                        , E2EHelper.writeMessage admin 100 backlogMessage
+                        , respondToMessageEncrypted admin
+                        , T.checkBackend 100 (checkSoloDmHasNoPlainText backlogMessage)
+
+                        -- A second device with the key for this conversation loads with
+                        -- the message already sitting in it.
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId0
+                            "/"
+                            E2EHelper.desktopWindow
+                            (\adminB ->
+                                [ T.andThen
+                                    10
+                                    (\data ->
+                                        [ adminB.portEvent
+                                            0
+                                            "load_startup_data_from_js"
+                                            (E2EHelper.startupDataJsonWithE2eeKeys
+                                                data.time
+                                                E2EHelper.firefoxDesktop
+                                                [ Broadcast.adminUserId ]
+                                            )
+                                        ]
+                                    )
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text backlogMessage ])
+                                , respondToManyMessagesDecrypted adminB
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text backlogMessage ])
+                                , adminB.click 100 (Dom.id "guild_friendLabel_0")
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text backlogMessage ])
+                                , adminB.snapshotView 100 { name = "Backlog decrypted on page load" }
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Decrypt older messages loaded by scrolling up"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.openDm admin 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                        , respondToSharedSecretStored admin Broadcast.adminUserId
+                        , admin.click 100 (Dom.id "guild_hideMembers")
+
+                        -- More messages than fit in a page, so a device loading the
+                        -- conversation gets the most recent ones and has to scroll up for
+                        -- the rest.
+                        , List.range 1 (VisibleMessages.pageSize + 5)
+                            |> List.map
+                                (\index ->
+                                    T.group
+                                        [ E2EHelper.writeMessage admin 100 (olderMessage index)
+                                        , respondToMessageEncrypted admin
+                                        ]
+                                )
+                            |> T.group
+                        , T.checkBackend
+                            100
+                            (checkSoloDmMessageCount (VisibleMessages.pageSize + 5))
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId0
+                            "/"
+                            E2EHelper.desktopWindow
+                            (\adminB ->
+                                [ T.andThen
+                                    10
+                                    (\data ->
+                                        [ adminB.portEvent
+                                            0
+                                            "load_startup_data_from_js"
+                                            (E2EHelper.startupDataJsonWithE2eeKeys
+                                                data.time
+                                                E2EHelper.firefoxDesktop
+                                                [ Broadcast.adminUserId ]
+                                            )
+                                        ]
+                                    )
+                                , adminB.click 100 (Dom.id "guild_friendLabel_0")
+                                , respondToManyMessagesDecrypted adminB
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.exactText (olderMessage (VisibleMessages.pageSize + 5)) ]
+                                    )
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.hasNot
+                                        [ Test.Html.Selector.exactText (olderMessage 1) ]
+                                    )
+                                , T.checkState 100 (checkScrollShifts adminB 0)
+
+                                -- Scrolling up loads the rest of the conversation. The
+                                -- page arrives showing nothing at all, since nothing has
+                                -- worked out what any of it says yet: the one shift here
+                                -- is for the messages that were never encrypted, and it
+                                -- moves the reader by nothing.
+                                , E2EHelper.scrollToTop adminB
+                                , adminB.checkView
+                                    1000
+                                    (Test.Html.Query.hasNot
+                                        [ Test.Html.Selector.exactText (olderMessage 1) ]
+                                    )
+                                , T.checkState 100 (checkScrollShifts adminB 1)
+
+                                -- The answer is what actually grows the conversation, so
+                                -- the shift that keeps the reader in place belongs here.
+                                , respondToManyMessagesDecrypted adminB
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.exactText (olderMessage 1) ]
+                                    )
+                                , T.checkState 100 (checkScrollShifts adminB 2)
+                                , adminB.snapshotView 100 { name = "Older encrypted messages decrypted" }
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    ]
+        |> T.testGroup "E2EE"
+
+
+checkDmE2eeDeclinedBy : Id UserId -> BackendModel2 -> Result String ()
+checkDmE2eeDeclinedBy declinedBy backend =
+    case adminDmChannel backend |> Maybe.map .e2ee of
+        Just (DmChannel.E2eeDeclinedBy actual) ->
+            if actual == declinedBy then
+                Ok ()
+
+            else
+                Err
+                    ("Expected the DM to have been declined by user "
+                        ++ String.fromInt (Id.toInt declinedBy)
+                        ++ " but it was declined by user "
+                        ++ String.fromInt (Id.toInt actual)
+                    )
+
+        _ ->
+            Err "The declined request should have been recorded on the backend"
+
+
+checkDmE2eeRequestedBy : Id UserId -> BackendModel2 -> Result String ()
+checkDmE2eeRequestedBy requestedBy backend =
+    case adminDmChannel backend |> Maybe.map .e2ee of
+        Just (DmChannel.E2eeRequestedBy ( actual, _ )) ->
+            if actual == requestedBy then
+                Ok ()
+
+            else
+                Err
+                    ("Expected user "
+                        ++ String.fromInt (Id.toInt requestedBy)
+                        ++ " to have asked to encrypt the DM but user "
+                        ++ String.fromInt (Id.toInt actual)
+                        ++ " did"
+                    )
+
+        _ ->
+            Err "Nobody has asked to encrypt the DM on the backend"
+
+
+writtenByAdmin : String
+writtenByAdmin =
+    "Written before we encrypted anything"
+
+
+writtenByUser : String
+writtenByUser =
+    "And this one was mine"
+
+
+checkPlainTextMessageStored : String -> BackendModel2 -> Result String ()
+checkPlainTextMessageStored text backend =
+    case adminDmChannel backend of
+        Just dmChannel ->
+            if List.member text (plainTextMessages dmChannel) then
+                Ok ()
+
+            else
+                Err
+                    ("Expected the server to be holding \""
+                        ++ text
+                        ++ "\" as plain text. Holding: "
+                        ++ String.join ", " (plainTextMessages dmChannel)
+                    )
+
+        Nothing ->
+            Err "The DM isn't on the backend"
 
 
 {-| The conversations a client has asked the browser to work a shared secret out for.
@@ -806,109 +1024,6 @@ encryptedMessageContents backend =
             []
 
 
-soloDmEncryptionTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-soloDmEncryptionTest config =
-    E2EHelper.startTest
-        "Encrypt a DM with yourself"
-        E2EHelper.startTime
-        config
-        [ T.connectFrontend
-            100
-            E2EHelper.sessionId0
-            "/"
-            E2EHelper.desktopWindow
-            (\admin ->
-                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
-                , admin.click 100 (Dom.id "guild_createGuild")
-                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
-                , admin.click 100 (Dom.id "guild_createGuildSubmit")
-                , admin.click 100 (Dom.id "guild_openChannel_0")
-                , E2EHelper.openDm admin 100 "0"
-                , admin.click 100 (Dom.id "guild_showMembers")
-                , admin.click 100 (Dom.id "guild_e2eeSection")
-                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
-                , addPrivateKeyToAccount admin
-                    (\adminPrivateKey ->
-                        [ admin.checkView
-                            100
-                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
-                        , admin.click 100 (Dom.id "guild_enableE2ee")
-                        , admin.checkView
-                            100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "to accept message encryption" ])
-                        , admin.checkView
-                            100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_cancelE2ee" ])
-                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") (String.dropRight 5 adminPrivateKey)
-                        , T.checkState 100 (checkSharedSecretsAskedFor admin [])
-                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
-                        , respondToSharedSecretStored admin Broadcast.adminUserId
-                        , T.checkBackend 100 checkSoloDmIsEncrypted
-                        , admin.checkView
-                            100
-                            (Test.Html.Query.has [ Test.Html.Selector.text "E2EE was enabled on" ])
-                        , admin.checkView
-                            100
-                            (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.text Pages.Guild.missingPrivateKeyText ]
-                            )
-                        , admin.click 100 (Dom.id "guild_hideMembers")
-                        , T.connectFrontend
-                            100
-                            E2EHelper.sessionId0
-                            "/"
-                            E2EHelper.desktopWindow
-                            (\adminB ->
-                                [ T.andThen 10
-                                    (\data ->
-                                        [ adminB.portEvent
-                                            0
-                                            "load_startup_data_from_js"
-                                            (E2EHelper.startupDataJsonWithE2eeKeys
-                                                data.time
-                                                E2EHelper.firefoxDesktop
-                                                [ E2EHelper.defaultAdminId ]
-                                            )
-                                        ]
-                                    )
-                                , writeEncryptedMessage admin 100 "Note to self"
-                                , T.checkBackend 100 (checkSoloDmHasNoPlainText "Note to self")
-                                , T.checkBackend 100 (checkSoloDmMessageStored "Note to self")
-                                , respondToMessageDecrypted adminB
-                                , adminB.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Note to self" ])
-                                , adminB.click 100 (Dom.id "guild_friendLabel_0")
-                                , writeEncryptedMessage adminB 100 "Note to self from adminB"
-                                , respondToMessageDecrypted admin
-                                , adminB.snapshotView 100 { name = "Second tab views decrypted message" }
-                                ]
-                            )
-                        , T.connectFrontend
-                            100
-                            E2EHelper.sessionId1
-                            "/"
-                            E2EHelper.desktopWindow
-                            (\adminC ->
-                                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminC
-                                , adminC.click 100 (Dom.id "guild_friendLabel_0")
-                                , respondToManyMessagesDecryptedFailed adminC
-                                , E2EHelper.writeMessage adminC 100 "Another session"
-                                , adminC.click 100 (Dom.id "guild_showMembers")
-                                , adminC.snapshotView 100 { name = "Enter private key on another device" }
-                                , adminC.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
-                                , respondToSharedSecretStored adminC Broadcast.adminUserId
-                                , writeEncryptedMessage adminC 100 "Note to self from adminB should be encrypted"
-                                , respondToMessageDecrypted admin
-                                ]
-                            )
-                        ]
-                    )
-                ]
-            )
-        ]
-
-
 writeEncryptedMessage :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> T.DelayInMs
@@ -918,201 +1033,6 @@ writeEncryptedMessage user delay text =
     T.group
         [ E2EHelper.writeMessage user delay text
         , respondToMessageEncrypted user
-        ]
-
-
-{-| A device that already has the key for a conversation has to work out what the
-messages waiting in it say, since only their encrypted form is kept anywhere. That is the
-whole conversation at once rather than one request per message, so the page asks for the
-backlog as it loads and fills the contents in when the answer comes back.
--}
-backlogDecryptedOnLoadTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-backlogDecryptedOnLoadTest config =
-    E2EHelper.startTest
-        "Decrypt the messages already in a conversation when the page loads"
-        E2EHelper.startTime
-        config
-        [ T.connectFrontend
-            100
-            E2EHelper.sessionId0
-            "/"
-            E2EHelper.desktopWindow
-            (\admin ->
-                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
-                , admin.click 100 (Dom.id "guild_createGuild")
-                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
-                , admin.click 100 (Dom.id "guild_createGuildSubmit")
-                , admin.click 100 (Dom.id "guild_openChannel_0")
-                , E2EHelper.openDm admin 100 "0"
-                , admin.click 100 (Dom.id "guild_showMembers")
-                , admin.click 100 (Dom.id "guild_e2eeSection")
-                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
-                , addPrivateKeyToAccount admin
-                    (\adminPrivateKey ->
-                        [ admin.click 100 (Dom.id "guild_enableE2ee")
-                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
-                        , respondToSharedSecretStored admin Broadcast.adminUserId
-                        , admin.click 100 (Dom.id "guild_hideMembers")
-                        , E2EHelper.writeMessage admin 100 backlogMessage
-                        , respondToMessageEncrypted admin
-                        , T.checkBackend 100 (checkSoloDmHasNoPlainText backlogMessage)
-
-                        -- A second device with the key for this conversation loads with
-                        -- the message already sitting in it.
-                        , T.connectFrontend
-                            100
-                            E2EHelper.sessionId0
-                            "/"
-                            E2EHelper.desktopWindow
-                            (\adminB ->
-                                [ T.andThen
-                                    10
-                                    (\data ->
-                                        [ adminB.portEvent
-                                            0
-                                            "load_startup_data_from_js"
-                                            (E2EHelper.startupDataJsonWithE2eeKeys
-                                                data.time
-                                                E2EHelper.firefoxDesktop
-                                                [ Broadcast.adminUserId ]
-                                            )
-                                        ]
-                                    )
-                                , adminB.checkView
-                                    100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text backlogMessage ])
-                                , respondToManyMessagesDecrypted adminB
-                                , adminB.checkView
-                                    100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text backlogMessage ])
-                                , adminB.click 100 (Dom.id "guild_friendLabel_0")
-                                , adminB.checkView
-                                    100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text backlogMessage ])
-                                , adminB.snapshotView 100 { name = "Backlog decrypted on page load" }
-                                ]
-                            )
-                        ]
-                    )
-                ]
-            )
-        ]
-
-
-{-| An encrypted message shows nothing until this device works out what it says, so a
-page of older ones loaded by scrolling up arrives taking up no room at all. Shifting the
-scroll then would move the reader by nothing and leave them jumping when the contents
-turn up, so it waits for the answer.
--}
-olderMessagesDecryptedTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-olderMessagesDecryptedTest config =
-    E2EHelper.startTest
-        "Decrypt older messages loaded by scrolling up"
-        E2EHelper.startTime
-        config
-        [ T.connectFrontend
-            100
-            E2EHelper.sessionId0
-            "/"
-            E2EHelper.desktopWindow
-            (\admin ->
-                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
-                , admin.click 100 (Dom.id "guild_createGuild")
-                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
-                , admin.click 100 (Dom.id "guild_createGuildSubmit")
-                , admin.click 100 (Dom.id "guild_openChannel_0")
-                , E2EHelper.openDm admin 100 "0"
-                , admin.click 100 (Dom.id "guild_showMembers")
-                , admin.click 100 (Dom.id "guild_e2eeSection")
-                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
-                , addPrivateKeyToAccount admin
-                    (\adminPrivateKey ->
-                        [ admin.click 100 (Dom.id "guild_enableE2ee")
-                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
-                        , respondToSharedSecretStored admin Broadcast.adminUserId
-                        , admin.click 100 (Dom.id "guild_hideMembers")
-
-                        -- More messages than fit in a page, so a device loading the
-                        -- conversation gets the most recent ones and has to scroll up for
-                        -- the rest.
-                        , List.range 1 (VisibleMessages.pageSize + 5)
-                            |> List.map
-                                (\index ->
-                                    T.group
-                                        [ E2EHelper.writeMessage admin 100 (olderMessage index)
-                                        , respondToMessageEncrypted admin
-                                        ]
-                                )
-                            |> T.group
-                        , T.checkBackend
-                            100
-                            (checkSoloDmMessageCount (VisibleMessages.pageSize + 5))
-                        , T.connectFrontend
-                            100
-                            E2EHelper.sessionId0
-                            "/"
-                            E2EHelper.desktopWindow
-                            (\adminB ->
-                                [ T.andThen
-                                    10
-                                    (\data ->
-                                        [ adminB.portEvent
-                                            0
-                                            "load_startup_data_from_js"
-                                            (E2EHelper.startupDataJsonWithE2eeKeys
-                                                data.time
-                                                E2EHelper.firefoxDesktop
-                                                [ Broadcast.adminUserId ]
-                                            )
-                                        ]
-                                    )
-                                , adminB.click 100 (Dom.id "guild_friendLabel_0")
-                                , respondToManyMessagesDecrypted adminB
-                                , adminB.checkView
-                                    100
-                                    (Test.Html.Query.has
-                                        [ Test.Html.Selector.exactText (olderMessage (VisibleMessages.pageSize + 5)) ]
-                                    )
-                                , adminB.checkView
-                                    100
-                                    (Test.Html.Query.hasNot
-                                        [ Test.Html.Selector.exactText (olderMessage 1) ]
-                                    )
-                                , T.checkState 100 (checkScrollShifts adminB 0)
-
-                                -- Scrolling up loads the rest of the conversation. The
-                                -- page arrives showing nothing at all, since nothing has
-                                -- worked out what any of it says yet: the one shift here
-                                -- is for the messages that were never encrypted, and it
-                                -- moves the reader by nothing.
-                                , E2EHelper.scrollToTop adminB
-                                , adminB.checkView
-                                    1000
-                                    (Test.Html.Query.hasNot
-                                        [ Test.Html.Selector.exactText (olderMessage 1) ]
-                                    )
-                                , T.checkState 100 (checkScrollShifts adminB 1)
-
-                                -- The answer is what actually grows the conversation, so
-                                -- the shift that keeps the reader in place belongs here.
-                                , respondToManyMessagesDecrypted adminB
-                                , adminB.checkView
-                                    100
-                                    (Test.Html.Query.has
-                                        [ Test.Html.Selector.exactText (olderMessage 1) ]
-                                    )
-                                , T.checkState 100 (checkScrollShifts adminB 2)
-                                , adminB.snapshotView 100 { name = "Older encrypted messages decrypted" }
-                                ]
-                            )
-                        ]
-                    )
-                ]
-            )
         ]
 
 

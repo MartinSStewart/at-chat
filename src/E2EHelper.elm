@@ -2534,7 +2534,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_RequestE2ee _ ->
                     True
 
-                Local_CancelE2eeRequest _ ->
+                Local_DeclineE2eeRequestAsInitiator _ ->
                     True
 
                 Local_DeclineE2eeRequest _ ->
@@ -3067,7 +3067,7 @@ allAttackerLocalChanges =
     , Local_SetMuteDiscordGuild discordUserId discordGuildId MuteSettings.IsMuted
     , Local_SetMuteGuild legitGuildId MuteSettings.IsMuted
     , Local_RequestE2ee { otherUserId = Broadcast.adminUserId }
-    , Local_CancelE2eeRequest { otherUserId = Broadcast.adminUserId }
+    , Local_DeclineE2eeRequestAsInitiator { otherUserId = Broadcast.adminUserId }
     , Local_DeclineE2eeRequest { otherUserId = Broadcast.adminUserId }
     , Local_SetPublicKey attackerPublicKey EmptyPlaceholder
     , Local_EncryptOldMessages { otherUserId = Broadcast.adminUserId } []
