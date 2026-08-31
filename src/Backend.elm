@@ -6092,66 +6092,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model
                         sessionId
                         id
-                        (\session _ _ dmChannelId dmChannel ->
-                            case dmChannel.e2ee of
-                                DmChannel.E2eeEnabled _ ->
-                                    let
-                                        model2 : BackendModel
-                                        model2 =
-                                            { model
-                                                | dmChannels =
-                                                    SeqDict.insert
-                                                        dmChannelId
-                                                        (List.foldl
-                                                            (\( threadRoute, encryptedData ) channel ->
-                                                                case threadRoute of
-                                                                    NoThreadWithMessage messageId ->
-                                                                        { channel
-                                                                            | messages =
-                                                                                DmChannel.updateArray
-                                                                                    messageId
-                                                                                    (Message.toEncrypted encryptedData)
-                                                                                    channel.messages
-                                                                        }
-
-                                                                    ViewThreadWithMessage threadId messageId ->
-                                                                        { channel
-                                                                            | threads =
-                                                                                SeqDict.updateIfExists
-                                                                                    threadId
-                                                                                    (\thread ->
-                                                                                        { thread
-                                                                                            | messages =
-                                                                                                DmChannel.updateArray
-                                                                                                    messageId
-                                                                                                    (Message.toEncrypted encryptedData)
-                                                                                                    thread.messages
-                                                                                        }
-                                                                                    )
-                                                                                    channel.threads
-                                                                        }
-                                                            )
-                                                            dmChannel
-                                                            messages
-                                                        )
-                                                        model.dmChannels
-                                            }
-                                    in
-                                    ( model2
-                                    , Command.batch
-                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-
-                                        --, Broadcast.toDmChannelExcludingOne
-                                        --    clientId
-                                        --    session.userId
-                                        --    id
-                                        --    (\id2 -> Server_MessagesEncrypted id2 messages)
-                                        --    model2
-                                        ]
-                                    )
-
-                                _ ->
-                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        (\_ _ _ dmChannelId dmChannel ->
+                            BackendExtra.encryptOldMessages clientId changeId localMsg model messages dmChannelId dmChannel
                         )
 
                 Local_SetE2eeRisksAccepted isAccepted ->

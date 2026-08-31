@@ -3300,11 +3300,6 @@ updateLoaded msg model =
                         case result of
                             Ok ( publicKey, command ) ->
                                 let
-                                    -- Setting the key that is already on the account is
-                                    -- how the server is asked for anything in this user's
-                                    -- encrypted conversations that it is still holding as
-                                    -- plain text. What this device has already loaded
-                                    -- doesn't have to wait for that answer.
                                     toEncrypt : List ( Id EncryptManyRequestId, OldMessagesToEncrypt )
                                     toEncrypt =
                                         conversationsToEncrypt

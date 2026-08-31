@@ -598,6 +598,7 @@ tests config =
                                 , adminC.snapshotView 100 { name = "Enter private key on another device" }
                                 , adminC.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
                                 , respondToSharedSecretStored adminC Broadcast.adminUserId
+                                , respondToManyMessagesDecrypted adminC
                                 , writeEncryptedMessage adminC 100 "Note to self from adminB should be encrypted"
                                 , respondToMessageDecrypted admin
                                 ]
@@ -632,8 +633,7 @@ tests config =
                         , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
                         , respondToSharedSecretStored admin Broadcast.adminUserId
                         , admin.click 100 (Dom.id "guild_hideMembers")
-                        , E2EHelper.writeMessage admin 100 backlogMessage
-                        , respondToMessageEncrypted admin
+                        , writeEncryptedMessage admin 100 backlogMessage
                         , T.checkBackend 100 (checkSoloDmHasNoPlainText backlogMessage)
 
                         -- A second device with the key for this conversation loads with
@@ -706,13 +706,7 @@ tests config =
                         -- conversation gets the most recent ones and has to scroll up for
                         -- the rest.
                         , List.range 1 (VisibleMessages.pageSize + 5)
-                            |> List.map
-                                (\index ->
-                                    T.group
-                                        [ E2EHelper.writeMessage admin 100 (olderMessage index)
-                                        , respondToMessageEncrypted admin
-                                        ]
-                                )
+                            |> List.map (\index -> writeEncryptedMessage admin 100 (olderMessage index))
                             |> T.group
                         , T.checkBackend
                             100

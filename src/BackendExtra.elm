@@ -19,6 +19,7 @@ module BackendExtra exposing
     , discordGuildToFrontend
     , discordGuildToFrontendForUser
     , dmChannelsThatNeedEncrypting
+    , encryptOldMessages
     , getLinkedDiscordUsersAndOtherUsers
     , getLoginCode
     , getLoginData
@@ -3184,3 +3185,60 @@ asDiscordDmUser_AllowUserThatNeedsAuthAgain model sessionId { currentUserId, cha
 
         Nothing ->
             ( model, Command.none )
+
+
+encryptOldMessages :
+    ClientId
+    -> ChangeId
+    -> LocalChange
+    -> BackendModel
+    -> List ( ThreadRouteWithMessage, EncryptedData (ContentAndEmbeds (Id UserId)) )
+    -> DmChannelId
+    -> BackendDmChannel
+    -> ( BackendModel, Command BackendOnly ToFrontend backendMsg )
+encryptOldMessages clientId changeId localMsg model messages dmChannelId dmChannel =
+    case dmChannel.e2ee of
+        DmChannel.E2eeEnabled _ ->
+            ( { model
+                | dmChannels =
+                    SeqDict.insert
+                        dmChannelId
+                        (List.foldl
+                            (\( threadRoute, encryptedData ) channel ->
+                                case threadRoute of
+                                    NoThreadWithMessage messageId ->
+                                        { channel
+                                            | messages =
+                                                DmChannel.updateArray
+                                                    messageId
+                                                    (Message.toEncrypted encryptedData)
+                                                    channel.messages
+                                        }
+
+                                    ViewThreadWithMessage threadId messageId ->
+                                        { channel
+                                            | threads =
+                                                SeqDict.updateIfExists
+                                                    threadId
+                                                    (\thread ->
+                                                        { thread
+                                                            | messages =
+                                                                DmChannel.updateArray
+                                                                    messageId
+                                                                    (Message.toEncrypted encryptedData)
+                                                                    thread.messages
+                                                        }
+                                                    )
+                                                    channel.threads
+                                        }
+                            )
+                            dmChannel
+                            messages
+                        )
+                        model.dmChannels
+              }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        _ ->
+            ( model, invalidChangeResponse changeId clientId )
