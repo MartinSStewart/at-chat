@@ -2807,9 +2807,6 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_E2eeRequestDeclined _ _ ->
                             True
 
-                        Types.Server_MessagesEncrypted _ _ ->
-                            True
-
                         Types.Server_E2eeAccepted _ _ ->
                             True
 

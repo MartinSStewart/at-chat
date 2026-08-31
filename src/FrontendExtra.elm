@@ -5260,15 +5260,6 @@ changeUpdate localMsg local =
                 Server_E2eeRequestDeclined { otherUserId } declinedBy ->
                     LocalState.setDmE2ee otherUserId (DmChannel.E2eeDeclinedBy declinedBy) local
 
-                Server_MessagesEncrypted { otherUserId } messages ->
-                    { local
-                        | dmChannels =
-                            SeqDict.updateIfExists
-                                otherUserId
-                                (encryptOldMessages messages)
-                                local.dmChannels
-                    }
-
                 Server_SetPublicKey userId publicKey ->
                     let
                         localUser : LocalUser
