@@ -50,6 +50,7 @@ import Ui.Font
 import Ui.Input
 import Ui.Prose
 import Ui.Shadow
+import UserAgent exposing (Browser(..))
 
 
 {-| OpaqueVariants
@@ -342,34 +343,70 @@ errorView errorMessage =
         (Ui.text errorMessage)
 
 
-mobileWarning : Element msg
-mobileWarning =
+mobileWarning : Coord CssPixels -> Browser -> Element msg
+mobileWarning windowSize browser =
+    let
+        wideEnoughForIcon =
+            Coord.xRaw windowSize >= 400
+    in
     Ui.column
         [ Ui.spacing 8 ]
         [ Html.div
             []
-            [ Html.div
-                [ Html.Attributes.style "float" "left"
-                , Html.Attributes.style "width" "44px"
-                , Html.Attributes.style "height" "40px"
-                , Html.Attributes.style "margin-right" "8px"
-                ]
-                [ Icons.addApp ]
+            [ if wideEnoughForIcon then
+                Html.div
+                    [ Html.Attributes.style "float" "left"
+                    , Html.Attributes.style "width" "44px"
+                    , Html.Attributes.style "height" "40px"
+                    , Html.Attributes.style "margin-right" "4px"
+                    , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
+                    ]
+                    [ Icons.addApp ]
+
+              else
+                Html.text ""
             , Html.b
                 []
-                [ Html.text "Please install this app from the browser menu (Add\u{00A0}to\u{00A0}Home\u{00A0}Screen)" ]
+                [ Html.text
+                    ("Please install this app from the browser menu"
+                        ++ (case browser of
+                                Safari ->
+                                    " (Add\u{00A0}to\u{00A0}Home\u{00A0}Screen)"
+
+                                Chrome ->
+                                    " (Install\u{00A0}and\u{00A0}Create\u{00A0}Shortcut)"
+
+                                Firefox ->
+                                    ""
+
+                                Edge ->
+                                    ""
+
+                                Opera ->
+                                    ""
+
+                                UnknownBrowser ->
+                                    ""
+                           )
+                    )
+                ]
             ]
             |> Ui.html
         , Ui.Prose.paragraph
             [ Ui.Font.color MyUi.font3
             , Ui.Font.size 16
+            , if wideEnoughForIcon then
+                Ui.padding 4
+
+              else
+                Ui.paddingXY 0 4
             ]
             [ Ui.text "You can still use it in a browser but you're not going to have a good time." ]
         ]
 
 
-view : Maybe { a | htmlId : HtmlId, selection : Range } -> LoginForm -> Coord CssPixels -> PwaStatus -> Element Msg
-view textSelection loginForm windowSize pwaStatus =
+view : Maybe { a | htmlId : HtmlId, selection : Range } -> LoginForm -> Coord CssPixels -> PwaStatus -> Browser -> Element Msg
+view textSelection loginForm windowSize pwaStatus browser =
     let
         isMobile =
             MyUi.isMobileAlt windowSize
@@ -405,10 +442,10 @@ view textSelection loginForm windowSize pwaStatus =
                 , Ui.border 1
                 , Ui.borderColor MyUi.white
                 , Ui.rounded 8
-                , Ui.padding 16
+                , Ui.paddingXY 8 16
                 , Ui.Font.color MyUi.font1
                 ]
-                mobileWarning
+                (mobileWarning windowSize browser)
 
           else
             Ui.none

@@ -8049,6 +8049,7 @@ view _ model =
                                     (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                                     loaded.windowSize
                                     loaded.startupData.pwaStatus
+                                    loaded.startupData.userAgent.browser
                                     |> Ui.map LoginFormMsg
                                     |> FrontendExtra.layout loaded
                                         [ Ui.background MyUi.background3
@@ -8079,6 +8080,7 @@ view _ model =
                                                     loginForm2
                                                     loaded.windowSize
                                                     loaded.startupData.pwaStatus
+                                                    loaded.startupData.userAgent.browser
                                                     |> Ui.map LoginFormMsg
 
                                             Nothing ->
@@ -8150,7 +8152,10 @@ view _ model =
                                             , Ui.widthMax 380
                                             , Ui.padding 16
                                             ]
-                                            LoginForm.mobileWarning
+                                            (LoginForm.mobileWarning
+                                                loaded.windowSize
+                                                loaded.startupData.userAgent.browser
+                                            )
                                         )
 
                                   else
@@ -8209,6 +8214,7 @@ view _ model =
                                             loaded.windowSize
                                             -- Don't show PWA warning on this login screen
                                             InstalledPwa
+                                            loaded.startupData.userAgent.browser
                                             |> Ui.map LoginFormMsg
                                         ]
 
