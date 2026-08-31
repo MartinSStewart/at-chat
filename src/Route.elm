@@ -57,6 +57,7 @@ type Route
     | TextEditorRoute
     | LinkDiscord (Result LinkDiscordError Discord.UserAuth)
     | PublicGoMatchRoute (SecretId GamePublicId)
+    | E2eeInfo
 
 
 type LinkDiscordError
@@ -384,6 +385,9 @@ decode url =
         [ "go-match", goMatchPublicId ] ->
             PublicGoMatchRoute (SecretId.fromString goMatchPublicId)
 
+        [ "end-to-end-encryption" ] ->
+            E2eeInfo
+
         _ ->
             HomePageRoute
 
@@ -480,6 +484,9 @@ toChannelHeaderTab route =
         PublicGoMatchRoute _ ->
             Nothing
 
+        E2eeInfo ->
+            Nothing
+
 
 type ChannelSidebarMode
     = ChannelSidebarNotDragging { offset : Float }
@@ -572,6 +579,9 @@ toShowMembersTabVisible { sidebarMode } route =
         PublicGoMatchRoute _ ->
             ( HideChannelSettings, False )
 
+        E2eeInfo ->
+            ( HideChannelSettings, False )
+
 
 {-| Whether the member column is open. Routes that have no member column to
 open are treated as having it closed.
@@ -632,6 +642,9 @@ toShowMembersTab route =
             ( HideChannelSettings, False )
 
         PublicGoMatchRoute _ ->
+            ( HideChannelSettings, False )
+
+        E2eeInfo ->
             ( HideChannelSettings, False )
 
 
@@ -753,6 +766,9 @@ setChannelsVisible channelsVisible route =
             route
 
         PublicGoMatchRoute _ ->
+            route
+
+        E2eeInfo ->
             route
 
 
@@ -935,6 +951,9 @@ encode route =
 
                 PublicGoMatchRoute goMatchPublicId ->
                     ( [ "go-match", SecretId.toString goMatchPublicId ], [] )
+
+                E2eeInfo ->
+                    ( [ "end-to-end-encryption" ], [] )
     in
     Url.Builder.absolute path query
 
@@ -1042,6 +1061,9 @@ requiresLogin route =
             False
 
         PublicGoMatchRoute _ ->
+            False
+
+        E2eeInfo ->
             False
 
 

@@ -3215,6 +3215,9 @@ routeToViewing isMobile route local =
         PublicGoMatchRoute _ ->
             StopViewingChannel
 
+        E2eeInfo ->
+            StopViewingChannel
+
 
 guildOrDmIdToMessage :
     GuildOrDmId

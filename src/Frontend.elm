@@ -2944,6 +2944,9 @@ updateLoaded msg model =
                         PublicGoMatchRoute _ ->
                             ( model, Command.none )
 
+                        E2eeInfo ->
+                            ( model, Command.none )
+
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
                     case threadRoute of
                         NoThreadWithMessage messageId ->
@@ -5183,6 +5186,9 @@ updateLoaded msg model =
                 PublicGoMatchRoute _ ->
                     ( model, Command.none )
 
+                E2eeInfo ->
+                    ( model, Command.none )
+
         GoSpectatorMsg spectatorMsg ->
             case model.publicGoMatch of
                 PublicGoMatch_Loaded data gameModel ->
@@ -6792,6 +6798,9 @@ setShowMembers showMembers model =
         PublicGoMatchRoute _ ->
             ( model, Command.none )
 
+        E2eeInfo ->
+            ( model, Command.none )
+
 
 viewImageInfo :
     ( AnyGuildOrDmId, ThreadRoute )
@@ -7484,6 +7493,9 @@ channelSidebarTarget route =
                     2
 
                 PublicGoMatchRoute _ ->
+                    2
+
+                E2eeInfo ->
                     2
 
 
@@ -8741,6 +8753,12 @@ view _ model =
                                 PublicGoMatch_NotLoaded ->
                                     errorPage loaded "Something went wrong when loading Go match"
                             )
+
+                    E2eeInfo ->
+                        FrontendExtra.layout
+                            loaded
+                            [ Ui.background MyUi.background3 ]
+                            (Encryption.info FrontendNoOp)
         ]
     }
 

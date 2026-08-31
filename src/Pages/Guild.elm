@@ -151,7 +151,7 @@ editingText =
 
 e2eeSectionTitle : String
 e2eeSectionTitle =
-    "End-to-end encryption"
+    "End-to-end encryption (E2EE)"
 
 
 enableE2eeText : String
@@ -161,7 +161,7 @@ enableE2eeText =
 
 declineE2eeText : String
 declineE2eeText =
-    "Decline"
+    "Decline request"
 
 
 e2eeDeclinedText : String
@@ -2474,21 +2474,6 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                 "guild_e2eeAcceptRisks"
                 [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.pointer, Ui.width Ui.shrink ]
                 (Ui.text "I understand and accept the\u{00A0}risks")
-
-        requestedByOtherUser : Bool
-        requestedByOtherUser =
-            case e2ee of
-                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
-                    requestedBy /= localUser.session.userId
-
-                DmChannel.E2eeDeclinedBy _ ->
-                    False
-
-                DmChannel.E2eeDisabled ->
-                    False
-
-                DmChannel.E2eeEnabled _ ->
-                    False
     in
     MyUi.container
         16
@@ -2500,10 +2485,40 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
         e2eeSectionTitle
         [ Ui.column
             [ Ui.paddingWith { left = 8, right = 8, top = 8, bottom = 0 }, Ui.spacing 16 ]
-            [ Ui.column
+            [ case e2ee of
+                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
+                    if requestedBy == localUser.session.userId then
+                        Ui.none
+
+                    else
+                        Ui.column
+                            [ Ui.spacing 16 ]
+                            [ Ui.Prose.paragraph
+                                [ MyUi.htmlStyle "word-wrap" "anywhere", Ui.paddingXY 0 4 ]
+                                [ Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt otherUserId localUser))
+                                , Ui.text " would like to enable E2EE. You can either:"
+                                ]
+                            , MyUi.simpleButton
+                                (Dom.id "guild_declineE2ee")
+                                (PressedDeclineE2eeRequest otherUserId)
+                                (Ui.text declineE2eeText)
+                            , Ui.text "Or follow the instructions below to set it up."
+                            , Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.font1 ] Ui.none
+                            ]
+
+                DmChannel.E2eeDisabled ->
+                    Ui.none
+
+                DmChannel.E2eeDeclinedBy id ->
+                    Ui.none
+
+                DmChannel.E2eeEnabled e2eeEnabledData ->
+                    Ui.none
+            , Ui.column
                 [ Ui.attrIf risksAccepted (Ui.opacity 0.5), Ui.spacing 8 ]
                 [ MyUi.warningHeader "Before you enable E2EE:"
                 , Ui.text "You'll get a private key that you need to store in a password manager. If you lose it, you'll permanently lose access to all your encrypted messages."
+                , Ui.el [ Ui.Font.color MyUi.textLinkColor, Ui.linkNewTab (Route.encode Route.E2eeInfo) ] (Ui.text "Read more about E2EE here")
                 , Ui.row
                     []
                     [ Ui.Input.checkbox
@@ -2538,8 +2553,8 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                     (PressedEnableE2ee otherUserId)
                                     (Ui.text enableE2eeText)
 
-                DmChannel.E2eeRequestedBy _ ->
-                    if requestedByOtherUser then
+                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
+                    if requestedBy /= localUser.session.userId then
                         Ui.column
                             [ Ui.spacing 16 ]
                             [ if not risksAccepted then
@@ -2555,10 +2570,6 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                             otherUserId
                                             (Ui.text "2. Enter your private key to enable E2EE")
                                             keyInput
-                            , MyUi.simpleButton
-                                (Dom.id "guild_declineE2ee")
-                                (PressedDeclineE2eeRequest otherUserId)
-                                (Ui.text declineE2eeText)
                             ]
 
                     else if otherUserId == localUser.session.userId then
@@ -2571,12 +2582,10 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                         Ui.column
                             [ Ui.spacing 16 ]
                             [ Ui.Prose.paragraph
-                                []
-                                [ Ui.text
-                                    ("2. Waiting for "
-                                        ++ User.toStringAlt otherUserId localUser
-                                        ++ " to accept message encryption."
-                                    )
+                                [ MyUi.htmlStyle "word-wrap" "anywhere", Ui.paddingXY 0 4 ]
+                                [ Ui.text "2. Waiting for "
+                                , Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt otherUserId localUser))
+                                , Ui.text " to accept message encryption."
                                 ]
                             , MyUi.simpleButton
                                 (Dom.id "guild_cancelE2ee")

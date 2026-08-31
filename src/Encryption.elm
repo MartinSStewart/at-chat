@@ -16,6 +16,7 @@ port module Encryption exposing
     , fromJs
     , fromJsCodec
     , hash
+    , info
     , storeSharedSecret
     , toBase64
     , toJsCodec
@@ -36,14 +37,27 @@ the plaintext of a message is the only secret that crosses the port after that.
 
 -}
 
+import Array
 import Base64
 import Bytes exposing (Bytes)
 import Bytes.Decode
+import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
+import Effect.Time as Time
+import Html
+import Html.Attributes
 import Id exposing (Id, UserId, Viewing_DmId)
 import Json.Encode
+import RichText
+import SeqDict
+import SeqSet
 import Serialize
+import Sticker exposing (AnimationMode(..))
+import String.Nonempty exposing (NonemptyString(..))
+import Ui
+import Url exposing (Url)
+import UserColor
 
 
 {-| OpaqueVariants.
@@ -106,6 +120,59 @@ bytesHash bytes =
         )
         bytes
         |> Maybe.withDefault (BytesHash 0)
+
+
+info : msg -> Ui.Element msg
+info noOp =
+    NonemptyString
+        '#'
+        """ End-to-end encryption (E2EE) in at-chat
+
+
+## Quick summary of E2EE
+With E2EE enabled your messages are encrypted when stored on the server. This means, even if a hacker gets access to server data, they won't be able to read your conversation.
+
+
+## Limitations
+* One of the web's best features is that it's very easy to distribute new versions of a website/webapp. Unfortunately for E2EE this is a disadvantage. Anyone with the power to change what JS code the server sends to a client (either a hacker or malicious admin) can modify the webapp to covertly spy on you since messages are not encrypted once loaded on your webapp).
+* Because Browsers can't be relied upon to store data indefinitely, some compromises have been made to user experience. [Forward secrecy](https://en.wikipedia.org/wiki/Forward_secrecy) is not supported and you have to manually store your private key outside of at-chat.
+* Browser extensions or other 3rd party JS can also potentially spy on your conversation
+
+For these reasons, consider at-chat's E2EE "best effort". It will protect you from a lazy malicious admin (who can't be bothered of going through the trouble of deploying spyware to the client) and from a hacker who gets read-only access to the server.
+
+If privacy is important to you, Signal is probably a better choice.
+
+
+## What exactly gets encrypted
+at-chat only encrypts message contents and attached file contents. Metadata such as timestamps, reactions, sender ID, number of attached files, and drawings are not encrypted.
+"""
+        |> RichText.fromNonemptyString Time.utc SeqDict.empty
+        |> RichText.view
+            (Dom.id "e2ee-info")
+            1000
+            (\_ -> noOp)
+            (\_ -> noOp)
+            (\_ -> noOp)
+            { domainWhitelist = SeqSet.empty
+            , revealedSpoilers = SeqSet.empty
+            , users = SeqDict.empty
+            , attachedFiles = SeqDict.empty
+            , stickers = SeqDict.empty
+            , customEmojis = SeqDict.empty
+            , animationMode = LoopAFewTimesOnLoad
+            , timezone = Time.utc
+            , time = Time.millisToPosix 0
+            , drawings = SeqDict.empty
+            , embedDrawings = SeqDict.empty
+            , drawingUserColor = \_ -> UserColor.default
+            , isSelectingAnchor = False
+            , devicePixelRatio = 1
+            , isHovered = False
+            }
+            Array.empty
+        |> Html.div [ Html.Attributes.style "white-space" "pre-wrap" ]
+        |> Ui.html
+        |> Ui.el [ Ui.centerX, Ui.widthMax 1000, Ui.paddingXY 16 32 ]
 
 
 

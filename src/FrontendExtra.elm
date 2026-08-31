@@ -734,6 +734,9 @@ canDropFiles isMobile currentUserId route =
         PublicGoMatchRoute _ ->
             Nothing
 
+        E2eeInfo ->
+            Nothing
+
 
 canDropFileHelper :
     AnyGuildOrDmId
@@ -1841,6 +1844,9 @@ routeRequest previousRoute newRoute model =
             ( { model2 | publicGoMatch = PublicGoMatch_Loading }
             , Lamdera.sendToBackend (GetPublicGoMatchRequest publicGoMatchId)
             )
+
+        E2eeInfo ->
+            ( model2, Command.none )
     )
         |> Tuple.mapSecond (\a -> Command.batch [ viewCmd, a ])
 

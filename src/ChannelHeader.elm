@@ -974,6 +974,9 @@ tabBodyView isMobile local loggedIn model =
         PublicGoMatchRoute _ ->
             Nothing
 
+        E2eeInfo ->
+            Nothing
+
 
 gameTabBody :
     GuildOrDmId
