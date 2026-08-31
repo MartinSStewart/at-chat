@@ -335,15 +335,6 @@ type alias UserTextMessageData messageId userId =
     }
 
 
-{-| Swaps a message the server can read for the ciphertext a device made of it.
-
-Encryption gets turned on partway through a conversation, so everything written before
-then is sitting on the server as plain text until somebody who holds the key replaces it.
-Anything that was never plain text in the first place, or that somebody has already got
-to, is left alone: both people in the conversation can do this and only the first of them
-has any work to do.
-
--}
 toEncrypted : EncryptedData (ContentAndEmbeds userId) -> Message messageId userId -> Message messageId userId
 toEncrypted encryptedData message =
     case message of

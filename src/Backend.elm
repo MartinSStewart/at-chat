@@ -6040,9 +6040,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         DmChannel.E2eeDisabled ->
                                             True
 
-                                        -- Whoever turned a request down has the next word
-                                        -- on the matter, so asking again is theirs to do
-                                        -- rather than the person they said no to.
                                         DmChannel.E2eeDeclinedBy declinedBy ->
                                             declinedBy == session.userId
 

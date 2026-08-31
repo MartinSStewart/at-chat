@@ -282,13 +282,6 @@ type alias LoggedIn2 =
     }
 
 
-{-| What this device has asked the browser to encrypt or decrypt and hasn't heard back
-about, along with the number the next request of each kind will go out under.
-
-The browser answers with the number it was asked under and nothing else, so what a reply
-is about is only knowable from what is kept here.
-
--}
 type alias EncryptionRequests =
     { pendingEncryptedMessages : SeqDict (Id EncryptRequestId) PendingEncryptedMessage
     , nextEncryptionRequestId : Id EncryptRequestId
@@ -317,28 +310,12 @@ type alias PendingDecryptedMessage =
     }
 
 
-{-| The messages handed over to be encrypted after the fact, and where each one came
-from.
-
-The browser answers in the order it was asked rather than naming anything, so this is
-what turns its answer back into a change the server can apply.
-
--}
 type alias PendingEncryptedManyMessages =
     { id : Viewing_DmId
     , messages : List ( ThreadRouteWithMessage, ContentAndEmbeds (Id UserId) )
     }
 
 
-{-| What is left to do once the browser says what a batch of encrypted messages contains.
-
-An encrypted message shows nothing at all until its contents are worked out, so a batch
-of older ones loaded by scrolling up takes up no room when it arrives and only pushes the
-conversation down once the answer comes back. The message to measure the scroll from
-waits here until then. The backlog handed over as the page loads has nothing waiting on
-it.
-
--}
 type alias PendingDecryptedManyMessages =
     { shiftScrollFrom : Maybe HtmlId
     }

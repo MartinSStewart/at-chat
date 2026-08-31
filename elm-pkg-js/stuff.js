@@ -47,22 +47,14 @@ function e2eeWithStore(mode, run) {
     }));
 }
 
-// Both encryption ports carry Bytes rather than JSON, so what arrives here is a DataView
-// holding an elm-serialize encoding and what goes back has to be one too. The format is
-// all big endian: a one byte version, then a two byte variant tag counting from zero,
-// then the variant's fields in order. An Int is a float64, and a String or Bytes field is
-// a four byte length followed by that many bytes.
-
 const e2eeSerializeVersion = 1;
 
-// The ToJs variants, in the order Encryption.toJsCodec defines them.
 const e2eeToJsStoreSharedSecret = 0;
 const e2eeToJsEncryptMessage = 1;
 const e2eeToJsDecryptMessage = 2;
 const e2eeToJsDecryptManyMessages = 3;
 const e2eeToJsEncryptManyMessages = 4;
 
-// The FromJs variants, in the order Encryption.fromJsCodec defines them.
 const e2eeFromJsSharedSecretStored = 0;
 const e2eeFromJsSharedSecretFailed = 1;
 const e2eeFromJsMessageEncrypted = 2;
@@ -85,10 +77,6 @@ function e2eeReadToJs(dataView) {
             };
 
         case e2eeToJsEncryptMessage:
-            // Whatever Elm serialized the message into is the last field and is written
-            // by its own codec rather than as Bytes, so it has no length of its own and
-            // runs to the end of the buffer. It stays opaque here: this side only
-            // encrypts it.
             return {
                 tag: "encrypt-message",
                 requestId: dataView.getFloat64(3, false),
@@ -106,8 +94,6 @@ function e2eeReadToJs(dataView) {
             };
 
         case e2eeToJsDecryptManyMessages: {
-            // A List is four bytes of length, then that many Bytes fields one after
-            // another.
             const count = dataView.getUint32(19, false);
             const messages = [];
             let offset = 23;
@@ -127,8 +113,6 @@ function e2eeReadToJs(dataView) {
         }
 
         case e2eeToJsEncryptManyMessages: {
-            // Elm serialized each message on its own before sending, so unlike the single
-            // message case these do carry a length and can be told apart here.
             const count = dataView.getUint32(19, false);
             const messages = [];
             let offset = 23;
@@ -152,7 +136,6 @@ function e2eeReadToJs(dataView) {
     }
 }
 
-// A Bytes field: four bytes of length, then that many bytes.
 function e2eeReadBytesField(dataView, offset) {
     return new Uint8Array(
         dataView.buffer,
@@ -160,10 +143,6 @@ function e2eeReadBytesField(dataView, offset) {
         dataView.getUint32(offset, false));
 }
 
-// The 48 bits Elm keys its cache of decrypted messages by. It has to survive a round trip
-// through Serialize.int, which is a float64, so it can be at most 53 bits; 32 would be
-// small enough that two messages colliding is a real possibility, and 64 doesn't fit.
-// The top 6 bytes of a SHA-256 give 48 of them.
 async function e2eeBytesHash(bytes) {
     const digest = new DataView(await crypto.subtle.digest("SHA-256", bytes));
     return digest.getUint16(0, false) * 4294967296 + digest.getUint32(2, false);
@@ -188,8 +167,6 @@ function e2eeIdAndTextMessage(variant, id, text) {
     return out;
 }
 
-// FromJs_MessageEncrypted carries the hash twice: once on its own, which is what Elm keys
-// its cache by, and once inside the EncryptedData beside the bytes it belongs to.
 function e2eeMessageEncryptedMessage(requestId, hash, bytes) {
     const out = new DataView(new ArrayBuffer(31 + bytes.length));
     out.setUint8(0, e2eeSerializeVersion);
@@ -202,10 +179,6 @@ function e2eeMessageEncryptedMessage(requestId, hash, bytes) {
     return out;
 }
 
-// The hash comes back beside the request id because Elm files a decrypted message under
-// the hash of the bytes it came from. The plaintext is whatever Elm serialized in the
-// first place, so it goes back as it is for Elm's own codec to read, with no length of
-// its own.
 function e2eeMessageDecryptedMessage(requestId, hash, bytes) {
     const out = new DataView(new ArrayBuffer(19 + bytes.length));
     out.setUint8(0, e2eeSerializeVersion);
@@ -216,9 +189,6 @@ function e2eeMessageDecryptedMessage(requestId, hash, bytes) {
     return out;
 }
 
-// One reply for a whole conversation: the request id, then a list of the hash each
-// message was filed under beside whether it could be read. A Result is a variant tag,
-// with Err first, and an Err () has nothing after it.
 function e2eeManyMessagesDecryptedMessage(requestId, results) {
     const bodies = results.map(({ plainText }) =>
         plainText === null ? new Uint8Array(0) : plainText);
@@ -243,9 +213,6 @@ function e2eeManyMessagesDecryptedMessage(requestId, results) {
     return out;
 }
 
-// One reply for a whole conversation: the request id, then a list of EncryptedData, each
-// of which is the hash the ciphertext will be filed under followed by the ciphertext
-// itself.
 function e2eeManyMessagesEncryptedMessage(requestId, results) {
     const size = 11 + 4 + results.reduce((n, r) => n + 8 + 4 + r.cipherText.length, 0);
     const out = new DataView(new ArrayBuffer(size));
@@ -311,7 +278,6 @@ async function loadAudio(url, context, sounds) {
         sounds[url] = null;
     }
 }
-
 
 
 exports.init = async function init(app)
@@ -1045,8 +1011,6 @@ exports.init = async function init(app)
                         message.requestId, await e2eeBytesHash(combined), combined));
 
             } else if (message.tag === "decrypt-message") {
-                // The reply is filed under the hash of the bytes that came in, which is
-                // the same hash the EncryptedData holding them already carries.
                 const hash = await e2eeBytesHash(message.data);
                 const key = await e2eeWithStore(
                     "readonly", store => store.get(message.otherUserId));
@@ -1057,7 +1021,6 @@ exports.init = async function init(app)
                     return;
                 }
 
-                // The IV was prepended when this was encrypted, so it comes off the front.
                 const plainText = await crypto.subtle.decrypt(
                     { name: "AES-GCM", iv: message.data.slice(0, 12) },
                     key,
@@ -1071,8 +1034,6 @@ exports.init = async function init(app)
                 const key = await e2eeWithStore(
                     "readonly", store => store.get(message.otherUserId));
 
-                // The key is looked up once for the whole conversation, which is the
-                // point of asking about them together.
                 const results = await Promise.all(message.data.map(async (bytes) => {
                     const hash = await e2eeBytesHash(bytes);
 
@@ -1083,8 +1044,6 @@ exports.init = async function init(app)
                             { name: "AES-GCM", iv: bytes.slice(0, 12) }, key, bytes.slice(12));
                         return { hash: hash, plainText: new Uint8Array(plainText) };
                     } catch (e) {
-                        // One message that can't be read shouldn't cost the rest of the
-                        // conversation, so it is reported on its own.
                         return { hash: hash, plainText: null };
                     }
                 }));
@@ -1096,9 +1055,6 @@ exports.init = async function init(app)
                 const key = await e2eeWithStore(
                     "readonly", store => store.get(message.otherUserId));
 
-                // Unlike decrypting, one message failing here means the key is missing
-                // and every other one would fail the same way, so the whole conversation
-                // is reported at once rather than message by message.
                 if (!key) {
                     app.ports.encryption_from_js.send(
                         e2eeIdAndTextMessage(

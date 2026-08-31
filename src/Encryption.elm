@@ -123,15 +123,6 @@ decryptMessage requestId id (EncryptedData _ data) =
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
-{-| Everything in one conversation that was written before it was encrypted, handed over
-in one go to be turned into ciphertext.
-
-The browser answers in the order it was asked, so the caller keeps its own list of which
-message each one came from rather than the two sides agreeing on names for them. Each
-message is serialized here rather than left to the codec of the list, since the browser
-has to be able to tell where one ends and the next begins without understanding either.
-
--}
 encryptManyMessages :
     Id EncryptManyRequestId
     -> Viewing_DmId
@@ -150,12 +141,6 @@ encryptManyMessages requestId id dataCodec messages =
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
-{-| Everything in one conversation that still needs decrypting, asked for in one go.
-
-A page load can find hundreds of messages waiting, and asking about them one at a time
-would mean a port round trip each. The browser only has to look the key up once this way.
-
--}
 decryptManyMessages : Id DecryptManyRequestId -> Viewing_DmId -> List (EncryptedData a) -> Command FrontendOnly toMsg msg
 decryptManyMessages requestId id messages =
     Serialize.encodeToBytes

@@ -3348,9 +3348,6 @@ updateLoaded msg model =
                                                 DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
                                                     requestedBy /= local.localUser.session.userId || otherUserId == local.localUser.session.userId
 
-                                                -- A request that was turned down isn't
-                                                -- waiting on an answer, so a key typed in
-                                                -- here has nothing to accept.
                                                 DmChannel.E2eeDeclinedBy _ ->
                                                     False
 
@@ -3431,8 +3428,6 @@ updateLoaded msg model =
                             FrontendExtra.handleDecryptedMessage requestId bytesHash (Err ()) model loggedIn
 
                         Ok (Encryption.FromJs_ManyMessagesDecrypted requestId results) ->
-                            -- These were already in the conversation, so unlike a message
-                            -- that has just arrived there is nowhere to put them.
                             ( FrontendExtra.fileDecryptedMessages
                                 results
                                 (FrontendExtra.mapEncryptionRequests
@@ -3444,10 +3439,7 @@ updateLoaded msg model =
                                     )
                                     loggedIn
                                 )
-                            , -- Older messages loaded by scrolling up take up no room
-                              -- until now, so this is the moment the conversation grows
-                              -- and the scroll has to be shifted to match.
-                              case
+                            , case
                                 SeqDict.get requestId loggedIn.encryptionRequests.pendingDecryptedManyMessages
                                     |> Maybe.andThen .shiftScrollFrom
                               of
@@ -3464,9 +3456,6 @@ updateLoaded msg model =
                             case SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedManyMessages of
                                 Just pending ->
                                     let
-                                        -- The browser answers in the order it was asked,
-                                        -- so pairing the two lists up is what says which
-                                        -- message each piece of ciphertext belongs to.
                                         pairs :
                                             List
                                                 ( ( ThreadRouteWithMessage, ContentAndEmbeds (Id UserId) )
@@ -3485,9 +3474,6 @@ updateLoaded msg model =
                                             |> Local_EncryptOldMessages pending.id
                                             |> Just
                                         )
-                                        -- This device just read these out to encrypt
-                                        -- them, so it doesn't have to ask what they say
-                                        -- to go on showing them.
                                         (FrontendExtra.fileDecryptedMessages
                                             (List.map
                                                 (\( ( _, contentAndEmbeds ), encryptedData ) ->
@@ -3506,8 +3492,6 @@ updateLoaded msg model =
                                     ( loggedIn, Command.none )
 
                         Ok (Encryption.FromJs_ManyMessagesEncryptFailed requestId error) ->
-                            -- The messages stay as they were, so nothing is lost by this
-                            -- and the next device to hold the key can try again.
                             ( FrontendExtra.mapEncryptionRequests
                                 (forgetEncryptManyRequest requestId)
                                 { loggedIn | e2eeError = Just error }
@@ -7797,12 +7781,8 @@ updateLoadedFromBackend msg model =
                                     loggedIn.games
                       }
                     , Command.batch
-                        [ -- Everything written before the conversation was encrypted, now
-                          -- that this device is holding a key that can encrypt it.
-                          List.map encryptConversation oldMessagesToEncrypt |> Command.batch
-                        , -- The scroll shift that goes with these waits for the answer,
-                          -- since they take up no room in the conversation until then.
-                          case loadedEncryptedMessages of
+                        [ List.map encryptConversation oldMessagesToEncrypt |> Command.batch
+                        , case loadedEncryptedMessages of
                             Just loaded ->
                                 Encryption.decryptManyMessages
                                     loggedIn.encryptionRequests.nextDecryptManyRequestId
@@ -9030,9 +9010,6 @@ storeRemainingSharedSecrets alreadyHandled privateKey loggedIn =
             )
 
 
-{-| Notes that a conversation has gone off to be decrypted in one go, so that the answer
-can be matched to what was waiting on it.
--}
 rememberDecryptManyRequest : PendingDecryptedManyMessages -> EncryptionRequests -> EncryptionRequests
 rememberDecryptManyRequest pending requests =
     { requests
@@ -9042,9 +9019,6 @@ rememberDecryptManyRequest pending requests =
     }
 
 
-{-| Notes the conversations that have gone off to be encrypted, each under the number it
-was sent out with.
--}
 rememberEncryptManyRequests :
     List ( Id EncryptManyRequestId, OldMessagesToEncrypt )
     -> EncryptionRequests
@@ -9075,23 +9049,12 @@ forgetEncryptManyRequest requestId requests =
     }
 
 
-{-| One conversation's worth of messages written before it was encrypted, ready to be
-handed to the browser.
--}
 type alias OldMessagesToEncrypt =
     { id : Viewing_DmId
     , messages : List ( ThreadRouteWithMessage, ContentAndEmbeds (Id UserId) )
     }
 
 
-{-| The server answers a private key being set with everything in the user's encrypted
-conversations that is still sitting on it as plain text, since this device is the only
-thing that can do anything about that.
-
-Each conversation is a request of its own, so the browser only looks a key up once per
-conversation and an answer says which one it is about.
-
--}
 messagesNeedingEncryption :
     Id EncryptManyRequestId
     -> LocalChange
@@ -9108,9 +9071,6 @@ messagesNeedingEncryption nextRequestId localChange =
             []
 
 
-{-| Flattens each conversation into the order it will be handed over in, since the browser
-answers in that order and says nothing else about which message is which.
--}
 conversationsToEncrypt :
     Id EncryptManyRequestId
     -> SeqDict Viewing_DmId ChannelDataToEncrypt
@@ -9139,17 +9099,6 @@ conversationsToEncrypt nextRequestId conversations =
         (SeqDict.toList conversations)
 
 
-{-| Everything in the conversations this device has loaded that is still sitting on the
-server as plain text.
-
-The server is asked for the same thing, but its answer takes a round trip and an encrypted
-message shows nothing at all until this device works out what it says. Encrypting what is
-already loaded means the reader watches their own messages turn into ciphertext they can
-still read rather than into nothing. Whatever the server names that had not been loaded is
-picked up when its answer arrives, and anything named twice is encrypted twice, which
-costs a little work and no correctness.
-
--}
 locallyLoadedMessagesToEncrypt : LocalState -> SeqDict Viewing_DmId ChannelDataToEncrypt
 locallyLoadedMessagesToEncrypt local =
     SeqDict.foldl
@@ -9208,9 +9157,6 @@ plainTextLoaded messages =
         |> SeqDict.fromList
 
 
-{-| Hands one conversation's worth of messages to the browser to be turned into
-ciphertext.
--}
 encryptConversation :
     ( Id EncryptManyRequestId, OldMessagesToEncrypt )
     -> Command FrontendOnly ToBackend FrontendMsg_
@@ -9222,9 +9168,6 @@ encryptConversation ( requestId, conversation ) =
         (List.map Tuple.second conversation.messages)
 
 
-{-| Encrypted messages that have just arrived, and where the scroll should be measured
-from once the browser says what they contain.
--}
 type alias LoadedEncryptedMessages =
     { id : Viewing_DmId
     , messages : List (Encryption.EncryptedData (ContentAndEmbeds (Id UserId)))
@@ -9232,16 +9175,6 @@ type alias LoadedEncryptedMessages =
     }
 
 
-{-| An encrypted message shows nothing until this device works out what it says, so a
-batch of them arrives taking up no room at all and only pushes the conversation around
-when the answer comes back.
-
-A page of older ones, fetched by scrolling up, is the case where that matters: the scroll
-is shifted when the answer lands rather than when the page does, so that the reader stays
-where they were rather than being moved twice. Opening a conversation puts them at the
-bottom of it, so there is nothing there to keep them level with.
-
--}
 encryptedMessagesJustLoaded : LocalChange -> Maybe LoadedEncryptedMessages
 encryptedMessagesJustLoaded localChange =
     case localChange of
@@ -9284,11 +9217,6 @@ encryptedMessagesLoadedInto guildOrDmId shiftScrollFrom messagesLoaded =
             Nothing
 
 
-{-| A conversation this device has no key for is handed over all the same. Only the
-browser knows what it can read, which is why it answers for each message separately, and
-being told so is how the view learns to say the message can't be read rather than showing
-nothing at all.
--}
 encryptedMessagesInConversation :
     Viewing_DmId
     -> Maybe HtmlId

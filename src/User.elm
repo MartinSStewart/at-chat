@@ -896,10 +896,7 @@ type alias LocalUser =
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , emojiData : Maybe Emoji.CachedEmojiData
-    , -- The contents of encrypted messages, which only this device can work out. This
-      -- sits outside the Local_/Server_ changes and is kept here so that a message view
-      -- can read it without another parameter.
-      decryptedMessages : SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
+    , decryptedMessages : SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
     }
 
 

@@ -1945,14 +1945,6 @@ dmChannelsThatNeedEncrypting session dmChannels =
         dmChannels
 
 
-{-| The messages in a conversation that are still stored as plain text.
-
-Encryption is turned on partway through a conversation rather than at the start of one,
-so everything written before then is sitting on the server in the clear. A device holding
-the key is the only thing that can do anything about that, so it is handed the contents
-to encrypt.
-
--}
 plainTextMessages :
     IdArray messageId (Message messageId (Id UserId))
     -> SeqDict (Id messageId) (ContentAndEmbeds (Id UserId))

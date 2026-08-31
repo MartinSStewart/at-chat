@@ -1846,9 +1846,6 @@ routeRequest previousRoute newRoute model =
         |> Tuple.mapSecond (\a -> Command.batch [ viewCmd, a ])
 
 
-{-| The requests this device has out with the browser are a record of their own, so
-anything that starts or finishes one reaches through this.
--}
 mapEncryptionRequests : (EncryptionRequests -> EncryptionRequests) -> LoggedIn2 -> LoggedIn2
 mapEncryptionRequests func loggedIn =
     { loggedIn | encryptionRequests = func loggedIn.encryptionRequests }
@@ -7275,14 +7272,6 @@ handleDecryptedMessage requestId bytesHash result model loggedIn =
             ( loggedIn, Command.none )
 
 
-{-| Swaps the plain text messages a conversation was holding for the ciphertext somebody
-made of them.
-
-Both people in an encrypted conversation are handed the same backlog to encrypt, so the
-second of them to get around to it finds the work already done. Message.toEncrypted
-leaves anything that is no longer plain text alone, which is what makes that harmless.
-
--}
 encryptOldMessages :
     List ( ThreadRouteWithMessage, EncryptedData (ContentAndEmbeds (Id UserId)) )
     -> FrontendDmChannel
@@ -7321,10 +7310,6 @@ encryptOldMessages messages dmChannel =
         messages
 
 
-{-| Files what the browser worked out encrypted messages to say. Only this device can
-work them out, so they sit outside the Local\_/Server\_ changes and both copies of the
-local state are given them.
--}
 fileDecryptedMessages :
     List ( BytesHash, Result () (ContentAndEmbeds (Id UserId)) )
     -> LoggedIn2

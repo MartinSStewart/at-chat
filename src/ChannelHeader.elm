@@ -72,8 +72,6 @@ showDmSettingsRedDot otherUserId local loggedIn =
                     requestedBy /= local.localUser.session.userId
 
                 DmChannel.E2eeDeclinedBy declinedBy ->
-                    -- Being turned down is news to whoever asked, and the section is the
-                    -- only place it is written down.
                     declinedBy /= local.localUser.session.userId
 
                 DmChannel.E2eeDisabled ->

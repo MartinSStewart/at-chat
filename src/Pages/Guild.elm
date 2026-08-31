@@ -164,9 +164,6 @@ declineE2eeText =
     "Decline"
 
 
-{-| Shown to whoever asked, once the other person has said no. It ends by saying who can
-ask next, since the button to do it has gone.
--}
 e2eeDeclinedText : String
 e2eeDeclinedText =
     "declined your request to enable E2EE Only they can start one now."
@@ -177,10 +174,6 @@ youDeclinedE2eeText =
     "You declined the request to to enable E2EE."
 
 
-{-| Shown to whoever asked, on the device they asked from, once the other person has
-accepted. It says what happened as well as what to do, since this is the first they hear
-of the answer.
--}
 requestAcceptedText : String
 requestAcceptedText =
     "accepted and E2EE is now enabled. Enter your private key here to decrypted messages"
@@ -2562,9 +2555,6 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                             otherUserId
                                             (Ui.text "2. Enter your private key to enable E2EE")
                                             keyInput
-
-                            -- Turning the request down takes nothing but the decision, so
-                            -- this sits outside the steps that lead to accepting it.
                             , MyUi.simpleButton
                                 (Dom.id "guild_declineE2ee")
                                 (PressedDeclineE2eeRequest otherUserId)
@@ -2615,8 +2605,6 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                             ]
 
                     else
-                        -- Asking again is theirs to do rather than this user's, so there
-                        -- is nothing to press underneath.
                         Ui.Prose.paragraph
                             []
                             [ Ui.text (User.toStringAlt otherUserId localUser ++ " " ++ e2eeDeclinedText) ]
@@ -5000,10 +4988,6 @@ decodeMessageView packed =
     }
 
 
-{-| The friends column and the labels in it are both one argument over what their lazy
-wrappers take, so each packs its one flag in with the time the same way a message view
-packs its own. The time is already rounded to the minute by the time it gets here.
--}
 encodeFriendsColumn : Bool -> Int -> Int
 encodeFriendsColumn canScroll time =
     (if canScroll then
