@@ -1,5 +1,6 @@
 module E2EEncryption exposing
     ( backlogDecryptedOnLoadTest
+    , declineE2eeRequestTest
     , endToEndEncryptionAcceptTest
     , endToEndEncryptionRequestTest
     , olderMessagesDecryptedTest
@@ -184,6 +185,81 @@ endToEndEncryptionRequestTest config =
                 ]
             )
         ]
+
+
+{-| Being asked to encrypt a conversation is a request rather than something done to you,
+so the person on the other end can turn it down. Nothing about the answer needs a key or
+an understanding of what encryption costs, so the button to decline sits in front of the
+steps that lead to accepting rather than behind them.
+-}
+declineE2eeRequestTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+declineE2eeRequestTest config =
+    E2EHelper.startTest
+        "Decline a request to start end-to-end encryption"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.openDm admin 100 "2"
+                , E2EHelper.openDm user 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\_ ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.id "guild_cancelE2ee" ])
+
+                        -- The request opens the section on its own, and the answer is
+                        -- there to give straight away: no risks accepted, no key made.
+                        , user.click 100 (Dom.id "guild_showMembers")
+                        , user.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.declineE2eeText ])
+                        , user.click 100 (Dom.id "guild_declineE2ee")
+                        , user.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.declineE2eeText ])
+                        , T.checkBackend 100 checkDmIsNotEncrypted
+
+                        -- The person who asked is left where they started rather than
+                        -- waiting on an answer that isn't coming.
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_cancelE2ee" ])
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
+                        , admin.snapshotView 100 { name = "Encryption request was declined" }
+
+                        -- Nothing about declining stops it being asked again.
+                        , admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.id "guild_cancelE2ee" ])
+                        , user.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.declineE2eeText ])
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+checkDmIsNotEncrypted : BackendModel2 -> Result String ()
+checkDmIsNotEncrypted backend =
+    case adminDmChannel backend |> Maybe.map .e2ee of
+        Just DmChannel.E2eeDisabled ->
+            Ok ()
+
+        _ ->
+            Err "The declined request should have left the DM unencrypted on the backend"
 
 
 {-| Accepting a request is what actually turns encryption on: both people work out the

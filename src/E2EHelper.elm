@@ -2528,6 +2528,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_CancelE2eeRequest _ ->
                     True
 
+                Local_DeclineE2eeRequest _ ->
+                    True
+
                 Local_SetPublicKey _ ->
                     -- Setting the key on your own account is what this is for, so the
                     -- attacker succeeding at it against themselves is not a leak.
@@ -3047,6 +3050,7 @@ allAttackerLocalChanges =
     , Local_SetMuteGuild legitGuildId MuteSettings.IsMuted
     , Local_RequestE2ee { otherUserId = Broadcast.adminUserId }
     , Local_CancelE2eeRequest { otherUserId = Broadcast.adminUserId }
+    , Local_DeclineE2eeRequest { otherUserId = Broadcast.adminUserId }
     , Local_SetPublicKey attackerPublicKey
     , Local_SetE2eeRisksAccepted True
     , Local_AcceptE2ee { otherUserId = Broadcast.adminUserId } startTime

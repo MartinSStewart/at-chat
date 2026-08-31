@@ -359,6 +359,9 @@ pendingChangesText localChange =
         Local_CancelE2eeRequest _ ->
             "Cancelled the end-to-end encryption request"
 
+        Local_DeclineE2eeRequest _ ->
+            "Declined the end-to-end encryption request"
+
         Local_SetPublicKey _ ->
             "Added a private key to the account"
 
@@ -2373,6 +2376,9 @@ isPressMsg msg =
         PressedCancelE2eeRequest _ ->
             True
 
+        PressedDeclineE2eeRequest _ ->
+            True
+
         TypedPrivateKey _ _ ->
             False
 
@@ -3823,6 +3829,9 @@ changeUpdate localMsg local =
                         local
 
                 Local_CancelE2eeRequest { otherUserId } ->
+                    LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
+
+                Local_DeclineE2eeRequest { otherUserId } ->
                     LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
 
                 Local_SendEncryptedMessage createdAt { otherUserId } content threadRouteWithRepliedTo attachedFiles ->

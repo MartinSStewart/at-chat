@@ -6223,6 +6223,55 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
+                Local_DeclineE2eeRequest id ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session _ _ dmChannelId dmChannel ->
+                            case dmChannel.e2ee of
+                                DmChannel.E2eeRequestedBy requestedBy ->
+                                    -- Turning down your own request is what cancelling is
+                                    -- for, except in a DM with yourself where there is
+                                    -- nobody else to answer it.
+                                    if requestedBy == session.userId && (session.userId /= id.otherUserId) then
+                                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                    else
+                                        let
+                                            model2 : BackendModel
+                                            model2 =
+                                                { model
+                                                    | dmChannels =
+                                                        SeqDict.insert
+                                                            dmChannelId
+                                                            { dmChannel | e2ee = DmChannel.E2eeDisabled }
+                                                            model.dmChannels
+                                                }
+                                        in
+                                        ( model2
+                                        , Command.batch
+                                            [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+
+                                            -- The request is gone either way, so the
+                                            -- person who made it is told the same thing
+                                            -- as when they withdraw it themselves.
+                                            , Broadcast.toDmChannelExcludingOne
+                                                clientId
+                                                session.userId
+                                                id
+                                                Server_E2eeRequestCancelled
+                                                model2
+                                            ]
+                                        )
+
+                                DmChannel.E2eeDisabled ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                DmChannel.E2eeEnabled _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
         TwoFactorToBackend toBackend2 ->
             BackendExtra.asUser
                 model

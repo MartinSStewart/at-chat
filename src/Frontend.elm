@@ -3254,6 +3254,17 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedDeclineE2eeRequest otherUserId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_DeclineE2eeRequest { otherUserId = otherUserId } |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
         TypedPrivateKey otherUserId text ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->

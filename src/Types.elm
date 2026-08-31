@@ -618,6 +618,7 @@ type FrontendMsg_
     | PressedE2eeRisksAccepted Bool
     | PressedEnableE2ee (Id UserId)
     | PressedCancelE2eeRequest (Id UserId)
+    | PressedDeclineE2eeRequest (Id UserId)
     | TypedPrivateKey (Id UserId) String
     | PageHasFocusChanged Bool
     | GotServiceWorkerMessage String
@@ -1128,6 +1129,7 @@ type LocalChange
     | Local_SetMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
     | Local_RequestE2ee Viewing_DmId
     | Local_CancelE2eeRequest Viewing_DmId
+    | Local_DeclineE2eeRequest Viewing_DmId
     | Local_SetPublicKey X25519.PublicKey
     | Local_SetE2eeRisksAccepted Bool
     | Local_AcceptE2ee Viewing_DmId Time.Posix

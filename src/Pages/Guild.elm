@@ -9,6 +9,7 @@ module Pages.Guild exposing
     , chatWithText
     , confirmLeaveGuildText
     , conversationContainerId
+    , declineE2eeText
     , decodeMessageView
     , deleteGuildText
     , directMessagesText
@@ -152,6 +153,11 @@ e2eeSectionTitle =
 enableE2eeText : String
 enableE2eeText =
     "Enable end-to-end encryption"
+
+
+declineE2eeText : String
+declineE2eeText =
+    "Decline"
 
 
 chatWithText : String
@@ -2511,19 +2517,29 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
 
                 DmChannel.E2eeRequestedBy _ ->
                     if requestedByOtherUser then
-                        if not risksAccepted then
-                            Ui.none
+                        Ui.column
+                            [ Ui.spacing 16 ]
+                            [ if not risksAccepted then
+                                Ui.none
 
-                        else
-                            case localUser.user.publicKey of
-                                Nothing ->
-                                    createPrivateKeyButton
+                              else
+                                case localUser.user.publicKey of
+                                    Nothing ->
+                                        createPrivateKeyButton
 
-                                Just _ ->
-                                    privateKeyInput
-                                        otherUserId
-                                        "2. Enter your private key to start encrypting this conversation."
-                                        keyInput
+                                    Just _ ->
+                                        privateKeyInput
+                                            otherUserId
+                                            "2. Enter your private key to start encrypting this conversation."
+                                            keyInput
+
+                            -- Turning the request down takes nothing but the decision, so
+                            -- this sits outside the steps that lead to accepting it.
+                            , MyUi.simpleButton
+                                (Dom.id "guild_declineE2ee")
+                                (PressedDeclineE2eeRequest otherUserId)
+                                (Ui.text declineE2eeText)
+                            ]
 
                     else if otherUserId == localUser.session.userId then
                         privateKeyInput
