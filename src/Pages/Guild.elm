@@ -2417,7 +2417,7 @@ or closes it themselves.
 e2eeSectionIsExpanded : Id UserId -> LocalState -> LoggedIn2 -> Bool
 e2eeSectionIsExpanded otherUserId local loggedIn =
     Maybe.withDefault
-        (LocalState.dmE2eeRequestedByOtherUser otherUserId local)
+        (ChannelHeader.showDmSettingsRedDot otherUserId local loggedIn)
         (SeqDict.get otherUserId loggedIn.e2eeSectionsExpanded)
 
 
@@ -2431,10 +2431,6 @@ dmE2eeStatus otherUserId local =
             DmChannel.E2eeDisabled
 
 
-{-| Turning end-to-end encryption on needs both people in the DM to accept the risks that
-come with it, so this section is either asking this user for that, or waiting on the
-other person to give it.
--}
 e2eeSectionView :
     LocalUser
     -> Id UserId
@@ -2530,7 +2526,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                     Just _ ->
                                         privateKeyInput
                                             otherUserId
-                                            "2. Enter your private key to start encrypting this conversation."
+                                            (Ui.text "2. Enter your private key to start encrypting this conversation.")
                                             keyInput
 
                             -- Turning the request down takes nothing but the decision, so
@@ -2544,7 +2540,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                     else if otherUserId == localUser.session.userId then
                         privateKeyInput
                             otherUserId
-                            "2. Enter your private key to start encrypting this conversation."
+                            (Ui.text "2. Enter your private key to start encrypting this conversation.")
                             keyInput
 
                     else
@@ -2574,7 +2570,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                           else
                             privateKeyInput
                                 otherUserId
-                                "3. This conversation is missing a private key in order to decrypt messages. Enter your private key here."
+                                (Ui.text "3. This device is missing a private key in order to decrypt messages. Enter your private key here.")
                                 keyInput
                         ]
             ]
@@ -2612,12 +2608,12 @@ It is a password field rather than a plain one so that a password manager recogn
 and offers to fill in the key it saved when the key was first made.
 
 -}
-privateKeyInput : Id UserId -> String -> E2eeKeyInput -> Element FrontendMsg_
+privateKeyInput : Id UserId -> Element FrontendMsg_ -> E2eeKeyInput -> Element FrontendMsg_
 privateKeyInput otherUserId prompt keyInput =
     let
         keyLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
         keyLabel =
-            Ui.Input.label "guild_e2eePrivateKey" [] (Ui.text prompt)
+            Ui.Input.label "guild_e2eePrivateKey" [] prompt
     in
     Ui.column
         [ Ui.spacing 4 ]
@@ -2634,6 +2630,7 @@ privateKeyInput otherUserId prompt keyInput =
             , label = keyLabel.id
             , show = False
             }
+            |> Ui.el [ ChannelHeader.e2eeRequestDot ]
         , case keyInput.error of
             Just error ->
                 Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)

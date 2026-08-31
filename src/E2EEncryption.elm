@@ -712,6 +712,7 @@ soloDmEncryptionTest config =
                                 , adminC.click 100 (Dom.id "guild_friendLabel_0")
                                 , respondToManyMessagesDecryptedFailed adminC
                                 , E2EHelper.writeMessage adminC 100 "Another session"
+                                , adminC.click 100 (Dom.id "guild_showMembers")
                                 ]
                             )
                         ]

@@ -1553,8 +1553,6 @@ routeRequest previousRoute newRoute model =
                     Route.routeChangeCountsAsMessageView oldRoute newRoute
 
                 Nothing ->
-                    -- The route a session starts on isn't one the reader navigated to, so
-                    -- whatever is waiting in it stays unread until they've looked at it.
                     False
 
         ( model2, viewCmd ) =
@@ -1570,8 +1568,6 @@ routeRequest previousRoute newRoute model =
                         )
                         { loggedIn
                             | drawingMode =
-                                -- Closing the draw tab (or navigating elsewhere) also
-                                -- deselects the drawing anchor
                                 if Route.toChannelHeaderTab newRoute == Just ChannelHeaderTab_Draw then
                                     loggedIn.drawingMode
 

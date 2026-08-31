@@ -5,7 +5,9 @@ module ChannelHeader exposing
     , discordChannel
     , discordThread
     , drawingCanUndoOrRedo
+    , e2eeRequestDot
     , headerBackButton
+    , showDmSettingsRedDot
     , startDrawingText
     , thread
     , zoomInText
