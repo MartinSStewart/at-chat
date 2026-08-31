@@ -713,6 +713,11 @@ soloDmEncryptionTest config =
                                 , respondToManyMessagesDecryptedFailed adminC
                                 , E2EHelper.writeMessage adminC 100 "Another session"
                                 , adminC.click 100 (Dom.id "guild_showMembers")
+                                , adminC.snapshotView 100 { name = "Enter private key on another device" }
+                                , adminC.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                                , respondToSharedSecretStored adminC Broadcast.adminUserId
+                                , writeEncryptedMessage adminC 100 "Note to self from adminB should be encrypted"
+                                , respondToMessageDecrypted admin
                                 ]
                             )
                         ]

@@ -3319,8 +3319,25 @@ updateLoaded msg model =
                                 local : LocalState
                                 local =
                                     Local.model loggedIn2.localState
+
+                                acceptE2ee : Bool
+                                acceptE2ee =
+                                    case SeqDict.get otherUserId local.dmChannels of
+                                        Just dmChannel ->
+                                            case dmChannel.e2ee of
+                                                DmChannel.E2eeRequestedBy requestedBy ->
+                                                    requestedBy /= local.localUser.session.userId || otherUserId == local.localUser.session.userId
+
+                                                DmChannel.E2eeDisabled ->
+                                                    False
+
+                                                DmChannel.E2eeEnabled _ ->
+                                                    False
+
+                                        Nothing ->
+                                            False
                             in
-                            if LocalState.dmE2eeRequestedByOtherUser otherUserId local || otherUserId == local.localUser.session.userId then
+                            if acceptE2ee then
                                 FrontendExtra.handleLocalChange
                                     model.time
                                     (Local_AcceptE2ee { otherUserId = otherUserId } model.time |> Just)
