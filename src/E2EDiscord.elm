@@ -6,6 +6,7 @@ import Backend
 import Codec
 import CustomEmoji exposing (CustomEmojiData)
 import Discord
+import DiscordSync
 import DiscordUserData
 import Drawing
 import Duration
@@ -360,7 +361,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , -- The guild column mixes at-chat guilds and Discord guilds, so
@@ -400,7 +401,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         let
                             customEmojiNamed : String -> T.Data FrontendModel E2EHelper.BackendModel2 -> List CustomEmojiData
@@ -463,7 +464,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         let
                             customEmojiNamed : String -> T.Data FrontendModel E2EHelper.BackendModel2 -> List CustomEmojiData
@@ -613,7 +614,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":3,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-12T13:14:33.237000+00:00","pinned":false,"nonce":"1492875573255471104","mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2020-05-01T11:39:39.915000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"1492875574455042168","flags":0,"embeds":[],"edited_timestamp":null,"content":"","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at0232","public_flags":0,"primary_guild":null,"id":"161098476632014848","global_name":"AT","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"3d7b1aa7b5149fe06971b6dedf682d82"},"attachments":[{"width":80,"url":"https://cdn.discordapp.com/attachments/1072828564317159465/1492875574174154943/SPOILER_1122943867721875456.png?ex=69dcec39&is=69db9ab9&hm=992b357861cbb393bf8fdfac2690f576b6283968400d3cd18dd2d9f7e117c65b&","size":492063,"proxy_url":"https://media.discordapp.net/attachments/1072828564317159465/1492875574174154943/SPOILER_1122943867721875456.png?ex=69dcec39&is=69db9ab9&hm=992b357861cbb393bf8fdfac2690f576b6283968400d3cd18dd2d9f7e117c65b&","placeholder_version":1,"placeholder":"ZCmGHQYsRFqRmof6NoZvZ/lnBEaEhnJkWA==","original_content_type":"image/png","id":"1492875574174154943","height":80,"flags":40,"filename":"SPOILER_1122943867721875456.png","content_type":"image/png","content_scan_version":4}],"guild_id":"705745250815311942"}}"""
@@ -640,7 +641,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":476,"op":0,"d":{"webhook_id":"1374332266083254363","type":0,"tts":false,"timestamp":"2026-03-31T20:15:05.862000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"id":"1488632753368072280","flags":0,"embeds":[{"url":"https://github.com/lamdera/compiler/pull/92","type":"rich","title":"[lamdera/compiler] Pull request opened: #92   Allow configuring <html lang> via html-lang file","id":"1488632753368072281","description":"Read an optional html-lang file from the project root to set the lang attribute on the generated  tag.  If the file contains e.g. \\"fr\\", the output becomes .  If absent or empty, the tag is plain  as before.  Fixes #84.","content_scan_version":4,"color":38912,"author":{"url":"https://github.com/MavenRain","proxy_icon_url":"https://images-ext-1.discordapp.net/external/z5iI09eMZ6hW8pY8xflOmWevOiHuXRD-pljR_thC38Q/%3Fv%3D4/https/avatars.githubusercontent.com/u/7246681","name":"MavenRain","icon_url":"https://avatars.githubusercontent.com/u/7246681?v=4"}}],"edited_timestamp":null,"content":"","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"GitHub","id":"1374332266083254363","global_name":null,"discriminator":"0000","bot":true,"avatar":"e57fd67dc7ca0cc840a0e87a82281bc5"},"attachments":[],"guild_id":"705745250815311942"}}"""
@@ -662,7 +663,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guildIcon_showFriends")
                         , admin.checkView
@@ -693,7 +694,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
 
@@ -712,13 +713,19 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 -- A new connection is opened (against the resume_gateway_url from the ready event)
                 -- and Discord says hello on it.
                 , E2EHelper.andThenWebsocket
+                    (Duration.inMilliseconds DiscordSync.gatewayReconnectTickInterval)
                     (\connection _ ->
-                        [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
+                        [ T.websocketSendString
+                            100
+                            connection
+                            """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}"""
+                        ]
                     )
 
                 -- We resume the old session instead of identifying, and we tell Discord the
                 -- sequence number of the last event we actually received.
                 , E2EHelper.andThenWebsocket
+                    (Duration.inMilliseconds DiscordSync.gatewayReconnectTickInterval)
                     (\_ websocketState ->
                         [ T.checkState
                             0
@@ -744,7 +751,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- Open a Discord guild channel and load a message into it.
                           admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
@@ -778,10 +785,11 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 -- handshake on it (hello -> identify) and replay the READY data, which triggers
                 -- HandleReadyDataStep2 again.
                 , E2EHelper.andThenWebsocket
+                    (Duration.inMilliseconds DiscordSync.gatewayReconnectTickInterval)
                     (\connection _ ->
                         [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
                     )
-                , E2EHelper.andThenWebsocket
+                , E2EHelper.andThenWebsocket 120
                     (\connection websocketState ->
                         case Array.toList websocketState.dataSent |> List.filter E2EHelper.isOp2 of
                             [ _ ] ->
@@ -820,7 +828,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , E2EHelper.writeMessage admin 100 "https://www.youtube.com/watch?v=zAFDQH19pV4"
@@ -844,7 +852,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
 
@@ -895,7 +903,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":3293,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-17T16:14:03.131000+00:00","pinned":false,"nonce":"1494732679017398272","message_snapshots":[{"message":{"type":0,"timestamp":"2026-04-17T11:22:04.856000+00:00","mentions":[],"flags":0,"embeds":[],"edited_timestamp":null,"content":"","components":[],"attachments":[{"width":2160,"url":"https://cdn.discordapp.com/attachments/123/321/IMG_1234.jpg?ex=123&is=321&hm=123&","size":517431,"proxy_url":"https://media.discordapp.net/attachments/123/321/1234.jpg?ex=123&is=321&hm=123&","placeholder_version":1,"placeholder":"WlkKDgSql6d2d3d4d4B4gZqYrHCJCGc=","id":"1494732685631946782","height":2461,"filename":"IMG_7203.jpg","content_type":"image/jpeg","content_scan_version":4}]}}],"message_reference":{"type":1,"message_id":"1494659209021751327","channel_id":"1472236476401057854"},"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":["476506921260810240","734405273103499264","743849378363605082","840010386958581770","776291214478802964","840041852852895765","1030137708531687514"],"premium_since":null,"pending":false,"nick":"cute technology","mute":false,"joined_at":"2018-08-07T17:00:17.616000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"1494732685992530114","flags":16384,"embeds":[],"edited_timestamp":null,"content":"","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"capysuit","public_flags":0,"primary_guild":null,"id":"339560235050205185","global_name":"gio","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7d2709668c67727f98ba40ff62611e78"},"attachments":[],"guild_id":"705745250815311942"}}"""
@@ -917,7 +925,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , admin.click 100 (Dom.id "messageMenu_channelInput_openEmojiSelector")
@@ -1077,11 +1085,11 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , adminA.checkView
                             200
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "Loading user data" ])
-                        , E2EHelper.andThenWebsocket
+                        , E2EHelper.andThenWebsocket 120
                             (\connection _ ->
                                 [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
                             )
-                        , E2EHelper.andThenWebsocket
+                        , E2EHelper.andThenWebsocket 120
                             (\connection websocketState ->
                                 case Array.toList websocketState.dataSent |> List.filter E2EHelper.isOp2 of
                                     [ _ ] ->
@@ -1138,7 +1146,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0ReadySupplemental
             (\user ->
                 [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , E2EHelper.andThenWebsocket
+                , E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- A forum holds no messages, so a new post is announced by a thread
                           -- create event and nothing else. The post's title is the thread's name.
@@ -1193,7 +1201,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             (\user ->
                 [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                 , user.click 100 (Dom.id "guild_openChannel_1535645724761653309")
-                , E2EHelper.andThenWebsocket
+                , E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- A message in a normal channel with a thread started from it. The
                           -- thread has the same id as the message, so a thread event that
@@ -1276,7 +1284,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0ReadySupplemental
             (\user ->
                 [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , E2EHelper.andThenWebsocket
+                , E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- at0232 writes a message in channel A...
                           T.websocketSendString
@@ -1354,7 +1362,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0ReadySupplemental
             (\user ->
                 [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , E2EHelper.andThenWebsocket
+                , E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- The linked account (at28727) writes a message in channel A...
                           T.websocketSendString
@@ -1409,7 +1417,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0ReadySupplemental
             (\user ->
                 [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , E2EHelper.andThenWebsocket
+                , E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ T.websocketSendString
                             100
@@ -1487,7 +1495,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0ReadySupplemental
             (\user ->
                 [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , E2EHelper.andThenWebsocket
+                , E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- at0232 writes a message in channel A...
                           T.websocketSendString
@@ -1582,7 +1590,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                         ++ " times"
                                     )
                     )
-                , E2EHelper.andThenWebsocket
+                , E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- A thread still ends up in the right place when someone writes in it after
                           -- the reload.
@@ -1614,7 +1622,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0ReadySupplemental
             (\admin ->
                 [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , E2EHelper.andThenWebsocket
+                , E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ reloadDiscordChannelA admin (ChangeId 0)
                         , checkDiscordChannelAMessages [ "Old message", "Stand-alone thread", "Hello from history" ]
@@ -1697,7 +1705,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0ReadySupplemental
             (\admin ->
                 [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , E2EHelper.andThenWebsocket
+                , E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.checkView
                             100
@@ -1734,7 +1742,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0ReadySupplemental
             (\admin ->
                 [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , E2EHelper.andThenWebsocket
+                , E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ T.websocketSendString
                             100
@@ -1767,7 +1775,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0ReadySupplemental
             (\admin ->
                 [ admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
-                , E2EHelper.andThenWebsocket
+                , E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ T.websocketSendString
                             100
@@ -1939,7 +1947,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , E2EHelper.enableNotifications False admin
@@ -1972,7 +1980,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ E2EHelper.enableNotifications False admin
                         , E2EHelper.checkNotification "Success!" "Push notifications enabled"
@@ -1999,7 +2007,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.resizeWindow 100 E2EHelper.iphone14Window
                         , discordDmMessage connection "Starting a Discord DM"
@@ -2030,7 +2038,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ E2EHelper.enableNotifications False admin
                         , E2EHelper.checkNotification "Success!" "Push notifications enabled"
@@ -2063,7 +2071,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
                         , discordDmMessage connection "Draw on this Discord DM message!"
@@ -2141,7 +2149,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
                         , discordDmMessage connection "Hello!"
@@ -2175,7 +2183,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- The admin is on the friends page and isn't viewing the Discord DM, so no
                           -- notification icon is shown in the guild column yet.
@@ -2229,7 +2237,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- The admin opens a Discord guild channel, which catches it up
                           admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
@@ -2269,7 +2277,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- Messages pile up in a Discord guild channel while the admin is the only
                           -- at-chat user with a Discord account linked.
@@ -2322,7 +2330,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- A new Discord group DM (the linked account plus two other users) is created.
                           T.websocketSendString 100 connection discordGroupDmChannelCreate
@@ -2382,7 +2390,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- A group DM containing the linked account, at0232 and kess is created and
                           -- at0232 writes a message in it.
@@ -2437,7 +2445,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 [ T.andThen
                     10
                     (\data -> [ admin.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.safariIphone) ])
-                , E2EHelper.andThenWebsocket
+                , E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- `AT` is a Bot Test member that the linked Discord account shares no
                           -- DM channel with, and the frontend can't create one, so long pressing
@@ -2476,7 +2484,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             (\admin ->
                 [ -- The admin's linked Discord account creates a private channel that only it
                   -- can view (@everyone is denied View Channel, the admin's account is allowed).
-                  E2EHelper.andThenWebsocket
+                  E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ T.websocketSendString 100 connection E2EHelper.privateDiscordChannelCreateEvent ]
                     )
@@ -2751,7 +2759,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 Err "The backend doesn't have the Bot Test guild"
                 in
                 [ -- The admin's linked Discord account creates a channel that @everyone may view.
-                  E2EHelper.andThenWebsocket
+                  E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ T.websocketSendString 100 connection E2EHelper.regularDiscordChannelCreateEvent ]
                     )
@@ -2760,7 +2768,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 , -- The admin makes the channel private: @everyone is now denied View Channel.
                   -- (Sent on the admin's gateway before the second user links, so there is only
                   -- one websocket connection for andThenWebsocket to resolve.)
-                  E2EHelper.andThenWebsocket
+                  E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ T.websocketSendString 100 connection E2EHelper.regularDiscordChannelBecomesPrivateEvent ]
                     )
@@ -2883,7 +2891,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
         -- (3) The unread overview on the home page shows the newest message of the Bot Test
         -- channel, which AT wrote, so AT gets loaded for a client that isn't viewing the
         -- guild at all.
-        , E2EHelper.andThenWebsocket
+        , E2EHelper.andThenWebsocket 120
             (\connection _ ->
                 [ T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":300,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"id":"1500000000000000300","flags":0,"embeds":[],"edited_timestamp":null,"content":"Unread message written by AT","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"AT","public_flags":0,"primary_guild":null,"id":"1401255355928936478","global_name":null,"display_name_styles":null,"discriminator":"0275","collectibles":null,"bot":true,"avatar_decoration_data":null,"avatar":"34f894fcc2d53b98b2d6c99228b814a7"},"attachments":[],"guild_id":"705745250815311942"}}"""
                 ]
@@ -2918,7 +2926,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- The admin is looking at the unread overview and has never opened the Bot
                           -- Test guild, so its members aren't loaded.
@@ -2953,7 +2961,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- The Bot Test guild starts out with a single custom emoji from the ready payload.
                           T.checkState 100 (checkGuildCustomEmojis admin [ "elm" ])
@@ -2981,7 +2989,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
                         , admin.checkView
@@ -3091,7 +3099,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , E2EHelper.writeMessage admin 100 "_"
@@ -3144,7 +3152,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ -- A message lands in channel A while the admin is elsewhere, so the
                           -- channel has something to fetch when they open it.
@@ -3187,7 +3195,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ E2EHelper.andThenWebsocket
+                [ E2EHelper.andThenWebsocket 120
                     (\connection _ ->
                         [ T.websocketSendString 100 connection groupChatCreated
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "at0232, joe" ])
@@ -3308,6 +3316,7 @@ gatewayDropAndReconnect :
 gatewayDropAndReconnect unjitteredDelay =
     T.group
         [ E2EHelper.andThenWebsocket
+            120
             (\connection _ ->
                 [ T.websocketClose 100 connection (Websocket.UnknownCode 4000) "Unknown error"
 

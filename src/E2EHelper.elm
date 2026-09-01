@@ -116,7 +116,9 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Dict
 import Discord
+import DiscordSync
 import Drawing
+import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (DelayInMs, HttpRequest, HttpResponse(..), RequestedBy(..))
@@ -1408,14 +1410,16 @@ safariIphone =
 
 
 andThenWebsocket :
-    (Websocket.Connection
-     -> T.WebsocketState
-     -> List (T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
-    )
+    DelayInMs
+    ->
+        (Websocket.Connection
+         -> T.WebsocketState
+         -> List (T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
+        )
     -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-andThenWebsocket andThenFunc =
+andThenWebsocket delayInMs andThenFunc =
     T.andThen
-        120
+        delayInMs
         (\data ->
             let
                 maybeConnection : List ( Websocket.Connection, T.WebsocketState )
@@ -1669,10 +1673,12 @@ linkDiscordAndLogin sessionId name emailAddress isNewAccount discordOp0Ready dis
               else
                 T.group []
             , andThenWebsocket
+                (Duration.inMilliseconds DiscordSync.gatewayReconnectTickInterval)
                 (\connection _ ->
                     [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
                 )
             , andThenWebsocket
+                120
                 (\connection websocketState ->
                     case Array.toList websocketState.dataSent |> List.filter isOp2 of
                         [ _ ] ->

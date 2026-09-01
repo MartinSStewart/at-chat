@@ -3217,6 +3217,7 @@ attackerTriesToReadPrivateDiscordChannel config discordOpReady discordOpSuppleme
             (\_ ->
                 [ -- The admin creates a private channel that only their Discord account can access.
                   E2EHelper.andThenWebsocket
+                    120
                     (\connection _ ->
                         [ T.websocketSendString 100 connection E2EHelper.privateDiscordChannelCreateEvent ]
                     )
