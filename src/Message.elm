@@ -174,9 +174,8 @@ encryptedUserTextMessageFrontend :
     -> Id UserId
     -> EncryptedData (ContentAndEmbeds (Id UserId))
     -> Maybe (Id messageId)
-    -> SeqDict (Id FileId) FileData
     -> Message messageId (Id UserId)
-encryptedUserTextMessageFrontend createdAt2 createdBy contentAndEmbeds repliedTo attachedFiles =
+encryptedUserTextMessageFrontend createdAt2 createdBy contentAndEmbeds repliedTo =
     EncryptedUserTextMessage
         { encryptedData = contentAndEmbeds
         , createdAt = createdAt2
@@ -184,7 +183,6 @@ encryptedUserTextMessageFrontend createdAt2 createdBy contentAndEmbeds repliedTo
         , reactions = SeqDict.empty
         , editedAt = Nothing
         , repliedTo = repliedTo
-        , attachedFiles = attachedFiles
         , timestampDrawings = Drawing.emptyDrawing
         , userIconDrawings = Drawing.emptyDrawing
         , imageAttachmentDrawings = SeqDict.empty
@@ -346,7 +344,6 @@ toEncrypted encryptedData message =
                 , reactions = data.reactions
                 , editedAt = data.editedAt
                 , repliedTo = data.repliedTo
-                , attachedFiles = data.attachedFiles
                 , timestampDrawings = data.timestampDrawings
                 , userIconDrawings = data.userIconDrawings
                 , imageAttachmentDrawings = data.imageAttachmentDrawings
@@ -370,7 +367,7 @@ toEncrypted encryptedData message =
 
 
 type alias ContentAndEmbeds userId =
-    { content : Nonempty (RichText userId), embeds : Array Embed }
+    { content : Nonempty (RichText userId), embeds : Array Embed, attachedFiles : SeqDict (Id FileId) FileData }
 
 
 type alias EncryptedUserTextMessageData messageId userId =
@@ -380,7 +377,6 @@ type alias EncryptedUserTextMessageData messageId userId =
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , repliedTo : Maybe (Id messageId)
-    , attachedFiles : SeqDict (Id FileId) FileData
     , timestampDrawings : Drawing userId
     , userIconDrawings : Drawing userId
     , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing userId)
@@ -391,6 +387,7 @@ type alias EncryptedUserTextMessageData messageId userId =
 
 type MessageNoReply userId
     = UserTextMessage_NoReply (UserTextMessageDataNoReply userId)
+    | EncryptedUserTextMessage_NoReply (EncryptedUserTextMessageDataNoReply userId)
     | UserJoinedMessage_NoReply Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
     | DeletedMessage_NoReply Time.Posix
     | CallStarted_NoReply Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
@@ -404,6 +401,15 @@ type alias UserTextMessageDataNoReply userId =
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , attachedFiles : SeqDict (Id FileId) FileData
+    }
+
+
+type alias EncryptedUserTextMessageDataNoReply userId =
+    { encryptedData : EncryptedData (ContentAndEmbeds userId)
+    , createdAt : Time.Posix
+    , createdBy : userId
+    , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+    , editedAt : Maybe Time.Posix
     }
 
 
@@ -731,7 +737,21 @@ contentAndEmbedsCodec =
     Serialize.record ContentAndEmbeds
         |> Serialize.field .content (nonemptyCodec (RichText.codec Id.codec))
         |> Serialize.field .embeds (Serialize.array embedCodec)
+        |> Serialize.field .attachedFiles (seqDictCodec Id.codec fileDataCodec)
         |> Serialize.finishRecord
+
+
+seqDictCodec : Serialize.Codec e k -> Serialize.Codec e a -> Serialize.Codec e (SeqDict k a)
+seqDictCodec keyCodec valueCodec =
+    Serialize.map
+        SeqDict.fromList
+        SeqDict.toList
+        (Serialize.list (Serialize.tuple keyCodec valueCodec))
+
+
+fileDataCodec : Serialize.Codec e FileData
+fileDataCodec =
+    Debug.todo ""
 
 
 nonemptyCodec : Serialize.Codec e a -> Serialize.Codec e (Nonempty a)

@@ -6151,7 +6151,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
-                Local_SendEncryptedMessage _ id content threadRoute attachedFiles ->
+                Local_SendEncryptedMessage _ id content threadRoute ->
                     BackendExtra.asDmUser
                         model
                         sessionId
@@ -6166,7 +6166,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         id
                                         content
                                         threadRoute
-                                        (BackendExtra.validateAttachedFiles model.files attachedFiles)
                                         session
                                         user
                                         dmChannelId

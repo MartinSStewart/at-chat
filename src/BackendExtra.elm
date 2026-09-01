@@ -1952,7 +1952,7 @@ plainTextMessages messages =
         (\messageId message dict ->
             case message of
                 UserTextMessage data ->
-                    SeqDict.insert messageId { content = data.content, embeds = data.embeds } dict
+                    SeqDict.insert messageId { content = data.content, embeds = data.embeds, attachedFiles = data.attachedFiles } dict
 
                 EncryptedUserTextMessage _ ->
                     dict
@@ -1988,14 +1988,13 @@ sendEncryptedDm :
     -> Viewing_DmId
     -> EncryptedData (ContentAndEmbeds (Id UserId))
     -> ThreadRouteWithMaybeMessage
-    -> SeqDict (Id FileId) FileData
     -> UserSession
     -> BackendUser
     -> DmChannelId
     -> BackendDmChannel
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendEncryptedDm time clientId changeId id contentAndEmbeds threadRouteWithReplyTo attachedFiles session user dmChannelId dmChannel model =
+sendEncryptedDm time clientId changeId id contentAndEmbeds threadRouteWithReplyTo session user dmChannelId dmChannel model =
     case RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits of
         Ok sendMessageRateLimits ->
             let
@@ -2004,13 +2003,13 @@ sendEncryptedDm time clientId changeId id contentAndEmbeds threadRouteWithReplyT
                         ViewThreadWithMaybeMessage threadId repliedTo ->
                             LocalState.createThreadMessageBackend
                                 threadId
-                                (Message.encryptedUserTextMessageFrontend time session.userId contentAndEmbeds repliedTo attachedFiles)
+                                (Message.encryptedUserTextMessageFrontend time session.userId contentAndEmbeds repliedTo)
                                 dmChannel
                                 |> Tuple.mapFirst (ViewThreadWithMessage threadId)
 
                         NoThreadWithMaybeMessage repliedTo ->
                             LocalState.createChannelMessageBackend
-                                (Message.encryptedUserTextMessageFrontend time session.userId contentAndEmbeds repliedTo attachedFiles)
+                                (Message.encryptedUserTextMessageFrontend time session.userId contentAndEmbeds repliedTo)
                                 dmChannel
                                 |> Tuple.mapFirst NoThreadWithMessage
 
@@ -2032,7 +2031,7 @@ sendEncryptedDm time clientId changeId id contentAndEmbeds threadRouteWithReplyT
                 , sessions = sessions
               }
             , Command.batch
-                [ Local_SendEncryptedMessage time id contentAndEmbeds threadRouteWithReplyTo attachedFiles
+                [ Local_SendEncryptedMessage time id contentAndEmbeds threadRouteWithReplyTo
                     |> LocalChangeResponse changeId
                     |> Lamdera.sendToFrontend clientId
                 , Broadcast.toDmChannelExcludingOne
@@ -2047,7 +2046,6 @@ sendEncryptedDm time clientId changeId id contentAndEmbeds threadRouteWithReplyT
                             id2
                             contentAndEmbeds
                             threadRouteWithReplyTo
-                            attachedFiles
                     )
                     model
                 , notificationCmd
@@ -2612,7 +2610,7 @@ toBackendLog toBackend =
                 Local_AcceptE2ee _ _ _ ->
                     ToBackendLog_Local_AcceptE2ee
 
-                Local_SendEncryptedMessage _ _ _ _ _ ->
+                Local_SendEncryptedMessage _ _ _ _ ->
                     ToBackendLog_Local_SendEncryptedMessage
 
         TwoFactorToBackend _ ->

@@ -1079,7 +1079,7 @@ type ServerChange
     | Server_E2eeRequestDeclined Viewing_DmId (Id UserId)
     | Server_E2eeAccepted Viewing_DmId Time.Posix
     | Server_SetPublicKey (Id UserId) X25519.PublicKey
-    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (EncryptedData (ContentAndEmbeds (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (EncryptedData (ContentAndEmbeds (Id UserId))) ThreadRouteWithMaybeMessage
 
 
 type LocalChange
@@ -1144,7 +1144,7 @@ type LocalChange
     | Local_EncryptOldMessages Viewing_DmId (List ( ThreadRouteWithMessage, EncryptedData (ContentAndEmbeds (Id UserId)) ))
     | Local_SetE2eeRisksAccepted Bool
     | Local_AcceptE2ee Viewing_DmId Time.Posix (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
-    | Local_SendEncryptedMessage Time.Posix Viewing_DmId (EncryptedData (ContentAndEmbeds (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Local_SendEncryptedMessage Time.Posix Viewing_DmId (EncryptedData (ContentAndEmbeds (Id UserId))) ThreadRouteWithMaybeMessage
 
 
 type alias ChannelDataToEncrypt =

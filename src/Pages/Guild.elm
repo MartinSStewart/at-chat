@@ -7000,7 +7000,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                     (User.userColor localUser)
                     isHovered
                     messageId
-                    { content = data.content, embeds = data.embeds }
+                    { content = data.content, embeds = data.embeds, attachedFiles = data.attachedFiles }
                     False
                     data
                 )
@@ -7039,7 +7039,10 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                             (User.userColor localUser)
                             isHovered
                             messageId
-                            (Result.withDefault { content = RichText.failedToDecryptMessage, embeds = Array.empty } result)
+                            (Result.withDefault
+                                { content = RichText.failedToDecryptMessage, embeds = Array.empty, attachedFiles = SeqDict.empty }
+                                result
+                            )
                             True
                             data
                         )
@@ -7249,6 +7252,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                     messageId
                     data.content
                     data.embeds
+                    data.attachedFiles
                     data
                 )
 
@@ -7284,6 +7288,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                     messageId
                     RichText.failedToDecryptMessage
                     Array.empty
+                    SeqDict.empty
                     data
                 )
 
@@ -7488,7 +7493,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                     (User.userColor localUser)
                     isHovered
                     messageId
-                    { content = message2.content, embeds = message2.embeds }
+                    { content = message2.content, embeds = message2.embeds, attachedFiles = message2.attachedFiles }
                     False
                     message2
                 )
@@ -7522,7 +7527,10 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                             (User.userColor localUser)
                             isHovered
                             messageId
-                            (Result.withDefault { content = RichText.failedToDecryptMessage, embeds = Array.empty } result)
+                            (Result.withDefault
+                                { content = RichText.failedToDecryptMessage, embeds = Array.empty, attachedFiles = SeqDict.empty }
+                                result
+                            )
                             True
                             message2
                         )
@@ -7702,6 +7710,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                     messageId
                     message2.content
                     message2.embeds
+                    message2.attachedFiles
                     message2
                 )
 
@@ -7732,6 +7741,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                     messageId
                     RichText.failedToDecryptMessage
                     Array.empty
+                    SeqDict.empty
                     message2
                 )
 
@@ -7932,14 +7942,13 @@ userTextMessageContent :
             , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId))
             , editedAt : Maybe Time.Posix
             , repliedTo : Maybe (Id messageId)
-            , attachedFiles : SeqDict (Id FileId) FileData
             , timestampDrawings : Drawing (Id UserId)
             , userIconDrawings : Drawing (Id UserId)
             , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing (Id UserId))
             , embedDrawings : SeqDict Int (Drawing (Id UserId))
         }
     -> Element MessageViewMsg
-userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId { content, embeds } showEncryptionIcon message2 =
+userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId { content, embeds, attachedFiles } showEncryptionIcon message2 =
     let
         decrypted : SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
         decrypted =
@@ -8021,7 +8030,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                             Nothing ->
                                 SeqSet.empty
                     , users = allUsers
-                    , attachedFiles = message2.attachedFiles
+                    , attachedFiles = attachedFiles
                     , domainWhitelist = localUser.user.domainWhitelist
                     , customEmojis = localUser.customEmojis
                     , stickers = localUser.stickers
@@ -8093,6 +8102,7 @@ discordUserTextMessageContent :
     -> Id messageId
     -> Nonempty (RichText (Discord.Id Discord.UserId))
     -> Array Embed
+    -> SeqDict (Id FileId) FileData
     ->
         { a
             | createdAt : Time.Posix
@@ -8100,14 +8110,13 @@ discordUserTextMessageContent :
             , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet (Discord.Id Discord.UserId))
             , editedAt : Maybe Time.Posix
             , repliedTo : Maybe (Id messageId)
-            , attachedFiles : SeqDict (Id FileId) FileData
             , timestampDrawings : Drawing (Discord.Id Discord.UserId)
             , userIconDrawings : Drawing (Discord.Id Discord.UserId)
             , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing (Discord.Id Discord.UserId))
             , embedDrawings : SeqDict Int (Drawing (Discord.Id Discord.UserId))
         }
     -> Element MessageViewMsg
-discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId content embeds message2 =
+discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId content embeds attachedFiles message2 =
     Ui.row
         []
         [ (case SeqDict.get message2.createdBy allUsers of
@@ -8186,7 +8195,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                             Nothing ->
                                 SeqSet.empty
                     , users = allUsers
-                    , attachedFiles = message2.attachedFiles
+                    , attachedFiles = attachedFiles
                     , domainWhitelist = localUser.user.domainWhitelist
                     , customEmojis = localUser.customEmojis
                     , stickers = localUser.stickers
@@ -8310,10 +8319,10 @@ replyToHeaderAboveMessage_userTextMessage :
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id messageId) (NonemptySet Int)
-    -> Nonempty (RichText userId)
-    -> { b | createdBy : userId, attachedFiles : SeqDict (Id FileId) FileData }
+    -> ContentAndEmbeds userId
+    -> userId
     -> Element MessageViewMsg
-replyToHeaderAboveMessage_userTextMessage isMobile repliedToIndex timezone time customEmojis allUsers revealedSpoilers content repliedToData =
+replyToHeaderAboveMessage_userTextMessage isMobile repliedToIndex timezone time customEmojis allUsers revealedSpoilers contentAndEmbeds createdBy =
     replyToHeaderAboveMessageHelper
         isMobile
         repliedToIndex
@@ -8329,8 +8338,8 @@ replyToHeaderAboveMessage_userTextMessage isMobile repliedToIndex timezone time 
                 Nothing ->
                     SeqSet.empty
             )
-            content
-            repliedToData
+            contentAndEmbeds
+            createdBy
         )
 
 
@@ -8355,8 +8364,8 @@ replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoiler
                 customEmojis
                 allUsers
                 revealedSpoilers
-                repliedToData.content
-                repliedToData
+                { content = repliedToData.content, embeds = repliedToData.embeds, attachedFiles = repliedToData.attachedFiles }
+                repliedToData.createdBy
 
         Just ( repliedToIndex, EncryptedUserTextMessage repliedToData ) ->
             case SeqDict.get (Encryption.hash repliedToData.encryptedData) decrypted of
@@ -8369,14 +8378,11 @@ replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoiler
                         customEmojis
                         allUsers
                         revealedSpoilers
-                        (case result of
-                            Ok ok ->
-                                ok.content
-
-                            Err () ->
-                                RichText.failedToDecryptMessage
+                        (Result.withDefault
+                            { content = RichText.failedToDecryptMessage, embeds = Array.empty, attachedFiles = SeqDict.empty }
+                            result
                         )
-                        repliedToData
+                        repliedToData.createdBy
 
                 Nothing ->
                     Ui.none
@@ -8409,10 +8415,10 @@ userTextMessagePreview :
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> SeqSet Int
-    -> Nonempty (RichText userId)
-    -> { b | createdBy : userId, attachedFiles : SeqDict (Id FileId) FileData }
+    -> ContentAndEmbeds userId
+    -> userId
     -> Element MessageViewMsg
-userTextMessagePreview timezone time customEmojis allUsers revealedSpoilers content message =
+userTextMessagePreview timezone time customEmojis allUsers revealedSpoilers contentAndEmbeds createdBy =
     Html.div
         [ Html.Attributes.style "white-space" "nowrap"
         , Html.Attributes.style "overflow" "hidden"
@@ -8422,18 +8428,18 @@ userTextMessagePreview timezone time customEmojis allUsers revealedSpoilers cont
             [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
             , Html.Attributes.style "padding" "0 6px 0 2px"
             ]
-            [ Html.text (User.toString message.createdBy allUsers) ]
+            [ Html.text (User.toString createdBy allUsers) ]
             :: RichText.preview
                 (\_ -> MessageView_NoOp)
                 { revealedSpoilers = revealedSpoilers
                 , users = allUsers
-                , attachedFiles = message.attachedFiles
+                , attachedFiles = contentAndEmbeds.attachedFiles
                 , customEmojis = customEmojis
                 , domainWhitelist = SeqSet.empty
                 , timezone = timezone
                 , time = time
                 }
-                content
+                contentAndEmbeds.content
         )
         |> Ui.html
 
@@ -8989,26 +8995,26 @@ previewThreadLastMessage_userTextMessage :
     -> Time.Zone
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
-    -> Nonempty (RichText userId)
-    -> { c | createdBy : userId, attachedFiles : SeqDict (Id FileId) FileData }
+    -> ContentAndEmbeds userId
+    -> userId
     -> List (Html MessageViewMsg)
-previewThreadLastMessage_userTextMessage time timezone customEmojis allUsers content data =
+previewThreadLastMessage_userTextMessage time timezone customEmojis allUsers contentAndEmbeds createdBy =
     Html.span
         [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
         , Html.Attributes.style "padding" "0 6px 0 2px"
         ]
-        [ Html.text (User.toString data.createdBy allUsers) ]
+        [ Html.text (User.toString createdBy allUsers) ]
         :: RichText.preview
             (\_ -> MessageView_NoOp)
             { revealedSpoilers = SeqSet.empty
             , users = allUsers
-            , attachedFiles = data.attachedFiles
+            , attachedFiles = contentAndEmbeds.attachedFiles
             , customEmojis = customEmojis
             , domainWhitelist = SeqSet.empty
             , timezone = timezone
             , time = time
             }
-            content
+            contentAndEmbeds.content
 
 
 previewThreadLastMessage :
@@ -9067,7 +9073,16 @@ previewThreadLastMessage timezone time customEmojis allUsers decrypted messageId
                     Just last ->
                         case last of
                             UserTextMessage data ->
-                                previewThreadLastMessage_userTextMessage time timezone customEmojis allUsers data.content data
+                                previewThreadLastMessage_userTextMessage
+                                    time
+                                    timezone
+                                    customEmojis
+                                    allUsers
+                                    { content = data.content
+                                    , embeds = data.embeds
+                                    , attachedFiles = data.attachedFiles
+                                    }
+                                    data.createdBy
 
                             EncryptedUserTextMessage data ->
                                 case SeqDict.get (Encryption.hash data.encryptedData) decrypted of
@@ -9077,14 +9092,11 @@ previewThreadLastMessage timezone time customEmojis allUsers decrypted messageId
                                             timezone
                                             customEmojis
                                             allUsers
-                                            (case result of
-                                                Ok ok ->
-                                                    ok.content
-
-                                                Err () ->
-                                                    RichText.failedToDecryptMessage
+                                            (Result.withDefault
+                                                { content = RichText.failedToDecryptMessage, embeds = Array.empty, attachedFiles = SeqDict.empty }
+                                                result
                                             )
-                                            data
+                                            data.createdBy
 
                                     Nothing ->
                                         []

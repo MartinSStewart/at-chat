@@ -8074,7 +8074,7 @@ updateLoadedFromBackend msg model =
                                 Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ ->
                                     FrontendExtra.handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local loggedIn2 model
 
-                                Server_SendEncryptedMessage senderId _ _ id content maybeRepliedTo attachedFiles ->
+                                Server_SendEncryptedMessage senderId _ _ id content maybeRepliedTo ->
                                     ( FrontendExtra.mapEncryptionRequests
                                         (\requests ->
                                             { requests
@@ -8087,7 +8087,6 @@ updateLoadedFromBackend msg model =
                                                         , id = id
                                                         , senderId = senderId
                                                         , threadRoute = maybeRepliedTo
-                                                        , attachedFiles = attachedFiles
                                                         }
                                                         requests.pendingDecryptedMessages
                                             }

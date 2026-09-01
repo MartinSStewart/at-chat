@@ -437,7 +437,6 @@ encodeMessage userIdToString userNames maybeThread message =
                     (\messageId -> Json.Encode.int (Id.toInt messageId))
                     data.repliedTo
                 ++ encodeReactions userIdToString data.reactions
-                ++ encodeAttachedFiles data.attachedFiles
 
         UserJoinedMessage createdAt userId reactions _ ->
             [ ( "type", Json.Encode.string "userJoined" )

@@ -375,7 +375,7 @@ pendingChangesText localChange =
         Local_AcceptE2ee _ _ _ ->
             "Started end-to-end encryption"
 
-        Local_SendEncryptedMessage _ _ _ _ _ ->
+        Local_SendEncryptedMessage _ _ _ _ ->
             "Sent an encrypted message"
 
 
@@ -3848,7 +3848,7 @@ changeUpdate localMsg local =
                         (DmChannel.E2eeDeclinedBy local.localUser.session.userId)
                         local
 
-                Local_SendEncryptedMessage createdAt { otherUserId } content threadRouteWithRepliedTo attachedFiles ->
+                Local_SendEncryptedMessage createdAt { otherUserId } content threadRouteWithRepliedTo ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -3862,7 +3862,6 @@ changeUpdate localMsg local =
                                 otherUserId
                                 content
                                 threadRouteWithRepliedTo
-                                attachedFiles
                                 local
 
                         ( currentlyViewing2, user2 ) =
@@ -5298,7 +5297,7 @@ changeUpdate localMsg local =
                         )
                         local
 
-                Server_SendEncryptedMessage createdBy createdByUser createdAt id content threadRouteWithRepliedTo attachedFiles ->
+                Server_SendEncryptedMessage createdBy createdByUser createdAt id content threadRouteWithRepliedTo ->
                     handleServerSendDmMessage
                         id
                         createdBy
@@ -5306,10 +5305,10 @@ changeUpdate localMsg local =
                         -- TODO, solve stickers
                         SeqDict.empty
                         (\maybeReplyTo ->
-                            Message.encryptedUserTextMessageFrontend createdAt createdBy content maybeReplyTo attachedFiles
+                            Message.encryptedUserTextMessageFrontend createdAt createdBy content maybeReplyTo
                         )
                         (\maybeReplyTo ->
-                            Message.encryptedUserTextMessageFrontend createdAt createdBy content maybeReplyTo attachedFiles
+                            Message.encryptedUserTextMessageFrontend createdAt createdBy content maybeReplyTo
                         )
                         threadRouteWithRepliedTo
                         local
@@ -6972,6 +6971,27 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                         else
                                                             Nothing
 
+                                                    EncryptedUserTextMessage_NoReply data ->
+                                                        case
+                                                            ( SeqDict.get (Encryption.hash data.encryptedData) local.localUser.decryptedMessages
+                                                            , local.localUser.session.userId == data.createdBy
+                                                            )
+                                                        of
+                                                            ( Just (Ok contentAndEmbeds), True ) ->
+                                                                ( Id.fromInt index
+                                                                , { createdAt = data.createdAt
+                                                                  , createdBy = data.createdBy
+                                                                  , content = contentAndEmbeds.content
+                                                                  , reactions = data.reactions
+                                                                  , editedAt = data.editedAt
+                                                                  , attachedFiles = contentAndEmbeds.attachedFiles
+                                                                  }
+                                                                )
+                                                                    |> Just
+
+                                                            _ ->
+                                                                Nothing
+
                                                     UserJoinedMessage_NoReply _ _ _ ->
                                                         Nothing
 
@@ -7042,6 +7062,9 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
 
                                                         else
                                                             Nothing
+
+                                                    EncryptedUserTextMessage_NoReply data ->
+                                                        Nothing
 
                                                     UserJoinedMessage_NoReply _ _ _ ->
                                                         Nothing
@@ -7118,10 +7141,9 @@ addEncryptedDmMessage :
     -> Id UserId
     -> EncryptedData (ContentAndEmbeds (Id UserId))
     -> ThreadRouteWithMaybeMessage
-    -> SeqDict (Id FileId) FileData
     -> LocalState
     -> LocalState
-addEncryptedDmMessage createdAt createdBy otherUserId contentAndEmbeds threadRouteWithRepliedTo attachedFiles local =
+addEncryptedDmMessage createdAt createdBy otherUserId contentAndEmbeds threadRouteWithRepliedTo local =
     let
         dmChannel : FrontendDmChannel
         dmChannel =
@@ -7140,7 +7162,6 @@ addEncryptedDmMessage createdAt createdBy otherUserId contentAndEmbeds threadRou
                                 createdBy
                                 contentAndEmbeds
                                 maybeReplyTo
-                                attachedFiles
                             )
                             dmChannel
 
@@ -7151,7 +7172,6 @@ addEncryptedDmMessage createdAt createdBy otherUserId contentAndEmbeds threadRou
                                 createdBy
                                 contentAndEmbeds
                                 maybeReplyTo
-                                attachedFiles
                             )
                             dmChannel
                 )

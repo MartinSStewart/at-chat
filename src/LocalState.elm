@@ -3426,14 +3426,13 @@ toMessageNoReply message =
                 |> UserTextMessage_NoReply
 
         EncryptedUserTextMessage data ->
-            { createdAt = data.createdAt
+            { encryptedData = data.encryptedData
+            , createdAt = data.createdAt
             , createdBy = data.createdBy
-            , content = RichText.failedToDecryptMessage
             , reactions = data.reactions
             , editedAt = data.editedAt
-            , attachedFiles = data.attachedFiles
             }
-                |> UserTextMessage_NoReply
+                |> EncryptedUserTextMessage_NoReply
 
         UserJoinedMessage time userId reactions _ ->
             UserJoinedMessage_NoReply time userId reactions

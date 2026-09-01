@@ -1,5 +1,6 @@
 module FileStatus exposing
-    ( ContentType(..)
+    ( AesPrivateKey
+    , ContentType(..)
     , ContentTypeType(..)
     , ExposureTime
     , FileData
@@ -114,6 +115,11 @@ type FileStatus
 
 type IsEncrypted
     = IsNotEncrypted
+    | IsEncrypted AesPrivateKey
+
+
+type AesPrivateKey
+    = AesPrivateKey Bytes
 
 
 {-| OpaqueVariants
