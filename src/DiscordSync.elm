@@ -1938,7 +1938,7 @@ latency) of a reconnect that isn't being backed off at all.
 -}
 gatewayReconnectTickInterval : Duration.Duration
 gatewayReconnectTickInterval =
-    Duration.milliseconds 200
+    Duration.second
 
 
 websocketCreateHandle : String -> (Websocket.Connection -> msg) -> String -> Command restriction toMsg msg
@@ -1955,10 +1955,6 @@ websocketClose debugName connection =
     Websocket.close connection |> Task.andThen (\() -> Time.now |> Task.map debugName)
 
 
-{-| Discord decides whether a session can be resumed based on the websocket close code, so we need
-the number rather than the name. Note that Effect.Websocket skips 1004 (it's reserved), so the
-constructors after UnsupportedData are all one higher than their name suggests.
--}
 closeEventCodeToInt : Websocket.CloseEventCode -> Int
 closeEventCodeToInt code =
     case code of
