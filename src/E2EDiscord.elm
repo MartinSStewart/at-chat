@@ -3213,6 +3213,83 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
+    , E2EHelper.startTest
+        "Admin page shows the state of the Discord gateway websockets"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\_ ->
+                [ -- The gateway connection is up and the ready event reset the reconnect backoff.
+                  T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/admin"
+                    E2EHelper.desktopWindow
+                    (\adminPage ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ adminPage.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , adminPage.click
+                            100
+                            (Pages.Admin.expandSectionButtonId User.DiscordUsersSection)
+                        , adminPage.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Websocket open" ])
+                        , adminPage.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.exactText "1 failed reconnect" ]
+                            )
+                        ]
+                    )
+
+                -- Discord drops the connection. We reconnect right away, but nothing has been
+                -- ready or resumed on the new websocket yet, so it counts as a failed attempt.
+                , E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ T.websocketClose 100 connection (Websocket.UnknownCode 4000) "Unknown error" ]
+                    )
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/admin"
+                    E2EHelper.desktopWindow
+                    (\adminPage ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ adminPage.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , -- The section was expanded above and that's stored on the user, so
+                          -- this admin page opens with it already expanded.
+                          adminPage.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Websocket open"
+                                , Test.Html.Selector.exactText "1 failed reconnect"
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
     ]
 
 
