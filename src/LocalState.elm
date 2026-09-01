@@ -11,6 +11,7 @@ module LocalState exposing
     , Archived
     , BackendChannel
     , BackendGuild
+    , BackupContents(..)
     , CallStatus(..)
     , ChannelStatus(..)
     , ConnectionData
@@ -27,6 +28,7 @@ module LocalState exposing
     , FrontendChannel
     , FrontendGuild
     , JoinGuildError(..)
+    , LastBackup
     , LastRequest(..)
     , LoadingDiscordChannel(..)
     , LoadingDiscordChannelStep(..)
@@ -660,6 +662,7 @@ type alias AdminData =
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
     , serverSecretRefreshedAt : ServerSecretStatus
+    , lastBackup : Maybe LastBackup
     , websocketCloseEvents : Array WebsocketClosedEvent
     , sessions : SeqDict SessionIdHash UserSession
     , wordSpellingGameEnglish : WordSpellingGameStatus
@@ -695,6 +698,21 @@ type alias ConnectionData =
 type CallStatus
     = NotInCall
     | ConnectedToCall Call.CallId
+
+
+{-| What the backend knows about the most recent backup it generated. The bytes stay on
+the backend until the admin asks for them, so this is only enough to label the download
+button with.
+-}
+type alias LastBackup =
+    { createdAt : Time.Posix
+    , contents : BackupContents
+    }
+
+
+type BackupContents
+    = FullBackup
+    | SubsetBackup
 
 
 type ServerSecretStatus

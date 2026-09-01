@@ -96,7 +96,7 @@ tests =
         ]
 
 
-{-| The progress of every step the export takes, in order, ending with the step
+{-| The progress of every step the export takes, in order, stopping before the step
 that assembles the export.
 -}
 stepsOf : BackendModel -> List Pages.Admin.ExportProgress
@@ -112,21 +112,31 @@ stepsOf model =
 stepsHelper : ExportStateProgress -> List Pages.Admin.ExportProgress -> List Pages.Admin.ExportProgress
 stepsHelper exportState collected =
     case Backend.handleExportBackendStep exportState of
-        ( progress, Just nextExportState ) ->
+        Types.ExportInProgress progress nextExportState ->
             stepsHelper nextExportState (progress :: collected)
 
-        ( progress, Nothing ) ->
-            List.reverse (progress :: collected)
+        Types.ExportFinished _ ->
+            List.reverse collected
 
 
 exportOf : BackendModel -> Maybe Bytes
 exportOf model =
-    case List.reverse (stepsOf model) of
-        (Pages.Admin.ExportingFinalStep bytes) :: _ ->
-            Just bytes
+    case (Backend.startExport (Time.millisToPosix 0) model).scheduledExportState of
+        Just exportState ->
+            Just (exportBytesHelper exportState)
 
-        _ ->
+        Nothing ->
             Nothing
+
+
+exportBytesHelper : ExportStateProgress -> Bytes
+exportBytesHelper exportState =
+    case Backend.handleExportBackendStep exportState of
+        Types.ExportInProgress _ nextExportState ->
+            exportBytesHelper nextExportState
+
+        Types.ExportFinished bytes ->
+            bytes
 
 
 testModel : BackendModel

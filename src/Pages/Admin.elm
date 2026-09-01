@@ -61,7 +61,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordRole, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
+import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), BackupContents(..), ConnectionData, DiscordRole, DiscordUserData_ForAdmin(..), LastBackup, LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -138,6 +138,7 @@ type Msg
     | TypedInReadOnlyTextInput
     | PressedExportBackend
     | PressedExportSubsetBackend
+    | PressedDownloadLastBackup
     | ToggledExportSubsetGuild (Id GuildId) Bool
     | ToggledExportSubsetDmChannel DmChannelId Bool
     | ToggledExportSubsetDiscordGuild (Discord.Id Discord.GuildId) Bool
@@ -161,6 +162,7 @@ type Msg
 
 type ToBackend
     = ExportBackendRequest ExportSubset
+    | DownloadLastBackupRequest
     | ImportBackendRequest Bytes
     | CountToBackendRequest
 
@@ -181,6 +183,8 @@ type alias ExportSubsetSelection =
 type ToFrontend
     = ImportBackendResponse (Result () ())
     | ExportBackendProgress ExportSubset ExportProgress
+    | ExportBackendFinished
+    | DownloadLastBackupResponse BackupContents Bytes
     | CountToFrontend Int
 
 
@@ -190,7 +194,6 @@ type ExportProgress
     | ExportingDmChannels { encoded : Int, total : Int }
     | ExportingDiscordGuilds { channelsRemaining : Int, encoded : Int, total : Int }
     | ExportingDiscordDmChannels { encoded : Int, total : Int }
-    | ExportingFinalStep Bytes
 
 
 type alias Model =
@@ -260,6 +263,7 @@ type alias InitAdminData =
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
     , serverSecretRegeneratedAt : Maybe Time.Posix
+    , lastBackup : Maybe LastBackup
     , websocketCloseEvents : Array WebsocketClosedEvent
     , sessions : SeqDict SessionIdHash UserSession
     , wordSpellingGameEnglish : WordSpellingGameStatus
@@ -1198,6 +1202,9 @@ update navigationKey time adminData localState msg model =
             , NoOutMsg
             )
 
+        PressedDownloadLastBackup ->
+            ( model, Lamdera.sendToBackend DownloadLastBackupRequest, NoOutMsg )
+
         PressedExportSubsetBackend ->
             ( { model
                 | exportSubsetSelection =
@@ -1453,24 +1460,25 @@ updateUserTable updateFunc model =
 updateFromBackend : ToFrontend -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
 updateFromBackend toFrontend model =
     case toFrontend of
-        ExportBackendProgress isPartial progress ->
-            case progress of
-                ExportingFinalStep bytes ->
-                    ( { model | exportProgress = Nothing }
-                    , Effect.File.Download.bytes
-                        (case isPartial of
-                            ExportAll ->
-                                "backend-export.bin"
+        ExportBackendProgress _ progress ->
+            ( { model | exportProgress = Just progress }, Command.none )
 
-                            ExportSubset _ ->
-                                "backend-export-subset.bin"
-                        )
-                        "application/octet-stream"
-                        bytes
-                    )
+        ExportBackendFinished ->
+            ( { model | exportProgress = Nothing }, Command.none )
 
-                _ ->
-                    ( { model | exportProgress = Just progress }, Command.none )
+        DownloadLastBackupResponse contents bytes ->
+            ( model
+            , Effect.File.Download.bytes
+                (case contents of
+                    FullBackup ->
+                        "backend-export.bin"
+
+                    SubsetBackup ->
+                        "backend-export-subset.bin"
+                )
+                "application/octet-stream"
+                bytes
+            )
 
         CountToFrontend count ->
             ( { model | countToFrontend = model.countToFrontend ++ " " ++ String.fromInt count }, Command.none )
@@ -1655,7 +1663,7 @@ view isMobile2 version time local adminData user model =
             , filesSection isMobile2 user adminData
             , stickersAndEmojisSection isMobile2 local user
             , toBackendLogsSection isMobile2 user adminData
-            , exportSection isMobile2 user adminData model
+            , exportSection isMobile2 local.localUser.timezone user adminData model
             ]
         )
 
@@ -2583,12 +2591,9 @@ exportProgressText progress =
         ExportingDiscordDmChannels { encoded, total } ->
             "Encoding Discord DM channels " ++ String.fromInt encoded ++ "/" ++ String.fromInt total
 
-        ExportingFinalStep _ ->
-            "Assembling export..."
 
-
-exportSection : Bool -> BackendUser -> AdminData -> Model -> Element Msg
-exportSection isMobile user adminData model =
+exportSection : Bool -> Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
+exportSection isMobile timezone user adminData model =
     section
         isMobile
         user.expandedSections
@@ -2616,6 +2621,31 @@ exportSection isMobile user adminData model =
 
             Nothing ->
                 Ui.none
+        , case adminData.lastBackup of
+            Just lastBackup ->
+                Ui.row
+                    [ Ui.spacing 8 ]
+                    [ MyUi.simpleButton
+                        (Dom.id "admin_downloadLastBackupButton")
+                        PressedDownloadLastBackup
+                        (Ui.text
+                            (case lastBackup.contents of
+                                FullBackup ->
+                                    "Download backup"
+
+                                SubsetBackup ->
+                                    "Download subset backup"
+                            )
+                        )
+                    , "Generated at "
+                        ++ MyUi.datestamp timezone lastBackup.createdAt
+                        ++ " "
+                        ++ MyUi.timestamp lastBackup.createdAt timezone
+                        |> Ui.text
+                    ]
+
+            Nothing ->
+                Ui.text "No backup has been generated yet"
         , Ui.row
             [ Ui.spacing 8 ]
             [ MyUi.simpleButton

@@ -2509,6 +2509,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     |> T.collapsableGroup "Delete stuff"
                                     |> List.singleton
                             )
+                        , admin.click 300 (Dom.id "admin_downloadLastBackupButton")
                         , admin.click 300 (Dom.id "admin_importBackendButton")
                         , admin.checkView
                             500

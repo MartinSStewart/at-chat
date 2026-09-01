@@ -1566,6 +1566,7 @@ adminData model lastLogPageViewed =
                             Nothing ->
                                 ""
     , serverSecretRegeneratedAt = model.serverSecretRegeneratedAt
+    , lastBackup = Maybe.map .backup model.lastBackup
     , websocketCloseEvents = model.websocketCloseEvents
     , sessions =
         SeqDict.values model.sessions

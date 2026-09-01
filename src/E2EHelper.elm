@@ -2597,6 +2597,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_NewLog _ _ ->
                             True
 
+                        Types.Server_BackupGenerated _ ->
+                            True
+
                         Types.Server_GotGuildMessageEmbed _ _ _ _ ->
                             True
 
@@ -2698,6 +2701,7 @@ allAttackerToBackendChanges =
     , LoginWithTwoFactorRequest InitialLoadRequested_None 0 UserAgent.init
     , GetLoginTokenRequest (Unsafe.emailAddress "attacker@example.com" |> Untrusted.untrust)
     , AdminToBackend (Pages.Admin.ExportBackendRequest Pages.Admin.ExportAll)
+    , AdminToBackend Pages.Admin.DownloadLastBackupRequest
     , LocalModelChangeRequest (ChangeId 0) Local_Invalid
     , TwoFactorToBackend TwoFactorAuthentication.EnableTwoFactorAuthenticationRequest
     , TwoFactorToBackend (TwoFactorAuthentication.DisableTwoFactorAuthenticationRequest 123456)
