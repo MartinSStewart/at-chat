@@ -4,6 +4,7 @@ module DiscordSync exposing
     , attachmentsToFileData
     , closeEventCodeToInt
     , discordUserWebsocketMsg
+    , gatewayReconnectTickInterval
     , getForumChannelReload
     , getManyMessages
     , getThreadsForMessages
@@ -1931,6 +1932,15 @@ discordIdCreatedAt id =
         |> Time.millisToPosix
 
 
+{-| How often `GatewayReconnectTick` fires while the backend is waiting to reopen a gateway
+websocket. The wait is counted down in steps this size, so it's also the granularity (and the
+latency) of a reconnect that isn't being backed off at all.
+-}
+gatewayReconnectTickInterval : Duration.Duration
+gatewayReconnectTickInterval =
+    Duration.milliseconds 100
+
+
 websocketCreateHandle : String -> (Websocket.Connection -> msg) -> String -> Command restriction toMsg msg
 websocketCreateHandle debugName msg url =
     let
@@ -2017,7 +2027,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             , Task.perform
                                 (WebsocketClosedByBackendForUser
                                     discordUserId
-                                    (Just { delay = delay, url = reconnectTo })
+                                    (Just { delay = delay, gatewayUrl = reconnectTo })
                                 )
                                 (websocketClose (WebsocketClosed_CloseAndReopenForUser discordUserId) connection)
                                 :: cmds

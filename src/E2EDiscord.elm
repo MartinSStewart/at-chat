@@ -3214,7 +3214,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
-        "Admin page shows the state of the Discord gateway websockets"
+        "Discord gateway reconnects back off exponentially, and the admin page shows their state"
         E2EHelper.startTime
         normalConfig
         [ E2EHelper.linkDiscordAndLogin
@@ -3255,12 +3255,14 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         ]
                     )
 
-                -- Discord drops the connection. We reconnect right away, but nothing has been
-                -- ready or resumed on the new websocket yet, so it counts as a failed attempt.
-                , E2EHelper.andThenWebsocket
-                    (\connection _ ->
-                        [ T.websocketClose 100 connection (Websocket.UnknownCode 4000) "Unknown error" ]
-                    )
+                -- Discord drops the connection four times in a row without us ever getting back to
+                -- ready or resumed, so every reconnect counts as a failed attempt and the wait
+                -- before the next one doubles: 0s, 1s, 3s, 7s (each shortened by up to half by the
+                -- jitter).
+                , gatewayDropAndReconnect 0
+                , gatewayDropAndReconnect 1
+                , gatewayDropAndReconnect 3
+                , gatewayDropAndReconnect 7
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId0
@@ -3282,7 +3284,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             100
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.exactText "Websocket open"
-                                , Test.Html.Selector.exactText "1 failed reconnect"
+                                , Test.Html.Selector.exactText "4 failed reconnects"
                                 ]
                             )
                         ]
@@ -3291,6 +3293,76 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     ]
+
+
+{-| Have Discord drop the gateway websocket, check that the backend waits out the delay the
+backoff picked, and then let it run down so the websocket is back for the next drop.
+
+`unjitteredDelay` is the wait in seconds before the jitter is applied, which is
+`2 ^ failedReconnectAttempts - 1`. The jitter only ever shortens it, and never by more than half.
+
+-}
+gatewayDropAndReconnect :
+    Float
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+gatewayDropAndReconnect unjitteredDelay =
+    T.group
+        [ E2EHelper.andThenWebsocket
+            (\connection _ ->
+                [ T.websocketClose 100 connection (Websocket.UnknownCode 4000) "Unknown error"
+
+                -- Check before any time passes, otherwise a delay of 0 has already run down.
+                , T.checkBackend 0 (checkGatewayReconnectDelay unjitteredDelay)
+                ]
+            )
+
+        -- Wait out the longest the delay could have been, plus a tick to reopen the websocket.
+        , T.checkBackend (unjitteredDelay * 1000 + 200) checkGatewayReconnected
+        ]
+
+
+{-| How long the backend still has to wait before it reopens the gateway websocket, in seconds.
+-}
+pendingGatewayReconnect : E2EHelper.BackendModel2 -> Maybe Float
+pendingGatewayReconnect backend =
+    SeqDict.get E2EHelper.currentDiscordUserId (E2EHelper.unwrapBackend backend).pendingGatewayReconnects
+        |> Maybe.map (\pending -> Duration.inSeconds pending.delay)
+
+
+checkGatewayReconnectDelay : Float -> E2EHelper.BackendModel2 -> Result String ()
+checkGatewayReconnectDelay unjitteredDelay backend =
+    case pendingGatewayReconnect backend of
+        Just delay ->
+            if delay >= unjitteredDelay / 2 && delay <= unjitteredDelay then
+                Ok ()
+
+            else
+                Err
+                    ("Expected the gateway reconnect to be delayed by between "
+                        ++ String.fromFloat (unjitteredDelay / 2)
+                        ++ "s and "
+                        ++ String.fromFloat unjitteredDelay
+                        ++ "s, but it was "
+                        ++ String.fromFloat delay
+                        ++ "s"
+                    )
+
+        Nothing ->
+            Err "Expected the backend to be waiting to reopen the gateway websocket"
+
+
+checkGatewayReconnected : E2EHelper.BackendModel2 -> Result String ()
+checkGatewayReconnected backend =
+    case pendingGatewayReconnect backend of
+        Just delay ->
+            Err
+                ("The gateway websocket hasn't been reopened yet, "
+                    ++ String.fromFloat delay
+                    ++ "s left to wait"
+                )
+
+        Nothing ->
+            Ok ()
 
 
 groupChatCreated : String

@@ -36,6 +36,7 @@ module Types exposing
     , MessageMenuExtraOptions
     , NewChannelForm
     , NewGuildForm
+    , PendingGatewayReconnect
     , PublicGoMatch(..)
     , RevealedSpoilers
     , ServerChange(..)
@@ -399,7 +400,17 @@ type alias BackendModel =
     , goMatchPublicIds : OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
     , wordSpellingGameEnglish : WordList
     , wordSpellingGameSwedish : WordList
-    , pendingGatewayReconnects : SeqDict (Discord.Id Discord.UserId) { delay : Duration, gatewayUrl : String }
+    , pendingGatewayReconnects : SeqDict (Discord.Id Discord.UserId) PendingGatewayReconnect
+    }
+
+
+{-| A gateway websocket the backend is waiting to reopen. `delay` is how much of the wait is left,
+counted down by `GatewayReconnectTick` rather than by a `Process.sleep` task, so that a reconnect
+survives the backend restarting.
+-}
+type alias PendingGatewayReconnect =
+    { delay : Duration
+    , gatewayUrl : String
     }
 
 
@@ -723,8 +734,8 @@ type BackendMsg
             )
         )
     | WebsocketCreatedHandleForUser (Discord.Id Discord.UserId) Websocket.Connection
-    | WebsocketClosedByBackendForUser (Discord.Id Discord.UserId) (Maybe { delay : Duration, url : String }) WebsocketClosedEvent
-    | OpenDiscordUserWebsocket (Discord.Id Discord.UserId) String
+    | WebsocketClosedByBackendForUser (Discord.Id Discord.UserId) (Maybe PendingGatewayReconnect) WebsocketClosedEvent
+    | GatewayReconnectTick
     | WebsocketSentDataForUser (Discord.Id Discord.UserId) (Result Websocket.SendError ())
     | DiscordMessageCreate_AttachmentsUploaded Discord.Message (Nonempty (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
     | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (Nonempty (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
