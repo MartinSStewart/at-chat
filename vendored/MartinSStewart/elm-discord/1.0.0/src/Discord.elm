@@ -6528,10 +6528,6 @@ websocketGatewayUrl =
     "wss://gateway.discord.gg/?v=9&encoding=json"
 
 
-{-| The `resume_gateway_url` Discord hands us in the ready event has no query parameters on it.
-Discord requires that we reconnect with the same query parameters we used for the original
-connection, so we have to add them back on ourselves.
--}
 resumeUrl : { a | resumeGatewayUrl : String } -> String
 resumeUrl gatewayState =
     gatewayState.resumeGatewayUrl ++ "/?v=9&encoding=json"
@@ -6562,15 +6558,6 @@ maxReconnectDelay =
     Duration.seconds 60
 
 
-{-| Losing the gateway connection is usually a blip, so the first reconnect happens immediately.
-When the reconnects themselves keep failing though (Discord is down, or it's rate limiting us),
-retrying in a tight loop only makes things worse, so each consecutive attempt waits twice as long
-as the last one, up to a minute. The delay is then randomly shortened by up to half so that a
-backend holding several Discord connections doesn't bring them all back at the same instant.
-
-The counter resets once a connection gets far enough to be ready or resumed.
-
--}
 nextReconnectDelay : Model connection -> ( Duration, Model connection )
 nextReconnectDelay model =
     let
@@ -6584,11 +6571,6 @@ nextReconnectDelay model =
         |> Quantity.multiplyBy jitter
     , { model | reconnect = { failedAttempts = model.reconnect.failedAttempts + 1, seed = nextSeed } }
     )
-
-
-resetReconnectDelay : Model connection -> Model connection
-resetReconnectDelay model =
-    { model | reconnect = { failedAttempts = 0, seed = model.reconnect.seed } }
 
 
 createdHandle : connection -> Model connection -> Model connection
@@ -6721,20 +6703,24 @@ handleGateway authToken intents response model =
                     in
                     case opDispatchEvent of
                         DispatchBot_ReadyEvent discordSessionId resumeGatewayUrl ->
-                            ( resetReconnectDelay
-                                { model
-                                    | gatewayState =
-                                        Just
-                                            { sessionId = discordSessionId
-                                            , sequenceCounter = sequenceCounter
-                                            , resumeGatewayUrl = resumeGatewayUrl
-                                            }
-                                }
+                            ( { model
+                                | gatewayState =
+                                    Just
+                                        { sessionId = discordSessionId
+                                        , sequenceCounter = sequenceCounter
+                                        , resumeGatewayUrl = resumeGatewayUrl
+                                        }
+                                , reconnect = { failedAttempts = 0, seed = model.reconnect.seed }
+                              }
                             , []
                             )
 
                         DispatchBot_ResumedEvent ->
-                            ( updateCounter model |> resetReconnectDelay, [] )
+                            let
+                                model2 =
+                                    updateCounter model
+                            in
+                            ( { model2 | reconnect = { failedAttempts = 0, seed = model.reconnect.seed } }, [] )
 
                         DispatchBot_MessageCreateEvent channelType message ->
                             ( updateCounter model, [ UserCreatedMessage channelType message ] )
@@ -6870,15 +6856,15 @@ handleUserGateway authToken intents response model =
                 OpDispatch sequenceCounter opDispatchEvent ->
                     (case opDispatchEvent of
                         DispatchUser_ReadyEvent readyEvent ->
-                            ( resetReconnectDelay
-                                { model
-                                    | gatewayState =
-                                        Just
-                                            { sessionId = readyEvent.sessionId
-                                            , sequenceCounter = sequenceCounter
-                                            , resumeGatewayUrl = readyEvent.resumeGatewayUrl
-                                            }
-                                }
+                            ( { model
+                                | gatewayState =
+                                    Just
+                                        { sessionId = readyEvent.sessionId
+                                        , sequenceCounter = sequenceCounter
+                                        , resumeGatewayUrl = readyEvent.resumeGatewayUrl
+                                        }
+                                , reconnect = { failedAttempts = 0, seed = model.reconnect.seed }
+                              }
                             , [ UserOutMsg_ReadyData readyEvent ]
                             )
 
@@ -6886,7 +6872,7 @@ handleUserGateway authToken intents response model =
                             ( model, [ UserOutMsg_SupplementalReadyData readySupplementalEvent ] )
 
                         DispatchUser_ResumedEvent ->
-                            ( resetReconnectDelay model, [] )
+                            ( { model | reconnect = { failedAttempts = 0, seed = model.reconnect.seed } }, [] )
 
                         DispatchUser_MessageCreateEvent channelType message ->
                             ( model, [ UserOutMsg_UserCreatedMessage channelType message ] )
