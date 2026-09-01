@@ -279,7 +279,7 @@ init =
       , goMatchPublicIds = OneToOne.empty
       , wordSpellingGameEnglish = WordList_NotLoaded
       , wordSpellingGameSwedish = WordList_NotLoaded
-      , dummyField = 123
+      , pendingGatewayReconnects = SeqDict.empty
       }
     , Command.none
     )

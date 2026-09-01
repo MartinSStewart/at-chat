@@ -2024,16 +2024,16 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             )
 
                         Discord.UserOutMsg_OpenHandle delay maybeResumeGatewayUrl ->
-                            ( model2
-                            , (Process.sleep delay
-                                |> Task.perform
-                                    (\() ->
-                                        OpenDiscordUserWebsocket
-                                            discordUserId
-                                            (Maybe.withDefault Discord.websocketGatewayUrl maybeResumeGatewayUrl)
-                                    )
-                              )
-                                :: cmds
+                            ( { model2
+                                | pendingGatewayReconnects =
+                                    SeqDict.insert
+                                        discordUserId
+                                        { delay = delay
+                                        , gatewayUrl = Maybe.withDefault Discord.websocketGatewayUrl maybeResumeGatewayUrl
+                                        }
+                                        model2.pendingGatewayReconnects
+                              }
+                            , cmds
                             )
 
                         Discord.UserOutMsg_AuthenticationIsNoLongerValid ->

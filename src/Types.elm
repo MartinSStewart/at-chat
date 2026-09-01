@@ -399,7 +399,7 @@ type alias BackendModel =
     , goMatchPublicIds : OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
     , wordSpellingGameEnglish : WordList
     , wordSpellingGameSwedish : WordList
-    , dummyField : Int
+    , pendingGatewayReconnects : SeqDict (Discord.Id Discord.UserId) { delay : Duration, gatewayUrl : String }
     }
 
 

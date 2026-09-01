@@ -3750,7 +3750,7 @@ discordUsersSection isMobile user adminData =
                             [ Ui.el [ Ui.width (Ui.px 150) ] (Ui.text (Discord.idToString discordUserId))
                             , discordUserLabel discordUserId discordUser
                             , Ui.el
-                                [ Ui.width (Ui.px 200) ]
+                                [ Ui.widthMin 200, Ui.width Ui.shrink ]
                                 (case discordUser of
                                     FullData_ForAdmin data ->
                                         linkedToView adminData data.linkedTo
