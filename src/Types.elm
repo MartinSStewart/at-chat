@@ -297,7 +297,6 @@ type alias EncryptionRequests =
 type alias PendingEncryptedMessage =
     { otherUserId : Id UserId
     , threadRoute : ThreadRouteWithMaybeMessage
-    , attachedFiles : SeqDict (Id FileId) FileData
     , contentAndEmbeds : ContentAndEmbeds (Id UserId)
     }
 
@@ -307,7 +306,6 @@ type alias PendingDecryptedMessage =
     , id : Viewing_DmId
     , senderId : Id UserId
     , threadRoute : ThreadRouteWithMaybeMessage
-    , attachedFiles : SeqDict (Id FileId) FileData
     }
 
 

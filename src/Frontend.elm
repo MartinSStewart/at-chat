@@ -3398,7 +3398,6 @@ updateLoaded msg model =
                                             { otherUserId = pending.otherUserId }
                                             cipherText
                                             pending.threadRoute
-                                            pending.attachedFiles
                                             |> Just
                                         )
                                         (FrontendExtra.fileDecryptedMessages
@@ -4389,6 +4388,13 @@ updateLoaded msg model =
                                                             (User.allUsers local.localUser)
                                                             nonempty
                                                     , embeds = Array.empty
+                                                    , attachedFiles =
+                                                        case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
+                                                            Just dict ->
+                                                                NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+
+                                                            Nothing ->
+                                                                SeqDict.empty
                                                     }
                                                     loggedIn
 
@@ -9180,7 +9186,7 @@ plainTextLoaded messages =
             (\( messageId, message ) ->
                 case message of
                     Message.UserTextMessage data ->
-                        Just ( messageId, { content = data.content, embeds = data.embeds } )
+                        Just ( messageId, { content = data.content, embeds = data.embeds, attachedFiles = data.attachedFiles } )
 
                     _ ->
                         Nothing
@@ -9381,13 +9387,6 @@ startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
 
                                 NoThread ->
                                     NoThreadWithMaybeMessage (SeqDict.get guildOrDmId loggedIn.replyTo)
-                        , attachedFiles =
-                            case SeqDict.get guildOrDmId loggedIn.filesToUpload of
-                                Just dict ->
-                                    NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
-
-                                Nothing ->
-                                    SeqDict.empty
                         , contentAndEmbeds = contentAndEmbeds
                         }
                         requests.pendingEncryptedMessages

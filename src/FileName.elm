@@ -1,5 +1,6 @@
-module FileName exposing (FileName(..), fromString, toString)
+module FileName exposing (FileName(..), codec, fromString, toString)
 
+import Serialize
 import String.Nonempty exposing (NonemptyString(..))
 
 
@@ -25,3 +26,8 @@ fromString text =
 toString : FileName -> String
 toString (FileName a) =
     String.Nonempty.toString a
+
+
+codec : Serialize.Codec e FileName
+codec =
+    Debug.todo ""
