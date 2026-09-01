@@ -1938,7 +1938,7 @@ latency) of a reconnect that isn't being backed off at all.
 -}
 gatewayReconnectTickInterval : Duration.Duration
 gatewayReconnectTickInterval =
-    Duration.milliseconds 100
+    Duration.milliseconds 200
 
 
 websocketCreateHandle : String -> (Websocket.Connection -> msg) -> String -> Command restriction toMsg msg
