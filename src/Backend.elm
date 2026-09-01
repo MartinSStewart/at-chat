@@ -278,7 +278,7 @@ init =
       , goMatchPublicIds = OneToOne.empty
       , wordSpellingGameEnglish = WordList_NotLoaded
       , wordSpellingGameSwedish = WordList_NotLoaded
-      , dummyField = 123
+      , pendingGatewayReconnects = SeqDict.empty
       }
     , Command.none
     )
@@ -337,6 +337,11 @@ subscriptions model =
 
             Nothing ->
                 Subscription.none
+        , if SeqDict.isEmpty model.pendingGatewayReconnects then
+            Subscription.none
+
+          else
+            Time.every DiscordSync.gatewayReconnectTickInterval (\_ -> GatewayReconnectTick)
         , Time.every Duration.hour HourlyUpdate
         ]
 
@@ -728,7 +733,7 @@ update msg model =
                         backendUser =
                             { auth = auth
                             , user = discordUser
-                            , connection = Discord.init
+                            , connection = Discord.init (Time.posixToMillis linkedAt)
                             , linkedTo = userId
                             , icon = Nothing
                             , linkedAt = linkedAt
@@ -736,7 +741,11 @@ update msg model =
                             , markEverythingAsViewedOnceLoaded = True
                             }
                     in
-                    ( { model | discordUsers = SeqDict.insert discordUser.id (FullData backendUser) model.discordUsers }
+                    ( { model
+                        | discordUsers = SeqDict.insert discordUser.id (FullData backendUser) model.discordUsers
+                        , pendingGatewayReconnects =
+                            SeqDict.remove discordUser.id model.pendingGatewayReconnects
+                      }
                     , Command.batch
                         [ Lamdera.sendToFrontend clientId (LinkDiscordResponse (Ok ()))
                         , Broadcast.toUser
@@ -772,10 +781,14 @@ update msg model =
                                 , {- This is to prevent the normal reconnect flow.
                                      We want to trigger a new Ready gateway event so we can load all the data in it.
                                   -}
-                                  connection = Discord.init
+                                  connection = Discord.init (Time.posixToMillis time)
                             }
                     in
-                    ( { model | discordUsers = SeqDict.insert discordUserId (FullData discordUser2) model.discordUsers }
+                    ( { model
+                        | discordUsers = SeqDict.insert discordUserId (FullData discordUser2) model.discordUsers
+                        , pendingGatewayReconnects =
+                            SeqDict.remove discordUserId model.pendingGatewayReconnects
+                      }
                     , Command.batch
                         [ Lamdera.sendToFrontend clientId (LinkDiscordResponse (Ok ()))
                         , Broadcast.toUser
@@ -998,16 +1011,59 @@ update msg model =
                     ( model, Command.none )
 
         WebsocketClosedByBackendForUser discordUserId reopen websocketEvent ->
-            ( recordWebsocketCloseEvent websocketEvent model
-            , case reopen of
-                Just reconnectUrl ->
-                    DiscordSync.websocketCreateHandle
-                        "WebsocketClosedByBackendForUser"
-                        (WebsocketCreatedHandleForUser discordUserId)
-                        reconnectUrl
+            let
+                model2 : BackendModel
+                model2 =
+                    recordWebsocketCloseEvent websocketEvent model
+            in
+            ( case reopen of
+                Just reconnect ->
+                    { model2
+                        | pendingGatewayReconnects =
+                            SeqDict.insert discordUserId reconnect model2.pendingGatewayReconnects
+                    }
 
                 Nothing ->
-                    Command.none
+                    model2
+            , Command.none
+            )
+
+        GatewayReconnectTick ->
+            let
+                ( stillWaiting, reopenNow ) =
+                    SeqDict.foldl
+                        (\discordUserId reconnect ( waiting, reopen ) ->
+                            let
+                                remaining : Duration.Duration
+                                remaining =
+                                    Quantity.minus DiscordSync.gatewayReconnectTickInterval reconnect.delay
+                            in
+                            if Quantity.greaterThanZero remaining then
+                                ( SeqDict.insert discordUserId { reconnect | delay = remaining } waiting, reopen )
+
+                            else
+                                case SeqDict.get discordUserId model.discordUsers of
+                                    Just (FullData _) ->
+                                        ( waiting, ( discordUserId, reconnect.gatewayUrl ) :: reopen )
+
+                                    _ ->
+                                        -- The account was unlinked or needs authorizing again while
+                                        -- we were waiting, so there's nothing left to reconnect to.
+                                        ( waiting, reopen )
+                        )
+                        ( SeqDict.empty, [] )
+                        model.pendingGatewayReconnects
+            in
+            ( { model | pendingGatewayReconnects = stillWaiting }
+            , List.map
+                (\( discordUserId, gatewayUrl ) ->
+                    DiscordSync.websocketCreateHandle
+                        "GatewayReconnectTick"
+                        (WebsocketCreatedHandleForUser discordUserId)
+                        gatewayUrl
+                )
+                reopenNow
+                |> Command.batch
             )
 
         WebsocketSentDataForUser discordUserId result ->

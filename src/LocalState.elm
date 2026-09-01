@@ -21,6 +21,7 @@ module LocalState exposing
     , DiscordChannelReload
     , DiscordFrontendChannel
     , DiscordFrontendGuild
+    , DiscordGatewayStatus
     , DiscordMessageAlreadyExists(..)
     , DiscordRole
     , DiscordThreadReload
@@ -968,6 +969,7 @@ type DiscordUserData_ForAdmin
         , icon : Maybe FileHash
         , linkedAt : Time.Posix
         , isLoadingData : DiscordUserLoadingData
+        , gateway : DiscordGatewayStatus
         }
     | NeedsAuthAgain_ForAdmin
         { user : Discord.User
@@ -975,6 +977,16 @@ type DiscordUserData_ForAdmin
         , icon : Maybe FileHash
         , linkedAt : Time.Posix
         }
+
+
+{-| What the backend's gateway websocket for a Discord user is currently up to.
+`failedReconnectAttempts` is how many reconnects in a row have been started without the connection
+getting as far as ready or resumed, which is what `Discord.nextReconnectDelay` backs off on.
+-}
+type alias DiscordGatewayStatus =
+    { websocketIsOpen : Bool
+    , failedReconnectAttempts : Int
+    }
 
 
 type PrivateVapidKey

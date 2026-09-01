@@ -4,6 +4,7 @@ module DiscordSync exposing
     , attachmentsToFileData
     , closeEventCodeToInt
     , discordUserWebsocketMsg
+    , gatewayReconnectTickInterval
     , getForumChannelReload
     , getManyMessages
     , getThreadsForMessages
@@ -1931,6 +1932,15 @@ discordIdCreatedAt id =
         |> Time.millisToPosix
 
 
+{-| How often `GatewayReconnectTick` fires while the backend is waiting to reopen a gateway
+websocket. The wait is counted down in steps this size, so it's also the granularity (and the
+latency) of a reconnect that isn't being backed off at all.
+-}
+gatewayReconnectTickInterval : Duration.Duration
+gatewayReconnectTickInterval =
+    Duration.second
+
+
 websocketCreateHandle : String -> (Websocket.Connection -> msg) -> String -> Command restriction toMsg msg
 websocketCreateHandle debugName msg url =
     let
@@ -1945,10 +1955,6 @@ websocketClose debugName connection =
     Websocket.close connection |> Task.andThen (\() -> Time.now |> Task.map debugName)
 
 
-{-| Discord decides whether a session can be resumed based on the websocket close code, so we need
-the number rather than the name. Note that Effect.Websocket skips 1004 (it's reserved), so the
-constructors after UnsupportedData are all one higher than their name suggests.
--}
 closeEventCodeToInt : Websocket.CloseEventCode -> Int
 closeEventCodeToInt code =
     case code of
@@ -2012,21 +2018,28 @@ discordUserWebsocketMsg discordUserId discordMsg model =
             List.foldl
                 (\outMsg ( model2, cmds ) ->
                     case outMsg of
-                        Discord.UserOutMsg_CloseAndReopenHandle connection reconnectTo ->
+                        Discord.UserOutMsg_CloseAndReopenHandle connection delay reconnectTo ->
                             ( model2
                             , Task.perform
-                                (WebsocketClosedByBackendForUser discordUserId (Just reconnectTo))
+                                (WebsocketClosedByBackendForUser
+                                    discordUserId
+                                    (Just { delay = delay, gatewayUrl = reconnectTo })
+                                )
                                 (websocketClose (WebsocketClosed_CloseAndReopenForUser discordUserId) connection)
                                 :: cmds
                             )
 
-                        Discord.UserOutMsg_OpenHandle maybeResumeGatewayUrl ->
-                            ( model2
-                            , websocketCreateHandle
-                                "OpenHandle"
-                                (WebsocketCreatedHandleForUser discordUserId)
-                                (Maybe.withDefault Discord.websocketGatewayUrl maybeResumeGatewayUrl)
-                                :: cmds
+                        Discord.UserOutMsg_OpenHandle delay maybeResumeGatewayUrl ->
+                            ( { model2
+                                | pendingGatewayReconnects =
+                                    SeqDict.insert
+                                        discordUserId
+                                        { delay = delay
+                                        , gatewayUrl = Maybe.withDefault Discord.websocketGatewayUrl maybeResumeGatewayUrl
+                                        }
+                                        model2.pendingGatewayReconnects
+                              }
+                            , cmds
                             )
 
                         Discord.UserOutMsg_AuthenticationIsNoLongerValid ->

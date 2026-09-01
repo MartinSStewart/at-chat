@@ -19,6 +19,7 @@ module Pages.Admin exposing
     , applyChangesToBackendUsers
     , disconnectClient
     , discordChannelReloadUser
+    , expandSectionButtonId
     , initForAdmin
     , initForUser
     , logSectionId
@@ -61,7 +62,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), BackupContents(..), ConnectionData, DiscordRole, DiscordUserData_ForAdmin(..), LastBackup, LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
+import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), BackupContents(..), ConnectionData, DiscordGatewayStatus, DiscordRole, DiscordUserData_ForAdmin(..), LastBackup, LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -3749,7 +3750,7 @@ discordUsersSection isMobile user adminData =
                             [ Ui.el [ Ui.width (Ui.px 150) ] (Ui.text (Discord.idToString discordUserId))
                             , discordUserLabel discordUserId discordUser
                             , Ui.el
-                                [ Ui.width (Ui.px 200) ]
+                                [ Ui.widthMin 200, Ui.width Ui.shrink ]
                                 (case discordUser of
                                     FullData_ForAdmin data ->
                                         linkedToView adminData data.linkedTo
@@ -3760,9 +3761,56 @@ discordUsersSection isMobile user adminData =
                                     NeedsAuthAgain_ForAdmin data ->
                                         linkedToView adminData data.linkedTo
                                 )
+                            , Ui.el
+                                [ Ui.width (Ui.px 260) ]
+                                (case discordUser of
+                                    FullData_ForAdmin data ->
+                                        gatewayStatusView data.gateway
+
+                                    BasicData_ForAdmin _ ->
+                                        Ui.none
+
+                                    NeedsAuthAgain_ForAdmin _ ->
+                                        Ui.el
+                                            [ Ui.Font.color MyUi.errorColor ]
+                                            (Ui.text "No websocket, needs auth again")
+                                )
                             ]
                     )
                     (SeqDict.toList adminData.discordUsers)
+                )
+        ]
+
+
+{-| Whether the backend is holding an open gateway websocket for a Discord user, and how many
+reconnects in a row have been started without one getting as far as ready or resumed. That count is
+what the reconnect backoff in Discord.elm uses to decide how long to wait, so a number that keeps
+climbing means we're failing to get back onto the gateway.
+-}
+gatewayStatusView : DiscordGatewayStatus -> Element msg
+gatewayStatusView gateway =
+    Ui.row
+        [ Ui.spacing 8, Ui.width Ui.shrink ]
+        [ if gateway.websocketIsOpen then
+            Ui.el [ Ui.width Ui.shrink ] (Ui.text "Websocket open")
+
+          else
+            Ui.el [ Ui.width Ui.shrink, Ui.Font.color MyUi.errorColor ] (Ui.text "Websocket closed")
+        , if gateway.failedReconnectAttempts == 0 then
+            Ui.none
+
+          else
+            Ui.el
+                [ Ui.width Ui.shrink, Ui.Font.color MyUi.errorColor ]
+                (Ui.text
+                    (String.fromInt gateway.failedReconnectAttempts
+                        ++ (if gateway.failedReconnectAttempts == 1 then
+                                " failed reconnect"
+
+                            else
+                                " failed reconnects"
+                           )
+                    )
                 )
         ]
 

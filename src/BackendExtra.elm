@@ -73,6 +73,7 @@ import Local exposing (ChangeId)
 import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), ConnectionData, DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..), FrontendGuild, LastRequest(..))
 import Log exposing (Log)
 import LoginForm
+import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..))
 import Message exposing (Message(..))
 import NonemptyDict exposing (NonemptyDict)
@@ -1457,6 +1458,10 @@ adminData model lastLogPageViewed =
                             , icon = data.icon
                             , linkedAt = data.linkedAt
                             , isLoadingData = data.isLoadingData
+                            , gateway =
+                                { websocketIsOpen = Maybe.Extra.isJust data.connection.websocketHandle
+                                , failedReconnectAttempts = data.connection.reconnect.failedAttempts
+                                }
                             }
 
                     BasicData data ->
