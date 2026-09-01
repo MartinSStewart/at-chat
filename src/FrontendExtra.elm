@@ -4658,6 +4658,20 @@ changeUpdate localMsg local =
                 Server_LoadAdminData adminData ->
                     { local | adminData = initAdminData adminData |> IsAdmin }
 
+                Server_BackupGenerated backup ->
+                    { local
+                        | adminData =
+                            case local.adminData of
+                                IsAdmin adminData ->
+                                    IsAdmin { adminData | lastBackup = Just backup }
+
+                                IsAdminButDataNotLoaded ->
+                                    local.adminData
+
+                                IsNotAdmin ->
+                                    local.adminData
+                    }
+
                 Server_NewLog time log ->
                     { local
                         | adminData =
@@ -5717,6 +5731,7 @@ initAdminData adminData =
     , toBackendLogs = adminData.toBackendLogs
     , vulnerabilityChecks = adminData.vulnerabilityChecks
     , serverSecretRefreshedAt = LocalState.NotBeingRegenerated adminData.serverSecretRegeneratedAt
+    , lastBackup = adminData.lastBackup
     , websocketCloseEvents = adminData.websocketCloseEvents
     , sessions = adminData.sessions
     , wordSpellingGameEnglish = adminData.wordSpellingGameEnglish

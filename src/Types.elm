@@ -11,12 +11,14 @@ module Types exposing
     , EmojiSelector(..)
     , ExportState
     , ExportStateProgress
+    , ExportStep(..)
     , FileDrag(..)
     , FrontendModel
     , FrontendModel_(..)
     , FrontendMsg
     , FrontendMsg_(..)
     , InitialLoadRequest(..)
+    , LastBackupData
     , LoadStatus(..)
     , LoadedFrontend
     , LoadingFrontend
@@ -85,7 +87,7 @@ import ImageViewer
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendChannel, BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReload, DiscordFrontendGuild, DiscordRole, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
+import LocalState exposing (BackendChannel, BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReload, DiscordFrontendGuild, DiscordRole, FrontendGuild, JoinGuildError, LastBackup, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -380,6 +382,7 @@ type alias BackendModel =
     , signupsEnabled : Bool
     , discordLinkingEnabled : Bool
     , exportState : Maybe ExportState
+    , lastBackup : Maybe LastBackupData
     , countToFrontendState : Maybe CountToFrontendState
     , scheduledExportState : Maybe ExportStateProgress
     , lastScheduledExportTime : Maybe Time.Posix
@@ -726,7 +729,7 @@ type BackendMsg
     | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (Nonempty (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
     | ReloadedDiscordGuildChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
     | ReloadedDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
-    | ExportBackendStep
+    | ExportBackendStep Time.Posix
     | CountToFrontendStep
     | ScheduledExportBackendStep Time.Posix
     | GotDiscordGuildChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Result Discord.HttpError DiscordChannelReload)
@@ -798,6 +801,23 @@ type alias ExportState =
     , exportSubset : ExportSubset
     , clientId : ClientId
     }
+
+
+{-| The most recently generated backup, held onto so that the admin can download it
+whenever they want instead of having to stay on the admin page while it's generated.
+-}
+type alias LastBackupData =
+    { backup : LastBackup
+    , bytes : Bytes
+    }
+
+
+{-| One step of a backend export. Every step but the last one makes progress that can be
+reported to the admin page, and the last one hands back the assembled export.
+-}
+type ExportStep
+    = ExportInProgress Pages.Admin.ExportProgress ExportStateProgress
+    | ExportFinished Bytes
 
 
 {-| The next count the admin page is waiting on, sent one update at a time the
@@ -941,6 +961,7 @@ type ServerChange
     | Server_LoadingDiscordChannelChanged (Discord.Id Discord.UserId) (Maybe (LoadingDiscordChannel Int))
     | Server_LoadAdminData InitAdminData
     | Server_NewLog Time.Posix Log
+    | Server_BackupGenerated LastBackup
     | Server_GotGuildMessageEmbed (Id GuildId) (Id ChannelId) ThreadRouteWithMessage ( Url, Result () EmbedData )
     | Server_GotDmMessageEmbed (Id UserId) ThreadRouteWithMessage ( Url, Result () EmbedData )
     | Server_GotDiscordGuildMessageEmbed (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage ( Url, Result () EmbedData )

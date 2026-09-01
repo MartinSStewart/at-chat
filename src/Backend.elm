@@ -82,7 +82,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
 import User exposing (BackendUser)
@@ -261,6 +261,7 @@ init =
       , signupsEnabled = True
       , discordLinkingEnabled = True
       , exportState = Nothing
+      , lastBackup = Nothing
       , countToFrontendState = Nothing
       , scheduledExportState = Nothing
       , lastScheduledExportTime = Nothing
@@ -320,7 +321,7 @@ subscriptions model =
             |> Subscription.batch
         , case model.exportState of
             Just _ ->
-                Time.every (Duration.milliseconds 30) (\_ -> ExportBackendStep)
+                Time.every (Duration.milliseconds 30) ExportBackendStep
 
             Nothing ->
                 Subscription.none
@@ -1472,23 +1473,46 @@ update msg model =
                 Nothing ->
                     ( model, Command.none )
 
-        ExportBackendStep ->
+        ExportBackendStep time ->
             case model.exportState of
                 Just exportState ->
-                    let
-                        ( progress, progressState ) =
-                            handleExportBackendStep exportState.progress
-                    in
-                    ( case progressState of
-                        Just progressState2 ->
-                            { model | exportState = Just { exportState | progress = progressState2 } }
+                    case handleExportBackendStep exportState.progress of
+                        ExportInProgress progress progressState ->
+                            ( { model | exportState = Just { exportState | progress = progressState } }
+                            , Pages.Admin.ExportBackendProgress exportState.exportSubset progress
+                                |> AdminToFrontend
+                                |> Lamdera.sendToFrontend exportState.clientId
+                            )
 
-                        Nothing ->
-                            { model | exportState = Nothing }
-                    , Pages.Admin.ExportBackendProgress exportState.exportSubset progress
-                        |> AdminToFrontend
-                        |> Lamdera.sendToFrontend exportState.clientId
-                    )
+                        ExportFinished bytes ->
+                            let
+                                backup : LocalState.LastBackup
+                                backup =
+                                    { createdAt = time
+                                    , contents =
+                                        case exportState.exportSubset of
+                                            Pages.Admin.ExportAll ->
+                                                LocalState.FullBackup
+
+                                            Pages.Admin.ExportSubset _ ->
+                                                LocalState.SubsetBackup
+                                    }
+
+                                model2 : BackendModel
+                                model2 =
+                                    { model
+                                        | exportState = Nothing
+                                        , lastBackup = Just { backup = backup, bytes = bytes }
+                                    }
+                            in
+                            ( model2
+                            , Command.batch
+                                [ Pages.Admin.ExportBackendFinished
+                                    |> AdminToFrontend
+                                    |> Lamdera.sendToFrontend exportState.clientId
+                                , Broadcast.toAdmins model2 (Server_BackupGenerated backup |> ServerChange)
+                                ]
+                            )
 
                 Nothing ->
                     ( model, Command.none )
@@ -1512,33 +1536,30 @@ update msg model =
         ScheduledExportBackendStep time ->
             case model.scheduledExportState of
                 Just exportState ->
-                    let
-                        ( progress, progressState ) =
-                            handleExportBackendStep exportState
+                    case handleExportBackendStep exportState of
+                        ExportInProgress _ progressState ->
+                            ( { model | scheduledExportState = Just progressState }, Command.none )
 
-                        timestamp : String
-                        timestamp =
-                            String.fromInt (Time.toYear Time.utc time)
-                                ++ "-"
-                                ++ String.padLeft 2 '0' (String.fromInt (MyUi.monthToInt (Time.toMonth Time.utc time)))
-                                ++ "-"
-                                ++ String.padLeft 2 '0' (String.fromInt (Time.toDay Time.utc time))
-                                ++ "-"
-                                ++ String.padLeft 2 '0' (String.fromInt (Time.toHour Time.utc time))
-                                ++ ":"
-                                ++ String.padLeft 2 '0' (String.fromInt (Time.toMinute Time.utc time))
-                                ++ ":"
-                                ++ String.padLeft 2 '0' (String.fromInt (Time.toSecond Time.utc time))
-                    in
-                    ( { model | scheduledExportState = progressState }
-                    , case progress of
-                        Pages.Admin.ExportingFinalStep bytes ->
-                            FileStatus.uploadBackup model.serverSecret ("backend-export-" ++ timestamp ++ ".bin") bytes
+                        ExportFinished bytes ->
+                            let
+                                timestamp : String
+                                timestamp =
+                                    String.fromInt (Time.toYear Time.utc time)
+                                        ++ "-"
+                                        ++ String.padLeft 2 '0' (String.fromInt (MyUi.monthToInt (Time.toMonth Time.utc time)))
+                                        ++ "-"
+                                        ++ String.padLeft 2 '0' (String.fromInt (Time.toDay Time.utc time))
+                                        ++ "-"
+                                        ++ String.padLeft 2 '0' (String.fromInt (Time.toHour Time.utc time))
+                                        ++ ":"
+                                        ++ String.padLeft 2 '0' (String.fromInt (Time.toMinute Time.utc time))
+                                        ++ ":"
+                                        ++ String.padLeft 2 '0' (String.fromInt (Time.toSecond Time.utc time))
+                            in
+                            ( { model | scheduledExportState = Nothing }
+                            , FileStatus.uploadBackup model.serverSecret ("backend-export-" ++ timestamp ++ ".bin") bytes
                                 |> Task.attempt (ScheduledExportUploadResult time)
-
-                        _ ->
-                            Command.none
-                    )
+                            )
 
                 Nothing ->
                     ( model, Command.none )
@@ -2330,6 +2351,7 @@ startExport time model =
                 , discordGuilds = SeqDict.empty
                 , discordDmChannels = SeqDict.empty
                 , exportState = Nothing
+                , lastBackup = Nothing
                 , countToFrontendState = Nothing
                 , scheduledExportState = Nothing
             }
@@ -8468,6 +8490,7 @@ updateFromFrontendAdmin clientId toBackend model =
                         , discordGuilds = SeqDict.empty
                         , discordDmChannels = SeqDict.empty
                         , exportState = Nothing
+                        , lastBackup = Nothing
                         , countToFrontendState = Nothing
                         , scheduledExportState = Nothing
                     }
@@ -8539,6 +8562,18 @@ updateFromFrontendAdmin clientId toBackend model =
                 |> Lamdera.sendToFrontend clientId
             )
 
+        Pages.Admin.DownloadLastBackupRequest ->
+            ( model
+            , case model.lastBackup of
+                Just lastBackup ->
+                    Pages.Admin.DownloadLastBackupResponse lastBackup.backup.contents lastBackup.bytes
+                        |> AdminToFrontend
+                        |> Lamdera.sendToFrontend clientId
+
+                Nothing ->
+                    Command.none
+            )
+
         Pages.Admin.CountToBackendRequest ->
             ( { model | countToFrontendState = Just { count = 0, clientId = clientId } }
             , Command.none
@@ -8557,39 +8592,39 @@ updateFromFrontendAdmin clientId toBackend model =
                     )
 
 
-handleExportBackendStep : ExportStateProgress -> ( Pages.Admin.ExportProgress, Maybe ExportStateProgress )
+handleExportBackendStep : ExportStateProgress -> ExportStep
 handleExportBackendStep exportState =
     case ( exportState.remainingGuildChannels, exportState.remainingGuilds ) of
         ( entry :: rest, _ ) ->
-            ( Pages.Admin.ExportingGuilds
-                { channelsRemaining = List.length rest
-                , encoded = exportState.encodedGuildCount
-                , total = exportState.encodedGuildCount + List.length exportState.remainingGuilds
+            ExportInProgress
+                (Pages.Admin.ExportingGuilds
+                    { channelsRemaining = List.length rest
+                    , encoded = exportState.encodedGuildCount
+                    , total = exportState.encodedGuildCount + List.length exportState.remainingGuilds
+                    }
+                )
+                { exportState
+                    | remainingGuildChannels = rest
+                    , encodedGuilds =
+                        Bytes.Encode.encode (WireHelper.encodeGuildChannel entry) :: exportState.encodedGuilds
                 }
-            , { exportState
-                | remainingGuildChannels = rest
-                , encodedGuilds =
-                    Bytes.Encode.encode (WireHelper.encodeGuildChannel entry) :: exportState.encodedGuilds
-              }
-                |> Just
-            )
 
         ( [], ( guildId, guild ) :: rest ) ->
-            ( Pages.Admin.ExportingGuilds
-                { channelsRemaining = 0
-                , encoded = exportState.encodedGuildCount + 1
-                , total = exportState.encodedGuildCount + 1 + List.length rest
+            ExportInProgress
+                (Pages.Admin.ExportingGuilds
+                    { channelsRemaining = 0
+                    , encoded = exportState.encodedGuildCount + 1
+                    , total = exportState.encodedGuildCount + 1 + List.length rest
+                    }
+                )
+                { exportState
+                    | remainingGuilds = rest
+                    , remainingGuildChannels = SeqDict.toList guild.channels
+                    , encodedGuildCount = exportState.encodedGuildCount + 1
+                    , encodedGuilds =
+                        Bytes.Encode.encode (WireHelper.encodeGuildHeader ( guildId, guild ))
+                            :: exportState.encodedGuilds
                 }
-            , { exportState
-                | remainingGuilds = rest
-                , remainingGuildChannels = SeqDict.toList guild.channels
-                , encodedGuildCount = exportState.encodedGuildCount + 1
-                , encodedGuilds =
-                    Bytes.Encode.encode (WireHelper.encodeGuildHeader ( guildId, guild ))
-                        :: exportState.encodedGuilds
-              }
-                |> Just
-            )
 
         ( [], [] ) ->
             case exportState.remainingDmChannels of
@@ -8599,50 +8634,50 @@ handleExportBackendStep exportState =
                         encodedCount =
                             List.length exportState.encodedDmChannels
                     in
-                    ( Pages.Admin.ExportingDmChannels
-                        { encoded = encodedCount + 1
-                        , total = encodedCount + List.length exportState.remainingDmChannels
+                    ExportInProgress
+                        (Pages.Admin.ExportingDmChannels
+                            { encoded = encodedCount + 1
+                            , total = encodedCount + List.length exportState.remainingDmChannels
+                            }
+                        )
+                        { exportState
+                            | remainingDmChannels = rest
+                            , encodedDmChannels = Bytes.Encode.encode (WireHelper.encodeDmChannel entry) :: exportState.encodedDmChannels
                         }
-                    , { exportState
-                        | remainingDmChannels = rest
-                        , encodedDmChannels = Bytes.Encode.encode (WireHelper.encodeDmChannel entry) :: exportState.encodedDmChannels
-                      }
-                        |> Just
-                    )
 
                 [] ->
                     case ( exportState.remainingDiscordGuildChannels, exportState.remainingDiscordGuilds ) of
                         ( entry :: rest, _ ) ->
-                            ( Pages.Admin.ExportingDiscordGuilds
-                                { channelsRemaining = List.length rest
-                                , encoded = exportState.encodedDiscordGuildCount
-                                , total = exportState.encodedDiscordGuildCount + List.length exportState.remainingDiscordGuilds
+                            ExportInProgress
+                                (Pages.Admin.ExportingDiscordGuilds
+                                    { channelsRemaining = List.length rest
+                                    , encoded = exportState.encodedDiscordGuildCount
+                                    , total = exportState.encodedDiscordGuildCount + List.length exportState.remainingDiscordGuilds
+                                    }
+                                )
+                                { exportState
+                                    | remainingDiscordGuildChannels = rest
+                                    , encodedDiscordGuilds =
+                                        Bytes.Encode.encode (WireHelper.encodeDiscordGuildChannel entry)
+                                            :: exportState.encodedDiscordGuilds
                                 }
-                            , { exportState
-                                | remainingDiscordGuildChannels = rest
-                                , encodedDiscordGuilds =
-                                    Bytes.Encode.encode (WireHelper.encodeDiscordGuildChannel entry)
-                                        :: exportState.encodedDiscordGuilds
-                              }
-                                |> Just
-                            )
 
                         ( [], ( guildId, guild ) :: rest ) ->
-                            ( Pages.Admin.ExportingDiscordGuilds
-                                { channelsRemaining = 0
-                                , encoded = exportState.encodedDiscordGuildCount + 1
-                                , total = exportState.encodedDiscordGuildCount + 1 + List.length rest
+                            ExportInProgress
+                                (Pages.Admin.ExportingDiscordGuilds
+                                    { channelsRemaining = 0
+                                    , encoded = exportState.encodedDiscordGuildCount + 1
+                                    , total = exportState.encodedDiscordGuildCount + 1 + List.length rest
+                                    }
+                                )
+                                { exportState
+                                    | remainingDiscordGuilds = rest
+                                    , remainingDiscordGuildChannels = SeqDict.toList guild.channels
+                                    , encodedDiscordGuildCount = exportState.encodedDiscordGuildCount + 1
+                                    , encodedDiscordGuilds =
+                                        Bytes.Encode.encode (WireHelper.encodeDiscordGuildHeader ( guildId, guild ))
+                                            :: exportState.encodedDiscordGuilds
                                 }
-                            , { exportState
-                                | remainingDiscordGuilds = rest
-                                , remainingDiscordGuildChannels = SeqDict.toList guild.channels
-                                , encodedDiscordGuildCount = exportState.encodedDiscordGuildCount + 1
-                                , encodedDiscordGuilds =
-                                    Bytes.Encode.encode (WireHelper.encodeDiscordGuildHeader ( guildId, guild ))
-                                        :: exportState.encodedDiscordGuilds
-                              }
-                                |> Just
-                            )
 
                         ( [], [] ) ->
                             case exportState.remainingDiscordDmChannels of
@@ -8652,18 +8687,18 @@ handleExportBackendStep exportState =
                                         encodedCount =
                                             List.length exportState.encodedDiscordDmChannels
                                     in
-                                    ( Pages.Admin.ExportingDiscordDmChannels
-                                        { encoded = encodedCount + 1
-                                        , total = encodedCount + List.length exportState.remainingDiscordDmChannels
+                                    ExportInProgress
+                                        (Pages.Admin.ExportingDiscordDmChannels
+                                            { encoded = encodedCount + 1
+                                            , total = encodedCount + List.length exportState.remainingDiscordDmChannels
+                                            }
+                                        )
+                                        { exportState
+                                            | remainingDiscordDmChannels = rest
+                                            , encodedDiscordDmChannels =
+                                                Bytes.Encode.encode (WireHelper.encodeDiscordDmChannel entry)
+                                                    :: exportState.encodedDiscordDmChannels
                                         }
-                                    , { exportState
-                                        | remainingDiscordDmChannels = rest
-                                        , encodedDiscordDmChannels =
-                                            Bytes.Encode.encode (WireHelper.encodeDiscordDmChannel entry)
-                                                :: exportState.encodedDiscordDmChannels
-                                      }
-                                        |> Just
-                                    )
 
                                 [] ->
                                     let
@@ -8686,6 +8721,4 @@ handleExportBackendStep exportState =
                                                     ]
                                                 )
                                     in
-                                    ( Pages.Admin.ExportingFinalStep exportedBytes
-                                    , Nothing
-                                    )
+                                    ExportFinished exportedBytes
