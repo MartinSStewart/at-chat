@@ -723,7 +723,8 @@ type BackendMsg
             )
         )
     | WebsocketCreatedHandleForUser (Discord.Id Discord.UserId) Websocket.Connection
-    | WebsocketClosedByBackendForUser (Discord.Id Discord.UserId) (Maybe String) WebsocketClosedEvent
+    | WebsocketClosedByBackendForUser (Discord.Id Discord.UserId) (Maybe { delay : Duration, url : String }) WebsocketClosedEvent
+    | OpenDiscordUserWebsocket (Discord.Id Discord.UserId) String
     | WebsocketSentDataForUser (Discord.Id Discord.UserId) (Result Websocket.SendError ())
     | DiscordMessageCreate_AttachmentsUploaded Discord.Message (Nonempty (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
     | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (Nonempty (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))

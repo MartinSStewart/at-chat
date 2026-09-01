@@ -8,7 +8,7 @@ module Discord exposing
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, UserId, Permissions
     , WebhookId
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , AchievementId, ActiveThreads, ApplicationId, ArchivedThreads, AttachmentFlags, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), ContentInventoryInboxStale, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, CustomEmojiId(..), DataUri(..), Embed, EmbedType(..), EmbeddedActivityLocation, EmbeddedActivityUpdateV2, EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildEmojisUpdate, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, GuildRoleUpdate, GuildScheduledEventUserData, HttpRequest, Id(..), ImageHash(..), ImageSize(..), IntegrationId, Intents, LoginResponse, LoginSettings, MergedMember, MessageFlags, MessageReference, MessageSnapshot, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, OverwriteId, Participant, Presence, PrivateChannel, PrivateChannelId, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, Role, RoleColors, RoleIconHash, RoleOrUserId(..), RoleTags, Roles(..), ScheduledEventId(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerId, StickerItem, StickerPack, StickerPackId, StickerType(..), SubscriptionListingId, SupplementalGuild, TagId, TeamId, ThreadMember, ThreadSortType(..), TypingStart, UploadAttachment, UploadAttachmentResponse, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, decodeRole, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getStickerPacks, getStickerPacksPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, idFromString, idFromUInt64, idToString, idToUInt64, imageIsAnimated, init, joinThread, joinThreadPayload, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, memberHasChannelPermission, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, noPermissions, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stickerUrl, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, uploadAttachments, uploadAttachmentsPayload, userAvatarUrl, userToPartialUser, userToken, userUpdate, websocketGatewayUrl
+    , AchievementId, ActiveThreads, ApplicationId, ArchivedThreads, AttachmentFlags, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), ContentInventoryInboxStale, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, CustomEmojiId(..), DataUri(..), Embed, EmbedType(..), EmbeddedActivityLocation, EmbeddedActivityUpdateV2, EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildEmojisUpdate, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, GuildRoleUpdate, GuildScheduledEventUserData, HttpRequest, Id(..), ImageHash(..), ImageSize(..), IntegrationId, Intents, LoginResponse, LoginSettings, MergedMember, MessageFlags, MessageReference, MessageSnapshot, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, OverwriteId, Participant, Presence, PrivateChannel, PrivateChannelId, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, Role, RoleColors, RoleIconHash, RoleOrUserId(..), RoleTags, Roles(..), ScheduledEventId(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerId, StickerItem, StickerPack, StickerPackId, StickerType(..), SubscriptionListingId, SupplementalGuild, TagId, TeamId, ThreadMember, ThreadSortType(..), TypingStart, UploadAttachment, UploadAttachmentResponse, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, decodeRole, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getStickerPacks, getStickerPacksPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, idFromString, idFromUInt64, idToString, idToUInt64, imageIsAnimated, init, joinThread, joinThreadPayload, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, memberHasChannelPermission, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, nextReconnectDelay, noCapabilities, noGuildModifications, noIntents, noPermissions, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stickerUrl, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, uploadAttachments, uploadAttachmentsPayload, userAvatarUrl, userToPartialUser, userToken, userUpdate, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -88,6 +88,7 @@ import Json.Decode.Extra as JD
 import Json.Encode as JE
 import Json.Encode.Extra as JE
 import Quantity exposing (Quantity(..), Rate)
+import Random
 import SafeJson exposing (SafeJson)
 import Task exposing (Task)
 import Time exposing (Posix(..))
@@ -6424,8 +6425,8 @@ encodeUserGatewayCommand gatewayCommand =
 
 
 type OutMsg connection
-    = CloseAndReopenHandle connection String
-    | OpenHandle (Maybe String)
+    = CloseAndReopenHandle connection Duration String
+    | OpenHandle Duration (Maybe String)
     | AuthenticationIsNoLongerValid
     | SendWebsocketData connection String
     | SendWebsocketDataWithDelay connection Duration String
@@ -6443,8 +6444,8 @@ type OutMsg connection
 
 
 type UserOutMsg connection
-    = UserOutMsg_CloseAndReopenHandle connection String
-    | UserOutMsg_OpenHandle (Maybe String)
+    = UserOutMsg_CloseAndReopenHandle connection Duration String
+    | UserOutMsg_OpenHandle Duration (Maybe String)
     | UserOutMsg_AuthenticationIsNoLongerValid
     | UserOutMsg_SendWebsocketData connection String
     | UserOutMsg_SendWebsocketDataWithDelay connection Duration String
@@ -6501,14 +6502,19 @@ type alias Model connection =
     { websocketHandle : Maybe connection
     , gatewayState : Maybe { sessionId : SessionId, sequenceCounter : SequenceCounter, resumeGatewayUrl : String }
     , heartbeatInterval : Maybe Duration
+    , reconnect : { failedAttempts : Int, seed : Int }
     }
 
 
-init : Model connection
-init =
+{-| The seed is only used to jitter reconnect delays (see `nextReconnectDelay`), so anything that
+differs between connections will do.
+-}
+init : Int -> Model connection
+init seed =
     { websocketHandle = Nothing
     , gatewayState = Nothing
     , heartbeatInterval = Nothing
+    , reconnect = { failedAttempts = 0, seed = seed }
     }
 
 
@@ -6551,6 +6557,40 @@ canResumeAfterClose closeCode =
     not (List.member closeCode [ 1000, 1001, 4007, 4009 ])
 
 
+maxReconnectDelay : Duration
+maxReconnectDelay =
+    Duration.seconds 60
+
+
+{-| Losing the gateway connection is usually a blip, so the first reconnect happens immediately.
+When the reconnects themselves keep failing though (Discord is down, or it's rate limiting us),
+retrying in a tight loop only makes things worse, so each consecutive attempt waits twice as long
+as the last one, up to a minute. The delay is then randomly shortened by up to half so that a
+backend holding several Discord connections doesn't bring them all back at the same instant.
+
+The counter resets once a connection gets far enough to be ready or resumed.
+
+-}
+nextReconnectDelay : Model connection -> ( Duration, Model connection )
+nextReconnectDelay model =
+    let
+        ( ( jitter, nextSeed ), _ ) =
+            Random.step
+                (Random.map2 Tuple.pair (Random.float 0.5 1) (Random.int Random.minInt Random.maxInt))
+                (Random.initialSeed model.reconnect.seed)
+    in
+    ( Duration.seconds (2 ^ toFloat model.reconnect.failedAttempts - 1)
+        |> Quantity.min maxReconnectDelay
+        |> Quantity.multiplyBy jitter
+    , { model | reconnect = { failedAttempts = model.reconnect.failedAttempts + 1, seed = nextSeed } }
+    )
+
+
+resetReconnectDelay : Model connection -> Model connection
+resetReconnectDelay model =
+    { model | reconnect = { failedAttempts = 0, seed = model.reconnect.seed } }
+
+
 createdHandle : connection -> Model connection -> Model connection
 createdHandle connection model =
     { model | websocketHandle = Just connection }
@@ -6579,6 +6619,9 @@ update authToken intents msg model =
             let
                 _ =
                     Debug.log "WebsocketClosed" ( code, reason )
+
+                ( delay, model2 ) =
+                    nextReconnectDelay { model | websocketHandle = Nothing }
             in
             if code == 4004 || reason == "Authentication failed." then
                 ( { model | websocketHandle = Nothing }, [ AuthenticationIsNoLongerValid ] )
@@ -6586,14 +6629,14 @@ update authToken intents msg model =
             else
                 case ( model.gatewayState, canResumeAfterClose code ) of
                     ( Just gatewayState, True ) ->
-                        ( { model | websocketHandle = Nothing }
-                        , [ OpenHandle (Just (resumeUrl gatewayState)) ]
+                        ( model2
+                        , [ OpenHandle delay (Just (resumeUrl gatewayState)) ]
                         )
 
                     _ ->
                         -- The session is gone, so start over with an identify on the main gateway.
-                        ( { model | websocketHandle = Nothing, gatewayState = Nothing }
-                        , [ OpenHandle Nothing ]
+                        ( { model2 | gatewayState = Nothing }
+                        , [ OpenHandle delay Nothing ]
                         )
 
 
@@ -6607,6 +6650,9 @@ userUpdate authToken intents msg model =
             let
                 _ =
                     Debug.log "WebsocketClosed" ( code, reason )
+
+                ( delay, model2 ) =
+                    nextReconnectDelay { model | websocketHandle = Nothing }
             in
             if code == 4004 || reason == "Authentication failed." then
                 ( { model | websocketHandle = Nothing }, [ UserOutMsg_AuthenticationIsNoLongerValid ] )
@@ -6614,14 +6660,14 @@ userUpdate authToken intents msg model =
             else
                 case ( model.gatewayState, canResumeAfterClose code ) of
                     ( Just gatewayState, True ) ->
-                        ( { model | websocketHandle = Nothing }
-                        , [ UserOutMsg_OpenHandle (Just (resumeUrl gatewayState)) ]
+                        ( model2
+                        , [ UserOutMsg_OpenHandle delay (Just (resumeUrl gatewayState)) ]
                         )
 
                     _ ->
                         -- The session is gone, so start over with an identify on the main gateway.
-                        ( { model | websocketHandle = Nothing, gatewayState = Nothing }
-                        , [ UserOutMsg_OpenHandle Nothing ]
+                        ( { model2 | gatewayState = Nothing }
+                        , [ UserOutMsg_OpenHandle delay Nothing ]
                         )
 
 
@@ -6675,19 +6721,20 @@ handleGateway authToken intents response model =
                     in
                     case opDispatchEvent of
                         DispatchBot_ReadyEvent discordSessionId resumeGatewayUrl ->
-                            ( { model
-                                | gatewayState =
-                                    Just
-                                        { sessionId = discordSessionId
-                                        , sequenceCounter = sequenceCounter
-                                        , resumeGatewayUrl = resumeGatewayUrl
-                                        }
-                              }
+                            ( resetReconnectDelay
+                                { model
+                                    | gatewayState =
+                                        Just
+                                            { sessionId = discordSessionId
+                                            , sequenceCounter = sequenceCounter
+                                            , resumeGatewayUrl = resumeGatewayUrl
+                                            }
+                                }
                             , []
                             )
 
                         DispatchBot_ResumedEvent ->
-                            ( updateCounter model, [] )
+                            ( updateCounter model |> resetReconnectDelay, [] )
 
                         DispatchBot_MessageCreateEvent channelType message ->
                             ( updateCounter model, [ UserCreatedMessage channelType message ] )
@@ -6763,8 +6810,12 @@ handleGateway authToken intents response model =
 
                     else
                         -- The session is unrecoverable, so closing it ourselves costs us nothing.
-                        ( { model | websocketHandle = Nothing, gatewayState = Nothing }
-                        , [ CloseAndReopenHandle connection websocketGatewayUrl ]
+                        let
+                            ( delay, model2 ) =
+                                nextReconnectDelay model
+                        in
+                        ( { model2 | websocketHandle = Nothing, gatewayState = Nothing }
+                        , [ CloseAndReopenHandle connection delay websocketGatewayUrl ]
                         )
 
         ( _, Err error ) ->
@@ -6819,14 +6870,15 @@ handleUserGateway authToken intents response model =
                 OpDispatch sequenceCounter opDispatchEvent ->
                     (case opDispatchEvent of
                         DispatchUser_ReadyEvent readyEvent ->
-                            ( { model
-                                | gatewayState =
-                                    Just
-                                        { sessionId = readyEvent.sessionId
-                                        , sequenceCounter = sequenceCounter
-                                        , resumeGatewayUrl = readyEvent.resumeGatewayUrl
-                                        }
-                              }
+                            ( resetReconnectDelay
+                                { model
+                                    | gatewayState =
+                                        Just
+                                            { sessionId = readyEvent.sessionId
+                                            , sequenceCounter = sequenceCounter
+                                            , resumeGatewayUrl = readyEvent.resumeGatewayUrl
+                                            }
+                                }
                             , [ UserOutMsg_ReadyData readyEvent ]
                             )
 
@@ -6834,7 +6886,7 @@ handleUserGateway authToken intents response model =
                             ( model, [ UserOutMsg_SupplementalReadyData readySupplementalEvent ] )
 
                         DispatchUser_ResumedEvent ->
-                            ( model, [] )
+                            ( resetReconnectDelay model, [] )
 
                         DispatchUser_MessageCreateEvent channelType message ->
                             ( model, [ UserOutMsg_UserCreatedMessage channelType message ] )
@@ -7024,8 +7076,12 @@ handleUserGateway authToken intents response model =
 
                     else
                         -- The session is unrecoverable, so closing it ourselves costs us nothing.
-                        ( { model | websocketHandle = Nothing, gatewayState = Nothing }
-                        , [ UserOutMsg_CloseAndReopenHandle connection websocketGatewayUrl ]
+                        let
+                            ( delay, model2 ) =
+                                nextReconnectDelay model
+                        in
+                        ( { model2 | websocketHandle = Nothing, gatewayState = Nothing }
+                        , [ UserOutMsg_CloseAndReopenHandle connection delay websocketGatewayUrl ]
                         )
 
         ( _, Err error ) ->

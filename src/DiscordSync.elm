@@ -2012,20 +2012,27 @@ discordUserWebsocketMsg discordUserId discordMsg model =
             List.foldl
                 (\outMsg ( model2, cmds ) ->
                     case outMsg of
-                        Discord.UserOutMsg_CloseAndReopenHandle connection reconnectTo ->
+                        Discord.UserOutMsg_CloseAndReopenHandle connection delay reconnectTo ->
                             ( model2
                             , Task.perform
-                                (WebsocketClosedByBackendForUser discordUserId (Just reconnectTo))
+                                (WebsocketClosedByBackendForUser
+                                    discordUserId
+                                    (Just { delay = delay, url = reconnectTo })
+                                )
                                 (websocketClose (WebsocketClosed_CloseAndReopenForUser discordUserId) connection)
                                 :: cmds
                             )
 
-                        Discord.UserOutMsg_OpenHandle maybeResumeGatewayUrl ->
+                        Discord.UserOutMsg_OpenHandle delay maybeResumeGatewayUrl ->
                             ( model2
-                            , websocketCreateHandle
-                                "OpenHandle"
-                                (WebsocketCreatedHandleForUser discordUserId)
-                                (Maybe.withDefault Discord.websocketGatewayUrl maybeResumeGatewayUrl)
+                            , (Process.sleep delay
+                                |> Task.perform
+                                    (\() ->
+                                        OpenDiscordUserWebsocket
+                                            discordUserId
+                                            (Maybe.withDefault Discord.websocketGatewayUrl maybeResumeGatewayUrl)
+                                    )
+                              )
                                 :: cmds
                             )
 

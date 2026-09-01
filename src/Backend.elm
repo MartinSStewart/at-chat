@@ -29,6 +29,7 @@ import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
+import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
@@ -728,7 +729,7 @@ update msg model =
                         backendUser =
                             { auth = auth
                             , user = discordUser
-                            , connection = Discord.init
+                            , connection = Discord.init (Time.posixToMillis linkedAt)
                             , linkedTo = userId
                             , icon = Nothing
                             , linkedAt = linkedAt
@@ -772,7 +773,7 @@ update msg model =
                                 , {- This is to prevent the normal reconnect flow.
                                      We want to trigger a new Ready gateway event so we can load all the data in it.
                                   -}
-                                  connection = Discord.init
+                                  connection = Discord.init (Time.posixToMillis time)
                             }
                     in
                     ( { model | discordUsers = SeqDict.insert discordUserId (FullData discordUser2) model.discordUsers }
@@ -1000,14 +1001,20 @@ update msg model =
         WebsocketClosedByBackendForUser discordUserId reopen websocketEvent ->
             ( recordWebsocketCloseEvent websocketEvent model
             , case reopen of
-                Just reconnectUrl ->
-                    DiscordSync.websocketCreateHandle
-                        "WebsocketClosedByBackendForUser"
-                        (WebsocketCreatedHandleForUser discordUserId)
-                        reconnectUrl
+                Just reconnect ->
+                    Process.sleep reconnect.delay
+                        |> Task.perform (\() -> OpenDiscordUserWebsocket discordUserId reconnect.url)
 
                 Nothing ->
                     Command.none
+            )
+
+        OpenDiscordUserWebsocket discordUserId url ->
+            ( model
+            , DiscordSync.websocketCreateHandle
+                "OpenDiscordUserWebsocket"
+                (WebsocketCreatedHandleForUser discordUserId)
+                url
             )
 
         WebsocketSentDataForUser discordUserId result ->
