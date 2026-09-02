@@ -6,7 +6,6 @@ import Backend
 import Codec
 import CustomEmoji exposing (CustomEmojiData)
 import Discord
-import DiscordSync
 import DiscordUserData
 import Drawing
 import Duration
@@ -713,7 +712,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 -- A new connection is opened (against the resume_gateway_url from the ready event)
                 -- and Discord says hello on it.
                 , E2EHelper.andThenWebsocket
-                    (Duration.inMilliseconds DiscordSync.gatewayReconnectTickInterval)
+                    E2EHelper.gatewayReconnectDelay
                     (\connection _ ->
                         [ T.websocketSendString
                             100
@@ -725,7 +724,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 -- We resume the old session instead of identifying, and we tell Discord the
                 -- sequence number of the last event we actually received.
                 , E2EHelper.andThenWebsocket
-                    (Duration.inMilliseconds DiscordSync.gatewayReconnectTickInterval)
+                    120
                     (\_ websocketState ->
                         [ T.checkState
                             0
@@ -785,7 +784,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 -- handshake on it (hello -> identify) and replay the READY data, which triggers
                 -- HandleReadyDataStep2 again.
                 , E2EHelper.andThenWebsocket
-                    (Duration.inMilliseconds DiscordSync.gatewayReconnectTickInterval)
+                    E2EHelper.gatewayReconnectDelay
                     (\connection _ ->
                         [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
                     )
@@ -3325,8 +3324,8 @@ gatewayDropAndReconnect unjitteredDelay =
                 ]
             )
 
-        -- Wait out the longest the delay could have been, plus a tick to reopen the websocket.
-        , T.checkBackend (unjitteredDelay * 1000 + 200) checkGatewayReconnected
+        -- Wait out the longest the delay could have been, plus the tick that reopens the websocket.
+        , T.checkBackend (unjitteredDelay * 1000 + E2EHelper.gatewayReconnectDelay) checkGatewayReconnected
         ]
 
 

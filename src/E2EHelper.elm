@@ -43,6 +43,7 @@ module E2EHelper exposing
     , focusEvent
     , fromJsAfterAdminOpensVoiceChat
     , fromJsAfterUserOpensVoiceChat
+    , gatewayReconnectDelay
     , handleInternalRequests
     , handleLogin
     , handleLoginFromLoginPage
@@ -294,6 +295,27 @@ handlePortToJs requestAndData =
             Nothing
 
         "audioPortToJs" ->
+            Nothing
+
+        "set_app_badge_to_js" ->
+            Nothing
+
+        "request_notification_permission" ->
+            Nothing
+
+        "request_device_pixel_ratio_to_js" ->
+            Nothing
+
+        "register_service_worker_to_js" ->
+            Nothing
+
+        "exec_command_to_js" ->
+            Nothing
+
+        "haptic_feedback" ->
+            Nothing
+
+        "shift_scroll_by_element_delta_to_js" ->
             Nothing
 
         _ ->
@@ -1446,6 +1468,16 @@ andThenWebsocket delayInMs andThenFunc =
         )
 
 
+{-| How long to wait for the backend to reopen a gateway websocket that closed without any
+backoff. The backend only reopens it on the next `GatewayReconnectTick`, which can be a whole
+tick away from when the close was handled, and handling the close takes a few frames of its
+own when the backend is the one closing it.
+-}
+gatewayReconnectDelay : DelayInMs
+gatewayReconnectDelay =
+    Duration.inMilliseconds DiscordSync.gatewayReconnectTickInterval + 200
+
+
 isOp2 : { data : String, sentAt : Time.Posix } -> Bool
 isOp2 data =
     case Json.Decode.decodeString (Json.Decode.field "op" Json.Decode.int) data.data of
@@ -1673,7 +1705,7 @@ linkDiscordAndLogin sessionId name emailAddress isNewAccount discordOp0Ready dis
               else
                 T.group []
             , andThenWebsocket
-                (Duration.inMilliseconds DiscordSync.gatewayReconnectTickInterval)
+                120
                 (\connection _ ->
                     [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
                 )
