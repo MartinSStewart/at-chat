@@ -20,6 +20,87 @@ import UserAgent
 import X25519
 
 
+{-| The server reads more out of a file than the browser can, so what the browser measured
+before uploading only stands in for a file the server couldn't read.
+-}
+uploadedFileMetadataTests : Test
+uploadedFileMetadataTests =
+    let
+        measured : FileStatus.FileMetadata
+        measured =
+            FileStatus.measuredFileMetadata (FileStatus.MeasuredImage (Coord.xy 128 96))
+
+        uploading : FileStatus.FileStatus
+        uploading =
+            FileStatus.FileUploading
+                (FileName.fromString "photo.png")
+                { sent = 0, size = 10 }
+                (FileStatus.contentType "image/png")
+                FileStatus.IsNotEncrypted
+
+        uploaded : Maybe FileStatus.FileMetadata -> Maybe (Coord.Coord CssPixels) -> Maybe FileStatus.FileMetadata
+        uploaded clientMetadata serverImageSize =
+            case
+                FileStatus.addFileHash
+                    clientMetadata
+                    (Ok
+                        { fileHash = FileStatus.fileHash "abc123"
+                        , videoMetadata = Nothing
+                        , imageMetadata = Maybe.map imageMetadata serverImageSize
+                        }
+                    )
+                    uploading
+            of
+                FileStatus.FileUploaded fileData ->
+                    fileData.metadata
+
+                _ ->
+                    Nothing
+
+        imageSizeOf : Maybe FileStatus.FileMetadata -> Maybe (Coord.Coord CssPixels)
+        imageSizeOf metadata =
+            case metadata of
+                Just (FileStatus.FileMetadata_Image image) ->
+                    Just image.imageSize
+
+                _ ->
+                    Nothing
+    in
+    Test.describe "What an uploaded file ends up saying about itself"
+        [ Test.test "The server's answer wins when it could read the file" <|
+            \_ ->
+                uploaded (Just measured) (Just (Coord.xy 640 480))
+                    |> imageSizeOf
+                    |> Expect.equal (Just (Coord.xy 640 480))
+        , Test.test "What the browser measured stands in when the server couldn't read it" <|
+            \_ ->
+                uploaded (Just measured) Nothing
+                    |> imageSizeOf
+                    |> Expect.equal (Just (Coord.xy 128 96))
+        , Test.test "Neither one leaves the file saying nothing about itself" <|
+            \_ ->
+                uploaded Nothing Nothing
+                    |> Expect.equal Nothing
+        ]
+
+
+imageMetadata : Coord.Coord CssPixels -> FileStatus.ImageMetadata
+imageMetadata imageSize =
+    { imageSize = imageSize
+    , orientation = Nothing
+    , gpsLocation = Nothing
+    , cameraOwner = Nothing
+    , exposureTime = Nothing
+    , fNumber = Nothing
+    , focalLength = Nothing
+    , isoSpeedRating = Nothing
+    , make = Nothing
+    , model = Nothing
+    , software = Nothing
+    , userComment = Nothing
+    }
+
+
 attachmentUrlTests : Test
 attachmentUrlTests =
     let
@@ -81,6 +162,7 @@ tests =
         "Misc tests"
         [ redactPrivateKeysTests
         , attachmentUrlTests
+        , uploadedFileMetadataTests
         , Test.test "Round trip message view encoding" <|
             \_ ->
                 let

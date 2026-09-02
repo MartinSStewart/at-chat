@@ -2360,12 +2360,12 @@ updateLoaded msg model =
         OneFrameAfterDragEnd ->
             ( { model | dragPrevious = model.drag }, Command.none )
 
-        GotFileToEncrypt guildOrDmId fileId bytes ->
+        GotFileToEncrypt guildOrDmId fileId contentType bytes ->
             FrontendExtra.updateLoggedIn
-                (FrontendExtra.startEncryptingFile guildOrDmId fileId bytes)
+                (FrontendExtra.startEncryptingFile guildOrDmId fileId contentType bytes)
                 model
 
-        GotFileHashName guildOrDmId fileStatusId result ->
+        GotFileHashName guildOrDmId fileStatusId clientMetadata result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     let
@@ -2373,7 +2373,7 @@ updateLoaded msg model =
                         filesToUpload =
                             SeqDict.updateIfExists
                                 guildOrDmId
-                                (NonemptyDict.updateIfExists fileStatusId (FileStatus.addFileHash result))
+                                (NonemptyDict.updateIfExists fileStatusId (FileStatus.addFileHash clientMetadata result))
                                 loggedIn.filesToUpload
                     in
                     ( { loggedIn | filesToUpload = filesToUpload }
@@ -2515,7 +2515,7 @@ updateLoaded msg model =
                                             | attachedFiles =
                                                 SeqDict.updateIfExists
                                                     fileId
-                                                    (FileStatus.addFileHash result)
+                                                    (FileStatus.addFileHash Nothing result)
                                                     edit.attachedFiles
                                         }
 
@@ -3579,7 +3579,11 @@ updateLoaded msg model =
                                                     loggedIn.filesToUpload
                                         }
                                     , FileStatus.uploadEncryptedFile
-                                        (GotFileHashName guildOrDmId fileId)
+                                        (GotFileHashName
+                                            guildOrDmId
+                                            fileId
+                                            (Maybe.map FileStatus.measuredFileMetadata encrypted.measured)
+                                        )
                                         guildOrDmId
                                         fileId
                                         encrypted.data
@@ -3608,7 +3612,7 @@ updateLoaded msg model =
                                                     guildOrDmId
                                                     (NonemptyDict.updateIfExists
                                                         fileId
-                                                        (FileStatus.addFileHash (Err (Http.BadBody error)))
+                                                        (FileStatus.addFileHash Nothing (Err (Http.BadBody error)))
                                                     )
                                                     loggedIn.filesToUpload
 
@@ -9196,7 +9200,7 @@ stillAttached loggedIn pending =
 bar would then never reach. The ciphertext is what actually gets sent, so its width is
 what the bar counts up to.
 -}
-fileEncrypted : { key : Bytes, data : Bytes } -> FileStatus -> FileStatus
+fileEncrypted : { key : Bytes, data : Bytes, measured : Maybe FileStatus.MeasuredFile } -> FileStatus -> FileStatus
 fileEncrypted encrypted fileStatus =
     case fileStatus of
         FileUploading fileName fileSize contentType _ ->

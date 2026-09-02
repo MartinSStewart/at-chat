@@ -638,7 +638,7 @@ updateSetup localUser msg model =
                             (\question ->
                                 { question
                                     | attachedFiles =
-                                        SeqDict.updateIfExists fileId (FileStatus.addFileHash result) question.attachedFiles
+                                        SeqDict.updateIfExists fileId (FileStatus.addFileHash Nothing result) question.attachedFiles
                                 }
                             )
                             model.questions
@@ -935,7 +935,7 @@ updateGame localUser setup shared msg model =
                         (\draft ->
                             { draft
                                 | attachedFiles =
-                                    SeqDict.updateIfExists fileId (FileStatus.addFileHash result) draft.attachedFiles
+                                    SeqDict.updateIfExists fileId (FileStatus.addFileHash Nothing result) draft.attachedFiles
                             }
                         )
                         model.answerDrafts
@@ -1067,7 +1067,7 @@ updateGame localUser setup shared msg model =
                         (\draft ->
                             { draft
                                 | attachedFiles =
-                                    SeqDict.updateIfExists fileId (FileStatus.addFileHash result) draft.attachedFiles
+                                    SeqDict.updateIfExists fileId (FileStatus.addFileHash Nothing result) draft.attachedFiles
                             }
                         )
                         model.noteDrafts

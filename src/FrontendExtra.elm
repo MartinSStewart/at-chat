@@ -845,11 +845,16 @@ gotFiles guildOrDmId threadRoute files model =
                             -- The upload can't start until the browser has encrypted the file, and
                             -- the browser can't be handed a File, so the bytes are read out first.
                             File.toBytes file2
-                                |> Task.perform (GotFileToEncrypt ( guildOrDmId, threadRoute ) fileId)
+                                |> Task.perform
+                                    (GotFileToEncrypt
+                                        ( guildOrDmId, threadRoute )
+                                        fileId
+                                        (File.mime file2)
+                                    )
 
                         Nothing ->
                             FileStatus.uploadFile
-                                (GotFileHashName ( guildOrDmId, threadRoute ) fileId)
+                                (GotFileHashName ( guildOrDmId, threadRoute ) fileId Nothing)
                                 ( guildOrDmId, threadRoute )
                                 fileId
                                 file2
@@ -992,13 +997,14 @@ gotPastedText guildOrDmId threadRoute { textBeforePaste, pastedText, textAfterPa
             startEncryptingFile
                 ( guildOrDmId, threadRoute )
                 fileId
+                "text/plain"
                 (Bytes.Encode.string pastedText |> Bytes.Encode.encode)
                 loggedIn2
 
         Nothing ->
             ( loggedIn2
             , FileStatus.uploadString
-                (GotFileHashName ( guildOrDmId, threadRoute ) fileId)
+                (GotFileHashName ( guildOrDmId, threadRoute ) fileId Nothing)
                 ( guildOrDmId, threadRoute )
                 fileId
                 pastedText
@@ -1894,10 +1900,11 @@ belongs to.
 startEncryptingFile :
     ( AnyGuildOrDmId, ThreadRoute )
     -> Id FileId
+    -> String
     -> Bytes
     -> LoggedIn2
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-startEncryptingFile guildOrDmId fileId bytes loggedIn =
+startEncryptingFile guildOrDmId fileId contentType bytes loggedIn =
     ( mapEncryptionRequests
         (\requests ->
             { requests
@@ -1910,7 +1917,10 @@ startEncryptingFile guildOrDmId fileId bytes loggedIn =
             }
         )
         loggedIn
-    , Encryption.encryptFile loggedIn.encryptionRequests.nextEncryptFileRequestId bytes
+    , Encryption.encryptFile
+        loggedIn.encryptionRequests.nextEncryptFileRequestId
+        contentType
+        bytes
     )
 
 
@@ -2363,10 +2373,10 @@ isPressMsg msg =
         SelectedFilesToAttach _ _ _ ->
             False
 
-        GotFileToEncrypt _ _ _ ->
+        GotFileToEncrypt _ _ _ _ ->
             False
 
-        GotFileHashName _ _ _ ->
+        GotFileHashName _ _ _ _ ->
             False
 
         PressedDeleteAttachedFile _ _ ->

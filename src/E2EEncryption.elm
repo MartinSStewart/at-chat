@@ -15,6 +15,8 @@ import Broadcast
 import Bytes exposing (Bytes)
 import Bytes.Decode
 import Bytes.Encode
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import DmChannel
 import DmChannelId
 import E2EHelper exposing (BackendModel2)
@@ -922,14 +924,23 @@ checkAttachmentStoredEncrypted backend =
                 [ fileData ] ->
                     case fileData.isEncrypted of
                         FileStatus.IsEncrypted _ ->
-                            if FileName.toString fileData.fileName == attachedFileName then
-                                Ok ()
-
-                            else
+                            if FileName.toString fileData.fileName /= attachedFileName then
                                 Err
                                     ("The file name in the message was lost. Stored: "
                                         ++ FileName.toString fileData.fileName
                                     )
+
+                            else
+                                case fileData.metadata of
+                                    Just (FileStatus.FileMetadata_Image metadata) ->
+                                        if metadata.imageSize == measuredImageSize then
+                                            Ok ()
+
+                                        else
+                                            Err "The image size in the message isn't the one the browser measured"
+
+                                    _ ->
+                                        Err "The message doesn't say how big the attached image is"
 
                         FileStatus.IsNotEncrypted ->
                             Err "The message says the attached file isn't encrypted"
@@ -1025,7 +1036,10 @@ respondToFileEncrypted client =
                 ( requestId, plainText ) :: _ ->
                     [ Encryption.FromJs_FileEncrypted
                         requestId
-                        { key = stubFileKey, data = stubCipherText plainText }
+                        { key = stubFileKey
+                        , data = stubCipherText plainText
+                        , measured = Just (FileStatus.MeasuredImage measuredImageSize)
+                        }
                         |> sendFromJs client
                     ]
 
@@ -1044,6 +1058,14 @@ encryptFileRequest request =
 
         _ ->
             Nothing
+
+
+{-| Stands in for what the browser measures the attached image as. The server only ever
+sees the ciphertext, so this is the only thing that can say how big it is.
+-}
+measuredImageSize : Coord CssPixels
+measuredImageSize =
+    Coord.xy 128 96
 
 
 {-| Stands in for the 32 byte AES key the browser generates for each file.

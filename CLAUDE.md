@@ -57,6 +57,16 @@ The service worker only exists inside a browser, so the end-to-end tests can't r
 These stand in for `indexedDB`, `caches` and `fetch` and run `public/service-worker.js`
 itself.
 
+Run the encryption port tests (also plain node):
+
+```
+node tests/EncryptionPortTests.js
+```
+
+`elm-pkg-js/stuff.js` reads and writes the encryption port's bytes by hand, and nothing
+type checks that against Elm's codec. The same byte sequences are pinned in both, so
+changing the format on one side alone fails on the other.
+
 Run elm-review and fix what it reports before you're done:
 
 ```

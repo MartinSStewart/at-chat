@@ -242,6 +242,24 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 )
                 E2EHelper.domain
 
+        -- Uploads an image the way an encrypted DM does: the server is handed
+        -- ciphertext, so it reports no metadata and whatever the browser measured
+        -- before encrypting is all there is.
+        encryptedImageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+        encryptedImageUploadConfig =
+            T.Config
+                Frontend.app_
+                E2EHelper.backendApp
+                (handleHttpRequestsWithUploadedImageSize Nothing)
+                E2EHelper.handlePortToJs
+                handleFileRequest
+                (\_ ->
+                    UploadMultipleFiles
+                        (T.uploadBytesFile "test-image.png" "image/png" atUserIcon E2EHelper.startTime)
+                        []
+                )
+                E2EHelper.domain
+
         -- Same as imageUploadConfig except the uploaded image is reported as
         -- being 800x100 pixels, wide enough to get scaled down to fit the screen
         wideImageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
@@ -314,7 +332,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.mentionSuggestionTest normalConfig
     , E2EMisc.emojiSuggestionTest normalConfig
     , E2EEncryption.tests normalConfig
-    , E2EEncryption.fileUploadTest imageUploadConfig
+    , E2EEncryption.fileUploadTest encryptedImageUploadConfig
     , E2EMisc.codeBlockInputTest normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig
     , E2EHelper.startTest

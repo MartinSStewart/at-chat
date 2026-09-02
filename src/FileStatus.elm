@@ -12,6 +12,7 @@ module FileStatus exposing
     , ImageMetadata
     , IsEncrypted(..)
     , Location
+    , MeasuredFile(..)
     , Orientation(..)
     , UploadResponse
     , UploadUrlRequest
@@ -36,6 +37,8 @@ module FileStatus exposing
     , imageInfoView
     , imageMaxHeight
     , jsonContent
+    , measuredFileMetadata
+    , measuredFileSerializeCodec
     , onlyUploadedFiles
     , pngContent
     , progressToString
@@ -102,6 +105,66 @@ type alias FileData =
 type FileMetadata
     = FileMetadata_Image ImageMetadata
     | FileMetadata_Video VideoMetadata
+
+
+{-| All the browser can work out about a file it is handed. Everything else the server
+reports needs the file parsed, which is what the browser has no way of doing.
+-}
+type MeasuredFile
+    = MeasuredImage (Coord CssPixels)
+    | MeasuredVideo (Coord CssPixels) (Maybe Duration)
+
+
+measuredFileMetadata : MeasuredFile -> FileMetadata
+measuredFileMetadata measured =
+    case measured of
+        MeasuredImage imageSize ->
+            FileMetadata_Image
+                { imageSize = imageSize
+                , orientation = Nothing
+                , gpsLocation = Nothing
+                , cameraOwner = Nothing
+                , exposureTime = Nothing
+                , fNumber = Nothing
+                , focalLength = Nothing
+                , isoSpeedRating = Nothing
+                , make = Nothing
+                , model = Nothing
+                , software = Nothing
+                , userComment = Nothing
+                }
+
+        MeasuredVideo videoSize duration ->
+            FileMetadata_Video
+                { videoSize = videoSize
+                , frames = Nothing
+                , createdAt = Nothing
+
+                -- The size the browser reports already has any rotation applied, the same
+                -- way the server reports it.
+                , orientation = NoChange
+                , frameRate = Nothing
+                , codec = Nothing
+                , title = Nothing
+                , gpsLocation = Nothing
+                , duration = duration
+                }
+
+
+measuredFileSerializeCodec : Serialize.Codec e MeasuredFile
+measuredFileSerializeCodec =
+    Serialize.customType
+        (\imageEncoder videoEncoder value ->
+            case value of
+                MeasuredImage argA ->
+                    imageEncoder argA
+
+                MeasuredVideo argA argB ->
+                    videoEncoder argA argB
+        )
+        |> Serialize.variant1 MeasuredImage coordSerializeCodec
+        |> Serialize.variant2 MeasuredVideo coordSerializeCodec (Serialize.maybe durationSerializeCodec)
+        |> Serialize.finishCustomType
 
 
 type alias FileDataWithImage =
@@ -412,7 +475,13 @@ videoMetadataSerializeCodec =
         |> Serialize.field .codec (Serialize.maybe Serialize.string)
         |> Serialize.field .title (Serialize.maybe Serialize.string)
         |> Serialize.field .gpsLocation (Serialize.maybe locationSerializeCodec)
+        |> Serialize.field .duration (Serialize.maybe durationSerializeCodec)
         |> Serialize.finishRecord
+
+
+durationSerializeCodec : Serialize.Codec e Duration
+durationSerializeCodec =
+    Serialize.map Duration.milliseconds Duration.inMilliseconds Serialize.float
 
 
 orientationSerializeCodec : Serialize.Codec e Orientation
@@ -578,6 +647,9 @@ type alias VideoMetadata =
     , codec : Maybe String
     , title : Maybe String
     , gpsLocation : Maybe Location
+    , -- How long the video runs. The server works this out from the frame count and frame
+      -- rate instead, so this is only filled in for a video the browser measured itself.
+      duration : Maybe Duration
     }
 
 
@@ -592,7 +664,19 @@ videoMetadataCodec =
         |> Codec.field "codec" .codec (Codec.nullable Codec.string)
         |> Codec.field "title" .title (Codec.nullable Codec.string)
         |> Codec.field "gps_location" .gpsLocation (Codec.nullable locationCodec)
+        |> Codec.maybeField "duration_ms" .duration durationCodec
         |> Codec.buildObject
+
+
+{-| Nothing sends this yet. It is here so that a video the browser measured and one the
+server decoded are read back the same way.
+-}
+durationCodec : Codec Duration
+durationCodec =
+    Codec.map
+        (\milliseconds -> toFloat milliseconds |> Duration.milliseconds)
+        (\duration -> Duration.inMilliseconds duration |> round)
+        Codec.int
 
 
 
@@ -1088,10 +1172,15 @@ from the two things they do write down.
 -}
 videoDuration : VideoMetadata -> Maybe Duration
 videoDuration metadata =
-    Maybe.map2
-        (\frames frameRate -> Quantity.at_ frameRate (Quantity.toFloatQuantity frames))
-        metadata.frames
-        metadata.frameRate
+    case metadata.duration of
+        Just duration ->
+            Just duration
+
+        Nothing ->
+            Maybe.map2
+                (\frames frameRate -> Quantity.at_ frameRate (Quantity.toFloatQuantity frames))
+                metadata.frames
+                metadata.frameRate
 
 
 durationToString : Duration -> String
@@ -1192,8 +1281,12 @@ videoHasMetadata metadata =
         || (metadata.title /= Nothing)
 
 
-addFileHash : Result Http.Error UploadResponse -> FileStatus -> FileStatus
-addFileHash result fileStatus =
+{-| `clientMetadata` is what the browser was able to measure before the file was uploaded.
+The server reads more out of a file than the browser can, so it only stands in for a file
+the server couldn't read: an encrypted one, or a format it doesn't decode.
+-}
+addFileHash : Maybe FileMetadata -> Result Http.Error UploadResponse -> FileStatus -> FileStatus
+addFileHash clientMetadata result fileStatus =
     case fileStatus of
         FileUploading fileName fileSize contentType2 isEncrypted ->
             case result of
@@ -1201,7 +1294,13 @@ addFileHash result fileStatus =
                     FileUploaded
                         { fileName = fileName
                         , fileSize = fileSize.size
-                        , metadata = uploadResponseMetadata data
+                        , metadata =
+                            case uploadResponseMetadata data of
+                                Just serverMetadata ->
+                                    Just serverMetadata
+
+                                Nothing ->
+                                    clientMetadata
                         , contentType = contentType2
                         , fileHash = data.fileHash
                         , isEncrypted = isEncrypted

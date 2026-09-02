@@ -165,12 +165,17 @@ function e2eeReadToJs(dataView) {
             };
         }
 
-        case e2eeToJsEncryptFile:
+        case e2eeToJsEncryptFile: {
+            const contentTypeLength = dataView.getUint32(11, false);
+
             return {
                 tag: "encrypt-file",
                 requestId: dataView.getFloat64(3, false),
-                data: e2eeReadBytesField(dataView, 11),
+                contentType: new TextDecoder().decode(
+                    new Uint8Array(dataView.buffer, dataView.byteOffset + 15, contentTypeLength)),
+                data: e2eeReadBytesField(dataView, 15 + contentTypeLength),
             };
+        }
 
         case e2eeToJsStoreFileKeys: {
             const count = dataView.getUint32(3, false);
@@ -284,8 +289,54 @@ function e2eeManyMessagesEncryptedMessage(requestId, cipherTexts) {
     return out;
 }
 
-function e2eeFileEncryptedMessage(requestId, key, cipherText) {
-    const out = new DataView(new ArrayBuffer(19 + key.length + cipherText.length));
+// The size and duration Elm reads back as a MeasuredFile (see FileStatus.elm). A Maybe is
+// a variant tag of 0 or 1, a Coord is two Quantities and a Quantity is a variant tag of its
+// own followed by the number, which is why each measurement is written as a tag and a
+// float rather than just a float.
+function e2eeMeasuredFileSize(measured) {
+    if (measured === null) {
+        return 2;
+    }
+
+    // Maybe tag, MeasuredFile tag, then two tagged quantities for the size.
+    const size = 2 + 2 + 2 * (2 + 8);
+
+    if (measured.kind === "image") {
+        return size;
+    }
+
+    return size + (measured.durationMs === null ? 2 : 2 + 8);
+}
+
+function e2eeWriteMeasuredFile(out, offset, measured) {
+    if (measured === null) {
+        out.setUint16(offset, 0, false);
+        return;
+    }
+
+    out.setUint16(offset, 1, false);
+    out.setUint16(offset + 2, measured.kind === "image" ? 0 : 1, false);
+    out.setUint16(offset + 4, 0, false);
+    out.setFloat64(offset + 6, measured.width, false);
+    out.setUint16(offset + 14, 0, false);
+    out.setFloat64(offset + 16, measured.height, false);
+
+    if (measured.kind === "image") {
+        return;
+    }
+
+    if (measured.durationMs === null) {
+        out.setUint16(offset + 24, 0, false);
+    } else {
+        out.setUint16(offset + 24, 1, false);
+        out.setFloat64(offset + 26, measured.durationMs, false);
+    }
+}
+
+function e2eeFileEncryptedMessage(requestId, key, cipherText, measured) {
+    const measuredOffset = 19 + key.length + cipherText.length;
+    const out = new DataView(
+        new ArrayBuffer(measuredOffset + e2eeMeasuredFileSize(measured)));
     out.setUint8(0, e2eeSerializeVersion);
     out.setUint16(1, e2eeFromJsFileEncrypted, false);
     out.setFloat64(3, requestId, false);
@@ -293,7 +344,58 @@ function e2eeFileEncryptedMessage(requestId, key, cipherText) {
     new Uint8Array(out.buffer).set(key, 15);
     out.setUint32(15 + key.length, cipherText.length, false);
     new Uint8Array(out.buffer).set(cipherText, 19 + key.length);
+    e2eeWriteMeasuredFile(out, measuredOffset, measured);
     return out;
+}
+
+// What the browser can work out about a file without parsing it. An image decodes to a
+// bitmap that knows its size, and a video element reports its size and how long it runs
+// once the metadata at the front of the file has loaded. Anything more (the EXIF a camera
+// writes, the codec a container names) needs the file parsed, which is the server's job on
+// a file it can read.
+async function e2eeMeasureFile(bytes, contentType) {
+    if (contentType.startsWith("image/")) {
+        try {
+            const bitmap = await createImageBitmap(new Blob([bytes], { type: contentType }));
+            const measured = { kind: "image", width: bitmap.width, height: bitmap.height };
+            bitmap.close();
+            return measured;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    if (contentType.startsWith("video/")) {
+        return await e2eeMeasureVideo(bytes, contentType);
+    }
+
+    return null;
+}
+
+function e2eeMeasureVideo(bytes, contentType) {
+    return new Promise((resolve) => {
+        const url = URL.createObjectURL(new Blob([bytes], { type: contentType }));
+        const video = document.createElement("video");
+
+        const finish = (measured) => {
+            URL.revokeObjectURL(url);
+            video.removeAttribute("src");
+            resolve(measured);
+        };
+
+        video.preload = "metadata";
+        video.onloadedmetadata = () => {
+            finish({
+                kind: "video",
+                width: video.videoWidth,
+                height: video.videoHeight,
+                // Live streams report Infinity, and a container that doesn't say gives NaN.
+                durationMs: Number.isFinite(video.duration) ? video.duration * 1000 : null
+            });
+        };
+        video.onerror = () => finish(null);
+        video.src = url;
+    });
 }
 
 function e2eeMessageDecryptFailedMessage(requestId) {
@@ -1153,7 +1255,11 @@ exports.init = async function init(app)
                     e2eeFileEncryptedMessage(
                         message.requestId,
                         new Uint8Array(await crypto.subtle.exportKey("raw", fileKey)),
-                        combined));
+                        combined,
+                        // Measured before the upload so it can go in the message alongside
+                        // the key. The server only ever sees the ciphertext, so this is the
+                        // only chance anything gets to look at the file itself.
+                        await e2eeMeasureFile(message.data, message.contentType)));
 
             } else if (message.tag === "store-file-keys") {
                 for (const entry of message.keys) {

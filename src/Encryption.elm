@@ -48,6 +48,7 @@ import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
+import FileStatus
 import Html
 import Html.Attributes
 import Id exposing (Id, UserId, Viewing_DmId)
@@ -199,7 +200,7 @@ type ToJs data
     | ToJs_DecryptNewMessage { requestId : Id DecryptRequestId, otherUserId : Id UserId, data : Bytes }
     | ToJs_DecryptManyMessages { requestId : Id DecryptManyRequestId, otherUserId : Id UserId, data : List Bytes }
     | ToJs_EncryptManyMessages { requestId : Id EncryptManyRequestId, otherUserId : Id UserId, data : List Bytes }
-    | ToJs_EncryptFile { requestId : Id EncryptFileRequestId, data : Bytes }
+    | ToJs_EncryptFile { requestId : Id EncryptFileRequestId, contentType : String, data : Bytes }
     | ToJs_StoreFileKeys (List { fileHash : String, key : Bytes })
 
 
@@ -262,11 +263,11 @@ decryptManyMessages requestId id messages =
 the message the file is attached to, which is itself encrypted, so the server holds the
 ciphertext and nothing that opens it.
 -}
-encryptFile : Id EncryptFileRequestId -> Bytes -> Command FrontendOnly toMsg msg
-encryptFile requestId data =
+encryptFile : Id EncryptFileRequestId -> String -> Bytes -> Command FrontendOnly toMsg msg
+encryptFile requestId contentType data =
     Serialize.encodeToBytes
         (toJsCodec Serialize.unit)
-        (ToJs_EncryptFile { requestId = requestId, data = data })
+        (ToJs_EncryptFile { requestId = requestId, contentType = contentType, data = data })
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
@@ -353,8 +354,11 @@ toJsCodec dataCodec =
         |> Serialize.variant1
             ToJs_EncryptFile
             (Serialize.record
-                (\requestId data -> { requestId = requestId, data = data })
+                (\requestId contentType data ->
+                    { requestId = requestId, contentType = contentType, data = data }
+                )
                 |> Serialize.field .requestId Id.codec
+                |> Serialize.field .contentType Serialize.string
                 |> Serialize.field .data Serialize.bytes
                 |> Serialize.finishRecord
             )
@@ -380,7 +384,7 @@ type FromJs a
     | FromJs_ManyMessagesDecrypted (Id DecryptManyRequestId) (List (Result () a))
     | FromJs_ManyMessagesEncrypted (Id EncryptManyRequestId) (List (EncryptedData a))
     | FromJs_ManyMessagesEncryptFailed (Id EncryptManyRequestId) String
-    | FromJs_FileEncrypted (Id EncryptFileRequestId) { key : Bytes, data : Bytes }
+    | FromJs_FileEncrypted (Id EncryptFileRequestId) { key : Bytes, data : Bytes, measured : Maybe FileStatus.MeasuredFile }
     | FromJs_FileEncryptFailed (Id EncryptFileRequestId) String
 
 
@@ -458,9 +462,10 @@ fromJsCodec aCodec =
         |> Serialize.variant2
             FromJs_FileEncrypted
             Id.codec
-            (Serialize.record (\key data -> { key = key, data = data })
+            (Serialize.record (\key data measured -> { key = key, data = data, measured = measured })
                 |> Serialize.field .key Serialize.bytes
                 |> Serialize.field .data Serialize.bytes
+                |> Serialize.field .measured (Serialize.maybe FileStatus.measuredFileSerializeCodec)
                 |> Serialize.finishRecord
             )
         |> Serialize.variant2 FromJs_FileEncryptFailed Id.codec Serialize.string

@@ -1,10 +1,16 @@
 module CodecRoundTripTests exposing (tests)
 
+import Bytes
+import Bytes.Decode
+import Bytes.Encode
 import Coord
+import Duration
 import Effect.Time as Time
+import Encryption
 import Expect
 import FileName
 import FileStatus
+import Id
 import Quantity
 import Serialize
 import Test exposing (Test, describe, test)
@@ -12,6 +18,101 @@ import Test exposing (Test, describe, test)
 
 tests : Test
 tests =
+    describe "Codecs" [ roundTripTests, portWireFormatTests ]
+
+
+{-| The bytes elm-pkg-js/stuff.js writes by hand for a file it has encrypted. Pinning them
+on both sides is what stops the two drifting: tests/EncryptionPortTests.js checks that the
+handwritten writer produces exactly these, and these check that Elm still reads them.
+-}
+portWireFormatTests : Test
+portWireFormatTests =
+    let
+        -- Request id 7, a one byte key of 170 and one byte of ciphertext of 187.
+        fileEncrypted : Maybe FileStatus.MeasuredFile -> Encryption.FromJs ()
+        fileEncrypted measured =
+            Encryption.FromJs_FileEncrypted
+                (Id.fromInt 7)
+                { key = byteList [ 170 ]
+                , data = byteList [ 187 ]
+                , measured = measured
+                }
+    in
+    describe "The bytes the encryption port passes"
+        [ test "A file nothing could be measured about" <|
+            \_ ->
+                fileEncrypted Nothing
+                    |> hasBytes [ 1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 0 ]
+        , test "An image that was measured" <|
+            \_ ->
+                FileStatus.MeasuredImage (Coord.xy 640 480)
+                    |> Just
+                    |> fileEncrypted
+                    |> hasBytes
+                        [ 1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 1, 0, 0, 0, 0, 64, 132, 0, 0, 0, 0, 0, 0, 0, 0, 64, 126, 0, 0, 0, 0, 0, 0 ]
+        , test "A video whose length the container didn't say" <|
+            \_ ->
+                FileStatus.MeasuredVideo (Coord.xy 1920 1080) Nothing
+                    |> Just
+                    |> fileEncrypted
+                    |> hasBytes
+                        [ 1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 1, 0, 1, 0, 0, 64, 158, 0, 0, 0, 0, 0, 0, 0, 0, 64, 144, 224, 0, 0, 0, 0, 0, 0, 0 ]
+        , test "A video that was measured" <|
+            \_ ->
+                FileStatus.MeasuredVideo (Coord.xy 1920 1080) (Just (Duration.seconds 2.5))
+                    |> Just
+                    |> fileEncrypted
+                    |> hasBytes
+                        [ 1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 1, 0, 1, 0, 0, 64, 158, 0, 0, 0, 0, 0, 0, 0, 0, 64, 144, 224, 0, 0, 0, 0, 0, 0, 1, 64, 163, 136, 0, 0, 0, 0, 0 ]
+        , -- The request stuff.js reads the file and its type back out of.
+          test "A file handed over to be encrypted" <|
+            \_ ->
+                Encryption.ToJs_EncryptFile
+                    { requestId = Id.fromInt 7
+                    , contentType = "image/png"
+                    , data = byteList [ 1, 2, 3 ]
+                    }
+                    |> Serialize.encodeToBytes (Encryption.toJsCodec Serialize.unit)
+                    |> toByteList
+                    |> Expect.equal
+                        [ 1, 0, 5, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 105, 109, 97, 103, 101, 47, 112, 110, 103, 0, 0, 0, 3, 1, 2, 3 ]
+        ]
+
+
+hasBytes : List Int -> Encryption.FromJs () -> Expect.Expectation
+hasBytes expected fromJs =
+    Serialize.encodeToBytes (Encryption.fromJsCodec Serialize.unit) fromJs
+        |> toByteList
+        |> Expect.equal expected
+
+
+byteList : List Int -> Bytes.Bytes
+byteList bytes =
+    List.map Bytes.Encode.unsignedInt8 bytes
+        |> Bytes.Encode.sequence
+        |> Bytes.Encode.encode
+
+
+toByteList : Bytes.Bytes -> List Int
+toByteList bytes =
+    Bytes.Decode.decode
+        (Bytes.Decode.loop ( Bytes.width bytes, [] )
+            (\( left, soFar ) ->
+                if left <= 0 then
+                    Bytes.Decode.succeed (Bytes.Decode.Done (List.reverse soFar))
+
+                else
+                    Bytes.Decode.map
+                        (\byte -> Bytes.Decode.Loop ( left - 1, byte :: soFar ))
+                        Bytes.Decode.unsignedInt8
+            )
+        )
+        bytes
+        |> Maybe.withDefault []
+
+
+roundTripTests : Test
+roundTripTests =
     describe "Codec round trips"
         [ test "A file name survives being encoded and read back" <|
             \_ ->
@@ -72,6 +173,7 @@ tests =
                             , codec = Just "avc1.640028"
                             , title = Just "A title"
                             , gpsLocation = Just { lat = 0, lon = 0 }
+                            , duration = Just (Duration.seconds 12.5)
                             }
                         )
                 , contentType = FileStatus.contentType "video/mp4"

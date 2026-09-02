@@ -606,8 +606,8 @@ type FrontendMsg_
     | ProfilePictureEditorMsg ImageEditor.Msg
     | GuildIconEditorMsg (Id GuildId) ImageEditor.Msg
     | OneFrameAfterDragEnd
-    | GotFileToEncrypt ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) Bytes
-    | GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
+    | GotFileToEncrypt ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) String Bytes
+    | GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) (Maybe FileStatus.FileMetadata) (Result Http.Error FileStatus.UploadResponse)
     | PressedDeleteAttachedFile ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)
     | PressedViewAttachedFileInfo ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)
     | PressedToggleAttachedFileSpoiler ( AnyGuildOrDmId, ThreadRoute ) { fileId : Id FileId, removeSpoiler : Bool }
