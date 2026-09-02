@@ -30,4 +30,4 @@ toString (FileName a) =
 
 codec : Serialize.Codec e FileName
 codec =
-    Debug.todo ""
+    Serialize.map fromString toString Serialize.string
