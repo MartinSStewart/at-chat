@@ -2368,14 +2368,37 @@ updateLoaded msg model =
         GotFileHashName guildOrDmId fileStatusId result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn
-                        | filesToUpload =
+                    let
+                        filesToUpload : SeqDict ( AnyGuildOrDmId, ThreadRoute ) (NonemptyDict (Id FileId) FileStatus)
+                        filesToUpload =
                             SeqDict.updateIfExists
                                 guildOrDmId
                                 (NonemptyDict.updateIfExists fileStatusId (FileStatus.addFileHash result))
                                 loggedIn.filesToUpload
-                      }
-                    , Command.none
+                    in
+                    ( { loggedIn | filesToUpload = filesToUpload }
+                      -- The key is only worth leaving with the service worker now that the
+                      -- upload has come back with the address the ciphertext sits at.
+                    , case
+                        SeqDict.get guildOrDmId filesToUpload
+                            |> Maybe.andThen (NonemptyDict.get fileStatusId)
+                      of
+                        Just (FileUploaded fileData) ->
+                            case FileStatus.fileKey fileData of
+                                Just key ->
+                                    Encryption.storeFileKeys [ key ]
+
+                                Nothing ->
+                                    Command.none
+
+                        Just (FileUploading _ _ _ _) ->
+                            Command.none
+
+                        Just (FileError _ _ _ _ _) ->
+                            Command.none
+
+                        Nothing ->
+                            Command.none
                     )
                 )
                 model
@@ -3419,9 +3442,13 @@ updateLoaded msg model =
                                                 }
                                             )
                                         )
-                                        (Scroll.toBottomOfChannel
-                                            Pages.Guild.conversationContainerId
-                                            SetScrollToBottom
+                                        (Command.batch
+                                            [ Scroll.toBottomOfChannel
+                                                Pages.Guild.conversationContainerId
+                                                SetScrollToBottom
+                                            , FrontendExtra.storeDecryptedFileKeys
+                                                [ ( Encryption.hash cipherText, Ok pending.contentAndEmbeds ) ]
+                                            ]
                                         )
 
                                 Nothing ->
@@ -3443,14 +3470,18 @@ updateLoaded msg model =
                             FrontendExtra.handleDecryptedMessage requestId (Err ()) model loggedIn
 
                         Ok (Encryption.FromJs_ManyMessagesDecrypted requestId results) ->
-                            ( FrontendExtra.fileDecryptedMessages
-                                (case SeqDict.get requestId loggedIn.encryptionRequests.pendingDecryptedManyMessages of
-                                    Just pending ->
-                                        List.map2 Tuple.pair pending.messageHashes results
+                            let
+                                decrypted : List ( BytesHash, Result () (MessageContent (Id UserId)) )
+                                decrypted =
+                                    case SeqDict.get requestId loggedIn.encryptionRequests.pendingDecryptedManyMessages of
+                                        Just pending ->
+                                            List.map2 Tuple.pair pending.messageHashes results
 
-                                    Nothing ->
-                                        []
-                                )
+                                        Nothing ->
+                                            []
+                            in
+                            ( FrontendExtra.fileDecryptedMessages
+                                decrypted
                                 (FrontendExtra.mapEncryptionRequests
                                     (\requests ->
                                         { requests
@@ -3460,17 +3491,20 @@ updateLoaded msg model =
                                     )
                                     loggedIn
                                 )
-                            , case
-                                SeqDict.get requestId loggedIn.encryptionRequests.pendingDecryptedManyMessages
-                                    |> Maybe.andThen .shiftScrollFrom
-                              of
-                                Just anchor ->
-                                    Ports.shiftScrollByElementDelta
-                                        Pages.Guild.conversationContainerId
-                                        anchor
+                            , Command.batch
+                                [ case
+                                    SeqDict.get requestId loggedIn.encryptionRequests.pendingDecryptedManyMessages
+                                        |> Maybe.andThen .shiftScrollFrom
+                                  of
+                                    Just anchor ->
+                                        Ports.shiftScrollByElementDelta
+                                            Pages.Guild.conversationContainerId
+                                            anchor
 
-                                Nothing ->
-                                    Command.none
+                                    Nothing ->
+                                        Command.none
+                                , FrontendExtra.storeDecryptedFileKeys decrypted
+                                ]
                             )
 
                         Ok (Encryption.FromJs_ManyMessagesEncrypted requestId encrypted) ->
@@ -3507,7 +3541,14 @@ updateLoaded msg model =
                                                 loggedIn
                                             )
                                         )
-                                        Command.none
+                                        (FrontendExtra.storeDecryptedFileKeys
+                                            (List.map
+                                                (\( ( _, contentAndEmbeds ), encryptedData ) ->
+                                                    ( Encryption.hash encryptedData, Ok contentAndEmbeds )
+                                                )
+                                                pairs
+                                            )
+                                        )
 
                                 Nothing ->
                                     ( loggedIn, Command.none )
@@ -6895,6 +6936,7 @@ viewImageInfo guildOrDmId fileId model =
                                             , metadata = metadata
                                             , contentType = fileData.contentType
                                             , fileHash = fileData.fileHash
+                                            , isEncrypted = fileData.isEncrypted
                                             }
                                                 |> Just
 

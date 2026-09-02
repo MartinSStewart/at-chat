@@ -19,6 +19,7 @@ port module Encryption exposing
     , fromJsCodec
     , hash
     , info
+    , storeFileKeys
     , storeSharedSecret
     , toBase64
     , toJsCodec
@@ -199,6 +200,7 @@ type ToJs data
     | ToJs_DecryptManyMessages { requestId : Id DecryptManyRequestId, otherUserId : Id UserId, data : List Bytes }
     | ToJs_EncryptManyMessages { requestId : Id EncryptManyRequestId, otherUserId : Id UserId, data : List Bytes }
     | ToJs_EncryptFile { requestId : Id EncryptFileRequestId, data : Bytes }
+    | ToJs_StoreFileKeys (List { fileHash : String, key : Bytes })
 
 
 storeSharedSecret : Id UserId -> Bytes -> Command FrontendOnly toMsg msg
@@ -268,10 +270,21 @@ encryptFile requestId data =
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
+{-| Attached files are fetched by the browser rather than by Elm, so their keys are left
+with the service worker to use rather than being handed over one request at a time.
+-}
+storeFileKeys : List { fileHash : String, key : Bytes } -> Command FrontendOnly toMsg msg
+storeFileKeys keys =
+    Serialize.encodeToBytes
+        (toJsCodec Serialize.unit)
+        (ToJs_StoreFileKeys keys)
+        |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
+
+
 toJsCodec : Serialize.Codec e data -> Serialize.Codec e (ToJs data)
 toJsCodec dataCodec =
     Serialize.customType
-        (\a b c d e f value ->
+        (\a b c d e f g value ->
             case value of
                 ToJs_StoreSharedSecret argA ->
                     a argA
@@ -290,6 +303,9 @@ toJsCodec dataCodec =
 
                 ToJs_EncryptFile argA ->
                     f argA
+
+                ToJs_StoreFileKeys argA ->
+                    g argA
         )
         |> Serialize.variant1
             ToJs_StoreSharedSecret
@@ -341,6 +357,15 @@ toJsCodec dataCodec =
                 |> Serialize.field .requestId Id.codec
                 |> Serialize.field .data Serialize.bytes
                 |> Serialize.finishRecord
+            )
+        |> Serialize.variant1
+            ToJs_StoreFileKeys
+            (Serialize.list
+                (Serialize.record (\fileHash key -> { fileHash = fileHash, key = key })
+                    |> Serialize.field .fileHash Serialize.string
+                    |> Serialize.field .key Serialize.bytes
+                    |> Serialize.finishRecord
+                )
             )
         |> Serialize.finishCustomType
 

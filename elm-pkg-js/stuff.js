@@ -47,6 +47,36 @@ function e2eeWithStore(mode, run) {
     }));
 }
 
+// Keys for encrypted file attachments, which the service worker reads so that it can
+// decrypt a file the browser fetches on its own (see public/service-worker.js). Kept apart
+// from the conversation keys above so the service worker never opens that database, and so
+// adding this store didn't need a version bump on one already in use.
+const fileKeyDbName = "at-chat-file-keys";
+const fileKeyStoreName = "file-keys";
+
+function fileKeyOpenDb() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(fileKeyDbName, 1);
+        request.onerror = () => reject(request.error);
+        request.onupgradeneeded = () => {
+            if (!request.result.objectStoreNames.contains(fileKeyStoreName)) {
+                request.result.createObjectStore(fileKeyStoreName);
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+    });
+}
+
+function fileKeyWithStore(mode, run) {
+    return fileKeyOpenDb().then(db => new Promise((resolve, reject) => {
+        const transaction = db.transaction(fileKeyStoreName, mode);
+        const request = run(transaction.objectStore(fileKeyStoreName));
+        request.onerror = () => { db.close(); reject(request.error); };
+        request.onsuccess = () => { db.close(); resolve(request.result); };
+    }));
+}
+
+
 const e2eeSerializeVersion = 1;
 
 const e2eeToJsStoreSharedSecret = 0;
@@ -55,6 +85,7 @@ const e2eeToJsDecryptMessage = 2;
 const e2eeToJsDecryptManyMessages = 3;
 const e2eeToJsEncryptManyMessages = 4;
 const e2eeToJsEncryptFile = 5;
+const e2eeToJsStoreFileKeys = 6;
 
 const e2eeFromJsSharedSecretStored = 0;
 const e2eeFromJsSharedSecretFailed = 1;
@@ -140,6 +171,26 @@ function e2eeReadToJs(dataView) {
                 requestId: dataView.getFloat64(3, false),
                 data: e2eeReadBytesField(dataView, 11),
             };
+
+        case e2eeToJsStoreFileKeys: {
+            const count = dataView.getUint32(3, false);
+            const keys = [];
+            let offset = 7;
+
+            for (let i = 0; i < count; i++) {
+                const fileHashLength = dataView.getUint32(offset, false);
+                const fileHash = new TextDecoder().decode(
+                    new Uint8Array(dataView.buffer, dataView.byteOffset + offset + 4, fileHashLength));
+                offset += 4 + fileHashLength;
+
+                const key = e2eeReadBytesField(dataView, offset);
+                offset += 4 + key.length;
+
+                keys.push({ fileHash: fileHash, key: key });
+            }
+
+            return { tag: "store-file-keys", keys: keys };
+        }
 
         default:
             return null;
@@ -1103,6 +1154,18 @@ exports.init = async function init(app)
                         message.requestId,
                         new Uint8Array(await crypto.subtle.exportKey("raw", fileKey)),
                         combined));
+
+            } else if (message.tag === "store-file-keys") {
+                for (const entry of message.keys) {
+                    // Stored the same way the conversation keys are: as a CryptoKey the
+                    // browser won't hand back out, so the raw bytes aren't left on disk for
+                    // anything with access to the database to read.
+                    const key = await crypto.subtle.importKey(
+                        "raw", entry.key, "AES-GCM", false, ["decrypt"]);
+
+                    await fileKeyWithStore(
+                        "readwrite", store => store.put(key, entry.fileHash));
+                }
             }
         } catch (e) {
             if (message.tag === "store-shared-secret") {
@@ -1124,6 +1187,10 @@ exports.init = async function init(app)
                 app.ports.encryption_from_js.send(
                     e2eeIdAndTextMessage(
                         e2eeFromJsFileEncryptFailed, message.requestId, e.toString()));
+            } else {
+                // store-file-keys has no request to answer. A file whose key didn't make it
+                // this far shows up as one that can't be decrypted when it is fetched.
+                console.error("Encryption port error: " + e.toString());
             }
         }
     });

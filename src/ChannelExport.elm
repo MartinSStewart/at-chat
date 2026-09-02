@@ -533,7 +533,7 @@ encodeAttachedFiles attachedFiles =
                     [ ( "id", Json.Encode.string (Id.toString fileId) )
                     , ( "fileName", Json.Encode.string (FileName.toString fileData.fileName) )
                     , ( "fileSize", Json.Encode.int fileData.fileSize )
-                    , ( "url", Json.Encode.string (FileStatus.fileUrl fileData.contentType fileData.fileHash) )
+                    , ( "url", Json.Encode.string (FileStatus.fileDataUrl fileData) )
                     ]
             )
         |> optionalListField "attachedFiles"

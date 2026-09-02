@@ -25,7 +25,10 @@ module FileStatus exposing
     , discordStickerUrl
     , domain
     , fileDataSerializeCodec
+    , fileDataThumbnailUrl
+    , fileDataUrl
     , fileHash
+    , fileKey
     , fileUrl
     , gifContent
     , hasUploadingFile
@@ -38,7 +41,6 @@ module FileStatus exposing
     , progressToString
     , secretKeyHeader
     , sizeToString
-    , thumbnailUrl
     , unknownContentType
     , uploadAvatar
     , uploadBackup
@@ -108,6 +110,7 @@ type alias FileDataWithImage =
     , metadata : FileMetadata
     , contentType : ContentType
     , fileHash : FileHash
+    , isEncrypted : IsEncrypted
     }
 
 
@@ -129,6 +132,19 @@ type AesPrivateKey
 aesPrivateKey : Bytes -> AesPrivateKey
 aesPrivateKey =
     AesPrivateKey
+
+
+{-| What the service worker needs in order to read an attached file back: the address the
+ciphertext is stored under, and the key that opens it.
+-}
+fileKey : FileData -> Maybe { fileHash : String, key : Bytes }
+fileKey fileData =
+    case ( fileData.isEncrypted, fileData.fileHash ) of
+        ( IsEncrypted (AesPrivateKey key), FileHash hash ) ->
+            Just { fileHash = hash, key = key }
+
+        ( IsNotEncrypted, _ ) ->
+            Nothing
 
 
 {-| OpaqueVariants
@@ -170,6 +186,42 @@ progressToString { sent, size } =
 fileUrl : ContentType -> FileHash -> String
 fileUrl (ContentType contentType2) (FileHash fileHash2) =
     domain ++ "/file/" ++ String.fromInt contentType2 ++ "/" ++ fileHash2
+
+
+{-| Where an attached file is read back from. An encrypted one is at a different address
+so that the service worker knows to decrypt it before handing it to the page, and so that
+a browser without the service worker installed gets nothing rather than ciphertext dressed
+up as a picture.
+-}
+fileDataUrl : { a | contentType : ContentType, fileHash : FileHash, isEncrypted : IsEncrypted } -> String
+fileDataUrl fileData =
+    case fileData.isEncrypted of
+        IsEncrypted _ ->
+            encryptedFileUrl fileData.contentType fileData.fileHash
+
+        IsNotEncrypted ->
+            fileUrl fileData.contentType fileData.fileHash
+
+
+encryptedFileUrl : ContentType -> FileHash -> String
+encryptedFileUrl (ContentType contentType2) (FileHash fileHash2) =
+    domain ++ "/file/e/" ++ String.fromInt contentType2 ++ "/" ++ fileHash2
+
+
+{-| The server makes thumbnails by decoding the image, which it can't do for one it only
+has the ciphertext of, so an encrypted image is shown at full size.
+-}
+fileDataThumbnailUrl :
+    Coord CssPixels
+    -> { a | contentType : ContentType, fileHash : FileHash, isEncrypted : IsEncrypted }
+    -> String
+fileDataThumbnailUrl imageSize fileData =
+    case fileData.isEncrypted of
+        IsEncrypted _ ->
+            encryptedFileUrl fileData.contentType fileData.fileHash
+
+        IsNotEncrypted ->
+            thumbnailUrl imageSize fileData.contentType fileData.fileHash
 
 
 thumbnailUrl : Coord CssPixels -> ContentType -> FileHash -> String
@@ -965,7 +1017,7 @@ imageInfoView timezone onPressClose fileData =
                         )
                     , Ui.image
                         [ Ui.widthMax (Coord.xRaw metadata.imageSize), Ui.centerX ]
-                        { source = fileUrl fileData.contentType fileData.fileHash
+                        { source = fileDataUrl fileData
                         , description = ""
                         , onLoad = Nothing
                         }
@@ -1004,7 +1056,7 @@ imageInfoView timezone onPressClose fileData =
                         [ Ui.widthMax (Coord.xRaw metadata.videoSize), Ui.centerX ]
                         (Ui.html
                             (Html.video
-                                [ Html.Attributes.src (fileUrl fileData.contentType fileData.fileHash)
+                                [ Html.Attributes.src (fileDataUrl fileData)
                                 , Html.Attributes.controls True
                                 , Html.Attributes.style "display" "block"
                                 , Html.Attributes.style "width" "100%"

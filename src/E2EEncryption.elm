@@ -835,6 +835,10 @@ fileUploadTest config =
                         , T.backendUpdate
                             100
                             (Types.Rpc_GotFileUpload (FileStatus.fileHash "123123123") 1234 Nothing)
+
+                        -- The browser fetches attached files itself, so the key has to be
+                        -- left with it rather than handed over a request at a time.
+                        , T.checkState 100 (checkFileKeysLeftWithBrowser 1 admin.clientId)
                         , E2EHelper.focusEvent
                             admin
                             1000
@@ -843,6 +847,10 @@ fileUploadTest config =
                         , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                         , respondToMessageEncrypted admin
                         , T.checkBackend 100 checkAttachmentStoredEncrypted
+
+                        -- Reading the message back gives the key again, which is how a
+                        -- device that didn't upload the file gets hold of it.
+                        , T.checkState 100 (checkFileKeysLeftWithBrowser 2 admin.clientId)
                         ]
                     )
                 ]
@@ -957,6 +965,53 @@ encryptedAttachedFiles message =
 
         _ ->
             Nothing
+
+
+{-| The address the ciphertext ends up at only comes back with the upload, so the key is
+worth nothing to the browser until then.
+-}
+checkFileKeysLeftWithBrowser : Int -> ClientId -> T.Data FrontendModel BackendModel2 -> Result String ()
+checkFileKeysLeftWithBrowser expected clientId data =
+    let
+        stored : List { fileHash : String, key : Bytes }
+        stored =
+            List.filterMap storeFileKeysRequest (encryptionPortRequests clientId data) |> List.concat
+    in
+    if List.length stored /= expected then
+        Err
+            ("Expected "
+                ++ String.fromInt expected
+                ++ " file keys to have been left with the browser, found "
+                ++ String.fromInt (List.length stored)
+            )
+
+    else if List.any (\key -> key.fileHash /= uploadedFileHash) stored then
+        Err "A key was stored under something other than the file's hash"
+
+    else if List.any (\key -> Base64.fromBytes key.key /= Base64.fromBytes stubFileKey) stored then
+        Err "A key stored isn't the one the file was encrypted with"
+
+    else
+        Ok ()
+
+
+storeFileKeysRequest :
+    Encryption.ToJs (MessageContent (Id UserId))
+    -> Maybe (List { fileHash : String, key : Bytes })
+storeFileKeysRequest request =
+    case request of
+        Encryption.ToJs_StoreFileKeys keys ->
+            Just keys
+
+        _ ->
+            Nothing
+
+
+{-| What the test config's http handler reports back for an upload.
+-}
+uploadedFileHash : String
+uploadedFileHash =
+    "123123123"
 
 
 respondToFileEncrypted :

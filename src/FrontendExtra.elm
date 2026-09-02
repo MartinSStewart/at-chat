@@ -38,6 +38,7 @@ module FrontendExtra exposing
     , savePrivateKeyTitle
     , setFocus
     , startEncryptingFile
+    , storeDecryptedFileKeys
     , updateLoggedIn
     )
 
@@ -7355,6 +7356,8 @@ handleDecryptedMessage requestId result model loggedIn =
                 (Local.model loggedIn2.localState)
                 loggedIn2
                 model
+                |> Tuple.mapSecond
+                    (\cmd -> Command.batch [ cmd, storeDecryptedFileKeys [ ( request.hash, result ) ] ])
 
         Nothing ->
             ( loggedIn, Command.none )
@@ -7396,6 +7399,34 @@ encryptOldMessages messages dmChannel =
         )
         dmChannel
         messages
+
+
+{-| The keys for any files attached to messages that have just been decrypted. Goes
+alongside `fileDecryptedMessages` at every place a message becomes readable, since the
+browser fetches attached files on its own and needs the keys left where it will find them.
+-}
+storeDecryptedFileKeys :
+    List ( BytesHash, Result () (MessageContent (Id UserId)) )
+    -> Command FrontendOnly toMsg msg
+storeDecryptedFileKeys decrypted =
+    case
+        List.concatMap
+            (\( _, result ) ->
+                case result of
+                    Ok messageContent ->
+                        SeqDict.values messageContent.attachedFiles
+                            |> List.filterMap FileStatus.fileKey
+
+                    Err () ->
+                        []
+            )
+            decrypted
+    of
+        [] ->
+            Command.none
+
+        keys ->
+            Encryption.storeFileKeys keys
 
 
 fileDecryptedMessages :

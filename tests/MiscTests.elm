@@ -1,10 +1,15 @@
 module MiscTests exposing (tests)
 
 import Backend
+import Bytes.Encode
+import Coord
+import CssPixels exposing (CssPixels)
 import DiscordSync
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Expect
+import FileName
+import FileStatus
 import Id exposing (CustomEmojiId, Id)
 import Pages.Guild exposing (HighlightMessage(..), IsHovered(..))
 import SeqSet
@@ -15,11 +20,67 @@ import UserAgent
 import X25519
 
 
+attachmentUrlTests : Test
+attachmentUrlTests =
+    let
+        plainFile : FileStatus.FileData
+        plainFile =
+            { fileName = FileName.fromString "photo.png"
+            , fileSize = 1234
+            , metadata = Nothing
+            , contentType = FileStatus.contentType "image/png"
+            , fileHash = FileStatus.fileHash "abc123"
+            , isEncrypted = FileStatus.IsNotEncrypted
+            }
+
+        encryptedFile : FileStatus.FileData
+        encryptedFile =
+            { plainFile
+                | isEncrypted =
+                    List.range 0 31
+                        |> List.map Bytes.Encode.unsignedInt8
+                        |> Bytes.Encode.sequence
+                        |> Bytes.Encode.encode
+                        |> FileStatus.aesPrivateKey
+                        |> FileStatus.IsEncrypted
+            }
+
+        -- Big enough that the server would have made a thumbnail for it.
+        largeImage : Coord.Coord CssPixels
+        largeImage =
+            Coord.xy 4000 4000
+    in
+    Test.describe "Where an attached file is read back from"
+        [ Test.test "An unencrypted file is fetched straight from the server" <|
+            \_ ->
+                FileStatus.fileDataUrl plainFile
+                    |> String.endsWith "/file/2/abc123"
+                    |> Expect.equal True
+        , Test.test "An encrypted file goes through the service worker instead" <|
+            \_ ->
+                FileStatus.fileDataUrl encryptedFile
+                    |> String.endsWith "/file/e/2/abc123"
+                    |> Expect.equal True
+        , Test.test "A large unencrypted image is shown as the server's thumbnail" <|
+            \_ ->
+                FileStatus.fileDataThumbnailUrl largeImage plainFile
+                    |> String.endsWith "/file/t/abc123"
+                    |> Expect.equal True
+        , -- The server can't decode ciphertext, so there is no thumbnail to ask it for.
+          Test.test "A large encrypted image has no thumbnail to fall back on" <|
+            \_ ->
+                FileStatus.fileDataThumbnailUrl largeImage encryptedFile
+                    |> String.endsWith "/file/e/2/abc123"
+                    |> Expect.equal True
+        ]
+
+
 tests : Test
 tests =
     Test.describe
         "Misc tests"
         [ redactPrivateKeysTests
+        , attachmentUrlTests
         , Test.test "Round trip message view encoding" <|
             \_ ->
                 let

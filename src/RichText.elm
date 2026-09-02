@@ -1394,10 +1394,7 @@ emailViewHelper config dropNextLineBreak state nonempty =
                                             else
                                                 let
                                                     thumbnailUrl =
-                                                        FileStatus.thumbnailUrl
-                                                            imageSize
-                                                            fileData.contentType
-                                                            fileData.fileHash
+                                                        FileStatus.fileDataThumbnailUrl imageSize fileData
                                                 in
                                                 Email.Html.img
                                                     [ Email.Html.Attributes.src thumbnailUrl
@@ -1594,7 +1591,7 @@ emailFileDownloadView isSpoilered fileData =
                     [ Email.Html.Attributes.color "transparent" ]
 
                 else
-                    [ Email.Html.Attributes.href (FileStatus.fileUrl fileData.contentType fileData.fileHash) ]
+                    [ Email.Html.Attributes.href (FileStatus.fileDataUrl fileData) ]
                )
         )
         [ Email.Html.text (FileName.toString fileData.fileName)
@@ -4276,13 +4273,10 @@ imageView maybePressedSpoiler maybeOnPressImage containerWidth2 config imageSize
     else
         let
             fileUrl =
-                FileStatus.fileUrl fileData.contentType fileData.fileHash
+                FileStatus.fileDataUrl fileData
 
             thumbnailUrl =
-                FileStatus.thumbnailUrl
-                    imageSize
-                    fileData.contentType
-                    fileData.fileHash
+                FileStatus.fileDataThumbnailUrl imageSize fileData
 
             imageElement : List (Html.Attribute msg) -> Html msg
             imageElement extraAttributes =
@@ -4818,7 +4812,7 @@ videoView maybeHtmlId maybeMetadata isSpoilered containerWidth fileData =
         Html.video
             (sizeAttrs
                 ++ [ idAttribute
-                   , Html.Attributes.src (FileStatus.fileUrl fileData.contentType fileData.fileHash)
+                   , Html.Attributes.src (FileStatus.fileDataUrl fileData)
                    , Html.Attributes.controls True
                    , Html.Attributes.style "display" "block"
                    , Html.Attributes.style "border-radius" "4px"
@@ -4854,7 +4848,7 @@ audioView maybeHtmlId isSpoilered containerWidth fileData =
                )
         )
         [ Html.audio
-            ([ Html.Attributes.src (FileStatus.fileUrl fileData.contentType fileData.fileHash)
+            ([ Html.Attributes.src (FileStatus.fileDataUrl fileData)
              , Html.Attributes.controls True
              , Html.Attributes.style "display" "block"
              , Html.Attributes.style "width" (String.fromInt width ++ "px")
@@ -4877,7 +4871,7 @@ fileDownloadView : Maybe String -> Bool -> FileData -> Html msg
 fileDownloadView maybeHtmlId isSpoilered fileData =
     let
         fileUrl =
-            FileStatus.fileUrl fileData.contentType fileData.fileHash
+            FileStatus.fileDataUrl fileData
     in
     Html.a
         [ case maybeHtmlId of

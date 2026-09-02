@@ -684,6 +684,7 @@ updateSetup localUser msg model =
                                 , metadata = metadata
                                 , contentType = fileData.contentType
                                 , fileHash = fileData.fileHash
+                                , isEncrypted = fileData.isEncrypted
                                 }
 
                         -- The button that sends this is only drawn for a file that has
@@ -981,6 +982,7 @@ updateGame localUser setup shared msg model =
                                 , metadata = metadata
                                 , contentType = fileData.contentType
                                 , fileHash = fileData.fileHash
+                                , isEncrypted = fileData.isEncrypted
                                 }
 
                         Nothing ->
@@ -1112,6 +1114,7 @@ updateGame localUser setup shared msg model =
                                 , metadata = metadata
                                 , contentType = fileData.contentType
                                 , fileHash = fileData.fileHash
+                                , isEncrypted = fileData.isEncrypted
                                 }
 
                         Nothing ->
@@ -3482,13 +3485,13 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                                     [ Html.Attributes.src
                                         (case fileData.metadata of
                                             Just (FileMetadata_Image metadata) ->
-                                                FileStatus.thumbnailUrl metadata.imageSize fileData.contentType fileData.fileHash
+                                                FileStatus.fileDataThumbnailUrl metadata.imageSize fileData
 
                                             Just (FileMetadata_Video _) ->
-                                                FileStatus.fileUrl fileData.contentType fileData.fileHash
+                                                FileStatus.fileDataUrl fileData
 
                                             Nothing ->
-                                                FileStatus.fileUrl fileData.contentType fileData.fileHash
+                                                FileStatus.fileDataUrl fileData
                                         )
                                     , Html.Attributes.style "object-fit" "cover"
                                     , Html.Attributes.width (fileUploadPreviewSize - 2)

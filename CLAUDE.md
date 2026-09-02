@@ -47,6 +47,16 @@ first and stops if it doesn't build. Don't skip past that step by requiring the
 compiled output some other way — a runner that starts without compiling reports on
 whatever was built last, and passing tests then mean nothing.
 
+Run the service worker tests (plain node, no Elm involved):
+
+```
+node tests/ServiceWorkerTests.js
+```
+
+The service worker only exists inside a browser, so the end-to-end tests can't reach it.
+These stand in for `indexedDB`, `caches` and `fetch` and run `public/service-worker.js`
+itself.
+
 Run elm-review and fix what it reports before you're done:
 
 ```
