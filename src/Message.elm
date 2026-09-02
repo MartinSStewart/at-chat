@@ -33,7 +33,6 @@ import Effect.Http as Http
 import Embed exposing (Embed(..), EmbedData)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
-import FileName exposing (FileName)
 import FileStatus exposing (FileData, FileId)
 import Id exposing (Id, StickerId, UserId)
 import List.Nonempty exposing (Nonempty)
@@ -747,7 +746,7 @@ contentAndEmbedsCodec =
     Serialize.record ContentAndEmbeds
         |> Serialize.field .content (nonemptyCodec (RichText.codec Id.codec))
         |> Serialize.field .embeds (Serialize.array embedCodec)
-        |> Serialize.field .attachedFiles (seqDictCodec Id.codec fileDataCodec)
+        |> Serialize.field .attachedFiles (seqDictCodec Id.codec FileStatus.fileDataSerializeCodec)
         |> Serialize.finishRecord
 
 
@@ -757,38 +756,6 @@ seqDictCodec keyCodec valueCodec =
         SeqDict.fromList
         SeqDict.toList
         (Serialize.list (Serialize.tuple keyCodec valueCodec))
-
-
-fileDataCodec : Serialize.Codec e FileData
-fileDataCodec =
-    Serialize.record FileData
-        |> Serialize.field .fileName FileName.codec
-        |> Serialize.field .fileSize Serialize.unsignedInt32
-        |> Serialize.field .metadata (Serialize.maybe fileMetadataCodec)
-        |> Serialize.field .contentType contentTypeCodec
-        |> Serialize.field .fileHash fileHashCodec
-        |> Serialize.field .isEncrypted isEncryptedCodec
-        |> Serialize.finishRecord
-
-
-fileMetadataCodec : Serialize.Codec e FileStatus.FileMetadata
-fileMetadataCodec =
-    Debug.todo ""
-
-
-contentTypeCodec : Serialize.Codec e FileStatus.ContentType
-contentTypeCodec =
-    Debug.todo ""
-
-
-fileHashCodec : Serialize.Codec e FileStatus.FileHash
-fileHashCodec =
-    Debug.todo ""
-
-
-isEncryptedCodec : Serialize.Codec e FileStatus.IsEncrypted
-isEncryptedCodec =
-    Debug.todo ""
 
 
 nonemptyCodec : Serialize.Codec e a -> Serialize.Codec e (Nonempty a)

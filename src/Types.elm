@@ -39,11 +39,11 @@ module Types exposing
     , MessageMenuExtraOptions
     , NewChannelForm
     , NewGuildForm
-    , PendingGatewayReconnect
     , PendingDecryptedManyMessages
     , PendingDecryptedMessage
     , PendingEncryptedManyMessages
     , PendingEncryptedMessage
+    , PendingGatewayReconnect
     , PublicGoMatch(..)
     , RevealedSpoilers
     , ServerChange(..)

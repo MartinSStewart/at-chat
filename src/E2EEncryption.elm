@@ -87,7 +87,9 @@ tests config =
                         , admin.checkView
                             100
                             (Test.Html.Query.has
-                                [ Test.Html.Selector.text "Waiting for Stevie Steve to accept message encryption."
+                                [ Test.Html.Selector.text Pages.Guild.waitingForE2eeText
+                                , Test.Html.Selector.text E2EHelper.userName
+                                , Test.Html.Selector.text Pages.Guild.toAcceptE2eeText
                                 , Test.Html.Selector.id "guild_cancelE2ee"
                                 ]
                             )
@@ -113,20 +115,20 @@ tests config =
                         , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
                         , user.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "to enable E2EE" ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.enterPrivateKeyText ])
                         , addPrivateKeyToAccount user
                             (\_ ->
                                 [ user.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text "to enable E2EE" ]
+                                        [ Test.Html.Selector.text Pages.Guild.enterPrivateKeyText ]
                                     )
                                 , T.checkBackend 100 checkBothKeysStoredAndDifferent
                                 , admin.click 100 (Dom.id "guild_cancelE2ee")
                                 , user.checkView
                                     100
                                     (Test.Html.Query.hasNot
-                                        [ Test.Html.Selector.text "to enable E2EE" ]
+                                        [ Test.Html.Selector.text Pages.Guild.enterPrivateKeyText ]
                                     )
                                 , admin.checkView
                                     100
@@ -537,7 +539,7 @@ tests config =
                         , admin.click 100 (Dom.id "guild_enableE2ee")
                         , admin.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "to accept message encryption" ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.toAcceptE2eeText ])
                         , admin.checkView
                             100
                             (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_cancelE2ee" ])

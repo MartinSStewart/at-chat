@@ -23,6 +23,7 @@ module FileStatus exposing
     , contentTypes
     , discordStickerUrl
     , domain
+    , fileDataSerializeCodec
     , fileHash
     , fileUrl
     , gifContent
@@ -79,6 +80,7 @@ import OneToOne exposing (OneToOne)
 import Quantity exposing (Quantity, Rate)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
+import Serialize
 import StringExtra
 import Ui exposing (Element)
 
@@ -261,6 +263,175 @@ contentType a =
 unknownContentType : ContentType
 unknownContentType =
     ContentType 9999
+
+
+fileDataSerializeCodec : Serialize.Codec e FileData
+fileDataSerializeCodec =
+    Serialize.record FileData
+        |> Serialize.field .fileName FileName.codec
+        |> Serialize.field .fileSize Serialize.unsignedInt32
+        |> Serialize.field .metadata (Serialize.maybe fileMetadataSerializeCodec)
+        |> Serialize.field .contentType contentTypeSerializeCodec
+        |> Serialize.field .fileHash fileHashSerializeCodec
+        |> Serialize.field .isEncrypted isEncryptedSerializeCodec
+        |> Serialize.finishRecord
+
+
+fileHashSerializeCodec : Serialize.Codec e FileHash
+fileHashSerializeCodec =
+    Serialize.map FileHash (\(FileHash a) -> a) Serialize.string
+
+
+contentTypeSerializeCodec : Serialize.Codec e ContentType
+contentTypeSerializeCodec =
+    Serialize.map ContentType (\(ContentType a) -> a) Serialize.unsignedInt16
+
+
+isEncryptedSerializeCodec : Serialize.Codec e IsEncrypted
+isEncryptedSerializeCodec =
+    Serialize.customType
+        (\isNotEncryptedEncoder isEncryptedEncoder value ->
+            case value of
+                IsNotEncrypted ->
+                    isNotEncryptedEncoder
+
+                IsEncrypted argA ->
+                    isEncryptedEncoder argA
+        )
+        |> Serialize.variant0 IsNotEncrypted
+        |> Serialize.variant1 IsEncrypted aesPrivateKeySerializeCodec
+        |> Serialize.finishCustomType
+
+
+aesPrivateKeySerializeCodec : Serialize.Codec e AesPrivateKey
+aesPrivateKeySerializeCodec =
+    Serialize.map AesPrivateKey (\(AesPrivateKey a) -> a) Serialize.bytes
+
+
+fileMetadataSerializeCodec : Serialize.Codec e FileMetadata
+fileMetadataSerializeCodec =
+    Serialize.customType
+        (\imageEncoder videoEncoder value ->
+            case value of
+                FileMetadata_Image argA ->
+                    imageEncoder argA
+
+                FileMetadata_Video argA ->
+                    videoEncoder argA
+        )
+        |> Serialize.variant1 FileMetadata_Image imageMetadataSerializeCodec
+        |> Serialize.variant1 FileMetadata_Video videoMetadataSerializeCodec
+        |> Serialize.finishCustomType
+
+
+imageMetadataSerializeCodec : Serialize.Codec e ImageMetadata
+imageMetadataSerializeCodec =
+    Serialize.record ImageMetadata
+        |> Serialize.field .imageSize coordSerializeCodec
+        |> Serialize.field .orientation (Serialize.maybe orientationSerializeCodec)
+        |> Serialize.field .gpsLocation (Serialize.maybe locationSerializeCodec)
+        |> Serialize.field .cameraOwner (Serialize.maybe Serialize.string)
+        |> Serialize.field .exposureTime (Serialize.maybe exposureTimeSerializeCodec)
+        |> Serialize.field .fNumber (Serialize.maybe Serialize.float)
+        |> Serialize.field .focalLength (Serialize.maybe Serialize.float)
+        |> Serialize.field .isoSpeedRating (Serialize.maybe Serialize.int)
+        |> Serialize.field .make (Serialize.maybe Serialize.string)
+        |> Serialize.field .model (Serialize.maybe Serialize.string)
+        |> Serialize.field .software (Serialize.maybe Serialize.string)
+        |> Serialize.field .userComment (Serialize.maybe Serialize.string)
+        |> Serialize.finishRecord
+
+
+videoMetadataSerializeCodec : Serialize.Codec e VideoMetadata
+videoMetadataSerializeCodec =
+    Serialize.record VideoMetadata
+        |> Serialize.field .videoSize coordSerializeCodec
+        |> Serialize.field .frames (Serialize.maybe (quantitySerializeCodec Serialize.int))
+        |> Serialize.field .createdAt (Serialize.maybe posixSerializeCodec)
+        |> Serialize.field .orientation orientationSerializeCodec
+        |> Serialize.field .frameRate (Serialize.maybe (quantitySerializeCodec Serialize.float))
+        |> Serialize.field .codec (Serialize.maybe Serialize.string)
+        |> Serialize.field .title (Serialize.maybe Serialize.string)
+        |> Serialize.field .gpsLocation (Serialize.maybe locationSerializeCodec)
+        |> Serialize.finishRecord
+
+
+orientationSerializeCodec : Serialize.Codec e Orientation
+orientationSerializeCodec =
+    Serialize.customType
+        (\noChangeEncoder r90Encoder r180Encoder r270Encoder mirroredEncoder mr90Encoder mr180Encoder mr270Encoder value ->
+            case value of
+                NoChange ->
+                    noChangeEncoder
+
+                Rotation90 ->
+                    r90Encoder
+
+                Rotation180 ->
+                    r180Encoder
+
+                Rotation270 ->
+                    r270Encoder
+
+                Mirrored ->
+                    mirroredEncoder
+
+                MirroredRotation90 ->
+                    mr90Encoder
+
+                MirroredRotation180 ->
+                    mr180Encoder
+
+                MirroredRotation270 ->
+                    mr270Encoder
+        )
+        |> Serialize.variant0 NoChange
+        |> Serialize.variant0 Rotation90
+        |> Serialize.variant0 Rotation180
+        |> Serialize.variant0 Rotation270
+        |> Serialize.variant0 Mirrored
+        |> Serialize.variant0 MirroredRotation90
+        |> Serialize.variant0 MirroredRotation180
+        |> Serialize.variant0 MirroredRotation270
+        |> Serialize.finishCustomType
+
+
+locationSerializeCodec : Serialize.Codec e Location
+locationSerializeCodec =
+    Serialize.record Location
+        |> Serialize.field .lat Serialize.float
+        |> Serialize.field .lon Serialize.float
+        |> Serialize.finishRecord
+
+
+exposureTimeSerializeCodec : Serialize.Codec e ExposureTime
+exposureTimeSerializeCodec =
+    Serialize.record ExposureTime
+        |> Serialize.field .numerator Serialize.int
+        |> Serialize.field .denominator Serialize.int
+        |> Serialize.finishRecord
+
+
+coordSerializeCodec : Serialize.Codec e (Coord units)
+coordSerializeCodec =
+    Serialize.tuple (quantitySerializeCodec Serialize.int) (quantitySerializeCodec Serialize.int)
+
+
+quantitySerializeCodec : Serialize.Codec e number -> Serialize.Codec e (Quantity number units)
+quantitySerializeCodec number =
+    Serialize.customType
+        (\quantityEncoder value ->
+            case value of
+                Quantity.Quantity argA ->
+                    quantityEncoder argA
+        )
+        |> Serialize.variant1 Quantity.Quantity number
+        |> Serialize.finishCustomType
+
+
+posixSerializeCodec : Serialize.Codec e Time.Posix
+posixSerializeCodec =
+    Serialize.map Time.millisToPosix Time.posixToMillis Serialize.int
 
 
 type alias UploadResponse =

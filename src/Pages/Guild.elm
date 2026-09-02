@@ -21,6 +21,7 @@ module Pages.Guild exposing
     , editingText
     , enableE2eeText
     , encodeMessageView
+    , enterPrivateKeyText
     , friendLabel
     , friendsSearchInputId
     , guildNotFoundText
@@ -40,9 +41,11 @@ module Pages.Guild exposing
     , startOfThreadText
     , startedACallText
     , threadMessageHtmlId
+    , toAcceptE2eeText
     , typingDebouncerDelay
     , typingText
     , userTextMessageContent
+    , waitingForE2eeText
     , youDeclinedE2eeText
     )
 
@@ -172,6 +175,21 @@ e2eeDeclinedText =
 youDeclinedE2eeText : String
 youDeclinedE2eeText =
     "You declined the request to to enable E2EE."
+
+
+enterPrivateKeyText : String
+enterPrivateKeyText =
+    "2. Enter your private key to enable E2EE"
+
+
+waitingForE2eeText : String
+waitingForE2eeText =
+    "2. Waiting for "
+
+
+toAcceptE2eeText : String
+toAcceptE2eeText =
+    " to accept message encryption."
 
 
 requestAcceptedText : String
@@ -2568,14 +2586,14 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                     Just _ ->
                                         privateKeyInput
                                             otherUserId
-                                            (Ui.text "2. Enter your private key to enable E2EE")
+                                            (Ui.text enterPrivateKeyText)
                                             keyInput
                             ]
 
                     else if otherUserId == localUser.session.userId then
                         privateKeyInput
                             otherUserId
-                            (Ui.text "2. Enter your private key to enable E2EE")
+                            (Ui.text enterPrivateKeyText)
                             keyInput
 
                     else
@@ -2583,9 +2601,9 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                             [ Ui.spacing 16 ]
                             [ Ui.Prose.paragraph
                                 [ MyUi.htmlStyle "word-wrap" "anywhere", Ui.paddingXY 0 4 ]
-                                [ Ui.text "2. Waiting for "
+                                [ Ui.text waitingForE2eeText
                                 , Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt otherUserId localUser))
-                                , Ui.text " to accept message encryption."
+                                , Ui.text toAcceptE2eeText
                                 ]
                             , MyUi.simpleButton
                                 (Dom.id "guild_cancelE2ee")

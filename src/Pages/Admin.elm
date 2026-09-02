@@ -19,8 +19,8 @@ module Pages.Admin exposing
     , applyChangesToBackendUsers
     , disconnectClient
     , discordChannelReloadUser
-    , expandSectionButtonId
     , discordLinkingEnabledText
+    , expandSectionButtonId
     , importedText
     , initForAdmin
     , initForUser
