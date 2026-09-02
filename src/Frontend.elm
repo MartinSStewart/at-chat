@@ -7505,18 +7505,6 @@ channelSidebarTarget route =
                     2
 
 
-
---case Route.toChannelsVisible route of
---    GuildChannelsHiddenOnMobile ->
---        1
---
---    GuildChannelsVisibleOnMobile ->
---        2
-
-
-{-| A swipe only ever travels between the screen the route is on and the one next door, so
-that letting go lands on one or the other.
--}
 channelSidebarDragRange : Route -> { min : Float, max : Float }
 channelSidebarDragRange route =
     case Route.toShowMembersTab route of
@@ -8762,7 +8750,7 @@ view _ model =
                     E2eeInfo ->
                         FrontendExtra.layout
                             loaded
-                            [ Ui.background MyUi.background3 ]
+                            [ Ui.background MyUi.background3, Ui.scrollable ]
                             (Encryption.info FrontendNoOp)
         ]
     }

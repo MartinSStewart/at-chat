@@ -1015,7 +1015,15 @@ colorPreview time isMobile local allUsers color =
         (Id.fromInt 0)
         message.content
         False
-        { message | userIconDrawings = exampleDrawing local.localUser.session.userId }
+        { message
+            | drawings =
+                { timestampDrawings = Drawing.emptyDrawing
+                , userIconDrawings = exampleDrawing local.localUser.session.userId
+                , imageAttachmentDrawings = SeqDict.empty
+                , embedDrawings = SeqDict.empty
+                }
+                    |> Just
+        }
         |> Ui.map (\_ -> FrontendNoOp)
         |> Ui.el [ Ui.background MyUi.background3, Ui.widthMax 400, Ui.paddingXY 8 4 ]
 

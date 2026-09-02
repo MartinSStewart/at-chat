@@ -86,7 +86,7 @@ import List.Nonempty exposing (Nonempty)
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (GameType(..), Message(..), MessageContent)
+import Message exposing (GameType(..), Message(..), MessageContent, UserTextMessageDrawings)
 import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageMenu
@@ -7952,10 +7952,7 @@ userTextMessageContent :
             , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId))
             , editedAt : Maybe Time.Posix
             , repliedTo : Maybe (Id messageId)
-            , timestampDrawings : Drawing (Id UserId)
-            , userIconDrawings : Drawing (Id UserId)
-            , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing (Id UserId))
-            , embedDrawings : SeqDict Int (Drawing (Id UserId))
+            , drawings : Maybe (UserTextMessageDrawings (Id UserId))
         }
     -> Element MessageViewMsg
 userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId { content, embeds, attachedFiles } showEncryptionIcon message2 =
@@ -7963,6 +7960,10 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
         decrypted : SeqDict BytesHash (Result () (MessageContent (Id UserId)))
         decrypted =
             localUser.decryptedMessages
+
+        drawings : UserTextMessageDrawings (Id UserId)
+        drawings =
+            Maybe.withDefault Message.noDrawings message2.drawings
     in
     Ui.row
         []
@@ -7973,7 +7974,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                     drawingColor
                     MessageView_PressedUserIconAnchor
                     (isHovered == IsHoveredWhileSelectingAnchor)
-                    message2.userIconDrawings
+                    drawings.userIconDrawings
                     ++ (if isHovered == IsHoveredWhileSelectingAnchor then
                             [ Ui.rounded User.profileImageRounding ]
 
@@ -8018,7 +8019,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                     Ui.none
                 , messageTimestamp
                     drawingColor
-                    message2.timestampDrawings
+                    drawings.timestampDrawings
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     messageId
                     message2.createdAt
@@ -8047,8 +8048,8 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
                     , time = time
-                    , drawings = message2.imageAttachmentDrawings
-                    , embedDrawings = message2.embedDrawings
+                    , drawings = drawings.imageAttachmentDrawings
+                    , embedDrawings = drawings.embedDrawings
                     , drawingUserColor = drawingColor
                     , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
                     , devicePixelRatio = localUser.devicePixelRatio
@@ -8118,13 +8119,15 @@ discordUserTextMessageContent :
             , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet (Discord.Id Discord.UserId))
             , editedAt : Maybe Time.Posix
             , repliedTo : Maybe (Id messageId)
-            , timestampDrawings : Drawing (Discord.Id Discord.UserId)
-            , userIconDrawings : Drawing (Discord.Id Discord.UserId)
-            , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing (Discord.Id Discord.UserId))
-            , embedDrawings : SeqDict Int (Drawing (Discord.Id Discord.UserId))
+            , drawings : Maybe (UserTextMessageDrawings (Discord.Id Discord.UserId))
         }
     -> Element MessageViewMsg
 discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId { content, embeds, attachedFiles } message2 =
+    let
+        drawings : UserTextMessageDrawings (Discord.Id Discord.UserId)
+        drawings =
+            Maybe.withDefault Message.noDrawings message2.drawings
+    in
     Ui.row
         []
         [ (case SeqDict.get message2.createdBy allUsers of
@@ -8140,7 +8143,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                     (User.discordUserColor localUser)
                     MessageView_PressedUserIconAnchor
                     (isHovered == IsHoveredWhileSelectingAnchor)
-                    message2.userIconDrawings
+                    drawings.userIconDrawings
                     ++ (if isHovered == IsHoveredWhileSelectingAnchor then
                             [ Ui.rounded User.profileImageRounding ]
 
@@ -8180,7 +8183,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                 [ User.toStringView message2.createdBy allUsers
                 , messageTimestamp
                     (User.discordUserColor localUser)
-                    message2.timestampDrawings
+                    drawings.timestampDrawings
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     messageId
                     message2.createdAt
@@ -8210,8 +8213,8 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
                     , time = time
-                    , drawings = message2.imageAttachmentDrawings
-                    , embedDrawings = message2.embedDrawings
+                    , drawings = drawings.imageAttachmentDrawings
+                    , embedDrawings = drawings.embedDrawings
                     , drawingUserColor = User.discordUserColor localUser
                     , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
                     , devicePixelRatio = localUser.devicePixelRatio
