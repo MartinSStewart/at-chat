@@ -2554,7 +2554,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_AcceptE2ee _ _ _ ->
                     True
 
-                Local_SendEncryptedMessage _ _ _ _ _ ->
+                Local_SendEncryptedMessage _ _ _ _ ->
                     True
 
         ChangeBroadcast localMsg ->
@@ -2813,7 +2813,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetPublicKey _ _ ->
                             True
 
-                        Types.Server_SendEncryptedMessage _ _ _ _ _ _ _ ->
+                        Types.Server_SendEncryptedMessage _ _ _ _ _ _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
@@ -3075,7 +3075,6 @@ allAttackerLocalChanges =
         { otherUserId = Broadcast.adminUserId }
         (EncryptedData (Bytes.Encode.encode (Bytes.Encode.sequence [])))
         (NoThreadWithMaybeMessage Nothing)
-        SeqDict.empty
     ]
 
 
