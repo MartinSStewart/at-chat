@@ -6970,7 +6970,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 allUsers
                 (case highlight of
                     NoHighlight ->
-                        if SeqSet.member currentUserId (RichText.mentionsUser data.content) then
+                        if SeqSet.member currentUserId (RichText.mentionsUser data.data.content) then
                             MentionHighlight
 
                         else
@@ -7000,7 +7000,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                     (User.userColor localUser)
                     isHovered
                     messageId
-                    { content = data.content, embeds = data.embeds, attachedFiles = data.attachedFiles }
+                    data.data
                     False
                     data
                 )
@@ -7222,7 +7222,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 allUsers
                 (case highlight of
                     NoHighlight ->
-                        if SeqSet.member currentUserId (RichText.mentionsUser data.content) then
+                        if SeqSet.member currentUserId (RichText.mentionsUser data.data.content) then
                             MentionHighlight
 
                         else
@@ -7250,9 +7250,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                     allUsers
                     isHovered
                     messageId
-                    data.content
-                    data.embeds
-                    data.attachedFiles
+                    data.data
                     data
                 )
 
@@ -7286,9 +7284,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                     allUsers
                     isHovered
                     messageId
-                    RichText.failedToDecryptMessage
-                    Array.empty
-                    SeqDict.empty
+                    { content = RichText.failedToDecryptMessage, embeds = Array.empty, attachedFiles = SeqDict.empty }
                     data
                 )
 
@@ -7461,7 +7457,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 containerWidth
                 (case highlight of
                     NoHighlight ->
-                        if SeqSet.member currentUserId (RichText.mentionsUser message2.content) then
+                        if SeqSet.member currentUserId (RichText.mentionsUser message2.data.content) then
                             MentionHighlight
 
                         else
@@ -7493,7 +7489,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                     (User.userColor localUser)
                     isHovered
                     messageId
-                    { content = message2.content, embeds = message2.embeds, attachedFiles = message2.attachedFiles }
+                    message2.data
                     False
                     message2
                 )
@@ -7678,7 +7674,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 containerWidth
                 (case highlight of
                     NoHighlight ->
-                        if SeqSet.member currentUserId (RichText.mentionsUser message2.content) then
+                        if SeqSet.member currentUserId (RichText.mentionsUser message2.data.content) then
                             MentionHighlight
 
                         else
@@ -7708,9 +7704,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                     allUsers
                     isHovered
                     messageId
-                    message2.content
-                    message2.embeds
-                    message2.attachedFiles
+                    message2.data
                     message2
                 )
 
@@ -7739,9 +7733,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                     allUsers
                     isHovered
                     messageId
-                    RichText.failedToDecryptMessage
-                    Array.empty
-                    SeqDict.empty
+                    { content = RichText.failedToDecryptMessage, embeds = Array.empty, attachedFiles = SeqDict.empty }
                     message2
                 )
 
@@ -8100,9 +8092,7 @@ discordUserTextMessageContent :
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> IsHovered
     -> Id messageId
-    -> Nonempty (RichText (Discord.Id Discord.UserId))
-    -> Array Embed
-    -> SeqDict (Id FileId) FileData
+    -> ContentAndEmbeds (Discord.Id Discord.UserId)
     ->
         { a
             | createdAt : Time.Posix
@@ -8116,7 +8106,7 @@ discordUserTextMessageContent :
             , embedDrawings : SeqDict Int (Drawing (Discord.Id Discord.UserId))
         }
     -> Element MessageViewMsg
-discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId content embeds attachedFiles message2 =
+discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId { content, embeds, attachedFiles } message2 =
     Ui.row
         []
         [ (case SeqDict.get message2.createdBy allUsers of
@@ -8364,7 +8354,7 @@ replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoiler
                 customEmojis
                 allUsers
                 revealedSpoilers
-                { content = repliedToData.content, embeds = repliedToData.embeds, attachedFiles = repliedToData.attachedFiles }
+                repliedToData.data
                 repliedToData.createdBy
 
         Just ( repliedToIndex, EncryptedUserTextMessage repliedToData ) ->
@@ -9078,10 +9068,7 @@ previewThreadLastMessage timezone time customEmojis allUsers decrypted messageId
                                     timezone
                                     customEmojis
                                     allUsers
-                                    { content = data.content
-                                    , embeds = data.embeds
-                                    , attachedFiles = data.attachedFiles
-                                    }
+                                    data.data
                                     data.createdBy
 
                             EncryptedUserTextMessage data ->
@@ -10684,7 +10671,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                      else
                                         ""
                                     )
-                                        ++ RichText.toString localUser.timezone True allUsers a.content
+                                        ++ RichText.toString localUser.timezone True allUsers a.data.content
 
                                 EncryptedUserTextMessage a ->
                                     (if a.createdBy == localUser.session.userId then
@@ -10835,7 +10822,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                             localUser.timezone
                                             True
                                             (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
-                                            a.content
+                                            a.data.content
 
                                 EncryptedUserTextMessage a ->
                                     if LinkedAndOtherDiscordUsers.isLinkedUser a.createdBy localUser.discordUsers then

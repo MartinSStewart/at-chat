@@ -511,7 +511,7 @@ messageToString :
 messageToString timezone allUsers3 decrypted message =
     case message of
         UserTextMessage a ->
-            RichText.toString timezone False allUsers3 a.content
+            RichText.toString timezone False allUsers3 a.data.content
 
         EncryptedUserTextMessage a ->
             case SeqDict.get (Encryption.hash a.encryptedData) decrypted of
@@ -2027,7 +2027,7 @@ editMessageHelperNoThread :
 editMessageHelperNoThread time editedBy newContent attachedFiles messageIndex channel =
     case IdArray.get messageIndex channel.messages of
         Just (UserTextMessage data) ->
-            if data.createdBy == editedBy && data.content /= newContent then
+            if data.createdBy == editedBy && data.data.content /= newContent then
                 { channel
                     | messages =
                         IdArray.set
@@ -2098,7 +2098,7 @@ editMessageFrontendHelperNoThread :
 editMessageFrontendHelperNoThread time editedBy newContent attachedFiles messageIndex channel =
     case MessageArray.get messageIndex channel.messages of
         Just (UserTextMessage data) ->
-            if data.createdBy == editedBy && data.content /= newContent then
+            if data.createdBy == editedBy && data.data.content /= newContent then
                 { channel
                     | messages =
                         MessageArray.set
@@ -3241,10 +3241,9 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                         Just (UserTextMessage data) ->
                             ( { createdAt = data.createdAt
                               , createdBy = data.createdBy
-                              , content = data.content
+                              , data = data.data
                               , reactions = data.reactions
                               , editedAt = data.editedAt
-                              , attachedFiles = data.attachedFiles
                               }
                             , ViewThreadWithMaybeMessage threadId data.repliedTo
                             )
@@ -3258,10 +3257,9 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                         Just (UserTextMessage data) ->
                             ( { createdAt = data.createdAt
                               , createdBy = data.createdBy
-                              , content = data.content
+                              , data = data.data
                               , reactions = data.reactions
                               , editedAt = data.editedAt
-                              , attachedFiles = data.attachedFiles
                               }
                             , NoThreadWithMaybeMessage data.repliedTo
                             )
@@ -3300,10 +3298,9 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                 Just (UserTextMessage data) ->
                     ( { createdAt = data.createdAt
                       , createdBy = data.createdBy
-                      , content = data.content
+                      , data = data.data
                       , reactions = data.reactions
                       , editedAt = data.editedAt
-                      , attachedFiles = data.attachedFiles
                       }
                     , NoThreadWithMaybeMessage data.repliedTo
                     )
@@ -3327,10 +3324,9 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                                 Just (UserTextMessage data) ->
                                     ( { createdAt = data.createdAt
                                       , createdBy = data.createdBy
-                                      , content = data.content
+                                      , data = data.data
                                       , reactions = data.reactions
                                       , editedAt = data.editedAt
-                                      , attachedFiles = data.attachedFiles
                                       }
                                     , ViewThreadWithMaybeMessage threadId data.repliedTo
                                     )
@@ -3418,10 +3414,9 @@ toMessageNoReply message =
         UserTextMessage data ->
             { createdAt = data.createdAt
             , createdBy = data.createdBy
-            , content = data.content
+            , data = data.data
             , reactions = data.reactions
             , editedAt = data.editedAt
-            , attachedFiles = data.attachedFiles
             }
                 |> UserTextMessage_NoReply
 

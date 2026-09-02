@@ -658,7 +658,7 @@ messageUserIds : Message messageId userId -> List userId
 messageUserIds message =
     case message of
         UserTextMessage data ->
-            data.createdBy :: SeqSet.toList (RichText.mentionsUser data.content)
+            data.createdBy :: SeqSet.toList (RichText.mentionsUser data.data.content)
 
         EncryptedUserTextMessage data ->
             [ data.createdBy ]
@@ -1952,7 +1952,7 @@ plainTextMessages messages =
         (\messageId message dict ->
             case message of
                 UserTextMessage data ->
-                    SeqDict.insert messageId { content = data.content, embeds = data.embeds, attachedFiles = data.attachedFiles } dict
+                    SeqDict.insert messageId data.data dict
 
                 EncryptedUserTextMessage _ ->
                     dict

@@ -414,7 +414,7 @@ encodeMessage userIdToString userNames maybeThread message =
             [ ( "type", Json.Encode.string "userTextMessage" )
             , ( "createdAt", encodeTime data.createdAt )
             , ( "createdBy", Json.Encode.string (userIdToString data.createdBy) )
-            , ( "content", encodeContent userNames data.content )
+            , ( "content", encodeContent userNames data.data.content )
             ]
                 ++ optionalField "editedAt" encodeTime data.editedAt
                 ++ optionalField
@@ -422,8 +422,8 @@ encodeMessage userIdToString userNames maybeThread message =
                     (\messageId -> Json.Encode.int (Id.toInt messageId))
                     data.repliedTo
                 ++ encodeReactions userIdToString data.reactions
-                ++ encodeAttachedFiles data.attachedFiles
-                ++ encodeEmbeds data.embeds
+                ++ encodeAttachedFiles data.data.attachedFiles
+                ++ encodeEmbeds data.data.embeds
 
         EncryptedUserTextMessage data ->
             [ ( "encryptedData", Encrypted.encode data.encryptedData )

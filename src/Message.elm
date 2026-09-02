@@ -101,12 +101,10 @@ userTextMessageNoEmbeds :
 userTextMessageNoEmbeds createdAt2 createdBy content reactions repliedTo attachedFiles =
     { createdAt = createdAt2
     , createdBy = createdBy
-    , content = content
+    , data = { content = content, attachedFiles = attachedFiles, embeds = Array.empty }
     , reactions = reactions
     , editedAt = Nothing
     , repliedTo = repliedTo
-    , attachedFiles = attachedFiles
-    , embeds = Array.empty
     , timestampDrawings = Drawing.emptyDrawing
     , userIconDrawings = Drawing.emptyDrawing
     , imageAttachmentDrawings = SeqDict.empty
@@ -135,12 +133,14 @@ userTextMessageBackend secretKey createdAt2 createdBy content repliedTo attached
     in
     ( { createdAt = createdAt2
       , createdBy = createdBy
-      , content = content
+      , data =
+            { content = content
+            , attachedFiles = attachedFiles
+            , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
+            }
       , reactions = SeqDict.empty
       , editedAt = Nothing
       , repliedTo = repliedTo
-      , attachedFiles = attachedFiles
-      , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
       , timestampDrawings = Drawing.emptyDrawing
       , userIconDrawings = Drawing.emptyDrawing
       , imageAttachmentDrawings = SeqDict.empty
@@ -206,12 +206,14 @@ userTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
     in
     { createdAt = createdAt2
     , createdBy = createdBy
-    , content = content
+    , data =
+        { content = content
+        , attachedFiles = attachedFiles
+        , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
+        }
     , reactions = SeqDict.empty
     , editedAt = Nothing
     , repliedTo = repliedTo
-    , attachedFiles = attachedFiles
-    , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
     , timestampDrawings = Drawing.emptyDrawing
     , userIconDrawings = Drawing.emptyDrawing
     , imageAttachmentDrawings = SeqDict.empty
@@ -237,7 +239,7 @@ editUserTextMessage time newContent attachedFiles data =
         oldUrls =
             List.indexedMap
                 (\index link ->
-                    case Array.get index data.embeds of
+                    case Array.get index data.data.embeds of
                         Just (EmbedLoaded embed) ->
                             ( link, embed )
 
@@ -247,28 +249,30 @@ editUserTextMessage time newContent attachedFiles data =
                         Nothing ->
                             ( link, Embed.empty )
                 )
-                (RichText.hyperlinks data.content)
+                (RichText.hyperlinks data.data.content)
                 |> SeqDict.fromList
     in
     { data
         | editedAt = Just time
-        , content = newContent
-        , attachedFiles =
-            case attachedFiles of
-                ChangeAttachments attachedFiles2 ->
-                    attachedFiles2
+        , data =
+            { content = newContent
+            , attachedFiles =
+                case attachedFiles of
+                    ChangeAttachments attachedFiles2 ->
+                        attachedFiles2
 
-                DoNotChangeAttachments ->
-                    data.attachedFiles
-        , embeds =
-            RichText.hyperlinks newContent
-                |> List.map
-                    (\url ->
-                        SeqDict.get url oldUrls
-                            |> Maybe.withDefault Embed.empty
-                            |> EmbedLoaded
-                    )
-                |> Array.fromList
+                    DoNotChangeAttachments ->
+                        data.data.attachedFiles
+            , embeds =
+                RichText.hyperlinks newContent
+                    |> List.map
+                        (\url ->
+                            SeqDict.get url oldUrls
+                                |> Maybe.withDefault Embed.empty
+                                |> EmbedLoaded
+                        )
+                    |> Array.fromList
+            }
     }
 
 
@@ -276,29 +280,37 @@ addEmbed : ( Url, Result e EmbedData ) -> Message messageId userId -> Message me
 addEmbed ( url, result ) message =
     case message of
         UserTextMessage message2 ->
+            let
+                contentAndEmbeds : ContentAndEmbeds userId
+                contentAndEmbeds =
+                    message2.data
+            in
             UserTextMessage
                 { message2
-                    | embeds =
-                        RichText.hyperlinks message2.content
-                            |> List.indexedMap Tuple.pair
-                            |> List.foldl
-                                (\( index, hyperlink ) array ->
-                                    if hyperlink == url then
-                                        Array.set
-                                            index
-                                            (case result of
-                                                Ok embed ->
-                                                    EmbedLoaded embed
+                    | data =
+                        { contentAndEmbeds
+                            | embeds =
+                                RichText.hyperlinks contentAndEmbeds.content
+                                    |> List.indexedMap Tuple.pair
+                                    |> List.foldl
+                                        (\( index, hyperlink ) array ->
+                                            if hyperlink == url then
+                                                Array.set
+                                                    index
+                                                    (case result of
+                                                        Ok embed ->
+                                                            EmbedLoaded embed
 
-                                                Err _ ->
-                                                    EmbedLoaded Embed.empty
-                                            )
-                                            array
+                                                        Err _ ->
+                                                            EmbedLoaded Embed.empty
+                                                    )
+                                                    array
 
-                                    else
-                                        array
-                                )
-                                message2.embeds
+                                            else
+                                                array
+                                        )
+                                        contentAndEmbeds.embeds
+                        }
                 }
 
         EncryptedUserTextMessage _ ->
@@ -320,12 +332,10 @@ addEmbed ( url, result ) message =
 type alias UserTextMessageData messageId userId =
     { createdAt : Time.Posix
     , createdBy : userId
-    , content : Nonempty (RichText userId)
+    , data : ContentAndEmbeds userId
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , repliedTo : Maybe (Id messageId)
-    , attachedFiles : SeqDict (Id FileId) FileData
-    , embeds : Array Embed
     , timestampDrawings : Drawing userId
     , userIconDrawings : Drawing userId
     , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing userId)
@@ -398,10 +408,9 @@ type MessageNoReply userId
 type alias UserTextMessageDataNoReply userId =
     { createdAt : Time.Posix
     , createdBy : userId
-    , content : Nonempty (RichText userId)
+    , data : ContentAndEmbeds userId
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
-    , attachedFiles : SeqDict (Id FileId) FileData
     }
 
 

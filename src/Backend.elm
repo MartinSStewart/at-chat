@@ -2468,7 +2468,12 @@ discordStartThread timezone discordUser channel channelId threadId messageId mod
                 Just message ->
                     case message of
                         UserTextMessage a ->
-                            RichText.toStringWithGetter timezone DiscordUserData.username True model.discordUsers a.content
+                            RichText.toStringWithGetter
+                                timezone
+                                DiscordUserData.username
+                                True
+                                model.discordUsers
+                                a.data.content
 
                         EncryptedUserTextMessage _ ->
                             ""

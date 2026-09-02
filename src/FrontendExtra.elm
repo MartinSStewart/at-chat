@@ -6981,10 +6981,9 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                                 ( Id.fromInt index
                                                                 , { createdAt = data.createdAt
                                                                   , createdBy = data.createdBy
-                                                                  , content = contentAndEmbeds.content
+                                                                  , data = contentAndEmbeds
                                                                   , reactions = data.reactions
                                                                   , editedAt = data.editedAt
-                                                                  , attachedFiles = contentAndEmbeds.attachedFiles
                                                                   }
                                                                 )
                                                                     |> Just
@@ -7013,9 +7012,9 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                 ( GuildOrDmId guildOrDmId2, threadRoute )
                                                 { messageIndex = index
                                                 , text =
-                                                    RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.content
+                                                    RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.data.content
                                                 , attachedFiles =
-                                                    SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
+                                                    SeqDict.map (\_ a -> FileUploaded a) message.data.attachedFiles
                                                 }
                                                 loggedIn.editMessage
                                       }
@@ -7091,9 +7090,9 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                         local.localUser.timezone
                                                         False
                                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
-                                                        message.content
+                                                        message.data.content
                                                 , attachedFiles =
-                                                    SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
+                                                    SeqDict.map (\_ a -> FileUploaded a) message.data.attachedFiles
                                                 }
                                                 loggedIn.editMessage
                                       }

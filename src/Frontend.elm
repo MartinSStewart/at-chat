@@ -3999,7 +3999,7 @@ updateLoaded msg model =
                                                                         (User.allUsers local.localUser)
                                                                         nonempty
                                                             in
-                                                            if message.content == richText then
+                                                            if message.data.content == richText then
                                                                 Nothing
 
                                                             else
@@ -4039,7 +4039,7 @@ updateLoaded msg model =
                                                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                                                         nonempty
                                                             in
-                                                            if message.content == richText then
+                                                            if message.data.content == richText then
                                                                 Nothing
 
                                                             else
@@ -6915,8 +6915,8 @@ pressedEditMessage guildOrDmId threadRoute model =
                         GuildOrDmId guildOrDmId2 ->
                             case LocalState.guildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
-                                    ( RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.content
-                                    , message.attachedFiles
+                                    ( RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.data.content
+                                    , message.data.attachedFiles
                                     )
                                         |> Just
 
@@ -6930,8 +6930,8 @@ pressedEditMessage guildOrDmId threadRoute model =
                                         local.localUser.timezone
                                         False
                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
-                                        message.content
-                                    , message.attachedFiles
+                                        message.data.content
+                                    , message.data.attachedFiles
                                     )
                                         |> Just
 
@@ -9186,7 +9186,7 @@ plainTextLoaded messages =
             (\( messageId, message ) ->
                 case message of
                     Message.UserTextMessage data ->
-                        Just ( messageId, { content = data.content, embeds = data.embeds, attachedFiles = data.attachedFiles } )
+                        Just ( messageId, data.data )
 
                     _ ->
                         Nothing
