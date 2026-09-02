@@ -3495,7 +3495,7 @@ findImageMessage backend =
                     (\( index, message ) ->
                         case message of
                             Message.UserTextMessage data ->
-                                List.Nonempty.toList data.content
+                                List.Nonempty.toList data.data.content
                                     |> List.filterMap
                                         (\part ->
                                             case part of
@@ -3529,7 +3529,7 @@ findEmbedImageMessage backend =
                     (\( index, message ) ->
                         case message of
                             Message.UserTextMessage data ->
-                                case Array.get 0 data.embeds of
+                                case Array.get 0 data.data.embeds of
                                     Just (Embed.EmbedLoaded embed) ->
                                         case embed.image of
                                             Just _ ->

@@ -898,7 +898,7 @@ checkPrivateKeyNeverReachedTheServer privateKeyText backend =
                     (\message ->
                         case message of
                             Message.UserTextMessage data ->
-                                RichText.toString Time.utc False SeqDict.empty data.content |> Just
+                                RichText.toString Time.utc False SeqDict.empty data.data.content |> Just
 
                             _ ->
                                 Nothing
@@ -950,7 +950,7 @@ plainTextMessages dmChannel =
             (\message ->
                 case message of
                     Message.UserTextMessage data ->
-                        RichText.toString Time.utc False SeqDict.empty data.content |> Just
+                        RichText.toString Time.utc False SeqDict.empty data.data.content |> Just
 
                     _ ->
                         Nothing

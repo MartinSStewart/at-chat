@@ -1320,7 +1320,7 @@ lastMessageTimestamps : E2EHelper.BackendModel2 -> List Int
 lastMessageTimestamps backend =
     case E2EHelper.lastGuildChannelMessage backend of
         Just ( _, _, Message.UserTextMessage data ) ->
-            List.Nonempty.toList data.content
+            List.Nonempty.toList data.data.content
                 |> List.filterMap
                     (\part ->
                         case part of
@@ -1508,7 +1508,7 @@ lastMessageMentionCount : E2EHelper.BackendModel2 -> Int
 lastMessageMentionCount backend =
     case E2EHelper.lastGuildChannelMessage backend of
         Just ( _, _, Message.UserTextMessage data ) ->
-            List.Nonempty.toList data.content
+            List.Nonempty.toList data.data.content
                 |> List.filter
                     (\part ->
                         case part of

@@ -3802,7 +3802,7 @@ discordMessageToString backend message =
         text =
             case message of
                 Message.UserTextMessage data ->
-                    RichText.toStringWithGetter Time.utc DiscordUserData.username True (E2EHelper.unwrapBackend backend).discordUsers data.content
+                    RichText.toStringWithGetter Time.utc DiscordUserData.username True (E2EHelper.unwrapBackend backend).discordUsers data.data.content
 
                 Message.EncryptedUserTextMessage _ ->
                     "<encrypted message>"
