@@ -159,7 +159,7 @@ e2eeSectionTitle =
 
 enableE2eeText : String
 enableE2eeText =
-    "Enable end-to-end encryption"
+    "Enable E2EE"
 
 
 declineE2eeText : String
