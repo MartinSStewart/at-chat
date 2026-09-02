@@ -1,4 +1,4 @@
-module E2EEncryption exposing (tests)
+module E2EEncryption exposing (fileUploadTest, tests)
 
 {-| End-to-end tests for encrypted DMs: agreeing to encrypt a conversation, working the
 shared key out on each device, and sending a message once one is there.
@@ -23,6 +23,8 @@ import Effect.Lamdera exposing (ClientId)
 import Effect.Test as T
 import Effect.Time as Time
 import Encryption
+import FileName
+import FileStatus
 import FrontendExtra
 import Html.Attributes
 import Id exposing (Id, UserId)
@@ -779,6 +781,231 @@ tests config =
         ]
     ]
         |> T.testGroup "E2EE"
+
+
+{-| Attaching a file to an encrypted DM. The server has to end up with ciphertext and a
+name it was never told, so what it is handed and what the message says about the file are
+both checked.
+-}
+fileUploadTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+fileUploadTest config =
+    E2EHelper.startTest
+        "Attach a file to an end-to-end encrypted DM"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.openDm admin 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                        , respondToSharedSecretStored admin Broadcast.adminUserId
+                        , T.checkBackend 100 checkSoloDmIsEncrypted
+                        , admin.click 100 (Dom.id "guild_hideMembers")
+
+                        -- Nothing has been sent yet while the browser still has the file,
+                        -- so deleting the attachment has to drop the ciphertext rather
+                        -- than upload it once it arrives.
+                        , admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                        , admin.click 100 (Dom.id "fileStatus_delete_1")
+                        , respondToFileEncrypted admin
+                        , T.checkState 100 (checkNothingUploadedYet admin.clientId)
+
+                        -- Picking the file doesn't start the upload. The bytes go to the
+                        -- browser first and only what comes back is sent.
+                        , admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                        , T.checkState 100 (checkNothingUploadedYet admin.clientId)
+                        , respondToFileEncrypted admin
+                        , T.checkState 100 (checkCipherTextUploaded admin.clientId)
+                        , T.backendUpdate
+                            100
+                            (Types.Rpc_GotFileUpload (FileStatus.fileHash "123123123") 1234 Nothing)
+                        , E2EHelper.focusEvent
+                            admin
+                            1000
+                            (Just (Dom.id "channel_textinput"))
+                            (Just { start = 0, end = 0 })
+                        , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                        , respondToMessageEncrypted admin
+                        , T.checkBackend 100 checkAttachmentStoredEncrypted
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| Every file upload a client has made so far.
+-}
+fileUploads : ClientId -> T.Data FrontendModel BackendModel2 -> List T.HttpRequest
+fileUploads clientId data =
+    List.filter
+        (\request ->
+            String.endsWith "/file/upload" request.url
+                && (request.requestedBy == T.RequestedByFrontend clientId)
+        )
+        data.httpRequests
+
+
+checkNothingUploadedYet : ClientId -> T.Data FrontendModel BackendModel2 -> Result String ()
+checkNothingUploadedYet clientId data =
+    if List.isEmpty (fileUploads clientId data) then
+        Ok ()
+
+    else
+        Err "The file was uploaded before the browser had encrypted it"
+
+
+{-| The bytes handed over to be encrypted are the ones the file picker gave, so putting
+them through the stand-in cipher gives what the upload should have carried.
+-}
+checkCipherTextUploaded : ClientId -> T.Data FrontendModel BackendModel2 -> Result String ()
+checkCipherTextUploaded clientId data =
+    case
+        ( List.filterMap encryptFileRequest (encryptionPortRequests clientId data)
+        , fileUploads clientId data
+        )
+    of
+        ( ( _, plainText ) :: _, [ upload ] ) ->
+            case upload.body of
+                T.BytesBody _ uploaded ->
+                    if Base64.fromBytes uploaded == Base64.fromBytes (stubCipherText plainText) then
+                        Ok ()
+
+                    else
+                        Err "What was uploaded isn't the ciphertext the browser handed back"
+
+                T.FileBody _ ->
+                    Err "The file was uploaded as it was picked, without being encrypted first"
+
+                _ ->
+                    Err "The file was uploaded as something other than bytes"
+
+        ( [], _ ) ->
+            Err "The client didn't ask for a file to be encrypted"
+
+        ( _, uploads ) ->
+            Err
+                ("Expected one file upload, found "
+                    ++ String.fromInt (List.length uploads)
+                )
+
+
+checkAttachmentStoredEncrypted : BackendModel2 -> Result String ()
+checkAttachmentStoredEncrypted backend =
+    case soloDmChannel backend of
+        Just dmChannel ->
+            case IdArray.toList dmChannel.messages |> List.filterMap encryptedAttachedFiles |> List.concat of
+                [ fileData ] ->
+                    case fileData.isEncrypted of
+                        FileStatus.IsEncrypted _ ->
+                            if FileName.toString fileData.fileName == attachedFileName then
+                                Ok ()
+
+                            else
+                                Err
+                                    ("The file name in the message was lost. Stored: "
+                                        ++ FileName.toString fileData.fileName
+                                    )
+
+                        FileStatus.IsNotEncrypted ->
+                            Err "The message says the attached file isn't encrypted"
+
+                [] ->
+                    Err "No attached file reached the server"
+
+                files ->
+                    Err
+                        ("Expected one attached file, found "
+                            ++ String.fromInt (List.length files)
+                        )
+
+        Nothing ->
+            Err "The DM the file was attached in isn't on the server"
+
+
+encryptedAttachedFiles : Message.Message Id.ChannelMessageId (Id UserId) -> Maybe (List FileStatus.FileData)
+encryptedAttachedFiles message =
+    case message of
+        Message.EncryptedUserTextMessage data ->
+            case Base64.toBytes (Encryption.toBase64 data.content) of
+                Just bytes ->
+                    case stubPlainText bytes of
+                        Ok contentAndEmbeds ->
+                            SeqDict.values contentAndEmbeds.attachedFiles |> Just
+
+                        Err _ ->
+                            Nothing
+
+                Nothing ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
+respondToFileEncrypted :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+respondToFileEncrypted client =
+    T.andThen
+        100
+        (\data ->
+            case List.filterMap encryptFileRequest (encryptionPortRequests client.clientId data) of
+                ( requestId, plainText ) :: _ ->
+                    [ Encryption.FromJs_FileEncrypted
+                        requestId
+                        { key = stubFileKey, data = stubCipherText plainText }
+                        |> sendFromJs client
+                    ]
+
+                [] ->
+                    [ T.checkState 0 (\_ -> Err "The client didn't ask for a file to be encrypted") ]
+        )
+
+
+encryptFileRequest :
+    Encryption.ToJs (MessageContent (Id UserId))
+    -> Maybe ( Id Encryption.EncryptFileRequestId, Bytes )
+encryptFileRequest request =
+    case request of
+        Encryption.ToJs_EncryptFile { requestId, data } ->
+            Just ( requestId, data )
+
+        _ ->
+            Nothing
+
+
+{-| Stands in for the 32 byte AES key the browser generates for each file.
+-}
+stubFileKey : Bytes
+stubFileKey =
+    List.range 0 31
+        |> List.map Bytes.Encode.unsignedInt8
+        |> Bytes.Encode.sequence
+        |> Bytes.Encode.encode
+
+
+{-| The name the file picker in the test config gives the file it hands over.
+-}
+attachedFileName : String
+attachedFileName =
+    "test-image.png"
 
 
 checkDmE2eeDeclinedBy : Id UserId -> BackendModel2 -> Result String ()

@@ -18,6 +18,7 @@ module FileStatus exposing
     , VideoFrames
     , VideoMetadata
     , addFileHash
+    , aesPrivateKey
     , contentType
     , contentTypeType
     , contentTypes
@@ -42,6 +43,7 @@ module FileStatus exposing
     , uploadAvatar
     , uploadBackup
     , uploadBytes
+    , uploadEncryptedFile
     , uploadFile
     , uploadGameFile
     , uploadResponseCodec
@@ -122,6 +124,11 @@ type IsEncrypted
 
 type AesPrivateKey
     = AesPrivateKey Bytes
+
+
+aesPrivateKey : Bytes -> AesPrivateKey
+aesPrivateKey =
+    AesPrivateKey
 
 
 {-| OpaqueVariants
@@ -705,6 +712,29 @@ uploadFile onResult guildOrDmId fileId file2 =
         , headers = []
         , url = domain ++ "/file/upload"
         , body = Http.fileBody file2
+        , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
+        , timeout = Just Duration.minute
+        , tracker = uploadTrackerId guildOrDmId fileId |> Just
+        }
+
+
+{-| The already encrypted bytes of a file being attached to an end-to-end encrypted DM.
+The browser has no `File` to hand over here, only the ciphertext Elm got back from it, so
+the name and type the server would otherwise read off the file are lost. Neither is
+missed: both are recorded on this device and travel inside the encrypted message instead.
+-}
+uploadEncryptedFile :
+    (Result Http.Error UploadResponse -> msg)
+    -> ( AnyGuildOrDmId, ThreadRoute )
+    -> Id FileId
+    -> Bytes
+    -> Command restriction toFrontend msg
+uploadEncryptedFile onResult guildOrDmId fileId cipherText =
+    Http.riskyRequest
+        { method = "POST"
+        , headers = []
+        , url = domain ++ "/file/upload"
+        , body = Http.bytesBody "application/octet-stream" cipherText
         , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
         , timeout = Just Duration.minute
         , tracker = uploadTrackerId guildOrDmId fileId |> Just

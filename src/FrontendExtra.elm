@@ -9,6 +9,7 @@ module FrontendExtra exposing
     , drawingUndo
     , editMessage_gotFiles
     , editMessage_gotPastedText
+    , encryptedDmOtherUser
     , externalLinkWarning
     , fileDecryptedMessages
     , fileDragOverlayOpacity
@@ -36,12 +37,14 @@ module FrontendExtra exposing
     , routeRequest
     , savePrivateKeyTitle
     , setFocus
+    , startEncryptingFile
     , updateLoggedIn
     )
 
 import AiChat
 import Array
 import Audio exposing (Audio, AudioData)
+import Bytes exposing (Bytes)
 import Bytes.Encode
 import Call exposing (CallId(..))
 import ChannelDescription
@@ -834,6 +837,22 @@ gotFiles guildOrDmId threadRoute files model =
     updateLoggedIn
         (\loggedIn ->
             let
+                startUpload : Id FileId -> File -> Command FrontendOnly ToBackend FrontendMsg_
+                startUpload fileId file2 =
+                    case encryptedDmOtherUser guildOrDmId (Local.model loggedIn.localState) loggedIn of
+                        Just _ ->
+                            -- The upload can't start until the browser has encrypted the file, and
+                            -- the browser can't be handed a File, so the bytes are read out first.
+                            File.toBytes file2
+                                |> Task.perform (GotFileToEncrypt ( guildOrDmId, threadRoute ) fileId)
+
+                        Nothing ->
+                            FileStatus.uploadFile
+                                (GotFileHashName ( guildOrDmId, threadRoute ) fileId)
+                                ( guildOrDmId, threadRoute )
+                                fileId
+                                file2
+
                 ( fileText, cmds, dict ) =
                     case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.filesToUpload of
                         Just dict2 ->
@@ -848,12 +867,7 @@ gotFiles guildOrDmId threadRoute files model =
                                                 ++ Id.toString id
                                                 ++ RichText.attachedFileSuffix
                                            ]
-                                    , FileStatus.uploadFile
-                                        (GotFileHashName ( guildOrDmId, threadRoute ) id)
-                                        ( guildOrDmId, threadRoute )
-                                        id
-                                        file2
-                                        :: cmds2
+                                    , startUpload id file2 :: cmds2
                                     , NonemptyDict.insert
                                         id
                                         (FileUploading
@@ -877,18 +891,7 @@ gotFiles guildOrDmId threadRoute files model =
                                 )
                                 (List.Nonempty.toList files)
                             , List.indexedMap
-                                (\index file2 ->
-                                    let
-                                        id : Id FileId
-                                        id =
-                                            Id.fromInt (index + 1)
-                                    in
-                                    FileStatus.uploadFile
-                                        (GotFileHashName ( guildOrDmId, threadRoute ) id)
-                                        ( guildOrDmId, threadRoute )
-                                        id
-                                        file2
-                                )
+                                (\index file2 -> startUpload (Id.fromInt (index + 1)) file2)
                                 (List.Nonempty.toList files)
                             , List.Nonempty.indexedMap
                                 (\index file2 ->
@@ -958,34 +961,47 @@ gotPastedText guildOrDmId threadRoute { textBeforePaste, pastedText, textAfterPa
                 ++ Id.toString fileId
                 ++ RichText.attachedFileSuffix
                 ++ textAfterPaste
-    in
-    ( { loggedIn
-        | filesToUpload =
-            SeqDict.update
-                ( guildOrDmId, threadRoute )
-                (\maybe ->
-                    case maybe of
-                        Just dict ->
-                            NonemptyDict.insert fileId (pastedTextFileStatus pastedText) dict |> Just
+
+        loggedIn2 : LoggedIn2
+        loggedIn2 =
+            { loggedIn
+                | filesToUpload =
+                    SeqDict.update
+                        ( guildOrDmId, threadRoute )
+                        (\maybe ->
+                            case maybe of
+                                Just dict ->
+                                    NonemptyDict.insert fileId (pastedTextFileStatus pastedText) dict |> Just
+
+                                Nothing ->
+                                    NonemptyDict.singleton fileId (pastedTextFileStatus pastedText) |> Just
+                        )
+                        loggedIn.filesToUpload
+                , drafts =
+                    case String.Nonempty.fromString draft of
+                        Just nonempty ->
+                            SeqDict.insert ( guildOrDmId, threadRoute ) nonempty loggedIn.drafts
 
                         Nothing ->
-                            NonemptyDict.singleton fileId (pastedTextFileStatus pastedText) |> Just
-                )
-                loggedIn.filesToUpload
-        , drafts =
-            case String.Nonempty.fromString draft of
-                Just nonempty ->
-                    SeqDict.insert ( guildOrDmId, threadRoute ) nonempty loggedIn.drafts
+                            loggedIn.drafts
+            }
+    in
+    case encryptedDmOtherUser guildOrDmId (Local.model loggedIn2.localState) loggedIn2 of
+        Just _ ->
+            startEncryptingFile
+                ( guildOrDmId, threadRoute )
+                fileId
+                (Bytes.Encode.string pastedText |> Bytes.Encode.encode)
+                loggedIn2
 
-                Nothing ->
-                    loggedIn.drafts
-      }
-    , FileStatus.uploadString
-        (GotFileHashName ( guildOrDmId, threadRoute ) fileId)
-        ( guildOrDmId, threadRoute )
-        fileId
-        pastedText
-    )
+        Nothing ->
+            ( loggedIn2
+            , FileStatus.uploadString
+                (GotFileHashName ( guildOrDmId, threadRoute ) fileId)
+                ( guildOrDmId, threadRoute )
+                fileId
+                pastedText
+            )
 
 
 editMessage_gotPastedText :
@@ -1851,6 +1867,52 @@ routeRequest previousRoute newRoute model =
         |> Tuple.mapSecond (\a -> Command.batch [ viewCmd, a ])
 
 
+encryptedDmOtherUser : AnyGuildOrDmId -> LocalState -> LoggedIn2 -> Maybe Viewing_DmId
+encryptedDmOtherUser guildOrDmId local loggedIn =
+    case guildOrDmId of
+        GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
+            case
+                ( SeqDict.get otherUserId local.dmChannels |> Maybe.map .e2ee
+                , SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice
+                )
+            of
+                ( Just (DmChannel.E2eeEnabled _), True ) ->
+                    Just { otherUserId = otherUserId }
+
+                _ ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
+{-| Hands a file's plaintext to the browser to be encrypted. The upload only starts once
+the ciphertext comes back, so `pendingEncryptedFiles` remembers which attachment the reply
+belongs to.
+-}
+startEncryptingFile :
+    ( AnyGuildOrDmId, ThreadRoute )
+    -> Id FileId
+    -> Bytes
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+startEncryptingFile guildOrDmId fileId bytes loggedIn =
+    ( mapEncryptionRequests
+        (\requests ->
+            { requests
+                | nextEncryptFileRequestId = Id.increment requests.nextEncryptFileRequestId
+                , pendingEncryptedFiles =
+                    SeqDict.insert
+                        requests.nextEncryptFileRequestId
+                        { guildOrDmId = guildOrDmId, fileId = fileId }
+                        requests.pendingEncryptedFiles
+            }
+        )
+        loggedIn
+    , Encryption.encryptFile loggedIn.encryptionRequests.nextEncryptFileRequestId bytes
+    )
+
+
 mapEncryptionRequests : (EncryptionRequests -> EncryptionRequests) -> LoggedIn2 -> LoggedIn2
 mapEncryptionRequests func loggedIn =
     { loggedIn | encryptionRequests = func loggedIn.encryptionRequests }
@@ -2298,6 +2360,9 @@ isPressMsg msg =
             False
 
         SelectedFilesToAttach _ _ _ ->
+            False
+
+        GotFileToEncrypt _ _ _ ->
             False
 
         GotFileHashName _ _ _ ->

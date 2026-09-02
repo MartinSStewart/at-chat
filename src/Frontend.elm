@@ -10,6 +10,7 @@ import Array
 import Audio exposing (AudioCmd, AudioData)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
+import Bytes exposing (Bytes)
 import Call exposing (MediaDevicesStatus(..))
 import ChannelDescription
 import ChannelName
@@ -89,7 +90,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Drag(..), DragTarget(..), ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -617,6 +618,8 @@ loadedInitHelper startupData emojiData loginData loading =
                 , nextDecryptManyRequestId = Id.fromInt (List.length backlog)
                 , pendingEncryptedManyMessages = SeqDict.empty
                 , nextEncryptManyRequestId = Id.fromInt 0
+                , pendingEncryptedFiles = SeqDict.empty
+                , nextEncryptFileRequestId = Id.fromInt 0
                 }
             , e2eeSectionsExpanded = SeqDict.empty
             , typedTextCounter = 0
@@ -2357,6 +2360,11 @@ updateLoaded msg model =
         OneFrameAfterDragEnd ->
             ( { model | dragPrevious = model.drag }, Command.none )
 
+        GotFileToEncrypt guildOrDmId fileId bytes ->
+            FrontendExtra.updateLoggedIn
+                (FrontendExtra.startEncryptingFile guildOrDmId fileId bytes)
+                model
+
         GotFileHashName guildOrDmId fileStatusId result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -3511,6 +3519,64 @@ updateLoaded msg model =
                             , Command.none
                             )
 
+                        Ok (Encryption.FromJs_FileEncrypted requestId encrypted) ->
+                            case
+                                SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedFiles
+                                    |> Maybe.andThen (stillAttached loggedIn)
+                            of
+                                Just { guildOrDmId, fileId } ->
+                                    ( FrontendExtra.mapEncryptionRequests
+                                        (forgetEncryptFileRequest requestId)
+                                        { loggedIn
+                                            | filesToUpload =
+                                                SeqDict.updateIfExists
+                                                    guildOrDmId
+                                                    (NonemptyDict.updateIfExists
+                                                        fileId
+                                                        (fileEncrypted encrypted)
+                                                    )
+                                                    loggedIn.filesToUpload
+                                        }
+                                    , FileStatus.uploadEncryptedFile
+                                        (GotFileHashName guildOrDmId fileId)
+                                        guildOrDmId
+                                        fileId
+                                        encrypted.data
+                                    )
+
+                                Nothing ->
+                                    ( FrontendExtra.mapEncryptionRequests
+                                        (forgetEncryptFileRequest requestId)
+                                        loggedIn
+                                    , Command.none
+                                    )
+
+                        Ok (Encryption.FromJs_FileEncryptFailed requestId error) ->
+                            ( FrontendExtra.mapEncryptionRequests
+                                (forgetEncryptFileRequest requestId)
+                                { loggedIn
+                                    | e2eeError = Just error
+                                    , filesToUpload =
+                                        case
+                                            SeqDict.get
+                                                requestId
+                                                loggedIn.encryptionRequests.pendingEncryptedFiles
+                                        of
+                                            Just { guildOrDmId, fileId } ->
+                                                SeqDict.updateIfExists
+                                                    guildOrDmId
+                                                    (NonemptyDict.updateIfExists
+                                                        fileId
+                                                        (FileStatus.addFileHash (Err (Http.BadBody error)))
+                                                    )
+                                                    loggedIn.filesToUpload
+
+                                            Nothing ->
+                                                loggedIn.filesToUpload
+                                }
+                            , Command.none
+                            )
+
                         Err error ->
                             ( { loggedIn | e2eeError = Just error }, Command.none )
                 )
@@ -4377,7 +4443,7 @@ updateLoaded msg model =
                                         ( loggedIn, Command.none )
 
                                     else
-                                        case encryptedDmOtherUser guildOrDmId local loggedIn of
+                                        case FrontendExtra.encryptedDmOtherUser guildOrDmId local loggedIn of
                                             Just dmId ->
                                                 startEncryptingMessage
                                                     dmId
@@ -9067,6 +9133,49 @@ forgetEncryptRequest requestId requests =
     }
 
 
+{-| Deleting an attachment cancels its upload, but there is nothing to cancel while the
+browser still has the file, so the ciphertext for one that has since been deleted is
+dropped rather than uploaded.
+-}
+stillAttached : LoggedIn2 -> PendingEncryptedFile -> Maybe PendingEncryptedFile
+stillAttached loggedIn pending =
+    case
+        SeqDict.get pending.guildOrDmId loggedIn.filesToUpload
+            |> Maybe.andThen (NonemptyDict.get pending.fileId)
+    of
+        Just _ ->
+            Just pending
+
+        Nothing ->
+            Nothing
+
+
+{-| The size recorded when the file was picked is the plaintext size, which the progress
+bar would then never reach. The ciphertext is what actually gets sent, so its width is
+what the bar counts up to.
+-}
+fileEncrypted : { key : Bytes, data : Bytes } -> FileStatus -> FileStatus
+fileEncrypted encrypted fileStatus =
+    case fileStatus of
+        FileUploading fileName fileSize contentType _ ->
+            FileUploading
+                fileName
+                { fileSize | size = Bytes.width encrypted.data }
+                contentType
+                (FileStatus.aesPrivateKey encrypted.key |> FileStatus.IsEncrypted)
+
+        FileUploaded _ ->
+            fileStatus
+
+        FileError _ _ _ _ _ ->
+            fileStatus
+
+
+forgetEncryptFileRequest : Id Encryption.EncryptFileRequestId -> EncryptionRequests -> EncryptionRequests
+forgetEncryptFileRequest requestId requests =
+    { requests | pendingEncryptedFiles = SeqDict.remove requestId requests.pendingEncryptedFiles }
+
+
 forgetEncryptManyRequest : Id EncryptManyRequestId -> EncryptionRequests -> EncryptionRequests
 forgetEncryptManyRequest requestId requests =
     { requests
@@ -9325,25 +9434,6 @@ storeSharedSecret otherUserId privateKey loggedIn =
 
                 Just secret ->
                     Encryption.storeSharedSecret otherUserId (X25519.sharedSecretToBytes secret) |> Ok
-
-
-encryptedDmOtherUser : AnyGuildOrDmId -> LocalState -> LoggedIn2 -> Maybe Viewing_DmId
-encryptedDmOtherUser guildOrDmId local loggedIn =
-    case guildOrDmId of
-        GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
-            case
-                ( SeqDict.get otherUserId local.dmChannels |> Maybe.map .e2ee
-                , SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice
-                )
-            of
-                ( Just (DmChannel.E2eeEnabled _), True ) ->
-                    Just { otherUserId = otherUserId }
-
-                _ ->
-                    Nothing
-
-        _ ->
-            Nothing
 
 
 startEncryptingMessage :

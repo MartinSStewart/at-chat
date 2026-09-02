@@ -41,6 +41,7 @@ module Types exposing
     , NewGuildForm
     , PendingDecryptedManyMessages
     , PendingDecryptedMessage
+    , PendingEncryptedFile
     , PendingEncryptedManyMessages
     , PendingEncryptedMessage
     , PendingGatewayReconnect
@@ -84,7 +85,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
-import Encryption exposing (BytesHash, DecryptManyRequestId, DecryptRequestId, EncryptManyRequestId, EncryptRequestId, EncryptedData)
+import Encryption exposing (BytesHash, DecryptManyRequestId, DecryptRequestId, EncryptFileRequestId, EncryptManyRequestId, EncryptRequestId, EncryptedData)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import Game
 import Go
@@ -291,6 +292,8 @@ type alias EncryptionRequests =
     , nextDecryptManyRequestId : Id DecryptManyRequestId
     , pendingEncryptedManyMessages : SeqDict (Id EncryptManyRequestId) PendingEncryptedManyMessages
     , nextEncryptManyRequestId : Id EncryptManyRequestId
+    , pendingEncryptedFiles : SeqDict (Id EncryptFileRequestId) PendingEncryptedFile
+    , nextEncryptFileRequestId : Id EncryptFileRequestId
     }
 
 
@@ -318,6 +321,12 @@ type alias PendingEncryptedManyMessages =
 type alias PendingDecryptedManyMessages =
     { messageHashes : List BytesHash
     , shiftScrollFrom : Maybe HtmlId
+    }
+
+
+type alias PendingEncryptedFile =
+    { guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
+    , fileId : Id FileId
     }
 
 
@@ -597,6 +606,7 @@ type FrontendMsg_
     | ProfilePictureEditorMsg ImageEditor.Msg
     | GuildIconEditorMsg (Id GuildId) ImageEditor.Msg
     | OneFrameAfterDragEnd
+    | GotFileToEncrypt ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) Bytes
     | GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | PressedDeleteAttachedFile ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)
     | PressedViewAttachedFileInfo ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)

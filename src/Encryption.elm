@@ -2,6 +2,7 @@ port module Encryption exposing
     ( BytesHash(..)
     , DecryptManyRequestId
     , DecryptRequestId
+    , EncryptFileRequestId
     , EncryptManyRequestId
     , EncryptRequestId
     , EncryptedData(..)
@@ -10,6 +11,7 @@ port module Encryption exposing
     , decryptManyMessages
     , decryptMessage
     , encode
+    , encryptFile
     , encryptManyMessages
     , encryptMessage
     , encryptedData
@@ -86,6 +88,10 @@ type DecryptManyRequestId
 
 type EncryptManyRequestId
     = EncryptManyRequestId Never
+
+
+type EncryptFileRequestId
+    = EncryptFileRequestId Never
 
 
 encode : EncryptedData a -> Json.Encode.Value
@@ -192,6 +198,7 @@ type ToJs data
     | ToJs_DecryptNewMessage { requestId : Id DecryptRequestId, otherUserId : Id UserId, data : Bytes }
     | ToJs_DecryptManyMessages { requestId : Id DecryptManyRequestId, otherUserId : Id UserId, data : List Bytes }
     | ToJs_EncryptManyMessages { requestId : Id EncryptManyRequestId, otherUserId : Id UserId, data : List Bytes }
+    | ToJs_EncryptFile { requestId : Id EncryptFileRequestId, data : Bytes }
 
 
 storeSharedSecret : Id UserId -> Bytes -> Command FrontendOnly toMsg msg
@@ -249,10 +256,22 @@ decryptManyMessages requestId id messages =
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
+{-| A file gets a key of its own rather than the conversation's. The key travels inside
+the message the file is attached to, which is itself encrypted, so the server holds the
+ciphertext and nothing that opens it.
+-}
+encryptFile : Id EncryptFileRequestId -> Bytes -> Command FrontendOnly toMsg msg
+encryptFile requestId data =
+    Serialize.encodeToBytes
+        (toJsCodec Serialize.unit)
+        (ToJs_EncryptFile { requestId = requestId, data = data })
+        |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
+
+
 toJsCodec : Serialize.Codec e data -> Serialize.Codec e (ToJs data)
 toJsCodec dataCodec =
     Serialize.customType
-        (\a b c d e value ->
+        (\a b c d e f value ->
             case value of
                 ToJs_StoreSharedSecret argA ->
                     a argA
@@ -268,6 +287,9 @@ toJsCodec dataCodec =
 
                 ToJs_EncryptManyMessages argA ->
                     e argA
+
+                ToJs_EncryptFile argA ->
+                    f argA
         )
         |> Serialize.variant1
             ToJs_StoreSharedSecret
@@ -312,6 +334,14 @@ toJsCodec dataCodec =
                 |> Serialize.field .data (Serialize.list Serialize.bytes)
                 |> Serialize.finishRecord
             )
+        |> Serialize.variant1
+            ToJs_EncryptFile
+            (Serialize.record
+                (\requestId data -> { requestId = requestId, data = data })
+                |> Serialize.field .requestId Id.codec
+                |> Serialize.field .data Serialize.bytes
+                |> Serialize.finishRecord
+            )
         |> Serialize.finishCustomType
 
 
@@ -325,6 +355,8 @@ type FromJs a
     | FromJs_ManyMessagesDecrypted (Id DecryptManyRequestId) (List (Result () a))
     | FromJs_ManyMessagesEncrypted (Id EncryptManyRequestId) (List (EncryptedData a))
     | FromJs_ManyMessagesEncryptFailed (Id EncryptManyRequestId) String
+    | FromJs_FileEncrypted (Id EncryptFileRequestId) { key : Bytes, data : Bytes }
+    | FromJs_FileEncryptFailed (Id EncryptFileRequestId) String
 
 
 port encryption_to_js : Bytes -> Cmd msg
@@ -351,7 +383,7 @@ fromJs aCodec msg =
 fromJsCodec : Serialize.Codec e a -> Serialize.Codec e (FromJs a)
 fromJsCodec aCodec =
     Serialize.customType
-        (\a b c d e f g h i value ->
+        (\a b c d e f g h i j k value ->
             case value of
                 FromJs_SharedSecretStored argA ->
                     a argA
@@ -379,6 +411,12 @@ fromJsCodec aCodec =
 
                 FromJs_ManyMessagesEncryptFailed argA argB ->
                     i argA argB
+
+                FromJs_FileEncrypted argA argB ->
+                    j argA argB
+
+                FromJs_FileEncryptFailed argA argB ->
+                    k argA argB
         )
         |> Serialize.variant1 FromJs_SharedSecretStored Id.codec
         |> Serialize.variant2 FromJs_SharedSecretFailed Id.codec Serialize.string
@@ -392,6 +430,15 @@ fromJsCodec aCodec =
             (Serialize.list (Serialize.result Serialize.unit aCodec))
         |> Serialize.variant2 FromJs_ManyMessagesEncrypted Id.codec (Serialize.list encryptedDataCodec)
         |> Serialize.variant2 FromJs_ManyMessagesEncryptFailed Id.codec Serialize.string
+        |> Serialize.variant2
+            FromJs_FileEncrypted
+            Id.codec
+            (Serialize.record (\key data -> { key = key, data = data })
+                |> Serialize.field .key Serialize.bytes
+                |> Serialize.field .data Serialize.bytes
+                |> Serialize.finishRecord
+            )
+        |> Serialize.variant2 FromJs_FileEncryptFailed Id.codec Serialize.string
         |> Serialize.finishCustomType
 
 

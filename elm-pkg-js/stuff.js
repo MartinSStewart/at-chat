@@ -54,6 +54,7 @@ const e2eeToJsEncryptMessage = 1;
 const e2eeToJsDecryptMessage = 2;
 const e2eeToJsDecryptManyMessages = 3;
 const e2eeToJsEncryptManyMessages = 4;
+const e2eeToJsEncryptFile = 5;
 
 const e2eeFromJsSharedSecretStored = 0;
 const e2eeFromJsSharedSecretFailed = 1;
@@ -64,6 +65,8 @@ const e2eeFromJsMessageDecryptFailed = 5;
 const e2eeFromJsManyMessagesDecrypted = 6;
 const e2eeFromJsManyMessagesEncrypted = 7;
 const e2eeFromJsManyMessagesEncryptFailed = 8;
+const e2eeFromJsFileEncrypted = 9;
+const e2eeFromJsFileEncryptFailed = 10;
 
 function e2eeReadToJs(dataView) {
     if (dataView.byteLength < 3 || dataView.getUint8(0) !== e2eeSerializeVersion) { return null; }
@@ -130,6 +133,13 @@ function e2eeReadToJs(dataView) {
                 data: messages,
             };
         }
+
+        case e2eeToJsEncryptFile:
+            return {
+                tag: "encrypt-file",
+                requestId: dataView.getFloat64(3, false),
+                data: e2eeReadBytesField(dataView, 11),
+            };
 
         default:
             return null;
@@ -220,6 +230,18 @@ function e2eeManyMessagesEncryptedMessage(requestId, cipherTexts) {
         offset += cipherText.length;
     }
 
+    return out;
+}
+
+function e2eeFileEncryptedMessage(requestId, key, cipherText) {
+    const out = new DataView(new ArrayBuffer(19 + key.length + cipherText.length));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, e2eeFromJsFileEncrypted, false);
+    out.setFloat64(3, requestId, false);
+    out.setUint32(11, key.length, false);
+    new Uint8Array(out.buffer).set(key, 15);
+    out.setUint32(15 + key.length, cipherText.length, false);
+    new Uint8Array(out.buffer).set(cipherText, 19 + key.length);
     return out;
 }
 
@@ -1060,6 +1082,27 @@ exports.init = async function init(app)
 
                 app.ports.encryption_from_js.send(
                     e2eeManyMessagesEncryptedMessage(message.requestId, results));
+
+            } else if (message.tag === "encrypt-file") {
+                // A key of its own for each file. It is exportable because it has to travel
+                // to the other person, which it does inside the encrypted message the file is
+                // attached to rather than through IndexedDB.
+                const fileKey = await crypto.subtle.generateKey(
+                    { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+
+                const iv = crypto.getRandomValues(new Uint8Array(12));
+                const cipherText = await crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: iv }, fileKey, message.data);
+
+                const combined = new Uint8Array(iv.length + cipherText.byteLength);
+                combined.set(iv, 0);
+                combined.set(new Uint8Array(cipherText), iv.length);
+
+                app.ports.encryption_from_js.send(
+                    e2eeFileEncryptedMessage(
+                        message.requestId,
+                        new Uint8Array(await crypto.subtle.exportKey("raw", fileKey)),
+                        combined));
             }
         } catch (e) {
             if (message.tag === "store-shared-secret") {
@@ -1077,6 +1120,10 @@ exports.init = async function init(app)
                 app.ports.encryption_from_js.send(
                     e2eeIdAndTextMessage(
                         e2eeFromJsManyMessagesEncryptFailed, message.requestId, e.toString()));
+            } else if (message.tag === "encrypt-file") {
+                app.ports.encryption_from_js.send(
+                    e2eeIdAndTextMessage(
+                        e2eeFromJsFileEncryptFailed, message.requestId, e.toString()));
             }
         }
     });
