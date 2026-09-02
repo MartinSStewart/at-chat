@@ -504,7 +504,7 @@ messageNotification usersMentioned time sender id threadRoute message members mo
     let
         plainText : String
         plainText =
-            RichText.toString Time.utc True (NonemptyDict.toSeqDict model.users) message.data.content
+            RichText.toString Time.utc True (NonemptyDict.toSeqDict model.users) message.content.content
 
         alwaysNotify : SeqSet (Id UserId)
         alwaysNotify =
@@ -684,7 +684,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                             DiscordUserData.username
                                             True
                                             model.discordUsers
-                                            message2.data.content
+                                            message2.content.content
 
                                     EncryptedUserTextMessage _ ->
                                         "Message is encrypted"
@@ -1053,7 +1053,7 @@ messageNotificationEmail time email senderName userToString navigateTo plainText
             helper
                 (notificationEmailSubject senderName)
                 (Postmark.BodyBoth
-                    (notificationEmailContent userToString senderName link data.data.content data.data.attachedFiles)
+                    (notificationEmailContent userToString senderName link data.content.content data.content.attachedFiles)
                     (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ link ++ " to reply.")
                 )
 
@@ -1559,7 +1559,7 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
                     senderFrontendUser
                     time
                     (GuildOrDmId_Dm otherUserId2)
-                    message.data.content
+                    message.content.content
                     threadRouteWithReplyTo
                     attachedFiles
                     stickers

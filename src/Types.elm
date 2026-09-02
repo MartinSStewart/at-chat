@@ -101,7 +101,7 @@ import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
 import MembersAndOwner exposing (MembersAndOwner)
-import Message exposing (ContentAndEmbeds, Message)
+import Message exposing (Message, MessageContent)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView exposing (MessageViewMsg)
 import MuteSettings exposing (IsMuted)
@@ -297,7 +297,7 @@ type alias EncryptionRequests =
 type alias PendingEncryptedMessage =
     { otherUserId : Id UserId
     , threadRoute : ThreadRouteWithMaybeMessage
-    , contentAndEmbeds : ContentAndEmbeds (Id UserId)
+    , contentAndEmbeds : MessageContent (Id UserId)
     }
 
 
@@ -311,7 +311,7 @@ type alias PendingDecryptedMessage =
 
 type alias PendingEncryptedManyMessages =
     { id : Viewing_DmId
-    , messages : List ( ThreadRouteWithMessage, ContentAndEmbeds (Id UserId) )
+    , messages : List ( ThreadRouteWithMessage, MessageContent (Id UserId) )
     }
 
 
@@ -686,7 +686,7 @@ type FrontendMsg_
     | UnreadOverviewChannelMsg AnyGuildOrDmId (Id ChannelMessageId) MessageViewMsg
     | UnreadOverviewThreadMsg AnyGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) MessageViewMsg
     | ValidatedE2eePrivateKey String E2eeKeysValid
-    | EncryptionFromJs (Result String (Encryption.FromJs (ContentAndEmbeds (Id UserId))))
+    | EncryptionFromJs (Result String (Encryption.FromJs (MessageContent (Id UserId))))
 
 
 type alias NewChannelForm =
@@ -1077,7 +1077,7 @@ type ServerChange
     | Server_E2eeRequestDeclined Viewing_DmId (Id UserId)
     | Server_E2eeAccepted Viewing_DmId Time.Posix
     | Server_SetPublicKey (Id UserId) X25519.PublicKey
-    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (EncryptedData (ContentAndEmbeds (Id UserId))) ThreadRouteWithMaybeMessage
+    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
 
 
 type LocalChange
@@ -1139,13 +1139,13 @@ type LocalChange
     | Local_DeclineE2eeRequestAsInitiator Viewing_DmId
     | Local_DeclineE2eeRequest Viewing_DmId
     | Local_SetPublicKey X25519.PublicKey (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
-    | Local_EncryptOldMessages Viewing_DmId (List ( ThreadRouteWithMessage, EncryptedData (ContentAndEmbeds (Id UserId)) ))
+    | Local_EncryptOldMessages Viewing_DmId (List ( ThreadRouteWithMessage, EncryptedData (MessageContent (Id UserId)) ))
     | Local_SetE2eeRisksAccepted Bool
     | Local_AcceptE2ee Viewing_DmId Time.Posix (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
-    | Local_SendEncryptedMessage Time.Posix Viewing_DmId (EncryptedData (ContentAndEmbeds (Id UserId))) ThreadRouteWithMaybeMessage
+    | Local_SendEncryptedMessage Time.Posix Viewing_DmId (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
 
 
 type alias ChannelDataToEncrypt =
-    { channel : SeqDict (Id ChannelMessageId) (ContentAndEmbeds (Id UserId))
-    , threads : SeqDict (Id ChannelMessageId) (SeqDict (Id ThreadMessageId) (ContentAndEmbeds (Id UserId)))
+    { channel : SeqDict (Id ChannelMessageId) (MessageContent (Id UserId))
+    , threads : SeqDict (Id ChannelMessageId) (SeqDict (Id ThreadMessageId) (MessageContent (Id UserId)))
     }

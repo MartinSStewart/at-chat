@@ -79,7 +79,7 @@ import Log exposing (Log)
 import LoginForm
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..))
-import Message exposing (ContentAndEmbeds, Message(..))
+import Message exposing (Message(..), MessageContent)
 import NonemptyDict exposing (NonemptyDict)
 import Pages.Admin exposing (InitAdminData)
 import Pagination exposing (PageId)
@@ -658,7 +658,7 @@ messageUserIds : Message messageId userId -> List userId
 messageUserIds message =
     case message of
         UserTextMessage data ->
-            data.createdBy :: SeqSet.toList (RichText.mentionsUser data.data.content)
+            data.createdBy :: SeqSet.toList (RichText.mentionsUser data.content.content)
 
         EncryptedUserTextMessage data ->
             [ data.createdBy ]
@@ -1917,7 +1917,7 @@ dmChannelsThatNeedEncrypting session dmChannels =
                                 SeqDict.foldl
                                     (\threadId thread threads ->
                                         let
-                                            plainText : SeqDict (Id ThreadMessageId) (ContentAndEmbeds (Id UserId))
+                                            plainText : SeqDict (Id ThreadMessageId) (MessageContent (Id UserId))
                                             plainText =
                                                 plainTextMessages thread.messages
                                         in
@@ -1946,13 +1946,13 @@ dmChannelsThatNeedEncrypting session dmChannels =
 
 plainTextMessages :
     IdArray messageId (Message messageId (Id UserId))
-    -> SeqDict (Id messageId) (ContentAndEmbeds (Id UserId))
+    -> SeqDict (Id messageId) (MessageContent (Id UserId))
 plainTextMessages messages =
     IdArray.foldlWithId
         (\messageId message dict ->
             case message of
                 UserTextMessage data ->
-                    SeqDict.insert messageId data.data dict
+                    SeqDict.insert messageId data.content dict
 
                 EncryptedUserTextMessage _ ->
                     dict
@@ -1986,7 +1986,7 @@ sendEncryptedDm :
     -> ClientId
     -> ChangeId
     -> Viewing_DmId
-    -> EncryptedData (ContentAndEmbeds (Id UserId))
+    -> EncryptedData (MessageContent (Id UserId))
     -> ThreadRouteWithMaybeMessage
     -> UserSession
     -> BackendUser
@@ -3181,7 +3181,7 @@ encryptOldMessages :
     -> ChangeId
     -> LocalChange
     -> BackendModel
-    -> List ( ThreadRouteWithMessage, EncryptedData (ContentAndEmbeds (Id UserId)) )
+    -> List ( ThreadRouteWithMessage, EncryptedData (MessageContent (Id UserId)) )
     -> DmChannelId
     -> BackendDmChannel
     -> ( BackendModel, Command BackendOnly ToFrontend backendMsg )

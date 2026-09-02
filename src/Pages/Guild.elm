@@ -86,7 +86,7 @@ import List.Nonempty exposing (Nonempty)
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (ContentAndEmbeds, GameType(..), Message(..))
+import Message exposing (GameType(..), Message(..), MessageContent)
 import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageMenu
@@ -2984,7 +2984,7 @@ threadPreviewText :
     Time.Zone
     -> SeqDict userId { a | name : PersonName }
     -> Id ChannelMessageId
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds userId))
+    -> SeqDict BytesHash (Result () (MessageContent userId))
     -> { b | messages : MessageArray ChannelMessageId userId }
     -> String
 threadPreviewText timezone allUsers threadMessageIndex decrypted channel =
@@ -6451,7 +6451,7 @@ messageEditingView :
     -> EditMessage
     -> Maybe (Nonempty (RichText userId))
     -> LoggedIn2
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds userId))
+    -> SeqDict BytesHash (Result () (MessageContent userId))
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
@@ -6611,7 +6611,7 @@ threadMessageEditingView :
     -> EditMessage
     -> Maybe (Nonempty (RichText userId))
     -> LoggedIn2
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds userId))
+    -> SeqDict BytesHash (Result () (MessageContent userId))
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
@@ -6971,7 +6971,7 @@ messageView :
     -> Element MessageViewMsg
 messageView time isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter messageId message =
     let
-        decrypted : SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
+        decrypted : SeqDict BytesHash (Result () (MessageContent (Id UserId)))
         decrypted =
             localUser.decryptedMessages
     in
@@ -6988,7 +6988,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 allUsers
                 (case highlight of
                     NoHighlight ->
-                        if SeqSet.member currentUserId (RichText.mentionsUser data.data.content) then
+                        if SeqSet.member currentUserId (RichText.mentionsUser data.content.content) then
                             MentionHighlight
 
                         else
@@ -7018,13 +7018,13 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                     (User.userColor localUser)
                     isHovered
                     messageId
-                    data.data
+                    data.content
                     False
                     data
                 )
 
         EncryptedUserTextMessage data ->
-            case SeqDict.get (Encryption.hash data.encryptedData) decrypted of
+            case SeqDict.get (Encryption.hash data.content) decrypted of
                 Just result ->
                     messageContainer
                         containerWidth
@@ -7240,7 +7240,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 allUsers
                 (case highlight of
                     NoHighlight ->
-                        if SeqSet.member currentUserId (RichText.mentionsUser data.data.content) then
+                        if SeqSet.member currentUserId (RichText.mentionsUser data.content.content) then
                             MentionHighlight
 
                         else
@@ -7268,7 +7268,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                     allUsers
                     isHovered
                     messageId
-                    data.data
+                    data.content
                     data
                 )
 
@@ -7465,7 +7465,7 @@ threadMessageView :
     -> Element MessageViewMsg
 threadMessageView time isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited allUsers currentUserId localUser maybeRepliedTo2 messageId message =
     let
-        decrypted : SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
+        decrypted : SeqDict BytesHash (Result () (MessageContent (Id UserId)))
         decrypted =
             localUser.decryptedMessages
     in
@@ -7475,7 +7475,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 containerWidth
                 (case highlight of
                     NoHighlight ->
-                        if SeqSet.member currentUserId (RichText.mentionsUser message2.data.content) then
+                        if SeqSet.member currentUserId (RichText.mentionsUser message2.content.content) then
                             MentionHighlight
 
                         else
@@ -7507,13 +7507,13 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                     (User.userColor localUser)
                     isHovered
                     messageId
-                    message2.data
+                    message2.content
                     False
                     message2
                 )
 
         EncryptedUserTextMessage message2 ->
-            case SeqDict.get (Encryption.hash message2.encryptedData) decrypted of
+            case SeqDict.get (Encryption.hash message2.content) decrypted of
                 Just result ->
                     threadMessageContainer
                         containerWidth
@@ -7692,7 +7692,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 containerWidth
                 (case highlight of
                     NoHighlight ->
-                        if SeqSet.member currentUserId (RichText.mentionsUser message2.data.content) then
+                        if SeqSet.member currentUserId (RichText.mentionsUser message2.content.content) then
                             MentionHighlight
 
                         else
@@ -7722,7 +7722,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                     allUsers
                     isHovered
                     messageId
-                    message2.data
+                    message2.content
                     message2
                 )
 
@@ -7943,7 +7943,7 @@ userTextMessageContent :
     -> (Id UserId -> UserColor)
     -> IsHovered
     -> Id messageId
-    -> ContentAndEmbeds (Id UserId)
+    -> MessageContent (Id UserId)
     -> Bool
     ->
         { a
@@ -7960,7 +7960,7 @@ userTextMessageContent :
     -> Element MessageViewMsg
 userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId { content, embeds, attachedFiles } showEncryptionIcon message2 =
     let
-        decrypted : SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
+        decrypted : SeqDict BytesHash (Result () (MessageContent (Id UserId)))
         decrypted =
             localUser.decryptedMessages
     in
@@ -8110,7 +8110,7 @@ discordUserTextMessageContent :
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> IsHovered
     -> Id messageId
-    -> ContentAndEmbeds (Discord.Id Discord.UserId)
+    -> MessageContent (Discord.Id Discord.UserId)
     ->
         { a
             | createdAt : Time.Posix
@@ -8327,7 +8327,7 @@ replyToHeaderAboveMessage_userTextMessage :
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id messageId) (NonemptySet Int)
-    -> ContentAndEmbeds userId
+    -> MessageContent userId
     -> userId
     -> Element MessageViewMsg
 replyToHeaderAboveMessage_userTextMessage isMobile repliedToIndex timezone time customEmojis allUsers revealedSpoilers contentAndEmbeds createdBy =
@@ -8358,7 +8358,7 @@ replyToHeaderAboveMessage :
     -> Maybe ( Id messageId, Message messageId userId )
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds userId))
+    -> SeqDict BytesHash (Result () (MessageContent userId))
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> Element MessageViewMsg
 replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoilers customEmojis decrypted allUsers =
@@ -8372,11 +8372,11 @@ replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoiler
                 customEmojis
                 allUsers
                 revealedSpoilers
-                repliedToData.data
+                repliedToData.content
                 repliedToData.createdBy
 
         Just ( repliedToIndex, EncryptedUserTextMessage repliedToData ) ->
-            case SeqDict.get (Encryption.hash repliedToData.encryptedData) decrypted of
+            case SeqDict.get (Encryption.hash repliedToData.content) decrypted of
                 Just result ->
                     replyToHeaderAboveMessage_userTextMessage
                         isMobile
@@ -8423,7 +8423,7 @@ userTextMessagePreview :
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> SeqSet Int
-    -> ContentAndEmbeds userId
+    -> MessageContent userId
     -> userId
     -> Element MessageViewMsg
 userTextMessagePreview timezone time customEmojis allUsers revealedSpoilers contentAndEmbeds createdBy =
@@ -8745,7 +8745,7 @@ messageContainer :
     -> FrontendCurrentUser
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> Maybe (FrontendGenericThread userId)
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds userId))
+    -> SeqDict BytesHash (Result () (MessageContent userId))
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
@@ -9003,7 +9003,7 @@ previewThreadLastMessage_userTextMessage :
     -> Time.Zone
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
-    -> ContentAndEmbeds userId
+    -> MessageContent userId
     -> userId
     -> List (Html MessageViewMsg)
 previewThreadLastMessage_userTextMessage time timezone customEmojis allUsers contentAndEmbeds createdBy =
@@ -9030,7 +9030,7 @@ previewThreadLastMessage :
     -> Time.Posix
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds userId))
+    -> SeqDict BytesHash (Result () (MessageContent userId))
     -> Id ChannelMessageId
     -> FrontendGenericThread userId
     -> Element MessageViewMsg
@@ -9086,11 +9086,11 @@ previewThreadLastMessage timezone time customEmojis allUsers decrypted messageId
                                     timezone
                                     customEmojis
                                     allUsers
-                                    data.data
+                                    data.content
                                     data.createdBy
 
                             EncryptedUserTextMessage data ->
-                                case SeqDict.get (Encryption.hash data.encryptedData) decrypted of
+                                case SeqDict.get (Encryption.hash data.content) decrypted of
                                     Just result ->
                                         previewThreadLastMessage_userTextMessage
                                             time
@@ -10661,7 +10661,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
         allUsers =
             User.allUsers localUser
 
-        decrypted : SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
+        decrypted : SeqDict BytesHash (Result () (MessageContent (Id UserId)))
         decrypted =
             localUser.decryptedMessages
 
@@ -10689,7 +10689,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                      else
                                         ""
                                     )
-                                        ++ RichText.toString localUser.timezone True allUsers a.data.content
+                                        ++ RichText.toString localUser.timezone True allUsers a.content.content
 
                                 EncryptedUserTextMessage a ->
                                     (if a.createdBy == localUser.session.userId then
@@ -10698,7 +10698,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                      else
                                         ""
                                     )
-                                        ++ (case SeqDict.get (Encryption.hash a.encryptedData) decrypted of
+                                        ++ (case SeqDict.get (Encryption.hash a.content) decrypted of
                                                 Just result ->
                                                     RichText.toString
                                                         localUser.timezone
@@ -10840,7 +10840,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                             localUser.timezone
                                             True
                                             (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
-                                            a.data.content
+                                            a.content.content
 
                                 EncryptedUserTextMessage a ->
                                     if LinkedAndOtherDiscordUsers.isLinkedUser a.createdBy localUser.discordUsers then

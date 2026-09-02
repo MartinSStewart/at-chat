@@ -170,7 +170,7 @@ import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (ChangeAttachments, ContentAndEmbeds, Message(..), MessageNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments, Message(..), MessageContent, MessageNoReply(..), UserTextMessageDataNoReply)
 import MessageArray exposing (MessageArray)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
@@ -505,16 +505,16 @@ messageReactionsNoThread messageId channel =
 messageToString :
     Time.Zone
     -> SeqDict userId { a | name : PersonName }
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds userId))
+    -> SeqDict BytesHash (Result () (MessageContent userId))
     -> Message messageId userId
     -> String
 messageToString timezone allUsers3 decrypted message =
     case message of
         UserTextMessage a ->
-            RichText.toString timezone False allUsers3 a.data.content
+            RichText.toString timezone False allUsers3 a.content.content
 
         EncryptedUserTextMessage a ->
-            case SeqDict.get (Encryption.hash a.encryptedData) decrypted of
+            case SeqDict.get (Encryption.hash a.content) decrypted of
                 Just result ->
                     case result of
                         Ok ok ->
@@ -2027,7 +2027,7 @@ editMessageHelperNoThread :
 editMessageHelperNoThread time editedBy newContent attachedFiles messageIndex channel =
     case IdArray.get messageIndex channel.messages of
         Just (UserTextMessage data) ->
-            if data.createdBy == editedBy && data.data.content /= newContent then
+            if data.createdBy == editedBy && data.content.content /= newContent then
                 { channel
                     | messages =
                         IdArray.set
@@ -2098,7 +2098,7 @@ editMessageFrontendHelperNoThread :
 editMessageFrontendHelperNoThread time editedBy newContent attachedFiles messageIndex channel =
     case MessageArray.get messageIndex channel.messages of
         Just (UserTextMessage data) ->
-            if data.createdBy == editedBy && data.data.content /= newContent then
+            if data.createdBy == editedBy && data.content.content /= newContent then
                 { channel
                     | messages =
                         MessageArray.set
@@ -3241,7 +3241,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                         Just (UserTextMessage data) ->
                             ( { createdAt = data.createdAt
                               , createdBy = data.createdBy
-                              , data = data.data
+                              , content = data.content
                               , reactions = data.reactions
                               , editedAt = data.editedAt
                               }
@@ -3257,7 +3257,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                         Just (UserTextMessage data) ->
                             ( { createdAt = data.createdAt
                               , createdBy = data.createdBy
-                              , data = data.data
+                              , content = data.content
                               , reactions = data.reactions
                               , editedAt = data.editedAt
                               }
@@ -3298,7 +3298,7 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                 Just (UserTextMessage data) ->
                     ( { createdAt = data.createdAt
                       , createdBy = data.createdBy
-                      , data = data.data
+                      , content = data.content
                       , reactions = data.reactions
                       , editedAt = data.editedAt
                       }
@@ -3324,7 +3324,7 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                                 Just (UserTextMessage data) ->
                                     ( { createdAt = data.createdAt
                                       , createdBy = data.createdBy
-                                      , data = data.data
+                                      , content = data.content
                                       , reactions = data.reactions
                                       , editedAt = data.editedAt
                                       }
@@ -3414,14 +3414,14 @@ toMessageNoReply message =
         UserTextMessage data ->
             { createdAt = data.createdAt
             , createdBy = data.createdBy
-            , data = data.data
+            , content = data.content
             , reactions = data.reactions
             , editedAt = data.editedAt
             }
                 |> UserTextMessage_NoReply
 
         EncryptedUserTextMessage data ->
-            { encryptedData = data.encryptedData
+            { content = data.content
             , createdAt = data.createdAt
             , createdBy = data.createdBy
             , reactions = data.reactions

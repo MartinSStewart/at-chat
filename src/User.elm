@@ -73,7 +73,7 @@ import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId)
 import Json.Decode
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
-import Message exposing (ContentAndEmbeds)
+import Message exposing (MessageContent)
 import MuteSettings
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -896,7 +896,7 @@ type alias LocalUser =
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , emojiData : Maybe Emoji.CachedEmojiData
-    , decryptedMessages : SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
+    , decryptedMessages : SeqDict BytesHash (Result () (MessageContent (Id UserId)))
     }
 
 

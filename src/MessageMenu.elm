@@ -960,7 +960,7 @@ messageCustomEmojiIds message =
     in
     case message of
         UserTextMessage data ->
-            RichText.customEmojis data.data.content ++ reactionIds data.reactions
+            RichText.customEmojis data.content.content ++ reactionIds data.reactions
 
         EncryptedUserTextMessage data ->
             reactionIds data.reactions

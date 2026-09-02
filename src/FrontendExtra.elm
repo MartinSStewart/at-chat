@@ -85,7 +85,7 @@ import Local
 import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import LoginForm
 import MembersAndOwner
-import Message exposing (ChangeAttachments(..), ContentAndEmbeds, GameType(..), Message(..), MessageNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments(..), GameType(..), Message(..), MessageContent, MessageNoReply(..), UserTextMessageDataNoReply)
 import MessageArray exposing (MessageArray)
 import MessageDropdown
 import MessageInput exposing (NameSoFar(..), TimestampData)
@@ -6973,7 +6973,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
 
                                                     EncryptedUserTextMessage_NoReply data ->
                                                         case
-                                                            ( SeqDict.get (Encryption.hash data.encryptedData) local.localUser.decryptedMessages
+                                                            ( SeqDict.get (Encryption.hash data.content) local.localUser.decryptedMessages
                                                             , local.localUser.session.userId == data.createdBy
                                                             )
                                                         of
@@ -6981,7 +6981,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                                 ( Id.fromInt index
                                                                 , { createdAt = data.createdAt
                                                                   , createdBy = data.createdBy
-                                                                  , data = contentAndEmbeds
+                                                                  , content = contentAndEmbeds
                                                                   , reactions = data.reactions
                                                                   , editedAt = data.editedAt
                                                                   }
@@ -7012,9 +7012,9 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                 ( GuildOrDmId guildOrDmId2, threadRoute )
                                                 { messageIndex = index
                                                 , text =
-                                                    RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.data.content
+                                                    RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.content.content
                                                 , attachedFiles =
-                                                    SeqDict.map (\_ a -> FileUploaded a) message.data.attachedFiles
+                                                    SeqDict.map (\_ a -> FileUploaded a) message.content.attachedFiles
                                                 }
                                                 loggedIn.editMessage
                                       }
@@ -7090,9 +7090,9 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                         local.localUser.timezone
                                                         False
                                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
-                                                        message.data.content
+                                                        message.content.content
                                                 , attachedFiles =
-                                                    SeqDict.map (\_ a -> FileUploaded a) message.data.attachedFiles
+                                                    SeqDict.map (\_ a -> FileUploaded a) message.content.attachedFiles
                                                 }
                                                 loggedIn.editMessage
                                       }
@@ -7138,7 +7138,7 @@ addEncryptedDmMessage :
     Time.Posix
     -> Id UserId
     -> Id UserId
-    -> EncryptedData (ContentAndEmbeds (Id UserId))
+    -> EncryptedData (MessageContent (Id UserId))
     -> ThreadRouteWithMaybeMessage
     -> LocalState
     -> LocalState
@@ -7264,7 +7264,7 @@ handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local logged
 
 handleDecryptedMessage :
     Id Encryption.DecryptRequestId
-    -> Result () (ContentAndEmbeds (Id UserId))
+    -> Result () (MessageContent (Id UserId))
     -> LoadedFrontend
     -> LoggedIn2
     -> ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg_ )
@@ -7296,7 +7296,7 @@ handleDecryptedMessage requestId result model loggedIn =
 
 
 encryptOldMessages :
-    List ( ThreadRouteWithMessage, EncryptedData (ContentAndEmbeds (Id UserId)) )
+    List ( ThreadRouteWithMessage, EncryptedData (MessageContent (Id UserId)) )
     -> FrontendDmChannel
     -> FrontendDmChannel
 encryptOldMessages messages dmChannel =
@@ -7334,7 +7334,7 @@ encryptOldMessages messages dmChannel =
 
 
 fileDecryptedMessages :
-    List ( BytesHash, Result () (ContentAndEmbeds (Id UserId)) )
+    List ( BytesHash, Result () (MessageContent (Id UserId)) )
     -> LoggedIn2
     -> LoggedIn2
 fileDecryptedMessages decrypted loggedIn =

@@ -2473,7 +2473,7 @@ discordStartThread timezone discordUser channel channelId threadId messageId mod
                                 DiscordUserData.username
                                 True
                                 model.discordUsers
-                                a.data.content
+                                a.content.content
 
                         EncryptedUserTextMessage _ ->
                             ""

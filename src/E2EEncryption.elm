@@ -27,7 +27,7 @@ import FrontendExtra
 import Html.Attributes
 import Id exposing (Id, UserId)
 import IdArray
-import Message exposing (ContentAndEmbeds)
+import Message exposing (MessageContent)
 import NonemptyDict
 import Pages.Guild
 import RichText
@@ -898,7 +898,7 @@ checkPrivateKeyNeverReachedTheServer privateKeyText backend =
                     (\message ->
                         case message of
                             Message.UserTextMessage data ->
-                                RichText.toString Time.utc False SeqDict.empty data.data.content |> Just
+                                RichText.toString Time.utc False SeqDict.empty data.content.content |> Just
 
                             _ ->
                                 Nothing
@@ -950,7 +950,7 @@ plainTextMessages dmChannel =
             (\message ->
                 case message of
                     Message.UserTextMessage data ->
-                        RichText.toString Time.utc False SeqDict.empty data.data.content |> Just
+                        RichText.toString Time.utc False SeqDict.empty data.content.content |> Just
 
                     _ ->
                         Nothing
@@ -961,7 +961,7 @@ encryptedMessageText : Message.Message Id.ChannelMessageId (Id UserId) -> Maybe 
 encryptedMessageText message =
     case message of
         Message.EncryptedUserTextMessage data ->
-            case Base64.toBytes (Encryption.toBase64 data.encryptedData) of
+            case Base64.toBytes (Encryption.toBase64 data.content) of
                 Just bytes ->
                     case stubPlainText bytes of
                         Ok contentAndEmbeds ->
@@ -1324,7 +1324,7 @@ respondToManyMessagesEncrypted client =
 
 
 encryptManyRequest :
-    Encryption.ToJs (ContentAndEmbeds (Id UserId))
+    Encryption.ToJs (MessageContent (Id UserId))
     -> Maybe ( Id Encryption.EncryptManyRequestId, List Bytes )
 encryptManyRequest request =
     case request of
@@ -1336,7 +1336,7 @@ encryptManyRequest request =
 
 
 decryptManyRequest :
-    Encryption.ToJs (ContentAndEmbeds (Id UserId))
+    Encryption.ToJs (MessageContent (Id UserId))
     -> Maybe ( Id Encryption.DecryptManyRequestId, List Bytes )
 decryptManyRequest request =
     case request of
@@ -1387,7 +1387,7 @@ stubIv payload =
 
 {-| Reads a message back out of the stand-in ciphertext it was put into.
 -}
-stubPlainText : Bytes -> Result String (ContentAndEmbeds (Id UserId))
+stubPlainText : Bytes -> Result String (MessageContent (Id UserId))
 stubPlainText cipherText =
     case
         Bytes.Decode.decode
@@ -1415,7 +1415,7 @@ that isn't already in the request.
 encryptionPortRequests :
     ClientId
     -> T.Data FrontendModel BackendModel2
-    -> List (Encryption.ToJs (ContentAndEmbeds (Id UserId)))
+    -> List (Encryption.ToJs (MessageContent (Id UserId)))
 encryptionPortRequests clientId data =
     List.filterMap
         (\request ->
@@ -1433,7 +1433,7 @@ encryptionPortRequests clientId data =
 
 answerEncryptRequest :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> (Id Encryption.EncryptRequestId -> ContentAndEmbeds (Id UserId) -> Encryption.FromJs (ContentAndEmbeds (Id UserId)))
+    -> (Id Encryption.EncryptRequestId -> MessageContent (Id UserId) -> Encryption.FromJs (MessageContent (Id UserId)))
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 answerEncryptRequest client toReply =
     T.andThen
@@ -1453,8 +1453,8 @@ answerEncryptRequest client toReply =
 
 
 encryptRequest :
-    Encryption.ToJs (ContentAndEmbeds (Id UserId))
-    -> Maybe ( Id Encryption.EncryptRequestId, ContentAndEmbeds (Id UserId) )
+    Encryption.ToJs (MessageContent (Id UserId))
+    -> Maybe ( Id Encryption.EncryptRequestId, MessageContent (Id UserId) )
 encryptRequest request =
     case request of
         Encryption.ToJs_EncryptNewMessage { requestId, data } ->
@@ -1465,7 +1465,7 @@ encryptRequest request =
 
 
 decryptRequest :
-    Encryption.ToJs (ContentAndEmbeds (Id UserId))
+    Encryption.ToJs (MessageContent (Id UserId))
     -> Maybe ( Id Encryption.DecryptRequestId, Bytes )
 decryptRequest request =
     case request of
@@ -1478,7 +1478,7 @@ decryptRequest request =
 
 sendFromJs :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> Encryption.FromJs (ContentAndEmbeds (Id UserId))
+    -> Encryption.FromJs (MessageContent (Id UserId))
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 sendFromJs client fromJs =
     Serialize.encodeToBytes (Encryption.fromJsCodec Message.contentAndEmbedsCodec) fromJs

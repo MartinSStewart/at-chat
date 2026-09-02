@@ -1013,7 +1013,7 @@ colorPreview time isMobile local allUsers color =
         (\_ -> color)
         IsNotHovered
         (Id.fromInt 0)
-        message.data
+        message.content
         False
         { message | userIconDrawings = exampleDrawing local.localUser.session.userId }
         |> Ui.map (\_ -> FrontendNoOp)

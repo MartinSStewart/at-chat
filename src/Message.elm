@@ -1,11 +1,11 @@
 module Message exposing
     ( CallStartedData
     , ChangeAttachments(..)
-    , ContentAndEmbeds
     , EncryptedUserTextMessageData
     , GameStartedData
     , GameType(..)
     , Message(..)
+    , MessageContent
     , MessageNoReply(..)
     , UserTextMessageData
     , UserTextMessageDataNoReply
@@ -100,7 +100,7 @@ userTextMessageNoEmbeds :
 userTextMessageNoEmbeds createdAt2 createdBy content reactions repliedTo attachedFiles =
     { createdAt = createdAt2
     , createdBy = createdBy
-    , data = { content = content, attachedFiles = attachedFiles, embeds = Array.empty }
+    , content = { content = content, attachedFiles = attachedFiles, embeds = Array.empty }
     , reactions = reactions
     , editedAt = Nothing
     , repliedTo = repliedTo
@@ -132,7 +132,7 @@ userTextMessageBackend secretKey createdAt2 createdBy content repliedTo attached
     in
     ( { createdAt = createdAt2
       , createdBy = createdBy
-      , data =
+      , content =
             { content = content
             , attachedFiles = attachedFiles
             , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
@@ -172,12 +172,12 @@ can do.
 encryptedUserTextMessageFrontend :
     Time.Posix
     -> Id UserId
-    -> EncryptedData (ContentAndEmbeds (Id UserId))
+    -> EncryptedData (MessageContent (Id UserId))
     -> Maybe (Id messageId)
     -> Message messageId (Id UserId)
 encryptedUserTextMessageFrontend createdAt2 createdBy contentAndEmbeds repliedTo =
     EncryptedUserTextMessage
-        { encryptedData = contentAndEmbeds
+        { content = contentAndEmbeds
         , createdAt = createdAt2
         , createdBy = createdBy
         , reactions = SeqDict.empty
@@ -205,7 +205,7 @@ userTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
     in
     { createdAt = createdAt2
     , createdBy = createdBy
-    , data =
+    , content =
         { content = content
         , attachedFiles = attachedFiles
         , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
@@ -238,7 +238,7 @@ editUserTextMessage time newContent attachedFiles data =
         oldUrls =
             List.indexedMap
                 (\index link ->
-                    case Array.get index data.data.embeds of
+                    case Array.get index data.content.embeds of
                         Just (EmbedLoaded embed) ->
                             ( link, embed )
 
@@ -248,12 +248,12 @@ editUserTextMessage time newContent attachedFiles data =
                         Nothing ->
                             ( link, Embed.empty )
                 )
-                (RichText.hyperlinks data.data.content)
+                (RichText.hyperlinks data.content.content)
                 |> SeqDict.fromList
     in
     { data
         | editedAt = Just time
-        , data =
+        , content =
             { content = newContent
             , attachedFiles =
                 case attachedFiles of
@@ -261,7 +261,7 @@ editUserTextMessage time newContent attachedFiles data =
                         attachedFiles2
 
                     DoNotChangeAttachments ->
-                        data.data.attachedFiles
+                        data.content.attachedFiles
             , embeds =
                 RichText.hyperlinks newContent
                     |> List.map
@@ -280,13 +280,13 @@ addEmbed ( url, result ) message =
     case message of
         UserTextMessage message2 ->
             let
-                contentAndEmbeds : ContentAndEmbeds userId
+                contentAndEmbeds : MessageContent userId
                 contentAndEmbeds =
-                    message2.data
+                    message2.content
             in
             UserTextMessage
                 { message2
-                    | data =
+                    | content =
                         { contentAndEmbeds
                             | embeds =
                                 RichText.hyperlinks contentAndEmbeds.content
@@ -331,7 +331,7 @@ addEmbed ( url, result ) message =
 type alias UserTextMessageData messageId userId =
     { createdAt : Time.Posix
     , createdBy : userId
-    , data : ContentAndEmbeds userId
+    , content : MessageContent userId
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , repliedTo : Maybe (Id messageId)
@@ -343,12 +343,12 @@ type alias UserTextMessageData messageId userId =
     }
 
 
-toEncrypted : EncryptedData (ContentAndEmbeds userId) -> Message messageId userId -> Message messageId userId
+toEncrypted : EncryptedData (MessageContent userId) -> Message messageId userId -> Message messageId userId
 toEncrypted encryptedData message =
     case message of
         UserTextMessage data ->
             EncryptedUserTextMessage
-                { encryptedData = encryptedData
+                { content = encryptedData
                 , createdAt = data.createdAt
                 , createdBy = data.createdBy
                 , reactions = data.reactions
@@ -376,14 +376,14 @@ toEncrypted encryptedData message =
             message
 
 
-type alias ContentAndEmbeds userId =
+type alias MessageContent userId =
     { content : Nonempty (RichText userId), embeds : Array Embed, attachedFiles : SeqDict (Id FileId) FileData }
 
 
 type alias EncryptedUserTextMessageData messageId userId =
-    { encryptedData : EncryptedData (ContentAndEmbeds userId)
-    , createdAt : Time.Posix
+    { createdAt : Time.Posix
     , createdBy : userId
+    , content : EncryptedData (MessageContent userId)
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , repliedTo : Maybe (Id messageId)
@@ -407,16 +407,16 @@ type MessageNoReply userId
 type alias UserTextMessageDataNoReply userId =
     { createdAt : Time.Posix
     , createdBy : userId
-    , data : ContentAndEmbeds userId
+    , content : MessageContent userId
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     }
 
 
 type alias EncryptedUserTextMessageDataNoReply userId =
-    { encryptedData : EncryptedData (ContentAndEmbeds userId)
-    , createdAt : Time.Posix
+    { createdAt : Time.Posix
     , createdBy : userId
+    , content : EncryptedData (MessageContent userId)
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     }
@@ -741,9 +741,9 @@ reactionEmojis message =
             gameStarted.reactions
 
 
-contentAndEmbedsCodec : Serialize.Codec e (ContentAndEmbeds (Id UserId))
+contentAndEmbedsCodec : Serialize.Codec e (MessageContent (Id UserId))
 contentAndEmbedsCodec =
-    Serialize.record ContentAndEmbeds
+    Serialize.record MessageContent
         |> Serialize.field .content (nonemptyCodec (RichText.codec Id.codec))
         |> Serialize.field .embeds (Serialize.array embedCodec)
         |> Serialize.field .attachedFiles (seqDictCodec Id.codec FileStatus.fileDataSerializeCodec)

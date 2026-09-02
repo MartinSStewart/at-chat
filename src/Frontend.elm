@@ -55,7 +55,7 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
-import Message exposing (ContentAndEmbeds)
+import Message exposing (MessageContent)
 import MessageArray exposing (MessageArray)
 import MessageDropdown
 import MessageInput exposing (NameSoFar(..), TextInputFocus)
@@ -660,7 +660,7 @@ loadedInitHelper startupData emojiData loginData loading =
 
 loginDataToLocalState :
     Ports.StartupData
-    -> SeqDict BytesHash (Result () (ContentAndEmbeds (Id UserId)))
+    -> SeqDict BytesHash (Result () (MessageContent (Id UserId)))
     -> List EncryptedBacklog
     -> Maybe CachedEmojiData
     -> LoginData
@@ -3471,8 +3471,8 @@ updateLoaded msg model =
                                     let
                                         pairs :
                                             List
-                                                ( ( ThreadRouteWithMessage, ContentAndEmbeds (Id UserId) )
-                                                , Encryption.EncryptedData (ContentAndEmbeds (Id UserId))
+                                                ( ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+                                                , Encryption.EncryptedData (MessageContent (Id UserId))
                                                 )
                                         pairs =
                                             List.map2 Tuple.pair pending.messages encrypted
@@ -3999,7 +3999,7 @@ updateLoaded msg model =
                                                                         (User.allUsers local.localUser)
                                                                         nonempty
                                                             in
-                                                            if message.data.content == richText then
+                                                            if message.content.content == richText then
                                                                 Nothing
 
                                                             else
@@ -4039,7 +4039,7 @@ updateLoaded msg model =
                                                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                                                         nonempty
                                                             in
-                                                            if message.data.content == richText then
+                                                            if message.content.content == richText then
                                                                 Nothing
 
                                                             else
@@ -6915,8 +6915,8 @@ pressedEditMessage guildOrDmId threadRoute model =
                         GuildOrDmId guildOrDmId2 ->
                             case LocalState.guildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
-                                    ( RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.data.content
-                                    , message.data.attachedFiles
+                                    ( RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.content.content
+                                    , message.content.attachedFiles
                                     )
                                         |> Just
 
@@ -6930,8 +6930,8 @@ pressedEditMessage guildOrDmId threadRoute model =
                                         local.localUser.timezone
                                         False
                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
-                                        message.data.content
-                                    , message.data.attachedFiles
+                                        message.content.content
+                                    , message.content.attachedFiles
                                     )
                                         |> Just
 
@@ -9088,7 +9088,7 @@ forgetEncryptManyRequest requestId requests =
 
 type alias OldMessagesToEncrypt =
     { id : Viewing_DmId
-    , messages : List ( ThreadRouteWithMessage, ContentAndEmbeds (Id UserId) )
+    , messages : List ( ThreadRouteWithMessage, MessageContent (Id UserId) )
     }
 
 
@@ -9150,7 +9150,7 @@ locallyLoadedMessagesToEncrypt local =
                                 SeqDict.foldl
                                     (\threadId thread threads ->
                                         let
-                                            plainText : SeqDict (Id Id.ThreadMessageId) (ContentAndEmbeds (Id UserId))
+                                            plainText : SeqDict (Id Id.ThreadMessageId) (MessageContent (Id UserId))
                                             plainText =
                                                 plainTextLoaded thread.messages
                                         in
@@ -9179,14 +9179,14 @@ locallyLoadedMessagesToEncrypt local =
 
 plainTextLoaded :
     MessageArray messageId (Id UserId)
-    -> SeqDict (Id messageId) (ContentAndEmbeds (Id UserId))
+    -> SeqDict (Id messageId) (MessageContent (Id UserId))
 plainTextLoaded messages =
     MessageArray.toList messages
         |> List.filterMap
             (\( messageId, message ) ->
                 case message of
                     Message.UserTextMessage data ->
-                        Just ( messageId, data.data )
+                        Just ( messageId, data.content )
 
                     _ ->
                         Nothing
@@ -9207,7 +9207,7 @@ encryptConversation ( requestId, conversation ) =
 
 type alias LoadedEncryptedMessages =
     { id : Viewing_DmId
-    , messages : List (Encryption.EncryptedData (ContentAndEmbeds (Id UserId)))
+    , messages : List (Encryption.EncryptedData (MessageContent (Id UserId)))
     , shiftScrollFrom : Maybe HtmlId
     }
 
@@ -9269,8 +9269,8 @@ encryptedMessagesInConversation id shiftScrollFrom messagesLoaded =
 
 
 type EncryptedBacklog
-    = PendingEncryption { id : Viewing_DmId, messages : List (Encryption.EncryptedData (ContentAndEmbeds (Id UserId))) }
-    | MissingKeys { id : Viewing_DmId, messages : List (Encryption.EncryptedData (ContentAndEmbeds (Id UserId))) }
+    = PendingEncryption { id : Viewing_DmId, messages : List (Encryption.EncryptedData (MessageContent (Id UserId))) }
+    | MissingKeys { id : Viewing_DmId, messages : List (Encryption.EncryptedData (MessageContent (Id UserId))) }
 
 
 encryptedBacklog : SeqSet (Id UserId) -> SeqDict (Id UserId) FrontendDmChannel -> List EncryptedBacklog
@@ -9297,7 +9297,7 @@ encryptedBacklog keysOnThisDevice dmChannels =
         (SeqDict.toList dmChannels)
 
 
-encryptedMessagesIn : FrontendDmChannel -> List (Encryption.EncryptedData (ContentAndEmbeds (Id UserId)))
+encryptedMessagesIn : FrontendDmChannel -> List (Encryption.EncryptedData (MessageContent (Id UserId)))
 encryptedMessagesIn dmChannel =
     List.filterMap (\( _, message ) -> encryptedMessageData message) (MessageArray.toList dmChannel.messages)
         ++ (SeqDict.values dmChannel.threads
@@ -9309,11 +9309,11 @@ encryptedMessagesIn dmChannel =
            )
 
 
-encryptedMessageData : Message.Message messageId (Id UserId) -> Maybe (Encryption.EncryptedData (ContentAndEmbeds (Id UserId)))
+encryptedMessageData : Message.Message messageId (Id UserId) -> Maybe (Encryption.EncryptedData (MessageContent (Id UserId)))
 encryptedMessageData message =
     case message of
         Message.EncryptedUserTextMessage data ->
-            Just data.encryptedData
+            Just data.content
 
         _ ->
             Nothing
@@ -9361,7 +9361,7 @@ encryptedDmOtherUser guildOrDmId local loggedIn =
 startEncryptingMessage :
     Viewing_DmId
     -> ThreadRoute
-    -> ContentAndEmbeds (Id UserId)
+    -> MessageContent (Id UserId)
     -> LoggedIn2
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
