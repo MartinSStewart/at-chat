@@ -2,6 +2,7 @@ module FileStatus exposing
     ( AesPrivateKey
     , ContentType(..)
     , ContentTypeType(..)
+    , EncryptedThumbnail(..)
     , ExposureTime
     , FileData
     , FileDataWithImage
@@ -63,6 +64,7 @@ module FileStatus exposing
     )
 
 import Bytes exposing (Bytes)
+import Bytes.Encode
 import Codec exposing (Codec)
 import CodecExtra
 import Coord exposing (Coord)
@@ -185,7 +187,21 @@ type FileStatus
 
 type IsEncrypted
     = IsNotEncrypted
-    | IsEncrypted AesPrivateKey
+    | IsEncrypted AesPrivateKey EncryptedThumbnail
+
+
+{-| Whether a thumbnail was stored alongside an encrypted image. There is no key or hash to
+go with it: the thumbnail is encrypted with the file's key and stored under the file's hash.
+
+The server makes thumbnails by decoding an image, which it can't do for one it only has the
+ciphertext of, so this one was made by the browser. It only tries for an image big enough
+to need one, and gives up if the browser has no way to write webp, hence the answer being
+recorded rather than worked out from the image's size.
+
+-}
+type EncryptedThumbnail
+    = NoEncryptedThumbnail
+    | HasEncryptedThumbnail
 
 
 type AesPrivateKey
@@ -203,7 +219,7 @@ ciphertext is stored under, and the key that opens it.
 fileKey : FileData -> Maybe { fileHash : String, key : Bytes }
 fileKey fileData =
     case ( fileData.isEncrypted, fileData.fileHash ) of
-        ( IsEncrypted (AesPrivateKey key), FileHash hash ) ->
+        ( IsEncrypted (AesPrivateKey key) _, FileHash hash ) ->
             Just { fileHash = hash, key = key }
 
         ( IsNotEncrypted, _ ) ->
@@ -259,7 +275,7 @@ up as a picture.
 fileDataUrl : { a | contentType : ContentType, fileHash : FileHash, isEncrypted : IsEncrypted } -> String
 fileDataUrl fileData =
     case fileData.isEncrypted of
-        IsEncrypted _ ->
+        IsEncrypted _ _ ->
             encryptedFileUrl fileData.contentType fileData.fileHash
 
         IsNotEncrypted ->
@@ -271,8 +287,17 @@ encryptedFileUrl (ContentType contentType2) (FileHash fileHash2) =
     domain ++ "/file/e/" ++ String.fromInt contentType2 ++ "/" ++ fileHash2
 
 
-{-| The server makes thumbnails by decoding the image, which it can't do for one it only
-has the ciphertext of, so an encrypted image is shown at full size.
+{-| A thumbnail sits where the server's own thumbnails do, under the file's hash, so the
+service worker takes the `/file/e/` off the front and finds it at the address it already
+serves thumbnails from.
+-}
+encryptedThumbnailUrl : FileHash -> String
+encryptedThumbnailUrl (FileHash fileHash2) =
+    domain ++ "/file/e/t/" ++ fileHash2
+
+
+{-| An encrypted image the browser made a thumbnail of is shown at that thumbnail. One it
+couldn't is shown at full size, since the server can't make a thumbnail out of ciphertext.
 -}
 fileDataThumbnailUrl :
     Coord CssPixels
@@ -280,7 +305,10 @@ fileDataThumbnailUrl :
     -> String
 fileDataThumbnailUrl imageSize fileData =
     case fileData.isEncrypted of
-        IsEncrypted _ ->
+        IsEncrypted _ HasEncryptedThumbnail ->
+            encryptedThumbnailUrl fileData.fileHash
+
+        IsEncrypted _ NoEncryptedThumbnail ->
             encryptedFileUrl fileData.contentType fileData.fileHash
 
         IsNotEncrypted ->
@@ -417,11 +445,27 @@ isEncryptedSerializeCodec =
                 IsNotEncrypted ->
                     isNotEncryptedEncoder
 
-                IsEncrypted argA ->
-                    isEncryptedEncoder argA
+                IsEncrypted argA argB ->
+                    isEncryptedEncoder argA argB
         )
         |> Serialize.variant0 IsNotEncrypted
-        |> Serialize.variant1 IsEncrypted aesPrivateKeySerializeCodec
+        |> Serialize.variant2 IsEncrypted aesPrivateKeySerializeCodec encryptedThumbnailSerializeCodec
+        |> Serialize.finishCustomType
+
+
+encryptedThumbnailSerializeCodec : Serialize.Codec e EncryptedThumbnail
+encryptedThumbnailSerializeCodec =
+    Serialize.customType
+        (\noThumbnailEncoder hasThumbnailEncoder value ->
+            case value of
+                NoEncryptedThumbnail ->
+                    noThumbnailEncoder
+
+                HasEncryptedThumbnail ->
+                    hasThumbnailEncoder
+        )
+        |> Serialize.variant0 NoEncryptedThumbnail
+        |> Serialize.variant0 HasEncryptedThumbnail
         |> Serialize.finishCustomType
 
 
@@ -854,27 +898,49 @@ uploadFile onResult guildOrDmId fileId file2 =
         }
 
 
-{-| The already encrypted bytes of a file being attached to an end-to-end encrypted DM.
-The browser has no `File` to hand over here, only the ciphertext Elm got back from it, so
-the name and type the server would otherwise read off the file are lost. Neither is
-missed: both are recorded on this device and travel inside the encrypted message instead.
+{-| The already encrypted bytes of a file being attached to an end-to-end encrypted DM,
+and a thumbnail of it if the browser was able to make one.
+
+The server is handed ciphertext, so the name and type it would otherwise read off the file
+are lost, as is the thumbnail it would have made. None of them are missed: the name and
+type are recorded on this device and travel inside the encrypted message, and the thumbnail
+is made here instead. The thumbnail's length goes first as a big endian `Int32` so the
+server knows where it ends and the file begins, with zero meaning none was made.
+
 -}
 uploadEncryptedFile :
     (Result Http.Error UploadResponse -> msg)
     -> ( AnyGuildOrDmId, ThreadRoute )
     -> Id FileId
-    -> Bytes
+    -> { cipherText : Bytes, thumbnail : Maybe Bytes }
     -> Command restriction toFrontend msg
-uploadEncryptedFile onResult guildOrDmId fileId cipherText =
+uploadEncryptedFile onResult guildOrDmId fileId encrypted =
+    let
+        thumbnail : Bytes
+        thumbnail =
+            Maybe.withDefault emptyBytes encrypted.thumbnail
+    in
     Http.riskyRequest
         { method = "POST"
         , headers = []
-        , url = domain ++ "/file/upload"
-        , body = Http.bytesBody "application/octet-stream" cipherText
+        , url = domain ++ "/file/upload-encrypted"
+        , body =
+            Bytes.Encode.sequence
+                [ Bytes.Encode.unsignedInt32 Bytes.BE (Bytes.width thumbnail)
+                , Bytes.Encode.bytes thumbnail
+                , Bytes.Encode.bytes encrypted.cipherText
+                ]
+                |> Bytes.Encode.encode
+                |> Http.bytesBody "application/octet-stream"
         , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
         , timeout = Just Duration.minute
         , tracker = uploadTrackerId guildOrDmId fileId |> Just
         }
+
+
+emptyBytes : Bytes
+emptyBytes =
+    Bytes.Encode.encode (Bytes.Encode.sequence [])
 
 
 {-| A file being attached to a game rather than to a message. Games keep their attachments

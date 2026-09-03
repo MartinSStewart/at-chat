@@ -9,8 +9,10 @@ const path = require("path");
 const vm = require("vm");
 
 // Deliberately not at-chat.app: the worker takes the domain it intercepts from wherever it
-// was served, so serving it from somewhere else is what shows it isn't hardcoded.
-const origin = "http://localhost:8000";
+// was served, so serving it from somewhere else is what shows it isn't hardcoded. This one
+// isn't a localhost address either, so the worker is exercised the way it runs deployed,
+// where the app and the files share an origin.
+const origin = "https://at-chat.example";
 
 const domain = origin + "/";
 
@@ -116,6 +118,7 @@ function fakeCaches() {
 
 function loadServiceWorker(options) {
     const listeners = {};
+    const servedFrom = options.origin === undefined ? origin : options.origin;
 
     const context = {
         self: {
@@ -124,7 +127,7 @@ function loadServiceWorker(options) {
             clients: { claim: () => Promise.resolve() },
             registration: {},
             // Where the worker script itself was served from.
-            location: { origin: origin, href: origin + "/service-worker.js" }
+            location: { origin: servedFrom, href: servedFrom + "/service-worker.js" }
         },
         indexedDB: options.indexedDB,
         caches: options.caches,
@@ -171,6 +174,15 @@ function requestFile(listeners, url) {
 
 async function run() {
     const failures = [];
+
+    function expectEqual(actual, expected, what) {
+        const actualText = JSON.stringify(actual);
+        const expectedText = JSON.stringify(expected);
+
+        if (actualText !== expectedText) {
+            throw new Error(what + " was " + actualText + " rather than " + expectedText);
+        }
+    }
 
     async function check(name, body) {
         try {
@@ -276,8 +288,46 @@ async function run() {
         }
     });
 
+    // A thumbnail is stored under the file's hash and encrypted with the file's key, so
+    // taking the /file/e/ off the front of its address finds it where the server already
+    // serves thumbnails from, and the key is already there to open it.
+    await check("An encrypted thumbnail is served decrypted as webp", async () => {
+        const thumbnail = crypto.getRandomValues(new Uint8Array(256));
+        const encryptedThumbnail = await crypto.subtle.encrypt(
+            { name: "AES-GCM", iv: encrypted.cipherText.slice(0, 12) },
+            encrypted.key,
+            thumbnail);
+
+        // The same shape the page uploads: a fresh iv in front of the ciphertext.
+        const combined = new Uint8Array(12 + encryptedThumbnail.byteLength);
+        combined.set(encrypted.cipherText.slice(0, 12), 0);
+        combined.set(new Uint8Array(encryptedThumbnail), 12);
+
+        served.set(
+            domain + "file/t/" + fileHash,
+            () => new Response(combined, {
+                status: 200,
+                headers: { "Content-Type": "image/webp" }
+            }));
+
+        const response = await requestFile(listeners, domain + "file/e/t/" + fileHash);
+        const body = new Uint8Array(await response.arrayBuffer());
+
+        if (response.status !== 200) {
+            throw new Error("Got status " + response.status);
+        }
+
+        if (response.headers.get("content-type") !== "image/webp") {
+            throw new Error("Got content type " + response.headers.get("content-type"));
+        }
+
+        if (Buffer.compare(Buffer.from(body), Buffer.from(thumbnail)) !== 0) {
+            throw new Error("The body isn't the thumbnail that was encrypted");
+        }
+    });
+
     await check("A file served from somewhere else is left alone", async () => {
-        const elsewhere = "https://at-chat.app/file/e/2/" + fileHash;
+        const elsewhere = "https://somewhere-else.example/file/e/2/" + fileHash;
         served.set(elsewhere, () => new Response(encrypted.cipherText, { status: 200 }));
 
         let responded = false;
@@ -294,6 +344,45 @@ async function run() {
 
         if (Buffer.compare(Buffer.from(body), Buffer.from(encrypted.cipherText)) !== 0) {
             throw new Error("The plain address didn't serve what the server sent");
+        }
+    });
+
+    // Running locally, lamdera live and the rust server are on different ports, so reading
+    // the ciphertext is a cross origin fetch that the file endpoints send no cors header
+    // for. The worker goes through the proxy on 8001 to get at it. Deployed there is no
+    // proxy and no second origin, which every test above covers.
+    await check("Locally the ciphertext is fetched through the proxy", async () => {
+        const localDatabases = new Map();
+        localDatabases.set(
+            "at-chat-file-keys",
+            new Map([["file-keys", new Map([[fileHash, encrypted.key]])]]));
+
+        const asked = [];
+
+        const localListeners = loadServiceWorker({
+            origin: "http://localhost:8000",
+            indexedDB: fakeIndexedDb(localDatabases),
+            caches: fakeCaches(),
+            fetch: (request) => {
+                asked.push(cacheKey(request));
+                return Promise.resolve(new Response(encrypted.cipherText, {
+                    status: 200,
+                    headers: { "Content-Type": contentType }
+                }));
+            }
+        });
+
+        const response = await requestFile(
+            localListeners, "http://localhost:3000/file/e/2/" + fileHash);
+        const body = new Uint8Array(await response.arrayBuffer());
+
+        expectEqual(
+            asked,
+            ["http://localhost:8001/http://localhost:3000/file/2/" + fileHash],
+            "the address the ciphertext was read from");
+
+        if (Buffer.compare(Buffer.from(body), Buffer.from(plainText)) !== 0) {
+            throw new Error("The body isn't the file that was encrypted");
         }
     });
 

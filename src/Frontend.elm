@@ -3598,7 +3598,9 @@ updateLoaded msg model =
                                         )
                                         guildOrDmId
                                         fileId
-                                        encrypted.data
+                                        { cipherText = encrypted.data
+                                        , thumbnail = encrypted.thumbnail
+                                        }
                                     )
 
                                 Nothing ->
@@ -9212,7 +9214,10 @@ stillAttached loggedIn pending =
 bar would then never reach. The ciphertext is what actually gets sent, so its width is
 what the bar counts up to.
 -}
-fileEncrypted : { key : Bytes, data : Bytes, measured : Maybe FileStatus.MeasuredFile } -> FileStatus -> FileStatus
+fileEncrypted :
+    { key : Bytes, data : Bytes, thumbnail : Maybe Bytes, measured : Maybe FileStatus.MeasuredFile }
+    -> FileStatus
+    -> FileStatus
 fileEncrypted encrypted fileStatus =
     case fileStatus of
         FileUploading fileName fileSize contentType _ ->
@@ -9220,7 +9225,16 @@ fileEncrypted encrypted fileStatus =
                 fileName
                 { fileSize | size = Bytes.width encrypted.data }
                 contentType
-                (FileStatus.aesPrivateKey encrypted.key |> FileStatus.IsEncrypted)
+                (FileStatus.IsEncrypted
+                    (FileStatus.aesPrivateKey encrypted.key)
+                    (case encrypted.thumbnail of
+                        Just _ ->
+                            FileStatus.HasEncryptedThumbnail
+
+                        Nothing ->
+                            FileStatus.NoEncryptedThumbnail
+                    )
+                )
 
         FileUploaded _ ->
             fileStatus

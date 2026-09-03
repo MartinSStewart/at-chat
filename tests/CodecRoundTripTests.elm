@@ -29,41 +29,49 @@ portWireFormatTests : Test
 portWireFormatTests =
     let
         -- Request id 7, a one byte key of 170 and one byte of ciphertext of 187.
-        fileEncrypted : Maybe FileStatus.MeasuredFile -> Encryption.FromJs ()
-        fileEncrypted measured =
+        fileEncrypted : Maybe Bytes.Bytes -> Maybe FileStatus.MeasuredFile -> Encryption.FromJs ()
+        fileEncrypted thumbnail measured =
             Encryption.FromJs_FileEncrypted
                 (Id.fromInt 7)
                 { key = byteList [ 170 ]
                 , data = byteList [ 187 ]
+                , thumbnail = thumbnail
                 , measured = measured
                 }
     in
     describe "The bytes the encryption port passes"
         [ test "A file nothing could be measured about" <|
             \_ ->
-                fileEncrypted Nothing
-                    |> hasBytes [ 1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 0 ]
-        , test "An image that was measured" <|
+                fileEncrypted Nothing Nothing
+                    |> hasBytes [ 1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 0, 0, 0 ]
+        , test "An image too small to have wanted a thumbnail" <|
             \_ ->
                 FileStatus.MeasuredImage (Coord.xy 640 480)
                     |> Just
-                    |> fileEncrypted
+                    |> fileEncrypted Nothing
                     |> hasBytes
-                        [ 1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 1, 0, 0, 0, 0, 64, 132, 0, 0, 0, 0, 0, 0, 0, 0, 64, 126, 0, 0, 0, 0, 0, 0 ]
+                        [ 1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 0, 0, 1, 0, 0, 0, 0, 64, 132, 0, 0, 0, 0, 0, 0, 0, 0, 64, 126, 0, 0, 0, 0, 0, 0 ]
+        , test "An image the browser made a thumbnail of" <|
+            \_ ->
+                FileStatus.MeasuredImage (Coord.xy 640 480)
+                    |> Just
+                    |> fileEncrypted (Just (byteList [ 1, 2, 3 ]))
+                    |> hasBytes
+                        [ 1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 1, 0, 0, 0, 3, 1, 2, 3, 0, 1, 0, 0, 0, 0, 64, 132, 0, 0, 0, 0, 0, 0, 0, 0, 64, 126, 0, 0, 0, 0, 0, 0 ]
         , test "A video whose length the container didn't say" <|
             \_ ->
                 FileStatus.MeasuredVideo (Coord.xy 1920 1080) Nothing
                     |> Just
-                    |> fileEncrypted
+                    |> fileEncrypted Nothing
                     |> hasBytes
-                        [ 1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 1, 0, 1, 0, 0, 64, 158, 0, 0, 0, 0, 0, 0, 0, 0, 64, 144, 224, 0, 0, 0, 0, 0, 0, 0 ]
+                        [ 1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 0, 0, 1, 0, 1, 0, 0, 64, 158, 0, 0, 0, 0, 0, 0, 0, 0, 64, 144, 224, 0, 0, 0, 0, 0, 0, 0 ]
         , test "A video that was measured" <|
             \_ ->
                 FileStatus.MeasuredVideo (Coord.xy 1920 1080) (Just (Duration.seconds 2.5))
                     |> Just
-                    |> fileEncrypted
+                    |> fileEncrypted Nothing
                     |> hasBytes
-                        [ 1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 1, 0, 1, 0, 0, 64, 158, 0, 0, 0, 0, 0, 0, 0, 0, 64, 144, 224, 0, 0, 0, 0, 0, 0, 1, 64, 163, 136, 0, 0, 0, 0, 0 ]
+                        [ 1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 0, 0, 1, 0, 1, 0, 0, 64, 158, 0, 0, 0, 0, 0, 0, 0, 0, 64, 144, 224, 0, 0, 0, 0, 0, 0, 1, 64, 163, 136, 0, 0, 0, 0, 0 ]
         , -- The request stuff.js reads the file and its type back out of.
           test "A file handed over to be encrypted" <|
             \_ ->
@@ -156,6 +164,34 @@ roundTripTests =
                 , contentType = FileStatus.contentType "image/jpeg"
                 , fileHash = FileStatus.fileHash "0123456789abcdef"
                 , isEncrypted = FileStatus.IsNotEncrypted
+                }
+                    |> roundTrip FileStatus.fileDataSerializeCodec
+        , -- The key and whether a thumbnail was made travel inside the encrypted message,
+          -- so they have to survive the codec that puts them there.
+          test "An encrypted file with a thumbnail survives" <|
+            \_ ->
+                { fileName = FileName.fromString "photo.png"
+                , fileSize = 2048
+                , metadata = Nothing
+                , contentType = FileStatus.contentType "image/png"
+                , fileHash = FileStatus.fileHash "abc123"
+                , isEncrypted =
+                    FileStatus.IsEncrypted
+                        (byteList (List.range 0 31) |> FileStatus.aesPrivateKey)
+                        FileStatus.HasEncryptedThumbnail
+                }
+                    |> roundTrip FileStatus.fileDataSerializeCodec
+        , test "An encrypted file the browser made no thumbnail of survives" <|
+            \_ ->
+                { fileName = FileName.fromString "photo.png"
+                , fileSize = 2048
+                , metadata = Nothing
+                , contentType = FileStatus.contentType "image/png"
+                , fileHash = FileStatus.fileHash "abc123"
+                , isEncrypted =
+                    FileStatus.IsEncrypted
+                        (byteList (List.range 0 31) |> FileStatus.aesPrivateKey)
+                        FileStatus.NoEncryptedThumbnail
                 }
                     |> roundTrip FileStatus.fileDataSerializeCodec
         , test "A video with every piece of metadata filled in survives" <|

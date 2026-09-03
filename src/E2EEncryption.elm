@@ -866,7 +866,7 @@ fileUploads : ClientId -> T.Data FrontendModel BackendModel2 -> List T.HttpReque
 fileUploads clientId data =
     List.filter
         (\request ->
-            String.endsWith "/file/upload" request.url
+            String.endsWith "/file/upload-encrypted" request.url
                 && (request.requestedBy == T.RequestedByFrontend clientId)
         )
         data.httpRequests
@@ -894,11 +894,11 @@ checkCipherTextUploaded clientId data =
         ( ( _, plainText ) :: _, [ upload ] ) ->
             case upload.body of
                 T.BytesBody _ uploaded ->
-                    if Base64.fromBytes uploaded == Base64.fromBytes (stubCipherText plainText) then
+                    if Base64.fromBytes uploaded == Base64.fromBytes (framedUpload plainText) then
                         Ok ()
 
                     else
-                        Err "What was uploaded isn't the ciphertext the browser handed back"
+                        Err "What was uploaded isn't the thumbnail and ciphertext the browser handed back"
 
                 T.FileBody _ ->
                     Err "The file was uploaded as it was picked, without being encrypted first"
@@ -916,6 +916,19 @@ checkCipherTextUploaded clientId data =
                 )
 
 
+{-| The body `/file/upload-encrypted` is sent: the thumbnail's length, then the thumbnail,
+then the file.
+-}
+framedUpload : Bytes -> Bytes
+framedUpload plainText =
+    Bytes.Encode.sequence
+        [ Bytes.Encode.unsignedInt32 Bytes.BE (Bytes.width stubThumbnail)
+        , Bytes.Encode.bytes stubThumbnail
+        , Bytes.Encode.bytes (stubCipherText plainText)
+        ]
+        |> Bytes.Encode.encode
+
+
 checkAttachmentStoredEncrypted : BackendModel2 -> Result String ()
 checkAttachmentStoredEncrypted backend =
     case soloDmChannel backend of
@@ -923,7 +936,10 @@ checkAttachmentStoredEncrypted backend =
             case IdArray.toList dmChannel.messages |> List.filterMap encryptedAttachedFiles |> List.concat of
                 [ fileData ] ->
                     case fileData.isEncrypted of
-                        FileStatus.IsEncrypted _ ->
+                        FileStatus.IsEncrypted _ FileStatus.NoEncryptedThumbnail ->
+                            Err "The message doesn't say the attached image has a thumbnail"
+
+                        FileStatus.IsEncrypted _ FileStatus.HasEncryptedThumbnail ->
                             if FileName.toString fileData.fileName /= attachedFileName then
                                 Err
                                     ("The file name in the message was lost. Stored: "
@@ -1038,6 +1054,7 @@ respondToFileEncrypted client =
                         requestId
                         { key = stubFileKey
                         , data = stubCipherText plainText
+                        , thumbnail = Just stubThumbnail
                         , measured = Just (FileStatus.MeasuredImage measuredImageSize)
                         }
                         |> sendFromJs client
@@ -1058,6 +1075,16 @@ encryptFileRequest request =
 
         _ ->
             Nothing
+
+
+{-| Stands in for the encrypted webp the browser makes of an image too big to show whole.
+-}
+stubThumbnail : Bytes
+stubThumbnail =
+    List.range 200 231
+        |> List.map Bytes.Encode.unsignedInt8
+        |> Bytes.Encode.sequence
+        |> Bytes.Encode.encode
 
 
 {-| Stands in for what the browser measures the attached image as. The server only ever

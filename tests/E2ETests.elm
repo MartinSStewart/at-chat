@@ -126,6 +126,21 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         "internal" :: rest2 ->
                             E2EHelper.handleInternalRequests discordStickerPacks currentRequest rest2
 
+                        -- Encrypted uploads answer with the same shape, only with no
+                        -- metadata, since the server is handed ciphertext.
+                        [ "upload-encrypted" ] ->
+                            E2EHelper.httpBasic
+                                currentRequest.url
+                                200
+                                (Codec.encodeToString
+                                    0
+                                    FileStatus.uploadResponseCodec
+                                    { fileHash = FileStatus.fileHash "123123123"
+                                    , videoMetadata = Nothing
+                                    , imageMetadata = Nothing
+                                    }
+                                )
+
                         [ "upload" ] ->
                             E2EHelper.httpBasic
                                 currentRequest.url

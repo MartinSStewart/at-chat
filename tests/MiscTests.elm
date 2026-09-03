@@ -116,15 +116,11 @@ attachmentUrlTests =
 
         encryptedFile : FileStatus.FileData
         encryptedFile =
-            { plainFile
-                | isEncrypted =
-                    List.range 0 31
-                        |> List.map Bytes.Encode.unsignedInt8
-                        |> Bytes.Encode.sequence
-                        |> Bytes.Encode.encode
-                        |> FileStatus.aesPrivateKey
-                        |> FileStatus.IsEncrypted
-            }
+            { plainFile | isEncrypted = encryptedWith FileStatus.NoEncryptedThumbnail }
+
+        encryptedFileWithThumbnail : FileStatus.FileData
+        encryptedFileWithThumbnail =
+            { plainFile | isEncrypted = encryptedWith FileStatus.HasEncryptedThumbnail }
 
         -- Big enough that the server would have made a thumbnail for it.
         largeImage : Coord.Coord CssPixels
@@ -147,13 +143,33 @@ attachmentUrlTests =
                 FileStatus.fileDataThumbnailUrl largeImage plainFile
                     |> String.endsWith "/file/t/abc123"
                     |> Expect.equal True
-        , -- The server can't decode ciphertext, so there is no thumbnail to ask it for.
-          Test.test "A large encrypted image has no thumbnail to fall back on" <|
+        , -- The server can't decode ciphertext, so if the browser had no thumbnail to
+          -- offer there is none to fall back on.
+          Test.test "A large encrypted image the browser couldn't make a thumbnail of is shown whole" <|
             \_ ->
                 FileStatus.fileDataThumbnailUrl largeImage encryptedFile
                     |> String.endsWith "/file/e/2/abc123"
                     |> Expect.equal True
+        , -- The thumbnail sits under the file's own hash, so its address carries no
+          -- content type and no second hash.
+          Test.test "An encrypted image the browser made a thumbnail of is shown at it" <|
+            \_ ->
+                FileStatus.fileDataThumbnailUrl largeImage encryptedFileWithThumbnail
+                    |> String.endsWith "/file/e/t/abc123"
+                    |> Expect.equal True
         ]
+
+
+encryptedWith : FileStatus.EncryptedThumbnail -> FileStatus.IsEncrypted
+encryptedWith thumbnail =
+    FileStatus.IsEncrypted
+        (List.range 0 31
+            |> List.map Bytes.Encode.unsignedInt8
+            |> Bytes.Encode.sequence
+            |> Bytes.Encode.encode
+            |> FileStatus.aesPrivateKey
+        )
+        thumbnail
 
 
 tests : Test

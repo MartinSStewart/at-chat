@@ -333,8 +333,25 @@ function e2eeWriteMeasuredFile(out, offset, measured) {
     }
 }
 
-function e2eeFileEncryptedMessage(requestId, key, cipherText, measured) {
-    const measuredOffset = 19 + key.length + cipherText.length;
+// A Maybe Bytes: the variant tag, then a length and the bytes when there are any.
+function e2eeMaybeBytesSize(bytes) {
+    return bytes === null ? 2 : 2 + 4 + bytes.length;
+}
+
+function e2eeWriteMaybeBytes(out, offset, bytes) {
+    if (bytes === null) {
+        out.setUint16(offset, 0, false);
+        return;
+    }
+
+    out.setUint16(offset, 1, false);
+    out.setUint32(offset + 2, bytes.length, false);
+    new Uint8Array(out.buffer).set(bytes, offset + 6);
+}
+
+function e2eeFileEncryptedMessage(requestId, key, cipherText, thumbnail, measured) {
+    const thumbnailOffset = 19 + key.length + cipherText.length;
+    const measuredOffset = thumbnailOffset + e2eeMaybeBytesSize(thumbnail);
     const out = new DataView(
         new ArrayBuffer(measuredOffset + e2eeMeasuredFileSize(measured)));
     out.setUint8(0, e2eeSerializeVersion);
@@ -344,32 +361,84 @@ function e2eeFileEncryptedMessage(requestId, key, cipherText, measured) {
     new Uint8Array(out.buffer).set(key, 15);
     out.setUint32(15 + key.length, cipherText.length, false);
     new Uint8Array(out.buffer).set(cipherText, 19 + key.length);
+    e2eeWriteMaybeBytes(out, thumbnailOffset, thumbnail);
     e2eeWriteMeasuredFile(out, measuredOffset, measured);
     return out;
 }
 
-// What the browser can work out about a file without parsing it. An image decodes to a
-// bitmap that knows its size, and a video element reports its size and how long it runs
-// once the metadata at the front of the file has loaded. Anything more (the EXIF a camera
-// writes, the codec a container names) needs the file parsed, which is the server's job on
-// a file it can read.
-async function e2eeMeasureFile(bytes, contentType) {
+// Should match imageMaxHeight in FileStatus.elm and MAX_THUMBNAIL_HEIGHT in the rust
+// server, which decide the same thing for a file that isn't encrypted.
+const e2eeMaxThumbnailHeight = 600;
+
+// What the browser can work out about a file without parsing it, and a thumbnail of it if
+// it is an image big enough to want one. An image decodes to a bitmap that knows its size,
+// and a video element reports its size and how long it runs once the metadata at the front
+// of the file has loaded. Anything more (the EXIF a camera writes, the codec a container
+// names) needs the file parsed, which is the server's job on a file it can read.
+//
+// The thumbnail comes from the same bitmap the size was read off, so a file is only ever
+// decoded once.
+async function e2eeInspectFile(bytes, contentType) {
     if (contentType.startsWith("image/")) {
         try {
-            const bitmap = await createImageBitmap(new Blob([bytes], { type: contentType }));
-            const measured = { kind: "image", width: bitmap.width, height: bitmap.height };
+            const bitmap = await createImageBitmap(
+                new Blob([bytes], { type: contentType }),
+                // The size the server reports has the rotation a camera asked for already
+                // applied, so the size reported here has to as well.
+                { imageOrientation: "from-image" });
+
+            const inspected = {
+                measured: { kind: "image", width: bitmap.width, height: bitmap.height },
+                thumbnail: await e2eeThumbnail(bitmap)
+            };
+
             bitmap.close();
-            return measured;
+            return inspected;
         } catch (error) {
-            return null;
+            return { measured: null, thumbnail: null };
         }
     }
 
     if (contentType.startsWith("video/")) {
-        return await e2eeMeasureVideo(bytes, contentType);
+        return { measured: await e2eeMeasureVideo(bytes, contentType), thumbnail: null };
     }
 
-    return null;
+    return { measured: null, thumbnail: null };
+}
+
+// Webp to match what the server makes for a file it can read, scaled down to the same box
+// it uses. Asking a canvas for a type it can't write is answered with a png rather than
+// with an error, so what came back has to be checked rather than trusted.
+async function e2eeThumbnail(bitmap) {
+    const scale = Math.min(
+        (e2eeMaxThumbnailHeight * 3) / bitmap.width,
+        e2eeMaxThumbnailHeight / bitmap.height,
+        1);
+
+    if (scale === 1) {
+        // Small enough to be shown as it is, so a thumbnail would be no smaller than the
+        // file it was made from.
+        return null;
+    }
+
+    try {
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+        const blob = await new Promise((resolve) => {
+            canvas.toBlob(resolve, "image/webp", 0.8);
+        });
+
+        if (blob === null || blob.type !== "image/webp") {
+            return null;
+        }
+
+        return new Uint8Array(await blob.arrayBuffer());
+    } catch (error) {
+        return null;
+    }
 }
 
 function e2eeMeasureVideo(bytes, contentType) {
@@ -1251,15 +1320,34 @@ exports.init = async function init(app)
                 combined.set(iv, 0);
                 combined.set(new Uint8Array(cipherText), iv.length);
 
+                // Looked at before the upload, since the server only ever sees the
+                // ciphertext and this is the only chance anything gets to read the file
+                // itself. The size goes in the message alongside the key.
+                const inspected = await e2eeInspectFile(message.data, message.contentType);
+
+                // The thumbnail is encrypted with the file's own key so that nothing has to
+                // carry a second one, under an iv of its own because reusing one with the
+                // same key is what breaks aes-gcm.
+                let thumbnail = null;
+
+                if (inspected.thumbnail !== null) {
+                    const thumbnailIv = crypto.getRandomValues(new Uint8Array(12));
+                    const thumbnailCipherText = await crypto.subtle.encrypt(
+                        { name: "AES-GCM", iv: thumbnailIv }, fileKey, inspected.thumbnail);
+
+                    thumbnail = new Uint8Array(
+                        thumbnailIv.length + thumbnailCipherText.byteLength);
+                    thumbnail.set(thumbnailIv, 0);
+                    thumbnail.set(new Uint8Array(thumbnailCipherText), thumbnailIv.length);
+                }
+
                 app.ports.encryption_from_js.send(
                     e2eeFileEncryptedMessage(
                         message.requestId,
                         new Uint8Array(await crypto.subtle.exportKey("raw", fileKey)),
                         combined,
-                        // Measured before the upload so it can go in the message alongside
-                        // the key. The server only ever sees the ciphertext, so this is the
-                        // only chance anything gets to look at the file itself.
-                        await e2eeMeasureFile(message.data, message.contentType)));
+                        thumbnail,
+                        inspected.measured));
 
             } else if (message.tag === "store-file-keys") {
                 for (const entry of message.keys) {

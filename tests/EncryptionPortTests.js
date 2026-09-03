@@ -38,17 +38,21 @@ const cipherText = new Uint8Array([187]);
 
 const fileEncryptedBytes = {
     nothingMeasured:
-        [1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 0],
+        [1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 0, 0, 0],
     image:
+        [1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 0, 0, 1,
+         0, 0, 0, 0, 64, 132, 0, 0, 0, 0, 0, 0, 0, 0, 64, 126, 0, 0, 0, 0, 0, 0],
+    imageWithThumbnail:
         [1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 1, 0, 0,
-         0, 0, 64, 132, 0, 0, 0, 0, 0, 0, 0, 0, 64, 126, 0, 0, 0, 0, 0, 0],
+         0, 3, 1, 2, 3, 0, 1, 0, 0, 0, 0, 64, 132, 0, 0, 0, 0, 0, 0, 0, 0, 64, 126, 0, 0,
+         0, 0, 0, 0],
     videoWithNoDuration:
-        [1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 1, 0, 1,
-         0, 0, 64, 158, 0, 0, 0, 0, 0, 0, 0, 0, 64, 144, 224, 0, 0, 0, 0, 0, 0, 0],
+        [1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 0, 0, 1,
+         0, 1, 0, 0, 64, 158, 0, 0, 0, 0, 0, 0, 0, 0, 64, 144, 224, 0, 0, 0, 0, 0, 0, 0],
     video:
-        [1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 1, 0, 1,
-         0, 0, 64, 158, 0, 0, 0, 0, 0, 0, 0, 0, 64, 144, 224, 0, 0, 0, 0, 0, 0, 1, 64,
-         163, 136, 0, 0, 0, 0, 0]
+        [1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 0, 0, 1,
+         0, 1, 0, 0, 64, 158, 0, 0, 0, 0, 0, 0, 0, 0, 64, 144, 224, 0, 0, 0, 0, 0, 0, 1,
+         64, 163, 136, 0, 0, 0, 0, 0]
 };
 
 // Request id 7, content type "image/png", three bytes of file.
@@ -86,16 +90,28 @@ function run() {
 
     check("A file nothing could be measured about", () => {
         expectEqual(
-            toArray(js.e2eeFileEncryptedMessage(requestId, key, cipherText, null)),
+            toArray(js.e2eeFileEncryptedMessage(requestId, key, cipherText, null, null)),
             fileEncryptedBytes.nothingMeasured,
             "the message");
     });
 
-    check("An image that was measured", () => {
+    check("An image too small to have wanted a thumbnail", () => {
         expectEqual(
             toArray(js.e2eeFileEncryptedMessage(
-                requestId, key, cipherText, { kind: "image", width: 640, height: 480 })),
+                requestId, key, cipherText, null, { kind: "image", width: 640, height: 480 })),
             fileEncryptedBytes.image,
+            "the message");
+    });
+
+    check("An image the browser made a thumbnail of", () => {
+        expectEqual(
+            toArray(js.e2eeFileEncryptedMessage(
+                requestId,
+                key,
+                cipherText,
+                new Uint8Array([1, 2, 3]),
+                { kind: "image", width: 640, height: 480 })),
+            fileEncryptedBytes.imageWithThumbnail,
             "the message");
     });
 
@@ -105,6 +121,7 @@ function run() {
                 requestId,
                 key,
                 cipherText,
+                null,
                 { kind: "video", width: 1920, height: 1080, durationMs: null })),
             fileEncryptedBytes.videoWithNoDuration,
             "the message");
@@ -116,6 +133,7 @@ function run() {
                 requestId,
                 key,
                 cipherText,
+                null,
                 { kind: "video", width: 1920, height: 1080, durationMs: 2500 })),
             fileEncryptedBytes.video,
             "the message");

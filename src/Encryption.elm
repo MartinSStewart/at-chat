@@ -385,7 +385,13 @@ type FromJs a
     | FromJs_ManyMessagesDecrypted (Id DecryptManyRequestId) (List (Result () a))
     | FromJs_ManyMessagesEncrypted (Id EncryptManyRequestId) (List (EncryptedData a))
     | FromJs_ManyMessagesEncryptFailed (Id EncryptManyRequestId) String
-    | FromJs_FileEncrypted (Id EncryptFileRequestId) { key : Bytes, data : Bytes, measured : Maybe FileStatus.MeasuredFile }
+    | FromJs_FileEncrypted
+        (Id EncryptFileRequestId)
+        { key : Bytes
+        , data : Bytes
+        , thumbnail : Maybe Bytes
+        , measured : Maybe FileStatus.MeasuredFile
+        }
     | FromJs_FileEncryptFailed (Id EncryptFileRequestId) String
 
 
@@ -463,9 +469,13 @@ fromJsCodec aCodec =
         |> Serialize.variant2
             FromJs_FileEncrypted
             Id.codec
-            (Serialize.record (\key data measured -> { key = key, data = data, measured = measured })
+            (Serialize.record
+                (\key data thumbnail measured ->
+                    { key = key, data = data, thumbnail = thumbnail, measured = measured }
+                )
                 |> Serialize.field .key Serialize.bytes
                 |> Serialize.field .data Serialize.bytes
+                |> Serialize.field .thumbnail (Serialize.maybe Serialize.bytes)
                 |> Serialize.field .measured (Serialize.maybe FileStatus.measuredFileSerializeCodec)
                 |> Serialize.finishRecord
             )
