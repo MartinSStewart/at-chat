@@ -233,7 +233,7 @@ async function waitForFileKey(fileHash) {
 // knows to decrypt them, and so that a browser without it installed gets a plain 404
 // instead of rendering ciphertext. The bytes themselves are stored at the ordinary
 // /file/<content type>/<hash>, which is what gets fetched here.
-async function decryptedFileResponse(encryptedUrl) {
+async function decryptedFileResponse(isDevelopment, encryptedUrl) {
     const rest = encryptedUrl.slice(encryptedUrl.indexOf('/file/e/') + '/file/e/'.length);
     const separator = rest.indexOf('/');
 
@@ -246,7 +246,10 @@ async function decryptedFileResponse(encryptedUrl) {
     // The bytes themselves sit at the ordinary address. The content type is part of it, so
     // the response that comes back names the type correctly even though what it served was
     // ciphertext.
-    const cipherTextUrl = encryptedUrl.replace('/file/e/', '/file/');
+    let cipherTextUrl = encryptedUrl.replace('/file/e/', '/file/');
+    if (isDevelopment) {
+        cipherTextUrl = "http://localhost:8001/" + cipherTextUrl;
+    }
 
     const key = await waitForFileKey(fileHash);
 
@@ -300,8 +303,13 @@ self.addEventListener('fetch', (event) => {
     {
     const url = event.request.url;
 
+    const isDevelopment = self.location.origin.startsWith("http://localhost:");
+
     const domain = self.location.origin + '/';
-    const apiDomain = domain.replace("http://localhost:8000/", "http://localhost:3000/");
+    let apiDomain = domain;
+    if (isDevelopment) {
+        apiDomain = "http://localhost:3000/";
+    }
 
     // The hashed frontend bundle, e.g. https://at-chat.app/frontend.a1b2c3.js
     if (url.startsWith(domain + 'frontend.') && url.endsWith('.js')) {
@@ -346,7 +354,7 @@ self.addEventListener('fetch', (event) => {
     }
 
     if (url.startsWith(apiDomain + 'file/e/')) {
-        event.respondWith(decryptedFileResponse(url));
+        event.respondWith(decryptedFileResponse(isDevelopment, url));
         return;
     }
 
