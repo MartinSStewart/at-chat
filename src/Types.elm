@@ -42,6 +42,7 @@ module Types exposing
     , NewGuildForm
     , PendingDecryptedManyMessages
     , PendingDecryptedMessage
+    , PendingEncryptedEdit
     , PendingEncryptedFile
     , PendingEncryptedManyMessages
     , PendingEncryptedMessage
@@ -293,6 +294,9 @@ type alias EncryptionRequests =
     , nextDecryptManyRequestId : Id DecryptManyRequestId
     , pendingEncryptedManyMessages : SeqDict (Id EncryptManyRequestId) PendingEncryptedManyMessages
     , nextEncryptManyRequestId : Id EncryptManyRequestId
+    , -- Shares nextEncryptionRequestId with pendingEncryptedMessages, so a request id only
+      -- ever appears in one of the two.
+      pendingEncryptedEdits : SeqDict (Id EncryptRequestId) PendingEncryptedEdit
     , pendingEncryptedFiles : SeqDict (Id EncryptFileRequestId) PendingEncryptedFile
     , nextEncryptFileRequestId : Id EncryptFileRequestId
     }
@@ -322,6 +326,13 @@ type alias PendingEncryptedManyMessages =
 type alias PendingDecryptedManyMessages =
     { messageHashes : List BytesHash
     , shiftScrollFrom : Maybe HtmlId
+    }
+
+
+type alias PendingEncryptedEdit =
+    { id : Viewing_DmId
+    , threadRoute : ThreadRouteWithMessage
+    , contentAndEmbeds : MessageContent (Id UserId)
     }
 
 
@@ -1104,6 +1115,7 @@ type ServerChange
     | Server_E2eeAccepted Viewing_DmId Time.Posix
     | Server_SetPublicKey (Id UserId) X25519.PublicKey
     | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
+    | Server_SendEncryptedEditMessage Time.Posix (Id UserId) Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId)))
 
 
 type LocalChange
@@ -1169,6 +1181,7 @@ type LocalChange
     | Local_SetE2eeRisksAccepted Bool
     | Local_AcceptE2ee Viewing_DmId Time.Posix (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
     | Local_SendEncryptedMessage Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
+    | Local_SendEncryptedEditMessage Time.Posix Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId)))
 
 
 type alias ChannelDataToEncrypt =

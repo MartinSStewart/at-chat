@@ -6226,6 +6226,54 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
+                Local_SendEncryptedEditMessage _ id threadRoute fileHashes content ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session _ _ dmChannelId dmChannel ->
+                            case
+                                ( dmChannel.e2ee
+                                , LocalState.editEncryptedMessageHelper
+                                    time
+                                    session.userId
+                                    fileHashes
+                                    content
+                                    threadRoute
+                                    dmChannel
+                                )
+                            of
+                                ( DmChannel.E2eeEnabled _, Ok dmChannel2 ) ->
+                                    ( { model
+                                        | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
+                                      }
+                                    , Command.batch
+                                        [ Local_SendEncryptedEditMessage time id threadRoute fileHashes content
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toDmChannelExcludingOne
+                                            clientId
+                                            session.userId
+                                            id
+                                            (\id2 ->
+                                                Server_SendEncryptedEditMessage
+                                                    time
+                                                    session.userId
+                                                    id2
+                                                    threadRoute
+                                                    fileHashes
+                                                    content
+                                            )
+                                            model
+                                        ]
+                                    )
+
+                                _ ->
+                                    -- Either nothing agreed to encrypt this conversation, or
+                                    -- the message being edited isn't one this user wrote.
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
                 Local_AcceptE2ee id _ _ ->
                     BackendExtra.asDmUser
                         model

@@ -585,6 +585,36 @@ tests config =
                                 , T.checkBackend 100 (checkSoloDmMessageStored "Note to self")
                                 , respondToMessageDecrypted adminB
                                 , adminB.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Note to self" ])
+
+                                -- An edit goes past the browser the same way the message did,
+                                -- so what reaches the server is the new ciphertext rather
+                                -- than what was typed.
+                                , editEncryptedMessage admin "Note to self" editedMessage
+                                , T.checkBackend 100 (checkSoloDmHasNoPlainText editedMessage)
+                                , T.checkBackend 100 (checkSoloDmMessageStored editedMessage)
+
+                                -- Editing replaces the message rather than adding one.
+                                , T.checkBackend 100 (checkSoloDmMessageCount 2)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Note to self" ])
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.exactText editedMessage ])
+
+                                -- The other tab is told the message changed and has nothing
+                                -- to show for it until it asks the browser what the new
+                                -- ciphertext says.
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text editedMessage ])
+                                , respondToManyMessagesDecrypted adminB
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text editedMessage ])
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Note to self" ])
                                 , adminB.click 100 (Dom.id "guild_friendLabel_0")
                                 , writeEncryptedMessage adminB 100 "Note to self from adminB"
                                 , respondToMessageDecrypted admin
@@ -1378,6 +1408,40 @@ checkScrollShifts client expected data =
             )
 
 
+{-| The same as `E2EHelper.editMostRecentMessageViaArrowUp` except that the browser has to
+encrypt the edit before it is sent, so the new text only shows up once it has.
+-}
+editEncryptedMessage :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> String
+    -> String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+editEncryptedMessage user originalText editedText =
+    T.group
+        [ user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "editMessageTextInput" ])
+        , user.keyDown 100 (Dom.id "channel_textinput") "ArrowUp" []
+
+        -- The edit box opens pre-filled with what the message says, which for an encrypted
+        -- one means what it decrypted to.
+        , user.checkView
+            100
+            (Test.Html.Query.has
+                [ Test.Html.Selector.id "editMessageTextInput"
+                , Test.Html.Selector.attribute (Html.Attributes.value originalText)
+                ]
+            )
+        , user.input 200 (Dom.id "editMessageTextInput") editedText
+        , user.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
+        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "editMessageTextInput" ])
+        , respondToMessageEncrypted user
+        ]
+
+
+editedMessage : String
+editedMessage =
+    "Note to self, corrected"
+
+
 backlogMessage : String
 backlogMessage =
     "Written before this device loaded"
@@ -1605,14 +1669,20 @@ respondToManyMessagesDecrypted client =
         100
         (\data ->
             case List.filterMap decryptManyRequest (encryptionPortRequests client.clientId data) of
-                ( requestId, messages ) :: _ ->
-                    [ List.map (\bytes -> stubPlainText bytes |> Result.mapError (\_ -> ())) messages
-                        |> Encryption.FromJs_ManyMessagesDecrypted requestId
-                        |> sendFromJs client
-                    ]
-
                 [] ->
                     [ T.checkState 0 (\_ -> Err "The client didn't ask for a conversation to be decrypted") ]
+
+                requests ->
+                    -- Every outstanding request is answered rather than whichever happens to
+                    -- come first. A client can be waiting on more than one at a time, and
+                    -- answering one it has already had back changes nothing.
+                    List.map
+                        (\( requestId, messages ) ->
+                            List.map (\bytes -> stubPlainText bytes |> Result.mapError (\_ -> ())) messages
+                                |> Encryption.FromJs_ManyMessagesDecrypted requestId
+                                |> sendFromJs client
+                        )
+                        requests
         )
 
 

@@ -6457,12 +6457,15 @@ messageEditingView :
     -> LocalState
     -> Element FrontendMsg_
 messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers charsLeft editing editingRichText loggedIn decrypted currentUserId allUsers local =
-    case message of
-        UserTextMessage data ->
+    let
+        -- An encrypted message is edited the same way a plain one is. Only who wrote it and
+        -- what it was reacted to with are read off the message here, and both kinds say.
+        editingView : userId -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> Element FrontendMsg_
+        editingView createdBy reactions =
             let
                 maybeReactions : Maybe (Element MessageViewMsg)
                 maybeReactions =
-                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth data.reactions
+                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth reactions
 
                 ( guildOrDmIdNoThread, threadRoute ) =
                     guildOrDmId
@@ -6519,7 +6522,7 @@ messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessa
                     allUsers
                     |> Ui.el [ Ui.paddingXY 8 0 ]
                     |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
-                , User.toString data.createdBy allUsers
+                , User.toString createdBy allUsers
                     ++ " "
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold, Ui.paddingXY 8 0 ]
@@ -6580,9 +6583,13 @@ messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessa
                     _ ->
                         Ui.none
                 ]
+    in
+    case message of
+        UserTextMessage data ->
+            editingView data.createdBy data.reactions
 
-        EncryptedUserTextMessage _ ->
-            Ui.none
+        EncryptedUserTextMessage data ->
+            editingView data.createdBy data.reactions
 
         UserJoinedMessage _ _ _ _ ->
             Ui.none
@@ -6617,11 +6624,14 @@ threadMessageEditingView :
     -> LocalState
     -> Element FrontendMsg_
 threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers charsLeft editing editingRichText loggedIn decrypted currentUserId allUsers local =
-    case message of
-        UserTextMessage data ->
+    let
+        -- An encrypted message is edited the same way a plain one is. Only who wrote it and
+        -- what it was reacted to with are read off the message here, and both kinds say.
+        editingView : userId -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> Element FrontendMsg_
+        editingView createdBy reactions =
             let
                 maybeReactions =
-                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth data.reactions
+                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth reactions
 
                 ( guildOrDmIdNoThread, _ ) =
                     guildOrDmId
@@ -6672,7 +6682,7 @@ threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messa
                     allUsers
                     |> Ui.el [ Ui.paddingXY 8 0 ]
                     |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
-                , User.toString data.createdBy allUsers
+                , User.toString createdBy allUsers
                     ++ " "
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold, Ui.paddingXY 8 0 ]
@@ -6718,9 +6728,13 @@ threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messa
                     Nothing ->
                         Ui.none
                 ]
+    in
+    case message of
+        UserTextMessage data ->
+            editingView data.createdBy data.reactions
 
-        EncryptedUserTextMessage _ ->
-            Ui.none
+        EncryptedUserTextMessage data ->
+            editingView data.createdBy data.reactions
 
         UserJoinedMessage _ _ _ _ ->
             Ui.none

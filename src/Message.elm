@@ -15,6 +15,7 @@ module Message exposing
     , contentAndEmbedsCodec
     , createdAt
     , drawing
+    , editEncryptedUserTextMessage
     , editUserTextMessage
     , encryptedUserTextMessageFrontend
     , handleDrawingChange
@@ -225,6 +226,20 @@ userTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
 type ChangeAttachments
     = ChangeAttachments (SeqDict (Id FileId) FileData)
     | DoNotChangeAttachments
+
+
+{-| An encrypted message is edited by putting the new ciphertext in place of the old. There
+is nothing to read out of what was there before, so unlike `editUserTextMessage` no embeds
+carry over: the browser works those out again from the text it just encrypted.
+-}
+editEncryptedUserTextMessage :
+    Time.Posix
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent userId)
+    -> EncryptedUserTextMessageData messageId userId
+    -> EncryptedUserTextMessageData messageId userId
+editEncryptedUserTextMessage time fileHashes newContent data =
+    { data | editedAt = Just time, content = newContent, fileHashes = fileHashes }
 
 
 editUserTextMessage :

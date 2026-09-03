@@ -87,6 +87,8 @@ module LocalState exposing
     , drawingHandleChangeNoThreadBackend
     , drawingHandleDateDivider
     , editChannel
+    , editEncryptedMessageFrontendHelper
+    , editEncryptedMessageHelper
     , editGuildName
     , editMessageFrontendHelper
     , editMessageFrontendHelperNoThread
@@ -158,7 +160,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Embed exposing (EmbedData)
 import Emoji exposing (EmojiOrCustomEmoji)
-import Encryption exposing (BytesHash)
+import Encryption exposing (BytesHash, EncryptedData)
 import FileStatus exposing (FileHash)
 import Game
 import GuildName exposing (GuildName)
@@ -2179,6 +2181,175 @@ editMessageFrontendHelperNoThread time editedBy newContent attachedFiles message
 
         _ ->
             Err ()
+
+
+{-| The encrypted counterpart of `editMessageHelper`. What is being replaced is ciphertext
+rather than rich text, so there is nothing to compare the new content against and nothing
+shared with the plain version beyond the shape of the walk to the message.
+-}
+editEncryptedMessageHelper :
+    Time.Posix
+    -> userId
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent userId)
+    -> ThreadRouteWithMessage
+    ->
+        { b
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId userId)
+            , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
+            , threads :
+                SeqDict
+                    (Id ChannelMessageId)
+                    { c
+                        | messages : IdArray ThreadMessageId (Message ThreadMessageId userId)
+                        , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
+                    }
+        }
+    ->
+        Result
+            ()
+            { b
+                | messages : IdArray ChannelMessageId (Message ChannelMessageId userId)
+                , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
+                , threads :
+                    SeqDict
+                        (Id ChannelMessageId)
+                        { c
+                            | messages : IdArray ThreadMessageId (Message ThreadMessageId userId)
+                            , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
+                        }
+            }
+editEncryptedMessageHelper time editedBy fileHashes newContent threadRoute channel =
+    case threadRoute of
+        ViewThreadWithMessage threadMessageIndex messageId ->
+            case SeqDict.get threadMessageIndex channel.threads of
+                Just thread ->
+                    case editEncryptedMessageHelperNoThread time editedBy fileHashes newContent messageId thread of
+                        Ok thread2 ->
+                            Ok { channel | threads = SeqDict.insert threadMessageIndex thread2 channel.threads }
+
+                        Err () ->
+                            Err ()
+
+                Nothing ->
+                    Err ()
+
+        NoThreadWithMessage messageId ->
+            editEncryptedMessageHelperNoThread time editedBy fileHashes newContent messageId channel
+
+
+editEncryptedMessageHelperNoThread :
+    Time.Posix
+    -> userId
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent userId)
+    -> Id messageId
+    -> { b | messages : IdArray messageId (Message messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
+    -> Result () { b | messages : IdArray messageId (Message messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
+editEncryptedMessageHelperNoThread time editedBy fileHashes newContent messageIndex channel =
+    case IdArray.get messageIndex channel.messages of
+        Just (EncryptedUserTextMessage data) ->
+            if data.createdBy == editedBy then
+                { channel
+                    | messages =
+                        IdArray.set
+                            messageIndex
+                            (EncryptedUserTextMessage
+                                (Message.editEncryptedUserTextMessage time fileHashes newContent data)
+                            )
+                            channel.messages
+                    , lastTypedAt = forgetEditTypingAt editedBy messageIndex channel.lastTypedAt
+                }
+                    |> Ok
+
+            else
+                Err ()
+
+        _ ->
+            Err ()
+
+
+editEncryptedMessageFrontendHelper :
+    Time.Posix
+    -> userId
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent userId)
+    -> ThreadRouteWithMessage
+    -> { b | messages : MessageArray ChannelMessageId userId, lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
+    -> Result () { b | messages : MessageArray ChannelMessageId userId, lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
+editEncryptedMessageFrontendHelper time editedBy fileHashes newContent threadRoute channel =
+    case threadRoute of
+        ViewThreadWithMessage threadMessageIndex messageId ->
+            case SeqDict.get threadMessageIndex channel.threads of
+                Just thread ->
+                    case editEncryptedMessageFrontendHelperNoThread time editedBy fileHashes newContent messageId thread of
+                        Ok thread2 ->
+                            Ok { channel | threads = SeqDict.insert threadMessageIndex thread2 channel.threads }
+
+                        Err () ->
+                            Err ()
+
+                Nothing ->
+                    Err ()
+
+        NoThreadWithMessage messageId ->
+            editEncryptedMessageFrontendHelperNoThread time editedBy fileHashes newContent messageId channel
+
+
+editEncryptedMessageFrontendHelperNoThread :
+    Time.Posix
+    -> userId
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent userId)
+    -> Id messageId
+    -> { b | messages : MessageArray messageId userId, lastTypedAt : SeqDict userId (LastTypedAt messageId) }
+    -> Result () { b | messages : MessageArray messageId userId, lastTypedAt : SeqDict userId (LastTypedAt messageId) }
+editEncryptedMessageFrontendHelperNoThread time editedBy fileHashes newContent messageIndex channel =
+    case MessageArray.get messageIndex channel.messages of
+        Just (EncryptedUserTextMessage data) ->
+            if data.createdBy == editedBy then
+                { channel
+                    | messages =
+                        MessageArray.set
+                            messageIndex
+                            (EncryptedUserTextMessage
+                                (Message.editEncryptedUserTextMessage time fileHashes newContent data)
+                            )
+                            channel.messages
+                    , lastTypedAt = forgetEditTypingAt editedBy messageIndex channel.lastTypedAt
+                }
+                    |> Ok
+
+            else
+                Err ()
+
+        _ ->
+            Err ()
+
+
+{-| An edit that has been sent is no longer being typed.
+-}
+forgetEditTypingAt :
+    userId
+    -> Id messageId
+    -> SeqDict userId (LastTypedAt messageId)
+    -> SeqDict userId (LastTypedAt messageId)
+forgetEditTypingAt editedBy messageIndex lastTypedAt =
+    SeqDict.update
+        editedBy
+        (\maybe ->
+            case maybe of
+                Just a ->
+                    if a.messageIndex == Just messageIndex then
+                        Nothing
+
+                    else
+                        maybe
+
+                Nothing ->
+                    Nothing
+        )
+        lastTypedAt
 
 
 removeReactionEmoji :

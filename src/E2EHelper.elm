@@ -2558,6 +2558,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SendEncryptedMessage _ _ _ _ _ ->
                     True
 
+                Local_SendEncryptedEditMessage _ _ _ _ _ ->
+                    True
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -2815,6 +2818,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_SendEncryptedMessage _ _ _ _ _ _ _ ->
+                            True
+
+                        Types.Server_SendEncryptedEditMessage _ _ _ _ _ _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
@@ -3077,6 +3083,12 @@ allAttackerLocalChanges =
         SeqSet.empty
         (EncryptedData (Bytes.Encode.encode (Bytes.Encode.sequence [])))
         (NoThreadWithMaybeMessage Nothing)
+    , Local_SendEncryptedEditMessage
+        startTime
+        { otherUserId = Broadcast.adminUserId }
+        (NoThreadWithMessage (Id.fromInt 0))
+        SeqSet.empty
+        (EncryptedData (Bytes.Encode.encode (Bytes.Encode.sequence [])))
     ]
 
 

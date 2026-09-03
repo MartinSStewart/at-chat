@@ -382,6 +382,9 @@ pendingChangesText localChange =
         Local_SendEncryptedMessage _ _ _ _ _ ->
             "Sent an encrypted message"
 
+        Local_SendEncryptedEditMessage _ _ _ _ _ ->
+            "Edited an encrypted message"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg_) -> Element FrontendMsg_ -> Html FrontendMsg_
 layout model attributes child =
@@ -3924,6 +3927,16 @@ changeUpdate localMsg local =
                         (DmChannel.E2eeDeclinedBy local.localUser.session.userId)
                         local
 
+                Local_SendEncryptedEditMessage createdAt { otherUserId } threadRoute fileHashes content ->
+                    editEncryptedDmMessage
+                        createdAt
+                        local.localUser.session.userId
+                        otherUserId
+                        threadRoute
+                        fileHashes
+                        content
+                        local
+
                 Local_SendEncryptedMessage createdAt { otherUserId } fileHashes content threadRouteWithRepliedTo ->
                     let
                         localUser : LocalUser
@@ -5388,6 +5401,16 @@ changeUpdate localMsg local =
                             Message.encryptedUserTextMessageFrontend createdAt createdBy fileHashes content maybeReplyTo
                         )
                         threadRouteWithRepliedTo
+                        local
+
+                Server_SendEncryptedEditMessage editedAt editedBy id threadRoute fileHashes content ->
+                    editEncryptedDmMessage
+                        editedAt
+                        editedBy
+                        id.otherUserId
+                        threadRoute
+                        fileHashes
+                        content
                         local
 
                 Server_DiscordAvatarsLoaded discordUserId discordUser ->
@@ -7256,6 +7279,40 @@ addEncryptedDmMessage createdAt createdBy otherUserId fileHashes contentAndEmbed
                 )
                 local.dmChannels
     }
+
+
+{-| Puts new ciphertext in place of a message's old ciphertext. An edit nobody is allowed
+to make leaves the conversation as it was, the same way the server refuses it.
+-}
+editEncryptedDmMessage :
+    Time.Posix
+    -> Id UserId
+    -> Id UserId
+    -> ThreadRouteWithMessage
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent (Id UserId))
+    -> LocalState
+    -> LocalState
+editEncryptedDmMessage editedAt editedBy otherUserId threadRoute fileHashes content local =
+    case SeqDict.get otherUserId local.dmChannels of
+        Just dmChannel ->
+            case
+                LocalState.editEncryptedMessageFrontendHelper
+                    editedAt
+                    editedBy
+                    fileHashes
+                    content
+                    threadRoute
+                    dmChannel
+            of
+                Ok dmChannel2 ->
+                    { local | dmChannels = SeqDict.insert otherUserId dmChannel2 local.dmChannels }
+
+                Err () ->
+                    local
+
+        Nothing ->
+            local
 
 
 handleServerSendMessage :

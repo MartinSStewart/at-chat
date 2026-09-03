@@ -2615,6 +2615,9 @@ toBackendLog toBackend =
                 Local_SendEncryptedMessage _ _ _ _ _ ->
                     ToBackendLog_Local_SendEncryptedMessage
 
+                Local_SendEncryptedEditMessage _ _ _ _ _ ->
+                    ToBackendLog_Local_SendEncryptedEditMessage
+
         TwoFactorToBackend _ ->
             ToBackendLog_TwoFactorToBackend
 
