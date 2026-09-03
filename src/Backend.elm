@@ -1612,7 +1612,17 @@ update msg model =
                                         ++ ":"
                                         ++ String.padLeft 2 '0' (String.fromInt (Time.toSecond Time.utc time))
                             in
-                            ( { model | scheduledExportState = Nothing }
+                            ( { model
+                                | scheduledExportState = Nothing
+                                , lastBackup =
+                                    Just
+                                        { backup =
+                                            { createdAt = time
+                                            , contents = LocalState.FullBackup
+                                            }
+                                        , bytes = bytes
+                                        }
+                              }
                             , FileStatus.uploadBackup model.serverSecret ("backend-export-" ++ timestamp ++ ".bin") bytes
                                 |> Task.attempt (ScheduledExportUploadResult time)
                             )
