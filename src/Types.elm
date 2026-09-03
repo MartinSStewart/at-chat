@@ -5,6 +5,7 @@ module Types exposing
     , BackendMsg(..)
     , CountToFrontendState
     , DiscordAttachmentData
+    , DownloadBackupState
     , EditChannelForm
     , EditGuildForm
     , EditMessage
@@ -88,7 +89,7 @@ import ImageViewer
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendChannel, BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReload, DiscordFrontendGuild, DiscordRole, FrontendGuild, JoinGuildError, LastBackup, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
+import LocalState exposing (BackendChannel, BackendGuild, BackupContents, ConnectionData, DeletedBackendGuild, DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReload, DiscordFrontendGuild, DiscordRole, FrontendGuild, JoinGuildError, LastBackup, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -385,6 +386,7 @@ type alias BackendModel =
     , exportState : Maybe ExportState
     , lastBackup : Maybe LastBackupData
     , countToFrontendState : Maybe CountToFrontendState
+    , downloadBackupState : Maybe DownloadBackupState
     , scheduledExportState : Maybe ExportStateProgress
     , lastScheduledExportTime : Maybe Time.Posix
     , sendMessageRateLimits : SeqDict (Id UserId) (Array Time.Posix)
@@ -743,6 +745,7 @@ type BackendMsg
     | ReloadedDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
     | ExportBackendStep Time.Posix
     | CountToFrontendStep
+    | DownloadBackupChunkStep
     | ScheduledExportBackendStep Time.Posix
     | GotDiscordGuildChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Result Discord.HttpError DiscordChannelReload)
     | GotDiscordDmChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Result Discord.HttpError (List Discord.Message))
@@ -837,6 +840,19 @@ way the export progress is, so the two can be compared against each other.
 -}
 type alias CountToFrontendState =
     { count : Int
+    , clientId : ClientId
+    }
+
+
+{-| Sending an entire backup in a single ToFrontend message blocks the websocket long
+enough for the connection to time out, so the backup gets sent to the admin one chunk at
+a time instead. `totalBytes` is the size of the whole backup so that the admin page knows
+when it has received all of it.
+-}
+type alias DownloadBackupState =
+    { contents : BackupContents
+    , remainingBytes : Bytes
+    , totalBytes : Int
     , clientId : ClientId
     }
 

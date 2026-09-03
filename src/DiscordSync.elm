@@ -2396,38 +2396,6 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.UserOutMsg_PresenceUpdate presence ->
-                            let
-                                ( model3, cmd2 ) =
-                                    case presence.guildId of
-                                        Included guildId ->
-                                            case SeqDict.get guildId model2.discordGuilds of
-                                                Just guild ->
-                                                    ( { model2
-                                                        | discordGuilds =
-                                                            SeqDict.insert
-                                                                guildId
-                                                                { guild
-                                                                    | membersAndOwner =
-                                                                        MembersAndOwner.addMember
-                                                                            presence.userId
-                                                                            { joinedAt = Nothing, roles = SeqSet.empty }
-                                                                            guild.membersAndOwner
-                                                                            |> Result.withDefault guild.membersAndOwner
-                                                                }
-                                                                model2.discordGuilds
-                                                      }
-                                                    , Command.none
-                                                    )
-
-                                                Nothing ->
-                                                    ( model2, Command.none )
-
-                                        Missing ->
-                                            ( model2, Command.none )
-                            in
-                            ( model3, cmd2 :: cmds )
-
                         Discord.UserOutMsg_EmbeddedActivityUpdateV2 embeddedActivityUpdateV2 ->
                             let
                                 ( model3, cmd2 ) =
