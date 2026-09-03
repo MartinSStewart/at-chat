@@ -94,7 +94,79 @@ tests =
                 backupWith SeqDict.empty SeqDict.empty
                     |> pickedReferenceNames
                     |> Expect.equal (Ok [])
+        , test "Splitting off a chunk gives back that many bytes plus the rest" <|
+            \_ ->
+                Backend.splitOffChunk 4 (bytesFromValues (List.range 1 10))
+                    |> (\( chunk, rest ) -> ( toByteValues chunk, toByteValues rest ))
+                    |> Expect.equal ( List.range 1 4, List.range 5 10 )
+        , test "Splitting off more bytes than there are gives back everything and an empty remainder" <|
+            \_ ->
+                Backend.splitOffChunk 20 (bytesFromValues (List.range 1 10))
+                    |> (\( chunk, rest ) -> ( toByteValues chunk, toByteValues rest ))
+                    |> Expect.equal ( List.range 1 10, [] )
+        , test "A backup is split into chunks that are no larger than the chunk size" <|
+            \_ ->
+                bytesFromValues (List.range 1 10)
+                    |> backupChunks 3
+                    |> List.map Bytes.width
+                    |> Expect.equal [ 3, 3, 3, 1 ]
+        , test "Chunks reassemble into the original backup" <|
+            \_ ->
+                bytesFromValues (List.range 1 10)
+                    |> backupChunks 3
+                    |> List.map Bytes.Encode.bytes
+                    |> Bytes.Encode.sequence
+                    |> Bytes.Encode.encode
+                    |> toByteValues
+                    |> Expect.equal (List.range 1 10)
         ]
+
+
+{-| The chunks the admin page ends up with, in the order it reassembles them. The backend
+keeps splitting a chunk off the backup until nothing is left over, and the admin page
+prepends each chunk as it arrives and reverses them once it has them all.
+-}
+backupChunks : Int -> Bytes -> List Bytes
+backupChunks chunkWidth backup =
+    let
+        collect : Bytes -> List Bytes -> List Bytes
+        collect remaining chunksNewestFirst =
+            let
+                ( chunk, rest ) =
+                    Backend.splitOffChunk chunkWidth remaining
+            in
+            if Bytes.width rest > 0 then
+                collect rest (chunk :: chunksNewestFirst)
+
+            else
+                chunk :: chunksNewestFirst
+    in
+    collect backup [] |> List.reverse
+
+
+bytesFromValues : List Int -> Bytes
+bytesFromValues values =
+    List.map Bytes.Encode.unsignedInt8 values
+        |> Bytes.Encode.sequence
+        |> Bytes.Encode.encode
+
+
+toByteValues : Bytes -> List Int
+toByteValues bytes =
+    Bytes.Decode.decode
+        (Bytes.Decode.loop ( Bytes.width bytes, [] )
+            (\( remaining, acc ) ->
+                if remaining <= 0 then
+                    Bytes.Decode.succeed (Bytes.Decode.Done (List.reverse acc))
+
+                else
+                    Bytes.Decode.map
+                        (\value -> Bytes.Decode.Loop ( remaining - 1, value :: acc ))
+                        Bytes.Decode.unsignedInt8
+            )
+        )
+        bytes
+        |> Maybe.withDefault []
 
 
 {-| Only the DM channels matter here, so the guilds `Backend.init` comes with

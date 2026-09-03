@@ -1,5 +1,6 @@
 module Pages.Admin exposing
     ( AdminChange(..)
+    , DownloadingBackup
     , EditedBackendUser
     , EditingCell
     , ExportProgress(..)
@@ -34,6 +35,7 @@ module Pages.Admin exposing
 import Array exposing (Array)
 import Array.Extra
 import Bytes exposing (Bytes)
+import Bytes.Encode
 import ChannelName
 import Codec
 import CustomEmoji
@@ -185,7 +187,7 @@ type ToFrontend
     = ImportBackendResponse (Result () ())
     | ExportBackendProgress ExportSubset ExportProgress
     | ExportBackendFinished
-    | DownloadLastBackupResponse BackupContents Bytes
+    | DownloadLastBackupChunk BackupContents Int Bytes
     | CountToFrontend Int
 
 
@@ -213,6 +215,18 @@ type alias Model =
     , exportSubsetSelection : Maybe ExportSubsetSelection
     , websocketCloseEventsPage : Int
     , countToFrontend : String
+    , downloadingBackup : Maybe DownloadingBackup
+    }
+
+
+{-| A backup that the backend is sending over in chunks. `chunks` holds what has arrived
+so far, most recent first, and gets assembled into the downloaded file once `receivedBytes`
+reaches `totalBytes`.
+-}
+type alias DownloadingBackup =
+    { totalBytes : Int
+    , receivedBytes : Int
+    , chunks : List Bytes
     }
 
 
@@ -348,6 +362,7 @@ initForUser =
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
     , countToFrontend = ""
+    , downloadingBackup = Nothing
     }
 
 
@@ -374,6 +389,7 @@ initForAdmin { highlightLog } =
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
     , countToFrontend = ""
+    , downloadingBackup = Nothing
     }
 
 
@@ -1204,7 +1220,10 @@ update navigationKey time adminData localState msg model =
             )
 
         PressedDownloadLastBackup ->
-            ( model, Lamdera.sendToBackend DownloadLastBackupRequest, NoOutMsg )
+            ( { model | downloadingBackup = Nothing }
+            , Lamdera.sendToBackend DownloadLastBackupRequest
+            , NoOutMsg
+            )
 
         PressedExportSubsetBackend ->
             ( { model
@@ -1467,19 +1486,52 @@ updateFromBackend toFrontend model =
         ExportBackendFinished ->
             ( { model | exportProgress = Nothing }, Command.none )
 
-        DownloadLastBackupResponse contents bytes ->
-            ( model
-            , Effect.File.Download.bytes
-                (case contents of
-                    FullBackup ->
-                        "backend-export.bin"
+        DownloadLastBackupChunk contents totalBytes chunk ->
+            let
+                chunks : List Bytes
+                chunks =
+                    chunk
+                        :: (case model.downloadingBackup of
+                                Just downloading ->
+                                    downloading.chunks
 
-                    SubsetBackup ->
-                        "backend-export-subset.bin"
+                                Nothing ->
+                                    []
+                           )
+
+                receivedBytes : Int
+                receivedBytes =
+                    List.foldl (\bytes total -> Bytes.width bytes + total) 0 chunks
+            in
+            if receivedBytes >= totalBytes then
+                ( { model | downloadingBackup = Nothing }
+                , Effect.File.Download.bytes
+                    (case contents of
+                        FullBackup ->
+                            "backend-export.bin"
+
+                        SubsetBackup ->
+                            "backend-export-subset.bin"
+                    )
+                    "application/octet-stream"
+                    (List.reverse chunks
+                        |> List.map Bytes.Encode.bytes
+                        |> Bytes.Encode.sequence
+                        |> Bytes.Encode.encode
+                    )
                 )
-                "application/octet-stream"
-                bytes
-            )
+
+            else
+                ( { model
+                    | downloadingBackup =
+                        Just
+                            { totalBytes = totalBytes
+                            , receivedBytes = receivedBytes
+                            , chunks = chunks
+                            }
+                  }
+                , Command.none
+                )
 
         CountToFrontend count ->
             ( { model | countToFrontend = model.countToFrontend ++ " " ++ String.fromInt count }, Command.none )
@@ -2560,6 +2612,15 @@ toBackendLogsTable logs =
         |> Ui.column []
 
 
+downloadingBackupText : DownloadingBackup -> String
+downloadingBackupText downloading =
+    "Downloading "
+        ++ String.fromInt (downloading.receivedBytes // (1024 * 1024))
+        ++ "MB of "
+        ++ String.fromInt (downloading.totalBytes // (1024 * 1024))
+        ++ "MB..."
+
+
 exportProgressText : ExportProgress -> String
 exportProgressText progress =
     case progress of
@@ -2650,11 +2711,16 @@ exportSection isMobile timezone user adminData model =
                                     "Download subset backup"
                             )
                         )
-                    , "Generated at "
-                        ++ MyUi.datestamp timezone lastBackup.createdAt
-                        ++ " "
-                        ++ MyUi.timestamp lastBackup.createdAt timezone
-                        |> Ui.text
+                    , case model.downloadingBackup of
+                        Just downloading ->
+                            downloadingBackupText downloading |> Ui.text
+
+                        Nothing ->
+                            "Generated at "
+                                ++ MyUi.datestamp timezone lastBackup.createdAt
+                                ++ " "
+                                ++ MyUi.timestamp lastBackup.createdAt timezone
+                                |> Ui.text
                     ]
 
             Nothing ->

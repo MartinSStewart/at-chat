@@ -3,6 +3,7 @@ module Backend exposing
     , app
     , app_
     , handleExportBackendStep
+    , splitOffChunk
     , startExport
     )
 
@@ -263,6 +264,7 @@ init =
       , exportState = Nothing
       , lastBackup = Nothing
       , countToFrontendState = Nothing
+      , downloadBackupState = Nothing
       , scheduledExportState = Nothing
       , lastScheduledExportTime = Nothing
       , sendMessageRateLimits = SeqDict.empty
@@ -328,6 +330,12 @@ subscriptions model =
         , case model.countToFrontendState of
             Just _ ->
                 Time.every (Duration.milliseconds 30) (\_ -> CountToFrontendStep)
+
+            Nothing ->
+                Subscription.none
+        , case model.downloadBackupState of
+            Just _ ->
+                Time.every (Duration.milliseconds 30) (\_ -> DownloadBackupChunkStep)
 
             Nothing ->
                 Subscription.none
@@ -1589,6 +1597,29 @@ update msg model =
                 Nothing ->
                     ( model, Command.none )
 
+        DownloadBackupChunkStep ->
+            case model.downloadBackupState of
+                Just downloadState ->
+                    let
+                        ( chunk, remainingBytes ) =
+                            splitOffChunk downloadBackupChunkSize downloadState.remainingBytes
+                    in
+                    ( { model
+                        | downloadBackupState =
+                            if Bytes.width remainingBytes > 0 then
+                                Just { downloadState | remainingBytes = remainingBytes }
+
+                            else
+                                Nothing
+                      }
+                    , Pages.Admin.DownloadLastBackupChunk downloadState.contents downloadState.totalBytes chunk
+                        |> AdminToFrontend
+                        |> Lamdera.sendToFrontend downloadState.clientId
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
+
         ScheduledExportBackendStep time ->
             case model.scheduledExportState of
                 Just exportState ->
@@ -2419,6 +2450,7 @@ startExport time model =
                 , exportState = Nothing
                 , lastBackup = Nothing
                 , countToFrontendState = Nothing
+                , downloadBackupState = Nothing
                 , scheduledExportState = Nothing
             }
     in
@@ -8558,6 +8590,7 @@ updateFromFrontendAdmin clientId toBackend model =
                         , exportState = Nothing
                         , lastBackup = Nothing
                         , countToFrontendState = Nothing
+                        , downloadBackupState = Nothing
                         , scheduledExportState = Nothing
                     }
 
@@ -8629,15 +8662,21 @@ updateFromFrontendAdmin clientId toBackend model =
             )
 
         Pages.Admin.DownloadLastBackupRequest ->
-            ( model
-            , case model.lastBackup of
+            ( case model.lastBackup of
                 Just lastBackup ->
-                    Pages.Admin.DownloadLastBackupResponse lastBackup.backup.contents lastBackup.bytes
-                        |> AdminToFrontend
-                        |> Lamdera.sendToFrontend clientId
+                    { model
+                        | downloadBackupState =
+                            Just
+                                { contents = lastBackup.backup.contents
+                                , remainingBytes = lastBackup.bytes
+                                , totalBytes = Bytes.width lastBackup.bytes
+                                , clientId = clientId
+                                }
+                    }
 
                 Nothing ->
-                    Command.none
+                    model
+            , Command.none
             )
 
         Pages.Admin.CountToBackendRequest ->
@@ -8656,6 +8695,33 @@ updateFromFrontendAdmin clientId toBackend model =
                     ( model
                     , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Err ()) |> AdminToFrontend)
                     )
+
+
+{-| How much of a backup gets sent in each ToFrontend message. Sending the whole backup
+at once blocks the websocket for long enough that the connection times out.
+-}
+downloadBackupChunkSize : Int
+downloadBackupChunkSize =
+    5 * 1024 * 1024
+
+
+{-| Split off the first `chunkWidth` bytes, along with whatever is left over. Asking for
+more bytes than there are gives back everything and an empty remainder.
+-}
+splitOffChunk : Int -> Bytes -> ( Bytes, Bytes )
+splitOffChunk chunkWidth bytes =
+    let
+        width : Int
+        width =
+            min chunkWidth (Bytes.width bytes)
+    in
+    Bytes.Decode.decode
+        (Bytes.Decode.map2 Tuple.pair
+            (Bytes.Decode.bytes width)
+            (Bytes.Decode.bytes (Bytes.width bytes - width))
+        )
+        bytes
+        |> Maybe.withDefault ( bytes, Bytes.Encode.encode (Bytes.Encode.sequence []) )
 
 
 handleExportBackendStep : ExportStateProgress -> ExportStep
