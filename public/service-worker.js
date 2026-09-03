@@ -301,7 +301,9 @@ self.addEventListener('fetch', (event) => {
     // Check if this is a request for an image
     const url = event.request.url;
 
-    const domain = 'https://at-chat.app/';
+    // Wherever this worker was served from, which is https://at-chat.app/ in production and
+    // http://localhost:8000/ when running locally.
+    const domain = self.location.origin + '/';
 
     // The hashed frontend bundle, e.g. https://at-chat.app/frontend.a1b2c3.js
     if (url.startsWith(domain + 'frontend.') && url.endsWith('.js')) {

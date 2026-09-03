@@ -8,7 +8,11 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const domain = "https://at-chat.app/";
+// Deliberately not at-chat.app: the worker takes the domain it intercepts from wherever it
+// was served, so serving it from somewhere else is what shows it isn't hardcoded.
+const origin = "http://localhost:8000";
+
+const domain = origin + "/";
 
 const fileHash = "abc123";
 
@@ -118,7 +122,9 @@ function loadServiceWorker(options) {
             addEventListener: (name, handler) => { listeners[name] = handler; },
             skipWaiting: () => Promise.resolve(),
             clients: { claim: () => Promise.resolve() },
-            registration: {}
+            registration: {},
+            // Where the worker script itself was served from.
+            location: { origin: origin, href: origin + "/service-worker.js" }
         },
         indexedDB: options.indexedDB,
         caches: options.caches,
@@ -267,6 +273,18 @@ async function run() {
 
         if (response.status === 200) {
             throw new Error("Ciphertext was handed to the page as if it were the file");
+        }
+    });
+
+    await check("A file served from somewhere else is left alone", async () => {
+        const elsewhere = "https://at-chat.app/file/e/2/" + fileHash;
+        served.set(elsewhere, () => new Response(encrypted.cipherText, { status: 200 }));
+
+        let responded = false;
+        listeners.fetch({ request: { url: elsewhere }, respondWith: () => { responded = true; } });
+
+        if (responded) {
+            throw new Error("The worker answered for an address outside the origin it was served from");
         }
     });
 
