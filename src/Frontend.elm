@@ -37,7 +37,7 @@ import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji(..), EmojiOrSticker(..))
 import Encryption exposing (BytesHash, EncryptManyRequestId)
-import FileStatus exposing (FileData, FileHash, FileId, FileStatus(..))
+import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
 import Game
 import Go
@@ -8305,7 +8305,7 @@ updateLoadedFromBackend msg model =
                                 Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ ->
                                     FrontendExtra.handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local loggedIn2 model
 
-                                Server_SendEncryptedMessage senderId _ _ id fileHashes content maybeRepliedTo ->
+                                Server_SendEncryptedMessage senderId _ _ id _ content maybeRepliedTo ->
                                     ( FrontendExtra.mapEncryptionRequests
                                         (\requests ->
                                             { requests

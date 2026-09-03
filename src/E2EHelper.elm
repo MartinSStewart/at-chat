@@ -133,7 +133,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed
 import Emoji exposing (EmojiOrCustomEmoji(..), SkinTone(..))
-import Encryption exposing (BytesHash(..), EncryptedData(..))
+import Encryption exposing (EncryptedData(..))
 import Env
 import Expect
 import FileStatus

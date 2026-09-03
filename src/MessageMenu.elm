@@ -450,16 +450,16 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                             EncryptedUserTextMessage data ->
                                 data.createdBy == local.localUser.session.userId
 
-                            UserJoinedMessage posix userId seqDict drawing ->
+                            UserJoinedMessage _ _ _ _ ->
                                 False
 
-                            DeletedMessage posix ->
+                            DeletedMessage _ ->
                                 False
 
-                            CallStarted callStartedData ->
+                            CallStarted _ ->
                                 False
 
-                            GameStarted gameStartedData ->
+                            GameStarted _ ->
                                 False
                     , text =
                         LocalState.messageToString

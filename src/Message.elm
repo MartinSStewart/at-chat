@@ -2,6 +2,7 @@ module Message exposing
     ( CallStartedData
     , ChangeAttachments(..)
     , EncryptedUserTextMessageData
+    , EncryptedUserTextMessageDataNoReply
     , GameStartedData
     , GameType(..)
     , Message(..)
@@ -837,7 +838,7 @@ quantityCodec =
     Serialize.map Quantity.unsafe Quantity.unwrap Serialize.unsignedInt32
 
 
-embedImageFormatCodec : Serialize.Codec e Embed.EmbedImageFormat
+embedImageFormatCodec : Serialize.Codec e EmbedImageFormat
 embedImageFormatCodec =
     Serialize.enum Png [ Jpeg, Gif, WebP, Pnm, Tiff, Tga, Dds, Bmp, Ico, Hdr, OpenExr, Farbfeld, Avif, Qoi ]
 

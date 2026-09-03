@@ -1757,16 +1757,16 @@ memberIsEditTypingBackendHelperNoThread time userId messageId channel =
                     else
                         Err ()
 
-                UserJoinedMessage posix _ seqDict drawing ->
+                UserJoinedMessage _ _ _ _ ->
                     Err ()
 
-                DeletedMessage posix ->
+                DeletedMessage _ ->
                     Err ()
 
-                CallStarted callStartedData ->
+                CallStarted _ ->
                     Err ()
 
-                GameStarted gameStartedData ->
+                GameStarted _ ->
                     Err ()
 
         _ ->
@@ -1842,16 +1842,16 @@ memberIsEditTypingFrontendHelperNoThread time userId messageIndex channel =
                     else
                         Err ()
 
-                UserJoinedMessage posix _ seqDict drawing ->
+                UserJoinedMessage _ _ _ _ ->
                     Err ()
 
-                DeletedMessage posix ->
+                DeletedMessage _ ->
                     Err ()
 
-                CallStarted callStartedData ->
+                CallStarted _ ->
                     Err ()
 
-                GameStarted gameStartedData ->
+                GameStarted _ ->
                     Err ()
 
         Nothing ->
@@ -2721,16 +2721,16 @@ deleteMessageBackendHelperNoThread userId messageId channel =
                     else
                         Err ()
 
-                UserJoinedMessage posix _ seqDict drawing ->
+                UserJoinedMessage _ _ _ _ ->
                     Err ()
 
-                DeletedMessage posix ->
+                DeletedMessage _ ->
                     Err ()
 
-                CallStarted callStartedData ->
+                CallStarted _ ->
                     Err ()
 
-                GameStarted gameStartedData ->
+                GameStarted _ ->
                     Err ()
 
         Nothing ->
@@ -2825,16 +2825,16 @@ deleteMessageFrontendHelper threadRoute channel =
                                                 channel.threads
                                     }
 
-                                UserJoinedMessage posix userId seqDict drawing ->
+                                UserJoinedMessage _ _ _ _ ->
                                     channel
 
-                                DeletedMessage posix ->
+                                DeletedMessage _ ->
                                     channel
 
-                                CallStarted callStartedData ->
+                                CallStarted _ ->
                                     channel
 
-                                GameStarted gameStartedData ->
+                                GameStarted _ ->
                                     channel
 
                         _ ->
@@ -2916,16 +2916,16 @@ deleteMessageFrontendNoThread messageId channel =
                         | messages = MessageArray.set messageId (DeletedMessage message2.createdAt) channel.messages
                     }
 
-                UserJoinedMessage posix userId seqDict drawing ->
+                UserJoinedMessage _ _ _ _ ->
                     channel
 
-                DeletedMessage posix ->
+                DeletedMessage _ ->
                     channel
 
-                CallStarted callStartedData ->
+                CallStarted _ ->
                     channel
 
-                GameStarted gameStartedData ->
+                GameStarted _ ->
                     channel
 
         _ ->
@@ -3554,16 +3554,16 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                                         _ ->
                                             Nothing
 
-                                UserJoinedMessage posix userId seqDict drawing ->
+                                UserJoinedMessage _ _ _ _ ->
                                     Nothing
 
-                                DeletedMessage posix ->
+                                DeletedMessage _ ->
                                     Nothing
 
-                                CallStarted callStartedData ->
+                                CallStarted _ ->
                                     Nothing
 
-                                GameStarted gameStartedData ->
+                                GameStarted _ ->
                                     Nothing
 
                         Nothing ->
@@ -3600,16 +3600,16 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                                         _ ->
                                             Nothing
 
-                                UserJoinedMessage posix userId seqDict drawing ->
+                                UserJoinedMessage _ _ _ _ ->
                                     Nothing
 
-                                DeletedMessage posix ->
+                                DeletedMessage _ ->
                                     Nothing
 
-                                CallStarted callStartedData ->
+                                CallStarted _ ->
                                     Nothing
 
-                                GameStarted gameStartedData ->
+                                GameStarted _ ->
                                     Nothing
 
                         Nothing ->
@@ -3655,19 +3655,19 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                             )
                                 |> Just
 
-                        EncryptedUserTextMessage data ->
+                        EncryptedUserTextMessage _ ->
                             Nothing
 
-                        UserJoinedMessage posix userId seqDict drawing ->
+                        UserJoinedMessage _ _ _ _ ->
                             Nothing
 
-                        DeletedMessage posix ->
+                        DeletedMessage _ ->
                             Nothing
 
-                        CallStarted callStartedData ->
+                        CallStarted _ ->
                             Nothing
 
-                        GameStarted gameStartedData ->
+                        GameStarted _ ->
                             Nothing
 
                 Nothing ->
@@ -3698,19 +3698,19 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                                             )
                                                 |> Just
 
-                                        EncryptedUserTextMessage data ->
+                                        EncryptedUserTextMessage _ ->
                                             Nothing
 
-                                        UserJoinedMessage posix userId seqDict drawing ->
+                                        UserJoinedMessage _ _ _ _ ->
                                             Nothing
 
-                                        DeletedMessage posix ->
+                                        DeletedMessage _ ->
                                             Nothing
 
-                                        CallStarted callStartedData ->
+                                        CallStarted _ ->
                                             Nothing
 
-                                        GameStarted gameStartedData ->
+                                        GameStarted _ ->
                                             Nothing
 
                                 Nothing ->

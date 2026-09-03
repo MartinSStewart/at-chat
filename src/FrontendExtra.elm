@@ -7162,7 +7162,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                         else
                                                             Nothing
 
-                                                    EncryptedUserTextMessage_NoReply data ->
+                                                    EncryptedUserTextMessage_NoReply _ ->
                                                         Nothing
 
                                                     UserJoinedMessage_NoReply _ _ _ ->

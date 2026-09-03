@@ -49,7 +49,7 @@ module Pages.Guild exposing
     , youDeclinedE2eeText
     )
 
-import Array exposing (Array)
+import Array
 import AsciiArt exposing (AsciiArt)
 import Bitwise
 import Call
@@ -65,11 +65,10 @@ import DmChannelId
 import Drawing exposing (Drawing)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Embed exposing (Embed)
 import Emoji exposing (CachedEmojiData, EmojiConfig, EmojiOrCustomEmoji)
 import Encryption exposing (BytesHash)
 import Env
-import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
+import FileStatus exposing (FileHash, FileId, FileStatus)
 import GuildColumn
 import GuildIcon exposing (ChannelNotificationType(..))
 import GuildName exposing (GuildName)
@@ -2527,10 +2526,10 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                 DmChannel.E2eeDisabled ->
                     Ui.none
 
-                DmChannel.E2eeDeclinedBy id ->
+                DmChannel.E2eeDeclinedBy _ ->
                     Ui.none
 
-                DmChannel.E2eeEnabled e2eeEnabledData ->
+                DmChannel.E2eeEnabled _ ->
                     Ui.none
             , Ui.column
                 [ Ui.attrIf risksAccepted (Ui.opacity 0.5), Ui.spacing 8 ]

@@ -60,7 +60,6 @@ import Serialize
 import Sticker exposing (AnimationMode(..))
 import String.Nonempty exposing (NonemptyString(..))
 import Ui
-import Url exposing (Url)
 import UserColor
 
 
