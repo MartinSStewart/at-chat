@@ -5315,7 +5315,7 @@ decodeDispatchUserEvent eventName =
             JD.field "d" decodeTypingStart |> JD.map DispatchUser_TypingStart
 
         "PRESENCE_UPDATE" ->
-            JD.field "d" decodePresence |> JD.map DispatchUser_PresenceUpdate
+            JD.succeed DispatchUser_PresenceUpdate
 
         "GUILD_INTEGRATIONS_UPDATE" ->
             JD.field "d" (JD.field "guild_id" decodeId) |> JD.map DispatchUser_GuildIntegrationsUpdate
@@ -5711,7 +5711,7 @@ type OpDispatchUserEvent
     | DispatchUser_ChannelCreateEvent Channel
     | DispatchUser_ChannelRecipientRemoveEvent (Id ChannelId) (Id UserId)
     | DispatchUser_TypingStart TypingStart
-    | DispatchUser_PresenceUpdate Presence
+    | DispatchUser_PresenceUpdate
     | DispatchUser_GuildIntegrationsUpdate (Id GuildId)
     | DispatchUser_IntegrationUpdate IntegrationUpdate
     | DispatchUser_SessionsReplace
@@ -6467,7 +6467,6 @@ type UserOutMsg connection
     | UserOutMsg_ChannelCreated Channel
     | UserOutMsg_ChannelRecipientRemoved (Id PrivateChannelId) (Id UserId)
     | UserOutMsg_TypingStarted TypingStart
-    | UserOutMsg_PresenceUpdate Presence
     | UserOutMsg_EmbeddedActivityUpdateV2 EmbeddedActivityUpdateV2
     | UserOutMsg_GuildMemberAddEvent (Id GuildId) GuildMember
     | UserOutMsg_GuildMemberRemoveEvent (Id GuildId) (Id UserId)
@@ -6949,8 +6948,8 @@ handleUserGateway authToken intents response model =
                         DispatchUser_TypingStart typingStart ->
                             ( model, [ UserOutMsg_TypingStarted typingStart ] )
 
-                        DispatchUser_PresenceUpdate presence ->
-                            ( model, [ UserOutMsg_PresenceUpdate presence ] )
+                        DispatchUser_PresenceUpdate ->
+                            ( model, [] )
 
                         DispatchUser_GuildIntegrationsUpdate _ ->
                             ( model, [] )

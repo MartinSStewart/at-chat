@@ -1,0 +1,37 @@
+module Evergreen.V367.MuteSettings exposing (..)
+
+import Evergreen.V367.Discord
+import Evergreen.V367.Id
+import SeqDict
+import SeqSet
+
+
+type IsMuted
+    = IsMuted
+    | IsNotMuted
+
+
+type alias MutedChannel =
+    { mutedChannel : IsMuted
+    , mutedThreads : SeqSet.SeqSet (Evergreen.V367.Id.Id Evergreen.V367.Id.ChannelMessageId)
+    }
+
+
+type alias MutedGuild =
+    { mutedGuild : IsMuted
+    , channels : SeqDict.SeqDict (Evergreen.V367.Id.Id Evergreen.V367.Id.ChannelId) MutedChannel
+    }
+
+
+type alias MutedDiscordGuild =
+    { mutedGuild : IsMuted
+    , channels : SeqDict.SeqDict (Evergreen.V367.Discord.Id Evergreen.V367.Discord.ChannelId) MutedChannel
+    }
+
+
+type alias Model =
+    { mutedGuilds : SeqDict.SeqDict (Evergreen.V367.Id.Id Evergreen.V367.Id.GuildId) MutedGuild
+    , mutedDms : SeqDict.SeqDict (Evergreen.V367.Id.Id Evergreen.V367.Id.UserId) MutedChannel
+    , mutedDiscordGuilds : SeqDict.SeqDict (Evergreen.V367.Discord.Id Evergreen.V367.Discord.GuildId) MutedDiscordGuild
+    , mutedDiscordDms : SeqSet.SeqSet (Evergreen.V367.Discord.Id Evergreen.V367.Discord.PrivateChannelId)
+    }

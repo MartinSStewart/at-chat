@@ -1,5 +1,6 @@
 module Pages.Admin exposing
     ( AdminChange(..)
+    , DownloadingBackup
     , EditedBackendUser
     , EditingCell
     , ExportProgress(..)
@@ -39,6 +40,7 @@ module Pages.Admin exposing
 import Array exposing (Array)
 import Array.Extra
 import Bytes exposing (Bytes)
+import Bytes.Encode
 import ChannelName
 import Codec
 import CustomEmoji
@@ -215,7 +217,7 @@ type ToFrontend
     = ImportBackendResponse (Result () ())
     | ExportBackendProgress ExportSubset ExportProgress
     | ExportBackendFinished
-    | DownloadLastBackupResponse BackupContents Bytes
+    | DownloadLastBackupChunk BackupContents Int Bytes
     | CountToFrontend Int
 
 
@@ -243,6 +245,18 @@ type alias Model =
     , exportSubsetSelection : Maybe ExportSubsetSelection
     , websocketCloseEventsPage : Int
     , countToFrontend : String
+    , downloadingBackup : Maybe DownloadingBackup
+    }
+
+
+{-| A backup that the backend is sending over in chunks. `chunks` holds what has arrived
+so far, most recent first, and gets assembled into the downloaded file once `receivedBytes`
+reaches `totalBytes`.
+-}
+type alias DownloadingBackup =
+    { totalBytes : Int
+    , receivedBytes : Int
+    , chunks : List Bytes
     }
 
 
@@ -378,6 +392,7 @@ initForUser =
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
     , countToFrontend = ""
+    , downloadingBackup = Nothing
     }
 
 
@@ -404,6 +419,7 @@ initForAdmin { highlightLog } =
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
     , countToFrontend = ""
+    , downloadingBackup = Nothing
     }
 
 
@@ -1234,7 +1250,10 @@ update navigationKey time adminData localState msg model =
             )
 
         PressedDownloadLastBackup ->
-            ( model, Lamdera.sendToBackend DownloadLastBackupRequest, NoOutMsg )
+            ( { model | downloadingBackup = Nothing }
+            , Lamdera.sendToBackend DownloadLastBackupRequest
+            , NoOutMsg
+            )
 
         PressedExportSubsetBackend ->
             ( { model
@@ -1497,19 +1516,52 @@ updateFromBackend toFrontend model =
         ExportBackendFinished ->
             ( { model | exportProgress = Nothing }, Command.none )
 
-        DownloadLastBackupResponse contents bytes ->
-            ( model
-            , Effect.File.Download.bytes
-                (case contents of
-                    FullBackup ->
-                        "backend-export.bin"
+        DownloadLastBackupChunk contents totalBytes chunk ->
+            let
+                chunks : List Bytes
+                chunks =
+                    chunk
+                        :: (case model.downloadingBackup of
+                                Just downloading ->
+                                    downloading.chunks
 
-                    SubsetBackup ->
-                        "backend-export-subset.bin"
+                                Nothing ->
+                                    []
+                           )
+
+                receivedBytes : Int
+                receivedBytes =
+                    List.foldl (\bytes total -> Bytes.width bytes + total) 0 chunks
+            in
+            if receivedBytes >= totalBytes then
+                ( { model | downloadingBackup = Nothing }
+                , Effect.File.Download.bytes
+                    (case contents of
+                        FullBackup ->
+                            "backend-export.bin"
+
+                        SubsetBackup ->
+                            "backend-export-subset.bin"
+                    )
+                    "application/octet-stream"
+                    (List.reverse chunks
+                        |> List.map Bytes.Encode.bytes
+                        |> Bytes.Encode.sequence
+                        |> Bytes.Encode.encode
+                    )
                 )
-                "application/octet-stream"
-                bytes
-            )
+
+            else
+                ( { model
+                    | downloadingBackup =
+                        Just
+                            { totalBytes = totalBytes
+                            , receivedBytes = receivedBytes
+                            , chunks = chunks
+                            }
+                  }
+                , Command.none
+                )
 
         CountToFrontend count ->
             ( { model | countToFrontend = model.countToFrontend ++ " " ++ String.fromInt count }, Command.none )
@@ -1693,7 +1745,7 @@ view isMobile2 version time local adminData user model =
             , wordSpellingGameSwedishSection isMobile2 user adminData
             , filesSection isMobile2 user adminData
             , stickersAndEmojisSection isMobile2 local user
-            , toBackendLogsSection isMobile2 user adminData
+            , toBackendLogsSection isMobile2 time user adminData
             , exportSection isMobile2 local.localUser.timezone user adminData model
             ]
         )
@@ -1883,7 +1935,7 @@ websocketCloseEventsSection isMobile currentTime timezone user adminData model =
                                 [ Ui.el
                                     [ Ui.Font.bold, Ui.Font.size 14 ]
                                     (Ui.text (label ++ " (" ++ String.fromInt (List.Nonempty.length times) ++ ")"))
-                                , websocketCloseEventLineGraph currentTime color times
+                                , eventsPerHourLineGraph currentTime color (List.Nonempty.toList times)
                                 ]
                         )
                         (SeqDict.toList allEvents)
@@ -2049,8 +2101,8 @@ websocketCloseEventListItem timezone ( index, event ) =
         ]
 
 
-websocketCloseEventLineGraph : Time.Posix -> String -> Nonempty Time.Posix -> Element msg
-websocketCloseEventLineGraph now color eventTimes =
+eventsPerHourLineGraph : Time.Posix -> String -> List Time.Posix -> Element msg
+eventsPerHourLineGraph now color eventTimes =
     let
         bucketCount : Int
         bucketCount =
@@ -2078,7 +2130,7 @@ websocketCloseEventLineGraph now color eventTimes =
 
         buckets : Array Int
         buckets =
-            List.Nonempty.foldl
+            List.foldl
                 (\eventTime acc ->
                     let
                         ms : Int
@@ -2455,13 +2507,29 @@ stickerUrlToString url =
             "Loading"
 
 
-toBackendLogsSection : Bool -> BackendUser -> AdminData -> Element Msg
-toBackendLogsSection isMobile user adminData =
+toBackendLogsSection : Bool -> Time.Posix -> BackendUser -> AdminData -> Element Msg
+toBackendLogsSection isMobile currentTime user adminData =
     section
         isMobile
         user.expandedSections
         ToBackendLogsSection
-        [ toBackendLogsTable adminData.toBackendLogs ]
+        [ if Array.isEmpty adminData.toBackendLogs then
+            Ui.text "No toBackend logs"
+
+          else
+            Ui.column
+                [ Ui.spacing 12 ]
+                [ Ui.column
+                    [ Ui.spacing 4 ]
+                    [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text "Logs per hour")
+                    , eventsPerHourLineGraph
+                        currentTime
+                        "#4a90d9"
+                        (Array.toList adminData.toBackendLogs |> List.map .startTime)
+                    ]
+                , toBackendLogsTable adminData.toBackendLogs
+                ]
+        ]
 
 
 toBackendLogsTable : Array ToBackendLogData -> Element Msg
@@ -2550,32 +2618,37 @@ toBackendLogsTable logs =
         msText ms =
             String.fromInt (round (Duration.inMilliseconds ms)) ++ "ms"
     in
-    if Array.isEmpty logs then
-        Ui.text "No toBackend logs"
+    (Ui.row
+        []
+        [ header False 200 (Ui.text "Log type")
+        , header True 100 (Ui.text ("Count\u{00A0}(" ++ String.fromInt (Array.length logs) ++ ")"))
+        , header True 80 (Ui.text "Fastest")
+        , header True 80 (Ui.text "Median")
+        , header True 80 (Ui.text "Slowest")
+        ]
+        :: List.map
+            (\row ->
+                Ui.row
+                    []
+                    [ cell False 200 (Ui.text row.name)
+                    , cell True 100 (Ui.text (String.fromInt row.count))
+                    , cell True 80 (Ui.text (msText row.fastest))
+                    , cell True 80 (Ui.text (msText row.median))
+                    , cell True 80 (Ui.text (msText row.slowest))
+                    ]
+            )
+            sorted
+    )
+        |> Ui.column []
 
-    else
-        (Ui.row
-            []
-            [ header False 200 (Ui.text "Log type")
-            , header True 100 (Ui.text ("Count\u{00A0}(" ++ String.fromInt (Array.length logs) ++ ")"))
-            , header True 80 (Ui.text "Fastest")
-            , header True 80 (Ui.text "Median")
-            , header True 80 (Ui.text "Slowest")
-            ]
-            :: List.map
-                (\row ->
-                    Ui.row
-                        []
-                        [ cell False 200 (Ui.text row.name)
-                        , cell True 100 (Ui.text (String.fromInt row.count))
-                        , cell True 80 (Ui.text (msText row.fastest))
-                        , cell True 80 (Ui.text (msText row.median))
-                        , cell True 80 (Ui.text (msText row.slowest))
-                        ]
-                )
-                sorted
-        )
-            |> Ui.column []
+
+downloadingBackupText : DownloadingBackup -> String
+downloadingBackupText downloading =
+    "Downloading "
+        ++ String.fromInt (downloading.receivedBytes // (1024 * 1024))
+        ++ "MB of "
+        ++ String.fromInt (downloading.totalBytes // (1024 * 1024))
+        ++ "MB..."
 
 
 exportProgressText : ExportProgress -> String
@@ -2668,11 +2741,16 @@ exportSection isMobile timezone user adminData model =
                                     "Download subset backup"
                             )
                         )
-                    , "Generated at "
-                        ++ MyUi.datestamp timezone lastBackup.createdAt
-                        ++ " "
-                        ++ MyUi.timestamp lastBackup.createdAt timezone
-                        |> Ui.text
+                    , case model.downloadingBackup of
+                        Just downloading ->
+                            downloadingBackupText downloading |> Ui.text
+
+                        Nothing ->
+                            "Generated at "
+                                ++ MyUi.datestamp timezone lastBackup.createdAt
+                                ++ " "
+                                ++ MyUi.timestamp lastBackup.createdAt timezone
+                                |> Ui.text
                     ]
 
             Nothing ->
