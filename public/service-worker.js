@@ -298,12 +298,10 @@ async function decryptedFileResponse(encryptedUrl) {
 self.addEventListener('fetch', (event) => {
     try
     {
-    // Check if this is a request for an image
     const url = event.request.url;
 
-    // Wherever this worker was served from, which is https://at-chat.app/ in production and
-    // http://localhost:8000/ when running locally.
     const domain = self.location.origin + '/';
+    const apiDomain = domain.replace("http://localhost:8000/", "http://localhost:3000/");
 
     // The hashed frontend bundle, e.g. https://at-chat.app/frontend.a1b2c3.js
     if (url.startsWith(domain + 'frontend.') && url.endsWith('.js')) {
@@ -347,22 +345,22 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    if (url.startsWith(domain + 'file/e/')) {
+    if (url.startsWith(apiDomain + 'file/e/')) {
         event.respondWith(decryptedFileResponse(url));
         return;
     }
 
-    if (url.startsWith(domain + 'file/t/')
-        || url.startsWith(domain + 'file/0')
-        || url.startsWith(domain + 'file/1')
-        || url.startsWith(domain + 'file/2')
-        || url.startsWith(domain + 'file/3')
-        || url.startsWith(domain + 'file/4')
-        || url.startsWith(domain + 'file/5')
-        || url.startsWith(domain + 'file/6')
-        || url.startsWith(domain + 'file/7')
-        || url.startsWith(domain + 'file/8')
-        || url.startsWith(domain + 'file/9')
+    if (url.startsWith(apiDomain + 'file/t/')
+        || url.startsWith(apiDomain + 'file/0')
+        || url.startsWith(apiDomain + 'file/1')
+        || url.startsWith(apiDomain + 'file/2')
+        || url.startsWith(apiDomain + 'file/3')
+        || url.startsWith(apiDomain + 'file/4')
+        || url.startsWith(apiDomain + 'file/5')
+        || url.startsWith(apiDomain + 'file/6')
+        || url.startsWith(apiDomain + 'file/7')
+        || url.startsWith(apiDomain + 'file/8')
+        || url.startsWith(apiDomain + 'file/9')
         ) {
 
         event.respondWith(caches.open(cacheName).then((cache) => {

@@ -549,9 +549,14 @@ anchorHighlight htmlId userIdToColor onPress isSelectingAnchor drawings =
       -}
       Ui.Anim.hovered
         (Ui.Anim.ms 10)
-        [ Ui.Anim.backgroundColor (Ui.rgba 96 165 250 0.3)
-        , Ui.Anim.outlineColor (Ui.rgba 96 165 250 1)
-        ]
+        (if isSelectingAnchor then
+            [ Ui.Anim.backgroundColor (Ui.rgba 96 165 250 0.3)
+            , Ui.Anim.outlineColor (Ui.rgba 96 165 250 1)
+            ]
+
+         else
+            []
+        )
     ]
         ++ (if isSelectingAnchor then
                 selectingAnchorHighlight htmlId onPress
@@ -572,18 +577,11 @@ selectingAnchorHighlight htmlId onPress =
     ]
 
 
-{-| Same hover highlight as anchorHighlight but for elements rendered with plain
-Html instead of elm-ui. The matching CSS rules live in MyUi.css.
--}
 anchorHighlightHtmlClass : Html.Attribute msg
 anchorHighlightHtmlClass =
     Html.Attributes.class "drawing-anchor-select"
 
 
-{-| Half the displayed size of the clicked anchor element, read from the event's
-currentTarget. Defaults to zero when the fields are missing (e.g. simulated test
-clicks).
--}
 decodeTargetHalfSize : Json.Decode.Decoder ( Float, Float )
 decodeTargetHalfSize =
     Json.Decode.map2
