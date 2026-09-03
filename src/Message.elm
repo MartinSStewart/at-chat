@@ -23,6 +23,7 @@ module Message exposing
     , noDrawings
     , reactionEmojis
     , removeReactionEmoji
+    , toDecrypted
     , toEncrypted
     , userJoined
     , userTextMessageBackend
@@ -358,6 +359,44 @@ type alias UserTextMessageData messageId userId =
         -}
         Maybe (UserTextMessageDrawings userId)
     }
+
+
+{-| Puts the plain text of a message back in place of its ciphertext, for a conversation
+that is no longer encrypted.
+
+Any attached files stay as they were. Their bytes are still encrypted on the server, and
+the key that opens them is in the message content, which is what makes them readable now
+that the message itself is.
+
+-}
+toDecrypted : MessageContent userId -> Message messageId userId -> Message messageId userId
+toDecrypted content message =
+    case message of
+        EncryptedUserTextMessage data ->
+            UserTextMessage
+                { content = content
+                , createdAt = data.createdAt
+                , createdBy = data.createdBy
+                , reactions = data.reactions
+                , editedAt = data.editedAt
+                , repliedTo = data.repliedTo
+                , drawings = data.drawings
+                }
+
+        UserTextMessage _ ->
+            message
+
+        UserJoinedMessage _ _ _ _ ->
+            message
+
+        DeletedMessage _ ->
+            message
+
+        CallStarted _ ->
+            message
+
+        GameStarted _ ->
+            message
 
 
 toEncrypted :
