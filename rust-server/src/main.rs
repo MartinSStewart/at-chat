@@ -59,6 +59,10 @@ async fn main() {
                     post(upload_endpoint).options(options_endpoint),
                 )
                 .route(
+                    "/file/upload-encrypted",
+                    post(upload_encrypted_endpoint).options(options_endpoint),
+                )
+                .route(
                     "/file/internal/upload-url",
                     post(upload_url_endpoint).options(options_endpoint),
                 )
@@ -695,6 +699,131 @@ async fn upload_endpoint(
             String::from("Invalid permissions 1"),
         ),
     }
+}
+
+/// How big an encrypted thumbnail may be. The client makes these at most
+/// `MAX_THUMBNAIL_HEIGHT * 3` by `MAX_THUMBNAIL_HEIGHT` and encodes them as webp,
+/// which lands well under this. The limit is here to bound what a caller who
+/// isn't our own client can write, since an encrypted thumbnail cannot be
+/// decoded to check it is what it claims to be.
+const MAX_ENCRYPTED_THUMBNAIL_BYTES: usize = 1024 * 1024;
+
+/// Splits an encrypted upload into its thumbnail and its file.
+///
+/// The body is the thumbnail's length as a big endian `u32`, then that many bytes
+/// of thumbnail, then the rest is the file. A length of zero means no thumbnail
+/// was sent. Only the thumbnail needs a length: the file is whatever is left.
+fn split_encrypted_upload(bytes: &Bytes) -> Option<(Bytes, Bytes)> {
+    let length_bytes: [u8; 4] = bytes.get(0..4)?.try_into().ok()?;
+    let thumbnail_length = usize::try_from(u32::from_be_bytes(length_bytes)).ok()?;
+    let file_start: usize = 4usize.checked_add(thumbnail_length)?;
+
+    if file_start > bytes.len() {
+        return None;
+    }
+
+    Some((bytes.slice(4..file_start), bytes.slice(file_start..)))
+}
+
+/// An encrypted file, and optionally a thumbnail of it, in one request.
+///
+/// The server is handed ciphertext, so unlike `/file/upload` there is no metadata
+/// it can read and no thumbnail it can make. The client makes the thumbnail
+/// instead and sends it along here, where it is stored under the same hash as the
+/// file so that nothing has to keep track of a second one.
+async fn upload_encrypted_endpoint(
+    State(state): State<Arc<Mutex<AppState>>>,
+    request: Request,
+) -> Response<String> {
+    let uploader: Option<Uploader> = uploader(&state, request.headers());
+    let secret_key: Vec<u8> = state.lock().unwrap().secret_key.clone();
+
+    let (uploader2, bytes) = match (uploader, request.extract::<Bytes, _>().await) {
+        (Some(uploader2), Ok(bytes)) => (uploader2, bytes),
+        _ => {
+            return response_with_headers(
+                StatusCode::UNAUTHORIZED,
+                String::from("Invalid permissions"),
+            );
+        }
+    };
+
+    let (thumbnail, file) = match split_encrypted_upload(&bytes) {
+        Some(split) => split,
+        None => {
+            return response_with_headers(
+                StatusCode::BAD_REQUEST,
+                String::from("Expected a thumbnail length, a thumbnail, then a file"),
+            );
+        }
+    };
+
+    if thumbnail.len() > MAX_ENCRYPTED_THUMBNAIL_BYTES {
+        return response_with_headers(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            format!("A thumbnail can be at most {MAX_ENCRYPTED_THUMBNAIL_BYTES} bytes"),
+        );
+    }
+
+    let hash = hash_bytes(&file);
+
+    // The size the file is displayed at is in the message the file is attached
+    // to, which is encrypted too, so there is nothing to report here.
+    if is_file_upload_allowed(&secret_key, hash.clone(), file.len(), &uploader2, (0, 0))
+        .await
+        .is_err()
+    {
+        return response_with_headers(
+            StatusCode::UNAUTHORIZED,
+            String::from("Invalid permissions"),
+        );
+    }
+
+    // Reached only once the caller is known to be allowed to upload, so that the
+    // answer doesn't tell a stranger which files already have a thumbnail.
+    store_encrypted_upload(&hash, &thumbnail, &file)
+}
+
+/// Writes an encrypted upload, refusing a thumbnail for a file that has one.
+///
+/// A thumbnail is written once and never replaced: it is stored under the file's
+/// own hash, so overwriting one would change what everyone sees of a file that is
+/// already stored.
+fn store_encrypted_upload(hash: &str, thumbnail: &Bytes, file: &Bytes) -> Response<String> {
+    let thumbnail_path = thumbnail_filepath(hash);
+
+    if !thumbnail.is_empty() && fs::exists(&thumbnail_path).unwrap_or(false) {
+        return response_with_headers(
+            StatusCode::CONFLICT,
+            String::from("That file already has a thumbnail"),
+        );
+    }
+
+    let path = filepath(hash);
+
+    if !fs::exists(&path).unwrap_or(false) && fs::write(&path, file).is_err() {
+        return response_with_headers(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            String::from("Internal error"),
+        );
+    }
+
+    if !thumbnail.is_empty() && fs::write(&thumbnail_path, thumbnail).is_err() {
+        return response_with_headers(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            String::from("Internal error"),
+        );
+    }
+
+    json_response_with_headers(
+        StatusCode::OK,
+        serde_json::to_string(&UploadResponse {
+            image_metadata: None,
+            video_metadata: None,
+            hash: String::from(hash),
+        })
+        .unwrap(),
+    )
 }
 
 /// Lives under `/file/internal/` because only the backend fetches attachments by
@@ -1821,6 +1950,14 @@ mod tests {
         );
     }
 
+    // Where the file endpoints read from and the upload endpoints write to.
+    fn create_storage_dir() {
+        create_dir_if_missing(String::from("./var"));
+        create_dir_if_missing(String::from("./var/lib"));
+        create_dir_if_missing(String::from("./var/lib/atchat"));
+        create_dir_if_missing(String::from("./var/lib/atchat/storage"));
+    }
+
     // Put a file where the endpoint looks for it and ask for it back, so the
     // tests below can read the headers it came with. Each caller passes its own
     // hash, which is the filename, so the two never tread on each other.
@@ -1829,10 +1966,7 @@ mod tests {
         content_type_index: String,
         bytes: &[u8],
     ) -> http::Response<Body> {
-        create_dir_if_missing("./var".to_string());
-        create_dir_if_missing("./var/lib".to_string());
-        create_dir_if_missing("./var/lib/atchat".to_string());
-        create_dir_if_missing("./var/lib/atchat/storage".to_string());
+        create_storage_dir();
         fs::write(filepath(hash), bytes).expect("failed to write the file to serve");
 
         let response = get_file_endpoint(Path((content_type_index, hash.to_string()))).await;
@@ -1877,6 +2011,211 @@ mod tests {
             content_security_policy(&response),
             Some("sandbox"),
             "a file served as html should be sandboxed out of the app's origin"
+        );
+    }
+
+    // --- encrypted uploads ---
+
+    fn encrypted_body(thumbnail: &[u8], file: &[u8]) -> Bytes {
+        let mut body: Vec<u8> = Vec::new();
+        body.extend_from_slice(&u32::try_from(thumbnail.len()).unwrap().to_be_bytes());
+        body.extend_from_slice(thumbnail);
+        body.extend_from_slice(file);
+        Bytes::from(body)
+    }
+
+    fn split_parts(thumbnail: &[u8], file: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
+        split_encrypted_upload(&encrypted_body(thumbnail, file))
+            .map(|(thumbnail2, file2)| (thumbnail2.to_vec(), file2.to_vec()))
+    }
+
+    #[test]
+    fn an_upload_splits_back_into_the_thumbnail_and_the_file() {
+        assert_eq!(
+            split_parts(b"thumb", b"the file"),
+            Some((b"thumb".to_vec(), b"the file".to_vec())),
+            "the thumbnail is what its length says and the file is the rest"
+        );
+    }
+
+    // A length of zero is how the client says it had no thumbnail to send, which
+    // is every video and any image small enough not to need one.
+    #[test]
+    fn an_upload_with_no_thumbnail_is_all_file() {
+        assert_eq!(
+            split_parts(b"", b"the file"),
+            Some((Vec::new(), b"the file".to_vec())),
+            "a length of zero should leave the whole body as the file"
+        );
+    }
+
+    #[test]
+    fn a_body_too_short_to_hold_a_length_is_refused() {
+        assert_eq!(
+            split_encrypted_upload(&Bytes::from_static(b"abc")),
+            None,
+            "a body with no room for the length should not be read as an upload"
+        );
+    }
+
+    // The length is the only thing saying where the thumbnail ends, so one that
+    // runs past the body has to be refused rather than clamped.
+    #[test]
+    fn a_thumbnail_longer_than_the_body_is_refused() {
+        let mut body: Vec<u8> = Vec::new();
+        body.extend_from_slice(&100u32.to_be_bytes());
+        body.extend_from_slice(b"only a few bytes");
+
+        assert_eq!(
+            split_encrypted_upload(&Bytes::from(body)),
+            None,
+            "a thumbnail that runs past the end of the body should be refused"
+        );
+    }
+
+    #[test]
+    fn a_thumbnail_length_that_cannot_be_a_size_is_refused() {
+        let mut body: Vec<u8> = Vec::new();
+        body.extend_from_slice(&u32::MAX.to_be_bytes());
+        body.extend_from_slice(b"a file");
+
+        assert_eq!(
+            split_encrypted_upload(&Bytes::from(body)),
+            None,
+            "a length that cannot fit the body should be refused rather than wrap"
+        );
+    }
+
+    // Storing writes to the same directory the file endpoints read from, so each
+    // test picks its own hash and clears up after itself.
+    fn store_encrypted(hash: &str, thumbnail: &[u8], file: &[u8]) -> Response<String> {
+        create_storage_dir();
+
+        store_encrypted_upload(
+            hash,
+            &Bytes::copy_from_slice(thumbnail),
+            &Bytes::copy_from_slice(file),
+        )
+    }
+
+    fn forget_stored(hash: &str) {
+        let _ = fs::remove_file(filepath(hash));
+        let _ = fs::remove_file(thumbnail_filepath(hash));
+    }
+
+    #[tokio::test]
+    async fn an_encrypted_file_and_its_thumbnail_are_stored_under_the_same_hash() {
+        let hash = "encryptedWithThumbnail";
+        forget_stored(hash);
+
+        let response = store_encrypted(hash, b"the thumbnail", b"the file");
+        let stored_file = fs::read(filepath(hash));
+        let stored_thumbnail = fs::read(thumbnail_filepath(hash));
+        forget_stored(hash);
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            stored_file.ok(),
+            Some(b"the file".to_vec()),
+            "the file should be stored under its hash"
+        );
+        assert_eq!(
+            stored_thumbnail.ok(),
+            Some(b"the thumbnail".to_vec()),
+            "the thumbnail should be stored under the file's hash rather than one of its own"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_encrypted_file_can_be_stored_without_a_thumbnail() {
+        let hash = "encryptedWithoutThumbnail";
+        forget_stored(hash);
+
+        let response = store_encrypted(hash, b"", b"the file");
+        let stored_thumbnail_exists = fs::exists(thumbnail_filepath(hash)).unwrap_or(false);
+        forget_stored(hash);
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            !stored_thumbnail_exists,
+            "sending no thumbnail should not leave an empty one behind"
+        );
+    }
+
+    // The thumbnail is stored under the file's hash, so accepting a second one
+    // would change what everyone sees of a file that is already there.
+    #[tokio::test]
+    async fn a_second_thumbnail_for_the_same_file_is_refused() {
+        let hash = "encryptedThumbnailTwice";
+        forget_stored(hash);
+
+        let first = store_encrypted(hash, b"the thumbnail", b"the file");
+        let second = store_encrypted(hash, b"a replacement", b"the file");
+        let stored_thumbnail = fs::read(thumbnail_filepath(hash));
+        forget_stored(hash);
+
+        assert_eq!(first.status(), StatusCode::OK);
+        assert_eq!(
+            second.status(),
+            StatusCode::CONFLICT,
+            "a file that already has a thumbnail should not take another"
+        );
+        assert_eq!(
+            stored_thumbnail.ok(),
+            Some(b"the thumbnail".to_vec()),
+            "the thumbnail that was already stored should be left alone"
+        );
+    }
+
+    // Sending the file again without a thumbnail is not an attempt to replace
+    // one, so there is nothing to refuse.
+    #[tokio::test]
+    async fn a_file_that_is_already_stored_can_be_sent_again() {
+        let hash = "encryptedStoredTwice";
+        forget_stored(hash);
+
+        let first = store_encrypted(hash, b"", b"the file");
+        let second = store_encrypted(hash, b"", b"the file");
+        forget_stored(hash);
+
+        assert_eq!(first.status(), StatusCode::OK);
+        assert_eq!(second.status(), StatusCode::OK);
+    }
+
+    // Both of these are answered before the upload is authorised, so they can be
+    // driven through the endpoint itself without an rpc to answer them.
+    async fn upload_encrypted_status(body: Bytes) -> StatusCode {
+        let request = Request::builder()
+            .method("POST")
+            .uri("/file/upload-encrypted")
+            .header("cookie", "sid=abc123")
+            .body(Body::from(body))
+            .unwrap();
+
+        upload_encrypted_endpoint(State(Arc::new(test_state("the-secret"))), request)
+            .await
+            .status()
+    }
+
+    #[tokio::test]
+    async fn a_body_that_is_not_an_upload_is_refused() {
+        assert_eq!(
+            upload_encrypted_status(Bytes::from_static(b"ab")).await,
+            StatusCode::BAD_REQUEST,
+            "a body that isn't a length followed by a thumbnail and a file should be refused"
+        );
+    }
+
+    // An encrypted thumbnail cannot be decoded to check it is one, so its size is
+    // the only thing standing between the store and whatever a caller sends.
+    #[tokio::test]
+    async fn an_oversized_thumbnail_is_refused() {
+        let thumbnail = vec![0u8; MAX_ENCRYPTED_THUMBNAIL_BYTES + 1];
+
+        assert_eq!(
+            upload_encrypted_status(encrypted_body(&thumbnail, b"the file")).await,
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "a thumbnail past the limit should be refused"
         );
     }
 
