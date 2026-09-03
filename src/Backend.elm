@@ -6198,7 +6198,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
-                Local_SendEncryptedMessage _ id content threadRoute ->
+                Local_SendEncryptedMessage _ id fileHashes content threadRoute ->
                     BackendExtra.asDmUser
                         model
                         sessionId
@@ -6211,6 +6211,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         clientId
                                         changeId
                                         id
+                                        fileHashes
                                         content
                                         threadRoute
                                         session

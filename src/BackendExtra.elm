@@ -1986,6 +1986,7 @@ sendEncryptedDm :
     -> ClientId
     -> ChangeId
     -> Viewing_DmId
+    -> SeqSet FileHash
     -> EncryptedData (MessageContent (Id UserId))
     -> ThreadRouteWithMaybeMessage
     -> UserSession
@@ -1994,7 +1995,7 @@ sendEncryptedDm :
     -> BackendDmChannel
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendEncryptedDm time clientId changeId id contentAndEmbeds threadRouteWithReplyTo session user dmChannelId dmChannel model =
+sendEncryptedDm time clientId changeId id fileHashes contentAndEmbeds threadRouteWithReplyTo session user dmChannelId dmChannel model =
     case RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits of
         Ok sendMessageRateLimits ->
             let
@@ -2003,13 +2004,13 @@ sendEncryptedDm time clientId changeId id contentAndEmbeds threadRouteWithReplyT
                         ViewThreadWithMaybeMessage threadId repliedTo ->
                             LocalState.createThreadMessageBackend
                                 threadId
-                                (Message.encryptedUserTextMessageFrontend time session.userId contentAndEmbeds repliedTo)
+                                (Message.encryptedUserTextMessageFrontend time session.userId fileHashes contentAndEmbeds repliedTo)
                                 dmChannel
                                 |> Tuple.mapFirst (ViewThreadWithMessage threadId)
 
                         NoThreadWithMaybeMessage repliedTo ->
                             LocalState.createChannelMessageBackend
-                                (Message.encryptedUserTextMessageFrontend time session.userId contentAndEmbeds repliedTo)
+                                (Message.encryptedUserTextMessageFrontend time session.userId fileHashes contentAndEmbeds repliedTo)
                                 dmChannel
                                 |> Tuple.mapFirst NoThreadWithMessage
 
@@ -2031,7 +2032,7 @@ sendEncryptedDm time clientId changeId id contentAndEmbeds threadRouteWithReplyT
                 , sessions = sessions
               }
             , Command.batch
-                [ Local_SendEncryptedMessage time id contentAndEmbeds threadRouteWithReplyTo
+                [ Local_SendEncryptedMessage time id fileHashes contentAndEmbeds threadRouteWithReplyTo
                     |> LocalChangeResponse changeId
                     |> Lamdera.sendToFrontend clientId
                 , Broadcast.toDmChannelExcludingOne
@@ -2044,6 +2045,7 @@ sendEncryptedDm time clientId changeId id contentAndEmbeds threadRouteWithReplyT
                             (User.backendToFrontendForUser user)
                             time
                             id2
+                            fileHashes
                             contentAndEmbeds
                             threadRouteWithReplyTo
                     )
@@ -2610,7 +2612,7 @@ toBackendLog toBackend =
                 Local_AcceptE2ee _ _ _ ->
                     ToBackendLog_Local_AcceptE2ee
 
-                Local_SendEncryptedMessage _ _ _ _ ->
+                Local_SendEncryptedMessage _ _ _ _ _ ->
                     ToBackendLog_Local_SendEncryptedMessage
 
         TwoFactorToBackend _ ->
@@ -3181,7 +3183,7 @@ encryptOldMessages :
     -> ChangeId
     -> LocalChange
     -> BackendModel
-    -> List ( ThreadRouteWithMessage, EncryptedData (MessageContent (Id UserId)) )
+    -> List ( ThreadRouteWithMessage, SeqSet FileHash, EncryptedData (MessageContent (Id UserId)) )
     -> DmChannelId
     -> BackendDmChannel
     -> ( BackendModel, Command BackendOnly ToFrontend backendMsg )
@@ -3193,14 +3195,14 @@ encryptOldMessages clientId changeId localMsg model messages dmChannelId dmChann
                     SeqDict.insert
                         dmChannelId
                         (List.foldl
-                            (\( threadRoute, encryptedData ) channel ->
+                            (\( threadRoute, fileHashes, encryptedData ) channel ->
                                 case threadRoute of
                                     NoThreadWithMessage messageId ->
                                         { channel
                                             | messages =
                                                 DmChannel.updateArray
                                                     messageId
-                                                    (Message.toEncrypted encryptedData)
+                                                    (Message.toEncrypted fileHashes encryptedData)
                                                     channel.messages
                                         }
 
@@ -3214,7 +3216,7 @@ encryptOldMessages clientId changeId localMsg model messages dmChannelId dmChann
                                                             | messages =
                                                                 DmChannel.updateArray
                                                                     messageId
-                                                                    (Message.toEncrypted encryptedData)
+                                                                    (Message.toEncrypted fileHashes encryptedData)
                                                                     thread.messages
                                                         }
                                                     )

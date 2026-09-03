@@ -37,7 +37,7 @@ import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji(..), EmojiOrSticker(..))
 import Encryption exposing (BytesHash, EncryptManyRequestId)
-import FileStatus exposing (FileData, FileId, FileStatus(..))
+import FileStatus exposing (FileData, FileHash, FileId, FileStatus(..))
 import FrontendExtra
 import Game
 import Go
@@ -3427,6 +3427,10 @@ updateLoaded msg model =
                                         (Local_SendEncryptedMessage
                                             model.time
                                             { otherUserId = pending.otherUserId }
+                                            (SeqDict.values pending.contentAndEmbeds.attachedFiles
+                                                |> List.map .fileHash
+                                                |> SeqSet.fromList
+                                            )
                                             cipherText
                                             pending.threadRoute
                                             |> Just
@@ -3517,13 +3521,21 @@ updateLoaded msg model =
                                                 , Encryption.EncryptedData (MessageContent (Id UserId))
                                                 )
                                         pairs =
-                                            List.map2 Tuple.pair pending.messages encrypted
+                                            List.map2
+                                                Tuple.pair
+                                                pending.messages
+                                                encrypted
                                     in
                                     FrontendExtra.handleLocalChange
                                         model.time
                                         (List.map
-                                            (\( ( threadRoute, _ ), encryptedData ) ->
-                                                ( threadRoute, encryptedData )
+                                            (\( ( threadRoute, content ), encryptedData ) ->
+                                                ( threadRoute
+                                                , SeqDict.values content.attachedFiles
+                                                    |> List.map .fileHash
+                                                    |> SeqSet.fromList
+                                                , encryptedData
+                                                )
                                             )
                                             pairs
                                             |> Local_EncryptOldMessages pending.id
@@ -8180,7 +8192,7 @@ updateLoadedFromBackend msg model =
                                 Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ ->
                                     FrontendExtra.handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local loggedIn2 model
 
-                                Server_SendEncryptedMessage senderId _ _ id content maybeRepliedTo ->
+                                Server_SendEncryptedMessage senderId _ _ id fileHashes content maybeRepliedTo ->
                                     ( FrontendExtra.mapEncryptionRequests
                                         (\requests ->
                                             { requests

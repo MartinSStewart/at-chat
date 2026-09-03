@@ -6,8 +6,8 @@ module Types exposing
     , ChannelDataToEncrypt
     , CountToFrontendState
     , DiscordAttachmentData
-    , E2eeKeysValid(..)
     , DownloadBackupState
+    , E2eeKeysValid(..)
     , EditChannelForm
     , EditGuildForm
     , EditMessage
@@ -1103,7 +1103,7 @@ type ServerChange
     | Server_E2eeRequestDeclined Viewing_DmId (Id UserId)
     | Server_E2eeAccepted Viewing_DmId Time.Posix
     | Server_SetPublicKey (Id UserId) X25519.PublicKey
-    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
+    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
 
 
 type LocalChange
@@ -1165,10 +1165,10 @@ type LocalChange
     | Local_DeclineE2eeRequestAsInitiator Viewing_DmId
     | Local_DeclineE2eeRequest Viewing_DmId
     | Local_SetPublicKey X25519.PublicKey (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
-    | Local_EncryptOldMessages Viewing_DmId (List ( ThreadRouteWithMessage, EncryptedData (MessageContent (Id UserId)) ))
+    | Local_EncryptOldMessages Viewing_DmId (List ( ThreadRouteWithMessage, SeqSet FileHash, EncryptedData (MessageContent (Id UserId)) ))
     | Local_SetE2eeRisksAccepted Bool
     | Local_AcceptE2ee Viewing_DmId Time.Posix (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
-    | Local_SendEncryptedMessage Time.Posix Viewing_DmId (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
+    | Local_SendEncryptedMessage Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
 
 
 type alias ChannelDataToEncrypt =

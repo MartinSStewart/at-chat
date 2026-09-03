@@ -70,7 +70,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (BytesHash, EncryptedData)
 import FileName
-import FileStatus exposing (FileData, FileId, FileStatus(..), IsEncrypted(..))
+import FileStatus exposing (FileData, FileHash, FileId, FileStatus(..), IsEncrypted(..))
 import Game
 import Go
 import Html exposing (Html)
@@ -379,7 +379,7 @@ pendingChangesText localChange =
         Local_AcceptE2ee _ _ _ ->
             "Started end-to-end encryption"
 
-        Local_SendEncryptedMessage _ _ _ _ ->
+        Local_SendEncryptedMessage _ _ _ _ _ ->
             "Sent an encrypted message"
 
 
@@ -3924,7 +3924,7 @@ changeUpdate localMsg local =
                         (DmChannel.E2eeDeclinedBy local.localUser.session.userId)
                         local
 
-                Local_SendEncryptedMessage createdAt { otherUserId } content threadRouteWithRepliedTo ->
+                Local_SendEncryptedMessage createdAt { otherUserId } fileHashes content threadRouteWithRepliedTo ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -3936,6 +3936,7 @@ changeUpdate localMsg local =
                                 createdAt
                                 localUser.session.userId
                                 otherUserId
+                                fileHashes
                                 content
                                 threadRouteWithRepliedTo
                                 local
@@ -5373,7 +5374,7 @@ changeUpdate localMsg local =
                         )
                         local
 
-                Server_SendEncryptedMessage createdBy createdByUser createdAt id content threadRouteWithRepliedTo ->
+                Server_SendEncryptedMessage createdBy createdByUser createdAt id fileHashes content threadRouteWithRepliedTo ->
                     handleServerSendDmMessage
                         id
                         createdBy
@@ -5381,10 +5382,10 @@ changeUpdate localMsg local =
                         -- TODO, solve stickers
                         SeqDict.empty
                         (\maybeReplyTo ->
-                            Message.encryptedUserTextMessageFrontend createdAt createdBy content maybeReplyTo
+                            Message.encryptedUserTextMessageFrontend createdAt createdBy fileHashes content maybeReplyTo
                         )
                         (\maybeReplyTo ->
-                            Message.encryptedUserTextMessageFrontend createdAt createdBy content maybeReplyTo
+                            Message.encryptedUserTextMessageFrontend createdAt createdBy fileHashes content maybeReplyTo
                         )
                         threadRouteWithRepliedTo
                         local
@@ -7214,11 +7215,12 @@ addEncryptedDmMessage :
     Time.Posix
     -> Id UserId
     -> Id UserId
+    -> SeqSet FileHash
     -> EncryptedData (MessageContent (Id UserId))
     -> ThreadRouteWithMaybeMessage
     -> LocalState
     -> LocalState
-addEncryptedDmMessage createdAt createdBy otherUserId contentAndEmbeds threadRouteWithRepliedTo local =
+addEncryptedDmMessage createdAt createdBy otherUserId fileHashes contentAndEmbeds threadRouteWithRepliedTo local =
     let
         dmChannel : FrontendDmChannel
         dmChannel =
@@ -7235,6 +7237,7 @@ addEncryptedDmMessage createdAt createdBy otherUserId contentAndEmbeds threadRou
                             (Message.encryptedUserTextMessageFrontend
                                 createdAt
                                 createdBy
+                                fileHashes
                                 contentAndEmbeds
                                 maybeReplyTo
                             )
@@ -7245,6 +7248,7 @@ addEncryptedDmMessage createdAt createdBy otherUserId contentAndEmbeds threadRou
                             (Message.encryptedUserTextMessageFrontend
                                 createdAt
                                 createdBy
+                                fileHashes
                                 contentAndEmbeds
                                 maybeReplyTo
                             )
@@ -7374,19 +7378,19 @@ handleDecryptedMessage requestId result model loggedIn =
 
 
 encryptOldMessages :
-    List ( ThreadRouteWithMessage, EncryptedData (MessageContent (Id UserId)) )
+    List ( ThreadRouteWithMessage, SeqSet FileHash, EncryptedData (MessageContent (Id UserId)) )
     -> FrontendDmChannel
     -> FrontendDmChannel
 encryptOldMessages messages dmChannel =
     List.foldl
-        (\( threadRoute, encryptedData ) channel ->
+        (\( threadRoute, fileHashes, encryptedData ) channel ->
             case threadRoute of
                 NoThreadWithMessage messageId ->
                     { channel
                         | messages =
                             MessageArray.updateIfExists
                                 messageId
-                                (Message.toEncrypted encryptedData)
+                                (Message.toEncrypted fileHashes encryptedData)
                                 channel.messages
                     }
 
@@ -7400,7 +7404,7 @@ encryptOldMessages messages dmChannel =
                                         | messages =
                                             MessageArray.updateIfExists
                                                 messageId
-                                                (Message.toEncrypted encryptedData)
+                                                (Message.toEncrypted fileHashes encryptedData)
                                                 thread.messages
                                     }
                                 )

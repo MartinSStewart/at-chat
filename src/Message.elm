@@ -35,7 +35,7 @@ import Effect.Http as Http
 import Embed exposing (Embed(..), EmbedData, EmbedImageFormat(..))
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
-import FileStatus exposing (FileData, FileId)
+import FileStatus exposing (FileData, FileHash, FileId)
 import Id exposing (Id, StickerId, UserId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
@@ -44,7 +44,7 @@ import RichText exposing (RichText)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
-import SeqSet
+import SeqSet exposing (SeqSet)
 import Serialize
 import Sticker exposing (StickerData)
 import Time
@@ -177,12 +177,14 @@ can do.
 encryptedUserTextMessageFrontend :
     Time.Posix
     -> Id UserId
+    -> SeqSet FileHash
     -> EncryptedData (MessageContent (Id UserId))
     -> Maybe (Id messageId)
     -> Message messageId (Id UserId)
-encryptedUserTextMessageFrontend createdAt2 createdBy contentAndEmbeds repliedTo =
+encryptedUserTextMessageFrontend createdAt2 createdBy fileHashes contentAndEmbeds repliedTo =
     EncryptedUserTextMessage
         { content = contentAndEmbeds
+        , fileHashes = fileHashes
         , createdAt = createdAt2
         , createdBy = createdBy
         , reactions = SeqDict.empty
@@ -342,12 +344,17 @@ type alias UserTextMessageData messageId userId =
     }
 
 
-toEncrypted : EncryptedData (MessageContent userId) -> Message messageId userId -> Message messageId userId
-toEncrypted encryptedData message =
+toEncrypted :
+    SeqSet FileHash
+    -> EncryptedData (MessageContent userId)
+    -> Message messageId userId
+    -> Message messageId userId
+toEncrypted fileHashes encryptedData message =
     case message of
         UserTextMessage data ->
             EncryptedUserTextMessage
                 { content = encryptedData
+                , fileHashes = fileHashes
                 , createdAt = data.createdAt
                 , createdBy = data.createdBy
                 , reactions = data.reactions
@@ -380,6 +387,7 @@ type alias EncryptedUserTextMessageData messageId userId =
     { createdAt : Time.Posix
     , createdBy : userId
     , content : EncryptedData (MessageContent userId)
+    , fileHashes : SeqSet FileHash
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , repliedTo : Maybe (Id messageId)

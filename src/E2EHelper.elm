@@ -166,6 +166,7 @@ import RichText exposing (Domain(..))
 import SafeJson exposing (SafeJson(..))
 import SecretId exposing (SecretId(..))
 import SeqDict
+import SeqSet
 import SessionIdHash exposing (SessionIdHash(..))
 import Slack
 import String.Nonempty exposing (NonemptyString(..))
@@ -2554,7 +2555,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_AcceptE2ee _ _ _ ->
                     True
 
-                Local_SendEncryptedMessage _ _ _ _ ->
+                Local_SendEncryptedMessage _ _ _ _ _ ->
                     True
 
         ChangeBroadcast localMsg ->
@@ -2813,7 +2814,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetPublicKey _ _ ->
                             True
 
-                        Types.Server_SendEncryptedMessage _ _ _ _ _ _ ->
+                        Types.Server_SendEncryptedMessage _ _ _ _ _ _ _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
@@ -3073,6 +3074,7 @@ allAttackerLocalChanges =
     , Local_SendEncryptedMessage
         startTime
         { otherUserId = Broadcast.adminUserId }
+        SeqSet.empty
         (EncryptedData (Bytes.Encode.encode (Bytes.Encode.sequence [])))
         (NoThreadWithMaybeMessage Nothing)
     ]

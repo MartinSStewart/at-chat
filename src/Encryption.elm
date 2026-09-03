@@ -153,6 +153,7 @@ at-chat encrypts message contents and attached files.
 The following is not encrypted:
 * Message creation time
 * Approximate size of message contents
+* Number of attached files and their approximate size
 * Who wrote the message
 * If the message is a reply to a previous message
 * Drawings
