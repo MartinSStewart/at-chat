@@ -61,7 +61,7 @@ import Coord
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
-import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannel exposing (DiscordFrontendDmChannel, E2eeStatus(..), FrontendDmChannel)
 import DmChannelId
 import Drawing exposing (Drawing)
 import Duration exposing (Duration)
@@ -209,7 +209,7 @@ requestAcceptedText =
 
 missingPrivateKeyText : String
 missingPrivateKeyText =
-    "3. This device is missing a private key in order to decrypt messages. Enter your private key here."
+    "3. Your private key is needed for this device. Without it you can't decrypt existing messages or send encrypted messages. Enter your private key here."
 
 
 chatWithText : String
@@ -1412,12 +1412,6 @@ unreadMessages maybeLastViewed channel =
             Nothing
 
 
-{-| Where the unread divider goes. Opening a conversation marks it as read, so the last
-viewed message of the local state has already moved to the newest message by the time it is
-drawn. The session remembers where the divider was on the way in, and that is what the
-conversation being looked at right now needs, so that its unread messages stay marked while
-the reader is still working through them.
--}
 unreadDividerAt : Id messageId -> PreviouslyLastViewedMessage messageId -> Id messageId
 unreadDividerAt lastViewed previouslyLastViewedMessage =
     case previouslyLastViewedMessage of
@@ -1448,6 +1442,21 @@ dmChannelView dmRoute loggedIn local model =
                         dmChannel =
                             SeqDict.get otherUserId local.dmChannels
                                 |> Maybe.withDefault DmChannel.frontendInit
+
+                        missingPrivateKey : Bool
+                        missingPrivateKey =
+                            case dmChannel.e2ee of
+                                E2eeEnabled _ ->
+                                    not (SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice)
+
+                                E2eeDisabled maybe ->
+                                    False
+
+                                E2eeRequestedBy ( id, sessionIdHash ) ->
+                                    False
+
+                                E2eeDeclinedBy id ->
+                                    False
                     in
                     case dmRoute.threadRoute of
                         ViewThreadWithFriends threadMessageIndex maybeUrlMessageId _ ->
@@ -1479,6 +1488,7 @@ dmChannelView dmRoute loggedIn local model =
                                     loggedIn
                                     model
                                     local
+                                    missingPrivateKey
                                     (PersonName.toString otherUser.name)
                                     (threadPreviewText
                                         local.localUser.timezone
@@ -1514,6 +1524,7 @@ dmChannelView dmRoute loggedIn local model =
                                 loggedIn
                                 model
                                 local
+                                missingPrivateKey
                                 (PersonName.toString otherUser.name)
                                 dmChannel
 
@@ -3069,6 +3080,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                     loggedIn
                                     model
                                     local
+                                    False
                                     (ChannelName.toString channel.name)
                                     (threadPreviewText
                                         local.localUser.timezone
@@ -3104,6 +3116,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                 loggedIn
                                 model
                                 local
+                                False
                                 (ChannelName.toString channel.name)
                                 channel
 
@@ -5388,9 +5401,6 @@ drawingModeAttributes route drawingMode =
         []
 
 
-{-| Css transform applied to the conversation container so the area around the
-selected anchor is magnified for more precise drawing.
--}
 drawingZoomAttributes : Route -> Drawing.Model -> List (Ui.Attribute FrontendMsg_)
 drawingZoomAttributes route drawingMode =
     case ( Route.toChannelHeaderTab route, drawingMode ) of
@@ -5410,6 +5420,15 @@ drawingZoomAttributes route drawingMode =
             []
 
 
+missingPrivateKeyPlaceholder : Html msg
+missingPrivateKeyPlaceholder =
+    Html.span
+        [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.errorColor) ]
+        [ Html.text "Private key missing. Goto\u{00A0}"
+        , Html.span [ Html.Attributes.style "position" "absolute" ] [ Icons.gear ]
+        ]
+
+
 conversationView :
     Id ChannelMessageId
     -> GuildOrDmId
@@ -5417,6 +5436,7 @@ conversationView :
     -> LoggedIn2
     -> LoadedFrontend
     -> LocalState
+    -> Bool
     -> String
     ->
         { a
@@ -5427,7 +5447,7 @@ conversationView :
             , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
         }
     -> Element FrontendMsg_
-conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel =
+conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local missingPrivateKey name channel =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
@@ -5551,18 +5571,24 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
                 channelTextInputId
-                (case guildOrDmIdNoThread of
-                    GuildOrDmId_Guild _ ->
-                        "Write a message in #" ++ name
+                (if missingPrivateKey then
+                    missingPrivateKeyPlaceholder
 
-                    GuildOrDmId_Dm { otherUserId } ->
-                        "Write a message to "
-                            ++ (if otherUserId == local.localUser.session.userId then
-                                    "yourself"
+                 else
+                    (case guildOrDmIdNoThread of
+                        GuildOrDmId_Guild _ ->
+                            "Write a message in #" ++ name
 
-                                else
-                                    name
-                               )
+                        GuildOrDmId_Dm { otherUserId } ->
+                            "Write a message to "
+                                ++ (if otherUserId == local.localUser.session.userId then
+                                        "yourself"
+
+                                    else
+                                        name
+                                   )
+                    )
+                        |> MessageInput.textPlaceholder
                 )
                 (RichText.maxLength - String.length draft)
                 draft
@@ -5729,7 +5755,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         (replyTo == Nothing)
                         (MyUi.isMobile model)
                         channelTextInputId
-                        (case guildOrDmIdNoThread of
+                        ((case guildOrDmIdNoThread of
                             DiscordGuildOrDmId_Guild _ ->
                                 "Write a message in #" ++ name
 
@@ -5741,6 +5767,8 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                                         else
                                             name
                                        )
+                         )
+                            |> MessageInput.textPlaceholder
                         )
                         (RichText.discordCharsLeft OneToOne.empty draftRichText)
                         draft
@@ -5877,11 +5905,12 @@ threadConversationView :
     -> LoggedIn2
     -> LoadedFrontend
     -> LocalState
+    -> Bool
     -> String
     -> String
     -> FrontendThread
     -> Element FrontendMsg_
-threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name threadName channel =
+threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local missingPrivateKey name threadName channel =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
@@ -6032,12 +6061,18 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
                 channelTextInputId
-                (case guildOrDmIdNoThread of
-                    GuildOrDmId_Guild _ ->
-                        "Write a message in this thread"
+                (if missingPrivateKey then
+                    missingPrivateKeyPlaceholder
 
-                    GuildOrDmId_Dm _ ->
-                        "Write a message in this thread"
+                 else
+                    (case guildOrDmIdNoThread of
+                        GuildOrDmId_Guild _ ->
+                            "Write a message in this thread"
+
+                        GuildOrDmId_Dm _ ->
+                            "Write a message in this thread"
+                    )
+                        |> MessageInput.textPlaceholder
                 )
                 (RichText.maxLength - String.length draft)
                 draft
@@ -6206,12 +6241,14 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
                 channelTextInputId
-                (case guildOrDmIdNoThread of
+                ((case guildOrDmIdNoThread of
                     DiscordGuildOrDmId_Guild _ ->
                         "Write a message in this thread"
 
                     DiscordGuildOrDmId_Dm _ ->
                         "Write a message in this thread"
+                 )
+                    |> MessageInput.textPlaceholder
                 )
                 (RichText.discordCharsLeft OneToOne.empty draftRichText)
                 draft
@@ -6507,7 +6544,7 @@ messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessa
                         True
                         False
                         MessageMenu.editMessageTextInputId
-                        ""
+                        MessageInput.emptyPlaceholder
                         charsLeft
                         editing.text
                         editingRichText
@@ -6676,7 +6713,7 @@ threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messa
                         True
                         False
                         MessageMenu.editMessageTextInputId
-                        ""
+                        MessageInput.emptyPlaceholder
                         charsLeft
                         editing.text
                         editingRichText

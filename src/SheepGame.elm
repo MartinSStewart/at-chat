@@ -1735,7 +1735,7 @@ questionInput localUser loggedIn users index question =
             , MessageInput.textarea
                 False
                 htmlId
-                ""
+                MessageInput.emptyPlaceholder
                 (maxQuestionLength - String.length question.text)
                 question.text
                 richText
@@ -2178,7 +2178,7 @@ answerInput localUser loggedIn questionId answer =
             , MessageInput.textarea
                 True
                 htmlId
-                "Answer here"
+                (MessageInput.textPlaceholder "Answer here")
                 (maxAnswerLength - String.length answer.text)
                 answer.text
                 richText
@@ -2347,7 +2347,7 @@ notesInput localUser loggedIn questionId notes =
             , MessageInput.textarea
                 True
                 htmlId
-                ""
+                (Html.text "\u{00A0}")
                 (maxNoteLength - String.length notes.text)
                 notes.text
                 richText
