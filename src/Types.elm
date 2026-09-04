@@ -43,6 +43,7 @@ module Types exposing
     , NewGuildForm
     , PendingDecryptedManyMessages
     , PendingDecryptedMessage
+    , PendingDecryptedOldMessages
     , PendingEncryptedEdit
     , PendingEncryptedFile
     , PendingEncryptedManyMessages
@@ -292,6 +293,9 @@ type alias EncryptionRequests =
     , pendingDecryptedMessages : SeqDict (Id DecryptRequestId) PendingDecryptedMessage
     , nextDecryptionRequestId : Id DecryptRequestId
     , pendingDecryptedManyMessages : SeqDict (Id DecryptManyRequestId) PendingDecryptedManyMessages
+    , -- Shares nextDecryptManyRequestId with pendingDecryptedManyMessages, so a request id
+      -- only ever appears in one of the two.
+      pendingDecryptedOldMessages : SeqDict (Id DecryptManyRequestId) PendingDecryptedOldMessages
     , nextDecryptManyRequestId : Id DecryptManyRequestId
     , pendingEncryptedManyMessages : SeqDict (Id EncryptManyRequestId) PendingEncryptedManyMessages
     , nextEncryptManyRequestId : Id EncryptManyRequestId
@@ -327,6 +331,16 @@ type alias PendingEncryptedManyMessages =
 type alias PendingDecryptedManyMessages =
     { messageHashes : List BytesHash
     , shiftScrollFrom : Maybe HtmlId
+    }
+
+
+{-| The messages of a conversation that has just had encryption turned off. Once they come
+back as plain text they are handed to the backend, which stores them in place of the
+ciphertext.
+-}
+type alias PendingDecryptedOldMessages =
+    { id : Viewing_DmId
+    , messages : List ThreadRouteWithMessage
     }
 
 
@@ -649,6 +663,7 @@ type FrontendMsg_
     | PressedE2eeRisksAccepted Bool
     | PressedEnableE2ee (Id UserId)
     | PressedCancelE2eeRequest (Id UserId)
+    | PressedDisableE2ee (Id UserId)
     | PressedDeclineE2eeRequest (Id UserId)
     | TypedPrivateKey (Id UserId) String
     | PageHasFocusChanged Bool
@@ -1117,7 +1132,7 @@ type ServerChange
     | Server_SetPublicKey (Id UserId) X25519.PublicKey
     | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
     | Server_SendEncryptedEditMessage Time.Posix (Id UserId) Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId)))
-    | Server_DisableE2ee (Id UserId) Viewing_DmId
+    | Server_DisableE2ee Viewing_DmId
 
 
 type LocalChange

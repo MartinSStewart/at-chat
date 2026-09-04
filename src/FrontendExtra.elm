@@ -373,6 +373,12 @@ pendingChangesText localChange =
         Local_EncryptOldMessages _ _ ->
             "Encrypted the messages written before this conversation was encrypted"
 
+        Local_DisableE2ee _ _ ->
+            "Turned off end-to-end encryption"
+
+        Local_DecryptOldMessages _ _ ->
+            "Removed the encryption from the messages written while this conversation was encrypted"
+
         Local_SetE2eeRisksAccepted _ ->
             "Accepted the end-to-end encryption risks"
 
@@ -2466,6 +2472,9 @@ isPressMsg msg =
         PressedCancelE2eeRequest _ ->
             True
 
+        PressedDisableE2ee _ ->
+            True
+
         PressedDeclineE2eeRequest _ ->
             True
 
@@ -4013,6 +4022,18 @@ changeUpdate localMsg local =
                                 local.dmChannels
                     }
 
+                Local_DisableE2ee { otherUserId } _ ->
+                    LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
+
+                Local_DecryptOldMessages { otherUserId } messages ->
+                    { local
+                        | dmChannels =
+                            SeqDict.updateIfExists
+                                otherUserId
+                                (decryptOldMessages messages)
+                                local.dmChannels
+                    }
+
                 Local_SetPublicKey publicKey _ ->
                     let
                         localUser : LocalUser
@@ -5359,6 +5380,9 @@ changeUpdate localMsg local =
 
                 Server_E2eeRequestDeclined { otherUserId } declinedBy ->
                     LocalState.setDmE2ee otherUserId (DmChannel.E2eeDeclinedBy declinedBy) local
+
+                Server_DisableE2ee { otherUserId } ->
+                    LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
 
                 Server_SetPublicKey userId publicKey ->
                     let
@@ -7428,10 +7452,48 @@ handleDecryptedMessage requestId result model loggedIn =
                 loggedIn2
                 model
                 |> Tuple.mapSecond
-                    (\cmd -> Command.batch [ cmd, storeDecryptedFileKeys [ ( request.hash, result ) ] ])
+                    (\cmd -> Command.batch [ cmd, storeDecryptedFileKeys [ result ] ])
 
         Nothing ->
             ( loggedIn, Command.none )
+
+
+decryptOldMessages :
+    List ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+    -> FrontendDmChannel
+    -> FrontendDmChannel
+decryptOldMessages messages dmChannel =
+    List.foldl
+        (\( threadRoute, content ) channel ->
+            case threadRoute of
+                NoThreadWithMessage messageId ->
+                    { channel
+                        | messages =
+                            MessageArray.updateIfExists
+                                messageId
+                                (Message.toDecrypted content)
+                                channel.messages
+                    }
+
+                ViewThreadWithMessage threadId messageId ->
+                    { channel
+                        | threads =
+                            SeqDict.updateIfExists
+                                threadId
+                                (\thread ->
+                                    { thread
+                                        | messages =
+                                            MessageArray.updateIfExists
+                                                messageId
+                                                (Message.toDecrypted content)
+                                                thread.messages
+                                    }
+                                )
+                                channel.threads
+                    }
+        )
+        dmChannel
+        messages
 
 
 encryptOldMessages :
@@ -7477,12 +7539,12 @@ alongside `fileDecryptedMessages` at every place a message becomes readable, sin
 browser fetches attached files on its own and needs the keys left where it will find them.
 -}
 storeDecryptedFileKeys :
-    List ( BytesHash, Result () (MessageContent (Id UserId)) )
+    List (Result () (MessageContent (Id UserId)))
     -> Command FrontendOnly toMsg msg
 storeDecryptedFileKeys decrypted =
     case
         List.concatMap
-            (\( _, result ) ->
+            (\result ->
                 case result of
                     Ok messageContent ->
                         SeqDict.values messageContent.attachedFiles

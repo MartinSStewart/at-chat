@@ -633,8 +633,23 @@ tests config =
                                 , E2EHelper.writeMessage adminC 100 "Another session"
                                 , adminC.click 100 (Dom.id "guild_showMembers")
                                 , E2EHelper.tallSnapshot adminC 100 { name = "Enter private key on another device" }
+
+                                -- Turning encryption off needs the key that reads the
+                                -- messages, so a device without it isn't offered the
+                                -- choice.
+                                , adminC.checkView
+                                    100
+                                    (Test.Html.Query.hasNot
+                                        [ Test.Html.Selector.text Pages.Guild.disableE2eeText ]
+                                    )
                                 , adminC.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
                                 , respondToSharedSecretStored adminC Broadcast.adminUserId
+                                , adminC.click 100 (Dom.id "guild_e2eeSection")
+                                , adminC.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text Pages.Guild.disableE2eeText ]
+                                    )
                                 , respondToManyMessagesDecrypted adminC
                                 , writeEncryptedMessage adminC 100 "Note to self from adminB should be encrypted"
                                 , respondToMessageDecrypted admin
@@ -804,6 +819,95 @@ tests config =
                                     )
                                 , T.checkState 100 (checkScrollShifts adminB 2)
                                 , adminB.snapshotView 100 { name = "Older encrypted messages decrypted" }
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Disable E2EE for a DM"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.openDm admin 100 "0"
+                , E2EHelper.writeMessage admin 100 backlogMessage
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                        , respondToSharedSecretStored admin Broadcast.adminUserId
+                        , respondToManyMessagesEncrypted admin
+                        , T.checkBackend 100 checkSoloDmIsEncrypted
+                        , T.checkBackend 100 (checkSoloDmHasNoPlainText backlogMessage)
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId0
+                            "/"
+                            E2EHelper.desktopWindow
+                            (\adminB ->
+                                [ T.andThen
+                                    10
+                                    (\data ->
+                                        [ adminB.portEvent
+                                            0
+                                            "load_startup_data_from_js"
+                                            (E2EHelper.startupDataJsonWithE2eeKeys
+                                                data.time
+                                                E2EHelper.firefoxDesktop
+                                                [ Broadcast.adminUserId ]
+                                            )
+                                        ]
+                                    )
+                                , respondToManyMessagesDecrypted adminB
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text Pages.Guild.disableE2eeText ]
+                                    )
+                                , admin.click 100 (Dom.id "guild_disableE2ee")
+
+                                -- The ciphertext the server hands back goes past the
+                                -- browser to be read before the plain text is sent up.
+                                , T.checkBackend 100 (checkSoloDmHasNoPlainText backlogMessage)
+                                , respondToManyMessagesDecrypted admin
+                                , T.checkBackend 100 checkSoloDmIsNotEncrypted
+                                , T.checkBackend 100 (checkSoloDmPlainTextStored backlogMessage)
+                                , T.checkBackend 100 (checkSoloDmMessageCount 0)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text Pages.Guild.enableE2eeText ]
+                                    )
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text backlogMessage ])
+
+                                -- The other device is told encryption is off without
+                                -- being sent any of the messages again.
+                                , adminB.click 100 (Dom.id "guild_friendLabel_0")
+                                , adminB.click 100 (Dom.id "guild_showMembers")
+                                , adminB.click 100 (Dom.id "guild_e2eeSection")
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.text Pages.Guild.enableE2eeText ]
+                                    )
+                                , adminB.snapshotView 100 { name = "E2EE disabled" }
                                 ]
                             )
                         ]
@@ -1455,6 +1559,33 @@ checkSoloDmIsEncrypted backend =
 
         _ ->
             Err "The DM with yourself should have been marked as encrypted on the backend"
+
+
+checkSoloDmIsNotEncrypted : BackendModel2 -> Result String ()
+checkSoloDmIsNotEncrypted backend =
+    case soloDmChannel backend |> Maybe.map .e2ee of
+        Just DmChannel.E2eeDisabled ->
+            Ok ()
+
+        _ ->
+            Err "The DM with yourself should no longer be marked as encrypted on the backend"
+
+
+checkSoloDmPlainTextStored : String -> BackendModel2 -> Result String ()
+checkSoloDmPlainTextStored text backend =
+    case soloDmChannel backend of
+        Just dmChannel ->
+            if List.member text (plainTextMessages dmChannel) then
+                Ok ()
+
+            else
+                Err
+                    ("The message isn't stored as plain text. Stored: "
+                        ++ String.join ", " (plainTextMessages dmChannel)
+                    )
+
+        Nothing ->
+            Err "There's no DM with yourself on the backend"
 
 
 checkSoloDmHasNoPlainText : String -> BackendModel2 -> Result String ()

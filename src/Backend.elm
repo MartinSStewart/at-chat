@@ -6140,6 +6140,60 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             BackendExtra.encryptOldMessages clientId changeId localMsg model messages dmChannelId dmChannel
                         )
 
+                Local_DisableE2ee id _ ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session _ _ dmChannelId dmChannel ->
+                            case dmChannel.e2ee of
+                                DmChannel.E2eeEnabled _ ->
+                                    let
+                                        model2 : BackendModel
+                                        model2 =
+                                            { model
+                                                | dmChannels =
+                                                    SeqDict.insert
+                                                        dmChannelId
+                                                        { dmChannel | e2ee = DmChannel.E2eeDisabled }
+                                                        model.dmChannels
+                                            }
+                                    in
+                                    ( model2
+                                    , Command.batch
+                                        [ BackendExtra.channelDataToDecrypt dmChannel
+                                            |> FilledInByBackend
+                                            |> Local_DisableE2ee id
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toDmChannelExcludingOne
+                                            clientId
+                                            session.userId
+                                            id
+                                            Server_DisableE2ee
+                                            model2
+                                        ]
+                                    )
+
+                                DmChannel.E2eeDisabled ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                DmChannel.E2eeRequestedBy _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                DmChannel.E2eeDeclinedBy _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
+                Local_DecryptOldMessages id messages ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\_ _ _ dmChannelId dmChannel ->
+                            BackendExtra.decryptOldMessages clientId changeId localMsg model messages dmChannelId dmChannel
+                        )
+
                 Local_SetE2eeRisksAccepted isAccepted ->
                     BackendExtra.asUser
                         model

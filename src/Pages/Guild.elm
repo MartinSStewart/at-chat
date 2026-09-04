@@ -13,6 +13,7 @@ module Pages.Guild exposing
     , decodeMessageView
     , deleteGuildText
     , directMessagesText
+    , disableE2eeText
     , discordGuildView
     , dropdownButtonId
     , e2eeDeclinedText
@@ -164,6 +165,11 @@ enableE2eeText =
 declineE2eeText : String
 declineE2eeText =
     "Decline request"
+
+
+disableE2eeText : String
+disableE2eeText =
+    "Disable E2EE"
 
 
 e2eeDeclinedText : String
@@ -2640,7 +2646,10 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                         [ Ui.spacing 16 ]
                         [ Ui.text ("2. E2EE was enabled on " ++ MyUi.datestamp localUser.timezone data.enabledAt)
                         , if keyInput.hasKeyOnThisDevice then
-                            Ui.none
+                            MyUi.simpleButton
+                                (Dom.id "guild_disableE2ee")
+                                (PressedDisableE2ee otherUserId)
+                                (Ui.text disableE2eeText)
 
                           else
                             privateKeyInput
