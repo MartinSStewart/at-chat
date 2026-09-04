@@ -4025,7 +4025,7 @@ changeUpdate localMsg local =
                                 local.dmChannels
                     }
 
-                Local_DisableE2ee { otherUserId } _ ->
+                Local_DisableE2ee _ _ ->
                     local
 
                 Local_DecryptOldMessages id time messages ->

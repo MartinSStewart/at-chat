@@ -1449,13 +1449,13 @@ dmChannelView dmRoute loggedIn local model =
                                 E2eeEnabled _ ->
                                     not (SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice)
 
-                                E2eeDisabled maybe ->
+                                E2eeDisabled _ ->
                                     False
 
-                                E2eeRequestedBy ( id, sessionIdHash ) ->
+                                E2eeRequestedBy _ ->
                                     False
 
-                                E2eeDeclinedBy id ->
+                                E2eeDeclinedBy _ ->
                                     False
                     in
                     case dmRoute.threadRoute of
@@ -2484,7 +2484,7 @@ e2eeSectionIsExpanded otherUserId local loggedIn =
         (SeqDict.get otherUserId loggedIn.e2eeSectionsExpanded)
 
 
-dmE2eeStatus : Id UserId -> LocalState -> DmChannel.E2eeStatus
+dmE2eeStatus : Id UserId -> LocalState -> E2eeStatus
 dmE2eeStatus otherUserId local =
     case SeqDict.get otherUserId local.dmChannels of
         Just dmChannel ->
@@ -2497,7 +2497,7 @@ dmE2eeStatus otherUserId local =
 e2eeSectionView :
     LocalUser
     -> Id UserId
-    -> DmChannel.E2eeStatus
+    -> E2eeStatus
     -> Bool
     -> E2eeKeyInput
     -> Element FrontendMsg_
@@ -2769,7 +2769,7 @@ dmChannelSettingsNotMobile :
     LocalUser
     -> Id UserId
     -> Bool
-    -> DmChannel.E2eeStatus
+    -> E2eeStatus
     -> Bool
     -> E2eeKeyInput
     -> Element FrontendMsg_
@@ -2806,7 +2806,7 @@ dmChannelSettingsMobile :
     -> LocalUser
     -> Id UserId
     -> Bool
-    -> DmChannel.E2eeStatus
+    -> E2eeStatus
     -> Bool
     -> E2eeKeyInput
     -> Element FrontendMsg_

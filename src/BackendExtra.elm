@@ -3302,10 +3302,10 @@ decryptOldMessages time clientId changeId localMsg model messages session dmChan
         DmChannel.E2eeDisabled _ ->
             ( model, invalidChangeResponse changeId clientId )
 
-        DmChannel.E2eeRequestedBy ( id, sessionIdHash ) ->
+        DmChannel.E2eeRequestedBy _ ->
             ( model, invalidChangeResponse changeId clientId )
 
-        DmChannel.E2eeDeclinedBy id ->
+        DmChannel.E2eeDeclinedBy _ ->
             ( model, invalidChangeResponse changeId clientId )
 
 
