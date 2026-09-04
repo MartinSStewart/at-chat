@@ -92,6 +92,7 @@ import SeqDict exposing (SeqDict)
 import Serialize
 import StringExtra
 import Ui exposing (Element)
+import Url
 
 
 type alias FileData =
@@ -282,9 +283,34 @@ fileDataUrl fileData =
             fileUrl fileData.contentType fileData.fileHash
 
 
+{-| The content type is spelled out here rather than numbered, and it is the whole header
+value the file ends up being served with, because the server never gets to supply it. The
+service worker asks for the ciphertext as application/octet-stream, so the server is never
+told what kind of file it is holding, and only puts this on the file once it has been
+decrypted.
+-}
 encryptedFileUrl : ContentType -> FileHash -> String
-encryptedFileUrl (ContentType contentType2) (FileHash fileHash2) =
-    domain ++ "/file/e/" ++ String.fromInt contentType2 ++ "/" ++ fileHash2
+encryptedFileUrl contentType2 (FileHash fileHash2) =
+    domain ++ "/file/e/" ++ Url.percentEncode (contentTypeHeader contentType2) ++ "/" ++ fileHash2
+
+
+{-| What the server would put in the Content-Type header for this kind of file. Text is
+named with a charset because a browser left to guess at one gets it wrong often enough to
+mangle the file. Keep in sync with rust-server/src/content\_types.rs, where the charset is
+written into the list itself.
+-}
+contentTypeHeader : ContentType -> String
+contentTypeHeader contentType2 =
+    case OneToOne.second contentType2 contentTypes of
+        Just text ->
+            if String.startsWith "text/" text then
+                text ++ "; charset=UTF-8"
+
+            else
+                text
+
+        Nothing ->
+            "application/octet-stream"
 
 
 {-| A thumbnail sits where the server's own thumbnails do, under the file's hash, so the

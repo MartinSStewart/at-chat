@@ -133,10 +133,18 @@ attachmentUrlTests =
                 FileStatus.fileDataUrl plainFile
                     |> String.endsWith "/file/2/abc123"
                     |> Expect.equal True
-        , Test.test "An encrypted file goes through the service worker instead" <|
+        , -- The kind of file is spelled out rather than numbered, because this address is
+          -- only ever read by the service worker. What it asks the server for names no
+          -- content type but application/octet-stream.
+          Test.test "An encrypted file goes through the service worker instead" <|
             \_ ->
                 FileStatus.fileDataUrl encryptedFile
-                    |> String.endsWith "/file/e/2/abc123"
+                    |> String.endsWith "/file/e/image%2Fpng/abc123"
+                    |> Expect.equal True
+        , Test.test "An encrypted text file keeps the charset the server would have sent" <|
+            \_ ->
+                FileStatus.fileDataUrl { encryptedFile | contentType = FileStatus.contentType "text/plain" }
+                    |> String.endsWith "/file/e/text%2Fplain%3B%20charset%3DUTF-8/abc123"
                     |> Expect.equal True
         , Test.test "A large unencrypted image is shown as the server's thumbnail" <|
             \_ ->
@@ -148,7 +156,7 @@ attachmentUrlTests =
           Test.test "A large encrypted image the browser couldn't make a thumbnail of is shown whole" <|
             \_ ->
                 FileStatus.fileDataThumbnailUrl largeImage encryptedFile
-                    |> String.endsWith "/file/e/2/abc123"
+                    |> String.endsWith "/file/e/image%2Fpng/abc123"
                     |> Expect.equal True
         , -- The thumbnail sits under the file's own hash, so its address carries no
           -- content type and no second hash.

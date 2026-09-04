@@ -20,6 +20,14 @@ const fileHash = "abc123";
 
 const contentType = "image/png";
 
+// Where the encrypted address names the file's type, spelled out and percent encoded rather
+// than numbered (see FileStatus.encryptedFileUrl).
+const encryptedUrl = domain + "file/e/" + encodeURIComponent(contentType) + "/" + fileHash;
+
+// Where the ciphertext itself is asked for: application/octet-stream, whatever the file
+// turns out to be, so the server is never told what kind of file it is holding.
+const octetStreamUrl = domain + "file/136/" + fileHash;
+
 // What stuff.js writes when it encrypts a file: a fresh key, and a 12 byte IV in front of
 // the ciphertext so that decrypting needs nothing but the one blob.
 async function encryptFile(plainText) {
@@ -155,6 +163,10 @@ function loadServiceWorker(options) {
     return listeners;
 }
 
+function readRepoFile(relativePath) {
+    return fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
+}
+
 // The service worker answers with respondWith, so the response has to be caught on the way
 // past rather than returned.
 function requestFile(listeners, url) {
@@ -202,10 +214,10 @@ async function run() {
 
     const served = new Map();
     served.set(
-        domain + "file/2/" + fileHash,
+        octetStreamUrl,
         () => new Response(encrypted.cipherText, {
             status: 200,
-            headers: { "Content-Type": contentType }
+            headers: { "Content-Type": "application/octet-stream" }
         }));
 
     let fetchCount = 0;
@@ -235,7 +247,7 @@ async function run() {
 
         databases.get("at-chat-file-keys").get("file-keys").set(fileHash, storedKey);
 
-        const response = await requestFile(listeners, domain + "file/e/2/" + fileHash);
+        const response = await requestFile(listeners, encryptedUrl);
         const body = new Uint8Array(await response.arrayBuffer());
 
         if (response.status !== 200) {
@@ -253,7 +265,7 @@ async function run() {
 
     await check("The ciphertext is cached, not the decrypted bytes", async () => {
         const before = fetchCount;
-        const response = await requestFile(listeners, domain + "file/e/2/" + fileHash);
+        const response = await requestFile(listeners, encryptedUrl);
         const body = new Uint8Array(await response.arrayBuffer());
 
         if (fetchCount !== before) {
@@ -266,8 +278,7 @@ async function run() {
 
         // What's stored has to still be unreadable, otherwise caching has undone the
         // encryption for anything that can read Cache Storage.
-        const cached = await (await caches.open("resource_cache_v1"))
-            .match(domain + "file/2/" + fileHash);
+        const cached = await (await caches.open("resource_cache_v1")).match(octetStreamUrl);
         const cachedBody = new Uint8Array(await cached.arrayBuffer());
 
         if (Buffer.compare(Buffer.from(cachedBody), Buffer.from(plainText)) === 0) {
@@ -275,13 +286,39 @@ async function run() {
         }
     });
 
+    // The address the ciphertext is read from is all the server learns about an encrypted
+    // attachment, so it must not name the kind of file it is holding.
+    await check("The server isn't told what kind of file the ciphertext is", async () => {
+        const asked = [];
+
+        const askedListeners = loadServiceWorker({
+            indexedDB: fakeIndexedDb(databases),
+            caches: fakeCaches(),
+            fetch: (request) => {
+                asked.push(cacheKey(request));
+                return Promise.resolve(new Response(encrypted.cipherText, { status: 200 }));
+            }
+        });
+
+        const response = await requestFile(askedListeners, encryptedUrl);
+
+        expectEqual(asked, [octetStreamUrl], "the address the ciphertext was read from");
+
+        if (response.headers.get("content-type") !== contentType) {
+            throw new Error(
+                "The decrypted file was handed back as "
+                    + response.headers.get("content-type"));
+        }
+    });
+
     await check("A file with no key stored is refused rather than served raw", async () => {
         const unknownHash = "no-key-here";
         served.set(
-            domain + "file/2/" + unknownHash,
+            domain + "file/136/" + unknownHash,
             () => new Response(encrypted.cipherText, { status: 200 }));
 
-        const response = await requestFile(listeners, domain + "file/e/2/" + unknownHash);
+        const response = await requestFile(
+            listeners, domain + "file/e/" + encodeURIComponent(contentType) + "/" + unknownHash);
 
         if (response.status === 200) {
             throw new Error("Ciphertext was handed to the page as if it were the file");
@@ -327,7 +364,8 @@ async function run() {
     });
 
     await check("A file served from somewhere else is left alone", async () => {
-        const elsewhere = "https://somewhere-else.example/file/e/2/" + fileHash;
+        const elsewhere =
+            "https://somewhere-else.example/file/e/" + encodeURIComponent(contentType) + "/" + fileHash;
         served.set(elsewhere, () => new Response(encrypted.cipherText, { status: 200 }));
 
         let responded = false;
@@ -339,7 +377,7 @@ async function run() {
     });
 
     await check("An unencrypted file is left alone", async () => {
-        const response = await requestFile(listeners, domain + "file/2/" + fileHash);
+        const response = await requestFile(listeners, octetStreamUrl);
         const body = new Uint8Array(await response.arrayBuffer());
 
         if (Buffer.compare(Buffer.from(body), Buffer.from(encrypted.cipherText)) !== 0) {
@@ -373,17 +411,56 @@ async function run() {
         });
 
         const response = await requestFile(
-            localListeners, "http://localhost:3000/file/e/2/" + fileHash);
+            localListeners,
+            "http://localhost:3000/file/e/" + encodeURIComponent(contentType) + "/" + fileHash);
         const body = new Uint8Array(await response.arrayBuffer());
 
         expectEqual(
             asked,
-            ["http://localhost:8001/http://localhost:3000/file/2/" + fileHash],
+            ["http://localhost:8001/http://localhost:3000/file/136/" + fileHash],
             "the address the ciphertext was read from");
 
         if (Buffer.compare(Buffer.from(body), Buffer.from(plainText)) !== 0) {
             throw new Error("The body isn't the file that was encrypted");
         }
+    });
+
+    // The worker asks for the ciphertext under a hardcoded index into the server's content
+    // type list, and the type it puts on the decrypted file comes from Elm rather than from
+    // the server's answer. Both stop being right the moment the two lists drift apart.
+    await check("The content type lists agree with the index the worker uses", async () => {
+        const quoted = (text) => Array.from(text.matchAll(/"([^"]*)"/g), (match) => match[1]);
+
+        const elmSource = readRepoFile("src/FileStatus.elm");
+        const elmStart = elmSource.indexOf("contentTypes : OneToOne ContentType String");
+        const elmList = quoted(
+            elmSource.slice(elmStart, elmSource.indexOf("]", elmStart)));
+
+        const rustSource = readRepoFile("rust-server/src/content_types.rs");
+        const rustList = quoted(
+            rustSource.slice(rustSource.indexOf("["), rustSource.indexOf("];")));
+
+        expectEqual(elmList.length, rustList.length, "the number of content types");
+
+        // FileStatus.contentTypeHeader adds the charset back on, so the two lists only
+        // line up once the same rule is applied here.
+        const mismatch = elmList.findIndex((contentType2, index) =>
+            (contentType2.startsWith("text/") ? contentType2 + "; charset=UTF-8" : contentType2)
+                !== rustList[index]);
+
+        if (mismatch >= 0) {
+            throw new Error(
+                "Entry " + mismatch + " is " + elmList[mismatch] + " in Elm and "
+                    + rustList[mismatch] + " in Rust");
+        }
+
+        const worker = readRepoFile("public/service-worker.js");
+        const index = Number(/const octetStreamContentType = (\d+);/.exec(worker)[1]);
+
+        expectEqual(
+            [elmList[index], rustList[index]],
+            ["application/octet-stream", "application/octet-stream"],
+            "what the worker's octet stream index names");
     });
 
     if (failures.length > 0) {

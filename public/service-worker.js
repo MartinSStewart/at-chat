@@ -229,12 +229,21 @@ async function waitForFileKey(fileHash) {
     return null;
 }
 
+// Where application/octet-stream sits in the server's content type list (see
+// rust-server/src/content_types.rs and FileStatus.contentTypes, which are the same list in
+// the same order). The ciphertext is asked for under this so that the server is never told
+// what kind of file it is holding.
+const octetStreamContentType = 136;
+
 // Encrypted attachments are addressed as /file/e/<content type>/<hash> so that this worker
 // knows to decrypt them, and so that a browser without it installed gets a plain 404
-// instead of rendering ciphertext. The bytes themselves are stored at the ordinary
-// /file/<content type>/<hash>, which is what gets fetched here.
+// instead of rendering ciphertext. The content type there is the header value itself,
+// percent encoded (see FileStatus.encryptedFileUrl), because it never leaves the browser:
+// it is put on the file here, after the bytes have been decrypted, rather than being asked
+// of the server.
 async function decryptedFileResponse(isDevelopment, encryptedUrl) {
-    const rest = encryptedUrl.slice(encryptedUrl.indexOf('/file/e/') + '/file/e/'.length);
+    const start = encryptedUrl.indexOf('/file/e/');
+    const rest = encryptedUrl.slice(start + '/file/e/'.length);
     const separator = rest.indexOf('/');
 
     if (separator < 0) {
@@ -243,10 +252,19 @@ async function decryptedFileResponse(isDevelopment, encryptedUrl) {
 
     const fileHash = rest.slice(separator + 1);
 
-    // The bytes themselves sit at the ordinary address. The content type is part of it, so
-    // the response that comes back names the type correctly even though what it served was
-    // ciphertext.
-    let cipherTextUrl = encryptedUrl.replace('/file/e/', '/file/');
+    // Thumbnails the browser made are always webp, and sit where the server's own
+    // thumbnails do, so their address never carried a content type in the first place.
+    const isThumbnail = rest.slice(0, separator) === 't';
+
+    const contentType = isThumbnail
+        ? "image/webp"
+        : decodeURIComponent(rest.slice(0, separator));
+
+    const origin = encryptedUrl.slice(0, start);
+
+    let cipherTextUrl = isThumbnail
+        ? origin + '/file/t/' + fileHash
+        : origin + '/file/' + octetStreamContentType + '/' + fileHash;
     if (isDevelopment) {
         cipherTextUrl = "http://localhost:8001/" + cipherTextUrl;
     }
@@ -270,8 +288,6 @@ async function decryptedFileResponse(isDevelopment, encryptedUrl) {
         }
     }
 
-    const contentType = cipherTextResponse.headers.get("content-type") || "application/octet-stream";
-
     // Read once and cache from the bytes rather than caching a clone. Draining two branches
     // of a teed body truncates whichever is read second once it runs past the browser's tee
     // buffer, which is the same trap the frontend bundle above works around.
@@ -280,7 +296,7 @@ async function decryptedFileResponse(isDevelopment, encryptedUrl) {
     if (cipherText.byteLength < 1000 * 1000) {
         await cache.put(
             cipherTextUrl,
-            new Response(cipherText, { status: 200, headers: { "Content-Type": contentType } }));
+            new Response(cipherText, { status: 200, headers: { "Content-Type": "application/octet-stream" } }));
     }
 
     try {
