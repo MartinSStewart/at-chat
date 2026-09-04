@@ -1952,16 +1952,12 @@ channelDataToDecrypt dmChannel =
     , threads =
         SeqDict.foldl
             (\threadId thread threads ->
-                let
-                    cipherText : SeqDict (Id ThreadMessageId) (EncryptedData (MessageContent (Id UserId)))
-                    cipherText =
-                        cipherTextMessages thread.messages
-                in
-                if SeqDict.isEmpty cipherText then
-                    threads
+                case NonemptyDict.fromSeqDict (cipherTextMessages thread.messages) of
+                    Just nonempty ->
+                        SeqDict.insert threadId nonempty threads
 
-                else
-                    SeqDict.insert threadId cipherText threads
+                    Nothing ->
+                        threads
             )
             SeqDict.empty
             dmChannel.threads
@@ -2662,7 +2658,7 @@ toBackendLog toBackend =
                 Local_DisableE2ee _ _ ->
                     ToBackendLog_Local_DisableE2ee
 
-                Local_DecryptOldMessages _ _ ->
+                Local_DecryptOldMessages _ _ _ ->
                     ToBackendLog_Local_DecryptOldMessages
 
                 Local_SetE2eeRisksAccepted _ ->
@@ -3241,59 +3237,75 @@ asDiscordDmUser_AllowUserThatNeedsAuthAgain model sessionId { currentUserId, cha
 
 
 decryptOldMessages :
-    ClientId
+    Time.Posix
+    -> ClientId
     -> ChangeId
     -> LocalChange
     -> BackendModel
     -> List ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+    -> UserSession
     -> DmChannelId
     -> BackendDmChannel
     -> ( BackendModel, Command BackendOnly ToFrontend backendMsg )
-decryptOldMessages clientId changeId localMsg model messages dmChannelId dmChannel =
+decryptOldMessages time clientId changeId localMsg model messages session dmChannelId dmChannel =
     case dmChannel.e2ee of
-        DmChannel.E2eeDisabled ->
-            ( { model
-                | dmChannels =
-                    SeqDict.insert
-                        dmChannelId
-                        (List.foldl
-                            (\( threadRoute, content ) channel ->
-                                case threadRoute of
-                                    NoThreadWithMessage messageId ->
-                                        { channel
-                                            | messages =
-                                                DmChannel.updateArray
-                                                    messageId
-                                                    (Message.toDecrypted content)
-                                                    channel.messages
-                                        }
+        DmChannel.E2eeEnabled _ ->
+            let
+                dmChannel2 : BackendDmChannel
+                dmChannel2 =
+                    List.foldl
+                        (\( threadRoute, content ) channel ->
+                            case threadRoute of
+                                NoThreadWithMessage messageId ->
+                                    { channel
+                                        | messages =
+                                            DmChannel.updateArray
+                                                messageId
+                                                (Message.toDecrypted content)
+                                                channel.messages
+                                    }
 
-                                    ViewThreadWithMessage threadId messageId ->
-                                        { channel
-                                            | threads =
-                                                SeqDict.updateIfExists
-                                                    threadId
-                                                    (\thread ->
-                                                        { thread
-                                                            | messages =
-                                                                DmChannel.updateArray
-                                                                    messageId
-                                                                    (Message.toDecrypted content)
-                                                                    thread.messages
-                                                        }
-                                                    )
-                                                    channel.threads
-                                        }
-                            )
-                            dmChannel
-                            messages
+                                ViewThreadWithMessage threadId messageId ->
+                                    { channel
+                                        | threads =
+                                            SeqDict.updateIfExists
+                                                threadId
+                                                (\thread ->
+                                                    { thread
+                                                        | messages =
+                                                            DmChannel.updateArray
+                                                                messageId
+                                                                (Message.toDecrypted content)
+                                                                thread.messages
+                                                    }
+                                                )
+                                                channel.threads
+                                    }
                         )
-                        model.dmChannels
-              }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
+                        dmChannel
+                        messages
+            in
+            if channelDataToDecrypt dmChannel2 == { channel = SeqDict.empty, threads = SeqDict.empty } then
+                ( { model
+                    | dmChannels =
+                        SeqDict.insert
+                            dmChannelId
+                            { dmChannel2 | e2ee = DmChannel.E2eeDisabled (Just ( session.userId, time )) }
+                            model.dmChannels
+                  }
+                , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                )
 
-        _ ->
+            else
+                ( model, invalidChangeResponse changeId clientId )
+
+        DmChannel.E2eeDisabled _ ->
+            ( model, invalidChangeResponse changeId clientId )
+
+        DmChannel.E2eeRequestedBy ( id, sessionIdHash ) ->
+            ( model, invalidChangeResponse changeId clientId )
+
+        DmChannel.E2eeDeclinedBy id ->
             ( model, invalidChangeResponse changeId clientId )
 
 

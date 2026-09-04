@@ -376,7 +376,7 @@ pendingChangesText localChange =
         Local_DisableE2ee _ _ ->
             "Turned off end-to-end encryption"
 
-        Local_DecryptOldMessages _ _ ->
+        Local_DecryptOldMessages _ _ _ ->
             "Removed the encryption from the messages written while this conversation was encrypted"
 
         Local_SetE2eeRisksAccepted _ ->
@@ -3921,18 +3921,18 @@ changeUpdate localMsg local =
                 Local_SetMuteDiscordGuild _ guildId isMuted ->
                     setMuteDiscordGuild guildId isMuted local
 
-                Local_RequestE2ee { otherUserId } ->
+                Local_RequestE2ee id ->
                     LocalState.setDmE2ee
-                        otherUserId
+                        id
                         (DmChannel.E2eeRequestedBy ( local.localUser.session.userId, local.localUser.session.sessionIdHash ))
                         local
 
-                Local_DeclineE2eeRequestAsInitiator { otherUserId } ->
-                    LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
+                Local_DeclineE2eeRequestAsInitiator id ->
+                    LocalState.setDmE2ee id (DmChannel.E2eeDisabled Nothing) local
 
-                Local_DeclineE2eeRequest { otherUserId } ->
+                Local_DeclineE2eeRequest id ->
                     LocalState.setDmE2ee
-                        otherUserId
+                        id
                         (DmChannel.E2eeDeclinedBy local.localUser.session.userId)
                         local
 
@@ -3979,17 +3979,17 @@ changeUpdate localMsg local =
                             { localUser | currentlyViewing = currentlyViewing2, user = user2 }
                     }
 
-                Local_AcceptE2ee { otherUserId } time _ ->
-                    case SeqDict.get otherUserId local.dmChannels of
+                Local_AcceptE2ee id time _ ->
+                    case SeqDict.get id.otherUserId local.dmChannels of
                         Just dmChannel ->
                             case dmChannel.e2ee of
                                 E2eeRequestedBy requestedBy ->
                                     LocalState.setDmE2ee
-                                        otherUserId
+                                        id
                                         (DmChannel.E2eeEnabled { enabledAt = time, requestedBy = requestedBy })
                                         local
 
-                                E2eeDisabled ->
+                                E2eeDisabled _ ->
                                     local
 
                                 E2eeDeclinedBy _ ->
@@ -4023,16 +4023,19 @@ changeUpdate localMsg local =
                     }
 
                 Local_DisableE2ee { otherUserId } _ ->
-                    LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
+                    local
 
-                Local_DecryptOldMessages { otherUserId } messages ->
-                    { local
-                        | dmChannels =
-                            SeqDict.updateIfExists
-                                otherUserId
-                                (decryptOldMessages messages)
-                                local.dmChannels
-                    }
+                Local_DecryptOldMessages id time messages ->
+                    LocalState.setDmE2ee
+                        id
+                        (DmChannel.E2eeDisabled (Just ( local.localUser.session.userId, time )))
+                        { local
+                            | dmChannels =
+                                SeqDict.updateIfExists
+                                    id.otherUserId
+                                    (decryptOldMessages messages)
+                                    local.dmChannels
+                        }
 
                 Local_SetPublicKey publicKey _ ->
                     let
@@ -5372,17 +5375,17 @@ changeUpdate localMsg local =
                 Server_SetMuteDiscordGuild guildId isMuted ->
                     setMuteDiscordGuild guildId isMuted local
 
-                Server_E2eeRequested { otherUserId } requestedBy ->
-                    LocalState.setDmE2ee otherUserId (DmChannel.E2eeRequestedBy requestedBy) local
+                Server_E2eeRequested id requestedBy ->
+                    LocalState.setDmE2ee id (DmChannel.E2eeRequestedBy requestedBy) local
 
-                Server_E2eeRequestCancelled { otherUserId } ->
-                    LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
+                Server_E2eeRequestCancelled id ->
+                    LocalState.setDmE2ee id (DmChannel.E2eeDisabled Nothing) local
 
-                Server_E2eeRequestDeclined { otherUserId } declinedBy ->
-                    LocalState.setDmE2ee otherUserId (DmChannel.E2eeDeclinedBy declinedBy) local
+                Server_E2eeRequestDeclined id declinedBy ->
+                    LocalState.setDmE2ee id (DmChannel.E2eeDeclinedBy declinedBy) local
 
-                Server_DisableE2ee { otherUserId } ->
-                    LocalState.setDmE2ee otherUserId DmChannel.E2eeDisabled local
+                Server_DisableE2ee disabledAt disabledBy id ->
+                    LocalState.setDmE2ee id (DmChannel.E2eeDisabled (Just ( disabledBy, disabledAt ))) local
 
                 Server_SetPublicKey userId publicKey ->
                     let
@@ -5401,9 +5404,9 @@ changeUpdate localMsg local =
                             }
                     }
 
-                Server_E2eeAccepted { otherUserId } time ->
+                Server_E2eeAccepted id time ->
                     LocalState.setDmE2ee
-                        otherUserId
+                        id
                         (DmChannel.E2eeEnabled
                             { enabledAt = time
                             , requestedBy = ( local.localUser.session.userId, local.localUser.session.sessionIdHash )

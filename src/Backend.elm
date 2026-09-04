@@ -6084,7 +6084,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 canRequest : Bool
                                 canRequest =
                                     case dmChannel.e2ee of
-                                        DmChannel.E2eeDisabled ->
+                                        DmChannel.E2eeDisabled _ ->
                                             True
 
                                         DmChannel.E2eeDeclinedBy declinedBy ->
@@ -6145,21 +6145,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model
                         sessionId
                         id
-                        (\session _ _ dmChannelId dmChannel ->
+                        (\session _ _ _ dmChannel ->
                             case dmChannel.e2ee of
                                 DmChannel.E2eeEnabled _ ->
-                                    let
-                                        model2 : BackendModel
-                                        model2 =
-                                            { model
-                                                | dmChannels =
-                                                    SeqDict.insert
-                                                        dmChannelId
-                                                        { dmChannel | e2ee = DmChannel.E2eeDisabled }
-                                                        model.dmChannels
-                                            }
-                                    in
-                                    ( model2
+                                    ( model
                                     , Command.batch
                                         [ BackendExtra.channelDataToDecrypt dmChannel
                                             |> FilledInByBackend
@@ -6170,12 +6159,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             clientId
                                             session.userId
                                             id
-                                            Server_DisableE2ee
-                                            model2
+                                            (Server_DisableE2ee time session.userId)
+                                            model
                                         ]
                                     )
 
-                                DmChannel.E2eeDisabled ->
+                                DmChannel.E2eeDisabled _ ->
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                 DmChannel.E2eeRequestedBy _ ->
@@ -6185,13 +6174,22 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
-                Local_DecryptOldMessages id messages ->
+                Local_DecryptOldMessages id _ messages ->
                     BackendExtra.asDmUser
                         model
                         sessionId
                         id
-                        (\_ _ _ dmChannelId dmChannel ->
-                            BackendExtra.decryptOldMessages clientId changeId localMsg model messages dmChannelId dmChannel
+                        (\session _ _ dmChannelId dmChannel ->
+                            BackendExtra.decryptOldMessages
+                                time
+                                clientId
+                                changeId
+                                localMsg
+                                model
+                                messages
+                                session
+                                dmChannelId
+                                dmChannel
                         )
 
                 Local_SetE2eeRisksAccepted isAccepted ->
@@ -6275,8 +6273,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         model
 
                                 _ ->
-                                    -- Nothing has agreed to encrypt this conversation, so
-                                    -- a message nobody can read is not worth storing.
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
@@ -6382,7 +6378,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         id
                         (\session _ _ dmChannelId dmChannel ->
                             case dmChannel.e2ee of
-                                DmChannel.E2eeDisabled ->
+                                DmChannel.E2eeDisabled _ ->
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                 DmChannel.E2eeDeclinedBy _ ->
@@ -6400,7 +6396,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     | dmChannels =
                                                         SeqDict.insert
                                                             dmChannelId
-                                                            { dmChannel | e2ee = DmChannel.E2eeDisabled }
+                                                            { dmChannel | e2ee = DmChannel.E2eeDisabled Nothing }
                                                             model.dmChannels
                                                 }
                                         in
@@ -6458,7 +6454,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 DmChannel.E2eeDeclinedBy _ ->
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
-                                DmChannel.E2eeDisabled ->
+                                DmChannel.E2eeDisabled _ ->
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                 DmChannel.E2eeEnabled _ ->

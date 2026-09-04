@@ -3403,7 +3403,7 @@ updateLoaded msg model =
                                                 DmChannel.E2eeDeclinedBy _ ->
                                                     False
 
-                                                DmChannel.E2eeDisabled ->
+                                                DmChannel.E2eeDisabled _ ->
                                                     False
 
                                                 DmChannel.E2eeEnabled _ ->
@@ -3531,7 +3531,7 @@ updateLoaded msg model =
                                     in
                                     FrontendExtra.handleLocalChange
                                         model.time
-                                        (Local_DecryptOldMessages pending.id decrypted |> Just)
+                                        (Local_DecryptOldMessages pending.id model.time decrypted |> Just)
                                         (FrontendExtra.mapEncryptionRequests
                                             (forgetDecryptOldMessagesRequest requestId)
                                             loggedIn
@@ -9310,7 +9310,7 @@ storeRemainingSharedSecrets alreadyHandled privateKey loggedIn =
                     DmChannel.E2eeDeclinedBy _ ->
                         Nothing
 
-                    DmChannel.E2eeDisabled ->
+                    DmChannel.E2eeDisabled _ ->
                         Nothing
             )
 
@@ -9500,7 +9500,7 @@ messagesNeedingDecryption localChange =
                                 (\( messageId, content ) ->
                                     ( ViewThreadWithMessage threadId messageId, content )
                                 )
-                                (SeqDict.toList thread)
+                                (NonemptyDict.toList thread)
                         )
                         (SeqDict.toList conversation.threads)
             of

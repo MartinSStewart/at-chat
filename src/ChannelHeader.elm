@@ -74,7 +74,7 @@ showDmSettingsRedDot otherUserId local loggedIn =
                 DmChannel.E2eeDeclinedBy declinedBy ->
                     declinedBy /= local.localUser.session.userId
 
-                DmChannel.E2eeDisabled ->
+                DmChannel.E2eeDisabled _ ->
                     False
 
                 DmChannel.E2eeEnabled _ ->

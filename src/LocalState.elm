@@ -164,7 +164,7 @@ import Encryption exposing (BytesHash, EncryptedData)
 import FileStatus exposing (FileHash)
 import Game
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import LinkedAndOtherDiscordUsers
 import List.Extra
@@ -441,12 +441,8 @@ messageReactions guildOrDmId threadRoute local =
                     SeqDict.empty
 
 
-{-| Records how far along the two people in a DM are with turning on end-to-end
-encryption. The DM might not have any messages in it yet, in which case the frontend
-hasn't got a channel for it and one gets started here.
--}
-setDmE2ee : Id UserId -> DmChannel.E2eeStatus -> LocalState -> LocalState
-setDmE2ee otherUserId e2ee local =
+setDmE2ee : Viewing_DmId -> DmChannel.E2eeStatus -> LocalState -> LocalState
+setDmE2ee { otherUserId } e2ee local =
     let
         emptyDmChannel : FrontendDmChannel
         emptyDmChannel =

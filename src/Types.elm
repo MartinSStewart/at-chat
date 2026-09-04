@@ -1132,7 +1132,7 @@ type ServerChange
     | Server_SetPublicKey (Id UserId) X25519.PublicKey
     | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
     | Server_SendEncryptedEditMessage Time.Posix (Id UserId) Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId)))
-    | Server_DisableE2ee Viewing_DmId
+    | Server_DisableE2ee Time.Posix (Id UserId) Viewing_DmId
 
 
 type LocalChange
@@ -1196,7 +1196,7 @@ type LocalChange
     | Local_SetPublicKey X25519.PublicKey (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
     | Local_EncryptOldMessages Viewing_DmId (List ( ThreadRouteWithMessage, SeqSet FileHash, EncryptedData (MessageContent (Id UserId)) ))
     | Local_DisableE2ee Viewing_DmId (ToBeFilledInByBackend ChannelDataToDecrypt)
-    | Local_DecryptOldMessages Viewing_DmId (List ( ThreadRouteWithMessage, MessageContent (Id UserId) ))
+    | Local_DecryptOldMessages Viewing_DmId Time.Posix (List ( ThreadRouteWithMessage, MessageContent (Id UserId) ))
     | Local_SetE2eeRisksAccepted Bool
     | Local_AcceptE2ee Viewing_DmId Time.Posix (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
     | Local_SendEncryptedMessage Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
@@ -1211,7 +1211,7 @@ type alias ChannelDataToDecrypt =
     , threads :
         SeqDict
             (Id ChannelMessageId)
-            (SeqDict (Id ThreadMessageId) (EncryptedData (MessageContent (Id UserId))))
+            (NonemptyDict (Id ThreadMessageId) (EncryptedData (MessageContent (Id UserId))))
     }
 
 

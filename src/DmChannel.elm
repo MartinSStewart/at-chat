@@ -52,7 +52,7 @@ type alias BackendDmChannel =
 
 
 type E2eeStatus
-    = E2eeDisabled
+    = E2eeDisabled (Maybe ( Id UserId, Time.Posix ))
     | E2eeRequestedBy ( Id UserId, SessionIdHash )
     | E2eeDeclinedBy (Id UserId)
     | E2eeEnabled E2eeEnabledData
@@ -98,7 +98,7 @@ backendInit =
     , threads = SeqDict.empty
     , games = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
-    , e2ee = E2eeDisabled
+    , e2ee = E2eeDisabled Nothing
     }
 
 
@@ -110,7 +110,7 @@ frontendInit =
     , threads = SeqDict.empty
     , games = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
-    , e2ee = E2eeDisabled
+    , e2ee = E2eeDisabled Nothing
     }
 
 

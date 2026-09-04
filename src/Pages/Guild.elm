@@ -157,9 +157,14 @@ e2eeSectionTitle =
     "End-to-end encryption (E2EE)"
 
 
-enableE2eeText : String
-enableE2eeText =
-    "Enable E2EE"
+enableE2eeText : Maybe ( Id UserId, Time.Posix ) -> String
+enableE2eeText disabledBy =
+    case disabledBy of
+        Just _ ->
+            "Re-enable E2EE"
+
+        Nothing ->
+            "Enable E2EE"
 
 
 declineE2eeText : String
@@ -2475,7 +2480,7 @@ dmE2eeStatus otherUserId local =
             dmChannel.e2ee
 
         Nothing ->
-            DmChannel.E2eeDisabled
+            DmChannel.E2eeDisabled Nothing
 
 
 e2eeSectionView :
@@ -2529,7 +2534,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                             , Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.font1 ] Ui.none
                             ]
 
-                DmChannel.E2eeDisabled ->
+                DmChannel.E2eeDisabled _ ->
                     Ui.none
 
                 DmChannel.E2eeDeclinedBy _ ->
@@ -2561,20 +2566,38 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                 Nothing ->
                     Ui.none
             , case e2ee of
-                DmChannel.E2eeDisabled ->
-                    if not risksAccepted then
-                        Ui.none
+                DmChannel.E2eeDisabled disabledBy ->
+                    Ui.column
+                        [ Ui.spacing 16 ]
+                        [ case disabledBy of
+                            Just ( disabledBy2, disabledAt ) ->
+                                Ui.Prose.paragraph
+                                    [ MyUi.htmlStyle "word-wrap" "anywhere", Ui.paddingXY 0 4 ]
+                                    [ Ui.text "2. "
+                                    , if disabledBy2 == localUser.session.userId then
+                                        Ui.text "You"
 
-                    else
-                        case localUser.user.publicKey of
+                                      else
+                                        Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt disabledBy2 localUser))
+                                    , Ui.text (" disabled E2EE on " ++ MyUi.datestampNoLineBreaks localUser.timezone disabledAt)
+                                    ]
+
                             Nothing ->
-                                createPrivateKeyButton
+                                Ui.none
+                        , if not risksAccepted then
+                            Ui.none
 
-                            Just _ ->
-                                MyUi.simpleButton
-                                    (Dom.id "guild_enableE2ee")
-                                    (PressedEnableE2ee otherUserId)
-                                    (Ui.text enableE2eeText)
+                          else
+                            case localUser.user.publicKey of
+                                Nothing ->
+                                    createPrivateKeyButton
+
+                                Just _ ->
+                                    MyUi.simpleButton
+                                        (Dom.id "guild_enableE2ee")
+                                        (PressedEnableE2ee otherUserId)
+                                        (Ui.text (enableE2eeText disabledBy))
+                        ]
 
                 DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
                     if requestedBy /= localUser.session.userId then
@@ -2633,7 +2656,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                         MyUi.simpleButton
                                             (Dom.id "guild_enableE2ee")
                                             (PressedEnableE2ee otherUserId)
-                                            (Ui.text enableE2eeText)
+                                            (Ui.text (enableE2eeText Nothing))
                             ]
 
                     else
@@ -2644,7 +2667,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                 DmChannel.E2eeEnabled data ->
                     Ui.column
                         [ Ui.spacing 16 ]
-                        [ Ui.text ("2. E2EE was enabled on " ++ MyUi.datestamp localUser.timezone data.enabledAt)
+                        [ Ui.text ("2. E2EE was enabled on " ++ MyUi.datestampNoLineBreaks localUser.timezone data.enabledAt)
                         , if keyInput.hasKeyOnThisDevice then
                             MyUi.simpleButton
                                 (Dom.id "guild_disableE2ee")

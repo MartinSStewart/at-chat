@@ -27,6 +27,7 @@ module MyUi exposing
     , dangerRed
     , datestamp
     , datestampDate
+    , datestampNoLineBreaks
     , deleteButton
     , deleteButtonBackground
     , deleteButtonBorder
@@ -346,6 +347,15 @@ datestamp timezone time =
         ++ " "
         ++ String.fromInt (Time.toDay timezone time)
         ++ ", "
+        ++ String.fromInt (Time.toYear timezone time)
+
+
+datestampNoLineBreaks : Time.Zone -> Time.Posix -> String
+datestampNoLineBreaks timezone time =
+    monthToString (Time.toMonth timezone time)
+        ++ "\u{00A0}"
+        ++ String.fromInt (Time.toDay timezone time)
+        ++ ",\u{00A0}"
         ++ String.fromInt (Time.toYear timezone time)
 
 

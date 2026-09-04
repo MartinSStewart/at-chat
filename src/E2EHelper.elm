@@ -2552,7 +2552,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_DisableE2ee _ _ ->
                     True
 
-                Local_DecryptOldMessages _ _ ->
+                Local_DecryptOldMessages _ _ _ ->
                     True
 
                 Local_SetE2eeRisksAccepted _ ->
@@ -2829,7 +2829,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SendEncryptedEditMessage _ _ _ _ _ _ ->
                             True
 
-                        Types.Server_DisableE2ee _ ->
+                        Types.Server_DisableE2ee _ _ _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
@@ -3085,7 +3085,7 @@ allAttackerLocalChanges =
     , Local_SetPublicKey attackerPublicKey EmptyPlaceholder
     , Local_EncryptOldMessages { otherUserId = Broadcast.adminUserId } []
     , Local_DisableE2ee { otherUserId = Broadcast.adminUserId } EmptyPlaceholder
-    , Local_DecryptOldMessages { otherUserId = Broadcast.adminUserId } []
+    , Local_DecryptOldMessages { otherUserId = Broadcast.adminUserId } (Time.millisToPosix 0) []
     , Local_SetE2eeRisksAccepted True
     , Local_AcceptE2ee { otherUserId = Broadcast.adminUserId } startTime EmptyPlaceholder
     , Local_SendEncryptedMessage

@@ -71,23 +71,23 @@ tests config =
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text warning ])
                 , admin.checkView
                     100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
                 , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
 
                 -- Encrypting anything needs a key pair on the account first, so that
                 -- stands in front of enabling it.
                 , admin.checkView
                     100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
                 , addPrivateKeyToAccount admin
                     (\adminPrivateKey ->
                         [ admin.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
                         , admin.click 100 (Dom.id "guild_enableE2ee")
                         , admin.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
                         , admin.checkView
                             100
                             (Test.Html.Query.has
@@ -137,7 +137,7 @@ tests config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text Pages.Guild.enableE2eeText ]
+                                        [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ]
                                     )
 
                                 -- Accepting the risks is answered once for the account rather than once
@@ -155,7 +155,7 @@ tests config =
                                     100
                                     (Test.Html.Query.has
                                         [ Test.Html.Selector.text warning
-                                        , Test.Html.Selector.text Pages.Guild.enableE2eeText
+                                        , Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing)
                                         ]
                                     )
 
@@ -225,7 +225,7 @@ tests config =
                             (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_enableE2ee" ])
                         , admin.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
                         , E2EHelper.tallSnapshot admin 100 { name = "Encryption request was declined" }
 
                         -- The person who declined has nothing left waiting on them, so
@@ -242,7 +242,7 @@ tests config =
                         -- and it still costs them the same steps anybody pays.
                         , user.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
                         , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
                         , addPrivateKeyToAccount user
                             (\_ ->
@@ -539,7 +539,7 @@ tests config =
                     (\adminPrivateKey ->
                         [ admin.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.enableE2eeText ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
                         , admin.click 100 (Dom.id "guild_enableE2ee")
                         , admin.checkView
                             100
@@ -891,7 +891,7 @@ tests config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text Pages.Guild.enableE2eeText ]
+                                        [ Test.Html.Selector.text (Pages.Guild.enableE2eeText (Just ( E2EHelper.defaultAdminId, Time.millisToPosix 0 ))) ]
                                     )
                                 , admin.checkView
                                     100
@@ -905,7 +905,7 @@ tests config =
                                 , adminB.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text Pages.Guild.enableE2eeText ]
+                                        [ Test.Html.Selector.text (Pages.Guild.enableE2eeText (Just ( E2EHelper.defaultAdminId, Time.millisToPosix 0 ))) ]
                                     )
                                 , adminB.snapshotView 100 { name = "E2EE disabled" }
                                 ]
@@ -1564,7 +1564,7 @@ checkSoloDmIsEncrypted backend =
 checkSoloDmIsNotEncrypted : BackendModel2 -> Result String ()
 checkSoloDmIsNotEncrypted backend =
     case soloDmChannel backend |> Maybe.map .e2ee of
-        Just DmChannel.E2eeDisabled ->
+        Just (DmChannel.E2eeDisabled _) ->
             Ok ()
 
         _ ->
