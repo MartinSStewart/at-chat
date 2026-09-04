@@ -1347,12 +1347,15 @@ logout model =
                                 , textInputFocus = Nothing
                                 }
                     }
-            in
-            if Route.requiresLogin model2.route then
-                routePush model2 HomePageRoute
 
-            else
-                ( model2, Command.none )
+                ( model3, cmd ) =
+                    if Route.requiresLogin model2.route then
+                        routePush model2 HomePageRoute
+
+                    else
+                        ( model2, Command.none )
+            in
+            ( model3, Command.batch [ cmd, Ports.clearBrowserStorage ] )
 
         NotLoggedIn _ ->
             ( model, Command.none )

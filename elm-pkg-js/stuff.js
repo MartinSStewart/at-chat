@@ -54,6 +54,10 @@ function e2eeWithStore(mode, run) {
 const fileKeyDbName = "at-chat-file-keys";
 const fileKeyStoreName = "file-keys";
 
+// Where the service worker writes its log entries (see log() in public/service-worker.js),
+// which is the only persistent storage both the worker and the page can read.
+const logDbName = "at-chat-db";
+
 function fileKeyOpenDb() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(fileKeyDbName, 1);
@@ -511,6 +515,39 @@ async function loadAudio(url, context, sounds) {
 }
 
 
+// Logging out has to leave nothing of whoever was signed in on the device, since the next
+// person to open this browser isn't necessarily them: the keys that open their encrypted
+// DMs and attachments are in IndexedDB, and the attachments themselves are in Cache
+// Storage.
+async function clearBrowserStorage(indexedDbApi, cacheStorage) {
+    // Not every browser will list its databases, so the ones this app makes are named out
+    // as well. Deleting one that was never created succeeds and does nothing.
+    const listed = indexedDbApi.databases
+        ? (await indexedDbApi.databases()).map((database) => database.name)
+        : [];
+
+    const names = new Set([e2eeDbName, fileKeyDbName, logDbName].concat(listed));
+
+    await Promise.all(
+        Array.from(names)
+            .filter((name) => typeof name === "string")
+            .map((name) => new Promise((resolve) => {
+                const request = indexedDbApi.deleteDatabase(name);
+
+                // A delete another tab is holding open isn't worth waiting on. This tab is
+                // on its way to the login screen either way, and the tab still holding it
+                // has been logged out too.
+                request.onsuccess = () => resolve();
+                request.onerror = () => resolve();
+                request.onblocked = () => resolve();
+            })));
+
+    const cacheNames = await cacheStorage.keys();
+
+    await Promise.all(cacheNames.map((name) => cacheStorage.delete(name)));
+}
+
+
 exports.init = async function init(app)
 {
     // Register a Service Worker.
@@ -538,6 +575,14 @@ exports.init = async function init(app)
               }
             });
             location.reload();
+        }
+    });
+
+    app.ports.clear_browser_storage_to_js.subscribe(async () => {
+        try {
+            await clearBrowserStorage(indexedDB, caches);
+        } catch (error) {
+            console.log("Clearing browser storage failed: " + error.toString());
         }
     });
 
@@ -589,7 +634,7 @@ exports.init = async function init(app)
             // persistent storage both the worker and the page can read.
             try {
                 result.serviceWorkerLogs = await new Promise((resolve, reject) => {
-                    const openRequest = indexedDB.open("at-chat-db", 1);
+                    const openRequest = indexedDB.open(logDbName, 1);
                     openRequest.onerror = () => reject(openRequest.error);
                     openRequest.onupgradeneeded = (event) => {
                         // Same schema as the service worker's log() creates, in

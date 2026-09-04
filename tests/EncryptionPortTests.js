@@ -1,4 +1,8 @@
-// Checks the bytes elm-pkg-js/stuff.js writes and reads by hand for the encryption port.
+// Checks the parts of elm-pkg-js/stuff.js that can be run without a browser: the bytes it
+// writes and reads by hand for the encryption port, and the storage it throws away when the
+// account is logged out of.
+//
+// For the port,
 // Elm's codec is what defines that format, and nothing type checks the handwritten JS
 // against it, so the same byte sequences are pinned on both sides: the ones here, and the
 // matching ones in portWireFormatTests in tests/CodecRoundTripTests.elm. Changing the
@@ -18,7 +22,8 @@ function loadPortHelpers() {
     return new Function(
         source.slice(0, source.indexOf("exports.init"))
             + "\n; return { e2eeReadToJs: e2eeReadToJs"
-            + ", e2eeFileEncryptedMessage: e2eeFileEncryptedMessage };")();
+            + ", e2eeFileEncryptedMessage: e2eeFileEncryptedMessage"
+            + ", clearBrowserStorage: clearBrowserStorage };")();
 }
 
 function toDataView(bytes) {
@@ -65,13 +70,13 @@ const storeFileKeysRequestBytes =
     [1, 0, 6, 0, 0, 0, 2, 0, 0, 0, 3, 97, 98, 99, 0, 0, 0, 2, 7, 8, 0, 0, 0, 2, 100, 101,
      0, 0, 0, 1, 9];
 
-function run() {
+async function run() {
     const js = loadPortHelpers();
     const failures = [];
 
-    function check(name, body) {
+    async function check(name, body) {
         try {
-            body();
+            await body();
             console.log("  passed: " + name);
         } catch (error) {
             failures.push(name);
@@ -88,14 +93,14 @@ function run() {
         }
     }
 
-    check("A file nothing could be measured about", () => {
+    await check("A file nothing could be measured about", () => {
         expectEqual(
             toArray(js.e2eeFileEncryptedMessage(requestId, key, cipherText, null, null)),
             fileEncryptedBytes.nothingMeasured,
             "the message");
     });
 
-    check("An image too small to have wanted a thumbnail", () => {
+    await check("An image too small to have wanted a thumbnail", () => {
         expectEqual(
             toArray(js.e2eeFileEncryptedMessage(
                 requestId, key, cipherText, null, { kind: "image", width: 640, height: 480 })),
@@ -103,7 +108,7 @@ function run() {
             "the message");
     });
 
-    check("An image the browser made a thumbnail of", () => {
+    await check("An image the browser made a thumbnail of", () => {
         expectEqual(
             toArray(js.e2eeFileEncryptedMessage(
                 requestId,
@@ -115,7 +120,7 @@ function run() {
             "the message");
     });
 
-    check("A video whose length the container didn't say", () => {
+    await check("A video whose length the container didn't say", () => {
         expectEqual(
             toArray(js.e2eeFileEncryptedMessage(
                 requestId,
@@ -127,7 +132,7 @@ function run() {
             "the message");
     });
 
-    check("A video that was measured", () => {
+    await check("A video that was measured", () => {
         expectEqual(
             toArray(js.e2eeFileEncryptedMessage(
                 requestId,
@@ -139,7 +144,7 @@ function run() {
             "the message");
     });
 
-    check("A file handed over to be encrypted", () => {
+    await check("A file handed over to be encrypted", () => {
         const parsed = js.e2eeReadToJs(toDataView(encryptFileRequestBytes));
 
         expectEqual(parsed.tag, "encrypt-file", "the request");
@@ -148,7 +153,7 @@ function run() {
         expectEqual(Array.from(parsed.data), [1, 2, 3], "the file");
     });
 
-    check("File keys handed over to be stored", () => {
+    await check("File keys handed over to be stored", () => {
         const parsed = js.e2eeReadToJs(toDataView(storeFileKeysRequestBytes));
 
         expectEqual(parsed.tag, "store-file-keys", "the request");
@@ -156,6 +161,76 @@ function run() {
             parsed.keys.map((entry) => ({ fileHash: entry.fileHash, key: Array.from(entry.key) })),
             [{ fileHash: "abc", key: [7, 8] }, { fileHash: "de", key: [9] }],
             "the keys");
+    });
+
+    // What was deleted, and a database whose delete another tab is holding open so the
+    // logout isn't left waiting on it.
+    function fakeIndexedDb(deleted, listed, blocked) {
+        return {
+            databases: listed === null ? undefined : () => Promise.resolve(listed),
+            deleteDatabase: (name) => {
+                deleted.push(name);
+
+                const request = {};
+
+                setTimeout(
+                    () => (name === blocked ? request.onblocked() : request.onsuccess()),
+                    0);
+
+                return request;
+            }
+        };
+    }
+
+    function fakeCaches(deleted, listed) {
+        return {
+            keys: () => Promise.resolve(listed),
+            delete: (name) => {
+                deleted.push(name);
+                return Promise.resolve(true);
+            }
+        };
+    }
+
+    await check("Logging out throws away every database and cache", async () => {
+        const databases = [];
+        const cacheNames = [];
+
+        await js.clearBrowserStorage(
+            fakeIndexedDb(databases, [{ name: "at-chat-e2ee" }, { name: "something-else" }], null),
+            fakeCaches(cacheNames, ["resource_cache_v1", "frontend_cache_v1"]));
+
+        expectEqual(
+            databases.sort(),
+            ["at-chat-db", "at-chat-e2ee", "at-chat-file-keys", "something-else"],
+            "the databases that were deleted");
+        expectEqual(
+            cacheNames.sort(),
+            ["frontend_cache_v1", "resource_cache_v1"],
+            "the caches that were deleted");
+    });
+
+    // Not every browser will list its databases, and the keys have to go either way.
+    await check("A browser that won't list its databases still loses the keys", async () => {
+        const databases = [];
+
+        await js.clearBrowserStorage(
+            fakeIndexedDb(databases, null, null), fakeCaches([], []));
+
+        expectEqual(
+            databases.sort(),
+            ["at-chat-db", "at-chat-e2ee", "at-chat-file-keys"],
+            "the databases that were deleted");
+    });
+
+    await check("A database another tab is holding open doesn't stall the rest", async () => {
+        const cacheNames = [];
+
+        await js.clearBrowserStorage(
+            fakeIndexedDb([], [], "at-chat-e2ee"),
+            fakeCaches(cacheNames, ["resource_cache_v1"]));
+
+        expectEqual(cacheNames, ["resource_cache_v1"], "the caches that were deleted");
     });
 
     if (failures.length > 0) {
