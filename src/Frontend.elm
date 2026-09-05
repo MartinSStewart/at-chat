@@ -7084,10 +7084,6 @@ viewImageInfo guildOrDmId fileId model =
         model
 
 
-{-| The message ahead of the given one. Marking a message as unread means the last message
-that was read is the one before it, and -1 stands for nothing having been read at all, the
-same value a conversation that was never opened falls back to.
--}
 messageBefore : Id messageId -> Id messageId
 messageBefore messageId =
     Id.toInt messageId - 1 |> Id.fromInt
