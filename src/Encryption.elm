@@ -44,7 +44,6 @@ import Array
 import Base64
 import Bytes exposing (Bytes)
 import Bytes.Decode
-import Bytes.Encode
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)

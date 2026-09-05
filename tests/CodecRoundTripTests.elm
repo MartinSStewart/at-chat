@@ -91,7 +91,7 @@ portWireFormatTests =
                     -- message out from behind.
                     |> List.drop 19
                     |> Expect.equal
-                        (Encryption.messageBytes Message.contentAndEmbedsCodec shortMessage
+                        (Serialize.encodeToBytesWithoutVersion Message.contentAndEmbedsCodec shortMessage
                             |> toByteList
                         )
         , -- The round trip a batch makes: these are the bytes stuff.js reads the messages
@@ -104,7 +104,7 @@ portWireFormatTests =
                     { requestId = Id.fromInt 7
                     , otherUserId = Id.fromInt 3
                     , data =
-                        [ Encryption.messageBytes Message.contentAndEmbedsCodec shortMessage ]
+                        [ Serialize.encodeToBytesWithoutVersion Message.contentAndEmbedsCodec shortMessage ]
                     }
                     |> Serialize.encodeToBytes (Encryption.toJsCodec Serialize.unit)
                     |> toByteList
