@@ -115,6 +115,15 @@ jobs:
         working-directory: review
         run: npx --no-install elm-test-rs --compiler ../node_modules/.bin/lamdera
 
+      # Plain node, no Elm involved. They stand in for the browser, which the
+      # end-to-end tests run without: stuff.js writes the encryption port's bytes
+      # by hand, and the service worker only exists inside a browser.
+      - name: Tests (encryption port)
+        run: yarn encryption-port-tests
+
+      - name: Tests (service worker)
+        run: yarn service-worker-tests
+
       - name: Tests (end-to-end)
         run: yarn end-to-end-tests
 
@@ -126,7 +135,7 @@ jobs:
           message: |
             The compile time was ${{ steps.build.outputs.time }}
   Rust:
-    name: Check rust-server compiles
+    name: Check rust-server compiles and its tests pass
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -149,3 +158,7 @@ jobs:
       - name: Check rust-server compiles
         working-directory: rust-server
         run: cargo check
+
+      - name: Test rust-server
+        working-directory: rust-server
+        run: cargo test
