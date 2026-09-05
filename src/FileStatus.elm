@@ -17,7 +17,6 @@ module FileStatus exposing
     , Orientation(..)
     , UploadResponse
     , UploadUrlRequest
-    , VideoFrames
     , VideoMetadata
     , addFileHash
     , aesPrivateKey
@@ -70,7 +69,7 @@ import CodecExtra
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
-import Duration exposing (Duration, Seconds)
+import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
 import Effect.Command exposing (BackendOnly, Command)
 import Effect.File exposing (File)
@@ -86,7 +85,7 @@ import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..),
 import Json.Decode
 import MyUi
 import OneToOne exposing (OneToOne)
-import Quantity exposing (Quantity, Rate)
+import Quantity exposing (Quantity)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import Serialize
@@ -699,10 +698,6 @@ type alias ImageMetadata =
     }
 
 
-type VideoFrames
-    = VideoFrames Never
-
-
 type alias VideoMetadata =
     { -- The size the video is displayed at, with any rotation already applied.
       videoSize : Coord CssPixels
@@ -728,8 +723,8 @@ videoMetadataCodec =
         |> Codec.buildObject
 
 
-{-| Nothing sends this yet. It is here so that a video the browser measured and one the
-server decoded are read back the same way.
+{-| The server counts the length in whole milliseconds, which is what a video the browser
+measured is rounded to as well, so both are read back the same way.
 -}
 durationCodec : Codec Duration
 durationCodec =
@@ -743,17 +738,22 @@ durationCodec =
 --pub struct VideoMetadata {
 --    /// The size the video is displayed at, with any rotation already applied.
 --    pub video_size: (u32, u32),
+--    /// How long the video runs, in milliseconds.
 --    pub duration_ms: Option<u64>,
 --    /// When the file says it was recorded, as milliseconds since the Unix epoch.
 --    pub created_at_ms: Option<i64>,
---    /// A quarter turn or half turn the video is displayed with, in degrees. Only
---    /// `MP4` stores this; it is already applied to `video_size`.
---    pub rotation: Option<u16>,
---    pub frame_rate: Option<f32>,
+--    /// The turn or flip the video is displayed with, numbered the way EXIF does
+--    /// it so that images and videos are read the same way. Already applied to
+--    /// `video_size`. `1` means shown as recorded, which is also what a container
+--    /// that cannot express a transform reports.
+--    pub orientation: u8,
 --    /// How the container names the video codec. `MP4` files use the RFC 6381
 --    /// spelling such as `avc1.42E01E`, Matroska files their own such as `V_VP9`.
 --    pub codec: Option<String>,
 --    pub title: Option<String>,
+--    /// Where the recording was made, which only `MP4` has somewhere standard to
+--    /// put.
+--    pub gps_location: Option<crate::Location>,
 --}
 
 
@@ -1263,11 +1263,6 @@ durationToString duration =
 
     else
         String.fromInt (total // 60) ++ ":" ++ pad (modBy 60 total)
-
-
-frameRateToString : Quantity Float (Rate VideoFrames Seconds) -> String
-frameRateToString frameRate =
-    StringExtra.removeTrailing0s 2 (Quantity.unwrap frameRate) ++ " fps"
 
 
 imageLabel : String -> String -> Element msg
