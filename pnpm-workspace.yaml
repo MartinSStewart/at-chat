@@ -1,0 +1,4 @@
+allowBuilds:
+  elm-format: false
+  elm-test-rs: false
+  lamdera: false
