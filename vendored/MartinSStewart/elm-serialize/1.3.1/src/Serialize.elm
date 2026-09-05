@@ -7,7 +7,7 @@ module Serialize exposing
     , CustomTypeCodec, customType, variant0, variant1, variant2, variant3, variant4, variant5, variant6, variant7, variant8, finishCustomType, VariantEncoder
     , map, mapValid, mapError
     , lazy
-    , decodeGetJson, unsignedInt16, unsignedInt32
+    , decodeFromBytesWithoutVersion, decodeGetJson, encodeToBytesWithoutVersion, unsignedInt16, unsignedInt32
     )
 
 {-|
@@ -156,6 +156,16 @@ decodeFromBytes codec bytes_ =
                     )
     in
     case BD.decode decoder bytes_ of
+        Just value ->
+            value
+
+        Nothing ->
+            Err DataCorrupted
+
+
+decodeFromBytesWithoutVersion : Codec e a -> Bytes.Bytes -> Result (Error e) a
+decodeFromBytesWithoutVersion codec bytes_ =
+    case BD.decode (getBytesDecoderHelper codec) bytes_ of
         Just value ->
             value
 
@@ -335,6 +345,11 @@ encodeToBytes codec value =
         , value |> getBytesEncoderHelper codec
         ]
         |> BE.encode
+
+
+encodeToBytesWithoutVersion : Codec e a -> a -> Bytes.Bytes
+encodeToBytesWithoutVersion codec value =
+    getBytesEncoderHelper codec value |> BE.encode
 
 
 {-| Convert an Elm value into a string. This string contains only url safe characters, so you can do the following:

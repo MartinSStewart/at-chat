@@ -1781,7 +1781,7 @@ respondToMessageEncrypted client =
             let
                 bytes : Bytes
                 bytes =
-                    Encryption.messageBytes Message.contentAndEmbedsCodec contentAndEmbeds
+                    Serialize.encodeToBytesWithoutVersion Message.contentAndEmbedsCodec contentAndEmbeds
             in
             Encryption.FromJs_NewMessageEncrypted
                 requestId
@@ -1963,7 +1963,7 @@ stubPlainText cipherText =
             cipherText
     of
         Just payload ->
-            Encryption.messageFromBytes Message.contentAndEmbedsCodec payload
+            Serialize.decodeFromBytesWithoutVersion Message.contentAndEmbedsCodec payload
                 |> Result.mapError (\_ -> "The bytes handed over to be decrypted aren't a message")
 
         Nothing ->

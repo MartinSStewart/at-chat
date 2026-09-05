@@ -17,13 +17,14 @@ import EmailAddress exposing (EmailAddress)
 import Embed exposing (Embed(..))
 import Env
 import FileName
-import FileStatus exposing (FileData, FileId, FileMetadata(..))
+import FileStatus exposing (FileData, FileId, FileMetadata(..), IsEncrypted(..))
 import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
-import Id exposing (Id, StickerId)
+import Id exposing (Id, StickerId, UserId)
 import List.Nonempty exposing (Nonempty(..))
 import Log exposing (Log)
+import Message exposing (UserTextMessageData)
 import MessageInput
 import MyUi
 import OneOrGreater
@@ -217,7 +218,7 @@ stickersSection =
             True
             False
             (Dom.id "channel")
-            "Placeholder"
+            (MessageInput.textPlaceholder "Placeholder")
             123
             (richText |> RichText.toString Time.utc False SeqDict.empty)
             (Just richText)
@@ -238,6 +239,7 @@ attachments =
             , metadata = Nothing
             , contentType = FileStatus.jsonContent
             , fileHash = FileStatus.fileHash "123"
+            , isEncrypted = IsNotEncrypted
             }
           )
         , ( Id.fromInt 2
@@ -261,6 +263,7 @@ attachments =
                     |> Just
             , contentType = FileStatus.pngContent
             , fileHash = FileStatus.fileHash "123"
+            , isEncrypted = IsNotEncrypted
             }
           )
         ]
@@ -369,21 +372,6 @@ notificationEmail =
 /¯|    ___      ´╥`
 ░▒▓█"""
                 ]
-
-        message =
-            { createdAt = Time.millisToPosix 0
-            , createdBy = Id.fromInt 1
-            , content = content
-            , reactions = SeqDict.empty
-            , editedAt = Nothing
-            , repliedTo = Nothing
-            , attachedFiles = attachments
-            , embeds = Array.empty
-            , timestampDrawings = Drawing.emptyDrawing
-            , userIconDrawings = Drawing.emptyDrawing
-            , imageAttachmentDrawings = SeqDict.empty
-            , embedDrawings = SeqDict.empty
-            }
     in
     emailView
         (Broadcast.notificationEmailSubject "Stevie Steve")
@@ -391,7 +379,8 @@ notificationEmail =
             (\id -> "User " ++ Id.toString id)
             "Stevie Steve"
             Env.domain
-            message
+            content
+            SeqDict.empty
         )
 
 

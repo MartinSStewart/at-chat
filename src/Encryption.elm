@@ -19,8 +19,6 @@ port module Encryption exposing
     , fromJsCodec
     , hash
     , info
-    , messageBytes
-    , messageFromBytes
     , storeFileKeys
     , storeSharedSecret
     , toBase64
@@ -244,38 +242,10 @@ encryptManyMessages requestId id dataCodec messages =
         (ToJs_EncryptManyMessages
             { requestId = requestId
             , otherUserId = id.otherUserId
-            , data = List.map (messageBytes dataCodec) messages
+            , data = List.map (Serialize.encodeToBytesWithoutVersion dataCodec) messages
             }
         )
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
-
-
-{-| One message, written the way `fromJsCodec` reads it back once the browser has decrypted
-it: as a field inside another codec, with no format version in front of it.
-
-`Serialize.encodeToBytes` writes a version byte, because it is meant for data that stands on
-its own and `decodeFromBytes` reads the byte back off again. Nothing reads a message that
-way. A message encrypted one at a time never had the byte to begin with, since it goes out
-as a field of `ToJs_EncryptNewMessage`, and everything comes back through the same codec
-whichever way it was encrypted. So the byte is taken off here rather than being encrypted
-into the stored message, where it would make the message unreadable.
-
--}
-messageBytes : Serialize.Codec e a -> a -> Bytes
-messageBytes dataCodec data =
-    let
-        encoded : Bytes
-        encoded =
-            Serialize.encodeToBytes dataCodec data
-    in
-    Bytes.Decode.decode
-        (Bytes.Decode.map2
-            (\_ rest -> rest)
-            Bytes.Decode.unsignedInt8
-            (Bytes.Decode.bytes (Bytes.width encoded - 1))
-        )
-        encoded
-        |> Maybe.withDefault encoded
 
 
 decryptManyMessages : Id DecryptManyRequestId -> Viewing_DmId -> List (EncryptedData a) -> Command FrontendOnly toMsg msg
@@ -289,24 +259,6 @@ decryptManyMessages requestId id messages =
             }
         )
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
-
-
-{-| Reads back a message written by `messageBytes`, putting the version byte back on so
-that `decodeFromBytes` finds what it looks for.
--}
-messageFromBytes : Serialize.Codec e a -> Bytes -> Result (Serialize.Error e) a
-messageFromBytes dataCodec data =
-    Bytes.Encode.sequence
-        [ Bytes.Encode.unsignedInt8 serializeVersion, Bytes.Encode.bytes data ]
-        |> Bytes.Encode.encode
-        |> Serialize.decodeFromBytes dataCodec
-
-
-{-| The version `Serialize.encodeToBytes` writes in front of what it encodes.
--}
-serializeVersion : Int
-serializeVersion =
-    1
 
 
 {-| A file gets a key of its own rather than the conversation's. The key travels inside
