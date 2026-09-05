@@ -14,7 +14,6 @@ import FileStatus
 import Id
 import List.Nonempty
 import Message
-import Quantity
 import RichText
 import SeqDict
 import Serialize
@@ -265,10 +264,8 @@ roundTripTests =
                     Just
                         (FileStatus.FileMetadata_Video
                             { videoSize = Coord.xy 1920 1080
-                            , frames = Just (Quantity.Quantity 3600)
                             , createdAt = Just (Time.millisToPosix 1234567890)
                             , orientation = FileStatus.Rotation90
-                            , frameRate = Just (Quantity.Quantity 29.97)
                             , codec = Just "avc1.640028"
                             , title = Just "A title"
                             , gpsLocation = Just { lat = 0, lon = 0 }

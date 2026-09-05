@@ -19,9 +19,8 @@ use serde::Serialize;
 pub struct VideoMetadata {
     /// The size the video is displayed at, with any rotation already applied.
     pub video_size: (u32, u32),
-    /// How many frames the video holds. `MP4` files say so in their sample
-    /// table; Matroska files have to be counted through.
-    pub frames: Option<u64>,
+    /// How long the video runs, in milliseconds.
+    pub duration_ms: Option<u64>,
     /// When the file says it was recorded, as milliseconds since the Unix epoch.
     pub created_at_ms: Option<i64>,
     /// The turn or flip the video is displayed with, numbered the way EXIF does
@@ -29,7 +28,6 @@ pub struct VideoMetadata {
     /// `video_size`. `1` means shown as recorded, which is also what a container
     /// that cannot express a transform reports.
     pub orientation: u8,
-    pub frame_rate: Option<f32>,
     /// How the container names the video codec. `MP4` files use the RFC 6381
     /// spelling such as `avc1.42E01E`, Matroska files their own such as `V_VP9`.
     pub codec: Option<String>,
@@ -97,23 +95,13 @@ fn mp4_metadata(bytes: &[u8]) -> Option<VideoMetadata> {
         .and_then(|milliseconds| milliseconds.checked_sub(MP4_EPOCH_OFFSET_MS))
         .and_then(plausible_timestamp);
 
-    // One entry per frame in the sample table, which is what the file is built
-    // around, so this is a count rather than an estimate. Fragmented files keep
-    // their samples in the fragments instead and leave this empty.
-    let frames: Option<u64> = match track.samples.len() as u64 {
-        0 => None,
-        frames2 => Some(frames2),
-    };
-
-    // The frame count over the length of the track, which is the average rate
-    // rather than a declared one. Variable frame rate video has no single answer
-    // and this is the closest to it.
-    let frame_rate: Option<f32> = match (frames, track.duration, track.timescale) {
-        (Some(frames2), duration, timescale) if duration > 0 && timescale > 0 => {
-            let seconds = duration as f64 / timescale as f64;
-            Some((frames2 as f64 / seconds) as f32)
-        }
-        _ => None,
+    // The track counts its length in its own time units, so many of them to the
+    // second. A fragmented file leaves the header empty and `re_mp4` adds the
+    // samples up instead, so there is a length here either way.
+    let duration_ms: Option<u64> = if track.duration > 0 && track.timescale > 0 {
+        Some(track.duration.saturating_mul(1000) / track.timescale)
+    } else {
+        None
     };
 
     Some(VideoMetadata {
@@ -122,10 +110,9 @@ fn mp4_metadata(bytes: &[u8]) -> Option<VideoMetadata> {
         } else {
             (width, height)
         },
-        frames,
+        duration_ms,
         created_at_ms,
         orientation,
-        frame_rate,
         codec: track.codec_string(&mp4),
         title: None,
         gps_location: mp4_gps_location(bytes),
@@ -168,7 +155,7 @@ fn turns_a_quarter(orientation: u8) -> bool {
 
 /// Reads the metadata of the first video track of a `WebM` or Matroska file.
 fn matroska_metadata(bytes: &[u8]) -> Option<VideoMetadata> {
-    let mut matroska = matroska_demuxer::MatroskaFile::open(std::io::Cursor::new(bytes)).ok()?;
+    let matroska = matroska_demuxer::MatroskaFile::open(std::io::Cursor::new(bytes)).ok()?;
 
     let track = matroska
         .tracks()
@@ -195,15 +182,17 @@ fn matroska_metadata(bytes: &[u8]) -> Option<VideoMetadata> {
         None => (video.pixel_width().get(), video.pixel_height().get()),
     };
 
-    let track_number: u64 = track.track_number().get();
-
-    // Unlike MP4 this is a declared frame duration rather than a measured one,
-    // and it is only present on constant frame rate files.
-    let frame_rate: Option<f32> = track
-        .default_duration()
-        .map(|nanoseconds| (1_000_000_000.0 / nanoseconds.get() as f64) as f32);
-
     let info = matroska.info();
+
+    // The length is counted in units of the timestamp scale, which is itself a
+    // number of nanoseconds, so a file written with an unusual scale reads the
+    // same way as any other.
+    let duration_ms: Option<u64> = match info.duration() {
+        Some(duration) if duration > 0.0 && duration.is_finite() => {
+            Some((duration * info.timestamp_scale().get() as f64 / 1_000_000.0) as u64)
+        }
+        _ => None,
+    };
 
     let created_at_ms: Option<i64> = info
         .date_utc()
@@ -216,54 +205,17 @@ fn matroska_metadata(bytes: &[u8]) -> Option<VideoMetadata> {
 
     Some(VideoMetadata {
         video_size,
-        frames: matroska_frames(&mut matroska, track_number),
+        duration_ms,
         created_at_ms,
         // Matroska has no field for this. A file can be flagged as a projection
         // for 360 degree video, but that is a different thing to a photograph
         // taken sideways, and nothing here writes one.
         orientation: NO_TRANSFORM,
-        frame_rate,
         codec: Some(codec),
         title,
         // Matroska has no standard element for a location either.
         gps_location: None,
     })
-}
-
-/// Counts the frames on a track by reading through them.
-///
-/// Matroska keeps no count anywhere. Frames are laid out in blocks spread over
-/// the whole file, so the only way to know how many there are is to walk them,
-/// which costs a few milliseconds for a file of the size uploads are capped at.
-///
-/// A block whose timestamp is the smallest number that fits in its field makes
-/// `matroska-demuxer` 0.8.1 negate that number, which does not fit, so reading
-/// through the frames of a damaged file can panic where opening it cannot. The
-/// count is worth having and a panic here costs us nothing but the count, so it
-/// is caught and the file simply goes without one.
-fn matroska_frames(
-    matroska: &mut matroska_demuxer::MatroskaFile<std::io::Cursor<&[u8]>>,
-    track_number: u64,
-) -> Option<u64> {
-    let counted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let mut frame = matroska_demuxer::Frame::default();
-        let mut frames: u64 = 0;
-
-        // The same buffer is handed back in on every call, so this reuses one
-        // allocation the size of the largest frame rather than one per frame.
-        while matroska.next_frame(&mut frame).ok()? {
-            if frame.track == track_number {
-                frames += 1;
-            }
-        }
-
-        Some(frames)
-    }));
-
-    match counted {
-        Ok(Some(frames)) if frames > 0 => Some(frames),
-        _ => None,
-    }
 }
 
 /// Reads where an `MP4` says it was recorded.
@@ -415,18 +367,9 @@ mod tests {
         let mp4 = metadata("landscape.mp4");
 
         assert_eq!(mp4.video_size, (640, 360), "size from the track header");
-        assert_eq!(
-            mp4.frames,
-            Some(300),
-            "ten seconds at thirty frames a second"
-        );
+        assert_eq!(mp4.duration_ms, Some(10_000), "the sample runs ten seconds");
         assert_eq!(mp4.codec.as_deref(), Some("avc1.64001F"), "h.264 track");
         assert_eq!(mp4.orientation, 1, "the sample stands as recorded");
-        assert_eq!(
-            mp4.frame_rate.map(f32::round),
-            Some(30.0),
-            "the sample runs at thirty frames a second"
-        );
         assert_eq!(
             mp4.created_at_ms,
             Some(1_710_505_845_000),
@@ -439,13 +382,12 @@ mod tests {
         let webm = metadata("landscape.webm");
 
         assert_eq!(webm.video_size, (640, 360), "size from the video track");
-        assert_eq!(webm.frames, Some(300), "counted through the clusters");
-        assert_eq!(webm.codec.as_deref(), Some("V_VP9"), "vp9 track");
         assert_eq!(
-            webm.frame_rate.map(f32::round),
-            Some(30.0),
-            "the sample runs at thirty frames a second"
+            webm.duration_ms,
+            Some(10_000),
+            "the same ten seconds as the MP4 sample"
         );
+        assert_eq!(webm.codec.as_deref(), Some("V_VP9"), "vp9 track");
         assert_eq!(
             webm.created_at_ms,
             Some(1_710_505_845_000),
@@ -534,7 +476,7 @@ mod tests {
     fn serialises_to_the_shape_clients_read() {
         assert_eq!(
             serde_json::to_string(&metadata("landscape.mp4")).unwrap(),
-            r#"{"video_size":[640,360],"frames":300,"created_at_ms":1710505845000,"orientation":1,"frame_rate":30.0,"codec":"avc1.64001F","title":null,"gps_location":{"lat":59.3293,"lon":18.0686}}"#,
+            r#"{"video_size":[640,360],"duration_ms":10000,"created_at_ms":1710505845000,"orientation":1,"codec":"avc1.64001F","title":null,"gps_location":{"lat":59.3293,"lon":18.0686}}"#,
             "changing this breaks whoever is decoding it"
         );
     }
@@ -675,9 +617,10 @@ mod tests {
     }
 
     /// `matroska-demuxer` 0.8.1 negates a block timestamp to take its size,
-    /// which overflows on the smallest number that field can hold. Reading
-    /// through the frames of a file carrying one must cost us the count and
-    /// nothing else.
+    /// which overflows on the smallest number that field can hold. Everything
+    /// read here comes out of the header, so a file carrying such a block is
+    /// read the same as any other, and it stays that way only for as long as
+    /// nothing walks the blocks.
     #[test]
     fn survives_the_smallest_block_timestamp() {
         let mut bytes = sample("landscape.webm");
@@ -701,9 +644,9 @@ mod tests {
         assert_eq!(
             video_metadata(&bytes)
                 .expect("the file is still a video")
-                .frames,
-            None,
-            "the count is what gets given up, not the request"
+                .duration_ms,
+            Some(10_000),
+            "the header still says how long it runs"
         );
     }
 
