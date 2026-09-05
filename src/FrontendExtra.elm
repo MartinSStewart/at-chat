@@ -1400,7 +1400,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                             SeqSet.member guildId local.localUser.user.notifyOnAllMessages
 
                         GuildOrDmId_Dm _ ->
-                            False
+                            True
 
                 isMentionedOrRepliedTo : Bool
                 isMentionedOrRepliedTo =

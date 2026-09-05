@@ -16,9 +16,6 @@ import TwoFactorAuthentication
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, LoginTokenData(..), ToBackend, ToFrontend)
 
 
-{-| Everything the browser was holding for the account is thrown away when the account is
-logged out of, since whoever uses this browser next isn't necessarily the same person.
--}
 checkStorageCleared :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> Int
@@ -29,12 +26,7 @@ checkStorageCleared client expected data =
         actual : Int
         actual =
             List.filter
-                (\request ->
-                    request.clientId
-                        == client.clientId
-                        && request.portName
-                        == "clear_browser_storage_to_js"
-                )
+                (\request -> request.clientId == client.clientId && request.portName == "clear_browser_storage_to_js")
                 data.portRequests
                 |> List.length
     in
@@ -132,7 +124,9 @@ loginTests isMobile normalConfig =
             "/"
             windowSize
             (\user ->
-                [ E2EHelper.handleLogin userAgent E2EHelper.adminEmail user
+                [ T.checkState 100 (checkStorageCleared user 0)
+                , E2EHelper.handleLogin userAgent E2EHelper.adminEmail user
+                , T.checkState 100 (checkStorageCleared user 1)
                 , user.click 100 (Dom.id "guild_showUserOptions")
                 , user.click 100 (Dom.id "userOptions_twoFactor")
                 , user.click 100 (Dom.id "userOverview_start2FaSetup")
@@ -176,9 +170,9 @@ loginTests isMobile normalConfig =
                                 [ T.checkState 100 (\_ -> Err "User not found") ]
                     )
                 , user.click 100 (Dom.id "userOptions_connectedDevices")
-                , T.checkState 100 (checkStorageCleared user 0)
-                , user.click 100 (Dom.id "options_logout")
                 , T.checkState 100 (checkStorageCleared user 1)
+                , user.click 100 (Dom.id "options_logout")
+                , T.checkState 100 (checkStorageCleared user 2)
                 ]
             )
         , T.connectFrontend

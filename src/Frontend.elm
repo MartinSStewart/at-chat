@@ -448,7 +448,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
                         , useInviteAfterLoggedIn = Nothing
                         , textInputFocus = Nothing
                         }
-                    , Command.none
+                    , Ports.clearBrowserStorage
                     )
 
         ( aiChatModel, aiChatCmd ) =

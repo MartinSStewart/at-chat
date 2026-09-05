@@ -233,11 +233,6 @@ unregisterServiceWorker =
 port clear_browser_storage_to_js : Json.Encode.Value -> Cmd msg
 
 
-{-| Throws away everything the browser is holding for whoever was signed in on this device:
-the keys that open their encrypted DMs and attachments, and the attachments themselves.
-Logging out is the point at which the next person to use this browser must not be able to
-read any of it.
--}
 clearBrowserStorage : Command FrontendOnly toMsg msg
 clearBrowserStorage =
     Command.sendToJs "clear_browser_storage_to_js" clear_browser_storage_to_js Json.Encode.null
