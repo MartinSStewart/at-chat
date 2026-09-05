@@ -9,7 +9,6 @@ import BackendExtra
 import Broadcast
 import Coord
 import Discord
-import Drawing
 import Effect.Browser.Dom as Dom
 import Effect.Http as Http
 import Email.Html
@@ -21,10 +20,9 @@ import FileStatus exposing (FileData, FileId, FileMetadata(..), IsEncrypted(..))
 import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
-import Id exposing (Id, StickerId, UserId)
+import Id exposing (Id, StickerId)
 import List.Nonempty exposing (Nonempty(..))
 import Log exposing (Log)
-import Message exposing (UserTextMessageData)
 import MessageInput
 import MyUi
 import OneOrGreater
