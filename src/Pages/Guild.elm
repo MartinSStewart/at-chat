@@ -179,7 +179,7 @@ disableE2eeText =
 
 e2eeDeclinedText : String
 e2eeDeclinedText =
-    "declined your request to enable E2EE Only they can start one now."
+    "declined your E2EE request"
 
 
 youDeclinedE2eeText : String
