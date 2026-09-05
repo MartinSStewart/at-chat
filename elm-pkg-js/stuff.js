@@ -514,6 +514,45 @@ async function loadAudio(url, context, sounds) {
     }
 }
 
+
+// Logging out has to leave nothing of whoever was signed in on the device, since the next
+// person to open this browser isn't necessarily them: the keys that open their encrypted
+// DMs and attachments are in IndexedDB, and the attachments themselves are in Cache
+// Storage.
+//
+// The two stores are taken as arguments rather than reached for directly so that
+// tests/EncryptionPortTests.js can hand it fakes. Only the declarations above the init
+// function below can be run without a browser, which is why this doesn't live inside the
+// port subscriber that calls it.
+async function clearBrowserStorage(indexedDbApi, cacheStorage) {
+    // Not every browser will list its databases, so the ones this app makes are named out
+    // as well. Deleting one that was never created succeeds and does nothing.
+    const listed = indexedDbApi.databases
+        ? (await indexedDbApi.databases()).map((database) => database.name)
+        : [];
+
+    const names = new Set([e2eeDbName, fileKeyDbName, logDbName].concat(listed));
+
+    await Promise.all(
+        Array.from(names)
+            .filter((name) => typeof name === "string")
+            .map((name) => new Promise((resolve) => {
+                const request = indexedDbApi.deleteDatabase(name);
+
+                // A delete another tab is holding open isn't worth waiting on. This tab is
+                // on its way to the login screen either way, and the tab still holding it
+                // has been logged out too.
+                request.onsuccess = () => resolve();
+                request.onerror = () => resolve();
+                request.onblocked = () => resolve();
+            })));
+
+    const cacheNames = await cacheStorage.keys();
+
+    await Promise.all(cacheNames.map((name) => cacheStorage.delete(name)));
+}
+
+
 exports.init = async function init(app)
 {
     // Register a Service Worker.
@@ -546,28 +585,7 @@ exports.init = async function init(app)
 
     app.ports.clear_browser_storage_to_js.subscribe(async () => {
         try {
-            // Not every browser will list its databases, so the ones this app makes are named out
-            // as well. Deleting one that was never created succeeds and does nothing.
-            const listed = indexedDB.databases
-                ? (await indexedDB.databases()).map((database) => database.name)
-                : [];
-
-            const names = new Set([e2eeDbName, fileKeyDbName, logDbName].concat(listed));
-
-            await Promise.all(
-                Array.from(names)
-                    .filter((name) => typeof name === "string")
-                    .map((name) => new Promise((resolve) => {
-                        const request = indexedDB.deleteDatabase(name);
-
-                        request.onsuccess = () => resolve();
-                        request.onerror = () => resolve();
-                        request.onblocked = () => resolve();
-                    })));
-
-            const cacheNames = await caches.keys();
-
-            await Promise.all(cacheNames.map((name) => caches.delete(name)));
+            await clearBrowserStorage(indexedDB, caches);
         } catch (error) {
             console.log("Clearing browser storage failed: " + error.toString());
         }
