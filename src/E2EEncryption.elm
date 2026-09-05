@@ -417,6 +417,39 @@ tests config =
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text writtenByAdmin ])
                                 , admin.snapshotView 100 { name = "Older messages encrypted after the fact" }
+
+                                -- A device that wasn't there when they were encrypted has
+                                -- only the ciphertext to go on, so it reads what it is
+                                -- given back through the browser in one go. Nothing else
+                                -- checks that what the batch wrote is what the batch reads.
+                                , T.connectFrontend
+                                    100
+                                    E2EHelper.sessionId0
+                                    "/"
+                                    E2EHelper.desktopWindow
+                                    (\adminB ->
+                                        [ T.andThen
+                                            10
+                                            (\data ->
+                                                [ adminB.portEvent
+                                                    0
+                                                    "load_startup_data_from_js"
+                                                    (E2EHelper.startupDataJsonWithE2eeKeys
+                                                        data.time
+                                                        E2EHelper.firefoxDesktop
+                                                        [ Id.fromInt 2 ]
+                                                    )
+                                                ]
+                                            )
+                                        , respondToManyMessagesDecrypted adminB
+                                        , adminB.click 100 (Dom.id "guild_friendLabel_0")
+                                        , adminB.checkView
+                                            100
+                                            (Test.Html.Query.has
+                                                [ Test.Html.Selector.text writtenByUser ]
+                                            )
+                                        ]
+                                    )
                                 ]
                             )
                         ]
@@ -1748,7 +1781,7 @@ respondToMessageEncrypted client =
             let
                 bytes : Bytes
                 bytes =
-                    Serialize.encodeToBytes Message.contentAndEmbedsCodec contentAndEmbeds
+                    Encryption.messageBytes Message.contentAndEmbedsCodec contentAndEmbeds
             in
             Encryption.FromJs_NewMessageEncrypted
                 requestId
@@ -1930,7 +1963,7 @@ stubPlainText cipherText =
             cipherText
     of
         Just payload ->
-            Serialize.decodeFromBytes Message.contentAndEmbedsCodec payload
+            Encryption.messageFromBytes Message.contentAndEmbedsCodec payload
                 |> Result.mapError (\_ -> "The bytes handed over to be decrypted aren't a message")
 
         Nothing ->

@@ -23,7 +23,8 @@ function loadPortHelpers() {
         source.slice(0, source.indexOf("exports.init"))
             + "\n; return { e2eeReadToJs: e2eeReadToJs"
             + ", e2eeFileEncryptedMessage: e2eeFileEncryptedMessage"
-            + ", clearBrowserStorage: clearBrowserStorage };")();
+            + ", clearBrowserStorage: clearBrowserStorage"
+            + ", e2eeManyMessagesDecryptedMessage: e2eeManyMessagesDecryptedMessage };")();
 }
 
 function toDataView(bytes) {
@@ -64,6 +65,20 @@ const fileEncryptedBytes = {
 const encryptFileRequestBytes =
     [1, 0, 5, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 105, 109, 97, 103, 101, 47, 112, 110,
      103, 0, 0, 0, 3, 1, 2, 3];
+
+// A batch of one message reading "hi": the request that hands it over to be encrypted, and
+// the answer that hands it back once it has been decrypted again. Encrypting and decrypting
+// leave the message itself untouched, so reading the messages out of the first and answering
+// with them is the whole round trip minus the crypto, and has to produce the second exactly.
+// Both are pinned in tests/CodecRoundTripTests.elm too, so a message written one way on the
+// way out and read another way on the way back fails here.
+const batchRequestBytes =
+    [1, 0, 4, 64, 28, 0, 0, 0, 0, 0, 0, 64, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 25, 0,
+     0, 0, 1, 0, 0, 0, 104, 0, 0, 0, 1, 105, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+const batchAnswerBytes =
+    [1, 0, 6, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 104, 0, 0, 0,
+     1, 105, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
 // Two keys: "abc" with bytes 7 and 8, then "de" with byte 9.
 const storeFileKeysRequestBytes =
@@ -161,6 +176,32 @@ async function run() {
             parsed.keys.map((entry) => ({ fileHash: entry.fileHash, key: Array.from(entry.key) })),
             [{ fileHash: "abc", key: [7, 8] }, { fileHash: "de", key: [9] }],
             "the keys");
+    });
+
+    await check("A batch of messages read in and handed back decrypted", async () => {
+        const request = js.e2eeReadToJs(toDataView(batchRequestBytes));
+
+        expectEqual(request.tag, "encrypt-many-messages", "the request");
+        expectEqual(request.requestId, requestId, "the request id");
+        expectEqual(request.otherUserId, 3, "the conversation");
+
+        // Encrypting and decrypting hand back the same bytes, so answering with what was
+        // read is the whole round trip minus the crypto.
+        expectEqual(
+            toArray(js.e2eeManyMessagesDecryptedMessage(request.requestId, request.data)),
+            batchAnswerBytes,
+            "the answer");
+    });
+
+    await check("A message that couldn't be decrypted is marked as such", async () => {
+        const request = js.e2eeReadToJs(toDataView(batchRequestBytes));
+
+        expectEqual(
+            toArray(js.e2eeManyMessagesDecryptedMessage(request.requestId, [null])),
+            // The same header and count, then a variant tag of 0 for Err rather than 1 for
+            // Ok, and no message behind it.
+            batchAnswerBytes.slice(0, 15).concat([0, 0]),
+            "the answer");
     });
 
     // What was deleted, and a database whose delete another tab is holding open so the

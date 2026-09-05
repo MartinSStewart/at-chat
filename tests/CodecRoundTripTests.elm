@@ -1,5 +1,6 @@
 module CodecRoundTripTests exposing (tests)
 
+import Array
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
@@ -11,7 +12,11 @@ import Expect
 import FileName
 import FileStatus
 import Id
+import List.Nonempty
+import Message
 import Quantity
+import RichText
+import SeqDict
 import Serialize
 import Test exposing (Test, describe, test)
 
@@ -72,6 +77,44 @@ portWireFormatTests =
                     |> fileEncrypted Nothing
                     |> hasBytes
                         [ 1, 0, 9, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 170, 0, 0, 0, 1, 187, 0, 0, 0, 1, 0, 1, 0, 0, 64, 158, 0, 0, 0, 0, 0, 0, 0, 0, 64, 144, 224, 0, 0, 0, 0, 0, 0, 1, 64, 163, 136, 0, 0, 0, 0, 0 ]
+        , -- A message encrypted on its own travels as a field of the request, so the browser
+          -- is handed exactly the bytes that come back as a field of the answer. One
+          -- encrypted as part of a batch has to be written the same way, or what gets stored
+          -- can't be read back afterwards.
+          test "A batch frames a message the way encrypting one on its own does" <|
+            \_ ->
+                Encryption.ToJs_EncryptNewMessage
+                    { requestId = Id.fromInt 7, otherUserId = Id.fromInt 3, data = shortMessage }
+                    |> Serialize.encodeToBytes (Encryption.toJsCodec Message.contentAndEmbedsCodec)
+                    |> toByteList
+                    -- The version, the variant tag and the two ids, which stuff.js reads the
+                    -- message out from behind.
+                    |> List.drop 19
+                    |> Expect.equal
+                        (Encryption.messageBytes Message.contentAndEmbedsCodec shortMessage
+                            |> toByteList
+                        )
+        , -- The round trip a batch makes: these are the bytes stuff.js reads the messages
+          -- out of, and the ones it writes back once they are decrypted.
+          -- tests/EncryptionPortTests.js runs the first through it and checks it produces
+          -- the second, which is what catches the two being framed differently.
+          test "A batch of messages handed over to be encrypted" <|
+            \_ ->
+                Encryption.ToJs_EncryptManyMessages
+                    { requestId = Id.fromInt 7
+                    , otherUserId = Id.fromInt 3
+                    , data =
+                        [ Encryption.messageBytes Message.contentAndEmbedsCodec shortMessage ]
+                    }
+                    |> Serialize.encodeToBytes (Encryption.toJsCodec Serialize.unit)
+                    |> toByteList
+                    |> Expect.equal batchRequestBytes
+        , test "A batch of messages handed back decrypted" <|
+            \_ ->
+                Encryption.FromJs_ManyMessagesDecrypted (Id.fromInt 7) [ Ok shortMessage ]
+                    |> Serialize.encodeToBytes (Encryption.fromJsCodec Message.contentAndEmbedsCodec)
+                    |> toByteList
+                    |> Expect.equal batchAnswerBytes
         , -- The request stuff.js reads the file and its type back out of.
           test "A file handed over to be encrypted" <|
             \_ ->
@@ -92,6 +135,26 @@ hasBytes expected fromJs =
     Serialize.encodeToBytes (Encryption.fromJsCodec Serialize.unit) fromJs
         |> toByteList
         |> Expect.equal expected
+
+
+{-| Request id 7, conversation with user 3, one message reading "hi".
+-}
+batchRequestBytes : List Int
+batchRequestBytes =
+    [ 1, 0, 4, 64, 28, 0, 0, 0, 0, 0, 0, 64, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 25, 0, 0, 0, 1, 0, 0, 0, 104, 0, 0, 0, 1, 105, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
+
+
+batchAnswerBytes : List Int
+batchAnswerBytes =
+    [ 1, 0, 6, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 104, 0, 0, 0, 1, 105, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
+
+
+shortMessage : Message.MessageContent (Id.Id Id.UserId)
+shortMessage =
+    { content = List.Nonempty.Nonempty (RichText.NormalText 'h' "i") []
+    , embeds = Array.empty
+    , attachedFiles = SeqDict.empty
+    }
 
 
 byteList : List Int -> Bytes.Bytes
