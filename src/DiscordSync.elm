@@ -43,7 +43,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import FileName
-import FileStatus exposing (FileData, FileHash, FileId, FileMetadata)
+import FileStatus exposing (FileData, FileHash, FileId, FileMetadata, IsEncrypted(..))
 import GuildName
 import Id exposing (ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import IdArray exposing (IdArray)
@@ -2996,6 +2996,7 @@ attachmentsToFileData attachment fileHash metadata =
                     Nothing ->
                         FileStatus.unknownContentType
     , fileHash = fileHash
+    , isEncrypted = IsNotEncrypted
     }
 
 

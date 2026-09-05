@@ -1,10 +1,16 @@
-module Frontend exposing (app, app_)
+module Frontend exposing
+    ( app
+    , app_
+    , discordLinkExpiredText
+    , goMatchNotFoundText
+    )
 
 import AiChat
 import Array
 import Audio exposing (AudioCmd, AudioData)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
+import Bytes exposing (Bytes)
 import Call exposing (MediaDevicesStatus(..))
 import ChannelDescription
 import ChannelName
@@ -30,6 +36,7 @@ import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji(..), EmojiOrSticker(..))
+import Encryption exposing (BytesHash, EncryptManyRequestId)
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
 import Game
@@ -38,7 +45,7 @@ import GuildColumn
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DmId)
 import ImageEditor
 import ImageViewer
 import Json.Decode
@@ -49,6 +56,8 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
+import Message exposing (MessageContent)
+import MessageArray exposing (MessageArray)
 import MessageDropdown
 import MessageInput exposing (NameSoFar(..), TextInputFocus)
 import MessageMenu
@@ -81,7 +90,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Drag(..), DragTarget(..), ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -95,6 +104,17 @@ import UserOptions
 import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
 import WordSpellingGame
+import X25519
+
+
+discordLinkExpiredText : String
+discordLinkExpiredText =
+    "This Discord link has expired"
+
+
+goMatchNotFoundText : String
+goMatchNotFoundText =
+    "Go match not found"
 
 
 app :
@@ -245,6 +265,7 @@ subscriptions _ model =
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
         , Call.fromJs GotVoiceChatSignalFromJs
+        , Encryption.fromJs Message.contentAndEmbedsCodec EncryptionFromJs
         , case model of
             Loading _ ->
                 Subscription.none
@@ -266,7 +287,7 @@ subscriptions _ model =
                                         NonemptyDict.foldl
                                             (\fileId fileStatus list2 ->
                                                 case fileStatus of
-                                                    FileUploading _ _ _ ->
+                                                    FileUploading _ _ _ _ ->
                                                         Http.track
                                                             (FileStatus.uploadTrackerId guildOrDmId fileId)
                                                             (FileUploadProgress guildOrDmId fileId)
@@ -275,7 +296,7 @@ subscriptions _ model =
                                                     FileUploaded _ ->
                                                         list2
 
-                                                    FileError _ _ _ _ ->
+                                                    FileError _ _ _ _ _ ->
                                                         list2
                                             )
                                             list
@@ -427,7 +448,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
                         , useInviteAfterLoggedIn = Nothing
                         , textInputFocus = Nothing
                         }
-                    , Command.none
+                    , Ports.clearBrowserStorage
                     )
 
         ( aiChatModel, aiChatCmd ) =
@@ -493,9 +514,13 @@ loadedInitHelper :
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 loadedInitHelper startupData emojiData loginData loading =
     let
+        backlog : List EncryptedBacklog
+        backlog =
+            encryptedBacklog (SeqSet.fromList startupData.e2eeKeys) loginData.dmChannels
+
         local : LocalState
         local =
-            loginDataToLocalState startupData emojiData loginData
+            loginDataToLocalState startupData SeqDict.empty backlog emojiData loginData
 
         loggedIn : LoggedIn2
         loggedIn =
@@ -563,12 +588,60 @@ loadedInitHelper startupData emojiData loginData loading =
             , showInviteLinkQrCode = Nothing
             , friendsSearch = ""
             , channelSearch = ""
+            , showNewPrivateKey = Nothing
+            , e2eeError = Nothing
+            , e2eePrivateKeyText = ""
+            , e2eeKeysOnThisDevice = SeqSet.fromList startupData.e2eeKeys
+            , encryptionRequests =
+                { pendingEncryptedMessages = SeqDict.empty
+                , nextEncryptionRequestId = Id.fromInt 0
+                , pendingDecryptedMessages = SeqDict.empty
+                , nextDecryptionRequestId = Id.fromInt 0
+                , pendingDecryptedManyMessages =
+                    List.indexedMap
+                        (\index backlog2 ->
+                            case backlog2 of
+                                PendingEncryption conversation ->
+                                    Just
+                                        ( Id.fromInt index
+                                        , { messageHashes = List.map Encryption.hash conversation.messages
+                                          , shiftScrollFrom = Nothing
+                                          }
+                                        )
+
+                                MissingKeys _ ->
+                                    Nothing
+                        )
+                        backlog
+                        |> List.filterMap identity
+                        |> SeqDict.fromList
+                , pendingDecryptedOldMessages = SeqDict.empty
+                , nextDecryptManyRequestId = Id.fromInt (List.length backlog)
+                , pendingEncryptedManyMessages = SeqDict.empty
+                , nextEncryptManyRequestId = Id.fromInt 0
+                , pendingEncryptedEdits = SeqDict.empty
+                , pendingEncryptedFiles = SeqDict.empty
+                , nextEncryptFileRequestId = Id.fromInt 0
+                }
+            , e2eeSectionsExpanded = SeqDict.empty
             , typedTextCounter = 0
             }
     in
     ( loggedIn
     , Command.batch
-        [ case loading.route of
+        [ List.indexedMap
+            (\index backlog2 ->
+                case backlog2 of
+                    PendingEncryption conversation ->
+                        Encryption.decryptManyMessages (Id.fromInt index) conversation.id conversation.messages |> Just
+
+                    MissingKeys _ ->
+                        Nothing
+            )
+            backlog
+            |> List.filterMap identity
+            |> Command.batch
+        , case loading.route of
             AdminRoute params ->
                 case params.highlightLog of
                     Just _ ->
@@ -590,8 +663,14 @@ loadedInitHelper startupData emojiData loginData loading =
     )
 
 
-loginDataToLocalState : Ports.StartupData -> Maybe CachedEmojiData -> LoginData -> LocalState
-loginDataToLocalState startupData emojiData loginData =
+loginDataToLocalState :
+    Ports.StartupData
+    -> SeqDict BytesHash (Result () (MessageContent (Id UserId)))
+    -> List EncryptedBacklog
+    -> Maybe CachedEmojiData
+    -> LoginData
+    -> LocalState
+loginDataToLocalState startupData decrypted encryptionBacklog emojiData loginData =
     { adminData =
         case loginData.adminData of
             IsAdminLoginData adminData ->
@@ -619,6 +698,21 @@ loginDataToLocalState startupData emojiData loginData =
         , stickers = loginData.stickers
         , customEmojis = loginData.customEmojis
         , emojiData = emojiData
+        , decryptedMessages =
+            List.foldl
+                (\backlog decrypted2 ->
+                    case backlog of
+                        PendingEncryption _ ->
+                            decrypted2
+
+                        MissingKeys conversation ->
+                            List.foldl
+                                (\message decrypted3 -> SeqDict.insert (Encryption.hash message) (Err ()) decrypted3)
+                                decrypted2
+                                conversation.messages
+                )
+                decrypted
+                encryptionBacklog
         }
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
@@ -2268,17 +2362,45 @@ updateLoaded msg model =
         OneFrameAfterDragEnd ->
             ( { model | dragPrevious = model.drag }, Command.none )
 
-        GotFileHashName guildOrDmId fileStatusId result ->
+        GotFileToEncrypt guildOrDmId fileId contentType bytes ->
+            FrontendExtra.updateLoggedIn
+                (FrontendExtra.startEncryptingFile guildOrDmId fileId contentType bytes)
+                model
+
+        GotFileHashName guildOrDmId fileStatusId clientMetadata result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn
-                        | filesToUpload =
+                    let
+                        filesToUpload : SeqDict ( AnyGuildOrDmId, ThreadRoute ) (NonemptyDict (Id FileId) FileStatus)
+                        filesToUpload =
                             SeqDict.updateIfExists
                                 guildOrDmId
-                                (NonemptyDict.updateIfExists fileStatusId (FileStatus.addFileHash result))
+                                (NonemptyDict.updateIfExists fileStatusId (FileStatus.addFileHash clientMetadata result))
                                 loggedIn.filesToUpload
-                      }
-                    , Command.none
+                    in
+                    ( { loggedIn | filesToUpload = filesToUpload }
+                      -- The key is only worth leaving with the service worker now that the
+                      -- upload has come back with the address the ciphertext sits at.
+                    , case
+                        SeqDict.get guildOrDmId filesToUpload
+                            |> Maybe.andThen (NonemptyDict.get fileStatusId)
+                      of
+                        Just (FileUploaded fileData) ->
+                            case FileStatus.fileKey fileData of
+                                Just key ->
+                                    Encryption.storeFileKeys [ key ]
+
+                                Nothing ->
+                                    Command.none
+
+                        Just (FileUploading _ _ _ _) ->
+                            Command.none
+
+                        Just (FileError _ _ _ _ _) ->
+                            Command.none
+
+                        Nothing ->
+                            Command.none
                     )
                 )
                 model
@@ -2395,7 +2517,7 @@ updateLoaded msg model =
                                             | attachedFiles =
                                                 SeqDict.updateIfExists
                                                     fileId
-                                                    (FileStatus.addFileHash result)
+                                                    (FileStatus.addFileHash Nothing result)
                                                     edit.attachedFiles
                                         }
 
@@ -2420,7 +2542,7 @@ updateLoaded msg model =
                                     fileId
                                     (\fileStatus ->
                                         case fileStatus of
-                                            FileUploading fileName fileSize contentType ->
+                                            FileUploading fileName fileSize contentType isEncrypted ->
                                                 FileUploading
                                                     fileName
                                                     (case progress of
@@ -2431,11 +2553,12 @@ updateLoaded msg model =
                                                             { sent = received, size = fileSize.size }
                                                     )
                                                     contentType
+                                                    isEncrypted
 
                                             FileUploaded _ ->
                                                 fileStatus
 
-                                            FileError _ _ _ _ ->
+                                            FileError _ _ _ _ _ ->
                                                 fileStatus
                                     )
                                 )
@@ -2854,6 +2977,9 @@ updateLoaded msg model =
                         PublicGoMatchRoute _ ->
                             ( model, Command.none )
 
+                        E2eeInfo ->
+                            ( model, Command.none )
+
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
                     case threadRoute of
                         NoThreadWithMessage messageId ->
@@ -3082,6 +3208,468 @@ updateLoaded msg model =
 
         PressedExportChannel exportChannelId ->
             ( model, Lamdera.sendToBackend (ExportChannelRequest exportChannelId) )
+
+        PressedAddPrivateKeyToAccount ->
+            case
+                X25519.privateKeyFromListInt
+                    (List.indexedMap
+                        (\index value -> (index + 1) * Time.posixToMillis model.time + value)
+                        model.startupData.randomSeed
+                    )
+            of
+                Just privateKey ->
+                    let
+                        startupData : Ports.StartupData
+                        startupData =
+                            model.startupData
+                    in
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_SetPublicKey (X25519.toPublicKey privateKey) EmptyPlaceholder |> Just)
+                                { loggedIn | showNewPrivateKey = Just privateKey }
+                                Command.none
+                        )
+                        -- The words that went into this key are dropped so that generating a
+                        -- second key cannot come out the same as the first.
+                        { model
+                            | startupData =
+                                { startupData | randomSeed = List.drop 8 startupData.randomSeed }
+                        }
+
+                Nothing ->
+                    ( model, Command.none )
+
+        PressedCloseNewPrivateKey ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn -> ( { loggedIn | showNewPrivateKey = Nothing }, Command.none ))
+                model
+
+        PressedExpandE2eeSection otherUserId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    let
+                        isExpanded : Bool
+                        isExpanded =
+                            Pages.Guild.e2eeSectionIsExpanded
+                                otherUserId
+                                (Local.model loggedIn.localState)
+                                loggedIn
+                    in
+                    ( { loggedIn
+                        | e2eeSectionsExpanded =
+                            SeqDict.insert otherUserId (not isExpanded) loggedIn.e2eeSectionsExpanded
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedE2eeRisksAccepted isChecked ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetE2eeRisksAccepted isChecked |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedEnableE2ee otherUserId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_RequestE2ee { otherUserId = otherUserId } |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedCancelE2eeRequest otherUserId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_DeclineE2eeRequestAsInitiator { otherUserId = otherUserId } |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedDisableE2ee otherUserId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_DisableE2ee { otherUserId = otherUserId } EmptyPlaceholder |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedDeclineE2eeRequest otherUserId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_DeclineE2eeRequest { otherUserId = otherUserId } |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        TypedPrivateKey otherUserId text ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    let
+                        trimmed : String
+                        trimmed =
+                            String.trim text
+                    in
+                    if String.endsWith "=" trimmed then
+                        let
+                            result : Result String ( X25519.PublicKey, Command FrontendOnly ToBackend FrontendMsg_ )
+                            result =
+                                case User.privateKeyForAccount trimmed (Local.model loggedIn.localState).localUser.user of
+                                    Ok privateKey ->
+                                        case storeSharedSecret otherUserId privateKey loggedIn of
+                                            Ok command ->
+                                                Ok
+                                                    ( X25519.toPublicKey privateKey
+                                                    , (command :: storeRemainingSharedSecrets otherUserId privateKey loggedIn)
+                                                        |> Command.batch
+                                                    )
+
+                                            Err error ->
+                                                Err error
+
+                                    Err error ->
+                                        Err error
+                        in
+                        case result of
+                            Ok ( publicKey, command ) ->
+                                let
+                                    toEncrypt : List ( Id EncryptManyRequestId, OldMessagesToEncrypt )
+                                    toEncrypt =
+                                        conversationsToEncrypt
+                                            loggedIn.encryptionRequests.nextEncryptManyRequestId
+                                            (locallyLoadedMessagesToEncrypt (Local.model loggedIn.localState))
+                                in
+                                FrontendExtra.handleLocalChange
+                                    model.time
+                                    (Local_SetPublicKey publicKey EmptyPlaceholder |> Just)
+                                    (FrontendExtra.mapEncryptionRequests
+                                        (rememberEncryptManyRequests toEncrypt)
+                                        { loggedIn | e2eeError = Nothing, e2eePrivateKeyText = "" }
+                                    )
+                                    (command :: List.map encryptConversation toEncrypt |> Command.batch)
+
+                            Err error ->
+                                ( { loggedIn | e2eeError = Just error, e2eePrivateKeyText = text }, Command.none )
+
+                    else
+                        ( { loggedIn | e2eeError = Nothing, e2eePrivateKeyText = text }, Command.none )
+                )
+                model
+
+        EncryptionFromJs result ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case result of
+                        Ok (Encryption.FromJs_SharedSecretStored otherUserId) ->
+                            let
+                                loggedIn2 : LoggedIn2
+                                loggedIn2 =
+                                    { loggedIn
+                                        | e2eeKeysOnThisDevice =
+                                            SeqSet.insert otherUserId loggedIn.e2eeKeysOnThisDevice
+                                    }
+
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn2.localState
+
+                                acceptE2ee : Bool
+                                acceptE2ee =
+                                    case SeqDict.get otherUserId local.dmChannels of
+                                        Just dmChannel ->
+                                            case dmChannel.e2ee of
+                                                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
+                                                    requestedBy /= local.localUser.session.userId || otherUserId == local.localUser.session.userId
+
+                                                DmChannel.E2eeDeclinedBy _ ->
+                                                    False
+
+                                                DmChannel.E2eeDisabled _ ->
+                                                    False
+
+                                                DmChannel.E2eeEnabled _ ->
+                                                    False
+
+                                        Nothing ->
+                                            False
+                            in
+                            if acceptE2ee then
+                                FrontendExtra.handleLocalChange
+                                    model.time
+                                    (Local_AcceptE2ee { otherUserId = otherUserId } model.time EmptyPlaceholder |> Just)
+                                    loggedIn2
+                                    Command.none
+
+                            else
+                                ( loggedIn2, Command.none )
+
+                        Ok (Encryption.FromJs_SharedSecretFailed _ error) ->
+                            ( { loggedIn | e2eeError = Just error }, Command.none )
+
+                        Ok (Encryption.FromJs_NewMessageEncrypted requestId cipherText) ->
+                            case
+                                ( SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedEdits
+                                , SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedMessages
+                                )
+                            of
+                                ( Just pending, _ ) ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Local_SendEncryptedEditMessage
+                                            model.time
+                                            pending.id
+                                            pending.threadRoute
+                                            (SeqDict.values pending.contentAndEmbeds.attachedFiles
+                                                |> List.map .fileHash
+                                                |> SeqSet.fromList
+                                            )
+                                            cipherText
+                                            |> Just
+                                        )
+                                        (FrontendExtra.fileDecryptedMessages
+                                            [ ( Encryption.hash cipherText, Ok pending.contentAndEmbeds ) ]
+                                            (FrontendExtra.mapEncryptionRequests
+                                                (forgetEncryptRequest requestId)
+                                                loggedIn
+                                            )
+                                        )
+                                        (FrontendExtra.storeDecryptedFileKeys [ Ok pending.contentAndEmbeds ])
+
+                                ( Nothing, Just pending ) ->
+                                    let
+                                        draft : ( AnyGuildOrDmId, ThreadRoute )
+                                        draft =
+                                            ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = pending.otherUserId })
+                                            , Id.threadRouteWithoutMaybeMessage pending.threadRoute
+                                            )
+                                    in
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Local_SendEncryptedMessage
+                                            model.time
+                                            { otherUserId = pending.otherUserId }
+                                            (SeqDict.values pending.contentAndEmbeds.attachedFiles
+                                                |> List.map .fileHash
+                                                |> SeqSet.fromList
+                                            )
+                                            cipherText
+                                            pending.threadRoute
+                                            |> Just
+                                        )
+                                        (FrontendExtra.fileDecryptedMessages
+                                            [ ( Encryption.hash cipherText, Ok pending.contentAndEmbeds ) ]
+                                            (FrontendExtra.mapEncryptionRequests
+                                                (forgetEncryptRequest requestId)
+                                                { loggedIn
+                                                    | drafts = SeqDict.remove draft loggedIn.drafts
+                                                    , replyTo = SeqDict.remove draft loggedIn.replyTo
+                                                    , filesToUpload = SeqDict.remove draft loggedIn.filesToUpload
+                                                }
+                                            )
+                                        )
+                                        (Command.batch
+                                            [ Scroll.toBottomOfChannel
+                                                Pages.Guild.conversationContainerId
+                                                SetScrollToBottom
+                                            , FrontendExtra.storeDecryptedFileKeys [ Ok pending.contentAndEmbeds ]
+                                            ]
+                                        )
+
+                                ( Nothing, Nothing ) ->
+                                    ( loggedIn, Command.none )
+
+                        Ok (Encryption.FromJs_NewMessageEncryptFailed requestId error) ->
+                            -- The draft is deliberately left where it is, so that a
+                            -- message that could not be encrypted is not also lost.
+                            ( FrontendExtra.mapEncryptionRequests
+                                (forgetEncryptRequest requestId)
+                                { loggedIn | e2eeError = Just error }
+                            , Command.none
+                            )
+
+                        Ok (Encryption.FromJs_NewMessageDecrypted requestId contentAndEmbeds) ->
+                            FrontendExtra.handleDecryptedMessage requestId (Ok contentAndEmbeds) model loggedIn
+
+                        Ok (Encryption.FromJs_NewMessageDecryptFailed requestId) ->
+                            FrontendExtra.handleDecryptedMessage requestId (Err ()) model loggedIn
+
+                        Ok (Encryption.FromJs_ManyMessagesDecrypted requestId results) ->
+                            case SeqDict.get requestId loggedIn.encryptionRequests.pendingDecryptedOldMessages of
+                                Just pending ->
+                                    let
+                                        decrypted : List ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+                                        decrypted =
+                                            List.map2 Tuple.pair pending.messages results
+                                                |> List.filterMap
+                                                    (\( threadRoute, decryptResult ) ->
+                                                        case decryptResult of
+                                                            Ok content ->
+                                                                Just ( threadRoute, content )
+
+                                                            Err () ->
+                                                                Nothing
+                                                    )
+                                    in
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Local_DecryptOldMessages pending.id model.time decrypted |> Just)
+                                        (FrontendExtra.mapEncryptionRequests
+                                            (forgetDecryptOldMessagesRequest requestId)
+                                            loggedIn
+                                        )
+                                        (FrontendExtra.storeDecryptedFileKeys
+                                            (List.map (\( _, content ) -> Ok content) decrypted)
+                                        )
+
+                                Nothing ->
+                                    handleManyMessagesDecrypted requestId results loggedIn
+
+                        Ok (Encryption.FromJs_ManyMessagesEncrypted requestId encrypted) ->
+                            case SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedManyMessages of
+                                Just pending ->
+                                    let
+                                        pairs :
+                                            List
+                                                ( ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+                                                , Encryption.EncryptedData (MessageContent (Id UserId))
+                                                )
+                                        pairs =
+                                            List.map2
+                                                Tuple.pair
+                                                pending.messages
+                                                encrypted
+                                    in
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (List.map
+                                            (\( ( threadRoute, content ), encryptedData ) ->
+                                                ( threadRoute
+                                                , SeqDict.values content.attachedFiles
+                                                    |> List.map .fileHash
+                                                    |> SeqSet.fromList
+                                                , encryptedData
+                                                )
+                                            )
+                                            pairs
+                                            |> Local_EncryptOldMessages pending.id
+                                            |> Just
+                                        )
+                                        (FrontendExtra.fileDecryptedMessages
+                                            (List.map
+                                                (\( ( _, contentAndEmbeds ), encryptedData ) ->
+                                                    ( Encryption.hash encryptedData, Ok contentAndEmbeds )
+                                                )
+                                                pairs
+                                            )
+                                            (FrontendExtra.mapEncryptionRequests
+                                                (forgetEncryptManyRequest requestId)
+                                                loggedIn
+                                            )
+                                        )
+                                        (FrontendExtra.storeDecryptedFileKeys
+                                            (List.map
+                                                (\( ( _, contentAndEmbeds ), _ ) -> Ok contentAndEmbeds)
+                                                pairs
+                                            )
+                                        )
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+
+                        Ok (Encryption.FromJs_ManyMessagesEncryptFailed requestId error) ->
+                            ( FrontendExtra.mapEncryptionRequests
+                                (forgetEncryptManyRequest requestId)
+                                { loggedIn | e2eeError = Just error }
+                            , Command.none
+                            )
+
+                        Ok (Encryption.FromJs_FileEncrypted requestId encrypted) ->
+                            case
+                                SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedFiles
+                                    |> Maybe.andThen (stillAttached loggedIn)
+                            of
+                                Just { guildOrDmId, fileId } ->
+                                    ( FrontendExtra.mapEncryptionRequests
+                                        (forgetEncryptFileRequest requestId)
+                                        { loggedIn
+                                            | filesToUpload =
+                                                SeqDict.updateIfExists
+                                                    guildOrDmId
+                                                    (NonemptyDict.updateIfExists
+                                                        fileId
+                                                        (fileEncrypted encrypted)
+                                                    )
+                                                    loggedIn.filesToUpload
+                                        }
+                                    , FileStatus.uploadEncryptedFile
+                                        (GotFileHashName
+                                            guildOrDmId
+                                            fileId
+                                            (Maybe.map FileStatus.measuredFileMetadata encrypted.measured)
+                                        )
+                                        guildOrDmId
+                                        fileId
+                                        { cipherText = encrypted.data
+                                        , thumbnail = encrypted.thumbnail
+                                        }
+                                    )
+
+                                Nothing ->
+                                    ( FrontendExtra.mapEncryptionRequests
+                                        (forgetEncryptFileRequest requestId)
+                                        loggedIn
+                                    , Command.none
+                                    )
+
+                        Ok (Encryption.FromJs_FileEncryptFailed requestId error) ->
+                            ( FrontendExtra.mapEncryptionRequests
+                                (forgetEncryptFileRequest requestId)
+                                { loggedIn
+                                    | e2eeError = Just error
+                                    , filesToUpload =
+                                        case
+                                            SeqDict.get
+                                                requestId
+                                                loggedIn.encryptionRequests.pendingEncryptedFiles
+                                        of
+                                            Just { guildOrDmId, fileId } ->
+                                                SeqDict.updateIfExists
+                                                    guildOrDmId
+                                                    (NonemptyDict.updateIfExists
+                                                        fileId
+                                                        (FileStatus.addFileHash Nothing (Err (Http.BadBody error)))
+                                                    )
+                                                    loggedIn.filesToUpload
+
+                                            Nothing ->
+                                                loggedIn.filesToUpload
+                                }
+                            , Command.none
+                            )
+
+                        Err error ->
+                            ( { loggedIn | e2eeError = Just error }, Command.none )
+                )
+                model
 
         PageHasFocusChanged hasFocus ->
             let
@@ -3544,80 +4132,117 @@ updateLoaded msg model =
                                             local : LocalState
                                             local =
                                                 Local.model loggedIn.localState
-                                        in
-                                        FrontendExtra.handleLocalChange
-                                            model.time
-                                            (case guildOrDmId of
-                                                GuildOrDmId guildOrDmId2 ->
-                                                    case
-                                                        ( String.Nonempty.fromString edit.text
-                                                        , LocalState.guildOrDmIdToMessage
-                                                            guildOrDmId2
-                                                            (Id.threadRouteWithMessage edit.messageIndex threadRoute)
-                                                            local
+
+                                            editedRichText : Maybe (Nonempty (RichText (Id UserId)))
+                                            editedRichText =
+                                                case
+                                                    ( String.Nonempty.fromString edit.text
+                                                    , LocalState.guildOrDmIdToMessage
+                                                        (case guildOrDmId of
+                                                            GuildOrDmId guildOrDmId2 ->
+                                                                guildOrDmId2
+
+                                                            DiscordGuildOrDmId _ ->
+                                                                GuildOrDmId_Dm { otherUserId = local.localUser.session.userId }
                                                         )
-                                                    of
-                                                        ( Just nonempty, Just ( message, _ ) ) ->
-                                                            let
-                                                                richText : Nonempty (RichText (Id UserId))
-                                                                richText =
-                                                                    RichText.fromNonemptyString
-                                                                        local.localUser.timezone
-                                                                        (User.allUsers local.localUser)
-                                                                        nonempty
-                                                            in
-                                                            if message.content == richText then
-                                                                Nothing
-
-                                                            else
-                                                                Local_SendEditMessage
-                                                                    model.time
-                                                                    model.timezone
-                                                                    guildOrDmId2
-                                                                    (case threadRoute of
-                                                                        ViewThread threadId ->
-                                                                            ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
-
-                                                                        NoThread ->
-                                                                            NoThreadWithMessage edit.messageIndex
-                                                                    )
+                                                        (Id.threadRouteWithMessage edit.messageIndex threadRoute)
+                                                        local
+                                                    )
+                                                of
+                                                    ( Just nonempty, Just ( message, _ ) ) ->
+                                                        let
+                                                            richText : Nonempty (RichText (Id UserId))
+                                                            richText =
+                                                                RichText.fromNonemptyString
+                                                                    local.localUser.timezone
+                                                                    (User.allUsers local.localUser)
                                                                     nonempty
-                                                                    (FileStatus.onlyUploadedFiles edit.attachedFiles)
-                                                                    |> Just
-
-                                                        _ ->
+                                                        in
+                                                        if message.content.content == richText then
                                                             Nothing
 
-                                                DiscordGuildOrDmId guildOrDmId2 ->
-                                                    case
-                                                        ( String.Nonempty.fromString edit.text
-                                                        , LocalState.discordGuildOrDmIdToMessage
-                                                            guildOrDmId2
-                                                            (Id.threadRouteWithMessage edit.messageIndex threadRoute)
-                                                            local
-                                                        )
-                                                    of
-                                                        ( Just nonempty, Just ( message, _ ) ) ->
-                                                            let
-                                                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
-                                                                richText =
-                                                                    RichText.fromNonemptyString
-                                                                        local.localUser.timezone
-                                                                        (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
-                                                                        nonempty
-                                                            in
-                                                            if message.content == richText then
-                                                                Nothing
+                                                        else
+                                                            Just richText
 
-                                                            else
-                                                                case guildOrDmId2 of
-                                                                    DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId } ->
-                                                                        Local_Discord_SendEditGuildMessage
+                                                    _ ->
+                                                        Nothing
+
+                                            editWasSent : LoggedIn2 -> LoggedIn2
+                                            editWasSent loggedIn2 =
+                                                if MyUi.isMobile model then
+                                                    MessageMenu.close model loggedIn2
+
+                                                else
+                                                    { loggedIn2
+                                                        | editMessage =
+                                                            SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn2.editMessage
+                                                    }
+                                        in
+                                        case
+                                            ( FrontendExtra.encryptedDmOtherUser guildOrDmId local loggedIn
+                                            , editedRichText
+                                            )
+                                        of
+                                            ( Just dmId, Just richText ) ->
+                                                -- The edit goes past the browser before it is
+                                                -- sent, the same way the message itself did.
+                                                startEncryptingEdit
+                                                    dmId
+                                                    (case threadRoute of
+                                                        ViewThread threadId ->
+                                                            ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
+
+                                                        NoThread ->
+                                                            NoThreadWithMessage edit.messageIndex
+                                                    )
+                                                    { content = richText
+                                                    , embeds = Array.empty
+                                                    , attachedFiles = FileStatus.onlyUploadedFiles edit.attachedFiles
+                                                    }
+                                                    (editWasSent loggedIn)
+                                                    |> Tuple.mapSecond
+                                                        (\cmd ->
+                                                            Command.batch
+                                                                [ cmd
+                                                                , FrontendExtra.setFocus model Pages.Guild.channelTextInputId
+                                                                ]
+                                                        )
+
+                                            ( Just _, Nothing ) ->
+                                                ( editWasSent loggedIn
+                                                , FrontendExtra.setFocus model Pages.Guild.channelTextInputId
+                                                )
+
+                                            ( Nothing, _ ) ->
+                                                FrontendExtra.handleLocalChange
+                                                    model.time
+                                                    (case guildOrDmId of
+                                                        GuildOrDmId guildOrDmId2 ->
+                                                            case
+                                                                ( String.Nonempty.fromString edit.text
+                                                                , LocalState.guildOrDmIdToMessage
+                                                                    guildOrDmId2
+                                                                    (Id.threadRouteWithMessage edit.messageIndex threadRoute)
+                                                                    local
+                                                                )
+                                                            of
+                                                                ( Just nonempty, Just ( message, _ ) ) ->
+                                                                    let
+                                                                        richText : Nonempty (RichText (Id UserId))
+                                                                        richText =
+                                                                            RichText.fromNonemptyString
+                                                                                local.localUser.timezone
+                                                                                (User.allUsers local.localUser)
+                                                                                nonempty
+                                                                    in
+                                                                    if message.content.content == richText then
+                                                                        Nothing
+
+                                                                    else
+                                                                        Local_SendEditMessage
                                                                             model.time
                                                                             model.timezone
-                                                                            currentUserId
-                                                                            guildId
-                                                                            channelId
+                                                                            guildOrDmId2
                                                                             (case threadRoute of
                                                                                 ViewThread threadId ->
                                                                                     ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
@@ -3626,29 +4251,73 @@ updateLoaded msg model =
                                                                                     NoThreadWithMessage edit.messageIndex
                                                                             )
                                                                             nonempty
+                                                                            (FileStatus.onlyUploadedFiles edit.attachedFiles)
                                                                             |> Just
 
-                                                                    DiscordGuildOrDmId_Dm data ->
-                                                                        Local_Discord_SendEditDmMessage
-                                                                            model.time
-                                                                            model.timezone
-                                                                            data
-                                                                            edit.messageIndex
-                                                                            nonempty
-                                                                            |> Just
+                                                                _ ->
+                                                                    Nothing
 
-                                                        _ ->
-                                                            Nothing
-                                            )
-                                            (if MyUi.isMobile model then
-                                                MessageMenu.close model loggedIn
+                                                        DiscordGuildOrDmId guildOrDmId2 ->
+                                                            case
+                                                                ( String.Nonempty.fromString edit.text
+                                                                , LocalState.discordGuildOrDmIdToMessage
+                                                                    guildOrDmId2
+                                                                    (Id.threadRouteWithMessage edit.messageIndex threadRoute)
+                                                                    local
+                                                                )
+                                                            of
+                                                                ( Just nonempty, Just ( message, _ ) ) ->
+                                                                    let
+                                                                        richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                                                        richText =
+                                                                            RichText.fromNonemptyString
+                                                                                local.localUser.timezone
+                                                                                (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                                                                                nonempty
+                                                                    in
+                                                                    if message.content.content == richText then
+                                                                        Nothing
 
-                                             else
-                                                { loggedIn
-                                                    | editMessage = SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn.editMessage
-                                                }
-                                            )
-                                            (FrontendExtra.setFocus model Pages.Guild.channelTextInputId)
+                                                                    else
+                                                                        case guildOrDmId2 of
+                                                                            DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId } ->
+                                                                                Local_Discord_SendEditGuildMessage
+                                                                                    model.time
+                                                                                    model.timezone
+                                                                                    currentUserId
+                                                                                    guildId
+                                                                                    channelId
+                                                                                    (case threadRoute of
+                                                                                        ViewThread threadId ->
+                                                                                            ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
+
+                                                                                        NoThread ->
+                                                                                            NoThreadWithMessage edit.messageIndex
+                                                                                    )
+                                                                                    nonempty
+                                                                                    |> Just
+
+                                                                            DiscordGuildOrDmId_Dm data ->
+                                                                                Local_Discord_SendEditDmMessage
+                                                                                    model.time
+                                                                                    model.timezone
+                                                                                    data
+                                                                                    edit.messageIndex
+                                                                                    nonempty
+                                                                                    |> Just
+
+                                                                _ ->
+                                                                    Nothing
+                                                    )
+                                                    (if MyUi.isMobile model then
+                                                        MessageMenu.close model loggedIn
+
+                                                     else
+                                                        { loggedIn
+                                                            | editMessage = SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn.editMessage
+                                                        }
+                                                    )
+                                                    (FrontendExtra.setFocus model Pages.Guild.channelTextInputId)
 
                                 Nothing ->
                                     ( loggedIn, Command.none )
@@ -3910,11 +4579,15 @@ updateLoaded msg model =
                                     ( guildOrDmId, threadRoute )
                             in
                             case SeqDict.get guildOrDmIdWithThread loggedIn.drafts of
-                                Just nonempty ->
+                                Just draft ->
                                     let
                                         local : LocalState
                                         local =
                                             Local.model loggedIn.localState
+
+                                        nonempty : String.Nonempty.NonemptyString
+                                        nonempty =
+                                            User.redactPrivateKeys local.localUser.user draft
 
                                         safeToSend : Bool
                                         safeToSend =
@@ -3936,84 +4609,106 @@ updateLoaded msg model =
                                                             LocalState.canSendDiscordMessage local guildOrDmId2 == Ok ()
                                                    )
                                     in
-                                    if safeToSend then
-                                        FrontendExtra.handleLocalChange
-                                            model.time
-                                            ((case guildOrDmId of
-                                                GuildOrDmId guildOrDmId2 ->
-                                                    Local_SendMessage
-                                                        model.time
-                                                        model.timezone
-                                                        guildOrDmId2
-                                                        nonempty
-                                                        (case threadRoute of
-                                                            ViewThread threadId ->
-                                                                ViewThreadWithMaybeMessage
-                                                                    threadId
-                                                                    (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
-
-                                                            NoThread ->
-                                                                NoThreadWithMaybeMessage
-                                                                    (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
-                                                        )
-                                                        (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
-                                                            Just dict ->
-                                                                NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
-
-                                                            Nothing ->
-                                                                SeqDict.empty
-                                                        )
-                                                        (case model.emojiData of
-                                                            Just emojiData2 ->
-                                                                RichText.fromNonemptyString Time.utc SeqDict.empty nonempty
-                                                                    |> RichText.emojisAndCustomEmojis emojiData2
-                                                                    |> SeqSet.fromList
-                                                                    |> SeqSet.toList
-
-                                                            Nothing ->
-                                                                []
-                                                        )
-
-                                                DiscordGuildOrDmId guildOrDmId2 ->
-                                                    Local_Discord_SendMessage
-                                                        model.time
-                                                        model.timezone
-                                                        guildOrDmId2
-                                                        nonempty
-                                                        (case threadRoute of
-                                                            ViewThread threadId ->
-                                                                ViewThreadWithMaybeMessage
-                                                                    threadId
-                                                                    (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
-
-                                                            NoThread ->
-                                                                NoThreadWithMaybeMessage
-                                                                    (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
-                                                        )
-                                                        (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
-                                                            Just dict ->
-                                                                NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
-
-                                                            Nothing ->
-                                                                SeqDict.empty
-                                                        )
-                                             )
-                                                |> Just
-                                            )
-                                            { loggedIn
-                                                | drafts = SeqDict.remove guildOrDmIdWithThread loggedIn.drafts
-                                                , replyTo = SeqDict.remove guildOrDmIdWithThread loggedIn.replyTo
-                                                , filesToUpload = SeqDict.remove guildOrDmIdWithThread loggedIn.filesToUpload
-                                            }
-                                            (if MyUi.isMobile model then
-                                                Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
-
-                                             else
-                                                Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
-                                            )
+                                    if not safeToSend then
+                                        ( loggedIn, Command.none )
 
                                     else
-                                        ( loggedIn, Command.none )
+                                        case FrontendExtra.encryptedDmOtherUser guildOrDmId local loggedIn of
+                                            Just dmId ->
+                                                startEncryptingMessage
+                                                    dmId
+                                                    threadRoute
+                                                    { content =
+                                                        RichText.fromNonemptyString
+                                                            local.localUser.timezone
+                                                            (User.allUsers local.localUser)
+                                                            nonempty
+                                                    , embeds = Array.empty
+                                                    , attachedFiles =
+                                                        case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
+                                                            Just dict ->
+                                                                NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+
+                                                            Nothing ->
+                                                                SeqDict.empty
+                                                    }
+                                                    loggedIn
+
+                                            Nothing ->
+                                                FrontendExtra.handleLocalChange
+                                                    model.time
+                                                    ((case guildOrDmId of
+                                                        GuildOrDmId guildOrDmId2 ->
+                                                            Local_SendMessage
+                                                                model.time
+                                                                model.timezone
+                                                                guildOrDmId2
+                                                                nonempty
+                                                                (case threadRoute of
+                                                                    ViewThread threadId ->
+                                                                        ViewThreadWithMaybeMessage
+                                                                            threadId
+                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
+
+                                                                    NoThread ->
+                                                                        NoThreadWithMaybeMessage
+                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
+                                                                )
+                                                                (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
+                                                                    Just dict ->
+                                                                        NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+
+                                                                    Nothing ->
+                                                                        SeqDict.empty
+                                                                )
+                                                                (case model.emojiData of
+                                                                    Just emojiData2 ->
+                                                                        RichText.fromNonemptyString Time.utc SeqDict.empty nonempty
+                                                                            |> RichText.emojisAndCustomEmojis emojiData2
+                                                                            |> SeqSet.fromList
+                                                                            |> SeqSet.toList
+
+                                                                    Nothing ->
+                                                                        []
+                                                                )
+
+                                                        DiscordGuildOrDmId guildOrDmId2 ->
+                                                            Local_Discord_SendMessage
+                                                                model.time
+                                                                model.timezone
+                                                                guildOrDmId2
+                                                                nonempty
+                                                                (case threadRoute of
+                                                                    ViewThread threadId ->
+                                                                        ViewThreadWithMaybeMessage
+                                                                            threadId
+                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
+
+                                                                    NoThread ->
+                                                                        NoThreadWithMaybeMessage
+                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
+                                                                )
+                                                                (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
+                                                                    Just dict ->
+                                                                        NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+
+                                                                    Nothing ->
+                                                                        SeqDict.empty
+                                                                )
+                                                     )
+                                                        |> Just
+                                                    )
+                                                    { loggedIn
+                                                        | drafts = SeqDict.remove guildOrDmIdWithThread loggedIn.drafts
+                                                        , replyTo = SeqDict.remove guildOrDmIdWithThread loggedIn.replyTo
+                                                        , filesToUpload = SeqDict.remove guildOrDmIdWithThread loggedIn.filesToUpload
+                                                    }
+                                                    (if MyUi.isMobile model then
+                                                        Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
+
+                                                     else
+                                                        Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+                                                    )
 
                                 Nothing ->
                                     ( loggedIn, Command.none )
@@ -4733,6 +5428,9 @@ updateLoaded msg model =
                 PublicGoMatchRoute _ ->
                     ( model, Command.none )
 
+                E2eeInfo ->
+                    ( model, Command.none )
+
         GoSpectatorMsg spectatorMsg ->
             case model.publicGoMatch of
                 PublicGoMatch_Loaded data gameModel ->
@@ -5165,6 +5863,22 @@ updateLoaded msg model =
 
                 MessageView.MessageView_PressedDiscordUserIconButton otherUserId ->
                     handlePressedDiscordUserIconButton otherUserId model
+
+        ValidatedE2eePrivateKey text keysValid ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map
+                                (\userOptions ->
+                                    { userOptions | e2eeKeysValid = keysValid, privateKeyText = text }
+                                )
+                                loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
 
 
 handleMouseEnteredMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
@@ -6326,6 +7040,9 @@ setShowMembers showMembers model =
         PublicGoMatchRoute _ ->
             ( model, Command.none )
 
+        E2eeInfo ->
+            ( model, Command.none )
+
 
 viewImageInfo :
     ( AnyGuildOrDmId, ThreadRoute )
@@ -6348,6 +7065,7 @@ viewImageInfo guildOrDmId fileId model =
                                             , metadata = metadata
                                             , contentType = fileData.contentType
                                             , fileHash = fileData.fileHash
+                                            , isEncrypted = fileData.isEncrypted
                                             }
                                                 |> Just
 
@@ -6434,8 +7152,8 @@ pressedEditMessage guildOrDmId threadRoute model =
                         GuildOrDmId guildOrDmId2 ->
                             case LocalState.guildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
-                                    ( RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.content
-                                    , message.attachedFiles
+                                    ( RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.content.content
+                                    , message.content.attachedFiles
                                     )
                                         |> Just
 
@@ -6449,8 +7167,8 @@ pressedEditMessage guildOrDmId threadRoute model =
                                         local.localUser.timezone
                                         False
                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
-                                        message.content
-                                    , message.attachedFiles
+                                        message.content.content
+                                    , message.content.attachedFiles
                                     )
                                         |> Just
 
@@ -7020,19 +7738,10 @@ channelSidebarTarget route =
                 PublicGoMatchRoute _ ->
                     2
 
+                E2eeInfo ->
+                    2
 
 
---case Route.toChannelsVisible route of
---    GuildChannelsHiddenOnMobile ->
---        1
---
---    GuildChannelsVisibleOnMobile ->
---        2
-
-
-{-| A swipe only ever travels between the screen the route is on and the one next door, so
-that letting go lands on one or the other.
--}
 channelSidebarDragRange : Route -> { min : Float, max : Float }
 channelSidebarDragRange route =
     case Route.toShowMembersTab route of
@@ -7284,9 +7993,42 @@ updateLoadedFromBackend msg model =
                         local : LocalState
                         local =
                             Local.model localState
+
+                        loadedEncryptedMessages : Maybe LoadedEncryptedMessages
+                        loadedEncryptedMessages =
+                            encryptedMessagesJustLoaded localChange
+
+                        oldMessagesToEncrypt : List ( Id EncryptManyRequestId, OldMessagesToEncrypt )
+                        oldMessagesToEncrypt =
+                            messagesNeedingEncryption
+                                loggedIn.encryptionRequests.nextEncryptManyRequestId
+                                localChange
+
+                        oldMessagesToDecrypt : Maybe OldMessagesToDecrypt
+                        oldMessagesToDecrypt =
+                            messagesNeedingDecryption localChange
                     in
                     ( { loggedIn
                         | localState = localState
+                        , encryptionRequests =
+                            rememberEncryptManyRequests
+                                oldMessagesToEncrypt
+                                (case ( loadedEncryptedMessages, oldMessagesToDecrypt ) of
+                                    ( Just loaded, _ ) ->
+                                        rememberDecryptManyRequest
+                                            { messageHashes = List.map Encryption.hash loaded.messages
+                                            , shiftScrollFrom = loaded.shiftScrollFrom
+                                            }
+                                            loggedIn.encryptionRequests
+
+                                    ( Nothing, Just conversation ) ->
+                                        rememberDecryptOldMessagesRequest
+                                            conversation
+                                            loggedIn.encryptionRequests
+
+                                    ( Nothing, Nothing ) ->
+                                        loggedIn.encryptionRequests
+                                )
                         , games =
                             case localChange of
                                 -- The match has arrived, so there's finally something for the
@@ -7303,203 +8045,223 @@ updateLoadedFromBackend msg model =
                                 _ ->
                                     loggedIn.games
                       }
-                    , case localChange of
-                        Local_Game guildOrDmId game ->
-                            case game of
-                                Game.CreatePublicLink _ _ ->
-                                    Command.none
+                    , Command.batch
+                        [ List.map encryptConversation oldMessagesToEncrypt |> Command.batch
+                        , case loadedEncryptedMessages of
+                            Just loaded ->
+                                Encryption.decryptManyMessages
+                                    loggedIn.encryptionRequests.nextDecryptManyRequestId
+                                    loaded.id
+                                    loaded.messages
 
-                                Game.LoadMatch matchId (FilledInByBackend _) ->
-                                    case FrontendExtra.currentGamesTab local model.route of
-                                        Just gamesTab ->
-                                            if gamesTab.guildOrDmId == guildOrDmId && gamesTab.maybeMatchId == Just matchId then
-                                                Scroll.toBottomOfChannelIfAtBottom
-                                                    WordSpellingGame.pastWordsContainerId
-                                                    SetScrollToBottom
-                                                    ScrolledToBottom
+                            Nothing ->
+                                Command.none
+                        , case oldMessagesToDecrypt of
+                            Just conversation ->
+                                decryptConversation
+                                    loggedIn.encryptionRequests.nextDecryptManyRequestId
+                                    conversation
 
-                                            else
+                            Nothing ->
+                                Command.none
+                        , case localChange of
+                            Local_Game guildOrDmId game ->
+                                case game of
+                                    Game.CreatePublicLink _ _ ->
+                                        Command.none
+
+                                    Game.LoadMatch matchId (FilledInByBackend _) ->
+                                        case FrontendExtra.currentGamesTab local model.route of
+                                            Just gamesTab ->
+                                                if gamesTab.guildOrDmId == guildOrDmId && gamesTab.maybeMatchId == Just matchId then
+                                                    Scroll.toBottomOfChannelIfAtBottom
+                                                        WordSpellingGame.pastWordsContainerId
+                                                        SetScrollToBottom
+                                                        ScrolledToBottom
+
+                                                else
+                                                    Command.none
+
+                                            Nothing ->
                                                 Command.none
 
-                                        Nothing ->
-                                            Command.none
+                                    Game.LoadMatch _ EmptyPlaceholder ->
+                                        Command.none
 
-                                Game.LoadMatch _ EmptyPlaceholder ->
-                                    Command.none
+                                    Game.LocalChange_Go _ _ ->
+                                        Command.none
 
-                                Game.LocalChange_Go _ _ ->
-                                    Command.none
+                                    Game.LocalChange_WordSpellingGame _ _ ->
+                                        Command.none
 
-                                Game.LocalChange_WordSpellingGame _ _ ->
-                                    Command.none
+                                    Game.LocalChange_SheepGame _ _ ->
+                                        Command.none
 
-                                Game.LocalChange_SheepGame _ _ ->
-                                    Command.none
+                            Local_VoiceChatChange callChange ->
+                                case callChange of
+                                    Call.Local_Leave _ ->
+                                        Command.none
 
-                        Local_VoiceChatChange callChange ->
-                            case callChange of
-                                Call.Local_Leave _ ->
-                                    Command.none
+                                    Call.Local_SetRemoteCallData _ ->
+                                        Command.none
 
-                                Call.Local_SetRemoteCallData _ ->
-                                    Command.none
+                            Local_TextEditor TextEditor.Local_Undo ->
+                                case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
+                                    Just range ->
+                                        Ports.setCursorPosition TextEditor.inputId range
 
-                        Local_TextEditor TextEditor.Local_Undo ->
-                            case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
-                                Just range ->
-                                    Ports.setCursorPosition TextEditor.inputId range
+                                    Nothing ->
+                                        Command.none
 
-                                Nothing ->
-                                    Command.none
-
-                        Local_NewGuild _ _ (FilledInByBackend guildId) ->
-                            case SeqDict.get guildId local.guilds of
-                                Just guild ->
-                                    FrontendExtra.routeReplace
-                                        model
-                                        (GuildRoute
-                                            guildId
-                                            (ChannelRoute
-                                                (LocalState.announcementChannel guild)
-                                                (NoThreadWithFriends Nothing HideChannelSettings)
-                                                Nothing
+                            Local_NewGuild _ _ (FilledInByBackend guildId) ->
+                                case SeqDict.get guildId local.guilds of
+                                    Just guild ->
+                                        FrontendExtra.routeReplace
+                                            model
+                                            (GuildRoute
+                                                guildId
+                                                (ChannelRoute
+                                                    (LocalState.announcementChannel guild)
+                                                    (NoThreadWithFriends Nothing HideChannelSettings)
+                                                    Nothing
+                                                )
+                                                ChannelsHiddenOnMobile
                                             )
-                                            ChannelsHiddenOnMobile
-                                        )
 
-                                Nothing ->
+                                    Nothing ->
+                                        Command.none
+
+                            Local_CurrentlyViewing _ viewing ->
+                                case viewing of
+                                    ViewChannel data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }), NoThread ) ->
+                                                if data.id.guildId == guildId && data.id.channelId == channelId then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    ViewDm data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( GuildOrDmId (GuildOrDmId_Dm { otherUserId }), NoThread ) ->
+                                                if data.id.otherUserId == otherUserId then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    ViewChannelThread data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }), ViewThread threadIdRoute ) ->
+                                                if data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadIdRoute then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    ViewDmThread data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( GuildOrDmId (GuildOrDmId_Dm { otherUserId }), ViewThread threadIdRoute ) ->
+                                                if data.id.otherUserId == otherUserId && data.id.threadId == threadIdRoute then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    StopViewingChannel ->
+                                        Command.none
+
+                                    ViewDiscordChannel data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }), NoThread ) ->
+                                                if data.id.currentUserId == currentUserId && data.id.guildId == guildId && data.id.channelId == channelId then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    ViewDiscordChannelThread data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }), ViewThread threadIdRoute ) ->
+                                                if data.id.currentUserId == currentUserId && data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadIdRoute then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    ViewDiscordDm data _ ->
+                                        case Route.toGuildOrDmId userId model.route of
+                                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm dmRoute), NoThread ) ->
+                                                if data.id.channelId == dmRoute.channelId then
+                                                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                                                else
+                                                    Command.none
+
+                                            _ ->
+                                                Command.none
+
+                                    ViewOverview _ ->
+                                        Command.none
+
+                            Local_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                                if SeqDict.isEmpty messagesLoaded then
                                     Command.none
 
-                        Local_CurrentlyViewing _ viewing ->
-                            case viewing of
-                                ViewChannel data _ ->
-                                    case Route.toGuildOrDmId userId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }), NoThread ) ->
-                                            if data.id.guildId == guildId && data.id.channelId == channelId then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+                                else
+                                    Ports.shiftScrollByElementDelta
+                                        Pages.Guild.conversationContainerId
+                                        (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage)
 
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewDm data _ ->
-                                    case Route.toGuildOrDmId userId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Dm { otherUserId }), NoThread ) ->
-                                            if data.id.otherUserId == otherUserId then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewChannelThread data _ ->
-                                    case Route.toGuildOrDmId userId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Guild { guildId, channelId }), ViewThread threadIdRoute ) ->
-                                            if data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadIdRoute then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewDmThread data _ ->
-                                    case Route.toGuildOrDmId userId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Dm { otherUserId }), ViewThread threadIdRoute ) ->
-                                            if data.id.otherUserId == otherUserId && data.id.threadId == threadIdRoute then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                StopViewingChannel ->
+                            Local_LoadThreadMessages _ _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                                if SeqDict.isEmpty messagesLoaded then
                                     Command.none
 
-                                ViewDiscordChannel data _ ->
-                                    case Route.toGuildOrDmId userId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }), NoThread ) ->
-                                            if data.id.currentUserId == currentUserId && data.id.guildId == guildId && data.id.channelId == channelId then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+                                else
+                                    Ports.shiftScrollByElementDelta
+                                        Pages.Guild.conversationContainerId
+                                        (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage)
 
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewDiscordChannelThread data _ ->
-                                    case Route.toGuildOrDmId userId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId }), ViewThread threadIdRoute ) ->
-                                            if data.id.currentUserId == currentUserId && data.id.guildId == guildId && data.id.channelId == channelId && data.id.threadId == threadIdRoute then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewDiscordDm data _ ->
-                                    case Route.toGuildOrDmId userId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm dmRoute), NoThread ) ->
-                                            if data.id.channelId == dmRoute.channelId then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewOverview _ ->
+                            Local_Discord_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                                if SeqDict.isEmpty messagesLoaded then
                                     Command.none
 
-                        Local_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
-                            if SeqDict.isEmpty messagesLoaded then
+                                else
+                                    Ports.shiftScrollByElementDelta
+                                        Pages.Guild.conversationContainerId
+                                        (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage)
+
+                            Local_Discord_LoadThreadMessages _ _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                                if SeqDict.isEmpty messagesLoaded then
+                                    Command.none
+
+                                else
+                                    Ports.shiftScrollByElementDelta
+                                        Pages.Guild.conversationContainerId
+                                        (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage)
+
+                            _ ->
                                 Command.none
-
-                            else
-                                Ports.shiftScrollByElementDelta
-                                    Pages.Guild.conversationContainerId
-                                    (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage)
-
-                        Local_LoadThreadMessages _ _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
-                            if SeqDict.isEmpty messagesLoaded then
-                                Command.none
-
-                            else
-                                Ports.shiftScrollByElementDelta
-                                    Pages.Guild.conversationContainerId
-                                    (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage)
-
-                        Local_Discord_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
-                            if SeqDict.isEmpty messagesLoaded then
-                                Command.none
-
-                            else
-                                Ports.shiftScrollByElementDelta
-                                    Pages.Guild.conversationContainerId
-                                    (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage)
-
-                        Local_Discord_LoadThreadMessages _ _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
-                            if SeqDict.isEmpty messagesLoaded then
-                                Command.none
-
-                            else
-                                Ports.shiftScrollByElementDelta
-                                    Pages.Guild.conversationContainerId
-                                    (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage)
-
-                        _ ->
-                            Command.none
+                        ]
                     )
                 )
                 model
@@ -7558,77 +8320,56 @@ updateLoadedFromBackend msg model =
                                     )
 
                                 Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ ->
-                                    let
-                                        scrolledToBottom : Bool
-                                        scrolledToBottom =
-                                            -- The drawing tab holds the scroll position, otherwise the
-                                            -- new message would throw off the stroke the user is drawing
-                                            (Route.toChannelHeaderTab model.route /= Just ChannelHeaderTab_Draw)
-                                                && (loggedIn2.channelScrollPosition == ScrolledToBottom)
+                                    FrontendExtra.handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local loggedIn2 model
 
-                                        isViewingConversation : Bool
-                                        isViewingConversation =
-                                            Route.toGuildOrDmId local.localUser.session.userId model.route
-                                                == Just
-                                                    ( GuildOrDmId guildOrDmId
-                                                    , Id.threadRouteWithoutMaybeMessage maybeRepliedTo
-                                                    )
-
-                                        helper channel =
-                                            Command.batch
-                                                [ FrontendExtra.playNotificationSound
-                                                    senderId
-                                                    guildOrDmId
-                                                    maybeRepliedTo
-                                                    channel
-                                                    local
-                                                    content
-                                                    model
-                                                , if scrolledToBottom then
-                                                    if MyUi.isMobile model then
-                                                        Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
-
-                                                    else
-                                                        Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
-
-                                                  else
-                                                    Command.none
-                                                ]
-                                    in
-                                    ( if isViewingConversation && not scrolledToBottom then
-                                        { loggedIn2
-                                            | newMessagesWhileNotScrolledToBottom =
-                                                loggedIn2.newMessagesWhileNotScrolledToBottom + 1
-                                            , channelScrollPosition =
-                                                case loggedIn2.channelScrollPosition of
-                                                    ScrolledToBottom ->
-                                                        ScrolledToMiddle
-
-                                                    ScrolledToTop ->
-                                                        loggedIn2.channelScrollPosition
-
-                                                    ScrolledToMiddle ->
-                                                        loggedIn2.channelScrollPosition
-                                        }
-
-                                      else
+                                Server_SendEncryptedMessage senderId _ _ id _ content maybeRepliedTo ->
+                                    ( FrontendExtra.mapEncryptionRequests
+                                        (\requests ->
+                                            { requests
+                                                | nextDecryptionRequestId =
+                                                    Id.increment requests.nextDecryptionRequestId
+                                                , pendingDecryptedMessages =
+                                                    SeqDict.insert
+                                                        requests.nextDecryptionRequestId
+                                                        { hash = Encryption.hash content
+                                                        , id = id
+                                                        , senderId = senderId
+                                                        , threadRoute = maybeRepliedTo
+                                                        }
+                                                        requests.pendingDecryptedMessages
+                                            }
+                                        )
                                         loggedIn2
-                                    , case guildOrDmId of
-                                        GuildOrDmId_Guild { guildId, channelId } ->
-                                            case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
-                                                Just ( _, channel ) ->
-                                                    helper channel
+                                    , Encryption.decryptMessage
+                                        loggedIn2.encryptionRequests.nextDecryptionRequestId
+                                        id
+                                        content
+                                    )
 
-                                                Nothing ->
-                                                    Command.none
-
-                                        GuildOrDmId_Dm { otherUserId } ->
-                                            case SeqDict.get otherUserId local.dmChannels of
-                                                Just channel ->
-                                                    helper channel
-
-                                                Nothing ->
-                                                    Command.none
+                                Server_SendEncryptedEditMessage _ _ id _ _ content ->
+                                    -- The message is already where it belongs, so all that
+                                    -- is wanted back is what the new ciphertext says. That
+                                    -- is what a batch decryption does, and one message is a
+                                    -- batch of one.
+                                    ( FrontendExtra.mapEncryptionRequests
+                                        (\requests ->
+                                            { requests
+                                                | nextDecryptManyRequestId =
+                                                    Id.increment requests.nextDecryptManyRequestId
+                                                , pendingDecryptedManyMessages =
+                                                    SeqDict.insert
+                                                        requests.nextDecryptManyRequestId
+                                                        { messageHashes = [ Encryption.hash content ]
+                                                        , shiftScrollFrom = Nothing
+                                                        }
+                                                        requests.pendingDecryptedManyMessages
+                                            }
+                                        )
+                                        loggedIn2
+                                    , Encryption.decryptManyMessages
+                                        loggedIn2.encryptionRequests.nextDecryptManyRequestId
+                                        id
+                                        [ content ]
                                     )
 
                                 Server_Discord_SendMessage _ guildOrDmId _ content maybeRepliedTo _ _ ->
@@ -7880,8 +8621,20 @@ updateLoadedFromBackend msg model =
                 Ok loginData ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
+                            let
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn.localState
+                            in
                             ( { loggedIn
-                                | localState = loginDataToLocalState model.startupData model.emojiData loginData |> Local.init
+                                | localState =
+                                    loginDataToLocalState
+                                        model.startupData
+                                        local.localUser.decryptedMessages
+                                        (encryptedBacklog (SeqSet.fromList model.startupData.e2eeKeys) loginData.dmChannels)
+                                        model.emojiData
+                                        loginData
+                                        |> Local.init
                                 , isReloading = False
                               }
                             , Command.none
@@ -8013,6 +8766,17 @@ view _ model =
                                                 local.localUser.user.domainWhitelist
                                                 isMobile
                                                 url
+                                                |> Ui.inFront
+
+                                        Nothing ->
+                                            Ui.noAttr
+                                    , case loggedIn.showNewPrivateKey of
+                                        Just privateKey ->
+                                            FrontendExtra.newPrivateKeyWarning
+                                                isMobile
+                                                loaded
+                                                local.localUser.user.email
+                                                privateKey
                                                 |> Ui.inFront
 
                                         Nothing ->
@@ -8226,7 +8990,7 @@ view _ model =
                                         loaded
                                         (case error of
                                             LinkDiscordExpired ->
-                                                "This Discord link has expired"
+                                                discordLinkExpiredText
 
                                             LinkDiscordServerError ->
                                                 "Failed to link your Discord account due to a server error"
@@ -8252,7 +9016,7 @@ view _ model =
                                             ]
 
                                 PublicGoMatch_Missing ->
-                                    errorPage loaded "Go match not found"
+                                    errorPage loaded goMatchNotFoundText
 
                                 PublicGoMatch_Loading ->
                                     Ui.el
@@ -8262,6 +9026,12 @@ view _ model =
                                 PublicGoMatch_NotLoaded ->
                                     errorPage loaded "Something went wrong when loading Go match"
                             )
+
+                    E2eeInfo ->
+                        FrontendExtra.layout
+                            loaded
+                            [ Ui.background MyUi.background3, Ui.scrollable ]
+                            (Encryption.info FrontendNoOp)
         ]
     }
 
@@ -8512,3 +9282,566 @@ handleGameOutMsgs outMsgs model =
         )
         ( model, [] )
         outMsgs
+
+
+storeRemainingSharedSecrets :
+    Id UserId
+    -> X25519.PrivateKey
+    -> LoggedIn2
+    -> List (Command FrontendOnly ToBackend FrontendMsg_)
+storeRemainingSharedSecrets alreadyHandled privateKey loggedIn =
+    SeqDict.toList (Local.model loggedIn.localState).dmChannels
+        |> List.filterMap
+            (\( otherUserId, dmChannel ) ->
+                case dmChannel.e2ee of
+                    DmChannel.E2eeEnabled _ ->
+                        if
+                            (otherUserId == alreadyHandled)
+                                || SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice
+                        then
+                            Nothing
+
+                        else
+                            storeSharedSecret otherUserId privateKey loggedIn |> Result.toMaybe
+
+                    DmChannel.E2eeRequestedBy _ ->
+                        Nothing
+
+                    DmChannel.E2eeDeclinedBy _ ->
+                        Nothing
+
+                    DmChannel.E2eeDisabled _ ->
+                        Nothing
+            )
+
+
+rememberDecryptManyRequest : PendingDecryptedManyMessages -> EncryptionRequests -> EncryptionRequests
+rememberDecryptManyRequest pending requests =
+    { requests
+        | pendingDecryptedManyMessages =
+            SeqDict.insert requests.nextDecryptManyRequestId pending requests.pendingDecryptedManyMessages
+        , nextDecryptManyRequestId = Id.increment requests.nextDecryptManyRequestId
+    }
+
+
+rememberEncryptManyRequests :
+    List ( Id EncryptManyRequestId, OldMessagesToEncrypt )
+    -> EncryptionRequests
+    -> EncryptionRequests
+rememberEncryptManyRequests conversations requests =
+    { requests
+        | pendingEncryptedManyMessages =
+            List.foldl
+                (\( requestId, conversation ) dict -> SeqDict.insert requestId conversation dict)
+                requests.pendingEncryptedManyMessages
+                conversations
+        , nextEncryptManyRequestId =
+            Id.fromInt (Id.toInt requests.nextEncryptManyRequestId + List.length conversations)
+    }
+
+
+{-| The two share a counter, so an id belongs to at most one of them and forgetting it from
+both is what happens either way.
+-}
+forgetEncryptRequest : Id Encryption.EncryptRequestId -> EncryptionRequests -> EncryptionRequests
+forgetEncryptRequest requestId requests =
+    { requests
+        | pendingEncryptedMessages = SeqDict.remove requestId requests.pendingEncryptedMessages
+        , pendingEncryptedEdits = SeqDict.remove requestId requests.pendingEncryptedEdits
+    }
+
+
+{-| Deleting an attachment cancels its upload, but there is nothing to cancel while the
+browser still has the file, so the ciphertext for one that has since been deleted is
+dropped rather than uploaded.
+-}
+stillAttached : LoggedIn2 -> PendingEncryptedFile -> Maybe PendingEncryptedFile
+stillAttached loggedIn pending =
+    case
+        SeqDict.get pending.guildOrDmId loggedIn.filesToUpload
+            |> Maybe.andThen (NonemptyDict.get pending.fileId)
+    of
+        Just _ ->
+            Just pending
+
+        Nothing ->
+            Nothing
+
+
+{-| The size recorded when the file was picked is the plaintext size, which the progress
+bar would then never reach. The ciphertext is what actually gets sent, so its width is
+what the bar counts up to.
+-}
+fileEncrypted :
+    { key : Bytes, data : Bytes, thumbnail : Maybe Bytes, measured : Maybe FileStatus.MeasuredFile }
+    -> FileStatus
+    -> FileStatus
+fileEncrypted encrypted fileStatus =
+    case fileStatus of
+        FileUploading fileName fileSize contentType _ ->
+            FileUploading
+                fileName
+                { fileSize | size = Bytes.width encrypted.data }
+                contentType
+                (FileStatus.IsEncrypted
+                    (FileStatus.aesPrivateKey encrypted.key)
+                    (case encrypted.thumbnail of
+                        Just _ ->
+                            FileStatus.HasEncryptedThumbnail
+
+                        Nothing ->
+                            FileStatus.NoEncryptedThumbnail
+                    )
+                )
+
+        FileUploaded _ ->
+            fileStatus
+
+        FileError _ _ _ _ _ ->
+            fileStatus
+
+
+forgetEncryptFileRequest : Id Encryption.EncryptFileRequestId -> EncryptionRequests -> EncryptionRequests
+forgetEncryptFileRequest requestId requests =
+    { requests | pendingEncryptedFiles = SeqDict.remove requestId requests.pendingEncryptedFiles }
+
+
+forgetEncryptManyRequest : Id EncryptManyRequestId -> EncryptionRequests -> EncryptionRequests
+forgetEncryptManyRequest requestId requests =
+    { requests
+        | pendingEncryptedManyMessages = SeqDict.remove requestId requests.pendingEncryptedManyMessages
+    }
+
+
+type alias OldMessagesToEncrypt =
+    { id : Viewing_DmId
+    , messages : List ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+    }
+
+
+messagesNeedingEncryption :
+    Id EncryptManyRequestId
+    -> LocalChange
+    -> List ( Id EncryptManyRequestId, OldMessagesToEncrypt )
+messagesNeedingEncryption nextRequestId localChange =
+    case localChange of
+        Local_SetPublicKey _ (FilledInByBackend conversations) ->
+            conversationsToEncrypt nextRequestId conversations
+
+        Local_AcceptE2ee _ _ (FilledInByBackend conversations) ->
+            conversationsToEncrypt nextRequestId conversations
+
+        _ ->
+            []
+
+
+{-| A batch of messages decrypted so they can be read, which is every batch except the one
+that turns encryption off.
+-}
+handleManyMessagesDecrypted :
+    Id Encryption.DecryptManyRequestId
+    -> List (Result () (MessageContent (Id UserId)))
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+handleManyMessagesDecrypted requestId results loggedIn =
+    let
+        decrypted : List ( BytesHash, Result () (MessageContent (Id UserId)) )
+        decrypted =
+            case SeqDict.get requestId loggedIn.encryptionRequests.pendingDecryptedManyMessages of
+                Just pending ->
+                    List.map2 Tuple.pair pending.messageHashes results
+
+                Nothing ->
+                    []
+    in
+    ( FrontendExtra.fileDecryptedMessages
+        decrypted
+        (FrontendExtra.mapEncryptionRequests
+            (\requests ->
+                { requests
+                    | pendingDecryptedManyMessages =
+                        SeqDict.remove requestId requests.pendingDecryptedManyMessages
+                }
+            )
+            loggedIn
+        )
+    , Command.batch
+        [ case
+            SeqDict.get requestId loggedIn.encryptionRequests.pendingDecryptedManyMessages
+                |> Maybe.andThen .shiftScrollFrom
+          of
+            Just anchor ->
+                Ports.shiftScrollByElementDelta Pages.Guild.conversationContainerId anchor
+
+            Nothing ->
+                Command.none
+        , FrontendExtra.storeDecryptedFileKeys (List.map Tuple.second decrypted)
+        ]
+    )
+
+
+type alias OldMessagesToDecrypt =
+    { id : Viewing_DmId
+    , messages : List ( ThreadRouteWithMessage, Encryption.EncryptedData (MessageContent (Id UserId)) )
+    }
+
+
+messagesNeedingDecryption : LocalChange -> Maybe OldMessagesToDecrypt
+messagesNeedingDecryption localChange =
+    case localChange of
+        Local_DisableE2ee id (FilledInByBackend conversation) ->
+            case
+                List.map
+                    (\( messageId, content ) -> ( NoThreadWithMessage messageId, content ))
+                    (SeqDict.toList conversation.channel)
+                    ++ List.concatMap
+                        (\( threadId, thread ) ->
+                            List.map
+                                (\( messageId, content ) ->
+                                    ( ViewThreadWithMessage threadId messageId, content )
+                                )
+                                (NonemptyDict.toList thread)
+                        )
+                        (SeqDict.toList conversation.threads)
+            of
+                [] ->
+                    Nothing
+
+                messages ->
+                    Just { id = id, messages = messages }
+
+        _ ->
+            Nothing
+
+
+decryptConversation :
+    Id Encryption.DecryptManyRequestId
+    -> OldMessagesToDecrypt
+    -> Command FrontendOnly ToBackend FrontendMsg_
+decryptConversation requestId conversation =
+    Encryption.decryptManyMessages
+        requestId
+        conversation.id
+        (List.map Tuple.second conversation.messages)
+
+
+rememberDecryptOldMessagesRequest : OldMessagesToDecrypt -> EncryptionRequests -> EncryptionRequests
+rememberDecryptOldMessagesRequest conversation requests =
+    { requests
+        | pendingDecryptedOldMessages =
+            SeqDict.insert
+                requests.nextDecryptManyRequestId
+                { id = conversation.id, messages = List.map Tuple.first conversation.messages }
+                requests.pendingDecryptedOldMessages
+        , nextDecryptManyRequestId = Id.increment requests.nextDecryptManyRequestId
+    }
+
+
+forgetDecryptOldMessagesRequest : Id Encryption.DecryptManyRequestId -> EncryptionRequests -> EncryptionRequests
+forgetDecryptOldMessagesRequest requestId requests =
+    { requests | pendingDecryptedOldMessages = SeqDict.remove requestId requests.pendingDecryptedOldMessages }
+
+
+conversationsToEncrypt :
+    Id EncryptManyRequestId
+    -> SeqDict Viewing_DmId ChannelDataToEncrypt
+    -> List ( Id EncryptManyRequestId, OldMessagesToEncrypt )
+conversationsToEncrypt nextRequestId conversations =
+    List.indexedMap
+        (\index ( id, conversation ) ->
+            ( Id.fromInt (Id.toInt nextRequestId + index)
+            , { id = id
+              , messages =
+                    List.map
+                        (\( messageId, content ) -> ( NoThreadWithMessage messageId, content ))
+                        (SeqDict.toList conversation.channel)
+                        ++ List.concatMap
+                            (\( threadId, thread ) ->
+                                List.map
+                                    (\( messageId, content ) ->
+                                        ( ViewThreadWithMessage threadId messageId, content )
+                                    )
+                                    (SeqDict.toList thread)
+                            )
+                            (SeqDict.toList conversation.threads)
+              }
+            )
+        )
+        (SeqDict.toList conversations)
+
+
+locallyLoadedMessagesToEncrypt : LocalState -> SeqDict Viewing_DmId ChannelDataToEncrypt
+locallyLoadedMessagesToEncrypt local =
+    SeqDict.foldl
+        (\otherUserId dmChannel dict ->
+            case dmChannel.e2ee of
+                DmChannel.E2eeEnabled _ ->
+                    let
+                        conversation : ChannelDataToEncrypt
+                        conversation =
+                            { channel = plainTextLoaded dmChannel.messages
+                            , threads =
+                                SeqDict.foldl
+                                    (\threadId thread threads ->
+                                        let
+                                            plainText : SeqDict (Id Id.ThreadMessageId) (MessageContent (Id UserId))
+                                            plainText =
+                                                plainTextLoaded thread.messages
+                                        in
+                                        if SeqDict.isEmpty plainText then
+                                            threads
+
+                                        else
+                                            SeqDict.insert threadId plainText threads
+                                    )
+                                    SeqDict.empty
+                                    dmChannel.threads
+                            }
+                    in
+                    if SeqDict.isEmpty conversation.channel && SeqDict.isEmpty conversation.threads then
+                        dict
+
+                    else
+                        SeqDict.insert { otherUserId = otherUserId } conversation dict
+
+                _ ->
+                    dict
+        )
+        SeqDict.empty
+        local.dmChannels
+
+
+plainTextLoaded :
+    MessageArray messageId (Id UserId)
+    -> SeqDict (Id messageId) (MessageContent (Id UserId))
+plainTextLoaded messages =
+    MessageArray.toList messages
+        |> List.filterMap
+            (\( messageId, message ) ->
+                case message of
+                    Message.UserTextMessage data ->
+                        Just ( messageId, data.content )
+
+                    _ ->
+                        Nothing
+            )
+        |> SeqDict.fromList
+
+
+encryptConversation :
+    ( Id EncryptManyRequestId, OldMessagesToEncrypt )
+    -> Command FrontendOnly ToBackend FrontendMsg_
+encryptConversation ( requestId, conversation ) =
+    Encryption.encryptManyMessages
+        requestId
+        conversation.id
+        Message.contentAndEmbedsCodec
+        (List.map Tuple.second conversation.messages)
+
+
+type alias LoadedEncryptedMessages =
+    { id : Viewing_DmId
+    , messages : List (Encryption.EncryptedData (MessageContent (Id UserId)))
+    , shiftScrollFrom : Maybe HtmlId
+    }
+
+
+encryptedMessagesJustLoaded : LocalChange -> Maybe LoadedEncryptedMessages
+encryptedMessagesJustLoaded localChange =
+    case localChange of
+        Local_LoadChannelMessages guildOrDmId previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+            encryptedMessagesLoadedInto
+                guildOrDmId
+                (Just (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage))
+                (SeqDict.values messagesLoaded)
+
+        Local_LoadThreadMessages guildOrDmId _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+            encryptedMessagesLoadedInto
+                guildOrDmId
+                (Just (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage))
+                (SeqDict.values messagesLoaded)
+
+        Local_CurrentlyViewing _ (ViewDm data (FilledInByBackend messagesLoaded)) ->
+            encryptedMessagesInConversation data.id Nothing (SeqDict.values messagesLoaded)
+
+        Local_CurrentlyViewing _ (ViewDmThread data (FilledInByBackend messagesLoaded)) ->
+            encryptedMessagesInConversation
+                { otherUserId = data.id.otherUserId }
+                Nothing
+                (SeqDict.values messagesLoaded)
+
+        _ ->
+            Nothing
+
+
+encryptedMessagesLoadedInto :
+    GuildOrDmId
+    -> Maybe HtmlId
+    -> List (Message.Message messageId (Id UserId))
+    -> Maybe LoadedEncryptedMessages
+encryptedMessagesLoadedInto guildOrDmId shiftScrollFrom messagesLoaded =
+    case guildOrDmId of
+        GuildOrDmId_Dm id ->
+            encryptedMessagesInConversation id shiftScrollFrom messagesLoaded
+
+        GuildOrDmId_Guild _ ->
+            Nothing
+
+
+encryptedMessagesInConversation :
+    Viewing_DmId
+    -> Maybe HtmlId
+    -> List (Message.Message messageId (Id UserId))
+    -> Maybe LoadedEncryptedMessages
+encryptedMessagesInConversation id shiftScrollFrom messagesLoaded =
+    case List.filterMap encryptedMessageData messagesLoaded of
+        [] ->
+            Nothing
+
+        messages ->
+            Just { id = id, messages = messages, shiftScrollFrom = shiftScrollFrom }
+
+
+type EncryptedBacklog
+    = PendingEncryption { id : Viewing_DmId, messages : List (Encryption.EncryptedData (MessageContent (Id UserId))) }
+    | MissingKeys { id : Viewing_DmId, messages : List (Encryption.EncryptedData (MessageContent (Id UserId))) }
+
+
+encryptedBacklog : SeqSet (Id UserId) -> SeqDict (Id UserId) FrontendDmChannel -> List EncryptedBacklog
+encryptedBacklog keysOnThisDevice dmChannels =
+    List.filterMap
+        (\( otherUserId, dmChannel ) ->
+            case encryptedMessagesIn dmChannel of
+                [] ->
+                    Nothing
+
+                messages ->
+                    let
+                        id =
+                            { otherUserId = otherUserId }
+                    in
+                    (if SeqSet.member otherUserId keysOnThisDevice then
+                        PendingEncryption { id = id, messages = messages }
+
+                     else
+                        MissingKeys { id = id, messages = messages }
+                    )
+                        |> Just
+        )
+        (SeqDict.toList dmChannels)
+
+
+encryptedMessagesIn : FrontendDmChannel -> List (Encryption.EncryptedData (MessageContent (Id UserId)))
+encryptedMessagesIn dmChannel =
+    List.filterMap (\( _, message ) -> encryptedMessageData message) (MessageArray.toList dmChannel.messages)
+        ++ (SeqDict.values dmChannel.threads
+                |> List.concatMap
+                    (\thread ->
+                        MessageArray.toList thread.messages
+                            |> List.filterMap (\( _, message ) -> encryptedMessageData message)
+                    )
+           )
+
+
+encryptedMessageData : Message.Message messageId (Id UserId) -> Maybe (Encryption.EncryptedData (MessageContent (Id UserId)))
+encryptedMessageData message =
+    case message of
+        Message.EncryptedUserTextMessage data ->
+            Just data.content
+
+        _ ->
+            Nothing
+
+
+storeSharedSecret : Id UserId -> X25519.PrivateKey -> LoggedIn2 -> Result String (Command FrontendOnly ToBackend FrontendMsg_)
+storeSharedSecret otherUserId privateKey loggedIn =
+    let
+        local : LocalState
+        local =
+            Local.model loggedIn.localState
+    in
+    case User.getUser otherUserId local.localUser |> Maybe.andThen .publicKey of
+        Nothing ->
+            Err "The other person hasn't created a private key yet"
+
+        Just otherPublicKey ->
+            case X25519.sharedSecret privateKey otherPublicKey of
+                Nothing ->
+                    Err "The other person's public key is not usable"
+
+                Just secret ->
+                    Encryption.storeSharedSecret otherUserId (X25519.sharedSecretToBytes secret) |> Ok
+
+
+{-| The edit can't be sent until the browser has encrypted it, so the request is remembered
+until the ciphertext comes back. Request ids are handed out by the same counter
+`startEncryptingMessage` uses, so one is only ever waiting on one of the two.
+-}
+startEncryptingEdit :
+    Viewing_DmId
+    -> ThreadRouteWithMessage
+    -> MessageContent (Id UserId)
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+startEncryptingEdit id threadRoute contentAndEmbeds loggedIn =
+    ( FrontendExtra.mapEncryptionRequests
+        (\requests ->
+            { requests
+                | nextEncryptionRequestId = Id.increment requests.nextEncryptionRequestId
+                , pendingEncryptedEdits =
+                    SeqDict.insert
+                        requests.nextEncryptionRequestId
+                        { id = id, threadRoute = threadRoute, contentAndEmbeds = contentAndEmbeds }
+                        requests.pendingEncryptedEdits
+            }
+        )
+        { loggedIn | e2eeError = Nothing }
+    , Encryption.encryptMessage
+        loggedIn.encryptionRequests.nextEncryptionRequestId
+        id
+        Message.contentAndEmbedsCodec
+        contentAndEmbeds
+    )
+
+
+startEncryptingMessage :
+    Viewing_DmId
+    -> ThreadRoute
+    -> MessageContent (Id UserId)
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
+    let
+        guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
+        guildOrDmId =
+            ( GuildOrDmId (GuildOrDmId_Dm id), threadRoute )
+    in
+    ( FrontendExtra.mapEncryptionRequests
+        (\requests ->
+            { requests
+                | nextEncryptionRequestId = Id.increment requests.nextEncryptionRequestId
+                , pendingEncryptedMessages =
+                    SeqDict.insert
+                        requests.nextEncryptionRequestId
+                        { otherUserId = id.otherUserId
+                        , threadRoute =
+                            case threadRoute of
+                                ViewThread threadId ->
+                                    ViewThreadWithMaybeMessage
+                                        threadId
+                                        (SeqDict.get guildOrDmId loggedIn.replyTo |> Maybe.map Id.changeType)
+
+                                NoThread ->
+                                    NoThreadWithMaybeMessage (SeqDict.get guildOrDmId loggedIn.replyTo)
+                        , contentAndEmbeds = contentAndEmbeds
+                        }
+                        requests.pendingEncryptedMessages
+            }
+        )
+        { loggedIn | e2eeError = Nothing }
+    , Encryption.encryptMessage
+        loggedIn.encryptionRequests.nextEncryptionRequestId
+        id
+        Message.contentAndEmbedsCodec
+        contentAndEmbeds
+    )

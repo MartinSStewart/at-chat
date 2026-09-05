@@ -70,6 +70,7 @@ type UserOptionSection
     = UserOption_TwoFactorAuthentication
     | UserOption_Settings
     | UserOption_WhitelistedDomains
+    | UserOption_E2ee
     | UserOption_Discord
     | UserOption_ConnectedDevices
     | UserOption_Debug

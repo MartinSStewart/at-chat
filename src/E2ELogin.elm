@@ -16,6 +16,33 @@ import TwoFactorAuthentication
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, LoginTokenData(..), ToBackend, ToFrontend)
 
 
+checkStorageCleared :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> Int
+    -> T.Data FrontendModel E2EHelper.BackendModel2
+    -> Result String ()
+checkStorageCleared client expected data =
+    let
+        actual : Int
+        actual =
+            List.filter
+                (\request -> request.clientId == client.clientId && request.portName == "clear_browser_storage_to_js")
+                data.portRequests
+                |> List.length
+    in
+    if actual == expected then
+        Ok ()
+
+    else
+        Err
+            ("Expected the browser to have been told to clear its storage "
+                ++ String.fromInt expected
+                ++ " times, was told "
+                ++ String.fromInt actual
+                ++ " times"
+            )
+
+
 loginTests :
     Bool
     -> T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
@@ -97,7 +124,9 @@ loginTests isMobile normalConfig =
             "/"
             windowSize
             (\user ->
-                [ E2EHelper.handleLogin userAgent E2EHelper.adminEmail user
+                [ T.checkState 100 (checkStorageCleared user 0)
+                , E2EHelper.handleLogin userAgent E2EHelper.adminEmail user
+                , T.checkState 100 (checkStorageCleared user 1)
                 , user.click 100 (Dom.id "guild_showUserOptions")
                 , user.click 100 (Dom.id "userOptions_twoFactor")
                 , user.click 100 (Dom.id "userOverview_start2FaSetup")
@@ -141,7 +170,9 @@ loginTests isMobile normalConfig =
                                 [ T.checkState 100 (\_ -> Err "User not found") ]
                     )
                 , user.click 100 (Dom.id "userOptions_connectedDevices")
+                , T.checkState 100 (checkStorageCleared user 1)
                 , user.click 100 (Dom.id "options_logout")
+                , T.checkState 100 (checkStorageCleared user 2)
                 ]
             )
         , T.connectFrontend
@@ -175,7 +206,7 @@ loginTests isMobile normalConfig =
                                                     100
                                                     (Test.Html.Query.has
                                                         [ Test.Html.Selector.exactText (PersonName.toString Backend.adminUser.name)
-                                                        , Test.Html.Selector.exactText "Two factor authentication was enabled "
+                                                        , Test.Html.Selector.exactText TwoFactorAuthentication.twoFactorEnabledAtText
                                                         ]
                                                     )
                                                 , E2EHelper.tallSnapshot user 100 { name = "user overview with two factor already complete" }
@@ -194,7 +225,7 @@ loginTests isMobile normalConfig =
                                                 , user.checkView
                                                     100
                                                     (Test.Html.Query.has
-                                                        [ Test.Html.Selector.exactText "Add two factor authentication" ]
+                                                        [ Test.Html.Selector.exactText TwoFactorAuthentication.addTwoFactorText ]
                                                     )
                                                 , T.checkState
                                                     100
@@ -240,12 +271,12 @@ loginTests isMobile normalConfig =
                     (\data -> [ client.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time userAgent) ])
                 , client.checkView
                     100
-                    (Test.Html.Query.has [ Test.Html.Selector.exactText "Recovery login" ])
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText RecoveryLogin.recoveryLoginTitle ])
                 , client.input 100 RecoveryLogin.passwordInputId "not the recovery password"
                 , client.click 100 RecoveryLogin.submitButtonId
                 , client.checkView
                     100
-                    (Test.Html.Query.has [ Test.Html.Selector.exactText "Incorrect password" ])
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText RecoveryLogin.incorrectPasswordText ])
                 , T.checkState
                     100
                     (\data ->

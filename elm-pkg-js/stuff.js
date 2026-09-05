@@ -14,6 +14,483 @@ function arrayBufferToBase64Url(buffer) {
         .replace(/=+$/, "");
 }
 
+// --- End-to-end encryption -------------------------------------------------------
+//
+// The symmetric key for a DM is derived from the shared secret Elm worked out, then kept
+// in IndexedDB as a CryptoKey the browser will not export. Storing the handle rather than
+// the bytes is the whole point: nothing on the page can read the key back out afterwards,
+// it can only ask for something to be encrypted with it.
+
+const e2eeDbName = "at-chat-e2ee";
+const e2eeStoreName = "dm-keys";
+
+function e2eeOpenDb() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(e2eeDbName, 1);
+        request.onupgradeneeded = () => {
+            if (!request.result.objectStoreNames.contains(e2eeStoreName)) {
+                request.result.createObjectStore(e2eeStoreName);
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+function e2eeWithStore(mode, run) {
+    return e2eeOpenDb().then(db => new Promise((resolve, reject) => {
+        const transaction = db.transaction(e2eeStoreName, mode);
+        const request = run(transaction.objectStore(e2eeStoreName));
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+        transaction.oncomplete = () => db.close();
+    }));
+}
+
+// Keys for encrypted file attachments, which the service worker reads so that it can
+// decrypt a file the browser fetches on its own (see public/service-worker.js). Kept apart
+// from the conversation keys above so the service worker never opens that database, and so
+// adding this store didn't need a version bump on one already in use.
+const fileKeyDbName = "at-chat-file-keys";
+const fileKeyStoreName = "file-keys";
+
+// Where the service worker writes its log entries (see log() in public/service-worker.js),
+// which is the only persistent storage both the worker and the page can read.
+const logDbName = "at-chat-db";
+
+function fileKeyOpenDb() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(fileKeyDbName, 1);
+        request.onerror = () => reject(request.error);
+        request.onupgradeneeded = () => {
+            if (!request.result.objectStoreNames.contains(fileKeyStoreName)) {
+                request.result.createObjectStore(fileKeyStoreName);
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+    });
+}
+
+function fileKeyWithStore(mode, run) {
+    return fileKeyOpenDb().then(db => new Promise((resolve, reject) => {
+        const transaction = db.transaction(fileKeyStoreName, mode);
+        const request = run(transaction.objectStore(fileKeyStoreName));
+        request.onerror = () => { db.close(); reject(request.error); };
+        request.onsuccess = () => { db.close(); resolve(request.result); };
+    }));
+}
+
+
+const e2eeSerializeVersion = 1;
+
+const e2eeToJsStoreSharedSecret = 0;
+const e2eeToJsEncryptMessage = 1;
+const e2eeToJsDecryptMessage = 2;
+const e2eeToJsDecryptManyMessages = 3;
+const e2eeToJsEncryptManyMessages = 4;
+const e2eeToJsEncryptFile = 5;
+const e2eeToJsStoreFileKeys = 6;
+
+const e2eeFromJsSharedSecretStored = 0;
+const e2eeFromJsSharedSecretFailed = 1;
+const e2eeFromJsMessageEncrypted = 2;
+const e2eeFromJsMessageEncryptFailed = 3;
+const e2eeFromJsMessageDecrypted = 4;
+const e2eeFromJsMessageDecryptFailed = 5;
+const e2eeFromJsManyMessagesDecrypted = 6;
+const e2eeFromJsManyMessagesEncrypted = 7;
+const e2eeFromJsManyMessagesEncryptFailed = 8;
+const e2eeFromJsFileEncrypted = 9;
+const e2eeFromJsFileEncryptFailed = 10;
+
+function e2eeReadToJs(dataView) {
+    if (dataView.byteLength < 3 || dataView.getUint8(0) !== e2eeSerializeVersion) { return null; }
+
+    switch (dataView.getUint16(1, false)) {
+        case e2eeToJsStoreSharedSecret:
+            return {
+                tag: "store-shared-secret",
+                otherUserId: dataView.getFloat64(3, false),
+                sharedSecret: e2eeReadBytesField(dataView, 11),
+            };
+
+        case e2eeToJsEncryptMessage:
+            return {
+                tag: "encrypt-message",
+                requestId: dataView.getFloat64(3, false),
+                otherUserId: dataView.getFloat64(11, false),
+                data: new Uint8Array(
+                    dataView.buffer, dataView.byteOffset + 19, dataView.byteLength - 19),
+            };
+
+        case e2eeToJsDecryptMessage:
+            return {
+                tag: "decrypt-message",
+                requestId: dataView.getFloat64(3, false),
+                otherUserId: dataView.getFloat64(11, false),
+                data: e2eeReadBytesField(dataView, 19),
+            };
+
+        case e2eeToJsDecryptManyMessages: {
+            const count = dataView.getUint32(19, false);
+            const messages = [];
+            let offset = 23;
+
+            for (let i = 0; i < count; i++) {
+                const message = e2eeReadBytesField(dataView, offset);
+                messages.push(message);
+                offset += 4 + message.length;
+            }
+
+            return {
+                tag: "decrypt-many-messages",
+                requestId: dataView.getFloat64(3, false),
+                otherUserId: dataView.getFloat64(11, false),
+                data: messages,
+            };
+        }
+
+        case e2eeToJsEncryptManyMessages: {
+            const count = dataView.getUint32(19, false);
+            const messages = [];
+            let offset = 23;
+
+            for (let i = 0; i < count; i++) {
+                const message = e2eeReadBytesField(dataView, offset);
+                messages.push(message);
+                offset += 4 + message.length;
+            }
+
+            return {
+                tag: "encrypt-many-messages",
+                requestId: dataView.getFloat64(3, false),
+                otherUserId: dataView.getFloat64(11, false),
+                data: messages,
+            };
+        }
+
+        case e2eeToJsEncryptFile: {
+            const contentTypeLength = dataView.getUint32(11, false);
+
+            return {
+                tag: "encrypt-file",
+                requestId: dataView.getFloat64(3, false),
+                contentType: new TextDecoder().decode(
+                    new Uint8Array(dataView.buffer, dataView.byteOffset + 15, contentTypeLength)),
+                data: e2eeReadBytesField(dataView, 15 + contentTypeLength),
+            };
+        }
+
+        case e2eeToJsStoreFileKeys: {
+            const count = dataView.getUint32(3, false);
+            const keys = [];
+            let offset = 7;
+
+            for (let i = 0; i < count; i++) {
+                const fileHashLength = dataView.getUint32(offset, false);
+                const fileHash = new TextDecoder().decode(
+                    new Uint8Array(dataView.buffer, dataView.byteOffset + offset + 4, fileHashLength));
+                offset += 4 + fileHashLength;
+
+                const key = e2eeReadBytesField(dataView, offset);
+                offset += 4 + key.length;
+
+                keys.push({ fileHash: fileHash, key: key });
+            }
+
+            return { tag: "store-file-keys", keys: keys };
+        }
+
+        default:
+            return null;
+    }
+}
+
+function e2eeReadBytesField(dataView, offset) {
+    return new Uint8Array(
+        dataView.buffer,
+        dataView.byteOffset + offset + 4,
+        dataView.getUint32(offset, false));
+}
+
+function e2eeIdMessage(variant, id) {
+    const out = new DataView(new ArrayBuffer(11));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, variant, false);
+    out.setFloat64(3, id, false);
+    return out;
+}
+
+function e2eeIdAndTextMessage(variant, id, text) {
+    const bytes = new TextEncoder().encode(text);
+    const out = new DataView(new ArrayBuffer(15 + bytes.length));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, variant, false);
+    out.setFloat64(3, id, false);
+    out.setUint32(11, bytes.length, false);
+    new Uint8Array(out.buffer).set(bytes, 15);
+    return out;
+}
+
+function e2eeMessageEncryptedMessage(requestId, bytes) {
+    const out = new DataView(new ArrayBuffer(15 + bytes.length));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, e2eeFromJsMessageEncrypted, false);
+    out.setFloat64(3, requestId, false);
+    out.setUint32(11, bytes.length, false);
+    new Uint8Array(out.buffer).set(bytes, 15);
+    return out;
+}
+
+function e2eeMessageDecryptedMessage(requestId, bytes) {
+    const out = new DataView(new ArrayBuffer(11 + bytes.length));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, e2eeFromJsMessageDecrypted, false);
+    out.setFloat64(3, requestId, false);
+    new Uint8Array(out.buffer).set(bytes, 11);
+    return out;
+}
+
+function e2eeManyMessagesDecryptedMessage(requestId, results) {
+    const bodies = results.map((plainText) =>
+        plainText === null ? new Uint8Array(0) : plainText);
+    const size = 11 + 4 + bodies.reduce((n, body) => n + 2 + body.length, 0);
+    const out = new DataView(new ArrayBuffer(size));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, e2eeFromJsManyMessagesDecrypted, false);
+    out.setFloat64(3, requestId, false);
+    out.setUint32(11, results.length, false);
+
+    let offset = 15;
+
+    for (const body of bodies) {
+        out.setUint16(offset, body.length === 0 ? 0 : 1, false);
+        offset += 2;
+        new Uint8Array(out.buffer).set(body, offset);
+        offset += body.length;
+    }
+
+    return out;
+}
+
+function e2eeManyMessagesEncryptedMessage(requestId, cipherTexts) {
+    const size = 11 + 4 + cipherTexts.reduce((n, c) => n + 4 + c.length, 0);
+    const out = new DataView(new ArrayBuffer(size));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, e2eeFromJsManyMessagesEncrypted, false);
+    out.setFloat64(3, requestId, false);
+    out.setUint32(11, cipherTexts.length, false);
+
+    let offset = 15;
+
+    for (const cipherText of cipherTexts) {
+        out.setUint32(offset, cipherText.length, false);
+        offset += 4;
+        new Uint8Array(out.buffer).set(cipherText, offset);
+        offset += cipherText.length;
+    }
+
+    return out;
+}
+
+// The size and duration Elm reads back as a MeasuredFile (see FileStatus.elm). A Maybe is
+// a variant tag of 0 or 1, a Coord is two Quantities and a Quantity is a variant tag of its
+// own followed by the number, which is why each measurement is written as a tag and a
+// float rather than just a float.
+function e2eeMeasuredFileSize(measured) {
+    if (measured === null) {
+        return 2;
+    }
+
+    // Maybe tag, MeasuredFile tag, then two tagged quantities for the size.
+    const size = 2 + 2 + 2 * (2 + 8);
+
+    if (measured.kind === "image") {
+        return size;
+    }
+
+    return size + (measured.durationMs === null ? 2 : 2 + 8);
+}
+
+function e2eeWriteMeasuredFile(out, offset, measured) {
+    if (measured === null) {
+        out.setUint16(offset, 0, false);
+        return;
+    }
+
+    out.setUint16(offset, 1, false);
+    out.setUint16(offset + 2, measured.kind === "image" ? 0 : 1, false);
+    out.setUint16(offset + 4, 0, false);
+    out.setFloat64(offset + 6, measured.width, false);
+    out.setUint16(offset + 14, 0, false);
+    out.setFloat64(offset + 16, measured.height, false);
+
+    if (measured.kind === "image") {
+        return;
+    }
+
+    if (measured.durationMs === null) {
+        out.setUint16(offset + 24, 0, false);
+    } else {
+        out.setUint16(offset + 24, 1, false);
+        out.setFloat64(offset + 26, measured.durationMs, false);
+    }
+}
+
+// A Maybe Bytes: the variant tag, then a length and the bytes when there are any.
+function e2eeMaybeBytesSize(bytes) {
+    return bytes === null ? 2 : 2 + 4 + bytes.length;
+}
+
+function e2eeWriteMaybeBytes(out, offset, bytes) {
+    if (bytes === null) {
+        out.setUint16(offset, 0, false);
+        return;
+    }
+
+    out.setUint16(offset, 1, false);
+    out.setUint32(offset + 2, bytes.length, false);
+    new Uint8Array(out.buffer).set(bytes, offset + 6);
+}
+
+function e2eeFileEncryptedMessage(requestId, key, cipherText, thumbnail, measured) {
+    const thumbnailOffset = 19 + key.length + cipherText.length;
+    const measuredOffset = thumbnailOffset + e2eeMaybeBytesSize(thumbnail);
+    const out = new DataView(
+        new ArrayBuffer(measuredOffset + e2eeMeasuredFileSize(measured)));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, e2eeFromJsFileEncrypted, false);
+    out.setFloat64(3, requestId, false);
+    out.setUint32(11, key.length, false);
+    new Uint8Array(out.buffer).set(key, 15);
+    out.setUint32(15 + key.length, cipherText.length, false);
+    new Uint8Array(out.buffer).set(cipherText, 19 + key.length);
+    e2eeWriteMaybeBytes(out, thumbnailOffset, thumbnail);
+    e2eeWriteMeasuredFile(out, measuredOffset, measured);
+    return out;
+}
+
+// Should match imageMaxHeight in FileStatus.elm and MAX_THUMBNAIL_HEIGHT in the rust
+// server, which decide the same thing for a file that isn't encrypted.
+const e2eeMaxThumbnailHeight = 600;
+
+// What the browser can work out about a file without parsing it, and a thumbnail of it if
+// it is an image big enough to want one. An image decodes to a bitmap that knows its size,
+// and a video element reports its size and how long it runs once the metadata at the front
+// of the file has loaded. Anything more (the EXIF a camera writes, the codec a container
+// names) needs the file parsed, which is the server's job on a file it can read.
+//
+// The thumbnail comes from the same bitmap the size was read off, so a file is only ever
+// decoded once.
+async function e2eeInspectFile(bytes, contentType) {
+    if (contentType.startsWith("image/")) {
+        try {
+            const bitmap = await createImageBitmap(
+                new Blob([bytes], { type: contentType }),
+                // The size the server reports has the rotation a camera asked for already
+                // applied, so the size reported here has to as well.
+                { imageOrientation: "from-image" });
+
+            const inspected = {
+                measured: { kind: "image", width: bitmap.width, height: bitmap.height },
+                thumbnail: await e2eeThumbnail(bitmap)
+            };
+
+            bitmap.close();
+            return inspected;
+        } catch (error) {
+            return { measured: null, thumbnail: null };
+        }
+    }
+
+    if (contentType.startsWith("video/")) {
+        return { measured: await e2eeMeasureVideo(bytes, contentType), thumbnail: null };
+    }
+
+    return { measured: null, thumbnail: null };
+}
+
+// Webp to match what the server makes for a file it can read, scaled down to the same box
+// it uses. Asking a canvas for a type it can't write is answered with a png rather than
+// with an error, so what came back has to be checked rather than trusted.
+async function e2eeThumbnail(bitmap) {
+    const scale = Math.min(
+        (e2eeMaxThumbnailHeight * 3) / bitmap.width,
+        e2eeMaxThumbnailHeight / bitmap.height,
+        1);
+
+    if (scale === 1) {
+        // Small enough to be shown as it is, so a thumbnail would be no smaller than the
+        // file it was made from.
+        return null;
+    }
+
+    try {
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+        const blob = await new Promise((resolve) => {
+            canvas.toBlob(resolve, "image/webp", 0.8);
+        });
+
+        if (blob === null || blob.type !== "image/webp") {
+            return null;
+        }
+
+        return new Uint8Array(await blob.arrayBuffer());
+    } catch (error) {
+        return null;
+    }
+}
+
+function e2eeMeasureVideo(bytes, contentType) {
+    return new Promise((resolve) => {
+        const url = URL.createObjectURL(new Blob([bytes], { type: contentType }));
+        const video = document.createElement("video");
+
+        const finish = (measured) => {
+            URL.revokeObjectURL(url);
+            video.removeAttribute("src");
+            resolve(measured);
+        };
+
+        video.preload = "metadata";
+        video.onloadedmetadata = () => {
+            finish({
+                kind: "video",
+                width: video.videoWidth,
+                height: video.videoHeight,
+                // Live streams report Infinity, and a container that doesn't say gives NaN.
+                durationMs: Number.isFinite(video.duration) ? video.duration * 1000 : null
+            });
+        };
+        video.onerror = () => finish(null);
+        video.src = url;
+    });
+}
+
+function e2eeMessageDecryptFailedMessage(requestId) {
+    const out = new DataView(new ArrayBuffer(11));
+    out.setUint8(0, e2eeSerializeVersion);
+    out.setUint16(1, e2eeFromJsMessageDecryptFailed, false);
+    out.setFloat64(3, requestId, false);
+    return out;
+}
+
+// The ids of every conversation this browser holds a key for. Sent along with the rest of
+// the startup data so that Elm knows from the first render which conversations still need
+// a private key typed in, without having to ask and wait.
+async function e2eeStoredKeyIds() {
+    try {
+        return await e2eeWithStore("readonly", store => store.getAllKeys());
+    } catch (e) {
+        return [];
+    }
+}
+
+
 async function requestNotificationPermission(app) {
     if (!("Notification" in window)) {
         app.ports.check_notification_permission_from_js.send("unsupported");
@@ -37,6 +514,30 @@ async function loadAudio(url, context, sounds) {
     }
 }
 
+async function clearBrowserStorage(indexedDbApi, cacheStorage) {
+    // Not every browser will list its databases, so the ones this app makes are named out
+    // as well. Deleting one that was never created succeeds and does nothing.
+    const listed = indexedDbApi.databases
+        ? (await indexedDbApi.databases()).map((database) => database.name)
+        : [];
+
+    const names = new Set([e2eeDbName, fileKeyDbName, logDbName].concat(listed));
+
+    await Promise.all(
+        Array.from(names)
+            .filter((name) => typeof name === "string")
+            .map((name) => new Promise((resolve) => {
+                const request = indexedDbApi.deleteDatabase(name);
+
+                request.onsuccess = () => resolve();
+                request.onerror = () => resolve();
+                request.onblocked = () => resolve();
+            })));
+
+    const cacheNames = await cacheStorage.keys();
+
+    await Promise.all(cacheNames.map((name) => cacheStorage.delete(name)));
+}
 
 
 exports.init = async function init(app)
@@ -66,6 +567,14 @@ exports.init = async function init(app)
               }
             });
             location.reload();
+        }
+    });
+
+    app.ports.clear_browser_storage_to_js.subscribe(async () => {
+        try {
+            await clearBrowserStorage(indexedDB, caches);
+        } catch (error) {
+            console.log("Clearing browser storage failed: " + error.toString());
         }
     });
 
@@ -117,7 +626,7 @@ exports.init = async function init(app)
             // persistent storage both the worker and the page can read.
             try {
                 result.serviceWorkerLogs = await new Promise((resolve, reject) => {
-                    const openRequest = indexedDB.open("at-chat-db", 1);
+                    const openRequest = indexedDB.open(logDbName, 1);
                     openRequest.onerror = () => reject(openRequest.error);
                     openRequest.onupgradeneeded = (event) => {
                         // Same schema as the service worker's log() creates, in
@@ -527,7 +1036,7 @@ exports.init = async function init(app)
         }
     });
 
-    function sendStartupData() {
+    async function sendStartupData() {
         // original code found here https://stackoverflow.com/a/13382873
         // Creating invisible container
         const outer = document.createElement('div');
@@ -597,7 +1106,9 @@ exports.init = async function init(app)
             notificationPermission: ("Notification" in window) ? Notification.permission : "unsupported",
             safeAreaInsetTop: safeAreaInsetTop,
             devicePixelRatio: window.devicePixelRatio || 1,
-            timezone: zone
+            timezone: zone,
+            randomSeed: Array.from(crypto.getRandomValues(new Uint32Array(32))),
+            e2eeKeys: await e2eeStoredKeyIds()
         });
     }
 
@@ -708,6 +1219,211 @@ exports.init = async function init(app)
                     //element.setSelectionRange(0, 5);
                 }
             });
+    });
+
+    app.ports.encryption_to_js.subscribe(async (dataView) => {
+        const message = e2eeReadToJs(dataView);
+
+        if (message === null) {
+            console.error("Couldn't read what Elm sent over the encryption port");
+            return;
+        }
+
+        try {
+            if (message.tag === "store-shared-secret") {
+                // The raw X25519 output is not a key, it is a number both sides happen to
+                // agree on, so it goes through HKDF before anything encrypts with it.
+                const hkdfKey = await crypto.subtle.importKey(
+                    "raw", message.sharedSecret, "HKDF", false, ["deriveKey"]);
+
+                const aesKey = await crypto.subtle.deriveKey(
+                    { name: "HKDF"
+                    , hash: "SHA-256"
+                    , salt: new Uint8Array(32)
+                    , info: new TextEncoder().encode("at-chat dm e2ee v1")
+                    },
+                    hkdfKey,
+                    { name: "AES-GCM", length: 256 },
+                    false, // not exportable, which is why it is safe to keep around
+                    ["encrypt", "decrypt"]);
+
+                await e2eeWithStore("readwrite", store => store.put(aesKey, message.otherUserId));
+                app.ports.encryption_from_js.send(
+                    e2eeIdMessage(e2eeFromJsSharedSecretStored, message.otherUserId));
+
+            } else if (message.tag === "encrypt-message") {
+                const key = await e2eeWithStore(
+                    "readonly", store => store.get(message.otherUserId));
+
+                if (!key) {
+                    app.ports.encryption_from_js.send(
+                        e2eeIdAndTextMessage(
+                            e2eeFromJsMessageEncryptFailed,
+                            message.requestId,
+                            "No encryption key is stored on this device for that conversation"));
+                    return;
+                }
+
+                // A fresh IV every message, prepended to the ciphertext so that decrypting
+                // only needs the one blob.
+                const iv = crypto.getRandomValues(new Uint8Array(12));
+                const cipherText = await crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: iv }, key, message.data);
+
+                const combined = new Uint8Array(iv.length + cipherText.byteLength);
+                combined.set(iv, 0);
+                combined.set(new Uint8Array(cipherText), iv.length);
+
+                app.ports.encryption_from_js.send(
+                    e2eeMessageEncryptedMessage(message.requestId, combined));
+
+            } else if (message.tag === "decrypt-message") {
+                const key = await e2eeWithStore(
+                    "readonly", store => store.get(message.otherUserId));
+
+                if (!key) {
+                    app.ports.encryption_from_js.send(
+                        e2eeMessageDecryptFailedMessage(message.requestId));
+                    return;
+                }
+
+                const plainText = await crypto.subtle.decrypt(
+                    { name: "AES-GCM", iv: message.data.slice(0, 12) },
+                    key,
+                    message.data.slice(12));
+
+                app.ports.encryption_from_js.send(
+                    e2eeMessageDecryptedMessage(message.requestId, new Uint8Array(plainText)));
+
+            } else if (message.tag === "decrypt-many-messages") {
+                const key = await e2eeWithStore(
+                    "readonly", store => store.get(message.otherUserId));
+
+                const results = await Promise.all(message.data.map(async (bytes) => {
+                    if (!key) { return null; }
+
+                    try {
+                        const plainText = await crypto.subtle.decrypt(
+                            { name: "AES-GCM", iv: bytes.slice(0, 12) }, key, bytes.slice(12));
+                        return new Uint8Array(plainText);
+                    } catch (e) {
+                        return null;
+                    }
+                }));
+
+                app.ports.encryption_from_js.send(
+                    e2eeManyMessagesDecryptedMessage(message.requestId, results));
+
+            } else if (message.tag === "encrypt-many-messages") {
+                const key = await e2eeWithStore(
+                    "readonly", store => store.get(message.otherUserId));
+
+                if (!key) {
+                    app.ports.encryption_from_js.send(
+                        e2eeIdAndTextMessage(
+                            e2eeFromJsManyMessagesEncryptFailed,
+                            message.requestId,
+                            "No encryption key is stored on this device for that conversation"));
+                    return;
+                }
+
+                const results = await Promise.all(message.data.map(async (bytes) => {
+                    const iv = crypto.getRandomValues(new Uint8Array(12));
+                    const cipherText = await crypto.subtle.encrypt(
+                        { name: "AES-GCM", iv: iv }, key, bytes);
+
+                    const combined = new Uint8Array(iv.length + cipherText.byteLength);
+                    combined.set(iv, 0);
+                    combined.set(new Uint8Array(cipherText), iv.length);
+
+                    return combined;
+                }));
+
+                app.ports.encryption_from_js.send(
+                    e2eeManyMessagesEncryptedMessage(message.requestId, results));
+
+            } else if (message.tag === "encrypt-file") {
+                // A key of its own for each file. It is exportable because it has to travel
+                // to the other person, which it does inside the encrypted message the file is
+                // attached to rather than through IndexedDB.
+                const fileKey = await crypto.subtle.generateKey(
+                    { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+
+                const iv = crypto.getRandomValues(new Uint8Array(12));
+                const cipherText = await crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: iv }, fileKey, message.data);
+
+                const combined = new Uint8Array(iv.length + cipherText.byteLength);
+                combined.set(iv, 0);
+                combined.set(new Uint8Array(cipherText), iv.length);
+
+                // Looked at before the upload, since the server only ever sees the
+                // ciphertext and this is the only chance anything gets to read the file
+                // itself. The size goes in the message alongside the key.
+                const inspected = await e2eeInspectFile(message.data, message.contentType);
+
+                // The thumbnail is encrypted with the file's own key so that nothing has to
+                // carry a second one, under an iv of its own because reusing one with the
+                // same key is what breaks aes-gcm.
+                let thumbnail = null;
+
+                if (inspected.thumbnail !== null) {
+                    const thumbnailIv = crypto.getRandomValues(new Uint8Array(12));
+                    const thumbnailCipherText = await crypto.subtle.encrypt(
+                        { name: "AES-GCM", iv: thumbnailIv }, fileKey, inspected.thumbnail);
+
+                    thumbnail = new Uint8Array(
+                        thumbnailIv.length + thumbnailCipherText.byteLength);
+                    thumbnail.set(thumbnailIv, 0);
+                    thumbnail.set(new Uint8Array(thumbnailCipherText), thumbnailIv.length);
+                }
+
+                app.ports.encryption_from_js.send(
+                    e2eeFileEncryptedMessage(
+                        message.requestId,
+                        new Uint8Array(await crypto.subtle.exportKey("raw", fileKey)),
+                        combined,
+                        thumbnail,
+                        inspected.measured));
+
+            } else if (message.tag === "store-file-keys") {
+                for (const entry of message.keys) {
+                    // Stored the same way the conversation keys are: as a CryptoKey the
+                    // browser won't hand back out, so the raw bytes aren't left on disk for
+                    // anything with access to the database to read.
+                    const key = await crypto.subtle.importKey(
+                        "raw", entry.key, "AES-GCM", false, ["decrypt"]);
+
+                    await fileKeyWithStore(
+                        "readwrite", store => store.put(key, entry.fileHash));
+                }
+            }
+        } catch (e) {
+            if (message.tag === "store-shared-secret") {
+                app.ports.encryption_from_js.send(
+                    e2eeIdAndTextMessage(
+                        e2eeFromJsSharedSecretFailed, message.otherUserId, e.toString()));
+            } else if (message.tag === "encrypt-message") {
+                app.ports.encryption_from_js.send(
+                    e2eeIdAndTextMessage(
+                        e2eeFromJsMessageEncryptFailed, message.requestId, e.toString()));
+            } else if (message.tag === "decrypt-message") {
+                app.ports.encryption_from_js.send(
+                    e2eeMessageDecryptFailedMessage(message.requestId));
+            } else if (message.tag === "encrypt-many-messages") {
+                app.ports.encryption_from_js.send(
+                    e2eeIdAndTextMessage(
+                        e2eeFromJsManyMessagesEncryptFailed, message.requestId, e.toString()));
+            } else if (message.tag === "encrypt-file") {
+                app.ports.encryption_from_js.send(
+                    e2eeIdAndTextMessage(
+                        e2eeFromJsFileEncryptFailed, message.requestId, e.toString()));
+            } else {
+                // store-file-keys has no request to answer. A file whose key didn't make it
+                // this far shows up as one that can't be decrypted when it is fetched.
+                console.error("Encryption port error: " + e.toString());
+            }
+        }
     });
 
     app.ports.haptic_feedback.subscribe((a) => {

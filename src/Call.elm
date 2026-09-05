@@ -423,6 +423,9 @@ displayMode isMobile currentUserId route local =
         PublicGoMatchRoute _ ->
             thumbnailOrNoVideo
 
+        E2eeInfo ->
+            thumbnailOrNoVideo
+
 
 localVideoNodeId : String
 localVideoNodeId =

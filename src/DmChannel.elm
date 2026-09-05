@@ -1,7 +1,9 @@
 module DmChannel exposing
-    ( DiscordDmChannel
+    ( BackendDmChannel
+    , DiscordDmChannel
     , DiscordFrontendDmChannel
-    , DmChannel
+    , E2eeEnabledData
+    , E2eeStatus(..)
     , FrontendDmChannel
     , backendInit
     , frontendInit
@@ -23,6 +25,7 @@ import Date exposing (Date)
 import Discord
 import DmChannelId exposing (DmChannelId, GuildOrFullDmId(..))
 import Drawing exposing (Drawing)
+import Effect.Time as Time
 import Game exposing (BackendGameData)
 import Id exposing (ChannelMessageId, GamePublicId, Id, ThreadMessageId, ThreadRoute(..), UserId)
 import IdArray exposing (IdArray)
@@ -32,18 +35,31 @@ import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
+import SessionIdHash exposing (SessionIdHash)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
 import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend(..))
 import VisibleMessages exposing (VisibleMessages)
 
 
-type alias DmChannel =
+type alias BackendDmChannel =
     { messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
     , games : SeqDict (Id ChannelMessageId) BackendGameData
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
+    , e2ee : E2eeStatus
     }
+
+
+type E2eeStatus
+    = E2eeDisabled (Maybe ( Id UserId, Time.Posix ))
+    | E2eeRequestedBy ( Id UserId, SessionIdHash )
+    | E2eeDeclinedBy (Id UserId)
+    | E2eeEnabled E2eeEnabledData
+
+
+type alias E2eeEnabledData =
+    { enabledAt : Time.Posix, requestedBy : ( Id UserId, SessionIdHash ) }
 
 
 type alias DiscordDmChannel =
@@ -56,7 +72,7 @@ type alias DiscordDmChannel =
 
 
 type alias DiscordFrontendDmChannel =
-    { messages : MessageArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
+    { messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId)
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
@@ -65,22 +81,24 @@ type alias DiscordFrontendDmChannel =
 
 
 type alias FrontendDmChannel =
-    { messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+    { messages : MessageArray ChannelMessageId (Id UserId)
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
     , games : SeqDict (Id ChannelMessageId) Game.MatchData
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
+    , e2ee : E2eeStatus
     }
 
 
-backendInit : DmChannel
+backendInit : BackendDmChannel
 backendInit =
     { messages = IdArray.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
     , games = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
+    , e2ee = E2eeDisabled Nothing
     }
 
 
@@ -92,6 +110,7 @@ frontendInit =
     , threads = SeqDict.empty
     , games = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
+    , e2ee = E2eeDisabled Nothing
     }
 
 
@@ -99,7 +118,7 @@ toFrontend :
     Maybe ( ThreadRoute, Maybe ChannelHeaderTab )
     -> DmChannelId
     -> OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
-    -> DmChannel
+    -> BackendDmChannel
     -> FrontendDmChannel
 toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
     let
@@ -117,6 +136,7 @@ toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
             dmChannel.threads
     , games = gamesToFrontend (GuildOrFullDmId_Dm dmChannelId) threadRoute goMatchPublicIds dmChannel
     , dateDividerDrawings = dmChannel.dateDividerDrawings
+    , e2ee = dmChannel.e2ee
     }
 
 
@@ -176,7 +196,7 @@ latestFrontendThreadMessageId thread =
 toFrontendHelper :
     Bool
     -> { a | messages : IdArray messageId (Message messageId userId), threads : SeqDict (Id messageId) BackendThread }
-    -> MessageArray messageId (Message messageId userId)
+    -> MessageArray messageId userId
 toFrontendHelper preloadMessages channel =
     loadThreadStarters channel.threads channel.messages (Thread.loadMessages preloadMessages channel.messages)
 
@@ -184,7 +204,7 @@ toFrontendHelper preloadMessages channel =
 toDiscordFrontendHelper :
     Bool
     -> { a | messages : IdArray messageId (Message messageId userId), threads : SeqDict (Id messageId) DiscordBackendThread }
-    -> MessageArray messageId (Message messageId userId)
+    -> MessageArray messageId userId
 toDiscordFrontendHelper preloadMessages channel =
     loadThreadStarters channel.threads channel.messages (Thread.loadMessages preloadMessages channel.messages)
 
@@ -195,8 +215,8 @@ the channel isn't, so that the thread can be previewed.
 loadThreadStarters :
     SeqDict (Id messageId) thread
     -> IdArray messageId (Message messageId userId)
-    -> MessageArray messageId (Message messageId userId)
-    -> MessageArray messageId (Message messageId userId)
+    -> MessageArray messageId userId
+    -> MessageArray messageId userId
 loadThreadStarters threads backendMessages messages =
     SeqDict.foldl
         (\threadId _ list ->
@@ -215,8 +235,8 @@ loadThreadStarters threads backendMessages messages =
 loadOlderMessages :
     Id messageId
     -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
-    -> { a | messages : MessageArray messageId (Message messageId userId), visibleMessages : VisibleMessages messageId }
-    -> { a | messages : MessageArray messageId (Message messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : MessageArray messageId userId, visibleMessages : VisibleMessages messageId }
+    -> { a | messages : MessageArray messageId userId, visibleMessages : VisibleMessages messageId }
 loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
@@ -236,22 +256,21 @@ aren't the page of messages the channel view would scroll through.
 -}
 loadUnreadMessages :
     SeqDict (Id messageId) (Message messageId userId)
-    -> { a | messages : MessageArray messageId (Message messageId userId) }
-    -> { a | messages : MessageArray messageId (Message messageId userId) }
+    -> { a | messages : MessageArray messageId userId }
+    -> { a | messages : MessageArray messageId userId }
 loadUnreadMessages messages channel =
     { channel | messages = MessageArray.setMany (SeqDict.toList messages) channel.messages }
 
 
 loadMessages :
     ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
-    -> { a | messages : MessageArray messageId (Message messageId userId), visibleMessages : VisibleMessages messageId }
-    -> { a | messages : MessageArray messageId (Message messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : MessageArray messageId userId, visibleMessages : VisibleMessages messageId }
+    -> { a | messages : MessageArray messageId userId, visibleMessages : VisibleMessages messageId }
 loadMessages messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
             { channel
-                | messages =
-                    MessageArray.setMany (SeqDict.toList messagesLoaded2) channel.messages
+                | messages = MessageArray.setMany (SeqDict.toList messagesLoaded2) channel.messages
                 , visibleMessages =
                     if channel.visibleMessages.count == 0 then
                         VisibleMessages.firstLoad (MessageArray.length channel.messages)

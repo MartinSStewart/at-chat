@@ -1,7 +1,7 @@
 module ExportComparisonTests exposing (tests)
 
 import ChannelExport
-import DmChannel exposing (DmChannel)
+import DmChannel exposing (BackendDmChannel)
 import Expect
 import ExportComparison exposing (Difference(..))
 import Id
@@ -113,7 +113,7 @@ channelExport =
         }
 
 
-backendInit : DmChannel
+backendInit : BackendDmChannel
 backendInit =
     DmChannel.backendInit
 

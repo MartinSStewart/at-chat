@@ -80,6 +80,17 @@ type ToBackendLog
     | ToBackendLog_Local_SetMuteDiscordThread
     | ToBackendLog_Local_SetMuteGuild
     | ToBackendLog_Local_SetMuteDiscordGuild
+    | ToBackendLog_Local_RequestE2ee
+    | ToBackendLog_Local_CancelE2eeRequest
+    | ToBackendLog_Local_DeclineE2eeRequest
+    | ToBackendLog_Local_SetPublicKey
+    | ToBackendLog_Local_EncryptOldMessages
+    | ToBackendLog_Local_DisableE2ee
+    | ToBackendLog_Local_DecryptOldMessages
+    | ToBackendLog_Local_SetE2eeRisksAccepted
+    | ToBackendLog_Local_AcceptE2ee
+    | ToBackendLog_Local_SendEncryptedMessage
+    | ToBackendLog_Local_SendEncryptedEditMessage
 
 
 toBackendLogToString : ToBackendLog -> String
@@ -297,3 +308,36 @@ toBackendLogToString log =
 
         ToBackendLog_Local_SetMuteDiscordGuild ->
             "Local_SetMuteDiscordGuild"
+
+        ToBackendLog_Local_RequestE2ee ->
+            "Local_RequestE2ee"
+
+        ToBackendLog_Local_CancelE2eeRequest ->
+            "Local_CancelE2eeRequest"
+
+        ToBackendLog_Local_DeclineE2eeRequest ->
+            "Local_DeclineE2eeRequest"
+
+        ToBackendLog_Local_SetPublicKey ->
+            "Local_SetPublicKey"
+
+        ToBackendLog_Local_EncryptOldMessages ->
+            "Local_EncryptOldMessages"
+
+        ToBackendLog_Local_DisableE2ee ->
+            "Local_DisableE2ee"
+
+        ToBackendLog_Local_DecryptOldMessages ->
+            "Local_DecryptOldMessages"
+
+        ToBackendLog_Local_SetE2eeRisksAccepted ->
+            "Local_SetE2eeRisksAccepted"
+
+        ToBackendLog_Local_AcceptE2ee ->
+            "Local_AcceptE2ee"
+
+        ToBackendLog_Local_SendEncryptedMessage ->
+            "Local_SendEncryptedMessage"
+
+        ToBackendLog_Local_SendEncryptedEditMessage ->
+            "Local_SendEncryptedEditMessage"

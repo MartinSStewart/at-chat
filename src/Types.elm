@@ -3,13 +3,17 @@ module Types exposing
     , BackendFileData
     , BackendModel
     , BackendMsg(..)
+    , ChannelDataToDecrypt
+    , ChannelDataToEncrypt
     , CountToFrontendState
     , DiscordAttachmentData
     , DownloadBackupState
+    , E2eeKeysValid(..)
     , EditChannelForm
     , EditGuildForm
     , EditMessage
     , EmojiSelector(..)
+    , EncryptionRequests
     , ExportState
     , ExportStateProgress
     , ExportStep(..)
@@ -37,6 +41,13 @@ module Types exposing
     , MessageMenuExtraOptions
     , NewChannelForm
     , NewGuildForm
+    , PendingDecryptedManyMessages
+    , PendingDecryptedMessage
+    , PendingDecryptedOldMessages
+    , PendingEncryptedEdit
+    , PendingEncryptedFile
+    , PendingEncryptedManyMessages
+    , PendingEncryptedMessage
     , PendingGatewayReconnect
     , PublicGoMatch(..)
     , RevealedSpoilers
@@ -62,7 +73,7 @@ import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData)
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordUserData exposing (DiscordUserData)
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, FrontendDmChannel)
+import DmChannel exposing (BackendDmChannel, DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
 import DmChannelId exposing (DmChannelId, GuildOrFullDmId)
 import Drawing
 import Duration exposing (Duration)
@@ -78,11 +89,12 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
+import Encryption exposing (BytesHash, DecryptManyRequestId, DecryptRequestId, EncryptFileRequestId, EncryptManyRequestId, EncryptRequestId, EncryptedData)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import Game
 import Go
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, ExportChannelId, GamePublicId, GuildId, GuildOrDmId, Id, InviteLinkId, QuestionId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId, Viewing_DiscordDmId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, ExportChannelId, GamePublicId, GuildId, GuildOrDmId, Id, InviteLinkId, QuestionId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId, Viewing_DiscordDmId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import ImageEditor
 import ImageViewer
@@ -94,7 +106,7 @@ import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
 import MembersAndOwner exposing (MembersAndOwner)
-import Message exposing (Message)
+import Message exposing (Message, MessageContent)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView exposing (MessageViewMsg)
 import MuteSettings exposing (IsMuted)
@@ -134,6 +146,7 @@ import UserAgent exposing (UserAgent)
 import UserColor exposing (UserColor)
 import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, FrontendUserSession, NotificationMode, SetViewing, ToBeFilledInByBackend, UserOptionSection, UserSession)
 import WordSpellingGame exposing (WordList)
+import X25519
 
 
 type alias FrontendModel =
@@ -261,10 +274,86 @@ type alias LoggedIn2 =
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
     , friendsSearch : String
     , channelSearch : String
+    , showNewPrivateKey : Maybe X25519.PrivateKey
+    , e2eeError : Maybe String
+    , e2eePrivateKeyText : String
+    , e2eeKeysOnThisDevice : SeqSet (Id UserId)
+    , encryptionRequests : EncryptionRequests
+    , e2eeSectionsExpanded : SeqDict (Id UserId) Bool
     , {- We want to slightly change the letter spacing for textarea's on Safari in order to force it to recalculate word wrap.
          This is to work around this bug https://github.com/panphora/overtype/issues/116
       -}
       typedTextCounter : Int
+    }
+
+
+type alias EncryptionRequests =
+    { pendingEncryptedMessages : SeqDict (Id EncryptRequestId) PendingEncryptedMessage
+    , nextEncryptionRequestId : Id EncryptRequestId
+    , pendingDecryptedMessages : SeqDict (Id DecryptRequestId) PendingDecryptedMessage
+    , nextDecryptionRequestId : Id DecryptRequestId
+    , pendingDecryptedManyMessages : SeqDict (Id DecryptManyRequestId) PendingDecryptedManyMessages
+    , -- Shares nextDecryptManyRequestId with pendingDecryptedManyMessages, so a request id
+      -- only ever appears in one of the two.
+      pendingDecryptedOldMessages : SeqDict (Id DecryptManyRequestId) PendingDecryptedOldMessages
+    , nextDecryptManyRequestId : Id DecryptManyRequestId
+    , pendingEncryptedManyMessages : SeqDict (Id EncryptManyRequestId) PendingEncryptedManyMessages
+    , nextEncryptManyRequestId : Id EncryptManyRequestId
+    , -- Shares nextEncryptionRequestId with pendingEncryptedMessages, so a request id only
+      -- ever appears in one of the two.
+      pendingEncryptedEdits : SeqDict (Id EncryptRequestId) PendingEncryptedEdit
+    , pendingEncryptedFiles : SeqDict (Id EncryptFileRequestId) PendingEncryptedFile
+    , nextEncryptFileRequestId : Id EncryptFileRequestId
+    }
+
+
+type alias PendingEncryptedMessage =
+    { otherUserId : Id UserId
+    , threadRoute : ThreadRouteWithMaybeMessage
+    , contentAndEmbeds : MessageContent (Id UserId)
+    }
+
+
+type alias PendingDecryptedMessage =
+    { hash : BytesHash
+    , id : Viewing_DmId
+    , senderId : Id UserId
+    , threadRoute : ThreadRouteWithMaybeMessage
+    }
+
+
+type alias PendingEncryptedManyMessages =
+    { id : Viewing_DmId
+    , messages : List ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+    }
+
+
+type alias PendingDecryptedManyMessages =
+    { messageHashes : List BytesHash
+    , shiftScrollFrom : Maybe HtmlId
+    }
+
+
+{-| The messages of a conversation that has just had encryption turned off. Once they come
+back as plain text they are handed to the backend, which stores them in place of the
+ciphertext.
+-}
+type alias PendingDecryptedOldMessages =
+    { id : Viewing_DmId
+    , messages : List ThreadRouteWithMessage
+    }
+
+
+type alias PendingEncryptedEdit =
+    { id : Viewing_DmId
+    , threadRoute : ThreadRouteWithMessage
+    , contentAndEmbeds : MessageContent (Id UserId)
+    }
+
+
+type alias PendingEncryptedFile =
+    { guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
+    , fileId : Id FileId
     }
 
 
@@ -280,7 +369,17 @@ type alias UserOptionsModel =
     , -- What the colour picker is pointing at, or Nothing while it's put away. The grid
       -- takes up a lot of room, so it stays hidden until asked for.
       color : Maybe UserColor.Selection
+    , e2eeKeysValid : E2eeKeysValid
+    , -- What has been typed into the box that checks a private key. Cleared as soon as a
+      -- whole key has been checked, so the key isn't left sitting in the model.
+      privateKeyText : String
     }
+
+
+type E2eeKeysValid
+    = E2eeKeys_NotChecked
+    | E2eeKeys_Error String
+    | E2eeKeys_Valid
 
 
 type MessageHover
@@ -363,7 +462,7 @@ type alias BackendModel =
     , deletedGuilds : SeqDict (Id GuildId) DeletedBackendGuild
     , isInitialized : Bool
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
-    , dmChannels : SeqDict DmChannelId DmChannel
+    , dmChannels : SeqDict DmChannelId BackendDmChannel
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordDmChannel
     , slackDms : OneToOne (Slack.Id Slack.ChannelId) DmChannelId
     , slackWorkspaces : OneToOne String (Id GuildId)
@@ -535,7 +634,8 @@ type FrontendMsg_
     | ProfilePictureEditorMsg ImageEditor.Msg
     | GuildIconEditorMsg (Id GuildId) ImageEditor.Msg
     | OneFrameAfterDragEnd
-    | GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
+    | GotFileToEncrypt ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) String Bytes
+    | GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) (Maybe FileStatus.FileMetadata) (Result Http.Error FileStatus.UploadResponse)
     | PressedDeleteAttachedFile ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)
     | PressedViewAttachedFileInfo ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)
     | PressedToggleAttachedFileSpoiler ( AnyGuildOrDmId, ThreadRoute ) { fileId : Id FileId, removeSpoiler : Bool }
@@ -557,6 +657,15 @@ type FrontendMsg_
     | PressedCloseImageInfo
     | PressedMemberListBack
     | PressedExportChannel ExportChannelId
+    | PressedAddPrivateKeyToAccount
+    | PressedCloseNewPrivateKey
+    | PressedExpandE2eeSection (Id UserId)
+    | PressedE2eeRisksAccepted Bool
+    | PressedEnableE2ee (Id UserId)
+    | PressedCancelE2eeRequest (Id UserId)
+    | PressedDisableE2ee (Id UserId)
+    | PressedDeclineE2eeRequest (Id UserId)
+    | TypedPrivateKey (Id UserId) String
     | PageHasFocusChanged Bool
     | GotServiceWorkerMessage String
     | VisualViewportResized Float
@@ -615,6 +724,8 @@ type FrontendMsg_
     | PressedMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
     | UnreadOverviewChannelMsg AnyGuildOrDmId (Id ChannelMessageId) MessageViewMsg
     | UnreadOverviewThreadMsg AnyGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) MessageViewMsg
+    | ValidatedE2eePrivateKey String E2eeKeysValid
+    | EncryptionFromJs (Result String (Encryption.FromJs (MessageContent (Id UserId))))
 
 
 type alias NewChannelForm =
@@ -800,7 +911,7 @@ type alias ExportStateProgress =
     , remainingGuildChannels : List ( Id ChannelId, BackendChannel )
     , encodedGuildCount : Int
     , encodedGuilds : List Bytes
-    , remainingDmChannels : List ( DmChannelId, DmChannel )
+    , remainingDmChannels : List ( DmChannelId, BackendDmChannel )
     , encodedDmChannels : List Bytes
     , remainingDiscordGuilds : List ( Discord.Id Discord.GuildId, DiscordBackendGuild )
     , remainingDiscordGuildChannels : List ( Discord.Id Discord.ChannelId, DiscordBackendChannel )
@@ -1012,6 +1123,16 @@ type ServerChange
     | Server_SetMuteGuild (Id GuildId) IsMuted
     | Server_SetMuteDiscordGuild (Discord.Id Discord.GuildId) IsMuted
     | Server_DiscordAvatarsLoaded (Discord.Id Discord.UserId) DiscordFrontendUser
+      -- The DM is named from the point of view of whoever is receiving this, so the user
+      -- that asked for encryption is named separately.
+    | Server_E2eeRequested Viewing_DmId ( Id UserId, SessionIdHash )
+    | Server_E2eeRequestCancelled Viewing_DmId
+    | Server_E2eeRequestDeclined Viewing_DmId (Id UserId)
+    | Server_E2eeAccepted Viewing_DmId Time.Posix
+    | Server_SetPublicKey (Id UserId) X25519.PublicKey
+    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
+    | Server_SendEncryptedEditMessage Time.Posix (Id UserId) Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId)))
+    | Server_DisableE2ee Time.Posix (Id UserId) Viewing_DmId
 
 
 type LocalChange
@@ -1069,3 +1190,32 @@ type LocalChange
     | Local_SetMuteDiscordThread (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
     | Local_SetMuteGuild (Id GuildId) IsMuted
     | Local_SetMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
+    | Local_RequestE2ee Viewing_DmId
+    | Local_DeclineE2eeRequestAsInitiator Viewing_DmId
+    | Local_DeclineE2eeRequest Viewing_DmId
+    | Local_SetPublicKey X25519.PublicKey (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
+    | Local_EncryptOldMessages Viewing_DmId (List ( ThreadRouteWithMessage, SeqSet FileHash, EncryptedData (MessageContent (Id UserId)) ))
+    | Local_DisableE2ee Viewing_DmId (ToBeFilledInByBackend ChannelDataToDecrypt)
+    | Local_DecryptOldMessages Viewing_DmId Time.Posix (List ( ThreadRouteWithMessage, MessageContent (Id UserId) ))
+    | Local_SetE2eeRisksAccepted Bool
+    | Local_AcceptE2ee Viewing_DmId Time.Posix (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
+    | Local_SendEncryptedMessage Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
+    | Local_SendEncryptedEditMessage Time.Posix Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId)))
+
+
+{-| The ciphertext of every message in one conversation, handed to the client that is
+turning encryption off so it can put the plain text back.
+-}
+type alias ChannelDataToDecrypt =
+    { channel : SeqDict (Id ChannelMessageId) (EncryptedData (MessageContent (Id UserId)))
+    , threads :
+        SeqDict
+            (Id ChannelMessageId)
+            (NonemptyDict (Id ThreadMessageId) (EncryptedData (MessageContent (Id UserId))))
+    }
+
+
+type alias ChannelDataToEncrypt =
+    { channel : SeqDict (Id ChannelMessageId) (MessageContent (Id UserId))
+    , threads : SeqDict (Id ChannelMessageId) (SeqDict (Id ThreadMessageId) (MessageContent (Id UserId)))
+    }

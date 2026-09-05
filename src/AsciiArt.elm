@@ -104,4 +104,8 @@ art =
           , coordinates = Coord.xy 89 -243
           , size = Coord.xy 765 401
           }
+        , { url = "ascii-at-chat-logo"
+          , coordinates = Coord.xy -557 350
+          , size = Coord.xy 82 84
+          }
         ]

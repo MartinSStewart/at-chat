@@ -25,7 +25,7 @@ import ChannelExport
 import ChannelName
 import Discord
 import DiscordUserData exposing (DiscordUserData)
-import DmChannel exposing (DiscordDmChannel, DmChannel)
+import DmChannel exposing (BackendDmChannel, DiscordDmChannel)
 import DmChannelId exposing (DmChannelId)
 import ExportComparison
 import GuildName
@@ -610,7 +610,7 @@ foldGuild ( guildId, guild ) collected =
     }
 
 
-foldDmChannel : ( DmChannelId, DmChannel ) -> Collected -> Collected
+foldDmChannel : ( DmChannelId, BackendDmChannel ) -> Collected -> Collected
 foldDmChannel ( dmChannelId, channel ) collected =
     let
         messageCount : Int

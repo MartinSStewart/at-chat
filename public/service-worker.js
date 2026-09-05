@@ -170,13 +170,162 @@ const cacheName = 'resource_cache_v1';
 
 const frontendCacheName = 'frontend_cache_v1';
 
+
+// Keys for encrypted file attachments, written by the page (see fileKeyWithStore in
+// elm-pkg-js/stuff.js) and only ever read here. Each entry is a non-exportable CryptoKey
+// stored under the hash the ciphertext is served at, so the raw key is never on disk and
+// this worker can decrypt without being able to hand the key to anything else.
+const fileKeyDbName = "at-chat-file-keys";
+const fileKeyStoreName = "file-keys";
+
+function fileKeyOpenDb() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(fileKeyDbName, 1);
+        request.onerror = () => reject(request.error);
+        request.onupgradeneeded = () => {
+            // The page normally creates the store first. Creating it here too means a
+            // request that arrives before the page has stored anything opens an empty
+            // store rather than a database with no store in it.
+            if (!request.result.objectStoreNames.contains(fileKeyStoreName)) {
+                request.result.createObjectStore(fileKeyStoreName);
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+    });
+}
+
+function readFileKey(fileHash) {
+    return fileKeyOpenDb().then(db => new Promise((resolve, reject) => {
+        const transaction = db.transaction(fileKeyStoreName, "readonly");
+        const request = transaction.objectStore(fileKeyStoreName).get(fileHash);
+        request.onerror = () => { db.close(); reject(request.error); };
+        request.onsuccess = () => { db.close(); resolve(request.result); };
+    }));
+}
+
+// The page stores a key as it decrypts the message the file is attached to, and the
+// browser can ask for the file before that write has landed. Only encrypted files reach
+// this, so waiting costs nothing anywhere else.
+const fileKeyWaitAttempts = 20;
+
+const fileKeyWaitMs = 100;
+
+async function waitForFileKey(fileHash) {
+    for (let attempt = 0; attempt < fileKeyWaitAttempts; attempt++) {
+        try {
+            const key = await readFileKey(fileHash);
+
+            if (key) {
+                return key;
+            }
+        } catch (error) {
+            log("File key lookup error: " + error.message);
+            return null;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, fileKeyWaitMs));
+    }
+
+    return null;
+}
+
+// Where application/octet-stream sits in the server's content type list (see
+// rust-server/src/content_types.rs and FileStatus.contentTypes, which are the same list in
+// the same order). The ciphertext is asked for under this so that the server is never told
+// what kind of file it is holding.
+const octetStreamContentType = 136;
+
+// Encrypted attachments are addressed as /file/e/<content type>/<hash> so that this worker
+// knows to decrypt them, and so that a browser without it installed gets a plain 404
+// instead of rendering ciphertext. The content type there is the header value itself,
+// percent encoded (see FileStatus.encryptedFileUrl), because it never leaves the browser:
+// it is put on the file here, after the bytes have been decrypted, rather than being asked
+// of the server.
+async function decryptedFileResponse(isDevelopment, encryptedUrl) {
+    const start = encryptedUrl.indexOf('/file/e/');
+    const rest = encryptedUrl.slice(start + '/file/e/'.length);
+    const separator = rest.indexOf('/');
+
+    if (separator < 0) {
+        return new Response("Not an encrypted file address", { status: 404 });
+    }
+
+    const fileHash = rest.slice(separator + 1);
+
+    // Thumbnails the browser made are always webp, and sit where the server's own
+    // thumbnails do, so their address never carried a content type in the first place.
+    const isThumbnail = rest.slice(0, separator) === 't';
+
+    const contentType = isThumbnail
+        ? "image/webp"
+        : decodeURIComponent(rest.slice(0, separator));
+
+    const origin = encryptedUrl.slice(0, start);
+
+    let cipherTextUrl = isThumbnail
+        ? origin + '/file/t/' + fileHash
+        : origin + '/file/' + octetStreamContentType + '/' + fileHash;
+    if (isDevelopment) {
+        cipherTextUrl = "http://localhost:8001/" + cipherTextUrl;
+    }
+
+    const key = await waitForFileKey(fileHash);
+
+    if (!key) {
+        return new Response("No key is stored on this device for that file", { status: 404 });
+    }
+
+    // Only the ciphertext is cached. Keeping the decrypted body out of Cache Storage means
+    // a file that is encrypted on the server isn't sitting in the clear on disk here.
+    const cache = await caches.open(cacheName);
+    let cipherTextResponse = await cache.match(cipherTextUrl);
+
+    if (!cipherTextResponse) {
+        cipherTextResponse = await fetch(cipherTextUrl);
+
+        if (!cipherTextResponse.ok) {
+            return cipherTextResponse;
+        }
+    }
+
+    // Read once and cache from the bytes rather than caching a clone. Draining two branches
+    // of a teed body truncates whichever is read second once it runs past the browser's tee
+    // buffer, which is the same trap the frontend bundle above works around.
+    const cipherText = await cipherTextResponse.arrayBuffer();
+
+    if (cipherText.byteLength < 1000 * 1000) {
+        await cache.put(
+            cipherTextUrl,
+            new Response(cipherText, { status: 200, headers: { "Content-Type": "application/octet-stream" } }));
+    }
+
+    try {
+        const plainText = await crypto.subtle.decrypt(
+            { name: "AES-GCM", iv: cipherText.slice(0, 12) }, key, cipherText.slice(12));
+
+        return new Response(plainText, {
+            status: 200,
+            statusText: "OK",
+            headers: { "Content-Type": contentType }
+        });
+    } catch (error) {
+        log("File decrypt error: " + error.message);
+        return new Response("This file could not be decrypted", { status: 404 });
+    }
+}
+
 self.addEventListener('fetch', (event) => {
     try
     {
-    // Check if this is a request for an image
     const url = event.request.url;
 
-    const domain = 'https://at-chat.app/';
+    const isDevelopment = self.location.origin.startsWith("http://localhost:");
+
+    const domain = self.location.origin + '/';
+    let apiDomain = domain;
+    if (isDevelopment) {
+        apiDomain = "http://localhost:3000/";
+    }
 
     // The hashed frontend bundle, e.g. https://at-chat.app/frontend.a1b2c3.js
     if (url.startsWith(domain + 'frontend.') && url.endsWith('.js')) {
@@ -220,17 +369,22 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    if (url.startsWith(domain + 'file/t/')
-        || url.startsWith(domain + 'file/0')
-        || url.startsWith(domain + 'file/1')
-        || url.startsWith(domain + 'file/2')
-        || url.startsWith(domain + 'file/3')
-        || url.startsWith(domain + 'file/4')
-        || url.startsWith(domain + 'file/5')
-        || url.startsWith(domain + 'file/6')
-        || url.startsWith(domain + 'file/7')
-        || url.startsWith(domain + 'file/8')
-        || url.startsWith(domain + 'file/9')
+    if (url.startsWith(apiDomain + 'file/e/')) {
+        event.respondWith(decryptedFileResponse(isDevelopment, url));
+        return;
+    }
+
+    if (url.startsWith(apiDomain + 'file/t/')
+        || url.startsWith(apiDomain + 'file/0')
+        || url.startsWith(apiDomain + 'file/1')
+        || url.startsWith(apiDomain + 'file/2')
+        || url.startsWith(apiDomain + 'file/3')
+        || url.startsWith(apiDomain + 'file/4')
+        || url.startsWith(apiDomain + 'file/5')
+        || url.startsWith(apiDomain + 'file/6')
+        || url.startsWith(apiDomain + 'file/7')
+        || url.startsWith(apiDomain + 'file/8')
+        || url.startsWith(apiDomain + 'file/9')
         ) {
 
         event.respondWith(caches.open(cacheName).then((cache) => {

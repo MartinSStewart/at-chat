@@ -20,9 +20,11 @@ module SheepGame exposing
     , UnvalidatedInput
     , ValidatedInput
     , ValidatedSetup
+    , answeredCountText
     , attachedFileTrackerId
     , changedInputs
     , clampSavedQuestions
+    , emptyQuestionError
     , fileUploadPreview
     , fileUploadPreviewSize
     , gameView
@@ -34,7 +36,11 @@ module SheepGame exposing
     , inputContainerId
     , inputId
     , mapQuestionRichText
+    , newQuestionRevealedText
+    , noQuestionsError
     , questionRevealed
+    , rankDownArrow
+    , rankUpArrow
     , reactionTargetId
     , removeAttachedFileFromText
     , resultsData
@@ -42,6 +48,7 @@ module SheepGame exposing
     , saveInputAction
     , scoresThroughQuestion
     , scoringId
+    , scoringText
     , setupView
     , updateAction
     , updateGame
@@ -67,7 +74,7 @@ import Effect.Http as Http
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji)
 import FileName
-import FileStatus exposing (FileData, FileId, FileMetadata(..), FileStatus)
+import FileStatus exposing (FileData, FileId, FileMetadata(..), FileStatus, IsEncrypted(..))
 import Go
 import GuildIcon
 import Html
@@ -100,6 +107,36 @@ import Ui.Prose
 import Ui.Shadow
 import User exposing (FrontendUser, LocalUser)
 import UserColor
+
+
+rankUpArrow : String
+rankUpArrow =
+    "▲"
+
+
+rankDownArrow : String
+rankDownArrow =
+    "▼"
+
+
+scoringText : String
+scoringText =
+    "Scoring"
+
+
+newQuestionRevealedText : String
+newQuestionRevealedText =
+    "New question revealed!"
+
+
+noQuestionsError : String
+noQuestionsError =
+    "Write at least one question before starting"
+
+
+emptyQuestionError : String
+emptyQuestionError =
+    "Can't be empty"
 
 
 type alias ValidatedSetup =
@@ -430,7 +467,7 @@ validateInput timezone users question =
                 |> Ok
 
         ( Nothing, _ ) ->
-            Err "Can't be empty"
+            Err emptyQuestionError
 
         ( _, True ) ->
             Err "Attached files not finished uploading"
@@ -453,7 +490,7 @@ validateSetup timezone users createdBy model =
                 Err ""
 
         Nothing ->
-            Err "Write at least one question before starting"
+            Err noQuestionsError
 
 
 {-| What the setup and the game can't do for themselves. Everything about an input works
@@ -601,7 +638,7 @@ updateSetup localUser msg model =
                             (\question ->
                                 { question
                                     | attachedFiles =
-                                        SeqDict.updateIfExists fileId (FileStatus.addFileHash result) question.attachedFiles
+                                        SeqDict.updateIfExists fileId (FileStatus.addFileHash Nothing result) question.attachedFiles
                                 }
                             )
                             model.questions
@@ -647,6 +684,7 @@ updateSetup localUser msg model =
                                 , metadata = metadata
                                 , contentType = fileData.contentType
                                 , fileHash = fileData.fileHash
+                                , isEncrypted = fileData.isEncrypted
                                 }
 
                         -- The button that sends this is only drawn for a file that has
@@ -715,6 +753,7 @@ attachFiles input files inputs =
                             (Effect.File.name file |> FileName.fromString)
                             { sent = 0, size = Effect.File.size file }
                             (Effect.File.mime file |> FileStatus.contentType)
+                            IsNotEncrypted
                         )
                         attachedFiles2
                     , ( fileId, file ) :: toUpload2
@@ -896,7 +935,7 @@ updateGame localUser setup shared msg model =
                         (\draft ->
                             { draft
                                 | attachedFiles =
-                                    SeqDict.updateIfExists fileId (FileStatus.addFileHash result) draft.attachedFiles
+                                    SeqDict.updateIfExists fileId (FileStatus.addFileHash Nothing result) draft.attachedFiles
                             }
                         )
                         model.answerDrafts
@@ -943,6 +982,7 @@ updateGame localUser setup shared msg model =
                                 , metadata = metadata
                                 , contentType = fileData.contentType
                                 , fileHash = fileData.fileHash
+                                , isEncrypted = fileData.isEncrypted
                                 }
 
                         Nothing ->
@@ -1027,7 +1067,7 @@ updateGame localUser setup shared msg model =
                         (\draft ->
                             { draft
                                 | attachedFiles =
-                                    SeqDict.updateIfExists fileId (FileStatus.addFileHash result) draft.attachedFiles
+                                    SeqDict.updateIfExists fileId (FileStatus.addFileHash Nothing result) draft.attachedFiles
                             }
                         )
                         model.noteDrafts
@@ -1074,6 +1114,7 @@ updateGame localUser setup shared msg model =
                                 , metadata = metadata
                                 , contentType = fileData.contentType
                                 , fileHash = fileData.fileHash
+                                , isEncrypted = fileData.isEncrypted
                                 }
 
                         Nothing ->
@@ -1694,7 +1735,7 @@ questionInput localUser loggedIn users index question =
             , MessageInput.textarea
                 False
                 htmlId
-                ""
+                MessageInput.emptyPlaceholder
                 (maxQuestionLength - String.length question.text)
                 question.text
                 richText
@@ -1756,7 +1797,7 @@ newQuestionRevealedView isMobile =
         , Ui.pointer
         , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.highlightedBorder ]
         ]
-        (Ui.text "New question revealed!")
+        (Ui.text newQuestionRevealedText)
 
 
 tabBodyHeight : Bool -> Coord CssPixels -> Int
@@ -2137,7 +2178,7 @@ answerInput localUser loggedIn questionId answer =
             , MessageInput.textarea
                 True
                 htmlId
-                "Answer here"
+                (MessageInput.textPlaceholder "Answer here")
                 (maxAnswerLength - String.length answer.text)
                 answer.text
                 richText
@@ -2306,7 +2347,7 @@ notesInput localUser loggedIn questionId notes =
             , MessageInput.textarea
                 True
                 htmlId
-                ""
+                (Html.text "\u{00A0}")
                 (maxNoteLength - String.length notes.text)
                 notes.text
                 richText
@@ -2622,7 +2663,7 @@ revealingView isMobile time contentWidth localUser setup shared model =
             [ Ui.spacing 32 ]
             (Ui.column
                 [ Ui.spacing 8, Ui.id (Dom.idToString scoringId), MyUi.fadeIn, padding ]
-                [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Scoring")
+                [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text scoringText)
                 , Ui.column
                     [ Ui.spacing 12, Ui.padding 8, Ui.Font.color MyUi.font3 ]
                     [ Ui.text "For each question you get points equal to the number of people who picked the same answer as you (including yourself). For example, if you pick a unique answer, you get 1 point. If you and two others pick the same answer, you three get 3 points."
@@ -2973,10 +3014,10 @@ scoreRowView localUser maxPoints answerResult =
                         [ Ui.text (String.fromInt score)
                         , case rankChange of
                             RankUp ->
-                                Ui.el [ Ui.Font.color (Ui.rgb 25 230 25), Ui.move { x = 0, y = -1, z = 0 } ] (Ui.text "▲")
+                                Ui.el [ Ui.Font.color (Ui.rgb 25 230 25), Ui.move { x = 0, y = -1, z = 0 } ] (Ui.text rankUpArrow)
 
                             RankDown ->
-                                Ui.el [ Ui.Font.color (Ui.rgb 230 25 25), Ui.move { x = 0, y = -1, z = 0 } ] (Ui.text "▼")
+                                Ui.el [ Ui.Font.color (Ui.rgb 230 25 25), Ui.move { x = 0, y = -1, z = 0 } ] (Ui.text rankDownArrow)
 
                             RankUnchanged ->
                                 Ui.none
@@ -3394,10 +3435,10 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                             Nothing ->
                                 Ui.noAttr
 
-                    FileStatus.FileUploading _ _ _ ->
+                    FileStatus.FileUploading _ _ _ _ ->
                         Ui.noAttr
 
-                    FileStatus.FileError _ _ _ _ ->
+                    FileStatus.FileError _ _ _ _ _ ->
                         Ui.noAttr
                 , Ui.el
                     [ Ui.alignBottom
@@ -3412,7 +3453,7 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                     (Ui.text ("[!" ++ Id.toString fileStatusId ++ "]"))
                     |> Ui.inFront
                 , case fileStatus of
-                    FileStatus.FileUploading _ fileSize _ ->
+                    FileStatus.FileUploading _ fileSize _ _ ->
                         FileStatus.progressToString fileSize
                             |> Ui.text
                             |> Ui.el
@@ -3430,11 +3471,11 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                     FileStatus.FileUploaded _ ->
                         Ui.noAttr
 
-                    FileStatus.FileError _ _ _ _ ->
+                    FileStatus.FileError _ _ _ _ _ ->
                         Ui.noAttr
                 ]
                 (case fileStatus of
-                    FileStatus.FileUploading _ _ _ ->
+                    FileStatus.FileUploading _ _ _ _ ->
                         Ui.none
 
                     FileStatus.FileUploaded fileData ->
@@ -3444,13 +3485,13 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                                     [ Html.Attributes.src
                                         (case fileData.metadata of
                                             Just (FileMetadata_Image metadata) ->
-                                                FileStatus.thumbnailUrl metadata.imageSize fileData.contentType fileData.fileHash
+                                                FileStatus.fileDataThumbnailUrl metadata.imageSize fileData
 
                                             Just (FileMetadata_Video _) ->
-                                                FileStatus.fileUrl fileData.contentType fileData.fileHash
+                                                FileStatus.fileDataUrl fileData
 
                                             Nothing ->
-                                                FileStatus.fileUrl fileData.contentType fileData.fileHash
+                                                FileStatus.fileDataUrl fileData
                                         )
                                     , Html.Attributes.style "object-fit" "cover"
                                     , Html.Attributes.width (fileUploadPreviewSize - 2)
@@ -3501,7 +3542,7 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                                     ]
                                     (Ui.text "0110\n0001")
 
-                    FileStatus.FileError _ _ _ _ ->
+                    FileStatus.FileError _ _ _ _ _ ->
                         Ui.el
                             [ Ui.centerX
                             , Ui.centerY

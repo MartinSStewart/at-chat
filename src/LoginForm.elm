@@ -8,6 +8,7 @@ module LoginForm exposing
     , Msg(..)
     , SubmitStatus(..)
     , cancelButtonId
+    , checkYourEmailText
     , emailInputId
     , errorView
     , init
@@ -51,6 +52,11 @@ import Ui.Input
 import Ui.Prose
 import Ui.Shadow
 import UserAgent exposing (Browser(..))
+
+
+checkYourEmailText : String
+checkYourEmailText =
+    "Check your email for a code"
 
 
 {-| OpaqueVariants
@@ -686,7 +692,7 @@ enterLoginCodeView windowSize textSelection model =
                     [ Ui.Font.center, Ui.spacing 16 ]
                     [ Ui.Prose.paragraph
                         [ Ui.Font.size 30, Ui.Font.weight 600 ]
-                        [ Ui.text "Check your email for a code" ]
+                        [ Ui.text checkYourEmailText ]
                     , Ui.Prose.paragraph
                         [ Ui.width Ui.shrink ]
                         [ Ui.text "An email has been sent to "

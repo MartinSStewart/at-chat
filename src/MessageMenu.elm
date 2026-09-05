@@ -1,6 +1,7 @@
 module MessageMenu exposing
     ( availableCustomEmojisAndStickers
     , close
+    , editMessageText
     , editMessageTextInputId
     , messageMenuSpeed
     , mobileMenuMaxHeight
@@ -41,6 +42,11 @@ import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
 import User
+
+
+editMessageText : String
+editMessageText =
+    "Edit message"
 
 
 width : number
@@ -432,7 +438,7 @@ menuItems :
     -> { items : List (Element FrontendMsg_), height : Int }
 menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl position local model =
     let
-        helper : Bool -> Id messageId -> { a | messages : MessageArray messageId (Message messageId (Id UserId)) } -> Maybe MenuItemsData
+        helper : Bool -> Id messageId -> { a | messages : MessageArray messageId (Id UserId) } -> Maybe MenuItemsData
         helper isPrivateDm messageId thread =
             case MessageArray.get messageId thread.messages of
                 Just message ->
@@ -441,9 +447,26 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                             UserTextMessage data ->
                                 data.createdBy == local.localUser.session.userId
 
-                            _ ->
+                            EncryptedUserTextMessage data ->
+                                data.createdBy == local.localUser.session.userId
+
+                            UserJoinedMessage _ _ _ _ ->
                                 False
-                    , text = LocalState.messageToString local.localUser.timezone (User.allUsers local.localUser) message
+
+                            DeletedMessage _ ->
+                                False
+
+                            CallStarted _ ->
+                                False
+
+                            GameStarted _ ->
+                                False
+                    , text =
+                        LocalState.messageToString
+                            local.localUser.timezone
+                            (User.allUsers local.localUser)
+                            local.localUser.decryptedMessages
+                            message
                     , messageCustomEmojiIdsList = messageCustomEmojiIds message
                     , openDm =
                         if isPrivateDm then
@@ -452,6 +475,9 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         else
                             case message of
                                 UserTextMessage data ->
+                                    MessageMenu_PressedOpenDm data.createdBy |> Just
+
+                                EncryptedUserTextMessage data ->
                                     MessageMenu_PressedOpenDm data.createdBy |> Just
 
                                 UserJoinedMessage _ createdBy _ _ ->
@@ -471,7 +497,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                 _ ->
                     Nothing
 
-        discordHelper : Bool -> Id messageId -> { a | messages : MessageArray messageId (Message messageId (Discord.Id Discord.UserId)) } -> Maybe MenuItemsData
+        discordHelper : Bool -> Id messageId -> { a | messages : MessageArray messageId (Discord.Id Discord.UserId) } -> Maybe MenuItemsData
         discordHelper isPrivateDm messageId thread =
             case MessageArray.get messageId thread.messages of
                 Just message ->
@@ -480,6 +506,9 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         messageUserId =
                             case message of
                                 UserTextMessage data ->
+                                    Just data.createdBy
+
+                                EncryptedUserTextMessage data ->
                                     Just data.createdBy
 
                                 UserJoinedMessage _ createdBy _ _ ->
@@ -505,6 +534,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         LocalState.messageToString
                             local.localUser.timezone
                             (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                            SeqDict.empty
                             message
                     , messageCustomEmojiIdsList = messageCustomEmojiIds message
                     , openDm =
@@ -659,7 +689,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                     isMobile
                     (Dom.id "messageMenu_editMessage")
                     Icons.pencil
-                    "Edit message"
+                    editMessageText
                     (MessageMenu_PressedEditMessage guildOrDmId threadRoute)
                     |> ButtonItem
 
@@ -942,7 +972,10 @@ messageCustomEmojiIds message =
     in
     case message of
         UserTextMessage data ->
-            RichText.customEmojis data.content ++ reactionIds data.reactions
+            RichText.customEmojis data.content.content ++ reactionIds data.reactions
+
+        EncryptedUserTextMessage data ->
+            reactionIds data.reactions
 
         UserJoinedMessage _ _ reactions _ ->
             reactionIds reactions

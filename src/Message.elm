@@ -1,20 +1,30 @@
 module Message exposing
     ( CallStartedData
     , ChangeAttachments(..)
+    , EncryptedUserTextMessageData
+    , EncryptedUserTextMessageDataNoReply
     , GameStartedData
     , GameType(..)
     , Message(..)
+    , MessageContent
     , MessageNoReply(..)
     , UserTextMessageData
     , UserTextMessageDataNoReply
+    , UserTextMessageDrawings
     , addEmbed
     , addReactionEmoji
+    , contentAndEmbedsCodec
     , createdAt
     , drawing
+    , editEncryptedUserTextMessage
     , editUserTextMessage
+    , encryptedUserTextMessageFrontend
     , handleDrawingChange
+    , noDrawings
     , reactionEmojis
     , removeReactionEmoji
+    , toDecrypted
+    , toEncrypted
     , userJoined
     , userTextMessageBackend
     , userTextMessageFrontend
@@ -25,17 +35,20 @@ import Array exposing (Array)
 import Drawing exposing (Drawing)
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
-import Embed exposing (Embed(..), EmbedData)
+import Embed exposing (Embed(..), EmbedData, EmbedImageFormat(..))
 import Emoji exposing (EmojiOrCustomEmoji)
-import FileStatus exposing (FileData, FileId)
-import Id exposing (Id, StickerId)
+import Encryption exposing (EncryptedData)
+import FileStatus exposing (FileData, FileHash, FileId)
+import Id exposing (Id, StickerId, UserId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
+import Quantity exposing (Quantity)
 import RichText exposing (RichText)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
-import SeqSet
+import SeqSet exposing (SeqSet)
+import Serialize
 import Sticker exposing (StickerData)
 import Time
 import Url exposing (Url)
@@ -43,6 +56,7 @@ import Url exposing (Url)
 
 type Message messageId userId
     = UserTextMessage (UserTextMessageData messageId userId)
+    | EncryptedUserTextMessage (EncryptedUserTextMessageData messageId userId)
     | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
     | DeletedMessage Time.Posix
     | CallStarted (CallStartedData userId)
@@ -91,13 +105,17 @@ userTextMessageNoEmbeds :
 userTextMessageNoEmbeds createdAt2 createdBy content reactions repliedTo attachedFiles =
     { createdAt = createdAt2
     , createdBy = createdBy
-    , content = content
+    , content = { content = content, attachedFiles = attachedFiles, embeds = Array.empty }
     , reactions = reactions
     , editedAt = Nothing
     , repliedTo = repliedTo
-    , attachedFiles = attachedFiles
-    , embeds = Array.empty
-    , timestampDrawings = Drawing.emptyDrawing
+    , drawings = Nothing
+    }
+
+
+noDrawings : UserTextMessageDrawings userId
+noDrawings =
+    { timestampDrawings = Drawing.emptyDrawing
     , userIconDrawings = Drawing.emptyDrawing
     , imageAttachmentDrawings = SeqDict.empty
     , embedDrawings = SeqDict.empty
@@ -125,16 +143,15 @@ userTextMessageBackend secretKey createdAt2 createdBy content repliedTo attached
     in
     ( { createdAt = createdAt2
       , createdBy = createdBy
-      , content = content
+      , content =
+            { content = content
+            , attachedFiles = attachedFiles
+            , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
+            }
       , reactions = SeqDict.empty
       , editedAt = Nothing
       , repliedTo = repliedTo
-      , attachedFiles = attachedFiles
-      , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
-      , timestampDrawings = Drawing.emptyDrawing
-      , userIconDrawings = Drawing.emptyDrawing
-      , imageAttachmentDrawings = SeqDict.empty
-      , embedDrawings = SeqDict.empty
+      , drawings = Nothing
       }
     , SeqSet.fromList hyperlinks |> SeqSet.toList |> List.map (Embed.request secretKey) |> Command.batch
     , List.foldl
@@ -156,6 +173,30 @@ userTextMessageBackend secretKey createdAt2 createdBy content repliedTo attached
     )
 
 
+{-| An encrypted message, as both people in the conversation hold it. There are no embeds
+because working them out means reading the message, which nothing outside the two of them
+can do.
+-}
+encryptedUserTextMessageFrontend :
+    Time.Posix
+    -> Id UserId
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent (Id UserId))
+    -> Maybe (Id messageId)
+    -> Message messageId (Id UserId)
+encryptedUserTextMessageFrontend createdAt2 createdBy fileHashes contentAndEmbeds repliedTo =
+    EncryptedUserTextMessage
+        { content = contentAndEmbeds
+        , fileHashes = fileHashes
+        , createdAt = createdAt2
+        , createdBy = createdBy
+        , reactions = SeqDict.empty
+        , editedAt = Nothing
+        , repliedTo = repliedTo
+        , drawings = Nothing
+        }
+
+
 userTextMessageFrontend :
     Time.Posix
     -> userId
@@ -171,16 +212,15 @@ userTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
     in
     { createdAt = createdAt2
     , createdBy = createdBy
-    , content = content
+    , content =
+        { content = content
+        , attachedFiles = attachedFiles
+        , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
+        }
     , reactions = SeqDict.empty
     , editedAt = Nothing
     , repliedTo = repliedTo
-    , attachedFiles = attachedFiles
-    , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
-    , timestampDrawings = Drawing.emptyDrawing
-    , userIconDrawings = Drawing.emptyDrawing
-    , imageAttachmentDrawings = SeqDict.empty
-    , embedDrawings = SeqDict.empty
+    , drawings = Nothing
     }
         |> UserTextMessage
 
@@ -188,6 +228,20 @@ userTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
 type ChangeAttachments
     = ChangeAttachments (SeqDict (Id FileId) FileData)
     | DoNotChangeAttachments
+
+
+{-| An encrypted message is edited by putting the new ciphertext in place of the old. There
+is nothing to read out of what was there before, so unlike `editUserTextMessage` no embeds
+carry over: the browser works those out again from the text it just encrypted.
+-}
+editEncryptedUserTextMessage :
+    Time.Posix
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent userId)
+    -> EncryptedUserTextMessageData messageId userId
+    -> EncryptedUserTextMessageData messageId userId
+editEncryptedUserTextMessage time fileHashes newContent data =
+    { data | editedAt = Just time, content = newContent, fileHashes = fileHashes }
 
 
 editUserTextMessage :
@@ -202,7 +256,7 @@ editUserTextMessage time newContent attachedFiles data =
         oldUrls =
             List.indexedMap
                 (\index link ->
-                    case Array.get index data.embeds of
+                    case Array.get index data.content.embeds of
                         Just (EmbedLoaded embed) ->
                             ( link, embed )
 
@@ -212,28 +266,30 @@ editUserTextMessage time newContent attachedFiles data =
                         Nothing ->
                             ( link, Embed.empty )
                 )
-                (RichText.hyperlinks data.content)
+                (RichText.hyperlinks data.content.content)
                 |> SeqDict.fromList
     in
     { data
         | editedAt = Just time
-        , content = newContent
-        , attachedFiles =
-            case attachedFiles of
-                ChangeAttachments attachedFiles2 ->
-                    attachedFiles2
+        , content =
+            { content = newContent
+            , attachedFiles =
+                case attachedFiles of
+                    ChangeAttachments attachedFiles2 ->
+                        attachedFiles2
 
-                DoNotChangeAttachments ->
-                    data.attachedFiles
-        , embeds =
-            RichText.hyperlinks newContent
-                |> List.map
-                    (\url ->
-                        SeqDict.get url oldUrls
-                            |> Maybe.withDefault Embed.empty
-                            |> EmbedLoaded
-                    )
-                |> Array.fromList
+                    DoNotChangeAttachments ->
+                        data.content.attachedFiles
+            , embeds =
+                RichText.hyperlinks newContent
+                    |> List.map
+                        (\url ->
+                            SeqDict.get url oldUrls
+                                |> Maybe.withDefault Embed.empty
+                                |> EmbedLoaded
+                        )
+                    |> Array.fromList
+            }
     }
 
 
@@ -241,30 +297,41 @@ addEmbed : ( Url, Result e EmbedData ) -> Message messageId userId -> Message me
 addEmbed ( url, result ) message =
     case message of
         UserTextMessage message2 ->
+            let
+                contentAndEmbeds : MessageContent userId
+                contentAndEmbeds =
+                    message2.content
+            in
             UserTextMessage
                 { message2
-                    | embeds =
-                        RichText.hyperlinks message2.content
-                            |> List.indexedMap Tuple.pair
-                            |> List.foldl
-                                (\( index, hyperlink ) array ->
-                                    if hyperlink == url then
-                                        Array.set
-                                            index
-                                            (case result of
-                                                Ok embed ->
-                                                    EmbedLoaded embed
+                    | content =
+                        { contentAndEmbeds
+                            | embeds =
+                                RichText.hyperlinks contentAndEmbeds.content
+                                    |> List.indexedMap Tuple.pair
+                                    |> List.foldl
+                                        (\( index, hyperlink ) array ->
+                                            if hyperlink == url then
+                                                Array.set
+                                                    index
+                                                    (case result of
+                                                        Ok embed ->
+                                                            EmbedLoaded embed
 
-                                                Err _ ->
-                                                    EmbedLoaded Embed.empty
-                                            )
-                                            array
+                                                        Err _ ->
+                                                            EmbedLoaded Embed.empty
+                                                    )
+                                                    array
 
-                                    else
-                                        array
-                                )
-                                message2.embeds
+                                            else
+                                                array
+                                        )
+                                        contentAndEmbeds.embeds
+                        }
                 }
+
+        EncryptedUserTextMessage _ ->
+            message
 
         UserJoinedMessage _ _ _ _ ->
             message
@@ -282,13 +349,109 @@ addEmbed ( url, result ) message =
 type alias UserTextMessageData messageId userId =
     { createdAt : Time.Posix
     , createdBy : userId
-    , content : Nonempty (RichText userId)
+    , content : MessageContent userId
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , repliedTo : Maybe (Id messageId)
-    , attachedFiles : SeqDict (Id FileId) FileData
-    , embeds : Array Embed
-    , timestampDrawings : Drawing userId
+    , drawings :
+        {- This introduces redundancy since Nothing and Just with no drawings inside mean the same thing.
+           Hopefully it also reduces how much memory this record uses for typical messages.
+        -}
+        Maybe (UserTextMessageDrawings userId)
+    }
+
+
+{-| Puts the plain text of a message back in place of its ciphertext, for a conversation
+that is no longer encrypted.
+
+Any attached files stay as they were. Their bytes are still encrypted on the server, and
+the key that opens them is in the message content, which is what makes them readable now
+that the message itself is.
+
+-}
+toDecrypted : MessageContent userId -> Message messageId userId -> Message messageId userId
+toDecrypted content message =
+    case message of
+        EncryptedUserTextMessage data ->
+            UserTextMessage
+                { content = content
+                , createdAt = data.createdAt
+                , createdBy = data.createdBy
+                , reactions = data.reactions
+                , editedAt = data.editedAt
+                , repliedTo = data.repliedTo
+                , drawings = data.drawings
+                }
+
+        UserTextMessage _ ->
+            message
+
+        UserJoinedMessage _ _ _ _ ->
+            message
+
+        DeletedMessage _ ->
+            message
+
+        CallStarted _ ->
+            message
+
+        GameStarted _ ->
+            message
+
+
+toEncrypted :
+    SeqSet FileHash
+    -> EncryptedData (MessageContent userId)
+    -> Message messageId userId
+    -> Message messageId userId
+toEncrypted fileHashes encryptedData message =
+    case message of
+        UserTextMessage data ->
+            EncryptedUserTextMessage
+                { content = encryptedData
+                , fileHashes = fileHashes
+                , createdAt = data.createdAt
+                , createdBy = data.createdBy
+                , reactions = data.reactions
+                , editedAt = data.editedAt
+                , repliedTo = data.repliedTo
+                , drawings = data.drawings
+                }
+
+        EncryptedUserTextMessage _ ->
+            message
+
+        UserJoinedMessage _ _ _ _ ->
+            message
+
+        DeletedMessage _ ->
+            message
+
+        CallStarted _ ->
+            message
+
+        GameStarted _ ->
+            message
+
+
+type alias MessageContent userId =
+    { content : Nonempty (RichText userId), embeds : Array Embed, attachedFiles : SeqDict (Id FileId) FileData }
+
+
+type alias EncryptedUserTextMessageData messageId userId =
+    { createdAt : Time.Posix
+    , createdBy : userId
+    , content : EncryptedData (MessageContent userId)
+    , fileHashes : SeqSet FileHash
+    , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+    , editedAt : Maybe Time.Posix
+    , repliedTo : Maybe (Id messageId)
+    , drawings : Maybe (UserTextMessageDrawings userId)
+    }
+
+
+type alias UserTextMessageDrawings userId =
+    { timestampDrawings : Drawing userId
     , userIconDrawings : Drawing userId
     , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing userId)
     , -- Keyed by the index of the embed the drawing is attached to
@@ -298,6 +461,7 @@ type alias UserTextMessageData messageId userId =
 
 type MessageNoReply userId
     = UserTextMessage_NoReply (UserTextMessageDataNoReply userId)
+    | EncryptedUserTextMessage_NoReply (EncryptedUserTextMessageDataNoReply userId)
     | UserJoinedMessage_NoReply Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
     | DeletedMessage_NoReply Time.Posix
     | CallStarted_NoReply Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
@@ -307,10 +471,18 @@ type MessageNoReply userId
 type alias UserTextMessageDataNoReply userId =
     { createdAt : Time.Posix
     , createdBy : userId
-    , content : Nonempty (RichText userId)
+    , content : MessageContent userId
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
-    , attachedFiles : SeqDict (Id FileId) FileData
+    }
+
+
+type alias EncryptedUserTextMessageDataNoReply userId =
+    { createdAt : Time.Posix
+    , createdBy : userId
+    , content : EncryptedData (MessageContent userId)
+    , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+    , editedAt : Maybe Time.Posix
     }
 
 
@@ -319,47 +491,78 @@ userJoined time userId =
     UserJoinedMessage time userId SeqDict.empty Drawing.emptyDrawing
 
 
+handleDrawingChangeHelper :
+    userId
+    -> Drawing.LocalChange
+    -> Drawing.MessageAnchor
+    -> Maybe (UserTextMessageDrawings userId)
+    -> Maybe (UserTextMessageDrawings userId)
+handleDrawingChangeHelper changeBy change anchorType data =
+    case anchorType of
+        Drawing.UserIconAnchor ->
+            let
+                data2 =
+                    Maybe.withDefault noDrawings data
+            in
+            Just { data2 | userIconDrawings = Drawing.handleLocalChange changeBy change data2.userIconDrawings }
+
+        Drawing.TimestampAnchor ->
+            let
+                data2 =
+                    Maybe.withDefault noDrawings data
+            in
+            Just { data2 | timestampDrawings = Drawing.handleLocalChange changeBy change data2.timestampDrawings }
+
+        Drawing.ImageAttachmentAnchor fileId ->
+            let
+                data2 =
+                    Maybe.withDefault noDrawings data
+            in
+            { data2
+                | imageAttachmentDrawings =
+                    SeqDict.update
+                        fileId
+                        (\maybe ->
+                            Maybe.withDefault Drawing.emptyDrawing maybe
+                                |> Drawing.handleLocalChange changeBy change
+                                |> Just
+                        )
+                        data2.imageAttachmentDrawings
+            }
+                |> Just
+
+        Drawing.EmbedImageAnchor embedIndex ->
+            let
+                data2 =
+                    Maybe.withDefault noDrawings data
+            in
+            { data2
+                | embedDrawings =
+                    SeqDict.update
+                        embedIndex
+                        (\maybe ->
+                            Maybe.withDefault Drawing.emptyDrawing maybe
+                                |> Drawing.handleLocalChange changeBy change
+                                |> Just
+                        )
+                        data2.embedDrawings
+            }
+                |> Just
+
+        Drawing.CardAnchor ->
+            data
+
+
 handleDrawingChange : userId -> Drawing.MessageAnchor -> Drawing.LocalChange -> Message messageId userId -> Message messageId userId
 handleDrawingChange changeBy anchorType change message =
     case message of
         UserTextMessage data ->
-            case anchorType of
-                Drawing.UserIconAnchor ->
-                    UserTextMessage { data | userIconDrawings = Drawing.handleLocalChange changeBy change data.userIconDrawings }
+            { data | drawings = handleDrawingChangeHelper changeBy change anchorType data.drawings }
+                |> UserTextMessage
 
-                Drawing.TimestampAnchor ->
-                    UserTextMessage { data | timestampDrawings = Drawing.handleLocalChange changeBy change data.timestampDrawings }
-
-                Drawing.ImageAttachmentAnchor fileId ->
-                    UserTextMessage
-                        { data
-                            | imageAttachmentDrawings =
-                                SeqDict.update
-                                    fileId
-                                    (\maybe ->
-                                        Maybe.withDefault Drawing.emptyDrawing maybe
-                                            |> Drawing.handleLocalChange changeBy change
-                                            |> Just
-                                    )
-                                    data.imageAttachmentDrawings
-                        }
-
-                Drawing.EmbedImageAnchor embedIndex ->
-                    UserTextMessage
-                        { data
-                            | embedDrawings =
-                                SeqDict.update
-                                    embedIndex
-                                    (\maybe ->
-                                        Maybe.withDefault Drawing.emptyDrawing maybe
-                                            |> Drawing.handleLocalChange changeBy change
-                                            |> Just
-                                    )
-                                    data.embedDrawings
-                        }
-
-                Drawing.CardAnchor ->
-                    message
+        EncryptedUserTextMessage data ->
+            { data | drawings = handleDrawingChangeHelper changeBy change anchorType data.drawings }
+                |> EncryptedUserTextMessage
 
         UserJoinedMessage time userId reactions drawings ->
             UserJoinedMessage time userId reactions drawings
@@ -418,25 +621,37 @@ handleDrawingChange changeBy anchorType change message =
                         }
 
 
+userTextMessageDrawing : Drawing.MessageAnchor -> Maybe (UserTextMessageDrawings userId) -> Drawing userId
+userTextMessageDrawing anchor data =
+    let
+        data2 =
+            Maybe.withDefault noDrawings data
+    in
+    case anchor of
+        Drawing.UserIconAnchor ->
+            data2.userIconDrawings
+
+        Drawing.TimestampAnchor ->
+            data2.timestampDrawings
+
+        Drawing.ImageAttachmentAnchor fileId ->
+            SeqDict.get fileId data2.imageAttachmentDrawings |> Maybe.withDefault Drawing.emptyDrawing
+
+        Drawing.EmbedImageAnchor embedIndex ->
+            SeqDict.get embedIndex data2.embedDrawings |> Maybe.withDefault Drawing.emptyDrawing
+
+        Drawing.CardAnchor ->
+            Drawing.emptyDrawing
+
+
 drawing : Drawing.MessageAnchor -> Message messageId userId -> Drawing userId
 drawing anchor message =
     case message of
         UserTextMessage data ->
-            case anchor of
-                Drawing.UserIconAnchor ->
-                    data.userIconDrawings
+            userTextMessageDrawing anchor data.drawings
 
-                Drawing.TimestampAnchor ->
-                    data.timestampDrawings
-
-                Drawing.ImageAttachmentAnchor fileId ->
-                    SeqDict.get fileId data.imageAttachmentDrawings |> Maybe.withDefault Drawing.emptyDrawing
-
-                Drawing.EmbedImageAnchor embedIndex ->
-                    SeqDict.get embedIndex data.embedDrawings |> Maybe.withDefault Drawing.emptyDrawing
-
-                Drawing.CardAnchor ->
-                    Drawing.emptyDrawing
+        EncryptedUserTextMessage data ->
+            userTextMessageDrawing anchor data.drawings
 
         UserJoinedMessage _ _ _ drawings ->
             drawings
@@ -485,6 +700,9 @@ createdAt message =
         UserTextMessage data ->
             data.createdAt
 
+        EncryptedUserTextMessage data ->
+            data.createdAt
+
         UserJoinedMessage time _ _ _ ->
             time
 
@@ -502,7 +720,10 @@ addReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> M
 addReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
-            { message2 | reactions = addReactionEmojiHelper userId emoji message2.reactions } |> UserTextMessage
+            UserTextMessage { message2 | reactions = addReactionEmojiHelper userId emoji message2.reactions }
+
+        EncryptedUserTextMessage message2 ->
+            EncryptedUserTextMessage { message2 | reactions = addReactionEmojiHelper userId emoji message2.reactions }
 
         UserJoinedMessage time userJoinedId reactions drawings ->
             UserJoinedMessage time userJoinedId (addReactionEmojiHelper userId emoji reactions) drawings
@@ -526,7 +747,10 @@ removeReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -
 removeReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
-            { message2 | reactions = removeReactionEmojiHelper userId emoji message2.reactions } |> UserTextMessage
+            UserTextMessage { message2 | reactions = removeReactionEmojiHelper userId emoji message2.reactions }
+
+        EncryptedUserTextMessage message2 ->
+            EncryptedUserTextMessage { message2 | reactions = removeReactionEmojiHelper userId emoji message2.reactions }
 
         UserJoinedMessage time userJoinedId reactions drawings ->
             UserJoinedMessage time userJoinedId (removeReactionEmojiHelper userId emoji reactions) drawings
@@ -541,7 +765,11 @@ removeReactionEmoji userId emoji message =
             GameStarted { gameStarted | reactions = removeReactionEmojiHelper userId emoji gameStarted.reactions }
 
 
-removeReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+removeReactionEmojiHelper :
+    userId
+    -> EmojiOrCustomEmoji
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 removeReactionEmojiHelper userId emoji reactions =
     SeqDict.update
         emoji
@@ -564,6 +792,9 @@ reactionEmojis message =
         UserTextMessage data ->
             data.reactions
 
+        EncryptedUserTextMessage data ->
+            data.reactions
+
         UserJoinedMessage _ _ reactions _ ->
             reactions
 
@@ -575,3 +806,82 @@ reactionEmojis message =
 
         GameStarted gameStarted ->
             gameStarted.reactions
+
+
+contentAndEmbedsCodec : Serialize.Codec e (MessageContent (Id UserId))
+contentAndEmbedsCodec =
+    Serialize.record MessageContent
+        |> Serialize.field .content (nonemptyCodec (RichText.codec Id.codec))
+        |> Serialize.field .embeds (Serialize.array embedCodec)
+        |> Serialize.field .attachedFiles (seqDictCodec Id.codec FileStatus.fileDataSerializeCodec)
+        |> Serialize.finishRecord
+
+
+seqDictCodec : Serialize.Codec e k -> Serialize.Codec e a -> Serialize.Codec e (SeqDict k a)
+seqDictCodec keyCodec valueCodec =
+    Serialize.map
+        SeqDict.fromList
+        SeqDict.toList
+        (Serialize.list (Serialize.tuple keyCodec valueCodec))
+
+
+nonemptyCodec : Serialize.Codec e a -> Serialize.Codec e (Nonempty a)
+nonemptyCodec a =
+    Serialize.customType
+        (\nonemptyEncoder value ->
+            case value of
+                List.Nonempty.Nonempty argA argB ->
+                    nonemptyEncoder argA argB
+        )
+        |> Serialize.variant2 List.Nonempty.Nonempty a (Serialize.list a)
+        |> Serialize.finishCustomType
+
+
+embedCodec : Serialize.Codec e Embed
+embedCodec =
+    Serialize.customType
+        (\embedLoadingEncoder embedLoadedEncoder value ->
+            case value of
+                Embed.EmbedLoading ->
+                    embedLoadingEncoder
+
+                Embed.EmbedLoaded argA ->
+                    embedLoadedEncoder argA
+        )
+        |> Serialize.variant0 Embed.EmbedLoading
+        |> Serialize.variant1 Embed.EmbedLoaded embedDataCodec
+        |> Serialize.finishCustomType
+
+
+embedDataCodec : Serialize.Codec e EmbedData
+embedDataCodec =
+    Serialize.record EmbedData
+        |> Serialize.field .title (Serialize.maybe Serialize.string)
+        |> Serialize.field .image (Serialize.maybe embedImageDataCodec)
+        |> Serialize.field .description (Serialize.maybe Serialize.string)
+        |> Serialize.field .createdAt (Serialize.maybe posixCodec)
+        |> Serialize.finishRecord
+
+
+embedImageDataCodec : Serialize.Codec e Embed.EmbedImageData
+embedImageDataCodec =
+    Serialize.record Embed.EmbedImageData
+        |> Serialize.field .url Serialize.string
+        |> Serialize.field .imageSize (Serialize.tuple quantityCodec quantityCodec)
+        |> Serialize.field .format (Serialize.maybe embedImageFormatCodec)
+        |> Serialize.finishRecord
+
+
+quantityCodec : Serialize.Codec e (Quantity Int units)
+quantityCodec =
+    Serialize.map Quantity.unsafe Quantity.unwrap Serialize.unsignedInt32
+
+
+embedImageFormatCodec : Serialize.Codec e EmbedImageFormat
+embedImageFormatCodec =
+    Serialize.enum Png [ Jpeg, Gif, WebP, Pnm, Tiff, Tga, Dds, Bmp, Ico, Hdr, OpenExr, Farbfeld, Avif, Qoi ]
+
+
+posixCodec : Serialize.Codec e Time.Posix
+posixCodec =
+    Serialize.map Time.millisToPosix Time.posixToMillis Serialize.int

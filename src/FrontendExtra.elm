@@ -9,33 +9,43 @@ module FrontendExtra exposing
     , drawingUndo
     , editMessage_gotFiles
     , editMessage_gotPastedText
+    , encryptedDmOtherUser
     , externalLinkWarning
+    , fileDecryptedMessages
     , fileDragOverlayOpacity
     , gotFiles
     , gotPastedText
+    , handleDecryptedMessage
     , handleEscapeKey
     , handleLocalChange
     , handlePressedArrowUpInEmptyInput
     , handlePressedTextInput
     , handleRedo
+    , handleServerSendMessage
     , handleUndo
     , initAdminData
     , isPressMsg
     , layout
     , logout
+    , mapEncryptionRequests
+    , newPrivateKeyWarning
+    , pastedMessageFileName
     , pingUserNameSoFar
-    , playNotificationSound
     , playNotificationSoundForDiscordMessage
     , routePush
     , routeReplace
     , routeRequest
+    , savePrivateKeyTitle
     , setFocus
+    , startEncryptingFile
+    , storeDecryptedFileKeys
     , updateLoggedIn
     )
 
 import AiChat
 import Array
 import Audio exposing (Audio, AudioData)
+import Bytes exposing (Bytes)
 import Bytes.Encode
 import Call exposing (CallId(..))
 import ChannelDescription
@@ -43,7 +53,7 @@ import ChannelHeader
 import ChannelName
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
-import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannel exposing (DiscordFrontendDmChannel, E2eeStatus(..), FrontendDmChannel)
 import DmChannelId
 import Drawing
 import Duration
@@ -56,15 +66,18 @@ import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task
 import Effect.Time as Time
+import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
+import Encryption exposing (BytesHash, EncryptedData)
 import FileName
-import FileStatus exposing (FileData, FileId, FileStatus(..))
+import FileStatus exposing (FileData, FileHash, FileId, FileStatus(..), IsEncrypted(..))
 import Game
 import Go
 import Html exposing (Html)
+import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DmId)
 import ImageEditor
 import ImageViewer
 import Json.Decode
@@ -76,7 +89,7 @@ import Local
 import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import LoginForm
 import MembersAndOwner
-import Message exposing (ChangeAttachments(..), GameType(..), Message(..), MessageNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments(..), GameType(..), Message(..), MessageContent, MessageNoReply(..), UserTextMessageDataNoReply)
 import MessageArray exposing (MessageArray)
 import MessageDropdown
 import MessageInput exposing (NameSoFar(..), TimestampData)
@@ -96,17 +109,18 @@ import Range exposing (Range)
 import RecoveryLogin
 import RichText exposing (Domain, RichText)
 import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
-import Scroll
+import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SheepGame
+import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch exposing (Drag(..), DragTarget(..))
 import TwoFactorAuthentication
-import Types exposing (EmojiSelector(..), FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
+import Types exposing (EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -118,6 +132,17 @@ import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, Notification
 import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 import WordSpellingGame
+import X25519
+
+
+savePrivateKeyTitle : String
+savePrivateKeyTitle =
+    "Save your private key now"
+
+
+pastedMessageFileName : String
+pastedMessageFileName =
+    "message.txt"
 
 
 {-| The messages out of what the backend fills in when a Discord channel or thread is
@@ -332,6 +357,39 @@ pendingChangesText localChange =
 
         Local_SetMuteDiscordGuild _ _ _ ->
             "Set mute Discord guild"
+
+        Local_RequestE2ee _ ->
+            "Asked to start end-to-end encryption"
+
+        Local_DeclineE2eeRequestAsInitiator _ ->
+            "Cancelled the end-to-end encryption request"
+
+        Local_DeclineE2eeRequest _ ->
+            "Declined the end-to-end encryption request"
+
+        Local_SetPublicKey _ _ ->
+            "Added a private key to the account"
+
+        Local_EncryptOldMessages _ _ ->
+            "Encrypted the messages written before this conversation was encrypted"
+
+        Local_DisableE2ee _ _ ->
+            "Turned off end-to-end encryption"
+
+        Local_DecryptOldMessages _ _ _ ->
+            "Removed the encryption from the messages written while this conversation was encrypted"
+
+        Local_SetE2eeRisksAccepted _ ->
+            "Accepted the end-to-end encryption risks"
+
+        Local_AcceptE2ee _ _ _ ->
+            "Started end-to-end encryption"
+
+        Local_SendEncryptedMessage _ _ _ _ _ ->
+            "Sent an encrypted message"
+
+        Local_SendEncryptedEditMessage _ _ _ _ _ ->
+            "Edited an encrypted message"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg_) -> Element FrontendMsg_ -> Html FrontendMsg_
@@ -689,6 +747,9 @@ canDropFiles isMobile currentUserId route =
         PublicGoMatchRoute _ ->
             Nothing
 
+        E2eeInfo ->
+            Nothing
+
 
 canDropFileHelper :
     AnyGuildOrDmId
@@ -786,6 +847,27 @@ gotFiles guildOrDmId threadRoute files model =
     updateLoggedIn
         (\loggedIn ->
             let
+                startUpload : Id FileId -> File -> Command FrontendOnly ToBackend FrontendMsg_
+                startUpload fileId file2 =
+                    case encryptedDmOtherUser guildOrDmId (Local.model loggedIn.localState) loggedIn of
+                        Just _ ->
+                            -- The upload can't start until the browser has encrypted the file, and
+                            -- the browser can't be handed a File, so the bytes are read out first.
+                            File.toBytes file2
+                                |> Task.perform
+                                    (GotFileToEncrypt
+                                        ( guildOrDmId, threadRoute )
+                                        fileId
+                                        (File.mime file2)
+                                    )
+
+                        Nothing ->
+                            FileStatus.uploadFile
+                                (GotFileHashName ( guildOrDmId, threadRoute ) fileId Nothing)
+                                ( guildOrDmId, threadRoute )
+                                fileId
+                                file2
+
                 ( fileText, cmds, dict ) =
                     case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.filesToUpload of
                         Just dict2 ->
@@ -800,18 +882,14 @@ gotFiles guildOrDmId threadRoute files model =
                                                 ++ Id.toString id
                                                 ++ RichText.attachedFileSuffix
                                            ]
-                                    , FileStatus.uploadFile
-                                        (GotFileHashName ( guildOrDmId, threadRoute ) id)
-                                        ( guildOrDmId, threadRoute )
-                                        id
-                                        file2
-                                        :: cmds2
+                                    , startUpload id file2 :: cmds2
                                     , NonemptyDict.insert
                                         id
                                         (FileUploading
                                             (File.name file2 |> FileName.fromString)
                                             { sent = 0, size = File.size file2 }
                                             (File.mime file2 |> FileStatus.contentType)
+                                            IsNotEncrypted
                                         )
                                         dict3
                                     )
@@ -828,18 +906,7 @@ gotFiles guildOrDmId threadRoute files model =
                                 )
                                 (List.Nonempty.toList files)
                             , List.indexedMap
-                                (\index file2 ->
-                                    let
-                                        id : Id FileId
-                                        id =
-                                            Id.fromInt (index + 1)
-                                    in
-                                    FileStatus.uploadFile
-                                        (GotFileHashName ( guildOrDmId, threadRoute ) id)
-                                        ( guildOrDmId, threadRoute )
-                                        id
-                                        file2
-                                )
+                                (\index file2 -> startUpload (Id.fromInt (index + 1)) file2)
                                 (List.Nonempty.toList files)
                             , List.Nonempty.indexedMap
                                 (\index file2 ->
@@ -848,6 +915,7 @@ gotFiles guildOrDmId threadRoute files model =
                                         (File.name file2 |> FileName.fromString)
                                         { sent = 0, size = File.size file2 }
                                         (File.mime file2 |> FileStatus.contentType)
+                                        IsNotEncrypted
                                     )
                                 )
                                 files
@@ -908,34 +976,48 @@ gotPastedText guildOrDmId threadRoute { textBeforePaste, pastedText, textAfterPa
                 ++ Id.toString fileId
                 ++ RichText.attachedFileSuffix
                 ++ textAfterPaste
-    in
-    ( { loggedIn
-        | filesToUpload =
-            SeqDict.update
-                ( guildOrDmId, threadRoute )
-                (\maybe ->
-                    case maybe of
-                        Just dict ->
-                            NonemptyDict.insert fileId (pastedTextFileStatus pastedText) dict |> Just
+
+        loggedIn2 : LoggedIn2
+        loggedIn2 =
+            { loggedIn
+                | filesToUpload =
+                    SeqDict.update
+                        ( guildOrDmId, threadRoute )
+                        (\maybe ->
+                            case maybe of
+                                Just dict ->
+                                    NonemptyDict.insert fileId (pastedTextFileStatus pastedText) dict |> Just
+
+                                Nothing ->
+                                    NonemptyDict.singleton fileId (pastedTextFileStatus pastedText) |> Just
+                        )
+                        loggedIn.filesToUpload
+                , drafts =
+                    case String.Nonempty.fromString draft of
+                        Just nonempty ->
+                            SeqDict.insert ( guildOrDmId, threadRoute ) nonempty loggedIn.drafts
 
                         Nothing ->
-                            NonemptyDict.singleton fileId (pastedTextFileStatus pastedText) |> Just
-                )
-                loggedIn.filesToUpload
-        , drafts =
-            case String.Nonempty.fromString draft of
-                Just nonempty ->
-                    SeqDict.insert ( guildOrDmId, threadRoute ) nonempty loggedIn.drafts
+                            loggedIn.drafts
+            }
+    in
+    case encryptedDmOtherUser guildOrDmId (Local.model loggedIn2.localState) loggedIn2 of
+        Just _ ->
+            startEncryptingFile
+                ( guildOrDmId, threadRoute )
+                fileId
+                "text/plain"
+                (Bytes.Encode.string pastedText |> Bytes.Encode.encode)
+                loggedIn2
 
-                Nothing ->
-                    loggedIn.drafts
-      }
-    , FileStatus.uploadString
-        (GotFileHashName ( guildOrDmId, threadRoute ) fileId)
-        ( guildOrDmId, threadRoute )
-        fileId
-        pastedText
-    )
+        Nothing ->
+            ( loggedIn2
+            , FileStatus.uploadString
+                (GotFileHashName ( guildOrDmId, threadRoute ) fileId Nothing)
+                ( guildOrDmId, threadRoute )
+                fileId
+                pastedText
+            )
 
 
 editMessage_gotPastedText :
@@ -982,9 +1064,10 @@ editMessage_gotPastedText guildOrDmId { textBeforePaste, pastedText, textAfterPa
 pastedTextFileStatus : String -> FileStatus
 pastedTextFileStatus pastedText =
     FileUploading
-        (FileName.fromString "message.txt")
+        (FileName.fromString pastedMessageFileName)
         { sent = 0, size = Bytes.Encode.getStringWidth pastedText }
         (FileStatus.contentType "text/plain")
+        IsNotEncrypted
 
 
 editMessage_gotFiles :
@@ -1024,6 +1107,7 @@ editMessage_gotFiles guildOrDmId files model =
                                             (File.name file2 |> FileName.fromString)
                                             { sent = 0, size = File.size file2 }
                                             (File.mime file2 |> FileStatus.contentType)
+                                            IsNotEncrypted
                                         )
                                         dict3
                                     )
@@ -1048,6 +1132,107 @@ editMessage_gotFiles guildOrDmId files model =
                     ( loggedIn, Command.none )
         )
         model
+
+
+{-| The one and only showing of a freshly generated private key.
+
+The key is not stored on the server, and the frontend forgets it as soon as this is
+closed, so if it is not copied out now it is gone and anything encrypted to it with it.
+That is the whole point of the warning being this loud.
+
+The key sits in a password field with the account's email in a username field above it, so
+the page looks to a password manager like any other place a new login was just made and it
+offers to save the pair. That offer is the easiest way for this to end well, so it is
+worth laying the popup out around it.
+
+-}
+newPrivateKeyWarning :
+    Bool
+    -> { a | lastCopied : Maybe MyUi.LastCopy }
+    -> EmailAddress
+    -> X25519.PrivateKey
+    -> Element FrontendMsg_
+newPrivateKeyWarning isMobile loaded email privateKey =
+    let
+        accountLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
+        accountLabel =
+            Ui.Input.label
+                "frontend_newPrivateKeyAccount"
+                [ Ui.Font.size 14, Ui.Font.color MyUi.font3, Ui.Font.bold ]
+                (Ui.text "Account")
+    in
+    Ui.el
+        [ Ui.behindContent
+            (Ui.el [ Ui.background MyUi.scrim, Ui.height Ui.fill ] Ui.none)
+        , Ui.height Ui.fill
+        ]
+        (Ui.column
+            [ Ui.centerX
+            , if isMobile then
+                Ui.alignBottom
+
+              else
+                Ui.centerY
+            , Ui.attrIf (not isMobile) (Ui.rounded 16)
+            , if isMobile then
+                Ui.paddingXY 16 16
+
+              else
+                Ui.paddingXY 24 24
+            , Ui.background MyUi.background3
+            , if isMobile then
+                Ui.width Ui.fill
+
+              else
+                Ui.widthMax 600
+            , Ui.width Ui.shrink
+            , Ui.spacing 24
+            , Ui.borderColor MyUi.border1
+            , Ui.border 1
+            ]
+            [ Ui.column
+                [ Ui.spacing 8 ]
+                [ Ui.row
+                    [ Ui.Font.color MyUi.font3, Ui.spacing 16, Ui.contentCenterY, Ui.Font.bold ]
+                    [ Ui.html (Icons.warning 36), Ui.text savePrivateKeyTitle ]
+                , Ui.Prose.paragraph
+                    []
+                    [ Ui.text "Put this in a password manager. It is not stored anywhere else, so this is the only chance you have to save it. Without it your encrypted messages can't be decrypted." ]
+                ]
+            , Ui.column
+                [ Ui.spacing 12 ]
+                [ Ui.column
+                    [ Ui.spacing 2 ]
+                    [ accountLabel.element
+                    , Ui.Input.username
+                        [ Ui.paddingWith { left = 8, right = 8, top = 2, bottom = 2 }
+                        , Ui.htmlAttribute (Html.Attributes.readonly True)
+                        , Ui.background (Ui.rgba 0 0 0 0.2)
+                        , Ui.border 1
+                        , Ui.borderColor MyUi.inputBorder
+                        , Ui.rounded 4
+                        , Ui.height (Ui.px 40)
+                        ]
+                        { onChange = \_ -> FrontendNoOp
+                        , text = EmailAddress.toString email
+                        , placeholder = Nothing
+                        , label = accountLabel.id
+                        }
+                    ]
+                , MyUi.newPasswordCopyBox
+                    (Dom.id "frontend_newPrivateKey")
+                    "Private key"
+                    PressedCopyText
+                    FrontendNoOp
+                    loaded
+                    (X25519.privateKeyToString privateKey)
+                ]
+            , MyUi.secondaryButton
+                (Dom.id "frontend_closeNewPrivateKey")
+                PressedCloseNewPrivateKey
+                "I've saved it"
+            ]
+        )
 
 
 externalLinkWarning : SeqSet Domain -> Bool -> Url -> Element FrontendMsg_
@@ -1122,7 +1307,7 @@ externalLinkWarning domainWhitelist isMobile url =
                 ]
             , Ui.row
                 []
-                [ MyUi.secondaryButton
+                [ MyUi.secondaryButtonTall
                     (Dom.id "frontend_cancelLeaveExternal")
                     PressedCloseExternalLinkWarning
                     "Back"
@@ -1162,12 +1347,15 @@ logout model =
                                 , textInputFocus = Nothing
                                 }
                     }
-            in
-            if Route.requiresLogin model2.route then
-                routePush model2 HomePageRoute
 
-            else
-                ( model2, Command.none )
+                ( model3, cmd ) =
+                    if Route.requiresLogin model2.route then
+                        routePush model2 HomePageRoute
+
+                    else
+                        ( model2, Command.none )
+            in
+            ( model3, Command.batch [ cmd, Ports.clearBrowserStorage ] )
 
         NotLoggedIn _ ->
             ( model, Command.none )
@@ -1191,7 +1379,7 @@ playNotificationSound :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : MessageArray ChannelMessageId (Id UserId)
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Id UserId))
         }
     -> LocalState
@@ -1212,7 +1400,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                             SeqSet.member guildId local.localUser.user.notifyOnAllMessages
 
                         GuildOrDmId_Dm _ ->
-                            False
+                            True
 
                 isMentionedOrRepliedTo : Bool
                 isMentionedOrRepliedTo =
@@ -1248,7 +1436,7 @@ playNotificationSoundForDiscordMessage :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
+            | messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId)
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Discord.Id Discord.UserId))
         }
     -> LocalState
@@ -1407,8 +1595,6 @@ routeRequest previousRoute newRoute model =
                     Route.routeChangeCountsAsMessageView oldRoute newRoute
 
                 Nothing ->
-                    -- The route a session starts on isn't one the reader navigated to, so
-                    -- whatever is waiting in it stays unread until they've looked at it.
                     False
 
         ( model2, viewCmd ) =
@@ -1424,8 +1610,6 @@ routeRequest previousRoute newRoute model =
                         )
                         { loggedIn
                             | drawingMode =
-                                -- Closing the draw tab (or navigating elsewhere) also
-                                -- deselects the drawing anchor
                                 if Route.toChannelHeaderTab newRoute == Just ChannelHeaderTab_Draw then
                                     loggedIn.drawingMode
 
@@ -1695,8 +1879,66 @@ routeRequest previousRoute newRoute model =
             ( { model2 | publicGoMatch = PublicGoMatch_Loading }
             , Lamdera.sendToBackend (GetPublicGoMatchRequest publicGoMatchId)
             )
+
+        E2eeInfo ->
+            ( model2, Command.none )
     )
         |> Tuple.mapSecond (\a -> Command.batch [ viewCmd, a ])
+
+
+encryptedDmOtherUser : AnyGuildOrDmId -> LocalState -> LoggedIn2 -> Maybe Viewing_DmId
+encryptedDmOtherUser guildOrDmId local loggedIn =
+    case guildOrDmId of
+        GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
+            case
+                ( SeqDict.get otherUserId local.dmChannels |> Maybe.map .e2ee
+                , SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice
+                )
+            of
+                ( Just (DmChannel.E2eeEnabled _), True ) ->
+                    Just { otherUserId = otherUserId }
+
+                _ ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
+{-| Hands a file's plaintext to the browser to be encrypted. The upload only starts once
+the ciphertext comes back, so `pendingEncryptedFiles` remembers which attachment the reply
+belongs to.
+-}
+startEncryptingFile :
+    ( AnyGuildOrDmId, ThreadRoute )
+    -> Id FileId
+    -> String
+    -> Bytes
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+startEncryptingFile guildOrDmId fileId contentType bytes loggedIn =
+    ( mapEncryptionRequests
+        (\requests ->
+            { requests
+                | nextEncryptFileRequestId = Id.increment requests.nextEncryptFileRequestId
+                , pendingEncryptedFiles =
+                    SeqDict.insert
+                        requests.nextEncryptFileRequestId
+                        { guildOrDmId = guildOrDmId, fileId = fileId }
+                        requests.pendingEncryptedFiles
+            }
+        )
+        loggedIn
+    , Encryption.encryptFile
+        loggedIn.encryptionRequests.nextEncryptFileRequestId
+        contentType
+        bytes
+    )
+
+
+mapEncryptionRequests : (EncryptionRequests -> EncryptionRequests) -> LoggedIn2 -> LoggedIn2
+mapEncryptionRequests func loggedIn =
+    { loggedIn | encryptionRequests = func loggedIn.encryptionRequests }
 
 
 updateLoggedIn :
@@ -2143,7 +2385,10 @@ isPressMsg msg =
         SelectedFilesToAttach _ _ _ ->
             False
 
-        GotFileHashName _ _ _ ->
+        GotFileToEncrypt _ _ _ _ ->
+            False
+
+        GotFileHashName _ _ _ _ ->
             False
 
         PressedDeleteAttachedFile _ _ ->
@@ -2208,6 +2453,36 @@ isPressMsg msg =
 
         PressedExportChannel _ ->
             True
+
+        EncryptionFromJs _ ->
+            False
+
+        PressedAddPrivateKeyToAccount ->
+            True
+
+        PressedCloseNewPrivateKey ->
+            True
+
+        PressedExpandE2eeSection _ ->
+            True
+
+        PressedE2eeRisksAccepted _ ->
+            True
+
+        PressedEnableE2ee _ ->
+            True
+
+        PressedCancelE2eeRequest _ ->
+            True
+
+        PressedDisableE2ee _ ->
+            True
+
+        PressedDeclineE2eeRequest _ ->
+            True
+
+        TypedPrivateKey _ _ ->
+            False
 
         PageHasFocusChanged _ ->
             False
@@ -2420,6 +2695,9 @@ isPressMsg msg =
         GotPositionForEmojiSelector_SheepGameInput _ _ ->
             False
 
+        ValidatedE2eePrivateKey _ _ ->
+            False
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg_
 setFocus model htmlId =
@@ -2507,7 +2785,7 @@ before the message was added, since that is what the message handlers have on ha
 -}
 newMessageThreadRoute :
     ThreadRouteWithMaybeMessage
-    -> { a | messages : MessageArray ChannelMessageId c, threads : SeqDict (Id ChannelMessageId) { d | messages : MessageArray Id.ThreadMessageId e } }
+    -> { a | messages : MessageArray ChannelMessageId c, threads : SeqDict (Id ChannelMessageId) { d | messages : MessageArray ThreadMessageId e } }
     -> ThreadRouteWithMessage
 newMessageThreadRoute threadRouteWithRepliedTo channel =
     case threadRouteWithRepliedTo of
@@ -3646,6 +3924,134 @@ changeUpdate localMsg local =
                 Local_SetMuteDiscordGuild _ guildId isMuted ->
                     setMuteDiscordGuild guildId isMuted local
 
+                Local_RequestE2ee id ->
+                    LocalState.setDmE2ee
+                        id
+                        (DmChannel.E2eeRequestedBy ( local.localUser.session.userId, local.localUser.session.sessionIdHash ))
+                        local
+
+                Local_DeclineE2eeRequestAsInitiator id ->
+                    LocalState.setDmE2ee id (DmChannel.E2eeDisabled Nothing) local
+
+                Local_DeclineE2eeRequest id ->
+                    LocalState.setDmE2ee
+                        id
+                        (DmChannel.E2eeDeclinedBy local.localUser.session.userId)
+                        local
+
+                Local_SendEncryptedEditMessage createdAt { otherUserId } threadRoute fileHashes content ->
+                    editEncryptedDmMessage
+                        createdAt
+                        local.localUser.session.userId
+                        otherUserId
+                        threadRoute
+                        fileHashes
+                        content
+                        local
+
+                Local_SendEncryptedMessage createdAt { otherUserId } fileHashes content threadRouteWithRepliedTo ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        local2 : LocalState
+                        local2 =
+                            addEncryptedDmMessage
+                                createdAt
+                                localUser.session.userId
+                                otherUserId
+                                fileHashes
+                                content
+                                threadRouteWithRepliedTo
+                                local
+
+                        ( currentlyViewing2, user2 ) =
+                            LocalState.ownMessageIsReadFrontend
+                                (GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId }))
+                                (latestMessageThreadRoute
+                                    threadRouteWithRepliedTo
+                                    (SeqDict.get otherUserId local2.dmChannels
+                                        |> Maybe.withDefault DmChannel.frontendInit
+                                    )
+                                )
+                                ( localUser.currentlyViewing, localUser.user )
+                    in
+                    { local2
+                        | localUser =
+                            { localUser | currentlyViewing = currentlyViewing2, user = user2 }
+                    }
+
+                Local_AcceptE2ee id time _ ->
+                    case SeqDict.get id.otherUserId local.dmChannels of
+                        Just dmChannel ->
+                            case dmChannel.e2ee of
+                                E2eeRequestedBy requestedBy ->
+                                    LocalState.setDmE2ee
+                                        id
+                                        (DmChannel.E2eeEnabled { enabledAt = time, requestedBy = requestedBy })
+                                        local
+
+                                E2eeDisabled _ ->
+                                    local
+
+                                E2eeDeclinedBy _ ->
+                                    local
+
+                                E2eeEnabled _ ->
+                                    local
+
+                        Nothing ->
+                            local
+
+                Local_SetE2eeRisksAccepted isAccepted ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        user : FrontendCurrentUser
+                        user =
+                            localUser.user
+                    in
+                    { local | localUser = { localUser | user = { user | e2eeRisksAccepted = isAccepted } } }
+
+                Local_EncryptOldMessages { otherUserId } messages ->
+                    { local
+                        | dmChannels =
+                            SeqDict.updateIfExists
+                                otherUserId
+                                (encryptOldMessages messages)
+                                local.dmChannels
+                    }
+
+                Local_DisableE2ee _ _ ->
+                    local
+
+                Local_DecryptOldMessages id time messages ->
+                    LocalState.setDmE2ee
+                        id
+                        (DmChannel.E2eeDisabled (Just ( local.localUser.session.userId, time )))
+                        { local
+                            | dmChannels =
+                                SeqDict.updateIfExists
+                                    id.otherUserId
+                                    (decryptOldMessages messages)
+                                    local.dmChannels
+                        }
+
+                Local_SetPublicKey publicKey _ ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        user : FrontendCurrentUser
+                        user =
+                            localUser.user
+                    in
+                    { local | localUser = { localUser | user = { user | publicKey = Just publicKey } } }
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage createdBy createdByUser createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles stickers ->
@@ -3733,81 +4139,30 @@ changeUpdate localMsg local =
                                 Nothing ->
                                     local
 
-                        GuildOrDmId_Dm { otherUserId } ->
-                            let
-                                localUser : LocalUser
-                                localUser =
-                                    local.localUser
-
-                                user : FrontendCurrentUser
-                                user =
-                                    localUser.user
-
-                                dmChannel : FrontendDmChannel
-                                dmChannel =
-                                    SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit
-
-                                dmChannel2 : FrontendDmChannel
-                                dmChannel2 =
-                                    case threadRouteWithRepliedTo of
-                                        ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                            LocalState.createThreadMessageFrontend
-                                                threadId
-                                                (Message.userTextMessageFrontend
-                                                    createdAt
-                                                    createdBy
-                                                    text
-                                                    maybeReplyTo
-                                                    attachedFiles
-                                                )
-                                                dmChannel
-
-                                        NoThreadWithMaybeMessage maybeReplyTo ->
-                                            LocalState.createChannelMessageFrontend
-                                                (Message.userTextMessageFrontend
-                                                    createdAt
-                                                    createdBy
-                                                    text
-                                                    maybeReplyTo
-                                                    attachedFiles
-                                                )
-                                                dmChannel
-
-                                threadRouteNoReply : ThreadRoute
-                                threadRouteNoReply =
-                                    case threadRouteWithRepliedTo of
-                                        ViewThreadWithMaybeMessage threadId _ ->
-                                            ViewThread threadId
-
-                                        NoThreadWithMaybeMessage _ ->
-                                            NoThread
-
-                                ( currentlyViewing2, user2 ) =
-                                    if createdBy == localUser.session.userId then
-                                        LocalState.ownMessageIsReadFrontend
-                                            (GuildOrDmId guildOrDmId)
-                                            (latestMessageThreadRoute threadRouteWithRepliedTo dmChannel2)
-                                            ( localUser.currentlyViewing, user )
-
-                                    else if isViewing (GuildOrDmId guildOrDmId) threadRouteNoReply local then
-                                        LocalState.incrementLastViewedMessageFrontend
-                                            (GuildOrDmId guildOrDmId)
-                                            (latestMessageThreadRoute threadRouteWithRepliedTo dmChannel2)
-                                            ( localUser.currentlyViewing, user )
-
-                                    else
-                                        ( localUser.currentlyViewing, user )
-                            in
-                            { local
-                                | dmChannels = SeqDict.insert otherUserId dmChannel2 local.dmChannels
-                                , localUser =
-                                    { localUser
-                                        | user = user2
-                                        , currentlyViewing = currentlyViewing2
-                                        , otherUsers = addMessageSender createdBy createdByUser localUser
-                                        , stickers = SeqDict.union stickers localUser.stickers
-                                    }
-                            }
+                        GuildOrDmId_Dm id ->
+                            handleServerSendDmMessage
+                                id
+                                createdBy
+                                createdByUser
+                                stickers
+                                (\maybeReplyTo ->
+                                    Message.userTextMessageFrontend
+                                        createdAt
+                                        createdBy
+                                        text
+                                        maybeReplyTo
+                                        attachedFiles
+                                )
+                                (\maybeReplyTo ->
+                                    Message.userTextMessageFrontend
+                                        createdAt
+                                        createdBy
+                                        text
+                                        maybeReplyTo
+                                        attachedFiles
+                                )
+                                threadRouteWithRepliedTo
+                                local
 
                 Server_Discord_SendMessage createdAt guildOrDmId createdByUser text threadRouteWithRepliedTo attachedFiles stickers ->
                     case guildOrDmId of
@@ -5023,6 +5378,71 @@ changeUpdate localMsg local =
                 Server_SetMuteDiscordGuild guildId isMuted ->
                     setMuteDiscordGuild guildId isMuted local
 
+                Server_E2eeRequested id requestedBy ->
+                    LocalState.setDmE2ee id (DmChannel.E2eeRequestedBy requestedBy) local
+
+                Server_E2eeRequestCancelled id ->
+                    LocalState.setDmE2ee id (DmChannel.E2eeDisabled Nothing) local
+
+                Server_E2eeRequestDeclined id declinedBy ->
+                    LocalState.setDmE2ee id (DmChannel.E2eeDeclinedBy declinedBy) local
+
+                Server_DisableE2ee disabledAt disabledBy id ->
+                    LocalState.setDmE2ee id (DmChannel.E2eeDisabled (Just ( disabledBy, disabledAt ))) local
+
+                Server_SetPublicKey userId publicKey ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | otherUsers =
+                                    SeqDict.updateIfExists
+                                        userId
+                                        (\otherUser -> { otherUser | publicKey = Just publicKey })
+                                        localUser.otherUsers
+                            }
+                    }
+
+                Server_E2eeAccepted id time ->
+                    LocalState.setDmE2ee
+                        id
+                        (DmChannel.E2eeEnabled
+                            { enabledAt = time
+                            , requestedBy = ( local.localUser.session.userId, local.localUser.session.sessionIdHash )
+                            }
+                        )
+                        local
+
+                Server_SendEncryptedMessage createdBy createdByUser createdAt id fileHashes content threadRouteWithRepliedTo ->
+                    handleServerSendDmMessage
+                        id
+                        createdBy
+                        createdByUser
+                        -- TODO, solve stickers
+                        SeqDict.empty
+                        (\maybeReplyTo ->
+                            Message.encryptedUserTextMessageFrontend createdAt createdBy fileHashes content maybeReplyTo
+                        )
+                        (\maybeReplyTo ->
+                            Message.encryptedUserTextMessageFrontend createdAt createdBy fileHashes content maybeReplyTo
+                        )
+                        threadRouteWithRepliedTo
+                        local
+
+                Server_SendEncryptedEditMessage editedAt editedBy id threadRoute fileHashes content ->
+                    editEncryptedDmMessage
+                        editedAt
+                        editedBy
+                        id.otherUserId
+                        threadRoute
+                        fileHashes
+                        content
+                        local
+
                 Server_DiscordAvatarsLoaded discordUserId discordUser ->
                     let
                         localUser : LocalUser
@@ -5358,14 +5778,14 @@ gameChangeUpdateChannel :
     -> Game.LocalChange
     ->
         { c
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : MessageArray ChannelMessageId (Id UserId)
             , visibleMessages : VisibleMessages.VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.MatchData
         }
     ->
         { c
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : MessageArray ChannelMessageId (Id UserId)
             , visibleMessages : VisibleMessages.VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.MatchData
@@ -6681,6 +7101,26 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                         else
                                                             Nothing
 
+                                                    EncryptedUserTextMessage_NoReply data ->
+                                                        case
+                                                            ( SeqDict.get (Encryption.hash data.content) local.localUser.decryptedMessages
+                                                            , local.localUser.session.userId == data.createdBy
+                                                            )
+                                                        of
+                                                            ( Just (Ok contentAndEmbeds), True ) ->
+                                                                ( Id.fromInt index
+                                                                , { createdAt = data.createdAt
+                                                                  , createdBy = data.createdBy
+                                                                  , content = contentAndEmbeds
+                                                                  , reactions = data.reactions
+                                                                  , editedAt = data.editedAt
+                                                                  }
+                                                                )
+                                                                    |> Just
+
+                                                            _ ->
+                                                                Nothing
+
                                                     UserJoinedMessage_NoReply _ _ _ ->
                                                         Nothing
 
@@ -6702,9 +7142,9 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                 ( GuildOrDmId guildOrDmId2, threadRoute )
                                                 { messageIndex = index
                                                 , text =
-                                                    RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.content
+                                                    RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.content.content
                                                 , attachedFiles =
-                                                    SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
+                                                    SeqDict.map (\_ a -> FileUploaded a) message.content.attachedFiles
                                                 }
                                                 loggedIn.editMessage
                                       }
@@ -6752,6 +7192,9 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                         else
                                                             Nothing
 
+                                                    EncryptedUserTextMessage_NoReply _ ->
+                                                        Nothing
+
                                                     UserJoinedMessage_NoReply _ _ _ ->
                                                         Nothing
 
@@ -6777,9 +7220,9 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                         local.localUser.timezone
                                                         False
                                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
-                                                        message.content
+                                                        message.content.content
                                                 , attachedFiles =
-                                                    SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
+                                                    SeqDict.map (\_ a -> FileUploaded a) message.content.attachedFiles
                                                 }
                                                 loggedIn.editMessage
                                       }
@@ -6819,3 +7262,409 @@ audio _ model =
 
                 NotLoggedIn _ ->
                     Audio.silence
+
+
+addEncryptedDmMessage :
+    Time.Posix
+    -> Id UserId
+    -> Id UserId
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent (Id UserId))
+    -> ThreadRouteWithMaybeMessage
+    -> LocalState
+    -> LocalState
+addEncryptedDmMessage createdAt createdBy otherUserId fileHashes contentAndEmbeds threadRouteWithRepliedTo local =
+    let
+        dmChannel : FrontendDmChannel
+        dmChannel =
+            SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit
+    in
+    { local
+        | dmChannels =
+            SeqDict.insert
+                otherUserId
+                (case threadRouteWithRepliedTo of
+                    ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+                        LocalState.createThreadMessageFrontend
+                            threadId
+                            (Message.encryptedUserTextMessageFrontend
+                                createdAt
+                                createdBy
+                                fileHashes
+                                contentAndEmbeds
+                                maybeReplyTo
+                            )
+                            dmChannel
+
+                    NoThreadWithMaybeMessage maybeReplyTo ->
+                        LocalState.createChannelMessageFrontend
+                            (Message.encryptedUserTextMessageFrontend
+                                createdAt
+                                createdBy
+                                fileHashes
+                                contentAndEmbeds
+                                maybeReplyTo
+                            )
+                            dmChannel
+                )
+                local.dmChannels
+    }
+
+
+{-| Puts new ciphertext in place of a message's old ciphertext. An edit nobody is allowed
+to make leaves the conversation as it was, the same way the server refuses it.
+-}
+editEncryptedDmMessage :
+    Time.Posix
+    -> Id UserId
+    -> Id UserId
+    -> ThreadRouteWithMessage
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent (Id UserId))
+    -> LocalState
+    -> LocalState
+editEncryptedDmMessage editedAt editedBy otherUserId threadRoute fileHashes content local =
+    case SeqDict.get otherUserId local.dmChannels of
+        Just dmChannel ->
+            case
+                LocalState.editEncryptedMessageFrontendHelper
+                    editedAt
+                    editedBy
+                    fileHashes
+                    content
+                    threadRoute
+                    dmChannel
+            of
+                Ok dmChannel2 ->
+                    { local | dmChannels = SeqDict.insert otherUserId dmChannel2 local.dmChannels }
+
+                Err () ->
+                    local
+
+        Nothing ->
+            local
+
+
+handleServerSendMessage :
+    Id UserId
+    -> GuildOrDmId
+    -> Nonempty (RichText (Id UserId))
+    -> ThreadRouteWithMaybeMessage
+    -> LocalState
+    -> LoggedIn2
+    -> LoadedFrontend
+    -> ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg_ )
+handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local loggedIn2 model =
+    let
+        scrolledToBottom : Bool
+        scrolledToBottom =
+            -- The drawing tab holds the scroll position, otherwise the
+            -- new message would throw off the stroke the user is drawing
+            (Route.toChannelHeaderTab model.route /= Just ChannelHeaderTab_Draw)
+                && (loggedIn2.channelScrollPosition == ScrolledToBottom)
+
+        isViewingConversation : Bool
+        isViewingConversation =
+            Route.toGuildOrDmId local.localUser.session.userId model.route
+                == Just
+                    ( GuildOrDmId guildOrDmId
+                    , Id.threadRouteWithoutMaybeMessage maybeRepliedTo
+                    )
+
+        helper channel =
+            Command.batch
+                [ playNotificationSound
+                    senderId
+                    guildOrDmId
+                    maybeRepliedTo
+                    channel
+                    local
+                    content
+                    model
+                , if scrolledToBottom then
+                    if MyUi.isMobile model then
+                        Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
+
+                    else
+                        Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+
+                  else
+                    Command.none
+                ]
+    in
+    ( if isViewingConversation && not scrolledToBottom then
+        { loggedIn2
+            | newMessagesWhileNotScrolledToBottom =
+                loggedIn2.newMessagesWhileNotScrolledToBottom + 1
+            , channelScrollPosition =
+                case loggedIn2.channelScrollPosition of
+                    ScrolledToBottom ->
+                        ScrolledToMiddle
+
+                    ScrolledToTop ->
+                        loggedIn2.channelScrollPosition
+
+                    ScrolledToMiddle ->
+                        loggedIn2.channelScrollPosition
+        }
+
+      else
+        loggedIn2
+    , case guildOrDmId of
+        GuildOrDmId_Guild { guildId, channelId } ->
+            case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
+                Just ( _, channel ) ->
+                    helper channel
+
+                Nothing ->
+                    Command.none
+
+        GuildOrDmId_Dm { otherUserId } ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just channel ->
+                    helper channel
+
+                Nothing ->
+                    Command.none
+    )
+
+
+handleDecryptedMessage :
+    Id Encryption.DecryptRequestId
+    -> Result () (MessageContent (Id UserId))
+    -> LoadedFrontend
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg_ )
+handleDecryptedMessage requestId result model loggedIn =
+    case SeqDict.get requestId loggedIn.encryptionRequests.pendingDecryptedMessages of
+        Just request ->
+            let
+                loggedIn2 : LoggedIn2
+                loggedIn2 =
+                    fileDecryptedMessages [ ( request.hash, result ) ] loggedIn
+            in
+            handleServerSendMessage
+                request.senderId
+                (GuildOrDmId_Dm request.id)
+                (case result of
+                    Ok contentAndEmbeds ->
+                        contentAndEmbeds.content
+
+                    Err () ->
+                        RichText.failedToDecryptMessage
+                )
+                request.threadRoute
+                (Local.model loggedIn2.localState)
+                loggedIn2
+                model
+                |> Tuple.mapSecond
+                    (\cmd -> Command.batch [ cmd, storeDecryptedFileKeys [ result ] ])
+
+        Nothing ->
+            ( loggedIn, Command.none )
+
+
+decryptOldMessages :
+    List ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+    -> FrontendDmChannel
+    -> FrontendDmChannel
+decryptOldMessages messages dmChannel =
+    List.foldl
+        (\( threadRoute, content ) channel ->
+            case threadRoute of
+                NoThreadWithMessage messageId ->
+                    { channel
+                        | messages =
+                            MessageArray.updateIfExists
+                                messageId
+                                (Message.toDecrypted content)
+                                channel.messages
+                    }
+
+                ViewThreadWithMessage threadId messageId ->
+                    { channel
+                        | threads =
+                            SeqDict.updateIfExists
+                                threadId
+                                (\thread ->
+                                    { thread
+                                        | messages =
+                                            MessageArray.updateIfExists
+                                                messageId
+                                                (Message.toDecrypted content)
+                                                thread.messages
+                                    }
+                                )
+                                channel.threads
+                    }
+        )
+        dmChannel
+        messages
+
+
+encryptOldMessages :
+    List ( ThreadRouteWithMessage, SeqSet FileHash, EncryptedData (MessageContent (Id UserId)) )
+    -> FrontendDmChannel
+    -> FrontendDmChannel
+encryptOldMessages messages dmChannel =
+    List.foldl
+        (\( threadRoute, fileHashes, encryptedData ) channel ->
+            case threadRoute of
+                NoThreadWithMessage messageId ->
+                    { channel
+                        | messages =
+                            MessageArray.updateIfExists
+                                messageId
+                                (Message.toEncrypted fileHashes encryptedData)
+                                channel.messages
+                    }
+
+                ViewThreadWithMessage threadId messageId ->
+                    { channel
+                        | threads =
+                            SeqDict.updateIfExists
+                                threadId
+                                (\thread ->
+                                    { thread
+                                        | messages =
+                                            MessageArray.updateIfExists
+                                                messageId
+                                                (Message.toEncrypted fileHashes encryptedData)
+                                                thread.messages
+                                    }
+                                )
+                                channel.threads
+                    }
+        )
+        dmChannel
+        messages
+
+
+{-| The keys for any files attached to messages that have just been decrypted. Goes
+alongside `fileDecryptedMessages` at every place a message becomes readable, since the
+browser fetches attached files on its own and needs the keys left where it will find them.
+-}
+storeDecryptedFileKeys :
+    List (Result () (MessageContent (Id UserId)))
+    -> Command FrontendOnly toMsg msg
+storeDecryptedFileKeys decrypted =
+    case
+        List.concatMap
+            (\result ->
+                case result of
+                    Ok messageContent ->
+                        SeqDict.values messageContent.attachedFiles
+                            |> List.filterMap FileStatus.fileKey
+
+                    Err () ->
+                        []
+            )
+            decrypted
+    of
+        [] ->
+            Command.none
+
+        keys ->
+            Encryption.storeFileKeys keys
+
+
+fileDecryptedMessages :
+    List ( BytesHash, Result () (MessageContent (Id UserId)) )
+    -> LoggedIn2
+    -> LoggedIn2
+fileDecryptedMessages decrypted loggedIn =
+    { loggedIn
+        | localState =
+            Local.mapModel
+                (\local ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | decryptedMessages =
+                                    List.foldl
+                                        (\( bytesHash, result ) dict -> SeqDict.insert bytesHash result dict)
+                                        localUser.decryptedMessages
+                                        decrypted
+                            }
+                    }
+                )
+                loggedIn.localState
+    }
+
+
+handleServerSendDmMessage :
+    Viewing_DmId
+    -> Id UserId
+    -> FrontendUser
+    -> SeqDict (Id StickerId) StickerData
+    -> (Maybe (Id ChannelMessageId) -> Message ChannelMessageId (Id UserId))
+    -> (Maybe (Id ThreadMessageId) -> Message ThreadMessageId (Id UserId))
+    -> ThreadRouteWithMaybeMessage
+    -> LocalState
+    -> LocalState
+handleServerSendDmMessage id createdBy createdByUser stickers messageForChannel messageForThread threadRouteWithRepliedTo local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        user : FrontendCurrentUser
+        user =
+            localUser.user
+
+        dmChannel : FrontendDmChannel
+        dmChannel =
+            SeqDict.get id.otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit
+
+        dmChannel2 : FrontendDmChannel
+        dmChannel2 =
+            case threadRouteWithRepliedTo of
+                ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+                    LocalState.createThreadMessageFrontend threadId (messageForThread maybeReplyTo) dmChannel
+
+                NoThreadWithMaybeMessage maybeReplyTo ->
+                    LocalState.createChannelMessageFrontend (messageForChannel maybeReplyTo) dmChannel
+
+        threadRouteNoReply : ThreadRoute
+        threadRouteNoReply =
+            case threadRouteWithRepliedTo of
+                ViewThreadWithMaybeMessage threadId _ ->
+                    ViewThread threadId
+
+                NoThreadWithMaybeMessage _ ->
+                    NoThread
+
+        guildOrDmId =
+            GuildOrDmId (GuildOrDmId_Dm id)
+
+        ( currentlyViewing2, user2 ) =
+            if createdBy == localUser.session.userId then
+                LocalState.ownMessageIsReadFrontend
+                    guildOrDmId
+                    (latestMessageThreadRoute threadRouteWithRepliedTo dmChannel2)
+                    ( localUser.currentlyViewing, user )
+
+            else if isViewing guildOrDmId threadRouteNoReply local then
+                LocalState.incrementLastViewedMessageFrontend
+                    guildOrDmId
+                    (latestMessageThreadRoute threadRouteWithRepliedTo dmChannel2)
+                    ( localUser.currentlyViewing, user )
+
+            else
+                ( localUser.currentlyViewing, user )
+    in
+    { local
+        | dmChannels = SeqDict.insert id.otherUserId dmChannel2 local.dmChannels
+        , localUser =
+            { localUser
+                | user = user2
+                , currentlyViewing = currentlyViewing2
+                , otherUsers = addMessageSender createdBy createdByUser localUser
+                , stickers = SeqDict.union stickers localUser.stickers
+            }
+    }

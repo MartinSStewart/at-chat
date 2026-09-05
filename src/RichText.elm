@@ -15,6 +15,7 @@ module RichText exposing
     , attachedFileSuffix
     , attachments
     , bigEmojiFont
+    , codec
     , customEmojis
     , customEmojisFromDiscord
     , dateAndTimeToString
@@ -24,12 +25,15 @@ module RichText exposing
     , emojisAndCustomEmojis
     , emptyPlaceholder
     , escapedCharToString
+    , failedToDecryptMessage
+    , failedToDecryptMessageText
     , fromDiscord
     , fromNonemptyString
     , hasLargeContent
     , hyperlinks
     , maxLength
     , mentionsUser
+    , messageIsEncrypted
     , preview
     , removeAttachedFile
     , spoilerAttachedFile
@@ -49,6 +53,7 @@ module RichText exposing
 
 import Array exposing (Array)
 import Basics.Extra
+import Char
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData, EmojiName)
@@ -79,6 +84,7 @@ import Point2d exposing (Point2d)
 import Range exposing (Range)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Serialize
 import Set
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
@@ -1388,10 +1394,7 @@ emailViewHelper config dropNextLineBreak state nonempty =
                                             else
                                                 let
                                                     thumbnailUrl =
-                                                        FileStatus.thumbnailUrl
-                                                            imageSize
-                                                            fileData.contentType
-                                                            fileData.fileHash
+                                                        FileStatus.fileDataThumbnailUrl imageSize fileData
                                                 in
                                                 Email.Html.img
                                                     [ Email.Html.Attributes.src thumbnailUrl
@@ -1588,7 +1591,7 @@ emailFileDownloadView isSpoilered fileData =
                     [ Email.Html.Attributes.color "transparent" ]
 
                 else
-                    [ Email.Html.Attributes.href (FileStatus.fileUrl fileData.contentType fileData.fileHash) ]
+                    [ Email.Html.Attributes.href (FileStatus.fileDataUrl fileData) ]
                )
         )
         [ Email.Html.text (FileName.toString fileData.fileName)
@@ -3310,6 +3313,21 @@ domainToString (Domain domain) =
     domain
 
 
+failedToDecryptMessage : Nonempty (RichText userId)
+failedToDecryptMessage =
+    Nonempty (Italic (Nonempty (NormalText 'F' "ailed to decrypt message") [])) []
+
+
+failedToDecryptMessageText : String
+failedToDecryptMessageText =
+    "Failed to decrypt message"
+
+
+messageIsEncrypted : Nonempty (RichText userId)
+messageIsEncrypted =
+    Nonempty (Italic (Nonempty (NormalText 'M' "essage is encrypted") [])) []
+
+
 type ShowLargeContent
     = ShowLargeContent Int
     | NoLargeContent
@@ -4255,13 +4273,10 @@ imageView maybePressedSpoiler maybeOnPressImage containerWidth2 config imageSize
     else
         let
             fileUrl =
-                FileStatus.fileUrl fileData.contentType fileData.fileHash
+                FileStatus.fileDataUrl fileData
 
             thumbnailUrl =
-                FileStatus.thumbnailUrl
-                    imageSize
-                    fileData.contentType
-                    fileData.fileHash
+                FileStatus.fileDataThumbnailUrl imageSize fileData
 
             imageElement : List (Html.Attribute msg) -> Html msg
             imageElement extraAttributes =
@@ -4797,7 +4812,7 @@ videoView maybeHtmlId maybeMetadata isSpoilered containerWidth fileData =
         Html.video
             (sizeAttrs
                 ++ [ idAttribute
-                   , Html.Attributes.src (FileStatus.fileUrl fileData.contentType fileData.fileHash)
+                   , Html.Attributes.src (FileStatus.fileDataUrl fileData)
                    , Html.Attributes.controls True
                    , Html.Attributes.style "display" "block"
                    , Html.Attributes.style "border-radius" "4px"
@@ -4833,7 +4848,7 @@ audioView maybeHtmlId isSpoilered containerWidth fileData =
                )
         )
         [ Html.audio
-            ([ Html.Attributes.src (FileStatus.fileUrl fileData.contentType fileData.fileHash)
+            ([ Html.Attributes.src (FileStatus.fileDataUrl fileData)
              , Html.Attributes.controls True
              , Html.Attributes.style "display" "block"
              , Html.Attributes.style "width" (String.fromInt width ++ "px")
@@ -4856,7 +4871,7 @@ fileDownloadView : Maybe String -> Bool -> FileData -> Html msg
 fileDownloadView maybeHtmlId isSpoilered fileData =
     let
         fileUrl =
-            FileStatus.fileUrl fileData.contentType fileData.fileHash
+            FileStatus.fileDataUrl fileData
     in
     Html.a
         [ case maybeHtmlId of
@@ -6594,3 +6609,255 @@ skipDiscordNormalChars source index len =
 
         else
             skipDiscordNormalChars source (index + 1) len
+
+
+codec : Serialize.Codec e userId -> Serialize.Codec e (RichText userId)
+codec userIdCodec =
+    Serialize.customType
+        (\userMentionEncoder normalTextEncoder boldEncoder italicEncoder underlineEncoder strikethroughEncoder spoilerEncoder blockQuoteEncoder headingEncoder hyperlinkEncoder markdownLinkEncoder inlineCodeEncoder codeBlockEncoder attachedFileEncoder escapedCharEncoder stickerEncoder customEmojiEncoder bulletPointEncoder timestampEncoder value ->
+            case value of
+                UserMention argA ->
+                    userMentionEncoder argA
+
+                NormalText argA argB ->
+                    normalTextEncoder argA argB
+
+                Bold argA ->
+                    boldEncoder argA
+
+                Italic argA ->
+                    italicEncoder argA
+
+                Underline argA ->
+                    underlineEncoder argA
+
+                Strikethrough argA ->
+                    strikethroughEncoder argA
+
+                Spoiler argA ->
+                    spoilerEncoder argA
+
+                BlockQuote argA argB ->
+                    blockQuoteEncoder argA argB
+
+                Heading argA argB argC ->
+                    headingEncoder argA argB argC
+
+                Hyperlink argA ->
+                    hyperlinkEncoder argA
+
+                MarkdownLink argA argB ->
+                    markdownLinkEncoder argA argB
+
+                InlineCode argA argB ->
+                    inlineCodeEncoder argA argB
+
+                CodeBlock argA argB ->
+                    codeBlockEncoder argA argB
+
+                AttachedFile argA ->
+                    attachedFileEncoder argA
+
+                EscapedChar argA ->
+                    escapedCharEncoder argA
+
+                Sticker argA ->
+                    stickerEncoder argA
+
+                CustomEmoji argA ->
+                    customEmojiEncoder argA
+
+                BulletPoint argA argB ->
+                    bulletPointEncoder argA argB
+
+                Timestamp argA ->
+                    timestampEncoder argA
+        )
+        |> Serialize.variant1 UserMention userIdCodec
+        |> Serialize.variant2 NormalText charCodec Serialize.string
+        |> Serialize.variant1 Bold (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec)))
+        |> Serialize.variant1 Italic (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec)))
+        |> Serialize.variant1 Underline (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec)))
+        |> Serialize.variant1 Strikethrough (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec)))
+        |> Serialize.variant1 Spoiler (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec)))
+        |> Serialize.variant2
+            BlockQuote
+            hasLeadingLineBreakCodec
+            (Serialize.list (Serialize.lazy (\() -> codec userIdCodec)))
+        |> Serialize.variant3
+            Heading
+            headingLevelCodec
+            hasLeadingLineBreakCodec
+            (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec)))
+        |> Serialize.variant1 Hyperlink urlCodec
+        |> Serialize.variant2 MarkdownLink nonemptyStringCodec urlCodec
+        |> Serialize.variant2 InlineCode charCodec Serialize.string
+        |> Serialize.variant2 CodeBlock languageCodec Serialize.string
+        |> Serialize.variant1 AttachedFile Id.codec
+        |> Serialize.variant1 EscapedChar escapedCharCodec
+        |> Serialize.variant1 Sticker Id.codec
+        |> Serialize.variant1 CustomEmoji Id.codec
+        |> Serialize.variant2
+            BulletPoint
+            hasLeadingLineBreakCodec
+            (nonemptyCodec (Serialize.list (Serialize.lazy (\() -> codec userIdCodec))))
+        |> Serialize.variant1 Timestamp timeInMinutesCodec
+        |> Serialize.finishCustomType
+
+
+charCodec : Serialize.Codec e Char
+charCodec =
+    Serialize.map Char.fromCode Char.toCode Serialize.unsignedInt32
+
+
+nonemptyCodec : Serialize.Codec e a -> Serialize.Codec e (Nonempty a)
+nonemptyCodec a =
+    Serialize.customType
+        (\nonemptyEncoder value ->
+            case value of
+                List.Nonempty.Nonempty argA argB ->
+                    nonemptyEncoder argA argB
+        )
+        |> Serialize.variant2 Nonempty a (Serialize.list a)
+        |> Serialize.finishCustomType
+
+
+hasLeadingLineBreakCodec : Serialize.Codec e HasLeadingLineBreak
+hasLeadingLineBreakCodec =
+    Serialize.customType
+        (\hasLeadingLineBreakEncoder noLeadingLineBreakEncoder value ->
+            case value of
+                HasLeadingLineBreak ->
+                    hasLeadingLineBreakEncoder
+
+                NoLeadingLineBreak ->
+                    noLeadingLineBreakEncoder
+        )
+        |> Serialize.variant0 HasLeadingLineBreak
+        |> Serialize.variant0 NoLeadingLineBreak
+        |> Serialize.finishCustomType
+
+
+headingLevelCodec : Serialize.Codec e HeadingLevel
+headingLevelCodec =
+    Serialize.customType
+        (\h1Encoder h2Encoder h3Encoder smallEncoder value ->
+            case value of
+                H1 ->
+                    h1Encoder
+
+                H2 ->
+                    h2Encoder
+
+                H3 ->
+                    h3Encoder
+
+                Small ->
+                    smallEncoder
+        )
+        |> Serialize.variant0 H1
+        |> Serialize.variant0 H2
+        |> Serialize.variant0 H3
+        |> Serialize.variant0 Small
+        |> Serialize.finishCustomType
+
+
+urlCodec : Serialize.Codec e Url
+urlCodec =
+    Serialize.record Url
+        |> Serialize.field .protocol protocolCodec
+        |> Serialize.field .host Serialize.string
+        |> Serialize.field .port_ (Serialize.maybe Serialize.unsignedInt16)
+        |> Serialize.field .path Serialize.string
+        |> Serialize.field .query (Serialize.maybe Serialize.string)
+        |> Serialize.field .fragment (Serialize.maybe Serialize.string)
+        |> Serialize.finishRecord
+
+
+protocolCodec : Serialize.Codec e Protocol
+protocolCodec =
+    Serialize.customType
+        (\httpEncoder httpsEncoder value ->
+            case value of
+                Url.Http ->
+                    httpEncoder
+
+                Url.Https ->
+                    httpsEncoder
+        )
+        |> Serialize.variant0 Url.Http
+        |> Serialize.variant0 Url.Https
+        |> Serialize.finishCustomType
+
+
+nonemptyStringCodec : Serialize.Codec e NonemptyString
+nonemptyStringCodec =
+    Serialize.customType
+        (\nonemptyStringEncoder value ->
+            case value of
+                String.Nonempty.NonemptyString argA argB ->
+                    nonemptyStringEncoder argA argB
+        )
+        |> Serialize.variant2 NonemptyString charCodec Serialize.string
+        |> Serialize.finishCustomType
+
+
+languageCodec : Serialize.Codec e Language
+languageCodec =
+    Serialize.customType
+        (\languageEncoder noLanguageEncoder value ->
+            case value of
+                Language argA ->
+                    languageEncoder argA
+
+                NoLanguage ->
+                    noLanguageEncoder
+        )
+        |> Serialize.variant1 Language nonemptyStringCodec
+        |> Serialize.variant0 NoLanguage
+        |> Serialize.finishCustomType
+
+
+escapedCharCodec : Serialize.Codec e EscapedChar
+escapedCharCodec =
+    Serialize.customType
+        (\escapedSquareBracketEncoder escapedBackslashEncoder escapedBacktickEncoder escapedAtSymbolEncoder escapedBoldEncoder escapedItalicEncoder escapedStrikethroughEncoder escapedSpoileredEncoder value ->
+            case value of
+                EscapedSquareBracket ->
+                    escapedSquareBracketEncoder
+
+                EscapedBackslash ->
+                    escapedBackslashEncoder
+
+                EscapedBacktick ->
+                    escapedBacktickEncoder
+
+                EscapedAtSymbol ->
+                    escapedAtSymbolEncoder
+
+                EscapedBold ->
+                    escapedBoldEncoder
+
+                EscapedItalic ->
+                    escapedItalicEncoder
+
+                EscapedStrikethrough ->
+                    escapedStrikethroughEncoder
+
+                EscapedSpoilered ->
+                    escapedSpoileredEncoder
+        )
+        |> Serialize.variant0 EscapedSquareBracket
+        |> Serialize.variant0 EscapedBackslash
+        |> Serialize.variant0 EscapedBacktick
+        |> Serialize.variant0 EscapedAtSymbol
+        |> Serialize.variant0 EscapedBold
+        |> Serialize.variant0 EscapedItalic
+        |> Serialize.variant0 EscapedStrikethrough
+        |> Serialize.variant0 EscapedSpoilered
+        |> Serialize.finishCustomType
+
+
+timeInMinutesCodec : Serialize.Codec e TimeInMinutes
+timeInMinutesCodec =
+    TimeInMinutes.codec

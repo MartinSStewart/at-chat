@@ -9,11 +9,13 @@ module MessageInput exposing
     , containerAttributes
     , disabledView
     , editView
+    , emptyPlaceholder
     , insertTab
     , isPress
     , largePastedText
     , showEmojiSelectorButton
     , tabText
+    , textPlaceholder
     , textarea
     , view
     )
@@ -244,7 +246,7 @@ selectionInsideCodeBlock text maybeSelection =
 textarea :
     Bool
     -> HtmlId
-    -> String
+    -> Html Msg
     -> Int
     -> String
     -> Maybe (Nonempty (RichText userId))
@@ -259,7 +261,7 @@ textarea :
     -> { c | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
     -> Html Msg
-textarea allowEnterKeyLinebreak channelTextInputId placeholderText charsLeft text richText attachedFiles localUser loggedIn users =
+textarea allowEnterKeyLinebreak channelTextInputId placeholder charsLeft text richText attachedFiles localUser loggedIn users =
     let
         keyDownNoDropdown : Html.Attribute Msg
         keyDownNoDropdown =
@@ -442,15 +444,19 @@ textarea allowEnterKeyLinebreak channelTextInputId placeholderText charsLeft tex
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
-                    [ if placeholderText == "" then
-                        -- A normal space doesn't prevent the textarea from being 0 lines tall for some reason
-                        Html.text "\u{00A0}"
-
-                      else
-                        Html.text placeholderText
-                    ]
+                    [ placeholder ]
             )
         ]
+
+
+emptyPlaceholder : Html msg
+emptyPlaceholder =
+    textPlaceholder "\u{00A0}"
+
+
+textPlaceholder : String -> Html msg
+textPlaceholder text =
+    Html.span [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont) ] [ Html.text text ]
 
 
 disabledTextarea : String -> String -> SeqDict (Id FileId) a -> LocalUser -> Html msg
@@ -505,11 +511,10 @@ disabledTextarea placeholderText text attachedFiles localUser =
 
                 Nothing ->
                     [ if placeholderText == "" then
-                        -- A normal space doesn't prevent the textarea from being 0 lines tall for some reason
-                        Html.text "\u{00A0}"
+                        emptyPlaceholder
 
                       else
-                        Html.text placeholderText
+                        textPlaceholder placeholderText
                     ]
             )
         ]
@@ -533,8 +538,7 @@ textareaOverlayAttributes text =
     , Html.Attributes.style "flex-grow" "1"
     ]
         ++ (if text == "" then
-                [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
-                , Html.Attributes.style "white-space" "nowrap"
+                [ Html.Attributes.style "white-space" "nowrap"
                 , Html.Attributes.style "text-overflow" "ellipsis"
                 , Html.Attributes.style "overflow" "hidden"
                 ]
@@ -569,7 +573,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
     textarea
         isMobileKeyboard
         channelTextInputId
-        placeholderText
+        (textPlaceholder placeholderText)
         charsLeft
         text
         richText
@@ -639,7 +643,7 @@ view :
     -> Bool
     -> Bool
     -> HtmlId
-    -> String
+    -> Html Msg
     -> Int
     -> String
     -> Maybe (Nonempty (RichText userId))

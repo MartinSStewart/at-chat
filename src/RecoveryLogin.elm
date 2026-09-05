@@ -3,9 +3,11 @@ module RecoveryLogin exposing
     , Msg(..)
     , SubmitStatus(..)
     , incorrectPassword
+    , incorrectPasswordText
     , init
     , isPressMsg
     , passwordInputId
+    , recoveryLoginTitle
     , submitButtonId
     , update
     , view
@@ -28,6 +30,16 @@ import Ui.Events
 import Ui.Font
 import Ui.Input
 import Ui.Prose
+
+
+recoveryLoginTitle : String
+recoveryLoginTitle =
+    "Recovery login"
+
+
+incorrectPasswordText : String
+incorrectPasswordText =
+    "Incorrect password"
 
 
 {-| OpaqueVariants
@@ -123,7 +135,7 @@ view (Model model) =
         ]
         [ Ui.Prose.paragraph
             [ Ui.Font.size 30, Ui.Font.weight 600 ]
-            [ Ui.text "Recovery login" ]
+            [ Ui.text recoveryLoginTitle ]
         , Ui.Prose.paragraph
             [ Ui.Font.color MyUi.font3, Ui.Font.size 16 ]
             [ Ui.text "This server has no Postmark API key configured, so it can't email login codes to anyone. Enter the recovery password to log in as the admin user." ]
@@ -153,7 +165,7 @@ view (Model model) =
             (MyUi.simpleButton submitButtonId PressedSubmit (Ui.text "Login"))
         , case model.submitStatus of
             IncorrectPassword ->
-                errorView "Incorrect password"
+                errorView incorrectPasswordText
 
             NotSubmitted True ->
                 errorView "Enter the recovery password first"

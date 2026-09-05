@@ -1,6 +1,8 @@
 module FileStatus exposing
-    ( ContentType(..)
+    ( AesPrivateKey
+    , ContentType(..)
     , ContentTypeType(..)
+    , EncryptedThumbnail(..)
     , ExposureTime
     , FileData
     , FileDataWithImage
@@ -9,19 +11,26 @@ module FileStatus exposing
     , FileMetadata(..)
     , FileStatus(..)
     , ImageMetadata
+    , IsEncrypted(..)
     , Location
+    , MeasuredFile(..)
     , Orientation(..)
     , UploadResponse
     , UploadUrlRequest
     , VideoFrames
     , VideoMetadata
     , addFileHash
+    , aesPrivateKey
     , contentType
     , contentTypeType
     , contentTypes
     , discordStickerUrl
     , domain
+    , fileDataSerializeCodec
+    , fileDataThumbnailUrl
+    , fileDataUrl
     , fileHash
+    , fileKey
     , fileUrl
     , gifContent
     , hasUploadingFile
@@ -29,16 +38,18 @@ module FileStatus exposing
     , imageInfoView
     , imageMaxHeight
     , jsonContent
+    , measuredFileMetadata
+    , measuredFileSerializeCodec
     , onlyUploadedFiles
     , pngContent
     , progressToString
     , secretKeyHeader
     , sizeToString
-    , thumbnailUrl
     , unknownContentType
     , uploadAvatar
     , uploadBackup
     , uploadBytes
+    , uploadEncryptedFile
     , uploadFile
     , uploadGameFile
     , uploadResponseCodec
@@ -53,6 +64,7 @@ module FileStatus exposing
     )
 
 import Bytes exposing (Bytes)
+import Bytes.Encode
 import Codec exposing (Codec)
 import CodecExtra
 import Coord exposing (Coord)
@@ -77,8 +89,10 @@ import OneToOne exposing (OneToOne)
 import Quantity exposing (Quantity, Rate)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
+import Serialize
 import StringExtra
 import Ui exposing (Element)
+import Url
 
 
 type alias FileData =
@@ -87,6 +101,7 @@ type alias FileData =
     , metadata : Maybe FileMetadata
     , contentType : ContentType
     , fileHash : FileHash
+    , isEncrypted : IsEncrypted
     }
 
 
@@ -95,19 +110,121 @@ type FileMetadata
     | FileMetadata_Video VideoMetadata
 
 
+{-| All the browser can work out about a file it is handed. Everything else the server
+reports needs the file parsed, which is what the browser has no way of doing.
+-}
+type MeasuredFile
+    = MeasuredImage (Coord CssPixels)
+    | MeasuredVideo (Coord CssPixels) (Maybe Duration)
+
+
+measuredFileMetadata : MeasuredFile -> FileMetadata
+measuredFileMetadata measured =
+    case measured of
+        MeasuredImage imageSize ->
+            FileMetadata_Image
+                { imageSize = imageSize
+                , orientation = Nothing
+                , gpsLocation = Nothing
+                , cameraOwner = Nothing
+                , exposureTime = Nothing
+                , fNumber = Nothing
+                , focalLength = Nothing
+                , isoSpeedRating = Nothing
+                , make = Nothing
+                , model = Nothing
+                , software = Nothing
+                , userComment = Nothing
+                }
+
+        MeasuredVideo videoSize duration ->
+            FileMetadata_Video
+                { videoSize = videoSize
+                , frames = Nothing
+                , createdAt = Nothing
+
+                -- The size the browser reports already has any rotation applied, the same
+                -- way the server reports it.
+                , orientation = NoChange
+                , frameRate = Nothing
+                , codec = Nothing
+                , title = Nothing
+                , gpsLocation = Nothing
+                , duration = duration
+                }
+
+
+measuredFileSerializeCodec : Serialize.Codec e MeasuredFile
+measuredFileSerializeCodec =
+    Serialize.customType
+        (\imageEncoder videoEncoder value ->
+            case value of
+                MeasuredImage argA ->
+                    imageEncoder argA
+
+                MeasuredVideo argA argB ->
+                    videoEncoder argA argB
+        )
+        |> Serialize.variant1 MeasuredImage coordSerializeCodec
+        |> Serialize.variant2 MeasuredVideo coordSerializeCodec (Serialize.maybe durationSerializeCodec)
+        |> Serialize.finishCustomType
+
+
 type alias FileDataWithImage =
     { fileName : FileName
     , fileSize : Int
     , metadata : FileMetadata
     , contentType : ContentType
     , fileHash : FileHash
+    , isEncrypted : IsEncrypted
     }
 
 
 type FileStatus
-    = FileUploading FileName { sent : Int, size : Int } ContentType
+    = FileUploading FileName { sent : Int, size : Int } ContentType IsEncrypted
     | FileUploaded FileData
-    | FileError FileName Int ContentType Http.Error
+    | FileError FileName Int ContentType Http.Error IsEncrypted
+
+
+type IsEncrypted
+    = IsNotEncrypted
+    | IsEncrypted AesPrivateKey EncryptedThumbnail
+
+
+{-| Whether a thumbnail was stored alongside an encrypted image. There is no key or hash to
+go with it: the thumbnail is encrypted with the file's key and stored under the file's hash.
+
+The server makes thumbnails by decoding an image, which it can't do for one it only has the
+ciphertext of, so this one was made by the browser. It only tries for an image big enough
+to need one, and gives up if the browser has no way to write webp, hence the answer being
+recorded rather than worked out from the image's size.
+
+-}
+type EncryptedThumbnail
+    = NoEncryptedThumbnail
+    | HasEncryptedThumbnail
+
+
+type AesPrivateKey
+    = AesPrivateKey Bytes
+
+
+aesPrivateKey : Bytes -> AesPrivateKey
+aesPrivateKey =
+    AesPrivateKey
+
+
+{-| What the service worker needs in order to read an attached file back: the address the
+ciphertext is stored under, and the key that opens it.
+-}
+fileKey : FileData -> Maybe { fileHash : String, key : Bytes }
+fileKey fileData =
+    case ( fileData.isEncrypted, fileData.fileHash ) of
+        ( IsEncrypted (AesPrivateKey key) _, FileHash hash ) ->
+            Just { fileHash = hash, key = key }
+
+        ( IsNotEncrypted, _ ) ->
+            Nothing
 
 
 {-| OpaqueVariants
@@ -149,6 +266,79 @@ progressToString { sent, size } =
 fileUrl : ContentType -> FileHash -> String
 fileUrl (ContentType contentType2) (FileHash fileHash2) =
     domain ++ "/file/" ++ String.fromInt contentType2 ++ "/" ++ fileHash2
+
+
+{-| Where an attached file is read back from. An encrypted one is at a different address
+so that the service worker knows to decrypt it before handing it to the page, and so that
+a browser without the service worker installed gets nothing rather than ciphertext dressed
+up as a picture.
+-}
+fileDataUrl : { a | contentType : ContentType, fileHash : FileHash, isEncrypted : IsEncrypted } -> String
+fileDataUrl fileData =
+    case fileData.isEncrypted of
+        IsEncrypted _ _ ->
+            encryptedFileUrl fileData.contentType fileData.fileHash
+
+        IsNotEncrypted ->
+            fileUrl fileData.contentType fileData.fileHash
+
+
+{-| The content type is spelled out here rather than numbered, and it is the whole header
+value the file ends up being served with, because the server never gets to supply it. The
+service worker asks for the ciphertext as application/octet-stream, so the server is never
+told what kind of file it is holding, and only puts this on the file once it has been
+decrypted.
+-}
+encryptedFileUrl : ContentType -> FileHash -> String
+encryptedFileUrl contentType2 (FileHash fileHash2) =
+    domain ++ "/file/e/" ++ Url.percentEncode (contentTypeHeader contentType2) ++ "/" ++ fileHash2
+
+
+{-| What the server would put in the Content-Type header for this kind of file. Text is
+named with a charset because a browser left to guess at one gets it wrong often enough to
+mangle the file. Keep in sync with rust-server/src/content\_types.rs, where the charset is
+written into the list itself.
+-}
+contentTypeHeader : ContentType -> String
+contentTypeHeader contentType2 =
+    case OneToOne.second contentType2 contentTypes of
+        Just text ->
+            if String.startsWith "text/" text then
+                text ++ "; charset=UTF-8"
+
+            else
+                text
+
+        Nothing ->
+            "application/octet-stream"
+
+
+{-| A thumbnail sits where the server's own thumbnails do, under the file's hash, so the
+service worker takes the `/file/e/` off the front and finds it at the address it already
+serves thumbnails from.
+-}
+encryptedThumbnailUrl : FileHash -> String
+encryptedThumbnailUrl (FileHash fileHash2) =
+    domain ++ "/file/e/t/" ++ fileHash2
+
+
+{-| An encrypted image the browser made a thumbnail of is shown at that thumbnail. One it
+couldn't is shown at full size, since the server can't make a thumbnail out of ciphertext.
+-}
+fileDataThumbnailUrl :
+    Coord CssPixels
+    -> { a | contentType : ContentType, fileHash : FileHash, isEncrypted : IsEncrypted }
+    -> String
+fileDataThumbnailUrl imageSize fileData =
+    case fileData.isEncrypted of
+        IsEncrypted _ HasEncryptedThumbnail ->
+            encryptedThumbnailUrl fileData.fileHash
+
+        IsEncrypted _ NoEncryptedThumbnail ->
+            encryptedFileUrl fileData.contentType fileData.fileHash
+
+        IsNotEncrypted ->
+            thumbnailUrl imageSize fileData.contentType fileData.fileHash
 
 
 thumbnailUrl : Coord CssPixels -> ContentType -> FileHash -> String
@@ -251,6 +441,197 @@ unknownContentType =
     ContentType 9999
 
 
+fileDataSerializeCodec : Serialize.Codec e FileData
+fileDataSerializeCodec =
+    Serialize.record FileData
+        |> Serialize.field .fileName FileName.codec
+        |> Serialize.field .fileSize Serialize.unsignedInt32
+        |> Serialize.field .metadata (Serialize.maybe fileMetadataSerializeCodec)
+        |> Serialize.field .contentType contentTypeSerializeCodec
+        |> Serialize.field .fileHash fileHashSerializeCodec
+        |> Serialize.field .isEncrypted isEncryptedSerializeCodec
+        |> Serialize.finishRecord
+
+
+fileHashSerializeCodec : Serialize.Codec e FileHash
+fileHashSerializeCodec =
+    Serialize.map FileHash (\(FileHash a) -> a) Serialize.string
+
+
+contentTypeSerializeCodec : Serialize.Codec e ContentType
+contentTypeSerializeCodec =
+    Serialize.map ContentType (\(ContentType a) -> a) Serialize.unsignedInt16
+
+
+isEncryptedSerializeCodec : Serialize.Codec e IsEncrypted
+isEncryptedSerializeCodec =
+    Serialize.customType
+        (\isNotEncryptedEncoder isEncryptedEncoder value ->
+            case value of
+                IsNotEncrypted ->
+                    isNotEncryptedEncoder
+
+                IsEncrypted argA argB ->
+                    isEncryptedEncoder argA argB
+        )
+        |> Serialize.variant0 IsNotEncrypted
+        |> Serialize.variant2 IsEncrypted aesPrivateKeySerializeCodec encryptedThumbnailSerializeCodec
+        |> Serialize.finishCustomType
+
+
+encryptedThumbnailSerializeCodec : Serialize.Codec e EncryptedThumbnail
+encryptedThumbnailSerializeCodec =
+    Serialize.customType
+        (\noThumbnailEncoder hasThumbnailEncoder value ->
+            case value of
+                NoEncryptedThumbnail ->
+                    noThumbnailEncoder
+
+                HasEncryptedThumbnail ->
+                    hasThumbnailEncoder
+        )
+        |> Serialize.variant0 NoEncryptedThumbnail
+        |> Serialize.variant0 HasEncryptedThumbnail
+        |> Serialize.finishCustomType
+
+
+aesPrivateKeySerializeCodec : Serialize.Codec e AesPrivateKey
+aesPrivateKeySerializeCodec =
+    Serialize.map AesPrivateKey (\(AesPrivateKey a) -> a) Serialize.bytes
+
+
+fileMetadataSerializeCodec : Serialize.Codec e FileMetadata
+fileMetadataSerializeCodec =
+    Serialize.customType
+        (\imageEncoder videoEncoder value ->
+            case value of
+                FileMetadata_Image argA ->
+                    imageEncoder argA
+
+                FileMetadata_Video argA ->
+                    videoEncoder argA
+        )
+        |> Serialize.variant1 FileMetadata_Image imageMetadataSerializeCodec
+        |> Serialize.variant1 FileMetadata_Video videoMetadataSerializeCodec
+        |> Serialize.finishCustomType
+
+
+imageMetadataSerializeCodec : Serialize.Codec e ImageMetadata
+imageMetadataSerializeCodec =
+    Serialize.record ImageMetadata
+        |> Serialize.field .imageSize coordSerializeCodec
+        |> Serialize.field .orientation (Serialize.maybe orientationSerializeCodec)
+        |> Serialize.field .gpsLocation (Serialize.maybe locationSerializeCodec)
+        |> Serialize.field .cameraOwner (Serialize.maybe Serialize.string)
+        |> Serialize.field .exposureTime (Serialize.maybe exposureTimeSerializeCodec)
+        |> Serialize.field .fNumber (Serialize.maybe Serialize.float)
+        |> Serialize.field .focalLength (Serialize.maybe Serialize.float)
+        |> Serialize.field .isoSpeedRating (Serialize.maybe Serialize.int)
+        |> Serialize.field .make (Serialize.maybe Serialize.string)
+        |> Serialize.field .model (Serialize.maybe Serialize.string)
+        |> Serialize.field .software (Serialize.maybe Serialize.string)
+        |> Serialize.field .userComment (Serialize.maybe Serialize.string)
+        |> Serialize.finishRecord
+
+
+videoMetadataSerializeCodec : Serialize.Codec e VideoMetadata
+videoMetadataSerializeCodec =
+    Serialize.record VideoMetadata
+        |> Serialize.field .videoSize coordSerializeCodec
+        |> Serialize.field .frames (Serialize.maybe (quantitySerializeCodec Serialize.int))
+        |> Serialize.field .createdAt (Serialize.maybe posixSerializeCodec)
+        |> Serialize.field .orientation orientationSerializeCodec
+        |> Serialize.field .frameRate (Serialize.maybe (quantitySerializeCodec Serialize.float))
+        |> Serialize.field .codec (Serialize.maybe Serialize.string)
+        |> Serialize.field .title (Serialize.maybe Serialize.string)
+        |> Serialize.field .gpsLocation (Serialize.maybe locationSerializeCodec)
+        |> Serialize.field .duration (Serialize.maybe durationSerializeCodec)
+        |> Serialize.finishRecord
+
+
+durationSerializeCodec : Serialize.Codec e Duration
+durationSerializeCodec =
+    Serialize.map Duration.milliseconds Duration.inMilliseconds Serialize.float
+
+
+orientationSerializeCodec : Serialize.Codec e Orientation
+orientationSerializeCodec =
+    Serialize.customType
+        (\noChangeEncoder r90Encoder r180Encoder r270Encoder mirroredEncoder mr90Encoder mr180Encoder mr270Encoder value ->
+            case value of
+                NoChange ->
+                    noChangeEncoder
+
+                Rotation90 ->
+                    r90Encoder
+
+                Rotation180 ->
+                    r180Encoder
+
+                Rotation270 ->
+                    r270Encoder
+
+                Mirrored ->
+                    mirroredEncoder
+
+                MirroredRotation90 ->
+                    mr90Encoder
+
+                MirroredRotation180 ->
+                    mr180Encoder
+
+                MirroredRotation270 ->
+                    mr270Encoder
+        )
+        |> Serialize.variant0 NoChange
+        |> Serialize.variant0 Rotation90
+        |> Serialize.variant0 Rotation180
+        |> Serialize.variant0 Rotation270
+        |> Serialize.variant0 Mirrored
+        |> Serialize.variant0 MirroredRotation90
+        |> Serialize.variant0 MirroredRotation180
+        |> Serialize.variant0 MirroredRotation270
+        |> Serialize.finishCustomType
+
+
+locationSerializeCodec : Serialize.Codec e Location
+locationSerializeCodec =
+    Serialize.record Location
+        |> Serialize.field .lat Serialize.float
+        |> Serialize.field .lon Serialize.float
+        |> Serialize.finishRecord
+
+
+exposureTimeSerializeCodec : Serialize.Codec e ExposureTime
+exposureTimeSerializeCodec =
+    Serialize.record ExposureTime
+        |> Serialize.field .numerator Serialize.int
+        |> Serialize.field .denominator Serialize.int
+        |> Serialize.finishRecord
+
+
+coordSerializeCodec : Serialize.Codec e (Coord units)
+coordSerializeCodec =
+    Serialize.tuple (quantitySerializeCodec Serialize.int) (quantitySerializeCodec Serialize.int)
+
+
+quantitySerializeCodec : Serialize.Codec e number -> Serialize.Codec e (Quantity number units)
+quantitySerializeCodec number =
+    Serialize.customType
+        (\quantityEncoder value ->
+            case value of
+                Quantity.Quantity argA ->
+                    quantityEncoder argA
+        )
+        |> Serialize.variant1 Quantity.Quantity number
+        |> Serialize.finishCustomType
+
+
+posixSerializeCodec : Serialize.Codec e Time.Posix
+posixSerializeCodec =
+    Serialize.map Time.millisToPosix Time.posixToMillis Serialize.int
+
+
 type alias UploadResponse =
     { fileHash : FileHash
     , imageMetadata : Maybe ImageMetadata
@@ -336,6 +717,9 @@ type alias VideoMetadata =
     , codec : Maybe String
     , title : Maybe String
     , gpsLocation : Maybe Location
+    , -- How long the video runs. The server works this out from the frame count and frame
+      -- rate instead, so this is only filled in for a video the browser measured itself.
+      duration : Maybe Duration
     }
 
 
@@ -350,7 +734,19 @@ videoMetadataCodec =
         |> Codec.field "codec" .codec (Codec.nullable Codec.string)
         |> Codec.field "title" .title (Codec.nullable Codec.string)
         |> Codec.field "gps_location" .gpsLocation (Codec.nullable locationCodec)
+        |> Codec.maybeField "duration_ms" .duration durationCodec
         |> Codec.buildObject
+
+
+{-| Nothing sends this yet. It is here so that a video the browser measured and one the
+server decoded are read back the same way.
+-}
+durationCodec : Codec Duration
+durationCodec =
+    Codec.map
+        (\milliseconds -> toFloat milliseconds |> Duration.milliseconds)
+        (\duration -> Duration.inMilliseconds duration |> round)
+        Codec.int
 
 
 
@@ -526,6 +922,51 @@ uploadFile onResult guildOrDmId fileId file2 =
         , timeout = Just Duration.minute
         , tracker = uploadTrackerId guildOrDmId fileId |> Just
         }
+
+
+{-| The already encrypted bytes of a file being attached to an end-to-end encrypted DM,
+and a thumbnail of it if the browser was able to make one.
+
+The server is handed ciphertext, so the name and type it would otherwise read off the file
+are lost, as is the thumbnail it would have made. None of them are missed: the name and
+type are recorded on this device and travel inside the encrypted message, and the thumbnail
+is made here instead. The thumbnail's length goes first as a big endian `Int32` so the
+server knows where it ends and the file begins, with zero meaning none was made.
+
+-}
+uploadEncryptedFile :
+    (Result Http.Error UploadResponse -> msg)
+    -> ( AnyGuildOrDmId, ThreadRoute )
+    -> Id FileId
+    -> { cipherText : Bytes, thumbnail : Maybe Bytes }
+    -> Command restriction toFrontend msg
+uploadEncryptedFile onResult guildOrDmId fileId encrypted =
+    let
+        thumbnail : Bytes
+        thumbnail =
+            Maybe.withDefault emptyBytes encrypted.thumbnail
+    in
+    Http.riskyRequest
+        { method = "POST"
+        , headers = []
+        , url = domain ++ "/file/upload-encrypted"
+        , body =
+            Bytes.Encode.sequence
+                [ Bytes.Encode.unsignedInt32 Bytes.BE (Bytes.width thumbnail)
+                , Bytes.Encode.bytes thumbnail
+                , Bytes.Encode.bytes encrypted.cipherText
+                ]
+                |> Bytes.Encode.encode
+                |> Http.bytesBody "application/octet-stream"
+        , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
+        , timeout = Just Duration.minute
+        , tracker = uploadTrackerId guildOrDmId fileId |> Just
+        }
+
+
+emptyBytes : Bytes
+emptyBytes =
+    Bytes.Encode.encode (Bytes.Encode.sequence [])
 
 
 {-| A file being attached to a game rather than to a message. Games keep their attachments
@@ -752,7 +1193,7 @@ imageInfoView timezone onPressClose fileData =
                         )
                     , Ui.image
                         [ Ui.widthMax (Coord.xRaw metadata.imageSize), Ui.centerX ]
-                        { source = fileUrl fileData.contentType fileData.fileHash
+                        { source = fileDataUrl fileData
                         , description = ""
                         , onLoad = Nothing
                         }
@@ -791,7 +1232,7 @@ imageInfoView timezone onPressClose fileData =
                         [ Ui.widthMax (Coord.xRaw metadata.videoSize), Ui.centerX ]
                         (Ui.html
                             (Html.video
-                                [ Html.Attributes.src (fileUrl fileData.contentType fileData.fileHash)
+                                [ Html.Attributes.src (fileDataUrl fileData)
                                 , Html.Attributes.controls True
                                 , Html.Attributes.style "display" "block"
                                 , Html.Attributes.style "width" "100%"
@@ -823,10 +1264,15 @@ from the two things they do write down.
 -}
 videoDuration : VideoMetadata -> Maybe Duration
 videoDuration metadata =
-    Maybe.map2
-        (\frames frameRate -> Quantity.at_ frameRate (Quantity.toFloatQuantity frames))
-        metadata.frames
-        metadata.frameRate
+    case metadata.duration of
+        Just duration ->
+            Just duration
+
+        Nothing ->
+            Maybe.map2
+                (\frames frameRate -> Quantity.at_ frameRate (Quantity.toFloatQuantity frames))
+                metadata.frames
+                metadata.frameRate
 
 
 durationToString : Duration -> String
@@ -927,27 +1373,38 @@ videoHasMetadata metadata =
         || (metadata.title /= Nothing)
 
 
-addFileHash : Result Http.Error UploadResponse -> FileStatus -> FileStatus
-addFileHash result fileStatus =
+{-| `clientMetadata` is what the browser was able to measure before the file was uploaded.
+The server reads more out of a file than the browser can, so it only stands in for a file
+the server couldn't read: an encrypted one, or a format it doesn't decode.
+-}
+addFileHash : Maybe FileMetadata -> Result Http.Error UploadResponse -> FileStatus -> FileStatus
+addFileHash clientMetadata result fileStatus =
     case fileStatus of
-        FileUploading fileName fileSize contentType2 ->
+        FileUploading fileName fileSize contentType2 isEncrypted ->
             case result of
                 Ok data ->
                     FileUploaded
                         { fileName = fileName
                         , fileSize = fileSize.size
-                        , metadata = uploadResponseMetadata data
+                        , metadata =
+                            case uploadResponseMetadata data of
+                                Just serverMetadata ->
+                                    Just serverMetadata
+
+                                Nothing ->
+                                    clientMetadata
                         , contentType = contentType2
                         , fileHash = data.fileHash
+                        , isEncrypted = isEncrypted
                         }
 
                 Err error ->
-                    FileError fileName fileSize.size contentType2 error
+                    FileError fileName fileSize.size contentType2 error isEncrypted
 
         FileUploaded _ ->
             fileStatus
 
-        FileError _ _ _ _ ->
+        FileError _ _ _ _ _ ->
             fileStatus
 
 
@@ -969,13 +1426,13 @@ onlyUploadedFiles dict =
     SeqDict.filterMap
         (\_ status ->
             case status of
-                FileUploading _ _ _ ->
+                FileUploading _ _ _ _ ->
                     Nothing
 
                 FileUploaded fileData ->
                     Just fileData
 
-                FileError _ _ _ _ ->
+                FileError _ _ _ _ _ ->
                     Nothing
         )
         dict
@@ -987,13 +1444,13 @@ hasUploadingFile dict =
         |> List.any
             (\( _, status ) ->
                 case status of
-                    FileUploading _ _ _ ->
+                    FileUploading _ _ _ _ ->
                         True
 
                     FileUploaded _ ->
                         False
 
-                    FileError _ _ _ _ ->
+                    FileError _ _ _ _ _ ->
                         False
             )
 

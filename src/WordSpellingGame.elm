@@ -44,14 +44,17 @@ module WordSpellingGame exposing
     , dragEnd
     , dragStart
     , fullTrayBonusScore
+    , gameOverText
     , gameSummary
     , gameView
     , initGame
     , initSetup
     , initShared
     , insideBoard
+    , invalidWordsText
     , isAnimating
     , isZoomAnimating
+    , movesText
     , nextTurnNotifications
     , parseWordList
     , pastWordsContainerId
@@ -59,6 +62,8 @@ module WordSpellingGame exposing
     , placementConnects
     , pressedKey
     , setupView
+    , tilesPlacedText
+    , topScoringWordText
     , trayDropSlot
     , trayTouchCoord
     , updateAction
@@ -120,6 +125,31 @@ import Ui.Lazy
 import Ui.Prose
 import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
+
+
+gameOverText : String
+gameOverText =
+    "Game over"
+
+
+tilesPlacedText : String
+tilesPlacedText =
+    "Tiles placed:"
+
+
+invalidWordsText : String
+invalidWordsText =
+    "Invalid words:"
+
+
+topScoringWordText : String
+topScoringWordText =
+    "Top scoring word:"
+
+
+movesText : String
+movesText =
+    "Moves"
 
 
 {-| OpaqueVariants
@@ -3914,7 +3944,7 @@ playerRow localUser userId highlight isSelected suffix =
             User.profileImage maybeUser
         , Ui.row
             [ MyUi.prewrap ]
-            [ Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt userId localUser))
+            [ Ui.el [ Ui.Font.bold, Ui.clipWithEllipsis, Ui.widthMax 250 ] (Ui.text (User.toStringAlt userId localUser))
             , Ui.text suffix
             ]
         ]
@@ -4105,7 +4135,7 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
                         , Ui.contentCenterY
                         , Ui.height (Ui.px lettersLeftHeight)
                         ]
-                        (Ui.text "Game over")
+                        (Ui.text gameOverText)
 
                 Nothing ->
                     Ui.row
@@ -4344,12 +4374,12 @@ gameSummaryView windowSize localUser shared log =
         ]
         ([ Ui.column
             [ Ui.spacing 4 ]
-            [ Ui.el [ Ui.Font.bold ] (Ui.text "Tiles placed:")
+            [ Ui.el [ Ui.Font.bold ] (Ui.text tilesPlacedText)
             , countsView (counts summary.tilesPlaced)
             ]
          , Ui.column
             [ Ui.spacing 4 ]
-            [ Ui.el [ Ui.Font.bold ] (Ui.text "Invalid words:")
+            [ Ui.el [ Ui.Font.bold ] (Ui.text invalidWordsText)
             , countsView (counts summary.invalidWords)
             ]
          ]
@@ -4357,7 +4387,7 @@ gameSummaryView windowSize localUser shared log =
                     Just bestWord ->
                         [ Ui.column
                             [ Ui.spacing 4 ]
-                            [ Ui.el [ Ui.Font.bold ] (Ui.text "Top scoring word:")
+                            [ Ui.el [ Ui.Font.bold ] (Ui.text topScoringWordText)
 
                             -- The word behaves like the placed words in the log below: hovering it
                             -- highlights its cells on the board and lights the text up, and
@@ -4374,7 +4404,7 @@ gameSummaryView windowSize localUser shared log =
                                 , Ui.Events.onMouseLeave MouseExitWord
                                 ]
                                 [ Ui.Prose.paragraph
-                                    [ Ui.alignTop ]
+                                    [ Ui.alignTop, MyUi.htmlStyle "word-wrap" "anywhere" ]
                                     [ Ui.text
                                         (bestWord.word
                                             ++ " (+"
@@ -4449,7 +4479,9 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                 [ Ui.text "Everyone passed and the game has ended!" ]
 
                             OutOfLetters userId ->
-                                [ Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt userId localUser))
+                                [ Ui.el
+                                    [ Ui.Font.bold, MyUi.htmlStyle "word-wrap" "anywhere" ]
+                                    (Ui.text (User.toStringAlt userId localUser))
                                 , Ui.text " ran out of letters and the game has ended!"
                                 ]
                         )
@@ -4500,7 +4532,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                     [ Ui.Font.color MyUi.font3, MyUi.noShrinking, Ui.alignTop, Ui.width Ui.shrink ]
                                     [ Ui.text (String.fromInt moveNumber ++ ". ") ]
                                 , Ui.Prose.paragraph
-                                    [ Ui.alignTop ]
+                                    [ Ui.alignTop, MyUi.htmlStyle "word-wrap" "anywhere" ]
                                     [ Ui.el [ Ui.Font.bold ] (Ui.text name)
                                     , Ui.text (descriptionToString description)
                                     ]
@@ -4596,7 +4628,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                 [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
                             ]
                         ]
-                        (Ui.text "Moves")
+                        (Ui.text movesText)
                     )
                 )
             , case scrollPosition of
@@ -6183,6 +6215,7 @@ setupView windowSize isReadonly setup =
                 )
             ]
         , MyUi.container
+            16
             setup.advancedSettingsExpanded
             (Dom.id "wsg_advancedSection")
             PressedExpandAdvancedSettings

@@ -22,7 +22,6 @@ import LinkedAndOtherDiscordUsers
 import List.Extra
 import LocalState exposing (DiscordFrontendGuild, FrontendGuild, LocalState)
 import MembersAndOwner exposing (IsMember(..))
-import Message exposing (Message)
 import MessageArray exposing (MessageArray)
 import MuteSettings exposing (IsMuted(..))
 import MyUi
@@ -428,7 +427,7 @@ channelOrThreadHasNotifications :
     -> channelId
     -> ThreadRoute
     -> Maybe (Id messageId)
-    -> { a | messages : MessageArray messageId (Message messageId userId) }
+    -> { a | messages : MessageArray messageId userId }
     -> ChannelNotificationType
 channelOrThreadHasNotifications isMuted maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
     case isMuted of
@@ -451,7 +450,7 @@ channelOrThreadHasNotificationsHelper :
     -> channelId
     -> ThreadRoute
     -> Maybe (Id messageId)
-    -> { a | messages : MessageArray messageId (Message messageId userId) }
+    -> { a | messages : MessageArray messageId userId }
     -> ChannelNotificationType
 channelOrThreadHasNotificationsHelper maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
     if notifyOnAllMessages then
@@ -476,7 +475,7 @@ channelOrThreadHasNotificationsHelper maybeDirectMentions notifyOnAllMessages ch
                         NoNotification
 
 
-newMessageCount : Maybe (Id messageId) -> { b | messages : MessageArray messageId (Message messageId userId) } -> Int
+newMessageCount : Maybe (Id messageId) -> { b | messages : MessageArray messageId userId } -> Int
 newMessageCount maybeLastViewed channel =
     case maybeLastViewed of
         Just lastViewed ->
@@ -491,8 +490,8 @@ channelNewMessageCount :
     -> FrontendCurrentUser
     ->
         { b
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
-            , threads : SeqDict (Id ChannelMessageId) { c | messages : MessageArray ThreadMessageId (Message ThreadMessageId userId) }
+            | messages : MessageArray ChannelMessageId userId
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : MessageArray ThreadMessageId userId }
         }
     -> Int
 channelNewMessageCount guildOrDmId currentUser channel =

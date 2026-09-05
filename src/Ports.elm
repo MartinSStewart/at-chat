@@ -12,6 +12,7 @@ port module Ports exposing
     , audioPortFromJS
     , audioPortToJS
     , checkNotificationPermissionResponse
+    , clearBrowserStorage
     , closeNotifications
     , copyImageToClipboard
     , copyToClipboard
@@ -52,6 +53,7 @@ import CodecExtra
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
+import Id exposing (Id, UserId)
 import Json.Decode
 import Json.Decode.Extra
 import Json.Encode
@@ -228,6 +230,14 @@ unregisterServiceWorker =
     Command.sendToJs "unregister_service_worker_to_js" unregister_service_worker_to_js Json.Encode.null
 
 
+port clear_browser_storage_to_js : Json.Encode.Value -> Cmd msg
+
+
+clearBrowserStorage : Command FrontendOnly toMsg msg
+clearBrowserStorage =
+    Command.sendToJs "clear_browser_storage_to_js" clear_browser_storage_to_js Json.Encode.null
+
+
 port load_service_worker_data_to_js : Json.Encode.Value -> Cmd msg
 
 
@@ -260,13 +270,11 @@ type alias StartupData =
     , scrollbarWidth : Int
     , pwaStatus : PwaStatus
     , notificationPermission : NotificationPermission
-    , -- The safe-area inset at the top of the screen (e.g. a phone notch), in pixels. Touch events
-      -- report positions from the viewport top (behind the inset) while the UI is laid out below it.
-      safeAreaInsetTop : Int
-    , -- How many device pixels one CSS pixel is drawn with (2 or 3 on high DPI screens, and any
-      -- fractional value when the page is zoomed).
-      devicePixelRatio : Float
+    , safeAreaInsetTop : Int
+    , devicePixelRatio : Float
     , timezone : Time.Zone
+    , randomSeed : List Int
+    , e2eeKeys : List (Id UserId)
     }
 
 
@@ -329,6 +337,9 @@ decodeStartupData =
                 ]
             )
         |> Json.Decode.Extra.andMap (Json.Decode.field "timezone" decodeTimezone)
+        |> Json.Decode.Extra.andMap (Json.Decode.field "randomSeed" (Json.Decode.list Json.Decode.int))
+        |> Json.Decode.Extra.andMap
+            (Json.Decode.field "e2eeKeys" (Json.Decode.list (Json.Decode.map Id.fromInt Json.Decode.int)))
 
 
 pwaStatusFromBool : Bool -> PwaStatus

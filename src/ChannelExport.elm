@@ -25,10 +25,11 @@ import ChannelName exposing (ChannelName)
 import CustomEmoji
 import Discord
 import DiscordUserData exposing (DiscordUserData)
-import DmChannel exposing (DiscordDmChannel, DmChannel)
+import DmChannel exposing (BackendDmChannel, DiscordDmChannel)
 import Effect.Time as Time
 import Embed exposing (Embed(..))
 import Emoji exposing (EmojiOrCustomEmoji(..))
+import Encryption as Encrypted
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
@@ -222,7 +223,7 @@ discordGuildChannel discordUsers guildId guild channel =
 {-| DM channels have no owner and no join times, so their members are only
 listed by name and profile image.
 -}
-dmChannel : NonemptyDict (Id UserId) BackendUser -> Id UserId -> Id UserId -> DmChannel -> String
+dmChannel : NonemptyDict (Id UserId) BackendUser -> Id UserId -> Id UserId -> BackendDmChannel -> String
 dmChannel users currentUserId otherUserId channel =
     let
         userNames : SeqDict (Id UserId) String
@@ -413,7 +414,7 @@ encodeMessage userIdToString userNames maybeThread message =
             [ ( "type", Json.Encode.string "userTextMessage" )
             , ( "createdAt", encodeTime data.createdAt )
             , ( "createdBy", Json.Encode.string (userIdToString data.createdBy) )
-            , ( "content", encodeContent userNames data.content )
+            , ( "content", encodeContent userNames data.content.content )
             ]
                 ++ optionalField "editedAt" encodeTime data.editedAt
                 ++ optionalField
@@ -421,8 +422,21 @@ encodeMessage userIdToString userNames maybeThread message =
                     (\messageId -> Json.Encode.int (Id.toInt messageId))
                     data.repliedTo
                 ++ encodeReactions userIdToString data.reactions
-                ++ encodeAttachedFiles data.attachedFiles
-                ++ encodeEmbeds data.embeds
+                ++ encodeAttachedFiles data.content.attachedFiles
+                ++ encodeEmbeds data.content.embeds
+
+        EncryptedUserTextMessage data ->
+            [ ( "encryptedData", Encrypted.encode data.content )
+            , ( "type", Json.Encode.string "userTextMessage" )
+            , ( "createdAt", encodeTime data.createdAt )
+            , ( "createdBy", Json.Encode.string (userIdToString data.createdBy) )
+            ]
+                ++ optionalField "editedAt" encodeTime data.editedAt
+                ++ optionalField
+                    "repliedTo"
+                    (\messageId -> Json.Encode.int (Id.toInt messageId))
+                    data.repliedTo
+                ++ encodeReactions userIdToString data.reactions
 
         UserJoinedMessage createdAt userId reactions _ ->
             [ ( "type", Json.Encode.string "userJoined" )
@@ -519,7 +533,7 @@ encodeAttachedFiles attachedFiles =
                     [ ( "id", Json.Encode.string (Id.toString fileId) )
                     , ( "fileName", Json.Encode.string (FileName.toString fileData.fileName) )
                     , ( "fileSize", Json.Encode.int fileData.fileSize )
-                    , ( "url", Json.Encode.string (FileStatus.fileUrl fileData.contentType fileData.fileHash) )
+                    , ( "url", Json.Encode.string (FileStatus.fileDataUrl fileData) )
                     ]
             )
         |> optionalListField "attachedFiles"

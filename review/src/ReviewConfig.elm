@@ -59,6 +59,7 @@ config =
     , OpaqueTypes.rule
         |> Review.Rule.ignoreErrorsForFiles
             [ "tests/E2ETests.elm"
+            , "src/E2EEncryption.elm"
             , "src/E2EHelper.elm"
             , "src/E2EDiscord.elm"
             ]
@@ -66,6 +67,10 @@ config =
     , NoRedundantUiAttributes.rule
         |> defaultIgnore
     , NoStaleReferences.rule
+        |> -- X25519's numbers are limb and coordinate indices rather than successive
+           -- versions of a value, and they are named the way RFC 7748 and TweetNaCl
+           -- name them so the two can be read side by side.
+           Review.Rule.ignoreErrorsForFiles [ "src/X25519.elm" ]
         |> defaultIgnore
 
     --, NoUnusedFields.rule |> defaultIgnore

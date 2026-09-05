@@ -5,8 +5,13 @@ module ChannelHeader exposing
     , discordChannel
     , discordThread
     , drawingCanUndoOrRedo
+    , e2eeRequestDot
     , headerBackButton
+    , showDmSettingsRedDot
+    , startDrawingText
     , thread
+    , zoomInText
+    , zoomOutText
     )
 
 import Call exposing (CallId(..))
@@ -23,7 +28,7 @@ import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_DiscordDmId)
 import LinkedAndOtherDiscordUsers
 import LocalState exposing (LocalState)
-import Message exposing (Message)
+import Message
 import MessageArray exposing (MessageArray)
 import MyUi
 import NonemptyDict
@@ -32,6 +37,7 @@ import PersonName
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
+import SeqSet
 import Thread
 import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2)
 import Ui exposing (Element)
@@ -42,9 +48,46 @@ import User exposing (LocalUser)
 import UserSession exposing (ChannelHeaderTab(..))
 
 
+startDrawingText : String
+startDrawingText =
+    "Start drawing!"
+
+
+zoomInText : String
+zoomInText =
+    "Zoom in"
+
+
+zoomOutText : String
+zoomOutText =
+    "Zoom out"
+
+
+showDmSettingsRedDot : Id UserId -> LocalState -> LoggedIn2 -> Bool
+showDmSettingsRedDot otherUserId local loggedIn =
+    case SeqDict.get otherUserId local.dmChannels of
+        Just dmChannel ->
+            case dmChannel.e2ee of
+                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
+                    requestedBy /= local.localUser.session.userId
+
+                DmChannel.E2eeDeclinedBy declinedBy ->
+                    declinedBy /= local.localUser.session.userId
+
+                DmChannel.E2eeDisabled _ ->
+                    False
+
+                DmChannel.E2eeEnabled _ ->
+                    not (SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice)
+
+        Nothing ->
+            False
+
+
 channel : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
 channel isMobile name guildOrDmIdNoThread local loggedIn model =
     let
+        currentChannelHeaderTab : Maybe ChannelHeaderTab
         currentChannelHeaderTab =
             Route.toChannelHeaderTab model.route
     in
@@ -53,10 +96,22 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm { otherUserId } ->
                 if otherUserId == local.localUser.session.userId then
-                    privateChatWithYourself isMobile model.route currentChannelHeaderTab local
+                    privateChatWithYourself
+                        isMobile
+                        model.route
+                        (showDmSettingsRedDot otherUserId local loggedIn)
+                        currentChannelHeaderTab
+                        local
 
                 else
-                    privateChatWith isMobile model.route currentChannelHeaderTab otherUserId local name
+                    privateChatWith
+                        isMobile
+                        model.route
+                        (showDmSettingsRedDot otherUserId local loggedIn)
+                        currentChannelHeaderTab
+                        otherUserId
+                        local
+                        name
 
             GuildOrDmId_Guild { guildId, channelId } ->
                 Ui.row
@@ -66,6 +121,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                         (Dom.id "guild_openChannelDescription")
                         ChannelHeaderTab_ChannelDescription
                         currentChannelHeaderTab
+                        False
                         [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                         , Ui.text name
                         ]
@@ -78,9 +134,9 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                             local.localUser
                             local.calls
                         , Ui.Lazy.lazy2 gameButton isMobile currentChannelHeaderTab
-                        , drawingTab isMobile currentChannelHeaderTab
+                        , drawingTab isMobile currentChannelHeaderTab False
                         , showFilesButton
-                        , channelSettingsTab isMobile model.route
+                        , channelSettingsTab isMobile model.route |> Maybe.withDefault Ui.none
                         ]
                     ]
         )
@@ -94,12 +150,19 @@ thread isMobile name threadName guildOrDmIdNoThread local loggedIn model =
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm { otherUserId } ->
                 if otherUserId == local.localUser.session.userId then
-                    privateChatWithYourselfInThread isMobile model.route (Route.toChannelHeaderTab model.route) local threadName
+                    privateChatWithYourselfInThread
+                        isMobile
+                        model.route
+                        (showDmSettingsRedDot otherUserId local loggedIn)
+                        (Route.toChannelHeaderTab model.route)
+                        local
+                        threadName
 
                 else
                     privateChatWithInThread
                         isMobile
                         model.route
+                        (showDmSettingsRedDot otherUserId local loggedIn)
                         (Route.toChannelHeaderTab model.route)
                         otherUserId
                         local
@@ -113,9 +176,9 @@ thread isMobile name threadName guildOrDmIdNoThread local loggedIn model =
                     , Ui.text (name ++ " / " ++ threadName)
                     , Ui.row
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-                        [ drawingTab isMobile (Route.toChannelHeaderTab model.route)
+                        [ drawingTab isMobile (Route.toChannelHeaderTab model.route) False
                         , showFilesButton
-                        , channelSettingsTab isMobile model.route
+                        , channelSettingsTab isMobile model.route |> Maybe.withDefault Ui.none
                         ]
                     ]
         )
@@ -135,7 +198,7 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
                 Ui.row
                     [ Ui.height Ui.fill, Ui.clipWithEllipsis ]
                     [ if chattingWithYourself data local then
-                        privateChatWithYourself isMobile model.route currentChannelHeaderTab local
+                        privateChatWithYourself isMobile model.route False currentChannelHeaderTab local
 
                       else
                         discordPrivateChatWith isMobile model.route currentChannelHeaderTab name
@@ -149,14 +212,15 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
                         (Dom.id "guild_openChannelDescription")
                         ChannelHeaderTab_ChannelDescription
                         currentChannelHeaderTab
+                        False
                         [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                         , Ui.text name
                         ]
                     , Ui.row
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-                        [ drawingTab isMobile currentChannelHeaderTab
+                        [ drawingTab isMobile currentChannelHeaderTab False
                         , showFilesButton
-                        , channelSettingsTab isMobile model.route
+                        , channelSettingsTab isMobile model.route |> Maybe.withDefault Ui.none
                         ]
                     ]
         )
@@ -170,7 +234,7 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
         (case guildOrDmIdNoThread of
             DiscordGuildOrDmId_Dm data ->
                 if chattingWithYourself data local then
-                    privateChatWithYourself isMobile model.route (Route.toChannelHeaderTab model.route) local
+                    privateChatWithYourself isMobile model.route False (Route.toChannelHeaderTab model.route) local
 
                 else
                     discordPrivateChatWith isMobile model.route (Route.toChannelHeaderTab model.route) name
@@ -182,9 +246,9 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
                     , Ui.text name
                     , Ui.row
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-                        [ drawingTab isMobile (Route.toChannelHeaderTab model.route)
+                        [ drawingTab isMobile (Route.toChannelHeaderTab model.route) False
                         , showFilesButton
-                        , channelSettingsTab isMobile model.route
+                        , channelSettingsTab isMobile model.route |> Maybe.withDefault Ui.none
                         ]
                     ]
         )
@@ -203,16 +267,14 @@ chattingWithYourself data local =
             False
 
 
-{-| Toggles a mode where the user can draw freehand on top of messages, with a
-mouse, a finger or a pen.
--}
-drawingTab : Bool -> Maybe ChannelHeaderTab -> Element FrontendMsg_
-drawingTab isMobile currentTab =
+drawingTab : Bool -> Maybe ChannelHeaderTab -> Bool -> Element FrontendMsg_
+drawingTab isMobile currentTab rightMostTab =
     channelHeaderIconTab
         isMobile
         (Dom.id "channelHeader_drawOnMessages")
         ChannelHeaderTab_Draw
         currentTab
+        rightMostTab
         (Ui.el
             [ Ui.width (Ui.px 24)
             , MyUi.hoverText "Draw on top of messages"
@@ -297,7 +359,7 @@ tabBodyZIndex =
     MyUi.htmlStyle "z-index" "20"
 
 
-channelSettingsTab : Bool -> Route -> Element FrontendMsg_
+channelSettingsTab : Bool -> Route -> Maybe (Element FrontendMsg_)
 channelSettingsTab isMobile route =
     case Route.toShowMembersTab route of
         ( HideChannelSettings, isThread ) ->
@@ -319,9 +381,10 @@ channelSettingsTab isMobile route =
                     )
                 ]
                 (Ui.html Icons.gear)
+                |> Just
 
         ( ShowChannelSettings, _ ) ->
-            Ui.none
+            Nothing
 
 
 headerBackButton : HtmlId -> msg -> Element msg
@@ -345,18 +408,26 @@ channelHeaderTabRow :
     -> HtmlId
     -> ChannelHeaderTab
     -> Maybe ChannelHeaderTab
+    -> Bool
     -> List (Element FrontendMsg_)
     -> Element FrontendMsg_
-channelHeaderTabRow isMobile htmlId tab currentTab content =
+channelHeaderTabRow isMobile htmlId tab currentTab rightMostTab content =
     MyUi.rowButton
         htmlId
         (PressedChannelHeaderTab tab)
-        (Ui.spacing 2 :: MyUi.prewrap :: channelHeaderTabAttributes 4 8 isMobile tab currentTab)
+        (Ui.spacing 2 :: MyUi.prewrap :: channelHeaderTabAttributes 4 8 isMobile tab currentTab rightMostTab)
         content
 
 
-channelHeaderTabAttributes : Int -> Int -> Bool -> ChannelHeaderTab -> Maybe ChannelHeaderTab -> List (Ui.Attribute msg)
-channelHeaderTabAttributes paddingLeft paddingRight isMobile tab currentTab =
+channelHeaderTabAttributes :
+    Int
+    -> Int
+    -> Bool
+    -> ChannelHeaderTab
+    -> Maybe ChannelHeaderTab
+    -> Bool
+    -> List (Ui.Attribute msg)
+channelHeaderTabAttributes paddingLeft paddingRight isMobile tab currentTab rightMostTab =
     let
         isSelected =
             case currentTab of
@@ -383,7 +454,21 @@ channelHeaderTabAttributes paddingLeft paddingRight isMobile tab currentTab =
             )
         )
     , Ui.attrIf isSelected (MyUi.tabSideEdge (borderHalfRadius * 2) MyUi.channelHeaderHeight True MyUi.tabBackground)
-    , Ui.attrIf isSelected (MyUi.tabSideEdge (borderHalfRadius * 2) MyUi.channelHeaderHeight False MyUi.tabBackground)
+    , (if rightMostTab then
+        Ui.inFront
+            (Ui.el
+                [ Ui.width (Ui.px 4)
+                , Ui.background MyUi.background1
+                , Ui.alignRight
+                , Ui.height Ui.fill
+                ]
+                Ui.none
+            )
+
+       else
+        MyUi.tabSideEdge (borderHalfRadius * 2) MyUi.channelHeaderHeight False MyUi.tabBackground
+      )
+        |> Ui.attrIf isSelected
     , Ui.contentCenterY
     , Ui.Font.color
         (if isSelected then
@@ -404,7 +489,7 @@ channelHeaderTab :
     -> Element FrontendMsg_
     -> Element FrontendMsg_
 channelHeaderTab isMobile htmlId tab currentTab content =
-    MyUi.elButton htmlId (PressedChannelHeaderTab tab) (channelHeaderTabAttributes 16 16 isMobile tab currentTab) content
+    MyUi.elButton htmlId (PressedChannelHeaderTab tab) (channelHeaderTabAttributes 16 16 isMobile tab currentTab False) content
 
 
 {-| A tab holding nothing but a 24px icon. The 12px of padding on either side make it
@@ -415,14 +500,15 @@ channelHeaderIconTab :
     -> HtmlId
     -> ChannelHeaderTab
     -> Maybe ChannelHeaderTab
+    -> Bool
     -> Element FrontendMsg_
     -> Element FrontendMsg_
-channelHeaderIconTab isMobile htmlId tab currentTab content =
-    MyUi.elButton htmlId (PressedChannelHeaderTab tab) (channelHeaderTabAttributes 12 12 isMobile tab currentTab) content
+channelHeaderIconTab isMobile htmlId tab currentTab rightMostTab content =
+    MyUi.elButton htmlId (PressedChannelHeaderTab tab) (channelHeaderTabAttributes 12 12 isMobile tab currentTab rightMostTab) content
 
 
-privateChatWithYourself : Bool -> Route -> Maybe ChannelHeaderTab -> LocalState -> Element FrontendMsg_
-privateChatWithYourself isMobile route currentTab local =
+privateChatWithYourself : Bool -> Route -> Bool -> Maybe ChannelHeaderTab -> LocalState -> Element FrontendMsg_
+privateChatWithYourself isMobile route showSettingsRedDot currentTab local =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
         [ channelHeaderTab
@@ -431,12 +517,20 @@ privateChatWithYourself isMobile route currentTab local =
             ChannelHeaderTab_ChannelDescription
             currentTab
             (Ui.text "Solo chat")
-        , dmHeaderButtons isMobile route currentTab local.localUser.session.userId local
+        , dmHeaderButtons isMobile route showSettingsRedDot currentTab local.localUser.session.userId local
         ]
 
 
-privateChatWith : Bool -> Route -> Maybe ChannelHeaderTab -> Id UserId -> LocalState -> String -> Element FrontendMsg_
-privateChatWith isMobile route currentTab otherUserId local name =
+privateChatWith :
+    Bool
+    -> Route
+    -> Bool
+    -> Maybe ChannelHeaderTab
+    -> Id UserId
+    -> LocalState
+    -> String
+    -> Element FrontendMsg_
+privateChatWith isMobile route showSettingsRedDot currentTab otherUserId local name =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.clipWithEllipsis, Ui.height Ui.fill ]
         [ channelHeaderTab
@@ -452,15 +546,15 @@ privateChatWith isMobile route currentTab otherUserId local name =
                     [ Ui.spacing 5 ]
                     [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ]
             )
-        , dmHeaderButtons isMobile route currentTab otherUserId local
+        , dmHeaderButtons isMobile route showSettingsRedDot currentTab otherUserId local
         ]
 
 
 {-| A thread is named after the message it started from, which can be arbitrarily long, so
 the thread name is what gets cut short when the header runs out of room.
 -}
-privateChatWithYourselfInThread : Bool -> Route -> Maybe ChannelHeaderTab -> LocalState -> String -> Element FrontendMsg_
-privateChatWithYourselfInThread isMobile route currentTab local threadName =
+privateChatWithYourselfInThread : Bool -> Route -> Bool -> Maybe ChannelHeaderTab -> LocalState -> String -> Element FrontendMsg_
+privateChatWithYourselfInThread isMobile route showSettingsRedDot currentTab local threadName =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.clipWithEllipsis, Ui.height Ui.fill ]
         [ channelHeaderTab
@@ -469,20 +563,21 @@ privateChatWithYourselfInThread isMobile route currentTab local threadName =
             ChannelHeaderTab_ChannelDescription
             currentTab
             (Ui.text ("Solo chat / " ++ threadName))
-        , dmHeaderButtons isMobile route currentTab local.localUser.session.userId local
+        , dmHeaderButtons isMobile route showSettingsRedDot currentTab local.localUser.session.userId local
         ]
 
 
 privateChatWithInThread :
     Bool
     -> Route
+    -> Bool
     -> Maybe ChannelHeaderTab
     -> Id UserId
     -> LocalState
     -> String
     -> String
     -> Element FrontendMsg_
-privateChatWithInThread isMobile route currentTab otherUserId local name threadName =
+privateChatWithInThread isMobile route showSettingsRedDot currentTab otherUserId local name threadName =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.clipWithEllipsis, Ui.height Ui.fill ]
         [ channelHeaderTab
@@ -500,21 +595,79 @@ privateChatWithInThread isMobile route currentTab otherUserId local name threadN
                     , Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text (name ++ " / " ++ threadName))
                     ]
             )
-        , dmHeaderButtons isMobile route currentTab otherUserId local
+        , dmHeaderButtons isMobile route showSettingsRedDot currentTab otherUserId local
         ]
 
 
-{-| The buttons on the right hand side of a DM's header.
--}
-dmHeaderButtons : Bool -> Route -> Maybe ChannelHeaderTab -> Id UserId -> LocalState -> Element FrontendMsg_
-dmHeaderButtons isMobile route currentTab otherUserId local =
+dmHeaderButtons : Bool -> Route -> Bool -> Maybe ChannelHeaderTab -> Id UserId -> LocalState -> Element FrontendMsg_
+dmHeaderButtons isMobile route showSettingsRedDot currentTab otherUserId local =
+    let
+        dmChannelSettingsTab2 : Maybe (Element FrontendMsg_)
+        dmChannelSettingsTab2 =
+            dmChannelSettingsTab isMobile route showSettingsRedDot
+    in
     Ui.row
         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
         [ voiceChatButton isMobile currentTab (DmRoomId { otherUserId = otherUserId }) local.localUser local.calls
         , Ui.Lazy.lazy2 gameButton isMobile currentTab
-        , drawingTab isMobile currentTab
-        , channelSettingsTab isMobile route
+        , drawingTab isMobile currentTab (dmChannelSettingsTab2 == Nothing)
+        , dmChannelSettingsTab2 |> Maybe.withDefault Ui.none
         ]
+
+
+dmChannelSettingsTab : Bool -> Route -> Bool -> Maybe (Element FrontendMsg_)
+dmChannelSettingsTab isMobile route showSettingsRedDot =
+    case Route.toShowMembersTab route of
+        ( HideChannelSettings, isThread ) ->
+            MyUi.elButton
+                (Dom.id "guild_showMembers")
+                PressedShowMembers
+                [ Ui.width (Ui.px (24 + 24))
+                , Ui.height Ui.fill
+                , Ui.paddingXY 12 0
+                , Ui.contentCenterY
+                , Ui.Font.color MyUi.font3
+                , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+                , MyUi.hoverText
+                    (if isThread then
+                        "Thread settings"
+
+                     else
+                        "Channel settings"
+                    )
+                ]
+                (Ui.el
+                    [ if showSettingsRedDot then
+                        e2eeRequestDot
+
+                      else
+                        Ui.noAttr
+                    ]
+                    (Ui.html Icons.gear)
+                )
+                |> Just
+
+        ( ShowChannelSettings, _ ) ->
+            Nothing
+
+
+e2eeRequestDot : Ui.Attribute msg
+e2eeRequestDot =
+    Ui.el
+        [ Ui.rounded 99
+        , Ui.background MyUi.alertColor
+        , Ui.border 2
+        , Ui.borderColor MyUi.background1
+        , Ui.width (Ui.px 12)
+        , Ui.height (Ui.px 12)
+        , Ui.move { x = 6, y = -6, z = 0 }
+        , Ui.alignRight
+        , Ui.alignTop
+        , Html.Attributes.attribute "aria-label" "Waiting for an answer about end-to-end encryption"
+            |> Ui.htmlAttribute
+        ]
+        Ui.none
+        |> Ui.inFront
 
 
 gameButton : Bool -> Maybe ChannelHeaderTab -> Element FrontendMsg_
@@ -524,6 +677,7 @@ gameButton isMobile currentTab =
         (Dom.id "guild_openGamesTab")
         (ChannelHeaderTab_Games Nothing)
         currentTab
+        False
         (Ui.el [ MyUi.hoverText "Games" ] (Ui.html Icons.go))
 
 
@@ -586,12 +740,18 @@ voiceChatButton isMobile currentTab roomId localUser calls =
             (Dom.id "guild_voiceChat")
             ChannelHeaderTab_VoiceChat
             currentTab
+            False
             (Ui.el [ MyUi.hoverText "Voice chat" ] (Ui.html Icons.phone))
         ]
 
 
 discordPrivateChatWith : Bool -> Route -> Maybe ChannelHeaderTab -> String -> Element FrontendMsg_
 discordPrivateChatWith isMobile route currentTab name =
+    let
+        channelSettingsTab2 : Maybe (Element FrontendMsg_)
+        channelSettingsTab2 =
+            channelSettingsTab isMobile route
+    in
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
         [ channelHeaderTab
@@ -609,8 +769,8 @@ discordPrivateChatWith isMobile route currentTab name =
             )
         , Ui.row
             [ Ui.alignRight, Ui.height Ui.fill ]
-            [ drawingTab isMobile currentTab
-            , channelSettingsTab isMobile route
+            [ drawingTab isMobile currentTab (channelSettingsTab2 == Nothing)
+            , Maybe.withDefault Ui.none channelSettingsTab2
             ]
         ]
 
@@ -814,6 +974,9 @@ tabBodyView isMobile local loggedIn model =
         PublicGoMatchRoute _ ->
             Nothing
 
+        E2eeInfo ->
+            Nothing
+
 
 gameTabBody :
     GuildOrDmId
@@ -850,7 +1013,7 @@ gameTabBody guildOrDmId maybeMatchId local loggedIn matchData model =
 drawingCanUndoOrRedo : AnyGuildOrDmId -> Drawing.AnchorType -> LocalState -> ( Bool, Bool )
 drawingCanUndoOrRedo guildOrDmId anchor local =
     let
-        noThreadHelper : userId -> Drawing.MessageAnchor -> Id messageId -> { a | messages : MessageArray messageId (Message messageId userId) } -> ( Bool, Bool )
+        noThreadHelper : userId -> Drawing.MessageAnchor -> Id messageId -> { a | messages : MessageArray messageId userId } -> ( Bool, Bool )
         noThreadHelper userId anchor2 messageId channel2 =
             case MessageArray.get messageId channel2.messages of
                 Just message ->
@@ -969,7 +1132,7 @@ drawingTabView isMobile model local =
                 in
                 Ui.column
                     [ Ui.spacing 8 ]
-                    [ Ui.text "Start drawing!"
+                    [ Ui.text startDrawingText
                     , Ui.row
                         [ if isMobile then
                             Ui.spacing 8
@@ -984,10 +1147,10 @@ drawingTabView isMobile model local =
                             Drawing.zoomButtonId
                             Drawing.PressedZoom
                             (if selected.zoom == 1 then
-                                "Zoom in"
+                                zoomInText
 
                              else
-                                "Zoom out"
+                                zoomOutText
                             )
                             True
                         ]

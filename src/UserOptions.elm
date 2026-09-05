@@ -1,10 +1,18 @@
-module UserOptions exposing (discordBookmarkletId, domainWhitelistToString, init, view)
+module UserOptions exposing
+    ( currentDeviceText
+    , discordBookmarkletId
+    , domainWhitelistToString
+    , init
+    , loadingUserDataText
+    , view
+    )
 
 import Codec
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
+import DmChannel exposing (E2eeStatus(..))
 import Drawing exposing (Drawing)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -32,7 +40,7 @@ import SessionIdHash exposing (SessionIdHash)
 import String.Nonempty exposing (NonemptyString(..))
 import Time
 import TwoFactorAuthentication
-import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
+import Types exposing (E2eeKeysValid(..), FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -42,6 +50,17 @@ import User exposing (FrontendUser)
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
 import UserColor exposing (UserColor)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), UserOptionSection(..))
+import X25519
+
+
+currentDeviceText : String
+currentDeviceText =
+    "Current device"
+
+
+loadingUserDataText : String
+loadingUserDataText =
+    "Loading user data"
 
 
 init : SeqSet RichText.Domain -> UserOptionsModel
@@ -50,6 +69,8 @@ init domainWhitelist =
     , domainWhitelistInput = domainWhitelistToString domainWhitelist
     , debugData = Nothing
     , color = Nothing
+    , e2eeKeysValid = E2eeKeys_NotChecked
+    , privateKeyText = ""
     }
 
 
@@ -166,7 +187,7 @@ viewConnectedDevice isMobile time sessionId otherSession userAgent =
                            )
 
                 Nothing ->
-                    "Current device"
+                    currentDeviceText
               )
                 |> Ui.text
                 |> Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
@@ -302,6 +323,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                     IsNotAdmin ->
                         Ui.none
                 , MyUi.container
+                    16
                     (SeqSet.member UserOption_Settings local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_settings")
                     (PressedExpandContainer UserOption_Settings)
@@ -431,6 +453,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                         )
                     ]
                 , MyUi.container
+                    16
                     (SeqSet.member UserOption_TwoFactorAuthentication local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_twoFactor")
                     (PressedExpandContainer UserOption_TwoFactorAuthentication)
@@ -456,6 +479,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                             model.domainWhitelistInput /= domainWhitelistToString local.localUser.user.domainWhitelist
                     in
                     MyUi.container
+                        16
                         (SeqSet.member UserOption_WhitelistedDomains local.localUser.session.expandedUserOptions)
                         (Dom.id "userOptions_whitelistedDomains")
                         (PressedExpandContainer UserOption_WhitelistedDomains)
@@ -494,6 +518,109 @@ view windowSize textInputFocus time local loggedIn loaded model =
                             Ui.none
                         ]
                 , MyUi.container
+                    16
+                    (SeqSet.member UserOption_E2ee local.localUser.session.expandedUserOptions)
+                    (Dom.id "userOptions_e2eeSection")
+                    (PressedExpandContainer UserOption_E2ee)
+                    MyUi.background1
+                    isMobile
+                    "End-to-end encryption"
+                    (case local.localUser.user.publicKey of
+                        Just publicKey ->
+                            let
+                                e2eeDmChannels =
+                                    List.filterMap
+                                        (\( otherUserId, channel ) ->
+                                            case ( channel.e2ee, User.getUser otherUserId local.localUser ) of
+                                                ( E2eeEnabled _, Just otherUser ) ->
+                                                    Pages.Guild.friendLabel
+                                                        isMobile
+                                                        time
+                                                        False
+                                                        local.localUser
+                                                        otherUserId
+                                                        otherUser
+                                                        channel
+                                                        |> Just
+
+                                                _ ->
+                                                    Nothing
+                                        )
+                                        (SeqDict.toList local.dmChannels)
+
+                                privateKeyLabel =
+                                    Ui.Input.label
+                                        "userOptions_privateKey"
+                                        []
+                                        (Ui.text "You can enter your private key here to check that it matches your public key.")
+                            in
+                            [ MyUi.copyBox
+                                (Dom.id "userOptions_publicKey")
+                                (Just "Your public key")
+                                PressedCopyText
+                                FrontendNoOp
+                                loaded
+                                (X25519.publicKeyToString publicKey)
+                                |> Ui.el [ Ui.paddingXY 16 0, Ui.widthMax 400 ]
+                            , Ui.column
+                                [ Ui.paddingXY 16 0, Ui.spacing 4 ]
+                                [ privateKeyLabel.element
+                                , Ui.Input.currentPassword
+                                    [ Ui.background MyUi.inputBackground
+                                    , Ui.paddingXY 8 8
+                                    , Ui.widthMax 300
+                                    , Ui.borderColor MyUi.inputBorder
+                                    ]
+                                    { text = model.privateKeyText
+                                    , show = False
+                                    , onChange =
+                                        \text ->
+                                            if String.endsWith "=" (String.trim text) then
+                                                case User.privateKeyForAccount text local.localUser.user of
+                                                    Ok _ ->
+                                                        ValidatedE2eePrivateKey "" E2eeKeys_Valid
+
+                                                    Err error ->
+                                                        ValidatedE2eePrivateKey text (E2eeKeys_Error error)
+
+                                            else
+                                                ValidatedE2eePrivateKey text E2eeKeys_NotChecked
+                                    , placeholder = Just "Your private key"
+                                    , label = privateKeyLabel.id
+                                    }
+                                , case model.e2eeKeysValid of
+                                    E2eeKeys_NotChecked ->
+                                        Ui.none
+
+                                    E2eeKeys_Error error ->
+                                        Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
+
+                                    E2eeKeys_Valid ->
+                                        Ui.text "Public + private key pair is valid!"
+                                ]
+                            , case e2eeDmChannels of
+                                [] ->
+                                    Ui.el [ Ui.paddingXY 16 0 ] (Ui.text "E2EE not enabled for an DM channels yet.")
+
+                                _ ->
+                                    Ui.column
+                                        [ Ui.spacing 8 ]
+                                        [ Ui.el [ Ui.paddingXY 16 0 ] (Ui.text "E2EE enabled for ")
+                                        , Ui.column [ Ui.paddingXY 12 0, Ui.widthMax 400 ] e2eeDmChannels
+                                        ]
+                            ]
+
+                        Nothing ->
+                            [ Ui.Prose.paragraph
+                                [ Ui.paddingXY 16 4 ]
+                                [ Ui.text "You have not enabled E2EE for any direct message channels yet. Open a direct message channel and click on the "
+                                , Ui.html Icons.gear
+                                , Ui.text " to do so."
+                                ]
+                            ]
+                    )
+                , MyUi.container
+                    16
                     (SeqSet.member UserOption_Discord local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_discordSection")
                     (PressedExpandContainer UserOption_Discord)
@@ -514,14 +641,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                     (SeqDict.toList (LinkedAndOtherDiscordUsers.linkedUsers local.localUser.discordUsers))
                                 )
                             ]
-                    , let
-                        bookmarkletLabel =
-                            Ui.Input.label
-                                (Dom.idToString discordBookmarkletId)
-                                [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ]
-                                (Ui.text "Bookmarklet URL")
-                      in
-                      Ui.column
+                    , Ui.column
                         [ Ui.spacing 16, Ui.paddingXY 16 0 ]
                         [ discordAcknowledgement local.localUser.user.linkDiscordAcknowledgementIsChecked
                         , if local.localUser.user.linkDiscordAcknowledgementIsChecked then
@@ -547,16 +667,16 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                         ]
                                     , Ui.text "5. Make sure you are logged in on Discord and then click on the bookmark"
                                     ]
-                                , Ui.column
-                                    [ Ui.spacing 2, Ui.widthMax 400 ]
-                                    [ bookmarkletLabel.element
-                                    , MyUi.copyBox
+                                , Ui.el
+                                    [ Ui.widthMax 400 ]
+                                    (MyUi.copyBox
                                         (Dom.id "userOptions_bookmarklet")
+                                        (Just "Bookmarklet URL")
                                         PressedCopyText
                                         TypedDiscordLinkBookmarklet
                                         loaded
                                         bookmarklet
-                                    ]
+                                    )
                                 ]
 
                           else
@@ -564,6 +684,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                         ]
                     ]
                 , MyUi.container
+                    10
                     (SeqSet.member UserOption_ConnectedDevices local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_connectedDevices")
                     (PressedExpandContainer UserOption_ConnectedDevices)
@@ -583,6 +704,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                             (SeqDict.toList local.otherSessions)
                     )
                 , MyUi.container
+                    16
                     (SeqSet.member UserOption_Debug local.localUser.session.expandedUserOptions)
                     (Dom.id "userOptions_debug")
                     (PressedExpandContainer UserOption_Debug)
@@ -597,11 +719,9 @@ view windowSize textInputFocus time local loggedIn loaded model =
                             Ui.width Ui.shrink
                         , Ui.paddingXY 16 0
                         ]
-                        [ Ui.el
-                            [ Ui.Font.size 14, Ui.Font.bold ]
-                            (Ui.text "SessionId hash")
-                        , MyUi.copyBox
+                        [ MyUi.copyBox
                             (Dom.id "userOptions_sessionIdHash")
+                            (Just "SessionId hash")
                             PressedCopyText
                             FrontendNoOp
                             loaded
@@ -619,7 +739,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                         |> Ui.el [ Ui.paddingXY 16 0 ]
                     , case model.debugData of
                         Just debugData ->
-                            Ui.column
+                            Ui.el
                                 [ if isMobile then
                                     Ui.width Ui.fill
 
@@ -627,21 +747,19 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                     Ui.width Ui.shrink
                                 , Ui.paddingXY 16 0
                                 ]
-                                [ Ui.el
-                                    [ Ui.Font.size 14, Ui.Font.bold ]
-                                    (Ui.text
+                                (MyUi.copyBox
+                                    (Dom.id "userOptions_debugData")
+                                    (Just
                                         ("Debug data (loaded at "
                                             ++ MyUi.timestamp debugData.loadedAt loaded.timezone
                                             ++ ")"
                                         )
                                     )
-                                , MyUi.copyBox
-                                    (Dom.id "userOptions_debugData")
                                     PressedCopyText
                                     FrontendNoOp
                                     loaded
                                     debugData.data
-                                ]
+                                )
 
                         Nothing ->
                             Ui.none
@@ -668,7 +786,7 @@ discordAcknowledgement discordAcknowledged =
         acknowledgmentLabel =
             Ui.Input.label
                 "userOptions_discordAcknowledgment"
-                [ Ui.pointer, Ui.width Ui.shrink ]
+                [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.pointer, Ui.width Ui.shrink ]
                 (Ui.text "I have read the above and accept the risks")
     in
     Ui.column
@@ -677,9 +795,7 @@ discordAcknowledgement discordAcknowledged =
         ]
         [ Ui.column
             [ Ui.spacing 8 ]
-            [ Ui.row
-                [ Ui.spacing 8, Ui.Font.bold, Ui.Font.color MyUi.font3 ]
-                [ Ui.html (Icons.warning 24), Ui.text "Before you link your Discord account, please note:" ]
+            [ MyUi.warningHeader "Before you link your Discord account, please note:"
             , numberPoint
                 1
                 (Ui.text "Using your Discord account via a 3rd party client breaks their terms of service. Discord can temporarily or even permanently ban your account for it. In practice this doesn't seem to happen as long as you don't act like a spam bot but the risk is still present.")
@@ -688,9 +804,9 @@ discordAcknowledgement discordAcknowledged =
                 (Ui.text "Discord doesn't have any permission system for 3rd party clients. This means that if you link your Discord account with this app, you are giving us complete access to your data and to act on your behalf. You are trusting us to not abuse that level of access or accidentally let hackers access your account.")
             ]
         , Ui.row
-            [ Ui.spacing 16 ]
+            []
             [ Ui.Input.checkbox
-                [ Ui.Font.size 14 ]
+                []
                 { onChange = PressedDiscordAcknowledgment
                 , icon = Nothing
                 , checked = discordAcknowledged
@@ -772,7 +888,7 @@ discordUserCard loaded discordUserId data =
                     ]
                     (case data.isLoadingData of
                         DiscordUserLoadingData _ ->
-                            Ui.row [ Ui.spacing 8, Ui.contentCenterY ] [ Ui.text "Loading user data", Icons.spinner ]
+                            Ui.row [ Ui.spacing 8, Ui.contentCenterY ] [ Ui.text loadingUserDataText, Icons.spinner ]
 
                         _ ->
                             Ui.text "Reload user data"
@@ -890,14 +1006,24 @@ colorPreview time isMobile local allUsers color =
         SeqDict.empty
         (SeqDict.fromList
             [ ( local.localUser.session.userId
-              , { color = color, name = local.localUser.user.name, icon = local.localUser.user.icon }
+              , { color = color, name = local.localUser.user.name, icon = local.localUser.user.icon, publicKey = Nothing }
               )
             ]
         )
         (\_ -> color)
         IsNotHovered
         (Id.fromInt 0)
-        { message | userIconDrawings = exampleDrawing local.localUser.session.userId }
+        message.content
+        False
+        { message
+            | drawings =
+                { timestampDrawings = Drawing.emptyDrawing
+                , userIconDrawings = exampleDrawing local.localUser.session.userId
+                , imageAttachmentDrawings = SeqDict.empty
+                , embedDrawings = SeqDict.empty
+                }
+                    |> Just
+        }
         |> Ui.map (\_ -> FrontendNoOp)
         |> Ui.el [ Ui.background MyUi.background3, Ui.widthMax 400, Ui.paddingXY 8 4 ]
 

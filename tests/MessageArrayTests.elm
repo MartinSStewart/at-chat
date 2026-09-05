@@ -4,8 +4,10 @@ import Array exposing (Array)
 import Expect
 import Fuzz exposing (Fuzzer)
 import Id
+import Message exposing (Message)
 import MessageArray exposing (MessageArray)
 import Test exposing (Test)
+import Time
 
 
 {-| The tests compare a `MessageArray` against an `Array (Maybe Int)`, which is
@@ -48,17 +50,35 @@ applyToReference op array =
             Array.push (Just value) array
 
 
+{-| A `MessageArray` only holds messages, so the Int the reference model works in is
+carried through one, and read back out again on the way past.
+-}
+message : Int -> Message () Int
+message value =
+    Message.DeletedMessage (Time.millisToPosix value)
+
+
+messageValue : Message () Int -> Int
+messageValue message2 =
+    case message2 of
+        Message.DeletedMessage time ->
+            Time.posixToMillis time
+
+        _ ->
+            0
+
+
 applyToMessageArray : Op -> MessageArray () Int -> MessageArray () Int
 applyToMessageArray op array =
     case op of
         Set index value ->
-            MessageArray.set (Id.fromInt index) value array
+            MessageArray.set (Id.fromInt index) (message value) array
 
         Update index ->
-            MessageArray.updateIfExists (Id.fromInt index) negate array
+            MessageArray.updateIfExists (Id.fromInt index) (messageValue >> negate >> message) array
 
         Push value ->
-            MessageArray.push value array
+            MessageArray.push (message value) array
 
 
 {-| Turns a `MessageArray` back into the naive representation so the two can be
@@ -66,7 +86,7 @@ compared.
 -}
 toReference : MessageArray () Int -> List (Maybe Int)
 toReference array =
-    MessageArray.foldr (\_ maybe list -> maybe :: list) [] array
+    MessageArray.foldr (\_ maybe list -> Maybe.map messageValue maybe :: list) [] array
 
 
 fromOps : List Op -> ( Array (Maybe Int), MessageArray () Int )
@@ -85,16 +105,18 @@ expectMatches reference array =
         , \_ -> MessageArray.isEmpty array |> Expect.equal (Array.isEmpty reference)
         , \_ ->
             MessageArray.last array
+                |> Maybe.map messageValue
                 |> Expect.equal (Array.get (Array.length reference - 1) reference |> Maybe.andThen identity)
         , \_ ->
             List.range -2 (Array.length reference + 2)
-                |> List.map (\index -> MessageArray.get (Id.fromInt index) array)
+                |> List.map (\index -> MessageArray.get (Id.fromInt index) array |> Maybe.map messageValue)
                 |> Expect.equalLists
                     (List.range -2 (Array.length reference + 2)
                         |> List.map (\index -> Array.get index reference |> Maybe.andThen identity)
                     )
         , \_ ->
             MessageArray.toList array
+                |> List.map (Tuple.mapSecond messageValue)
                 |> Expect.equalLists
                     (Array.toList reference
                         |> List.indexedMap
@@ -140,8 +162,10 @@ tests =
                         clamp clampedStart (Array.length reference) end
                 in
                 MessageArray.toList (MessageArray.slice (Id.fromInt start) (Id.fromInt end) array)
+                    |> List.map (Tuple.mapSecond messageValue)
                     |> Expect.equalLists
                         (MessageArray.toList array
+                            |> List.map (Tuple.mapSecond messageValue)
                             |> List.filter
                                 (\( id, _ ) -> Id.toInt id >= clampedStart && Id.toInt id < clampedEnd)
                         )
@@ -168,7 +192,7 @@ tests =
                     sliced =
                         MessageArray.slice (Id.fromInt start) (Id.fromInt end) array
                 in
-                MessageArray.foldr (\id maybe list -> ( Id.toInt id, maybe ) :: list) [] sliced
+                MessageArray.foldr (\id maybe list -> ( Id.toInt id, Maybe.map messageValue maybe ) :: list) [] sliced
                     |> Expect.equalLists
                         (List.range clampedStart (clampedEnd - 1)
                             |> List.map
@@ -184,9 +208,9 @@ tests =
                     ( reference, array ) =
                         fromOps ops
 
-                    entries : List ( Id.Id (), Int )
+                    entries : List ( Id.Id (), Message () Int )
                     entries =
-                        List.map (Tuple.mapFirst Id.fromInt) batch
+                        List.map (Tuple.mapBoth Id.fromInt message) batch
                 in
                 expectMatches
                     (List.foldl
@@ -205,8 +229,8 @@ tests =
                     isEven value =
                         modBy 2 value == 0
                 in
-                MessageArray.findRight isEven array
-                    |> Maybe.map (Tuple.mapFirst Id.toInt)
+                MessageArray.findRight (messageValue >> isEven) array
+                    |> Maybe.map (Tuple.mapBoth Id.toInt messageValue)
                     |> Expect.equal
                         (Array.toList reference
                             |> List.indexedMap Tuple.pair
@@ -253,18 +277,18 @@ tests =
                 in
                 expectMatches
                     reference
-                    (MessageArray.fromArray count (Id.fromInt start) (Array.fromList values))
+                    (MessageArray.fromArray count (Id.fromInt start) (Array.fromList (List.map message values)))
         , Test.test "Values loaded either side of a gap stay put once the gap is filled" <|
             \_ ->
                 let
                     array : MessageArray () Int
                     array =
                         MessageArray.fromArray 5 (Id.fromInt 0) Array.empty
-                            |> MessageArray.set (Id.fromInt 0) 10
-                            |> MessageArray.set (Id.fromInt 2) 12
-                            |> MessageArray.set (Id.fromInt 4) 14
-                            |> MessageArray.set (Id.fromInt 1) 11
-                            |> MessageArray.set (Id.fromInt 3) 13
+                            |> MessageArray.set (Id.fromInt 0) (message 10)
+                            |> MessageArray.set (Id.fromInt 2) (message 12)
+                            |> MessageArray.set (Id.fromInt 4) (message 14)
+                            |> MessageArray.set (Id.fromInt 1) (message 11)
+                            |> MessageArray.set (Id.fromInt 3) (message 13)
                 in
                 expectMatches (Array.fromList (List.map Just [ 10, 11, 12, 13, 14 ])) array
         ]

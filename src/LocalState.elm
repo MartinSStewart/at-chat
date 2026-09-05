@@ -49,6 +49,7 @@ module LocalState exposing
     , addReactionEmojiFrontendHelper
     , addReactionEmojiHelper
     , announcementChannel
+    , callEndedText
     , callStartedText
     , canSendDiscordMessage
     , canViewDiscordChannel
@@ -62,6 +63,7 @@ module LocalState exposing
     , createGuild
     , createThreadMessageBackend
     , createThreadMessageFrontend
+    , defaultChannelName
     , deleteChannel
     , deleteChannelFrontend
     , deleteForumPostFrontend
@@ -85,6 +87,8 @@ module LocalState exposing
     , drawingHandleChangeNoThreadBackend
     , drawingHandleDateDivider
     , editChannel
+    , editEncryptedMessageFrontendHelper
+    , editEncryptedMessageHelper
     , editGuildName
     , editMessageFrontendHelper
     , editMessageFrontendHelperNoThread
@@ -124,6 +128,7 @@ module LocalState exposing
     , messageReactionsHelper
     , messageReactionsNoThread
     , messageToString
+    , notEnoughDiscordMessagesError
     , ownMessageIsReadFrontend
     , removeInvite
     , removeReactionEmoji
@@ -132,6 +137,7 @@ module LocalState exposing
     , removeReactionEmojiHelper
     , routeToViewing
     , sentEnoughDiscordDmMessages
+    , setDmE2ee
     , updateChannel
     , userIsLoadingDiscordChannel
     , usersMentionedOrRepliedToBackend
@@ -154,10 +160,11 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Embed exposing (EmbedData)
 import Emoji exposing (EmojiOrCustomEmoji)
+import Encryption exposing (BytesHash, EncryptedData)
 import FileStatus exposing (FileHash)
 import Game
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import LinkedAndOtherDiscordUsers
 import List.Extra
@@ -165,7 +172,7 @@ import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (ChangeAttachments, Message(..), MessageNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments, Message(..), MessageContent, MessageNoReply(..), UserTextMessageDataNoReply)
 import MessageArray exposing (MessageArray)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
@@ -190,6 +197,16 @@ import Url exposing (Url)
 import User exposing (BackendUser, FrontendCurrentUser, LocalUser)
 import UserSession exposing (ChannelHeaderTab, FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
+
+
+callEndedText : String
+callEndedText =
+    "Call ended"
+
+
+notEnoughDiscordMessagesError : String
+notEnoughDiscordMessagesError =
+    "Send at least 4 messages using Discord first"
 
 
 type alias LocalState =
@@ -381,7 +398,7 @@ type alias FrontendChannel =
     , createdBy : Id UserId
     , name : ChannelName
     , description : ChannelDescription
-    , messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+    , messages : MessageArray ChannelMessageId (Id UserId)
     , visibleMessages : VisibleMessages ChannelMessageId
     , isArchived : Maybe Archived
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
@@ -395,7 +412,7 @@ type alias DiscordFrontendChannel =
     { name : ChannelName
     , description : ChannelDescription
     , isForum : Bool
-    , messages : MessageArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
+    , messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId)
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
@@ -424,10 +441,35 @@ messageReactions guildOrDmId threadRoute local =
                     SeqDict.empty
 
 
+setDmE2ee : Viewing_DmId -> DmChannel.E2eeStatus -> LocalState -> LocalState
+setDmE2ee { otherUserId } e2ee local =
+    let
+        emptyDmChannel : FrontendDmChannel
+        emptyDmChannel =
+            DmChannel.frontendInit
+    in
+    { local
+        | dmChannels =
+            SeqDict.update
+                otherUserId
+                (\maybeDmChannel ->
+                    (case maybeDmChannel of
+                        Just dmChannel ->
+                            { dmChannel | e2ee = e2ee }
+
+                        Nothing ->
+                            { emptyDmChannel | e2ee = e2ee }
+                    )
+                        |> Just
+                )
+                local.dmChannels
+    }
+
+
 messageReactionsHelper :
     { a
-        | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
-        , threads : SeqDict (Id ChannelMessageId) { b | messages : MessageArray ThreadMessageId (Message ThreadMessageId userId) }
+        | messages : MessageArray ChannelMessageId userId
+        , threads : SeqDict (Id ChannelMessageId) { b | messages : MessageArray ThreadMessageId userId }
     }
     -> ThreadRouteWithMessage
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
@@ -447,7 +489,7 @@ messageReactionsHelper channel threadRoute2 =
 
 messageReactionsNoThread :
     Id messageId
-    -> { a | messages : MessageArray messageId (Message messageId userId) }
+    -> { a | messages : MessageArray messageId userId }
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 messageReactionsNoThread messageId channel =
     case MessageArray.get messageId channel.messages of
@@ -458,11 +500,29 @@ messageReactionsNoThread messageId channel =
             SeqDict.empty
 
 
-messageToString : Time.Zone -> SeqDict userId { a | name : PersonName } -> Message messageId userId -> String
-messageToString timezone allUsers3 message =
+messageToString :
+    Time.Zone
+    -> SeqDict userId { a | name : PersonName }
+    -> SeqDict BytesHash (Result () (MessageContent userId))
+    -> Message messageId userId
+    -> String
+messageToString timezone allUsers3 decrypted message =
     case message of
         UserTextMessage a ->
-            RichText.toString timezone False allUsers3 a.content
+            RichText.toString timezone False allUsers3 a.content.content
+
+        EncryptedUserTextMessage a ->
+            case SeqDict.get (Encryption.hash a.content) decrypted of
+                Just result ->
+                    case result of
+                        Ok ok ->
+                            RichText.toString timezone False allUsers3 ok.content
+
+                        Err () ->
+                            RichText.failedToDecryptMessageText
+
+                Nothing ->
+                    ""
 
         UserJoinedMessage _ userId _ _ ->
             User.toString userId allUsers3
@@ -482,7 +542,7 @@ callStartedText : Maybe Time.Posix -> String
 callStartedText endedAt =
     case endedAt of
         Just _ ->
-            "Call ended"
+            callEndedText
 
         Nothing ->
             "Call started"
@@ -1100,8 +1160,11 @@ createMessageBackend message channel =
         | messages = IdArray.push message channel.messages
         , lastTypedAt =
             case message of
-                UserTextMessage { createdBy } ->
-                    SeqDict.remove createdBy channel.lastTypedAt
+                UserTextMessage data ->
+                    SeqDict.remove data.createdBy channel.lastTypedAt
+
+                EncryptedUserTextMessage data ->
+                    SeqDict.remove data.createdBy channel.lastTypedAt
 
                 UserJoinedMessage _ _ _ _ ->
                     channel.lastTypedAt
@@ -1172,6 +1235,18 @@ createDiscordDmChannelMessageBackend messageId message channel =
                     )
                         |> Ok
 
+                EncryptedUserTextMessage message2 ->
+                    ( messageId2
+                    , { channel2
+                        | members =
+                            NonemptyDict.updateIfExists
+                                message2.createdBy
+                                (\a -> { a | messagesSent = a.messagesSent + 1 })
+                                channel2.members
+                      }
+                    )
+                        |> Ok
+
                 UserJoinedMessage _ _ _ _ ->
                     Ok ( messageId2, channel2 )
 
@@ -1217,8 +1292,11 @@ createDiscordMessageBackend messageId message channel =
             | messages = IdArray.push message channel.messages
             , lastTypedAt =
                 case message of
-                    UserTextMessage { createdBy } ->
-                        SeqDict.remove createdBy channel.lastTypedAt
+                    UserTextMessage data ->
+                        SeqDict.remove data.createdBy channel.lastTypedAt
+
+                    EncryptedUserTextMessage data ->
+                        SeqDict.remove data.createdBy channel.lastTypedAt
 
                     UserJoinedMessage _ _ _ _ ->
                         channel.lastTypedAt
@@ -1243,14 +1321,14 @@ createThreadMessageFrontend :
     -> Message ThreadMessageId userId
     ->
         { d
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+            | messages : MessageArray ChannelMessageId userId
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
         }
     ->
         { d
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+            | messages : MessageArray ChannelMessageId userId
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
@@ -1273,13 +1351,13 @@ createChannelMessageFrontend :
     Message ChannelMessageId userId
     ->
         { d
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+            | messages : MessageArray ChannelMessageId userId
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
         }
     ->
         { d
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+            | messages : MessageArray ChannelMessageId userId
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
         }
@@ -1291,13 +1369,13 @@ createMessageFrontend :
     Message messageId userId
     ->
         { d
-            | messages : MessageArray messageId (Message messageId userId)
+            | messages : MessageArray messageId userId
             , visibleMessages : VisibleMessages messageId
             , lastTypedAt : SeqDict userId (LastTypedAt messageId)
         }
     ->
         { d
-            | messages : MessageArray messageId (Message messageId userId)
+            | messages : MessageArray messageId userId
             , visibleMessages : VisibleMessages messageId
             , lastTypedAt : SeqDict userId (LastTypedAt messageId)
         }
@@ -1307,8 +1385,11 @@ createMessageFrontend message channel =
         , visibleMessages = VisibleMessages.increment (MessageArray.length channel.messages) channel.visibleMessages
         , lastTypedAt =
             case message of
-                UserTextMessage { createdBy } ->
-                    SeqDict.remove createdBy channel.lastTypedAt
+                UserTextMessage data ->
+                    SeqDict.remove data.createdBy channel.lastTypedAt
+
+                EncryptedUserTextMessage data ->
+                    SeqDict.remove data.createdBy channel.lastTypedAt
 
                 UserJoinedMessage _ _ _ _ ->
                     channel.lastTypedAt
@@ -1549,7 +1630,7 @@ memberIsEditTypingFrontend :
                 SeqDict
                     channelId
                     { e
-                        | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+                        | messages : MessageArray ChannelMessageId userId
                         , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
                         , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
                     }
@@ -1562,7 +1643,7 @@ memberIsEditTypingFrontend :
                     SeqDict
                         channelId
                         { e
-                            | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+                            | messages : MessageArray ChannelMessageId userId
                             , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
                             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
                         }
@@ -1648,16 +1729,41 @@ memberIsEditTypingBackendHelperNoThread :
             }
 memberIsEditTypingBackendHelperNoThread time userId messageId channel =
     case IdArray.get messageId channel.messages of
-        Just (UserTextMessage data) ->
-            if data.createdBy == userId then
-                { channel
-                    | lastTypedAt =
-                        SeqDict.insert userId { time = time, messageIndex = Just messageId } channel.lastTypedAt
-                }
-                    |> Ok
+        Just message ->
+            case message of
+                UserTextMessage data ->
+                    if data.createdBy == userId then
+                        { channel
+                            | lastTypedAt =
+                                SeqDict.insert userId { time = time, messageIndex = Just messageId } channel.lastTypedAt
+                        }
+                            |> Ok
 
-            else
-                Err ()
+                    else
+                        Err ()
+
+                EncryptedUserTextMessage data ->
+                    if data.createdBy == userId then
+                        { channel
+                            | lastTypedAt =
+                                SeqDict.insert userId { time = time, messageIndex = Just messageId } channel.lastTypedAt
+                        }
+                            |> Ok
+
+                    else
+                        Err ()
+
+                UserJoinedMessage _ _ _ _ ->
+                    Err ()
+
+                DeletedMessage _ ->
+                    Err ()
+
+                CallStarted _ ->
+                    Err ()
+
+                GameStarted _ ->
+                    Err ()
 
         _ ->
             Err ()
@@ -1669,7 +1775,7 @@ memberIsEditTypingFrontendHelper :
     -> ThreadRouteWithMessage
     ->
         { a
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+            | messages : MessageArray ChannelMessageId userId
             , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
         }
@@ -1677,7 +1783,7 @@ memberIsEditTypingFrontendHelper :
         Result
             ()
             { a
-                | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+                | messages : MessageArray ChannelMessageId userId
                 , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
                 , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
             }
@@ -1704,22 +1810,47 @@ memberIsEditTypingFrontendHelperNoThread :
     Time.Posix
     -> userId
     -> Id messageId
-    -> { a | lastTypedAt : SeqDict userId (LastTypedAt messageId), messages : MessageArray messageId (Message messageId userId) }
-    -> Result () { a | lastTypedAt : SeqDict userId (LastTypedAt messageId), messages : MessageArray messageId (Message messageId userId) }
+    -> { a | lastTypedAt : SeqDict userId (LastTypedAt messageId), messages : MessageArray messageId userId }
+    -> Result () { a | lastTypedAt : SeqDict userId (LastTypedAt messageId), messages : MessageArray messageId userId }
 memberIsEditTypingFrontendHelperNoThread time userId messageIndex channel =
     case MessageArray.get messageIndex channel.messages of
-        Just (UserTextMessage data) ->
-            if data.createdBy == userId then
-                { channel
-                    | lastTypedAt =
-                        SeqDict.insert userId { time = time, messageIndex = Just messageIndex } channel.lastTypedAt
-                }
-                    |> Ok
+        Just message ->
+            case message of
+                UserTextMessage data ->
+                    if data.createdBy == userId then
+                        { channel
+                            | lastTypedAt =
+                                SeqDict.insert userId { time = time, messageIndex = Just messageIndex } channel.lastTypedAt
+                        }
+                            |> Ok
 
-            else
-                Err ()
+                    else
+                        Err ()
 
-        _ ->
+                EncryptedUserTextMessage data ->
+                    if data.createdBy == userId then
+                        { channel
+                            | lastTypedAt =
+                                SeqDict.insert userId { time = time, messageIndex = Just messageIndex } channel.lastTypedAt
+                        }
+                            |> Ok
+
+                    else
+                        Err ()
+
+                UserJoinedMessage _ _ _ _ ->
+                    Err ()
+
+                DeletedMessage _ ->
+                    Err ()
+
+                CallStarted _ ->
+                    Err ()
+
+                GameStarted _ ->
+                    Err ()
+
+        Nothing ->
             Err ()
 
 
@@ -1834,13 +1965,13 @@ addReactionEmojiFrontend :
     -> ThreadRouteWithMessage
     ->
         { b
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
-            , threads : SeqDict (Id ChannelMessageId) { c | messages : MessageArray ThreadMessageId (Message ThreadMessageId userId) }
+            | messages : MessageArray ChannelMessageId userId
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : MessageArray ThreadMessageId userId }
         }
     ->
         { b
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
-            , threads : SeqDict (Id ChannelMessageId) { c | messages : MessageArray ThreadMessageId (Message ThreadMessageId userId) }
+            | messages : MessageArray ChannelMessageId userId
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : MessageArray ThreadMessageId userId }
         }
 addReactionEmojiFrontend emoji userId threadRoute channel =
     case threadRoute of
@@ -1861,8 +1992,8 @@ addReactionEmojiFrontendHelper :
     EmojiOrCustomEmoji
     -> userId
     -> Id messageId
-    -> { a | messages : MessageArray messageId (Message messageId userId) }
-    -> { a | messages : MessageArray messageId (Message messageId userId) }
+    -> { a | messages : MessageArray messageId userId }
+    -> { a | messages : MessageArray messageId userId }
 addReactionEmojiFrontendHelper emoji userId messageId channel =
     { channel
         | messages =
@@ -1944,7 +2075,7 @@ editMessageHelperNoThread :
 editMessageHelperNoThread time editedBy newContent attachedFiles messageIndex channel =
     case IdArray.get messageIndex channel.messages of
         Just (UserTextMessage data) ->
-            if data.createdBy == editedBy && data.content /= newContent then
+            if data.createdBy == editedBy && data.content.content /= newContent then
                 { channel
                     | messages =
                         IdArray.set
@@ -1983,8 +2114,8 @@ editMessageFrontendHelper :
     -> Nonempty (RichText userId)
     -> ChangeAttachments
     -> ThreadRouteWithMessage
-    -> { b | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId), lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
-    -> Result () { b | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId), lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
+    -> { b | messages : MessageArray ChannelMessageId userId, lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
+    -> Result () { b | messages : MessageArray ChannelMessageId userId, lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
 editMessageFrontendHelper time editedBy newContent attachedFiles threadRoute channel =
     case threadRoute of
         ViewThreadWithMessage threadMessageIndex messageId ->
@@ -2010,12 +2141,12 @@ editMessageFrontendHelperNoThread :
     -> Nonempty (RichText userId)
     -> ChangeAttachments
     -> Id messageId
-    -> { b | messages : MessageArray messageId (Message messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
-    -> Result () { b | messages : MessageArray messageId (Message messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
+    -> { b | messages : MessageArray messageId userId, lastTypedAt : SeqDict userId (LastTypedAt messageId) }
+    -> Result () { b | messages : MessageArray messageId userId, lastTypedAt : SeqDict userId (LastTypedAt messageId) }
 editMessageFrontendHelperNoThread time editedBy newContent attachedFiles messageIndex channel =
     case MessageArray.get messageIndex channel.messages of
         Just (UserTextMessage data) ->
-            if data.createdBy == editedBy && data.content /= newContent then
+            if data.createdBy == editedBy && data.content.content /= newContent then
                 { channel
                     | messages =
                         MessageArray.set
@@ -2046,6 +2177,175 @@ editMessageFrontendHelperNoThread time editedBy newContent attachedFiles message
 
         _ ->
             Err ()
+
+
+{-| The encrypted counterpart of `editMessageHelper`. What is being replaced is ciphertext
+rather than rich text, so there is nothing to compare the new content against and nothing
+shared with the plain version beyond the shape of the walk to the message.
+-}
+editEncryptedMessageHelper :
+    Time.Posix
+    -> userId
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent userId)
+    -> ThreadRouteWithMessage
+    ->
+        { b
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId userId)
+            , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
+            , threads :
+                SeqDict
+                    (Id ChannelMessageId)
+                    { c
+                        | messages : IdArray ThreadMessageId (Message ThreadMessageId userId)
+                        , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
+                    }
+        }
+    ->
+        Result
+            ()
+            { b
+                | messages : IdArray ChannelMessageId (Message ChannelMessageId userId)
+                , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
+                , threads :
+                    SeqDict
+                        (Id ChannelMessageId)
+                        { c
+                            | messages : IdArray ThreadMessageId (Message ThreadMessageId userId)
+                            , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
+                        }
+            }
+editEncryptedMessageHelper time editedBy fileHashes newContent threadRoute channel =
+    case threadRoute of
+        ViewThreadWithMessage threadMessageIndex messageId ->
+            case SeqDict.get threadMessageIndex channel.threads of
+                Just thread ->
+                    case editEncryptedMessageHelperNoThread time editedBy fileHashes newContent messageId thread of
+                        Ok thread2 ->
+                            Ok { channel | threads = SeqDict.insert threadMessageIndex thread2 channel.threads }
+
+                        Err () ->
+                            Err ()
+
+                Nothing ->
+                    Err ()
+
+        NoThreadWithMessage messageId ->
+            editEncryptedMessageHelperNoThread time editedBy fileHashes newContent messageId channel
+
+
+editEncryptedMessageHelperNoThread :
+    Time.Posix
+    -> userId
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent userId)
+    -> Id messageId
+    -> { b | messages : IdArray messageId (Message messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
+    -> Result () { b | messages : IdArray messageId (Message messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
+editEncryptedMessageHelperNoThread time editedBy fileHashes newContent messageIndex channel =
+    case IdArray.get messageIndex channel.messages of
+        Just (EncryptedUserTextMessage data) ->
+            if data.createdBy == editedBy then
+                { channel
+                    | messages =
+                        IdArray.set
+                            messageIndex
+                            (EncryptedUserTextMessage
+                                (Message.editEncryptedUserTextMessage time fileHashes newContent data)
+                            )
+                            channel.messages
+                    , lastTypedAt = forgetEditTypingAt editedBy messageIndex channel.lastTypedAt
+                }
+                    |> Ok
+
+            else
+                Err ()
+
+        _ ->
+            Err ()
+
+
+editEncryptedMessageFrontendHelper :
+    Time.Posix
+    -> userId
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent userId)
+    -> ThreadRouteWithMessage
+    -> { b | messages : MessageArray ChannelMessageId userId, lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
+    -> Result () { b | messages : MessageArray ChannelMessageId userId, lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
+editEncryptedMessageFrontendHelper time editedBy fileHashes newContent threadRoute channel =
+    case threadRoute of
+        ViewThreadWithMessage threadMessageIndex messageId ->
+            case SeqDict.get threadMessageIndex channel.threads of
+                Just thread ->
+                    case editEncryptedMessageFrontendHelperNoThread time editedBy fileHashes newContent messageId thread of
+                        Ok thread2 ->
+                            Ok { channel | threads = SeqDict.insert threadMessageIndex thread2 channel.threads }
+
+                        Err () ->
+                            Err ()
+
+                Nothing ->
+                    Err ()
+
+        NoThreadWithMessage messageId ->
+            editEncryptedMessageFrontendHelperNoThread time editedBy fileHashes newContent messageId channel
+
+
+editEncryptedMessageFrontendHelperNoThread :
+    Time.Posix
+    -> userId
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent userId)
+    -> Id messageId
+    -> { b | messages : MessageArray messageId userId, lastTypedAt : SeqDict userId (LastTypedAt messageId) }
+    -> Result () { b | messages : MessageArray messageId userId, lastTypedAt : SeqDict userId (LastTypedAt messageId) }
+editEncryptedMessageFrontendHelperNoThread time editedBy fileHashes newContent messageIndex channel =
+    case MessageArray.get messageIndex channel.messages of
+        Just (EncryptedUserTextMessage data) ->
+            if data.createdBy == editedBy then
+                { channel
+                    | messages =
+                        MessageArray.set
+                            messageIndex
+                            (EncryptedUserTextMessage
+                                (Message.editEncryptedUserTextMessage time fileHashes newContent data)
+                            )
+                            channel.messages
+                    , lastTypedAt = forgetEditTypingAt editedBy messageIndex channel.lastTypedAt
+                }
+                    |> Ok
+
+            else
+                Err ()
+
+        _ ->
+            Err ()
+
+
+{-| An edit that has been sent is no longer being typed.
+-}
+forgetEditTypingAt :
+    userId
+    -> Id messageId
+    -> SeqDict userId (LastTypedAt messageId)
+    -> SeqDict userId (LastTypedAt messageId)
+forgetEditTypingAt editedBy messageIndex lastTypedAt =
+    SeqDict.update
+        editedBy
+        (\maybe ->
+            case maybe of
+                Just a ->
+                    if a.messageIndex == Just messageIndex then
+                        Nothing
+
+                    else
+                        maybe
+
+                Nothing ->
+                    Nothing
+        )
+        lastTypedAt
 
 
 removeReactionEmoji :
@@ -2093,13 +2393,13 @@ removeReactionEmojiFrontend :
     -> ThreadRouteWithMessage
     ->
         { b
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
-            , threads : SeqDict (Id ChannelMessageId) { c | messages : MessageArray ThreadMessageId (Message ThreadMessageId userId) }
+            | messages : MessageArray ChannelMessageId userId
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : MessageArray ThreadMessageId userId }
         }
     ->
         { b
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
-            , threads : SeqDict (Id ChannelMessageId) { c | messages : MessageArray ThreadMessageId (Message ThreadMessageId userId) }
+            | messages : MessageArray ChannelMessageId userId
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : MessageArray ThreadMessageId userId }
         }
 removeReactionEmojiFrontend emoji userId threadRoute channel =
     case threadRoute of
@@ -2120,8 +2420,8 @@ removeReactionEmojiFrontendHelper :
     EmojiOrCustomEmoji
     -> userId
     -> Id messageId
-    -> { a | messages : MessageArray messageId (Message messageId userId) }
-    -> { a | messages : MessageArray messageId (Message messageId userId) }
+    -> { a | messages : MessageArray messageId userId }
+    -> { a | messages : MessageArray messageId userId }
 removeReactionEmojiFrontendHelper emoji userId messageId channel =
     { channel
         | messages =
@@ -2399,15 +2699,37 @@ deleteMessageBackendHelperNoThread :
     -> Result () { b | messages : IdArray messageId (Message messageId userId) }
 deleteMessageBackendHelperNoThread userId messageId channel =
     case IdArray.get messageId channel.messages of
-        Just (UserTextMessage message) ->
-            if message.createdBy == userId then
-                { channel | messages = IdArray.set messageId (DeletedMessage message.createdAt) channel.messages }
-                    |> Ok
+        Just message ->
+            case message of
+                UserTextMessage message2 ->
+                    if message2.createdBy == userId then
+                        { channel | messages = IdArray.set messageId (DeletedMessage message2.createdAt) channel.messages }
+                            |> Ok
 
-            else
-                Err ()
+                    else
+                        Err ()
 
-        _ ->
+                EncryptedUserTextMessage message2 ->
+                    if message2.createdBy == userId then
+                        { channel | messages = IdArray.set messageId (DeletedMessage message2.createdAt) channel.messages }
+                            |> Ok
+
+                    else
+                        Err ()
+
+                UserJoinedMessage _ _ _ _ ->
+                    Err ()
+
+                DeletedMessage _ ->
+                    Err ()
+
+                CallStarted _ ->
+                    Err ()
+
+                GameStarted _ ->
+                    Err ()
+
+        Nothing ->
             Err ()
 
 
@@ -2420,7 +2742,7 @@ deleteMessageFrontend :
                 SeqDict
                     channelId
                     { c
-                        | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+                        | messages : MessageArray ChannelMessageId userId
                         , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
                     }
         }
@@ -2430,7 +2752,7 @@ deleteMessageFrontend :
                 SeqDict
                     channelId
                     { c
-                        | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+                        | messages : MessageArray ChannelMessageId userId
                         , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
                     }
         }
@@ -2453,12 +2775,12 @@ deleteMessageFrontendHelper :
     ThreadRouteWithMessage
     ->
         { a
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+            | messages : MessageArray ChannelMessageId userId
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
         }
     ->
         { a
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+            | messages : MessageArray ChannelMessageId userId
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
         }
 deleteMessageFrontendHelper threadRoute channel =
@@ -2467,20 +2789,49 @@ deleteMessageFrontendHelper threadRoute channel =
             case SeqDict.get threadId channel.threads of
                 Just thread ->
                     case MessageArray.get messageId thread.messages of
-                        Just (UserTextMessage message) ->
-                            { channel
-                                | threads =
-                                    SeqDict.insert
-                                        threadId
-                                        { thread
-                                            | messages =
-                                                MessageArray.set
-                                                    messageId
-                                                    (DeletedMessage message.createdAt)
-                                                    thread.messages
-                                        }
-                                        channel.threads
-                            }
+                        Just message ->
+                            case message of
+                                UserTextMessage message2 ->
+                                    { channel
+                                        | threads =
+                                            SeqDict.insert
+                                                threadId
+                                                { thread
+                                                    | messages =
+                                                        MessageArray.set
+                                                            messageId
+                                                            (DeletedMessage message2.createdAt)
+                                                            thread.messages
+                                                }
+                                                channel.threads
+                                    }
+
+                                EncryptedUserTextMessage message2 ->
+                                    { channel
+                                        | threads =
+                                            SeqDict.insert
+                                                threadId
+                                                { thread
+                                                    | messages =
+                                                        MessageArray.set
+                                                            messageId
+                                                            (DeletedMessage message2.createdAt)
+                                                            thread.messages
+                                                }
+                                                channel.threads
+                                    }
+
+                                UserJoinedMessage _ _ _ _ ->
+                                    channel
+
+                                DeletedMessage _ ->
+                                    channel
+
+                                CallStarted _ ->
+                                    channel
+
+                                GameStarted _ ->
+                                    channel
 
                         _ ->
                             channel
@@ -2505,7 +2856,7 @@ deleteForumPostFrontend :
                 SeqDict
                     channelId
                     { c
-                        | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+                        | messages : MessageArray ChannelMessageId userId
                         , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
                     }
         }
@@ -2515,7 +2866,7 @@ deleteForumPostFrontend :
                 SeqDict
                     channelId
                     { c
-                        | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+                        | messages : MessageArray ChannelMessageId userId
                         , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
                     }
         }
@@ -2525,7 +2876,7 @@ deleteForumPostFrontend channelId messageId guild =
             let
                 channel2 :
                     { c
-                        | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+                        | messages : MessageArray ChannelMessageId userId
                         , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
                     }
                 channel2 =
@@ -2545,18 +2896,33 @@ deleteForumPostFrontend channelId messageId guild =
 
 deleteMessageFrontendNoThread :
     Id messageId
-    -> { a | messages : MessageArray messageId (Message messageId userId) }
-    -> { a | messages : MessageArray messageId (Message messageId userId) }
+    -> { a | messages : MessageArray messageId userId }
+    -> { a | messages : MessageArray messageId userId }
 deleteMessageFrontendNoThread messageId channel =
     case MessageArray.get messageId channel.messages of
-        Just (UserTextMessage message) ->
-            { channel
-                | messages =
-                    MessageArray.set
-                        messageId
-                        (DeletedMessage message.createdAt)
-                        channel.messages
-            }
+        Just message ->
+            case message of
+                UserTextMessage message2 ->
+                    { channel
+                        | messages = MessageArray.set messageId (DeletedMessage message2.createdAt) channel.messages
+                    }
+
+                EncryptedUserTextMessage message2 ->
+                    { channel
+                        | messages = MessageArray.set messageId (DeletedMessage message2.createdAt) channel.messages
+                    }
+
+                UserJoinedMessage _ _ _ _ ->
+                    channel
+
+                DeletedMessage _ ->
+                    channel
+
+                CallStarted _ ->
+                    channel
+
+                GameStarted _ ->
+                    channel
 
         _ ->
             channel
@@ -2698,8 +3064,8 @@ addEmbedBackend messageId embed channel =
 addEmbedFrontend :
     Id messageId
     -> ( Url, Result e EmbedData )
-    -> { a | messages : MessageArray messageId (Message messageId userId) }
-    -> { a | messages : MessageArray messageId (Message messageId userId) }
+    -> { a | messages : MessageArray messageId userId }
+    -> { a | messages : MessageArray messageId userId }
 addEmbedFrontend messageId embed channel =
     { channel
         | messages =
@@ -2734,6 +3100,9 @@ usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channe
                     )
                         ++ (case IdArray.get threadId channel.messages of
                                 Just (UserTextMessage data) ->
+                                    [ data.createdBy ]
+
+                                Just (EncryptedUserTextMessage data) ->
                                     [ data.createdBy ]
 
                                 Just (UserJoinedMessage _ userJoined _ _) ->
@@ -2774,7 +3143,7 @@ usersMentionedOrRepliedToFrontend :
     -> Nonempty (RichText userId)
     ->
         { a
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+            | messages : MessageArray ChannelMessageId userId
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
         }
     -> SeqSet userId
@@ -2792,6 +3161,9 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
                         Just message ->
                             case message of
                                 UserTextMessage data ->
+                                    [ data.createdBy ]
+
+                                EncryptedUserTextMessage data ->
                                     [ data.createdBy ]
 
                                 UserJoinedMessage _ userJoined _ _ ->
@@ -2826,6 +3198,9 @@ repliedToUserId maybeRepliedTo channel =
                         UserTextMessage repliedToData ->
                             Just repliedToData.createdBy
 
+                        EncryptedUserTextMessage repliedToData ->
+                            Just repliedToData.createdBy
+
                         UserJoinedMessage _ joinedUser _ _ ->
                             Just joinedUser
 
@@ -2845,7 +3220,7 @@ repliedToUserId maybeRepliedTo channel =
             Nothing
 
 
-repliedToUserIdFrontend : Maybe (Id messageId) -> { a | messages : MessageArray messageId (Message messageId userId) } -> Maybe userId
+repliedToUserIdFrontend : Maybe (Id messageId) -> { a | messages : MessageArray messageId userId } -> Maybe userId
 repliedToUserIdFrontend maybeRepliedTo channel =
     case maybeRepliedTo of
         Just repliedTo ->
@@ -2853,6 +3228,9 @@ repliedToUserIdFrontend maybeRepliedTo channel =
                 Just message ->
                     case message of
                         UserTextMessage repliedToData ->
+                            Just repliedToData.createdBy
+
+                        EncryptedUserTextMessage repliedToData ->
                             Just repliedToData.createdBy
 
                         UserJoinedMessage _ joinedUser _ _ ->
@@ -2895,7 +3273,7 @@ canSendDiscordMessage local guildOrDmId =
                                     Ok ()
 
                                 else
-                                    Err "Send at least 4 messages using Discord first"
+                                    Err notEnoughDiscordMessagesError
 
                             Nothing ->
                                 Err "Channel not found"
@@ -3120,6 +3498,9 @@ routeToViewing isMobile route local =
         PublicGoMatchRoute _ ->
             StopViewingChannel
 
+        E2eeInfo ->
+            StopViewingChannel
+
 
 guildOrDmIdToMessage :
     GuildOrDmId
@@ -3129,7 +3510,7 @@ guildOrDmIdToMessage :
 guildOrDmIdToMessage guildOrDmId threadRoute local =
     let
         helper :
-            { a | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+            { a | messages : MessageArray ChannelMessageId (Id UserId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
             -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithMaybeMessage )
         helper channel =
             case threadRoute of
@@ -3140,36 +3521,94 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                             |> .messages
                             |> MessageArray.get messageId
                     of
-                        Just (UserTextMessage data) ->
-                            ( { createdAt = data.createdAt
-                              , createdBy = data.createdBy
-                              , content = data.content
-                              , reactions = data.reactions
-                              , editedAt = data.editedAt
-                              , attachedFiles = data.attachedFiles
-                              }
-                            , ViewThreadWithMaybeMessage threadId data.repliedTo
-                            )
-                                |> Just
+                        Just message ->
+                            case message of
+                                UserTextMessage data ->
+                                    ( { createdAt = data.createdAt
+                                      , createdBy = data.createdBy
+                                      , content = data.content
+                                      , reactions = data.reactions
+                                      , editedAt = data.editedAt
+                                      }
+                                    , ViewThreadWithMaybeMessage threadId data.repliedTo
+                                    )
+                                        |> Just
 
-                        _ ->
+                                EncryptedUserTextMessage data ->
+                                    case SeqDict.get (Encryption.hash data.content) local.localUser.decryptedMessages of
+                                        Just (Ok content) ->
+                                            ( { createdAt = data.createdAt
+                                              , createdBy = data.createdBy
+                                              , content = content
+                                              , reactions = data.reactions
+                                              , editedAt = data.editedAt
+                                              }
+                                            , ViewThreadWithMaybeMessage threadId data.repliedTo
+                                            )
+                                                |> Just
+
+                                        _ ->
+                                            Nothing
+
+                                UserJoinedMessage _ _ _ _ ->
+                                    Nothing
+
+                                DeletedMessage _ ->
+                                    Nothing
+
+                                CallStarted _ ->
+                                    Nothing
+
+                                GameStarted _ ->
+                                    Nothing
+
+                        Nothing ->
                             Nothing
 
                 NoThreadWithMessage messageId ->
                     case MessageArray.get messageId channel.messages of
-                        Just (UserTextMessage data) ->
-                            ( { createdAt = data.createdAt
-                              , createdBy = data.createdBy
-                              , content = data.content
-                              , reactions = data.reactions
-                              , editedAt = data.editedAt
-                              , attachedFiles = data.attachedFiles
-                              }
-                            , NoThreadWithMaybeMessage data.repliedTo
-                            )
-                                |> Just
+                        Just message ->
+                            case message of
+                                UserTextMessage data ->
+                                    ( { createdAt = data.createdAt
+                                      , createdBy = data.createdBy
+                                      , content = data.content
+                                      , reactions = data.reactions
+                                      , editedAt = data.editedAt
+                                      }
+                                    , NoThreadWithMaybeMessage data.repliedTo
+                                    )
+                                        |> Just
 
-                        _ ->
+                                EncryptedUserTextMessage data ->
+                                    case SeqDict.get (Encryption.hash data.content) local.localUser.decryptedMessages of
+                                        Just (Ok content) ->
+                                            ( { createdAt = data.createdAt
+                                              , createdBy = data.createdBy
+                                              , content = content
+                                              , reactions = data.reactions
+                                              , editedAt = data.editedAt
+                                              }
+                                            , NoThreadWithMaybeMessage data.repliedTo
+                                            )
+                                                |> Just
+
+                                        _ ->
+                                            Nothing
+
+                                UserJoinedMessage _ _ _ _ ->
+                                    Nothing
+
+                                DeletedMessage _ ->
+                                    Nothing
+
+                                CallStarted _ ->
+                                    Nothing
+
+                                GameStarted _ ->
+                                    Nothing
+
+                        Nothing ->
                             Nothing
     in
     case guildOrDmId of
@@ -3199,19 +3638,35 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
     let
         helper messageId channel =
             case MessageArray.get messageId channel.messages of
-                Just (UserTextMessage data) ->
-                    ( { createdAt = data.createdAt
-                      , createdBy = data.createdBy
-                      , content = data.content
-                      , reactions = data.reactions
-                      , editedAt = data.editedAt
-                      , attachedFiles = data.attachedFiles
-                      }
-                    , NoThreadWithMaybeMessage data.repliedTo
-                    )
-                        |> Just
+                Just message ->
+                    case message of
+                        UserTextMessage data ->
+                            ( { createdAt = data.createdAt
+                              , createdBy = data.createdBy
+                              , content = data.content
+                              , reactions = data.reactions
+                              , editedAt = data.editedAt
+                              }
+                            , NoThreadWithMaybeMessage data.repliedTo
+                            )
+                                |> Just
 
-                _ ->
+                        EncryptedUserTextMessage _ ->
+                            Nothing
+
+                        UserJoinedMessage _ _ _ _ ->
+                            Nothing
+
+                        DeletedMessage _ ->
+                            Nothing
+
+                        CallStarted _ ->
+                            Nothing
+
+                        GameStarted _ ->
+                            Nothing
+
+                Nothing ->
                     Nothing
     in
     case guildOrDmId of
@@ -3226,19 +3681,35 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                                     |> .messages
                                     |> MessageArray.get messageId
                             of
-                                Just (UserTextMessage data) ->
-                                    ( { createdAt = data.createdAt
-                                      , createdBy = data.createdBy
-                                      , content = data.content
-                                      , reactions = data.reactions
-                                      , editedAt = data.editedAt
-                                      , attachedFiles = data.attachedFiles
-                                      }
-                                    , ViewThreadWithMaybeMessage threadId data.repliedTo
-                                    )
-                                        |> Just
+                                Just message ->
+                                    case message of
+                                        UserTextMessage data ->
+                                            ( { createdAt = data.createdAt
+                                              , createdBy = data.createdBy
+                                              , content = data.content
+                                              , reactions = data.reactions
+                                              , editedAt = data.editedAt
+                                              }
+                                            , ViewThreadWithMaybeMessage threadId data.repliedTo
+                                            )
+                                                |> Just
 
-                                _ ->
+                                        EncryptedUserTextMessage _ ->
+                                            Nothing
+
+                                        UserJoinedMessage _ _ _ _ ->
+                                            Nothing
+
+                                        DeletedMessage _ ->
+                                            Nothing
+
+                                        CallStarted _ ->
+                                            Nothing
+
+                                        GameStarted _ ->
+                                            Nothing
+
+                                Nothing ->
                                     Nothing
 
                         NoThreadWithMessage messageId ->
@@ -3298,7 +3769,7 @@ guildOrDmIdToLatestMessages count ( guildOrDmId, threadRoute ) local =
 
 latestMessagesHelper :
     Int
-    -> { a | messages : MessageArray messageId (Message messageId userId) }
+    -> { a | messages : MessageArray messageId userId }
     -> List ( Int, MessageNoReply userId )
 latestMessagesHelper count channel =
     let
@@ -3323,9 +3794,17 @@ toMessageNoReply message =
             , content = data.content
             , reactions = data.reactions
             , editedAt = data.editedAt
-            , attachedFiles = data.attachedFiles
             }
                 |> UserTextMessage_NoReply
+
+        EncryptedUserTextMessage data ->
+            { content = data.content
+            , createdAt = data.createdAt
+            , createdBy = data.createdBy
+            , reactions = data.reactions
+            , editedAt = data.editedAt
+            }
+                |> EncryptedUserTextMessage_NoReply
 
         UserJoinedMessage time userId reactions _ ->
             UserJoinedMessage_NoReply time userId reactions
@@ -3349,7 +3828,7 @@ discordGuildOrDmIdToLatestMessages :
 discordGuildOrDmIdToLatestMessages count guildOrDmId threadRoute local =
     let
         helper2 :
-            { a | messages : MessageArray messageId (Message messageId userId) }
+            { a | messages : MessageArray messageId userId }
             -> Maybe (List ( Int, MessageNoReply userId ))
         helper2 channel =
             latestMessagesHelper count channel |> Just
@@ -3610,8 +4089,8 @@ drawingHandleChangeHelperFrontend :
     -> Drawing.MessageAnchor
     -> Drawing.LocalChange
     -> ThreadRouteWithMessage
-    -> { b | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
-    -> { b | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
+    -> { b | messages : MessageArray ChannelMessageId userId, threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
+    -> { b | messages : MessageArray ChannelMessageId userId, threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
 drawingHandleChangeHelperFrontend changeBy anchor change threadRoute channel =
     case threadRoute of
         NoThreadWithMessage messageId ->
@@ -3632,8 +4111,8 @@ drawingHandleChangeNoThreadFrontend :
     -> Drawing.MessageAnchor
     -> Drawing.LocalChange
     -> Id messageId
-    -> { b | messages : MessageArray messageId (Message messageId userId) }
-    -> { b | messages : MessageArray messageId (Message messageId userId) }
+    -> { b | messages : MessageArray messageId userId }
+    -> { b | messages : MessageArray messageId userId }
 drawingHandleChangeNoThreadFrontend changedBy anchor change messageId channel =
     { channel
         | messages =
@@ -3706,7 +4185,10 @@ arrayFindIndexRightHelper index selectFunc array =
             Nothing
 
 
-markCallMessageAsEndedBackend : Time.Posix -> { a | messages : IdArray messageId (Message messageId userId) } -> { a | messages : IdArray messageId (Message messageId userId) }
+markCallMessageAsEndedBackend :
+    Time.Posix
+    -> { a | messages : IdArray messageId (Message messageId userId) }
+    -> { a | messages : IdArray messageId (Message messageId userId) }
 markCallMessageAsEndedBackend time channel =
     let
         lastCallIndex : Maybe ( Int, Message messageId userId )
@@ -3743,7 +4225,7 @@ markCallMessageAsEndedBackend time channel =
             channel
 
 
-markCallMessageAsEndedFrontend : Time.Posix -> { a | messages : MessageArray messageId (Message messageId userId) } -> { a | messages : MessageArray messageId (Message messageId userId) }
+markCallMessageAsEndedFrontend : Time.Posix -> { a | messages : MessageArray messageId userId } -> { a | messages : MessageArray messageId userId }
 markCallMessageAsEndedFrontend time channel =
     let
         lastCallIndex : Maybe ( Id messageId, Message messageId userId )

@@ -25,12 +25,15 @@ module User exposing
     , getUser
     , init
     , linkDiscordDataCodec
+    , missingName
     , multipleProfileImages
+    , privateKeyForAccount
     , profileImage
     , profileImageHtml
     , profileImageNoRounding
     , profileImageRounding
     , profileImageSize
+    , redactPrivateKeys
     , sectionToString
     , setColor
     , setDiscordGuildNotificationLevel
@@ -62,6 +65,7 @@ import DiscordUserData exposing (DiscordUserData, DiscordUserLoadingData)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..), SkinTone)
+import Encryption exposing (BytesHash)
 import FileStatus exposing (FileHash)
 import GuildIcon
 import Html exposing (Html)
@@ -69,6 +73,7 @@ import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId)
 import Json.Decode
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
+import Message exposing (MessageContent)
 import MuteSettings
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -80,11 +85,18 @@ import SafeJson exposing (SafeJson)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker exposing (StickerData)
+import String.Nonempty exposing (NonemptyString)
 import Ui exposing (Element)
 import Ui.Font
 import UserAgent exposing (UserAgent)
 import UserColor exposing (UserColor)
 import UserSession exposing (DiscordFrontendUser, UserSession)
+import X25519
+
+
+missingName : String
+missingName =
+    "<missing>"
 
 
 {-| Contains sensitive data that should only be accessible by admins, the backend, and the user themselves.
@@ -119,6 +131,12 @@ type alias BackendUser =
     , availableStickers : SeqSet (Id StickerId)
     , availableCustomEmojis : SeqSet (Id CustomEmojiId)
     , muteSettings : MuteSettings.Model
+    , -- The public half of the key this account encrypts to. The private half is only
+      -- ever shown to the user once, when they generate it, and is never sent here.
+      publicKey : Maybe X25519.PublicKey
+    , -- Whether the warning about losing your private key has been accepted. Kept on the
+      -- account rather than per conversation so that it is only answered once.
+      e2eeRisksAccepted : Bool
     }
 
 
@@ -246,6 +264,70 @@ type alias FrontendCurrentUser =
     BackendUser
 
 
+redactPrivateKeys : { a | publicKey : Maybe X25519.PublicKey } -> NonemptyString -> NonemptyString
+redactPrivateKeys user text =
+    case user.publicKey of
+        Nothing ->
+            text
+
+        Just _ ->
+            let
+                original : String
+                original =
+                    String.Nonempty.toString text
+            in
+            String.words original
+                |> List.filter
+                    (\word ->
+                        String.endsWith "=" word
+                            && (case privateKeyForAccount word user of
+                                    Ok _ ->
+                                        True
+
+                                    Err _ ->
+                                        False
+                               )
+                    )
+                |> List.foldl (\word acc -> String.replace word redactedPrivateKey acc) original
+                |> String.Nonempty.fromString
+                |> Maybe.withDefault text
+
+
+{-| What a private key gets replaced with. The asterisks are what the message formatting
+uses for emphasis, so it stands out in the conversation.
+-}
+redactedPrivateKey : String
+redactedPrivateKey =
+    "*don't reveal your private key!*"
+
+
+{-| Read a private key someone has typed in and check it is the one that goes with this
+account's public key.
+
+The key is never stored: it is turned into a shared secret and dropped. That means it has
+to be asked for again on another device or after a reload, which is the trade for not
+keeping it anywhere a script could read it.
+
+-}
+privateKeyForAccount : String -> { a | publicKey : Maybe X25519.PublicKey } -> Result String X25519.PrivateKey
+privateKeyForAccount text user =
+    case user.publicKey of
+        Nothing ->
+            Err "This account doesn't have a key pair yet"
+
+        Just publicKey ->
+            case X25519.privateKeyFromString (String.trim text) of
+                Ok privateKey ->
+                    if X25519.toPublicKey privateKey == publicKey then
+                        Ok privateKey
+
+                    else
+                        Err "That isn't the private key for this account"
+
+                Err error ->
+                    Err error
+
+
 linkDiscordDataCodec : Codec Discord.UserAuth
 linkDiscordDataCodec =
     Codec.object Discord.UserAuth
@@ -311,6 +393,8 @@ init createdAt name email userIsAdmin =
     , availableStickers = SeqSet.empty
     , availableCustomEmojis = SeqSet.empty
     , muteSettings = MuteSettings.init
+    , publicKey = Nothing
+    , e2eeRisksAccepted = False
     }
 
 
@@ -761,6 +845,7 @@ type alias FrontendUser =
     { name : PersonName
     , color : UserColor
     , icon : Maybe FileHash
+    , publicKey : Maybe X25519.PublicKey
     }
 
 
@@ -811,6 +896,7 @@ type alias LocalUser =
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , emojiData : Maybe Emoji.CachedEmojiData
+    , decryptedMessages : SeqDict BytesHash (Result () (MessageContent (Id UserId)))
     }
 
 
@@ -887,6 +973,8 @@ backendToFrontendCurrent user =
     , availableStickers = user.availableStickers
     , availableCustomEmojis = user.availableCustomEmojis
     , muteSettings = user.muteSettings
+    , publicKey = user.publicKey
+    , e2eeRisksAccepted = user.e2eeRisksAccepted
     }
 
 
@@ -897,18 +985,20 @@ backendToFrontend user =
     { name = user.name
     , color = user.color
     , icon = user.icon
+    , publicKey = user.publicKey
     }
 
 
 {-| Convert a BackendUser to a FrontendUser while only including data the current user has permission to see
 -}
 backendToFrontendForUser :
-    { a | name : PersonName, color : UserColor, icon : Maybe FileHash }
+    { a | name : PersonName, color : UserColor, icon : Maybe FileHash, publicKey : Maybe X25519.PublicKey }
     -> FrontendUser
 backendToFrontendForUser user =
     { name = user.name
     , color = user.color
     , icon = user.icon
+    , publicKey = user.publicKey
     }
 
 
@@ -919,7 +1009,7 @@ toString userId allUsers2 =
             PersonName.toString user.name
 
         Nothing ->
-            "<missing>"
+            missingName
 
 
 toStringView : userId -> SeqDict userId { a | name : PersonName, color : UserColor } -> Element msg
@@ -931,7 +1021,7 @@ toStringView userId allUsers2 =
                 |> Ui.el [ Ui.Font.bold, Ui.Font.color (UserColor.toColor user.color), Ui.clipWithEllipsis ]
 
         Nothing ->
-            Ui.text "<missing>"
+            Ui.text missingName
 
 
 toStringAlt : Id UserId -> LocalUser -> String
@@ -945,7 +1035,7 @@ toStringAlt userId local =
                 PersonName.toString user.name
 
             Nothing ->
-                "<missing>"
+                missingName
 
 
 profileImageSize : number

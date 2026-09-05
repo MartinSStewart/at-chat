@@ -74,19 +74,19 @@ decodeGuildChannel =
         LocalState.w3_decode_BackendChannel
 
 
-encodeDmChannel : ( DmChannelId, DmChannel.DmChannel ) -> Encoder
+encodeDmChannel : ( DmChannelId, DmChannel.BackendDmChannel ) -> Encoder
 encodeDmChannel ( key, value ) =
     Bytes.Encode.sequence
         [ DmChannelId.w3_encode_DmChannelId key
-        , DmChannel.w3_encode_DmChannel value
+        , DmChannel.w3_encode_BackendDmChannel value
         ]
 
 
-decodeDmChannel : Decoder ( DmChannelId, DmChannel.DmChannel )
+decodeDmChannel : Decoder ( DmChannelId, DmChannel.BackendDmChannel )
 decodeDmChannel =
     Bytes.Decode.map2 Tuple.pair
         DmChannelId.w3_decode_DmChannelId
-        DmChannel.w3_decode_DmChannel
+        DmChannel.w3_decode_BackendDmChannel
 
 
 {-| Written the same way `encodeGuildHeader` writes a guild: the guild without
@@ -174,7 +174,7 @@ amount.
 foldStreamedBackendModel :
     { init : BackendModel -> state
     , guild : ( Id GuildId, LocalState.BackendGuild ) -> state -> state
-    , dmChannel : ( DmChannelId, DmChannel.DmChannel ) -> state -> state
+    , dmChannel : ( DmChannelId, DmChannel.BackendDmChannel ) -> state -> state
     , discordGuild : ( Discord.Id Discord.GuildId, LocalState.DiscordBackendGuild ) -> state -> state
     , discordDmChannel : ( Discord.Id Discord.PrivateChannelId, DmChannel.DiscordDmChannel ) -> state -> state
     }

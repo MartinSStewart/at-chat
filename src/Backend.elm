@@ -23,7 +23,7 @@ import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
 import DiscordUserData exposing (DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..))
-import DmChannel exposing (DiscordDmChannel, DmChannel)
+import DmChannel exposing (BackendDmChannel, DiscordDmChannel)
 import DmChannelId exposing (DmChannelId, GuildOrFullDmId(..))
 import Drawing
 import Duration
@@ -1238,6 +1238,12 @@ update msg model =
                                                         (\message members ->
                                                             case message of
                                                                 UserTextMessage message2 ->
+                                                                    NonemptyDict.updateIfExists
+                                                                        message2.createdBy
+                                                                        (\a -> { a | messagesSent = a.messagesSent + 1 })
+                                                                        members
+
+                                                                EncryptedUserTextMessage message2 ->
                                                                     NonemptyDict.updateIfExists
                                                                         message2.createdBy
                                                                         (\a -> { a | messagesSent = a.messagesSent + 1 })
@@ -2504,7 +2510,15 @@ discordStartThread timezone discordUser channel channelId threadId messageId mod
                 Just message ->
                     case message of
                         UserTextMessage a ->
-                            RichText.toStringWithGetter timezone DiscordUserData.username True model.discordUsers a.content
+                            RichText.toStringWithGetter
+                                timezone
+                                DiscordUserData.username
+                                True
+                                model.discordUsers
+                                a.content.content
+
+                        EncryptedUserTextMessage _ ->
+                            ""
 
                         UserJoinedMessage _ userId _ _ ->
                             case SeqDict.get userId model.discordUsers of
@@ -6060,6 +6074,393 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_RequestE2ee id ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session _ _ dmChannelId dmChannel ->
+                            let
+                                canRequest : Bool
+                                canRequest =
+                                    case dmChannel.e2ee of
+                                        DmChannel.E2eeDisabled _ ->
+                                            True
+
+                                        DmChannel.E2eeDeclinedBy declinedBy ->
+                                            declinedBy == session.userId
+
+                                        DmChannel.E2eeRequestedBy _ ->
+                                            False
+
+                                        DmChannel.E2eeEnabled _ ->
+                                            False
+                            in
+                            if canRequest then
+                                let
+                                    model2 : BackendModel
+                                    model2 =
+                                        { model
+                                            | dmChannels =
+                                                SeqDict.insert
+                                                    dmChannelId
+                                                    { dmChannel
+                                                        | e2ee =
+                                                            DmChannel.E2eeRequestedBy ( session.userId, session.sessionIdHash )
+                                                    }
+                                                    model.dmChannels
+                                        }
+
+                                    ( sessions, notificationCmd ) =
+                                        Broadcast.e2eeRequestNotification time session.userId id model2
+                                in
+                                ( { model2 | sessions = sessions }
+                                , Command.batch
+                                    [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                    , Broadcast.toDmChannelExcludingOne
+                                        clientId
+                                        session.userId
+                                        id
+                                        (\id2 -> Server_E2eeRequested id2 ( session.userId, session.sessionIdHash ))
+                                        model2
+                                    , notificationCmd
+                                    ]
+                                )
+
+                            else
+                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
+                Local_EncryptOldMessages id messages ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\_ _ _ dmChannelId dmChannel ->
+                            BackendExtra.encryptOldMessages clientId changeId localMsg model messages dmChannelId dmChannel
+                        )
+
+                Local_DisableE2ee id _ ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session _ _ _ dmChannel ->
+                            case dmChannel.e2ee of
+                                DmChannel.E2eeEnabled _ ->
+                                    ( model
+                                    , Command.batch
+                                        [ BackendExtra.channelDataToDecrypt dmChannel
+                                            |> FilledInByBackend
+                                            |> Local_DisableE2ee id
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toDmChannelExcludingOne
+                                            clientId
+                                            session.userId
+                                            id
+                                            (Server_DisableE2ee time session.userId)
+                                            model
+                                        ]
+                                    )
+
+                                DmChannel.E2eeDisabled _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                DmChannel.E2eeRequestedBy _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                DmChannel.E2eeDeclinedBy _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
+                Local_DecryptOldMessages id _ messages ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session _ _ dmChannelId dmChannel ->
+                            BackendExtra.decryptOldMessages
+                                time
+                                clientId
+                                changeId
+                                localMsg
+                                model
+                                messages
+                                session
+                                dmChannelId
+                                dmChannel
+                        )
+
+                Local_SetE2eeRisksAccepted isAccepted ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\session user ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user | e2eeRisksAccepted = isAccepted }
+                                        model.users
+                              }
+                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                            )
+                        )
+
+                Local_SetPublicKey publicKey _ ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\session user ->
+                            case user.publicKey of
+                                Nothing ->
+                                    ( { model
+                                        | users =
+                                            NonemptyDict.insert
+                                                session.userId
+                                                { user | publicKey = Just publicKey }
+                                                model.users
+                                      }
+                                    , Command.batch
+                                        [ BackendExtra.dmChannelsThatNeedEncrypting session model.dmChannels
+                                            |> FilledInByBackend
+                                            |> Local_SetPublicKey publicKey
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toEveryoneWhoCanSeeUser
+                                            clientId
+                                            session.userId
+                                            (Server_SetPublicKey session.userId publicKey |> ServerChange)
+                                            model
+                                        ]
+                                    )
+
+                                Just existingPublicKey ->
+                                    if publicKey == existingPublicKey then
+                                        ( model
+                                        , BackendExtra.dmChannelsThatNeedEncrypting session model.dmChannels
+                                            |> FilledInByBackend
+                                            |> Local_SetPublicKey publicKey
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        )
+
+                                    else
+                                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
+                Local_SendEncryptedMessage _ id fileHashes content threadRoute ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session user _ dmChannelId dmChannel ->
+                            case dmChannel.e2ee of
+                                DmChannel.E2eeEnabled _ ->
+                                    BackendExtra.sendEncryptedDm
+                                        time
+                                        clientId
+                                        changeId
+                                        id
+                                        fileHashes
+                                        content
+                                        threadRoute
+                                        session
+                                        user
+                                        dmChannelId
+                                        dmChannel
+                                        model
+
+                                _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
+                Local_SendEncryptedEditMessage _ id threadRoute fileHashes content ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session _ _ dmChannelId dmChannel ->
+                            case
+                                ( dmChannel.e2ee
+                                , LocalState.editEncryptedMessageHelper
+                                    time
+                                    session.userId
+                                    fileHashes
+                                    content
+                                    threadRoute
+                                    dmChannel
+                                )
+                            of
+                                ( DmChannel.E2eeEnabled _, Ok dmChannel2 ) ->
+                                    ( { model
+                                        | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
+                                      }
+                                    , Command.batch
+                                        [ Local_SendEncryptedEditMessage time id threadRoute fileHashes content
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toDmChannelExcludingOne
+                                            clientId
+                                            session.userId
+                                            id
+                                            (\id2 ->
+                                                Server_SendEncryptedEditMessage
+                                                    time
+                                                    session.userId
+                                                    id2
+                                                    threadRoute
+                                                    fileHashes
+                                                    content
+                                            )
+                                            model
+                                        ]
+                                    )
+
+                                _ ->
+                                    -- Either nothing agreed to encrypt this conversation, or
+                                    -- the message being edited isn't one this user wrote.
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
+                Local_AcceptE2ee id _ _ ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session _ _ dmChannelId dmChannel ->
+                            case dmChannel.e2ee of
+                                DmChannel.E2eeRequestedBy requestedBy ->
+                                    if Tuple.first requestedBy == session.userId && (session.userId /= id.otherUserId) then
+                                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                    else
+                                        let
+                                            dmChannels =
+                                                SeqDict.insert
+                                                    dmChannelId
+                                                    { dmChannel
+                                                        | e2ee =
+                                                            DmChannel.E2eeEnabled
+                                                                { enabledAt = time, requestedBy = requestedBy }
+                                                    }
+                                                    model.dmChannels
+
+                                            model2 : BackendModel
+                                            model2 =
+                                                { model | dmChannels = dmChannels }
+                                        in
+                                        ( model2
+                                        , Command.batch
+                                            [ BackendExtra.dmChannelsThatNeedEncrypting session dmChannels
+                                                |> FilledInByBackend
+                                                |> Local_AcceptE2ee id time
+                                                |> LocalChangeResponse changeId
+                                                |> Lamdera.sendToFrontend clientId
+                                            , Broadcast.toDmChannelExcludingOne
+                                                clientId
+                                                session.userId
+                                                id
+                                                (\id2 -> Server_E2eeAccepted id2 time)
+                                                model2
+                                            ]
+                                        )
+
+                                _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
+                Local_DeclineE2eeRequestAsInitiator id ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session _ _ dmChannelId dmChannel ->
+                            case dmChannel.e2ee of
+                                DmChannel.E2eeDisabled _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                DmChannel.E2eeDeclinedBy _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                DmChannel.E2eeEnabled _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
+                                    if requestedBy == session.userId then
+                                        let
+                                            model2 : BackendModel
+                                            model2 =
+                                                { model
+                                                    | dmChannels =
+                                                        SeqDict.insert
+                                                            dmChannelId
+                                                            { dmChannel | e2ee = DmChannel.E2eeDisabled Nothing }
+                                                            model.dmChannels
+                                                }
+                                        in
+                                        ( model2
+                                        , Command.batch
+                                            [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                            , Broadcast.toDmChannelExcludingOne
+                                                clientId
+                                                session.userId
+                                                id
+                                                Server_E2eeRequestCancelled
+                                                model2
+                                            ]
+                                        )
+
+                                    else
+                                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
+                Local_DeclineE2eeRequest id ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        id
+                        (\session _ _ dmChannelId dmChannel ->
+                            case dmChannel.e2ee of
+                                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
+                                    if requestedBy == session.userId && (session.userId /= id.otherUserId) then
+                                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                    else
+                                        let
+                                            model2 : BackendModel
+                                            model2 =
+                                                { model
+                                                    | dmChannels =
+                                                        SeqDict.insert
+                                                            dmChannelId
+                                                            { dmChannel | e2ee = DmChannel.E2eeDeclinedBy session.userId }
+                                                            model.dmChannels
+                                                }
+                                        in
+                                        ( model2
+                                        , Command.batch
+                                            [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                            , Broadcast.toDmChannelExcludingOne
+                                                clientId
+                                                session.userId
+                                                id
+                                                (\id2 -> Server_E2eeRequestDeclined id2 session.userId)
+                                                model2
+                                            ]
+                                        )
+
+                                DmChannel.E2eeDeclinedBy _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                DmChannel.E2eeDisabled _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                DmChannel.E2eeEnabled _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
         TwoFactorToBackend toBackend2 ->
             BackendExtra.asUser
                 model
@@ -6323,6 +6724,7 @@ handleGoMatchRequest messageId channel model =
                             { name = PersonName.fromStringLossy "<missing>"
                             , color = UserColor.default
                             , icon = Nothing
+                            , publicKey = Nothing
                             }
             in
             { setup = setup
@@ -6607,7 +7009,7 @@ handleDmGoGame :
     -> Id ChannelMessageId
     -> Go.LocalChange
     -> DmChannelId
-    -> DmChannel
+    -> BackendDmChannel
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDmGoGame time session clientId changeId id matchId goChange dmChannelId dmChannel model =
@@ -7467,7 +7869,7 @@ joinDmVoiceChat sessionId clientId time id model userId =
         dmChannelId =
             DmChannelId.fromUserIds userId id.otherUserId
 
-        dmChannel : DmChannel
+        dmChannel : BackendDmChannel
         dmChannel =
             SeqDict.get dmChannelId model.dmChannels |> Maybe.withDefault DmChannel.backendInit
     in
@@ -8614,7 +9016,7 @@ updateFromFrontendAdmin clientId toBackend model =
                         ExportAll ->
                             SeqDict.toList model.discordGuilds
 
-                remainingDmChannels : List ( DmChannelId, DmChannel )
+                remainingDmChannels : List ( DmChannelId, BackendDmChannel )
                 remainingDmChannels =
                     case isPartial of
                         ExportSubset selection ->

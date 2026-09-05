@@ -23,9 +23,11 @@ module E2EHelper exposing
     , clickSpoiler
     , connectFourUsersAndJoinNewGuild
     , connectTwoUsersAndJoinNewGuild
+    , copiedText
     , createThread
     , currentDiscordUserId
     , decodeCustomRequest
+    , defaultAdminId
     , desktopWindow
     , discordUserAuth
     , domain
@@ -80,6 +82,7 @@ module E2EHelper exposing
     , regularDiscordChannelCreateEvent
     , regularDiscordChannelId
     , safariIphone
+    , scrollShiftCount
     , scrollToBottom
     , scrollToMiddle
     , scrollToTop
@@ -94,12 +97,14 @@ module E2EHelper exposing
     , startTest
     , startTime
     , startupDataJson
+    , startupDataJsonWithE2eeKeys
     , startupDataJsonWithInset
     , tallDesktopWindow
     , tallSnapshot
     , unwrapBackend
     , uploadImageAttachment
     , userEmail
+    , userName
     , websocketByDiscordToken
     , writeMessage
     , writeMessageMobile
@@ -110,6 +115,7 @@ import Array
 import Audio
 import Backend
 import Broadcast
+import Bytes.Encode
 import Call
 import ChannelDescription
 import Codec
@@ -127,6 +133,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed
 import Emoji exposing (EmojiOrCustomEmoji(..), SkinTone(..))
+import Encryption exposing (EncryptedData(..))
 import Env
 import Expect
 import FileStatus
@@ -159,6 +166,7 @@ import RichText exposing (Domain(..))
 import SafeJson exposing (SafeJson(..))
 import SecretId exposing (SecretId(..))
 import SeqDict
+import SeqSet
 import SessionIdHash exposing (SessionIdHash(..))
 import Slack
 import String.Nonempty exposing (NonemptyString(..))
@@ -177,6 +185,7 @@ import UserAgent
 import UserColor
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import WordSpellingGame
+import X25519
 
 
 domain : Url
@@ -191,9 +200,6 @@ startupDataJson time userAgent =
     startupDataJsonWithInset time userAgent 0 False
 
 
-{-| Like [`startupDataJson`](#startupDataJson) but with a nonzero safe-area top inset (e.g. a phone
-notch), so a test can check that touch coordinates are adjusted for it.
--}
 startupDataJsonWithInset : Time.Posix -> String -> Int -> Bool -> Json.Encode.Value
 startupDataJsonWithInset time userAgent safeAreaInsetTop isPwa =
     Json.Encode.object
@@ -206,7 +212,49 @@ startupDataJsonWithInset time userAgent safeAreaInsetTop isPwa =
         , ( "safeAreaInsetTop", Json.Encode.int safeAreaInsetTop )
         , ( "devicePixelRatio", Json.Encode.float 2 )
         , ( "timezone", testTimezone )
+        , ( "randomSeed", testRandomSeed time )
+        , -- A browser in a test starts out with nothing stored.
+          ( "e2eeKeys", Json.Encode.list Json.Encode.int [] )
         ]
+
+
+startupDataJsonWithE2eeKeys : Time.Posix -> String -> List (Id UserId) -> Json.Encode.Value
+startupDataJsonWithE2eeKeys time userAgent e2eeKeys =
+    Json.Encode.object
+        [ ( "timeOrigin", Time.posixToMillis time |> toFloat |> Json.Encode.float )
+        , ( "loadStartupDataTime", Time.posixToMillis time |> toFloat |> Json.Encode.float )
+        , ( "userAgent", Json.Encode.string userAgent )
+        , ( "scrollbarWidth", Json.Encode.int 20 )
+        , ( "isPwa", Json.Encode.bool False )
+        , ( "notificationPermission", Json.Encode.string "denied" )
+        , ( "safeAreaInsetTop", Json.Encode.int 0 )
+        , ( "devicePixelRatio", Json.Encode.float 2 )
+        , ( "timezone", testTimezone )
+        , ( "randomSeed", testRandomSeed time )
+        , ( "e2eeKeys", Json.Encode.list (\userId -> Json.Encode.int (Id.toInt userId)) e2eeKeys )
+        ]
+
+
+defaultAdminId : Id UserId
+defaultAdminId =
+    Id.fromInt 0
+
+
+testRandomSeed : Time.Posix -> Json.Encode.Value
+testRandomSeed time =
+    List.foldl
+        (\_ ( previous, acc ) ->
+            let
+                next : Int
+                next =
+                    modBy 4294967296 (previous * 1103515 + 12345)
+            in
+            ( next, next :: acc )
+        )
+        ( Time.posixToMillis time + 1, [] )
+        (List.range 1 32)
+        |> Tuple.second
+        |> Json.Encode.list Json.Encode.int
 
 
 {-| The timezone tests run in. It sits on UTC and puts its clocks forward an hour for the
@@ -549,6 +597,14 @@ adminName =
     PersonName.toString Backend.adminUser.name
 
 
+{-| The display name the second person in a test signs up with. Read off the screen by
+tests that check what one of them is told about the other.
+-}
+userName : String
+userName =
+    "Stevie Steve"
+
+
 userEmail : EmailAddress
 userEmail =
     Unsafe.emailAddress "user@mail.com"
@@ -638,6 +694,36 @@ checkNotification title body =
                 [] ->
                     Err ("Notification not found for \"" ++ body ++ "\"")
         )
+
+
+{-| The last thing a client put on the clipboard. Pressing a copy button is how a test
+gets hold of something the app only shows on screen, like an invite link or a private
+key, without having to read it back out of the model.
+-}
+copiedText : Lamdera.ClientId -> T.Data frontendModel backendModel -> Maybe String
+copiedText clientId data =
+    List.Extra.findMap
+        (\request ->
+            if request.clientId == clientId && request.portName == "copy_to_clipboard_to_js" then
+                Json.Decode.decodeValue Json.Decode.string request.value |> Result.toMaybe
+
+            else
+                Nothing
+        )
+        data.portRequests
+
+
+{-| How many times a client has asked the browser to shift the scroll, which is what
+keeps the reader in place when messages are added above them.
+-}
+scrollShiftCount : Lamdera.ClientId -> T.Data FrontendModel BackendModel2 -> Int
+scrollShiftCount clientId data =
+    List.filter
+        (\request ->
+            request.clientId == clientId && request.portName == "shift_scroll_by_element_delta_to_js"
+        )
+        data.portRequests
+        |> List.length
 
 
 httpBasic : String -> Int -> String -> HttpResponse
@@ -998,28 +1084,18 @@ connectFourUsersAndJoinNewGuild windowSize continueFunc =
             , admin.click 100 (Dom.id "guild_createGuildSubmit")
             , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
             , admin.click 100 (Dom.id "guild_createInviteLink")
-            , admin.click 100 (Dom.id "guild_copyText")
+            , admin.click 100 (Dom.id "guild_inviteLinkCopy_copy")
             , T.andThen
                 100
                 (\data ->
-                    case
-                        List.Extra.findMap
-                            (\request ->
-                                if request.clientId == admin.clientId && request.portName == "copy_to_clipboard_to_js" then
-                                    Json.Decode.decodeValue Json.Decode.string request.value |> Result.toMaybe
-
-                                else
-                                    Nothing
-                            )
-                            data.portRequests
-                    of
+                    case copiedText admin.clientId data of
                         Just inviteUrl ->
                             [ joinGuildFromInvite
                                 inviteUrl
                                 windowSize
                                 sessionId1
                                 userEmail
-                                "Stevie Steve"
+                                userName
                                 (\userA ->
                                     [ pickUserColor 260 userA
                                     , joinGuildFromInvite
@@ -1130,21 +1206,11 @@ connectTwoUsersAndJoinNewGuild windowSize continueFunc =
             , admin.click 100 (Dom.id "guild_createGuildSubmit")
             , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
             , admin.click 100 (Dom.id "guild_createInviteLink")
-            , admin.click 100 (Dom.id "guild_copyText")
+            , admin.click 100 (Dom.id "guild_inviteLinkCopy_copy")
             , T.andThen
                 100
                 (\data ->
-                    case
-                        List.Extra.findMap
-                            (\request ->
-                                if request.clientId == admin.clientId && request.portName == "copy_to_clipboard_to_js" then
-                                    Json.Decode.decodeValue Json.Decode.string request.value |> Result.toMaybe
-
-                                else
-                                    Nothing
-                            )
-                            data.portRequests
-                    of
+                    case copiedText admin.clientId data of
                         Just text ->
                             [ T.connectFrontend
                                 100
@@ -1156,7 +1222,7 @@ connectTwoUsersAndJoinNewGuild windowSize continueFunc =
                                         10
                                         (\data2 -> [ user.portEvent 10 "load_startup_data_from_js" (startupDataJson data2.time firefoxDesktop) ])
                                     , handleLoginFromLoginPage userEmail user
-                                    , user.input 100 (Dom.id "loginForm_name") "Stevie Steve"
+                                    , user.input 100 (Dom.id "loginForm_name") userName
                                     , user.click 100 (Dom.id "loginForm_submit")
                                     , user.click 100 (Dom.id "guild_openChannel_0")
                                     , enableNotifications False user
@@ -2466,6 +2532,41 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetMuteDiscordGuild _ _ _ ->
                     True
 
+                Local_RequestE2ee _ ->
+                    True
+
+                Local_DeclineE2eeRequestAsInitiator _ ->
+                    True
+
+                Local_DeclineE2eeRequest _ ->
+                    True
+
+                Local_SetPublicKey _ _ ->
+                    -- Setting the key on your own account is what this is for, so the
+                    -- attacker succeeding at it against themselves is not a leak.
+                    False
+
+                Local_EncryptOldMessages _ _ ->
+                    True
+
+                Local_DisableE2ee _ _ ->
+                    True
+
+                Local_DecryptOldMessages _ _ _ ->
+                    True
+
+                Local_SetE2eeRisksAccepted _ ->
+                    False
+
+                Local_AcceptE2ee _ _ _ ->
+                    True
+
+                Local_SendEncryptedMessage _ _ _ _ _ ->
+                    True
+
+                Local_SendEncryptedEditMessage _ _ _ _ _ ->
+                    True
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -2705,6 +2806,30 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_DiscordAvatarsLoaded _ _ ->
+                            True
+
+                        Types.Server_E2eeRequested _ _ ->
+                            True
+
+                        Types.Server_E2eeRequestCancelled _ ->
+                            True
+
+                        Types.Server_E2eeRequestDeclined _ _ ->
+                            True
+
+                        Types.Server_E2eeAccepted _ _ ->
+                            True
+
+                        Types.Server_SetPublicKey _ _ ->
+                            True
+
+                        Types.Server_SendEncryptedMessage _ _ _ _ _ _ _ ->
+                            True
+
+                        Types.Server_SendEncryptedEditMessage _ _ _ _ _ _ ->
+                            True
+
+                        Types.Server_DisableE2ee _ _ _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
@@ -2954,7 +3079,40 @@ allAttackerLocalChanges =
         (Drawing.StartStroke ( 0, 0 ))
     , Local_SetMuteDiscordGuild discordUserId discordGuildId MuteSettings.IsMuted
     , Local_SetMuteGuild legitGuildId MuteSettings.IsMuted
+    , Local_RequestE2ee { otherUserId = Broadcast.adminUserId }
+    , Local_DeclineE2eeRequestAsInitiator { otherUserId = Broadcast.adminUserId }
+    , Local_DeclineE2eeRequest { otherUserId = Broadcast.adminUserId }
+    , Local_SetPublicKey attackerPublicKey EmptyPlaceholder
+    , Local_EncryptOldMessages { otherUserId = Broadcast.adminUserId } []
+    , Local_DisableE2ee { otherUserId = Broadcast.adminUserId } EmptyPlaceholder
+    , Local_DecryptOldMessages { otherUserId = Broadcast.adminUserId } (Time.millisToPosix 0) []
+    , Local_SetE2eeRisksAccepted True
+    , Local_AcceptE2ee { otherUserId = Broadcast.adminUserId } startTime EmptyPlaceholder
+    , Local_SendEncryptedMessage
+        startTime
+        { otherUserId = Broadcast.adminUserId }
+        SeqSet.empty
+        (EncryptedData (Bytes.Encode.encode (Bytes.Encode.sequence [])))
+        (NoThreadWithMaybeMessage Nothing)
+    , Local_SendEncryptedEditMessage
+        startTime
+        { otherUserId = Broadcast.adminUserId }
+        (NoThreadWithMessage (Id.fromInt 0))
+        SeqSet.empty
+        (EncryptedData (Bytes.Encode.encode (Bytes.Encode.sequence [])))
     ]
+
+
+{-| A public key for the attacker to try to plant on somebody else's account.
+-}
+attackerPublicKey : X25519.PublicKey
+attackerPublicKey =
+    case X25519.privateKeyFromListInt (List.repeat 8 123456789) of
+        Just privateKey ->
+            X25519.toPublicKey privateKey
+
+        Nothing ->
+            Debug.todo "Eight words is enough for a private key"
 
 
 {-| Id of a private Discord channel in the Bot Test guild (705745250815311942).
@@ -3219,44 +3377,35 @@ inviteUser admin continueWith =
     [ admin.click 100 (Dom.id "guild_openGuild_0")
     , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
     , admin.click 100 (Dom.id "guild_createInviteLink")
-    , admin.click 100 (Dom.id "guild_copyText")
+    , admin.click 100 (Dom.id "guild_inviteLinkCopy_copy")
     , T.andThen
         100
         (\data ->
-            case
-                List.filter
-                    (\portRequest -> portRequest.clientId == admin.clientId && portRequest.portName == "copy_to_clipboard_to_js")
-                    data.portRequests
-            of
-                [ portRequest ] ->
-                    case Json.Decode.decodeValue Json.Decode.string portRequest.value of
-                        Ok copyText ->
-                            [ if String.startsWith Env.domain copyText then
-                                T.connectFrontend
-                                    100
-                                    sessionId1
-                                    (String.dropLeft (String.length Env.domain) copyText)
-                                    desktopWindow
-                                    (\user ->
-                                        [ T.andThen
-                                            10
-                                            (\data2 -> [ user.portEvent 10 "load_startup_data_from_js" (startupDataJson data2.time firefoxDesktop) ])
-                                        , handleLoginFromLoginPage userEmail user
-                                        , user.input 100 (Dom.id "loginForm_name") "Sven"
-                                        , user.click 100 (Dom.id "loginForm_submit")
-                                        , T.group (continueWith user)
-                                        ]
-                                    )
+            case copiedText admin.clientId data of
+                Just copyText ->
+                    [ if String.startsWith Env.domain copyText then
+                        T.connectFrontend
+                            100
+                            sessionId1
+                            (String.dropLeft (String.length Env.domain) copyText)
+                            desktopWindow
+                            (\user ->
+                                [ T.andThen
+                                    10
+                                    (\data2 -> [ user.portEvent 10 "load_startup_data_from_js" (startupDataJson data2.time firefoxDesktop) ])
+                                , handleLoginFromLoginPage userEmail user
+                                , user.input 100 (Dom.id "loginForm_name") "Sven"
+                                , user.click 100 (Dom.id "loginForm_submit")
+                                , T.group (continueWith user)
+                                ]
+                            )
 
-                              else
-                                admin.checkModel 100 (\_ -> Err "Copied invalid link")
-                            ]
+                      else
+                        T.checkState 0 (\_ -> Err "Copied invalid link")
+                    ]
 
-                        Err _ ->
-                            [ admin.checkModel 100 (\_ -> Err "Didn't decode port") ]
-
-                _ ->
-                    [ admin.checkModel 100 (\_ -> Err "Didn't copy link") ]
+                Nothing ->
+                    [ T.checkState 0 (\_ -> Err "Didn't copy link") ]
         )
     ]
         |> T.collapsableGroup "Invite user"
@@ -3371,7 +3520,7 @@ findImageMessage backend =
                     (\( index, message ) ->
                         case message of
                             Message.UserTextMessage data ->
-                                List.Nonempty.toList data.content
+                                List.Nonempty.toList data.content.content
                                     |> List.filterMap
                                         (\part ->
                                             case part of
@@ -3405,7 +3554,7 @@ findEmbedImageMessage backend =
                     (\( index, message ) ->
                         case message of
                             Message.UserTextMessage data ->
-                                case Array.get 0 data.embeds of
+                                case Array.get 0 data.content.embeds of
                                     Just (Embed.EmbedLoaded embed) ->
                                         case embed.image of
                                             Just _ ->

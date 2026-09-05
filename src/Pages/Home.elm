@@ -1,6 +1,7 @@
 module Pages.Home exposing
     ( header
     , loginButtonId
+    , loginSignupText
     , view
     )
 
@@ -13,6 +14,11 @@ import Ui.Anim
 import Ui.Font
 import Ui.Input
 import Ui.Shadow
+
+
+loginSignupText : String
+loginSignupText =
+    "Login/Signup"
 
 
 header : Bool -> Route -> LoginStatus -> Element FrontendMsg_
@@ -46,7 +52,7 @@ header isMobile route loginStatus =
                         loginButtonId
                         PressedShowLogin
                         (buttonAttributes isMobile (notLoggedIn.loginForm /= Nothing || Route.requiresLogin route))
-                        (Ui.text "Login/Signup")
+                        (Ui.text loginSignupText)
             ]
         )
 

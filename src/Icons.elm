@@ -27,6 +27,7 @@ module Icons exposing
     , infinity
     , info
     , link
+    , lockClosed
     , logoutSvg
     , magnifyingGlass
     , map
@@ -240,6 +241,7 @@ gear =
         , Svg.Attributes.viewBox "0 0 24 24"
         , Svg.Attributes.strokeWidth "1.5"
         , Svg.Attributes.stroke "currentColor"
+        , Svg.Attributes.width "24"
         ]
         [ Svg.path
             [ Svg.Attributes.strokeLinecap "round"
@@ -1218,3 +1220,13 @@ backward =
         , Svg.Attributes.width "24"
         ]
         [ Svg.path [ Svg.Attributes.strokeLinecap "round", Svg.Attributes.strokeLinejoin "round", Svg.Attributes.d "M21 16.811c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 0 1 0-1.954l7.108-4.061A1.125 1.125 0 0 1 21 8.689v8.122ZM11.25 16.811c0 .864-.933 1.406-1.683.977l-7.108-4.061a1.125 1.125 0 0 1 0-1.954l7.108-4.061a1.125 1.125 0 0 1 1.683.977v8.122Z" ] [] ]
+
+
+lockClosed : Html msg
+lockClosed =
+    Svg.svg
+        [ Svg.Attributes.viewBox "0 0 24 24"
+        , Svg.Attributes.fill "currentColor"
+        , Svg.Attributes.width "14"
+        ]
+        [ Svg.path [ Svg.Attributes.fillRule "evenodd", Svg.Attributes.d "M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3c0-2.9-2.35-5.25-5.25-5.25Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z", Svg.Attributes.clipRule "evenodd" ] [] ]

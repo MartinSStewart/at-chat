@@ -4,6 +4,8 @@ module Broadcast exposing
     , broadcastDm
     , discordDmNotification
     , discordGuildMessageNotification
+    , e2eeRequestNotification
+    , encryptedDmNotification
     , gameStartedDmNotification
     , gameStartedGuildNotification
     , getSessionFromSessionIdHash
@@ -65,7 +67,7 @@ import NonemptyDict
 import PersonName
 import Ports exposing (SubscribeData)
 import Postmark
-import RichText
+import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
@@ -502,7 +504,7 @@ messageNotification usersMentioned time sender id threadRoute message members mo
     let
         plainText : String
         plainText =
-            RichText.toString Time.utc True (NonemptyDict.toSeqDict model.users) message.content
+            RichText.toString Time.utc True (NonemptyDict.toSeqDict model.users) message.content.content
 
         alwaysNotify : SeqSet (Id UserId)
         alwaysNotify =
@@ -677,7 +679,15 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                 )
                                 (case message of
                                     UserTextMessage message2 ->
-                                        RichText.toStringWithGetter Time.utc DiscordUserData.username True model.discordUsers message2.content
+                                        RichText.toStringWithGetter
+                                            Time.utc
+                                            DiscordUserData.username
+                                            True
+                                            model.discordUsers
+                                            message2.content.content
+
+                                    EncryptedUserTextMessage _ ->
+                                        "Message is encrypted"
 
                                     UserJoinedMessage _ _ _ _ ->
                                         "New user joined!"
@@ -1043,7 +1053,15 @@ messageNotificationEmail time email senderName userToString navigateTo plainText
             helper
                 (notificationEmailSubject senderName)
                 (Postmark.BodyBoth
-                    (notificationEmailContent userToString senderName link data)
+                    (notificationEmailContent userToString senderName link data.content.content data.content.attachedFiles)
+                    (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ link ++ " to reply.")
+                )
+
+        EncryptedUserTextMessage _ ->
+            helper
+                (notificationEmailSubject senderName)
+                (Postmark.BodyBoth
+                    (notificationEmailContent userToString senderName link RichText.messageIsEncrypted SeqDict.empty)
                     (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ link ++ " to reply.")
                 )
 
@@ -1076,8 +1094,14 @@ at-chat: a dark message card with the sender's name in bold above the message
 text. Email clients only support a small subset of CSS, so this sticks to inline
 styles and basic block elements.
 -}
-notificationEmailContent : (userId -> String) -> String -> String -> UserTextMessageData messageId userId -> Email.Html.Html
-notificationEmailContent userToString senderName link message =
+notificationEmailContent :
+    (userId -> String)
+    -> String
+    -> String
+    -> Nonempty (RichText userId)
+    -> SeqDict (Id FileId) FileData
+    -> Email.Html.Html
+notificationEmailContent userToString senderName link content attachedFiles =
     Email.Html.div
         [ Email.Html.Attributes.backgroundColor (MyUi.colorToStyle MyUi.background3)
         , Email.Html.Attributes.padding "8px"
@@ -1096,7 +1120,7 @@ notificationEmailContent userToString senderName link message =
             , Email.Html.Attributes.lineHeight "1.4"
             , Email.Html.Attributes.style "white-space" "pre-wrap"
             ]
-            (RichText.emailView { userToString = userToString, attachedFiles = message.attachedFiles } message.content)
+            (RichText.emailView { userToString = userToString, attachedFiles = attachedFiles } content)
         , Email.Html.div
             [ Email.Html.Attributes.paddingTop "20px" ]
             [ Email.Html.b
@@ -1535,7 +1559,7 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
                     senderFrontendUser
                     time
                     (GuildOrDmId_Dm otherUserId2)
-                    message.content
+                    message.content.content
                     threadRouteWithReplyTo
                     attachedFiles
                     stickers
@@ -1615,6 +1639,130 @@ gameStartedDmNotification time senderId { otherUserId } gameType model =
 
             Nothing ->
                 ( model.sessions, Command.none )
+
+
+{-| Tell the other person a message arrived. The server cannot read it, so unlike a plain
+message notification this can only say that there was one.
+-}
+encryptedDmNotification :
+    Time.Posix
+    -> Id UserId
+    -> Viewing_DmId
+    -> BackendModel
+    -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
+encryptedDmNotification time senderId { otherUserId } model =
+    let
+        isViewing : Bool
+        isViewing =
+            List.any
+                (\connection ->
+                    case connection.currentlyViewing of
+                        UserSession.Viewing_Dm data ->
+                            data.id.otherUserId == senderId
+
+                        _ ->
+                            False
+                )
+                (userGetAllConnections otherUserId model)
+    in
+    if senderId == otherUserId || isViewing then
+        ( model.sessions, Command.none )
+
+    else
+        case NonemptyDict.get senderId model.users of
+            Just senderUser ->
+                notificationAlt
+                    time
+                    otherUserId
+                    (case senderUser.name of
+                        PersonName.PersonName name ->
+                            name
+                    )
+                    (case senderUser.icon of
+                        Just icon ->
+                            FileStatus.fileUrl FileStatus.pngContent icon
+
+                        Nothing ->
+                            Env.domain ++ "/at-logo-no-background.png"
+                    )
+                    encryptedDmText
+                    encryptedDmText
+                    (Email.Html.text encryptedDmText)
+                    (DmRoute
+                        { channelId = DmChannelId.fromUserIds senderId otherUserId
+                        , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
+                        , tab = Nothing
+                        , channelsVisible = ChannelsHiddenOnMobile
+                        }
+                        |> Just
+                    )
+                    model.sessions
+                    model
+                    |> Tuple.mapSecond Command.batch
+
+            Nothing ->
+                ( model.sessions, Command.none )
+
+
+encryptedDmText : String
+encryptedDmText =
+    "Sent you an encrypted message"
+
+
+{-| Let the other person in a DM know that they've been asked to start end-to-end
+encrypting it. Unlike a message notification this is sent even when they're looking at
+the DM, since the only thing marking the request in the conversation is a dot on the
+channel settings button, which is easy to miss.
+-}
+e2eeRequestNotification :
+    Time.Posix
+    -> Id UserId
+    -> Viewing_DmId
+    -> BackendModel
+    -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
+e2eeRequestNotification time requestedBy { otherUserId } model =
+    if requestedBy == otherUserId then
+        ( model.sessions, Command.none )
+
+    else
+        case NonemptyDict.get requestedBy model.users of
+            Just requestedByUser ->
+                notificationAlt
+                    time
+                    otherUserId
+                    (case requestedByUser.name of
+                        PersonName.PersonName name ->
+                            name
+                    )
+                    (case requestedByUser.icon of
+                        Just icon ->
+                            FileStatus.fileUrl FileStatus.pngContent icon
+
+                        Nothing ->
+                            Env.domain ++ "/at-logo-no-background.png"
+                    )
+                    e2eeRequestText
+                    e2eeRequestText
+                    (Email.Html.text e2eeRequestText)
+                    (DmRoute
+                        { channelId = DmChannelId.fromUserIds requestedBy otherUserId
+                        , threadRoute = NoThreadWithFriends Nothing ShowChannelSettings
+                        , tab = Nothing
+                        , channelsVisible = ChannelsHiddenOnMobile
+                        }
+                        |> Just
+                    )
+                    model.sessions
+                    model
+                    |> Tuple.mapSecond Command.batch
+
+            Nothing ->
+                ( model.sessions, Command.none )
+
+
+e2eeRequestText : String
+e2eeRequestText =
+    "Wants to start end-to-end encryption"
 
 
 {-| Notify the members of a guild channel when a game is started in it, skipping anyone who is

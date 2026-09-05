@@ -1,23 +1,193 @@
 module MiscTests exposing (tests)
 
 import Backend
+import Bytes.Encode
+import Coord
+import CssPixels exposing (CssPixels)
 import DiscordSync
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Expect
+import FileName
+import FileStatus
 import Id exposing (CustomEmojiId, Id)
 import Pages.Guild exposing (HighlightMessage(..), IsHovered(..))
 import SeqSet
+import String.Nonempty
 import Test exposing (Test)
 import User
 import UserAgent
+import X25519
+
+
+{-| The server reads more out of a file than the browser can, so what the browser measured
+before uploading only stands in for a file the server couldn't read.
+-}
+uploadedFileMetadataTests : Test
+uploadedFileMetadataTests =
+    let
+        measured : FileStatus.FileMetadata
+        measured =
+            FileStatus.measuredFileMetadata (FileStatus.MeasuredImage (Coord.xy 128 96))
+
+        uploading : FileStatus.FileStatus
+        uploading =
+            FileStatus.FileUploading
+                (FileName.fromString "photo.png")
+                { sent = 0, size = 10 }
+                (FileStatus.contentType "image/png")
+                FileStatus.IsNotEncrypted
+
+        uploaded : Maybe FileStatus.FileMetadata -> Maybe (Coord.Coord CssPixels) -> Maybe FileStatus.FileMetadata
+        uploaded clientMetadata serverImageSize =
+            case
+                FileStatus.addFileHash
+                    clientMetadata
+                    (Ok
+                        { fileHash = FileStatus.fileHash "abc123"
+                        , videoMetadata = Nothing
+                        , imageMetadata = Maybe.map imageMetadata serverImageSize
+                        }
+                    )
+                    uploading
+            of
+                FileStatus.FileUploaded fileData ->
+                    fileData.metadata
+
+                _ ->
+                    Nothing
+
+        imageSizeOf : Maybe FileStatus.FileMetadata -> Maybe (Coord.Coord CssPixels)
+        imageSizeOf metadata =
+            case metadata of
+                Just (FileStatus.FileMetadata_Image image) ->
+                    Just image.imageSize
+
+                _ ->
+                    Nothing
+    in
+    Test.describe "What an uploaded file ends up saying about itself"
+        [ Test.test "The server's answer wins when it could read the file" <|
+            \_ ->
+                uploaded (Just measured) (Just (Coord.xy 640 480))
+                    |> imageSizeOf
+                    |> Expect.equal (Just (Coord.xy 640 480))
+        , Test.test "What the browser measured stands in when the server couldn't read it" <|
+            \_ ->
+                uploaded (Just measured) Nothing
+                    |> imageSizeOf
+                    |> Expect.equal (Just (Coord.xy 128 96))
+        , Test.test "Neither one leaves the file saying nothing about itself" <|
+            \_ ->
+                uploaded Nothing Nothing
+                    |> Expect.equal Nothing
+        ]
+
+
+imageMetadata : Coord.Coord CssPixels -> FileStatus.ImageMetadata
+imageMetadata imageSize =
+    { imageSize = imageSize
+    , orientation = Nothing
+    , gpsLocation = Nothing
+    , cameraOwner = Nothing
+    , exposureTime = Nothing
+    , fNumber = Nothing
+    , focalLength = Nothing
+    , isoSpeedRating = Nothing
+    , make = Nothing
+    , model = Nothing
+    , software = Nothing
+    , userComment = Nothing
+    }
+
+
+attachmentUrlTests : Test
+attachmentUrlTests =
+    let
+        plainFile : FileStatus.FileData
+        plainFile =
+            { fileName = FileName.fromString "photo.png"
+            , fileSize = 1234
+            , metadata = Nothing
+            , contentType = FileStatus.contentType "image/png"
+            , fileHash = FileStatus.fileHash "abc123"
+            , isEncrypted = FileStatus.IsNotEncrypted
+            }
+
+        encryptedFile : FileStatus.FileData
+        encryptedFile =
+            { plainFile | isEncrypted = encryptedWith FileStatus.NoEncryptedThumbnail }
+
+        encryptedFileWithThumbnail : FileStatus.FileData
+        encryptedFileWithThumbnail =
+            { plainFile | isEncrypted = encryptedWith FileStatus.HasEncryptedThumbnail }
+
+        -- Big enough that the server would have made a thumbnail for it.
+        largeImage : Coord.Coord CssPixels
+        largeImage =
+            Coord.xy 4000 4000
+    in
+    Test.describe "Where an attached file is read back from"
+        [ Test.test "An unencrypted file is fetched straight from the server" <|
+            \_ ->
+                FileStatus.fileDataUrl plainFile
+                    |> String.endsWith "/file/2/abc123"
+                    |> Expect.equal True
+        , -- The kind of file is spelled out rather than numbered, because this address is
+          -- only ever read by the service worker. What it asks the server for names no
+          -- content type but application/octet-stream.
+          Test.test "An encrypted file goes through the service worker instead" <|
+            \_ ->
+                FileStatus.fileDataUrl encryptedFile
+                    |> String.endsWith "/file/e/image%2Fpng/abc123"
+                    |> Expect.equal True
+        , Test.test "An encrypted text file keeps the charset the server would have sent" <|
+            \_ ->
+                FileStatus.fileDataUrl { encryptedFile | contentType = FileStatus.contentType "text/plain" }
+                    |> String.endsWith "/file/e/text%2Fplain%3B%20charset%3DUTF-8/abc123"
+                    |> Expect.equal True
+        , Test.test "A large unencrypted image is shown as the server's thumbnail" <|
+            \_ ->
+                FileStatus.fileDataThumbnailUrl largeImage plainFile
+                    |> String.endsWith "/file/t/abc123"
+                    |> Expect.equal True
+        , -- The server can't decode ciphertext, so if the browser had no thumbnail to
+          -- offer there is none to fall back on.
+          Test.test "A large encrypted image the browser couldn't make a thumbnail of is shown whole" <|
+            \_ ->
+                FileStatus.fileDataThumbnailUrl largeImage encryptedFile
+                    |> String.endsWith "/file/e/image%2Fpng/abc123"
+                    |> Expect.equal True
+        , -- The thumbnail sits under the file's own hash, so its address carries no
+          -- content type and no second hash.
+          Test.test "An encrypted image the browser made a thumbnail of is shown at it" <|
+            \_ ->
+                FileStatus.fileDataThumbnailUrl largeImage encryptedFileWithThumbnail
+                    |> String.endsWith "/file/e/t/abc123"
+                    |> Expect.equal True
+        ]
+
+
+encryptedWith : FileStatus.EncryptedThumbnail -> FileStatus.IsEncrypted
+encryptedWith thumbnail =
+    FileStatus.IsEncrypted
+        (List.range 0 31
+            |> List.map Bytes.Encode.unsignedInt8
+            |> Bytes.Encode.sequence
+            |> Bytes.Encode.encode
+            |> FileStatus.aesPrivateKey
+        )
+        thumbnail
 
 
 tests : Test
 tests =
     Test.describe
         "Misc tests"
-        [ Test.test "Round trip message view encoding" <|
+        [ redactPrivateKeysTests
+        , attachmentUrlTests
+        , uploadedFileMetadataTests
+        , Test.test "Round trip message view encoding" <|
             \_ ->
                 let
                     input =
@@ -155,3 +325,89 @@ usableCustomEmoji =
 unusableCustomEmoji : Id CustomEmojiId
 unusableCustomEmoji =
     Id.fromInt 2
+
+
+{-| A message that gives away the sender's own private key is caught on the way out.
+
+The account used here is built from a fixed private key, so the public key it is checked
+against is the one that really pairs with it rather than one written down by hand.
+
+-}
+redactPrivateKeysTests : Test
+redactPrivateKeysTests =
+    let
+        privateKey : X25519.PrivateKey
+        privateKey =
+            case X25519.privateKeyFromListInt (List.repeat 8 305419896) of
+                Just key ->
+                    key
+
+                Nothing ->
+                    Debug.todo "Eight words is enough for a private key"
+
+        privateKeyText : String
+        privateKeyText =
+            X25519.privateKeyToString privateKey
+
+        account : { publicKey : Maybe X25519.PublicKey }
+        account =
+            { publicKey = Just (X25519.toPublicKey privateKey) }
+
+        redact : { publicKey : Maybe X25519.PublicKey } -> String -> String
+        redact user text =
+            case String.Nonempty.fromString text of
+                Just nonempty ->
+                    User.redactPrivateKeys user nonempty |> String.Nonempty.toString
+
+                Nothing ->
+                    "the test wrote an empty message"
+
+        warning : String
+        warning =
+            "*don't reveal your private key!*"
+    in
+    Test.describe "Redacting a private key from a message"
+        [ Test.test "the key on its own is replaced"
+            (\_ -> redact account privateKeyText |> Expect.equal warning)
+        , Test.test "the rest of the message is left alone"
+            (\_ ->
+                redact account ("here it is " ++ privateKeyText ++ " don't tell anyone")
+                    |> Expect.equal ("here it is " ++ warning ++ " don't tell anyone")
+            )
+        , Test.test "line breaks and runs of spaces survive"
+            (\_ ->
+                redact account ("one\n\ntwo   " ++ privateKeyText ++ "\nthree")
+                    |> Expect.equal ("one\n\ntwo   " ++ warning ++ "\nthree")
+            )
+        , Test.test "every mention of it goes"
+            (\_ ->
+                redact account (privateKeyText ++ " and again " ++ privateKeyText)
+                    |> Expect.equal (warning ++ " and again " ++ warning)
+            )
+        , Test.test "somebody else's private key is not this account's to worry about"
+            (\_ ->
+                let
+                    otherKey : String
+                    otherKey =
+                        X25519.privateKeyFromListInt (List.repeat 8 987654321)
+                            |> Maybe.map X25519.privateKeyToString
+                            |> Maybe.withDefault "no key"
+                in
+                redact account otherKey |> Expect.equal otherKey
+            )
+        , Test.test "the public key is fine to share"
+            (\_ ->
+                let
+                    publicKeyText : String
+                    publicKeyText =
+                        X25519.toPublicKey privateKey |> X25519.publicKeyToString
+                in
+                redact account publicKeyText |> Expect.equal publicKeyText
+            )
+        , Test.test "an ordinary message ending in = is left alone"
+            (\_ -> redact account "the answer is x =" |> Expect.equal "the answer is x =")
+        , Test.test "an account with no key pair has nothing to redact"
+            (\_ ->
+                redact { publicKey = Nothing } privateKeyText |> Expect.equal privateKeyText
+            )
+        ]

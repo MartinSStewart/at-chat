@@ -44,7 +44,7 @@ type alias DiscordBackendThread =
 
 
 type alias FrontendGenericThread userId =
-    { messages : MessageArray ThreadMessageId (Message ThreadMessageId userId)
+    { messages : MessageArray ThreadMessageId userId
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing userId)
@@ -52,7 +52,7 @@ type alias FrontendGenericThread userId =
 
 
 type alias FrontendThread =
-    { messages : MessageArray ThreadMessageId (Message ThreadMessageId (Id UserId))
+    { messages : MessageArray ThreadMessageId (Id UserId)
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
@@ -60,7 +60,7 @@ type alias FrontendThread =
 
 
 type alias DiscordFrontendThread =
-    { messages : MessageArray ThreadMessageId (Message ThreadMessageId (Discord.Id Discord.UserId))
+    { messages : MessageArray ThreadMessageId (Discord.Id Discord.UserId)
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
@@ -124,7 +124,7 @@ discordToFrontend preloadMessages thread =
     }
 
 
-loadMessages : Bool -> IdArray messageId (Message messageId userId) -> MessageArray messageId (Message messageId userId)
+loadMessages : Bool -> IdArray messageId (Message messageId userId) -> MessageArray messageId userId
 loadMessages preloadMessages messages =
     let
         messageCount : Int

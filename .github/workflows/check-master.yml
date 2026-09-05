@@ -49,13 +49,22 @@ jobs:
       - name: Review tests
         run: npm run review-tests
 
+      # Plain node, no Elm involved. They stand in for the browser, which the
+      # end-to-end tests run without: stuff.js writes the encryption port's bytes
+      # by hand, and the service worker only exists inside a browser.
+      - name: Encryption port tests
+        run: npm run encryption-port-tests
+
+      - name: Service worker tests
+        run: npm run service-worker-tests
+
       - name: End-to-end tests
         run: npm run end-to-end-tests
 
       - name: Elm review
         run: npm run elm-review
   Rust:
-    name: Check rust-server compiles
+    name: Check rust-server compiles and its tests pass
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -78,3 +87,7 @@ jobs:
       - name: Check rust-server compiles
         working-directory: rust-server
         run: cargo check
+
+      - name: Test rust-server
+        working-directory: rust-server
+        run: cargo test

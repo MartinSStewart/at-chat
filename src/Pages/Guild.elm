@@ -2,26 +2,55 @@ module Pages.Guild exposing
     ( DmChannelSelection(..)
     , HighlightMessage(..)
     , IsHovered(..)
+    , channelDoesNotExistText
     , channelMessageHtmlId
     , channelSearchInputId
     , channelTextInputId
+    , chatWithText
+    , confirmLeaveGuildText
     , conversationContainerId
+    , declineE2eeText
     , decodeMessageView
+    , deleteGuildText
+    , directMessagesText
+    , disableE2eeText
     , discordGuildView
     , dropdownButtonId
+    , e2eeDeclinedText
+    , e2eeSectionIsExpanded
+    , e2eeSectionTitle
+    , editingText
+    , enableE2eeText
     , encodeMessageView
+    , enterPrivateKeyText
+    , friendLabel
     , friendsSearchInputId
+    , guildNotFoundText
     , guildView
     , homePageLoggedInView
+    , leaveGuildText
+    , missingPrivateKeyText
     , newGuildFormInit
     , newGuildFormView
+    , newMessagesBadgeText
     , newMessagesId
+    , noMatchingChannelsText
+    , noUnreadMessagesText
+    , olderUnreadMessagesText
     , profileImageButtonId
+    , requestAcceptedText
+    , startOfThreadText
+    , startedACallText
     , threadMessageHtmlId
+    , toAcceptE2eeText
     , typingDebouncerDelay
+    , typingText
     , userTextMessageContent
+    , waitingForE2eeText
+    , youDeclinedE2eeText
     )
 
+import Array
 import AsciiArt exposing (AsciiArt)
 import Bitwise
 import Call
@@ -32,12 +61,13 @@ import Coord
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
-import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannel exposing (DiscordFrontendDmChannel, E2eeStatus(..), FrontendDmChannel)
 import DmChannelId
 import Drawing exposing (Drawing)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (CachedEmojiData, EmojiConfig, EmojiOrCustomEmoji)
+import Encryption exposing (BytesHash)
 import Env
 import FileStatus exposing (FileHash, FileId, FileStatus)
 import GuildColumn
@@ -56,13 +86,13 @@ import List.Nonempty exposing (Nonempty)
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (GameType(..), Message(..), UserTextMessageData)
+import Message exposing (GameType(..), Message(..), MessageContent, UserTextMessageDrawings)
 import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
 import MuteSettings exposing (IsMuted(..))
-import MyUi exposing (Copied(..))
+import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
@@ -95,6 +125,145 @@ import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, Notification
 import UserColor exposing (UserColor)
 import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, PreviouslyLastViewedMessage(..), Viewing(..))
 import VisibleMessages exposing (VisibleMessages)
+
+
+newMessagesBadgeText : String
+newMessagesBadgeText =
+    "new"
+
+
+noUnreadMessagesText : String
+noUnreadMessagesText =
+    "You have no unread messages!"
+
+
+startedACallText : String
+startedACallText =
+    "started a call"
+
+
+typingText : String
+typingText =
+    "Typing..."
+
+
+editingText : String
+editingText =
+    "Editing..."
+
+
+e2eeSectionTitle : String
+e2eeSectionTitle =
+    "End-to-end encryption (E2EE)"
+
+
+enableE2eeText : Maybe ( Id UserId, Time.Posix ) -> String
+enableE2eeText disabledBy =
+    case disabledBy of
+        Just _ ->
+            "Re-enable E2EE"
+
+        Nothing ->
+            "Enable E2EE"
+
+
+declineE2eeText : String
+declineE2eeText =
+    "Decline request"
+
+
+disableE2eeText : String
+disableE2eeText =
+    "Disable E2EE"
+
+
+e2eeDeclinedText : String
+e2eeDeclinedText =
+    "declined your E2EE request"
+
+
+youDeclinedE2eeText : String
+youDeclinedE2eeText =
+    "You declined the request to to enable E2EE."
+
+
+enterPrivateKeyText : String
+enterPrivateKeyText =
+    "2. Enter your private key to enable E2EE"
+
+
+waitingForE2eeText : String
+waitingForE2eeText =
+    "2. Waiting for "
+
+
+toAcceptE2eeText : String
+toAcceptE2eeText =
+    " to accept message encryption."
+
+
+requestAcceptedText : String
+requestAcceptedText =
+    "accepted and E2EE is now enabled. Enter your private key here to decrypted messages"
+
+
+missingPrivateKeyText : String
+missingPrivateKeyText =
+    "3. Your private key is needed for this device. Without it you can't decrypt existing messages or send encrypted messages. Enter your private key here."
+
+
+chatWithText : String
+chatWithText =
+    "Chat with"
+
+
+deleteGuildText : String
+deleteGuildText =
+    "Delete guild"
+
+
+leaveGuildText : String
+leaveGuildText =
+    "Leave guild"
+
+
+confirmLeaveGuildText : String
+confirmLeaveGuildText =
+    "Yes, leave guild"
+
+
+startOfThreadText : String
+startOfThreadText =
+    "Start of thread"
+
+
+channelDoesNotExistText : String
+channelDoesNotExistText =
+    "Channel does not exist"
+
+
+guildNotFoundText : String
+guildNotFoundText =
+    "Guild not found"
+
+
+directMessagesText : String
+directMessagesText =
+    "Direct messages"
+
+
+noMatchingChannelsText : String
+noMatchingChannelsText =
+    "No matching channels\u{00A0}found"
+
+
+olderUnreadMessagesText : Int -> String
+olderUnreadMessagesText count =
+    if count == 1 then
+        "1 older unread message"
+
+    else
+        String.fromInt count ++ " older unread messages"
 
 
 loggedInAsView : LocalUser -> Element FrontendMsg_
@@ -160,12 +329,14 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                     SelectedDmChannel dmRoute ->
                                         case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                                             Just otherUserId ->
-                                                Ui.Lazy.lazy4
-                                                    dmChannelSettingsMobile
+                                                dmChannelSettingsMobile
                                                     canScroll2
                                                     local.localUser
                                                     otherUserId
                                                     isThread
+                                                    (dmE2eeStatus otherUserId local)
+                                                    (e2eeSectionIsExpanded otherUserId local loggedIn)
+                                                    (e2eeKeyInput otherUserId loggedIn)
                                                     |> Ui.el
                                                         [ Ui.height Ui.fill
                                                         , Ui.background MyUi.background3
@@ -339,7 +510,13 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         ( ( ShowChannelSettings, isThread ), SelectedDmChannel dmRoute ) ->
                             case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                                 Just otherUserId ->
-                                    Ui.Lazy.lazy3 dmChannelSettingsNotMobile local.localUser otherUserId isThread
+                                    dmChannelSettingsNotMobile
+                                        local.localUser
+                                        otherUserId
+                                        isThread
+                                        (dmE2eeStatus otherUserId local)
+                                        (e2eeSectionIsExpanded otherUserId local loggedIn)
+                                        (e2eeKeyInput otherUserId loggedIn)
                                         |> Ui.el
                                             [ Ui.width Ui.shrink
                                             , Ui.height Ui.fill
@@ -494,7 +671,7 @@ unreadOverviewNotMobile local loggedIn model =
                             , Ui.Font.bold
                             , Ui.Font.size 20
                             ]
-                            (Ui.text "You have no unread messages!")
+                            (Ui.text noUnreadMessagesText)
                         )
                     ]
                     [ Ui.image
@@ -673,7 +850,10 @@ each. A channel's place in the overview is decided by when it started being unre
 messages arriving while the overview is open add to a channel where it already is instead of
 moving it.
 -}
-unreadOverviewChannels : LocalState -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser -> List UnreadOverviewChannel
+unreadOverviewChannels :
+    LocalState
+    -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+    -> List UnreadOverviewChannel
 unreadOverviewChannels local allDiscordUsers =
     let
         currentUser : FrontendCurrentUser
@@ -730,7 +910,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                         threadSource
                                                             guild.name
                                                             channel.name
-                                                            (threadPreviewText local.localUser.timezone allUsers threadId channel)
+                                                            (threadPreviewText local.localUser.timezone allUsers threadId local.localUser.decryptedMessages channel)
                                                     , route =
                                                         GuildRoute
                                                             guildId
@@ -803,7 +983,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                     dmThreadSource
                                                         otherUserId
                                                         local.localUser
-                                                        (threadPreviewText local.localUser.timezone allUsers threadId dmChannel)
+                                                        (threadPreviewText local.localUser.timezone allUsers threadId local.localUser.decryptedMessages dmChannel)
                                                 , route =
                                                     DmRoute
                                                         { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
@@ -881,7 +1061,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                                     threadSource
                                                                         guild.name
                                                                         channel.name
-                                                                        (threadPreviewText local.localUser.timezone allDiscordUsers threadId channel)
+                                                                        (threadPreviewText local.localUser.timezone allDiscordUsers threadId SeqDict.empty channel)
                                                                 , route =
                                                                     DiscordGuildRoute
                                                                         { currentDiscordUserId = currentDiscordUserId
@@ -1000,7 +1180,7 @@ dmSource : Id UserId -> LocalUser -> Element msg
 dmSource otherUserId localUser =
     Ui.row
         [ Ui.spacing 4, Ui.width Ui.shrink, MyUi.noShrinking ]
-        [ Ui.el [ Ui.Font.weight 400, Ui.width Ui.shrink ] (Ui.text "Chat with")
+        [ Ui.el [ Ui.Font.weight 400, Ui.width Ui.shrink ] (Ui.text chatWithText)
         , Ui.text (User.toStringAlt otherUserId localUser)
         ]
 
@@ -1081,14 +1261,7 @@ unreadOverviewContainer unread messageViews =
                         , Ui.Font.italic
                         , Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 4 }
                         ]
-                        (Ui.text
-                            (if unread.additionalUnread == 1 then
-                                "1 older unread message"
-
-                             else
-                                String.fromInt unread.additionalUnread ++ " older unread messages"
-                            )
-                        )
+                        (Ui.text (olderUnreadMessagesText unread.additionalUnread))
 
                 else
                     Ui.none
@@ -1196,7 +1369,7 @@ which is what makes it usable for ordering the overview.
 -}
 unreadMessages :
     Maybe (Id messageId)
-    -> { a | messages : MessageArray messageId (Message messageId userId) }
+    -> { a | messages : MessageArray messageId userId }
     ->
         Maybe
             { messages : List ( Id messageId, Message messageId userId )
@@ -1239,12 +1412,6 @@ unreadMessages maybeLastViewed channel =
             Nothing
 
 
-{-| Where the unread divider goes. Opening a conversation marks it as read, so the last
-viewed message of the local state has already moved to the newest message by the time it is
-drawn. The session remembers where the divider was on the way in, and that is what the
-conversation being looked at right now needs, so that its unread messages stay marked while
-the reader is still working through them.
--}
 unreadDividerAt : Id messageId -> PreviouslyLastViewedMessage messageId -> Id messageId
 unreadDividerAt lastViewed previouslyLastViewedMessage =
     case previouslyLastViewedMessage of
@@ -1275,6 +1442,21 @@ dmChannelView dmRoute loggedIn local model =
                         dmChannel =
                             SeqDict.get otherUserId local.dmChannels
                                 |> Maybe.withDefault DmChannel.frontendInit
+
+                        missingPrivateKey : Bool
+                        missingPrivateKey =
+                            case dmChannel.e2ee of
+                                E2eeEnabled _ ->
+                                    not (SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice)
+
+                                E2eeDisabled _ ->
+                                    False
+
+                                E2eeRequestedBy _ ->
+                                    False
+
+                                E2eeDeclinedBy _ ->
+                                    False
                     in
                     case dmRoute.threadRoute of
                         ViewThreadWithFriends threadMessageIndex maybeUrlMessageId _ ->
@@ -1306,11 +1488,13 @@ dmChannelView dmRoute loggedIn local model =
                                     loggedIn
                                     model
                                     local
+                                    missingPrivateKey
                                     (PersonName.toString otherUser.name)
                                     (threadPreviewText
                                         local.localUser.timezone
                                         (User.allUsers local.localUser)
                                         threadMessageIndex
+                                        local.localUser.decryptedMessages
                                         dmChannel
                                     )
 
@@ -1340,6 +1524,7 @@ dmChannelView dmRoute loggedIn local model =
                                 loggedIn
                                 model
                                 local
+                                missingPrivateKey
                                 (PersonName.toString otherUser.name)
                                 dmChannel
 
@@ -1575,7 +1760,7 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
                                 [ GuildColumn.guildColumnLazy True model local
-                                , pageMissingMobile "Guild not found"
+                                , pageMissingMobile guildNotFoundText
                                 ]
                             , Ui.Lazy.lazy loggedInAsView local.localUser
                             ]
@@ -1600,7 +1785,7 @@ guildView model guildId channelRoute loggedIn local =
                                     ]
                                 , Ui.Lazy.lazy loggedInAsView local.localUser
                                 ]
-                            , pageMissing "Guild not found"
+                            , pageMissing guildNotFoundText
                             ]
 
 
@@ -2288,8 +2473,307 @@ dmMembers localUser otherUserId =
         [ localUser.session.userId, otherUserId ]
 
 
-dmChannelSettingsNotMobile : LocalUser -> Id UserId -> Bool -> Element FrontendMsg_
-dmChannelSettingsNotMobile localUser otherUserId isThread =
+{-| Whether the end-to-end encryption section of a DM's channel settings is open. It
+opens on its own while the other person is waiting for an answer, up until the user opens
+or closes it themselves.
+-}
+e2eeSectionIsExpanded : Id UserId -> LocalState -> LoggedIn2 -> Bool
+e2eeSectionIsExpanded otherUserId local loggedIn =
+    Maybe.withDefault
+        (ChannelHeader.showDmSettingsRedDot otherUserId local loggedIn)
+        (SeqDict.get otherUserId loggedIn.e2eeSectionsExpanded)
+
+
+dmE2eeStatus : Id UserId -> LocalState -> E2eeStatus
+dmE2eeStatus otherUserId local =
+    case SeqDict.get otherUserId local.dmChannels of
+        Just dmChannel ->
+            dmChannel.e2ee
+
+        Nothing ->
+            DmChannel.E2eeDisabled Nothing
+
+
+e2eeSectionView :
+    LocalUser
+    -> Id UserId
+    -> E2eeStatus
+    -> Bool
+    -> E2eeKeyInput
+    -> Element FrontendMsg_
+e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
+    let
+        risksAccepted : Bool
+        risksAccepted =
+            localUser.user.e2eeRisksAccepted
+
+        risksLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
+        risksLabel =
+            Ui.Input.label
+                "guild_e2eeAcceptRisks"
+                [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.pointer, Ui.width Ui.shrink ]
+                (Ui.text "I understand and accept the\u{00A0}risks")
+    in
+    MyUi.container
+        16
+        isExpanded
+        (Dom.id "guild_e2eeSection")
+        (PressedExpandE2eeSection otherUserId)
+        MyUi.background2
+        True
+        e2eeSectionTitle
+        [ Ui.column
+            [ Ui.paddingWith { left = 8, right = 8, top = 8, bottom = 0 }, Ui.spacing 16 ]
+            [ case e2ee of
+                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
+                    if requestedBy == localUser.session.userId then
+                        Ui.none
+
+                    else
+                        Ui.column
+                            [ Ui.spacing 16 ]
+                            [ Ui.Prose.paragraph
+                                [ MyUi.htmlStyle "word-wrap" "anywhere", Ui.paddingXY 0 4 ]
+                                [ Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt otherUserId localUser))
+                                , Ui.text " would like to enable E2EE. You can either:"
+                                ]
+                            , MyUi.simpleButton
+                                (Dom.id "guild_declineE2ee")
+                                (PressedDeclineE2eeRequest otherUserId)
+                                (Ui.text declineE2eeText)
+                            , Ui.text "Or follow the instructions below to set it up."
+                            , Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.font1 ] Ui.none
+                            ]
+
+                DmChannel.E2eeDisabled _ ->
+                    Ui.none
+
+                DmChannel.E2eeDeclinedBy _ ->
+                    Ui.none
+
+                DmChannel.E2eeEnabled _ ->
+                    Ui.none
+            , Ui.column
+                [ Ui.attrIf risksAccepted (Ui.opacity 0.5), Ui.spacing 8 ]
+                [ MyUi.warningHeader "Before you enable E2EE:"
+                , Ui.text "You'll get a private key that you need to store in a password manager. If you lose it, you'll permanently lose access to all your encrypted messages."
+                , Ui.el [ Ui.Font.color MyUi.textLinkColor, Ui.linkNewTab (Route.encode Route.E2eeInfo) ] (Ui.text "Read more about E2EE here")
+                , Ui.row
+                    []
+                    [ Ui.Input.checkbox
+                        []
+                        { onChange = PressedE2eeRisksAccepted
+                        , icon = Nothing
+                        , checked = risksAccepted
+                        , label = risksLabel.id
+                        }
+                    , risksLabel.element
+                    ]
+                ]
+            , case localUser.user.publicKey of
+                Just _ ->
+                    Ui.text "1. Create private key: completed!"
+
+                Nothing ->
+                    Ui.none
+            , case e2ee of
+                DmChannel.E2eeDisabled disabledBy ->
+                    Ui.column
+                        [ Ui.spacing 16 ]
+                        [ case disabledBy of
+                            Just ( disabledBy2, disabledAt ) ->
+                                Ui.Prose.paragraph
+                                    [ MyUi.htmlStyle "word-wrap" "anywhere", Ui.paddingXY 0 4 ]
+                                    [ Ui.text "2. "
+                                    , if disabledBy2 == localUser.session.userId then
+                                        Ui.text "You"
+
+                                      else
+                                        Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt disabledBy2 localUser))
+                                    , Ui.text (" disabled E2EE on " ++ MyUi.datestampNoLineBreaks localUser.timezone disabledAt)
+                                    ]
+
+                            Nothing ->
+                                Ui.none
+                        , if not risksAccepted then
+                            Ui.none
+
+                          else
+                            case localUser.user.publicKey of
+                                Nothing ->
+                                    createPrivateKeyButton
+
+                                Just _ ->
+                                    MyUi.simpleButton
+                                        (Dom.id "guild_enableE2ee")
+                                        (PressedEnableE2ee otherUserId)
+                                        (Ui.text (enableE2eeText disabledBy))
+                        ]
+
+                DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
+                    if requestedBy /= localUser.session.userId then
+                        Ui.column
+                            [ Ui.spacing 16 ]
+                            [ if not risksAccepted then
+                                Ui.none
+
+                              else
+                                case localUser.user.publicKey of
+                                    Nothing ->
+                                        createPrivateKeyButton
+
+                                    Just _ ->
+                                        privateKeyInput
+                                            otherUserId
+                                            (Ui.text enterPrivateKeyText)
+                                            keyInput
+                            ]
+
+                    else if otherUserId == localUser.session.userId then
+                        privateKeyInput
+                            otherUserId
+                            (Ui.text enterPrivateKeyText)
+                            keyInput
+
+                    else
+                        Ui.column
+                            [ Ui.spacing 16 ]
+                            [ Ui.Prose.paragraph
+                                [ MyUi.htmlStyle "word-wrap" "anywhere", Ui.paddingXY 0 4 ]
+                                [ Ui.text waitingForE2eeText
+                                , Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt otherUserId localUser))
+                                , Ui.text toAcceptE2eeText
+                                ]
+                            , MyUi.simpleButton
+                                (Dom.id "guild_cancelE2ee")
+                                (PressedCancelE2eeRequest otherUserId)
+                                (Ui.text "Cancel")
+                            ]
+
+                DmChannel.E2eeDeclinedBy declinedBy ->
+                    if declinedBy == localUser.session.userId then
+                        Ui.column
+                            [ Ui.spacing 16 ]
+                            [ Ui.Prose.paragraph [] [ Ui.text youDeclinedE2eeText ]
+                            , if not risksAccepted then
+                                Ui.none
+
+                              else
+                                case localUser.user.publicKey of
+                                    Nothing ->
+                                        createPrivateKeyButton
+
+                                    Just _ ->
+                                        MyUi.simpleButton
+                                            (Dom.id "guild_enableE2ee")
+                                            (PressedEnableE2ee otherUserId)
+                                            (Ui.text (enableE2eeText Nothing))
+                            ]
+
+                    else
+                        Ui.Prose.paragraph
+                            []
+                            [ Ui.text (User.toStringAlt otherUserId localUser ++ " " ++ e2eeDeclinedText) ]
+
+                DmChannel.E2eeEnabled data ->
+                    Ui.column
+                        [ Ui.spacing 16 ]
+                        [ Ui.text ("2. E2EE was enabled on " ++ MyUi.datestampNoLineBreaks localUser.timezone data.enabledAt)
+                        , if keyInput.hasKeyOnThisDevice then
+                            MyUi.simpleButton
+                                (Dom.id "guild_disableE2ee")
+                                (PressedDisableE2ee otherUserId)
+                                (Ui.text disableE2eeText)
+
+                          else
+                            privateKeyInput
+                                otherUserId
+                                (if data.requestedBy == ( localUser.session.userId, localUser.session.sessionIdHash ) then
+                                    "3. "
+                                        ++ User.toStringAlt otherUserId localUser
+                                        ++ " "
+                                        ++ requestAcceptedText
+                                        |> Ui.text
+
+                                 else
+                                    Ui.text missingPrivateKeyText
+                                )
+                                keyInput
+                        ]
+            ]
+        ]
+
+
+{-| Pulls together what the private key box for one conversation needs from the model.
+-}
+e2eeKeyInput : Id UserId -> LoggedIn2 -> E2eeKeyInput
+e2eeKeyInput otherUserId loggedIn =
+    { text = loggedIn.e2eePrivateKeyText
+    , error = loggedIn.e2eeError
+    , hasKeyOnThisDevice = SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice
+    }
+
+
+{-| What the private key box needs to draw itself: what has been typed so far, whether
+anything went wrong with the last attempt, and whether this device already has a key and
+so does not need to ask at all.
+-}
+type alias E2eeKeyInput =
+    { text : String
+    , error : Maybe String
+    , hasKeyOnThisDevice : Bool
+    }
+
+
+privateKeyInput : Id UserId -> Element FrontendMsg_ -> E2eeKeyInput -> Element FrontendMsg_
+privateKeyInput otherUserId prompt keyInput =
+    let
+        keyLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
+        keyLabel =
+            Ui.Input.label "guild_e2eePrivateKey" [ MyUi.htmlStyle "word-wrap" "anywhere" ] prompt
+    in
+    Ui.column
+        [ Ui.spacing 4 ]
+        [ keyLabel.element
+        , Ui.Input.currentPassword
+            [ Ui.background MyUi.inputBackground
+            , Ui.paddingXY 8 8
+            , Ui.widthMax 300
+            , Ui.borderColor MyUi.inputBorder
+            ]
+            { text = keyInput.text
+            , onChange = TypedPrivateKey otherUserId
+            , placeholder = Just "Your private key"
+            , label = keyLabel.id
+            , show = False
+            }
+            |> Ui.el [ ChannelHeader.e2eeRequestDot ]
+        , case keyInput.error of
+            Just error ->
+                Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
+
+            Nothing ->
+                Ui.none
+        ]
+
+
+createPrivateKeyButton : Element FrontendMsg_
+createPrivateKeyButton =
+    MyUi.simpleButton
+        (Dom.id "guild_addPrivateKey")
+        PressedAddPrivateKeyToAccount
+        (Ui.text "Create a private key")
+
+
+dmChannelSettingsNotMobile :
+    LocalUser
+    -> Id UserId
+    -> Bool
+    -> E2eeStatus
+    -> Bool
+    -> E2eeKeyInput
+    -> Element FrontendMsg_
+dmChannelSettingsNotMobile localUser otherUserId isThread e2ee isExpanded keyInput =
     let
         members : List (Id UserId)
         members =
@@ -2303,17 +2787,30 @@ dmChannelSettingsNotMobile localUser otherUserId isThread =
           else
             Ui.el [ Ui.paddingXY 8 8 ] (exportChannelButton (ExportChannel_Dm otherUserId))
         , Ui.column
-            [ Ui.paddingXY 8 4 ]
-            [ Ui.text ("Members (" ++ String.fromInt (List.length members) ++ ")")
+            [ Ui.paddingWith { left = 0, right = 0, top = 4, bottom = 16 } ]
+            [ Ui.el [ Ui.paddingXY 8 0 ] (Ui.text ("Members (" ++ String.fromInt (List.length members) ++ ")"))
             , Ui.column
                 [ Ui.height Ui.fill ]
                 (List.map (memberLabel False localUser) members)
             ]
+        , if isThread then
+            Ui.none
+
+          else
+            e2eeSectionView localUser otherUserId e2ee isExpanded keyInput
         ]
 
 
-dmChannelSettingsMobile : Bool -> LocalUser -> Id UserId -> Bool -> Element FrontendMsg_
-dmChannelSettingsMobile canScroll2 localUser otherUserId isThread =
+dmChannelSettingsMobile :
+    Bool
+    -> LocalUser
+    -> Id UserId
+    -> Bool
+    -> E2eeStatus
+    -> Bool
+    -> E2eeKeyInput
+    -> Element FrontendMsg_
+dmChannelSettingsMobile canScroll2 localUser otherUserId isThread e2ee isExpanded keyInput =
     let
         members : List (Id UserId)
         members =
@@ -2356,6 +2853,11 @@ dmChannelSettingsMobile canScroll2 localUser otherUserId isThread =
                     [ Ui.height Ui.fill ]
                     (List.map (memberLabel True localUser) members)
                 ]
+            , if isThread then
+                Ui.none
+
+              else
+                e2eeSectionView localUser otherUserId e2ee isExpanded keyInput
             ]
         ]
 
@@ -2524,12 +3026,13 @@ threadPreviewText :
     Time.Zone
     -> SeqDict userId { a | name : PersonName }
     -> Id ChannelMessageId
-    -> { b | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId) }
+    -> SeqDict BytesHash (Result () (MessageContent userId))
+    -> { b | messages : MessageArray ChannelMessageId userId }
     -> String
-threadPreviewText timezone allUsers threadMessageIndex channel =
+threadPreviewText timezone allUsers threadMessageIndex decrypted channel =
     case MessageArray.get threadMessageIndex channel.messages of
         Just message ->
-            LocalState.messageToString timezone allUsers message
+            LocalState.messageToString timezone allUsers decrypted message
 
         _ ->
             "Thread not found"
@@ -2577,11 +3080,13 @@ channelView channelRoute guildId guild loggedIn local model =
                                     loggedIn
                                     model
                                     local
+                                    False
                                     (ChannelName.toString channel.name)
                                     (threadPreviewText
                                         local.localUser.timezone
                                         (User.allUsers local.localUser)
                                         threadMessageIndex
+                                        local.localUser.decryptedMessages
                                         channel
                                     )
 
@@ -2611,11 +3116,12 @@ channelView channelRoute guildId guild loggedIn local model =
                                 loggedIn
                                 model
                                 local
+                                False
                                 (ChannelName.toString channel.name)
                                 channel
 
                 Nothing ->
-                    pageMissing "Channel does not exist"
+                    pageMissing channelDoesNotExistText
 
         NewChannelRoute ->
             SeqDict.get guildId loggedIn.newChannelForm
@@ -2686,6 +3192,7 @@ discordChannelView routeData guild loggedIn local model =
                                             local.localUser.timezone
                                             (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                             threadMessageIndex
+                                            SeqDict.empty
                                             channel
                                     )
                                     availableCustomEmojis
@@ -2732,7 +3239,7 @@ discordChannelView routeData guild loggedIn local model =
                                 availableStickers
 
                 Nothing ->
-                    pageMissing "Channel does not exist"
+                    pageMissing channelDoesNotExistText
 
         DiscordChannel_NewChannelRoute ->
             pageMissing "Adding Discord channels not supported yet"
@@ -2884,7 +3391,16 @@ guildSettingsView model loggedIn local guildId guild =
                                 [ Ui.spacing 8 ]
                                 [ Ui.row
                                     [ Ui.spacing 16 ]
-                                    [ Ui.el [ Ui.widthMax 300 ] (copyableText inviteLink model)
+                                    [ Ui.el
+                                        [ Ui.widthMax 300 ]
+                                        (MyUi.copyBox
+                                            (Dom.id "guild_inviteLinkCopy")
+                                            Nothing
+                                            PressedCopyText
+                                            FrontendNoOp
+                                            model
+                                            inviteLink
+                                        )
                                     , MyUi.elButton
                                         (Dom.id ("guild_inviteLinkQrCode_" ++ SecretId.toString inviteId))
                                         (PressedToggleInviteLinkQrCode inviteId)
@@ -3072,7 +3588,7 @@ deleteGuildSection guildId guild form =
                 )
             , Ui.border 1
             ]
-            (Ui.text "Delete guild")
+            (Ui.text deleteGuildText)
         ]
 
 
@@ -3107,10 +3623,10 @@ leaveGuildSection guildId form =
             ]
             (Ui.text
                 (if form.showLeaveConfirmation then
-                    "Yes, leave guild"
+                    confirmLeaveGuildText
 
                  else
-                    "Leave guild"
+                    leaveGuildText
                 )
             )
         ]
@@ -3164,58 +3680,6 @@ inviteLinkQrCodeView containerWidth inviteLink =
 
         Err _ ->
             Ui.none
-
-
-copyableText : String -> LoadedFrontend -> Element FrontendMsg_
-copyableText text model =
-    let
-        isCopied : Bool
-        isCopied =
-            case model.lastCopied of
-                Just copied ->
-                    (copied.copied == CopiedText text)
-                        && (Duration.from copied.copiedAt model.time
-                                |> Quantity.lessThan (Duration.seconds 10)
-                           )
-
-                Nothing ->
-                    False
-    in
-    Ui.row
-        []
-        [ Ui.Input.text
-            [ Ui.roundedWith { topLeft = 4, bottomLeft = 4, topRight = 0, bottomRight = 0 }
-            , Ui.border 1
-            , Ui.borderColor MyUi.inputBorder
-            , Ui.paddingXY 4 4
-            , Ui.background MyUi.inputBackground
-            ]
-            { text = text
-            , onChange = \_ -> FrontendNoOp
-            , placeholder = Nothing
-            , label = Ui.Input.labelHidden "Readonly text field"
-            }
-        , MyUi.elButton
-            (Dom.id "guild_copyText")
-            (PressedCopyText text)
-            [ Ui.Font.color MyUi.font2
-            , Ui.roundedWith { topRight = 4, bottomRight = 4, topLeft = 0, bottomLeft = 0 }
-            , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
-            , Ui.borderColor MyUi.inputBorder
-            , Ui.paddingXY 6 0
-            , Ui.width Ui.shrink
-            , Ui.height Ui.fill
-            , Ui.contentCenterY
-            , Ui.Font.size 14
-            , MyUi.hoverText "Copy"
-            ]
-            (if isCopied then
-                Ui.text "Copied!"
-
-             else
-                Ui.el [ Ui.width (Ui.px 18) ] (Ui.html Icons.copyIcon)
-            )
-        ]
 
 
 channelTextInputId : HtmlId
@@ -3310,7 +3774,7 @@ conversationViewHelper :
     -> Maybe (Id ChannelMessageId)
     ->
         { a
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : MessageArray ChannelMessageId (Id UserId)
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
@@ -3476,6 +3940,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         edit
                                         editRichText
                                         loggedIn
+                                        local.localUser.decryptedMessages
                                         local.localUser.session.userId
                                         allUsers
                                         local
@@ -3572,21 +4037,32 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
         |> prependUnreadDivider lastViewedIndex channel.visibleMessages.oldest
 
 
-maybeRepliedTo : Message messageId userId -> { a | messages : MessageArray messageId (Message messageId userId) } -> Maybe ( Id messageId, Message messageId userId )
+userTextMessageRepliedTo :
+    { a | repliedTo : Maybe (Id messageId) }
+    -> { b | messages : MessageArray messageId userId }
+    -> Maybe ( Id messageId, Message messageId userId )
+userTextMessageRepliedTo data channel =
+    case data.repliedTo of
+        Just repliedToIndex ->
+            case MessageArray.get repliedToIndex channel.messages of
+                Just message2 ->
+                    Just ( repliedToIndex, message2 )
+
+                _ ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+maybeRepliedTo : Message messageId userId -> { a | messages : MessageArray messageId userId } -> Maybe ( Id messageId, Message messageId userId )
 maybeRepliedTo message channel =
     case message of
         UserTextMessage data ->
-            case data.repliedTo of
-                Just repliedToIndex ->
-                    case MessageArray.get repliedToIndex channel.messages of
-                        Just message2 ->
-                            Just ( repliedToIndex, message2 )
+            userTextMessageRepliedTo data channel
 
-                        _ ->
-                            Nothing
-
-                Nothing ->
-                    Nothing
+        EncryptedUserTextMessage data ->
+            userTextMessageRepliedTo data channel
 
         UserJoinedMessage _ _ _ _ ->
             Nothing
@@ -3613,7 +4089,7 @@ discordConversationViewHelper :
     -> Maybe (Id ChannelMessageId)
     ->
         { a
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
+            | messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId)
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
@@ -3774,6 +4250,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         edit
                                         editRichText
                                         loggedIn
+                                        SeqDict.empty
                                         currentDiscordUserId
                                         allUsers
                                         local
@@ -4120,6 +4597,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         editing
                                         editRichText
                                         loggedIn
+                                        local.localUser.decryptedMessages
                                         local.localUser.session.userId
                                         allUsers
                                         local
@@ -4333,6 +4811,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         editing
                                         editRichText
                                         loggedIn
+                                        SeqDict.empty
                                         currentDiscordUserId
                                         allUsers
                                         local
@@ -4437,7 +4916,7 @@ newContentLabel =
             , Ui.Font.bold
             , Ui.Font.size 14
             ]
-            (Ui.text "new")
+            (Ui.text newMessagesBadgeText)
         )
     , Ui.inFront
         (Ui.el
@@ -4577,6 +5056,42 @@ decodeMessageView packed =
     , isMobile = Bitwise.shiftRightBy 6 value |> Bitwise.and 0x01 |> (==) 1
     , containerWidth = Bitwise.shiftRightBy 7 value
     , time = packed // timePackingOffset * msInMinute |> Time.millisToPosix
+    }
+
+
+encodeFriendsColumn : Bool -> Int -> Int
+encodeFriendsColumn canScroll time =
+    (if canScroll then
+        1
+
+     else
+        0
+    )
+        + (time // msInMinute * 2)
+
+
+decodeFriendsColumn : Int -> { canScroll : Bool, time : Int }
+decodeFriendsColumn packed =
+    { canScroll = modBy 2 packed == 1
+    , time = packed // 2 * msInMinute
+    }
+
+
+encodeFriendLabel : Bool -> Int -> Int
+encodeFriendLabel isSelected time =
+    (if isSelected then
+        1
+
+     else
+        0
+    )
+        + (time // msInMinute * 2)
+
+
+decodeFriendLabel : Int -> { isSelected : Bool, time : Time.Posix }
+decodeFriendLabel packed =
+    { isSelected = modBy 2 packed == 1
+    , time = packed // 2 * msInMinute |> Time.millisToPosix
     }
 
 
@@ -4749,7 +5264,7 @@ replyToHeader :
     ( AnyGuildOrDmId, ThreadRoute )
     -> Maybe (Id messageId)
     -> SeqDict userId { a | name : PersonName }
-    -> { b | messages : MessageArray messageId2 (Message messageId2 userId) }
+    -> { b | messages : MessageArray messageId2 userId }
     -> Element FrontendMsg_
 replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
     case replyTo of
@@ -4758,6 +5273,9 @@ replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
                 Just message ->
                     case message of
                         UserTextMessage data ->
+                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just data.createdBy) allUsers
+
+                        EncryptedUserTextMessage data ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just data.createdBy) allUsers
 
                         UserJoinedMessage _ userId _ _ ->
@@ -4883,9 +5401,6 @@ drawingModeAttributes route drawingMode =
         []
 
 
-{-| Css transform applied to the conversation container so the area around the
-selected anchor is magnified for more precise drawing.
--}
 drawingZoomAttributes : Route -> Drawing.Model -> List (Ui.Attribute FrontendMsg_)
 drawingZoomAttributes route drawingMode =
     case ( Route.toChannelHeaderTab route, drawingMode ) of
@@ -4905,6 +5420,15 @@ drawingZoomAttributes route drawingMode =
             []
 
 
+missingPrivateKeyPlaceholder : Html msg
+missingPrivateKeyPlaceholder =
+    Html.span
+        [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.errorColor) ]
+        [ Html.text "Private key missing. Goto\u{00A0}"
+        , Html.span [ Html.Attributes.style "position" "absolute" ] [ Icons.gear ]
+        ]
+
+
 conversationView :
     Id ChannelMessageId
     -> GuildOrDmId
@@ -4912,17 +5436,18 @@ conversationView :
     -> LoggedIn2
     -> LoadedFrontend
     -> LocalState
+    -> Bool
     -> String
     ->
         { a
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : MessageArray ChannelMessageId (Id UserId)
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
             , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
         }
     -> Element FrontendMsg_
-conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel =
+conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local missingPrivateKey name channel =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
@@ -5046,18 +5571,24 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
                 channelTextInputId
-                (case guildOrDmIdNoThread of
-                    GuildOrDmId_Guild _ ->
-                        "Write a message in #" ++ name
+                (if missingPrivateKey then
+                    missingPrivateKeyPlaceholder
 
-                    GuildOrDmId_Dm { otherUserId } ->
-                        "Write a message to "
-                            ++ (if otherUserId == local.localUser.session.userId then
-                                    "yourself"
+                 else
+                    (case guildOrDmIdNoThread of
+                        GuildOrDmId_Guild _ ->
+                            "Write a message in #" ++ name
 
-                                else
-                                    name
-                               )
+                        GuildOrDmId_Dm { otherUserId } ->
+                            "Write a message to "
+                                ++ (if otherUserId == local.localUser.session.userId then
+                                        "yourself"
+
+                                    else
+                                        name
+                                   )
+                    )
+                        |> MessageInput.textPlaceholder
                 )
                 (RichText.maxLength - String.length draft)
                 draft
@@ -5089,7 +5620,7 @@ discordConversationView :
     -> String
     ->
         { a
-            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
+            | messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId)
             , isForum : Bool
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
@@ -5224,7 +5755,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         (replyTo == Nothing)
                         (MyUi.isMobile model)
                         channelTextInputId
-                        (case guildOrDmIdNoThread of
+                        ((case guildOrDmIdNoThread of
                             DiscordGuildOrDmId_Guild _ ->
                                 "Write a message in #" ++ name
 
@@ -5236,6 +5767,8 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                                         else
                                             name
                                        )
+                         )
+                            |> MessageInput.textPlaceholder
                         )
                         (RichText.discordCharsLeft OneToOne.empty draftRichText)
                         draft
@@ -5372,11 +5905,12 @@ threadConversationView :
     -> LoggedIn2
     -> LoadedFrontend
     -> LocalState
+    -> Bool
     -> String
     -> String
     -> FrontendThread
     -> Element FrontendMsg_
-threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name threadName channel =
+threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local missingPrivateKey name threadName channel =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
@@ -5455,7 +5989,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     (if VisibleMessages.startIsVisible channel.visibleMessages then
                         [ Ui.el
                             [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                            (Ui.text "Start of thread")
+                            (Ui.text startOfThreadText)
                         , case guildOrDmIdNoThread of
                             GuildOrDmId_Guild { guildId, channelId } ->
                                 case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
@@ -5527,12 +6061,18 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
                 channelTextInputId
-                (case guildOrDmIdNoThread of
-                    GuildOrDmId_Guild _ ->
-                        "Write a message in this thread"
+                (if missingPrivateKey then
+                    missingPrivateKeyPlaceholder
 
-                    GuildOrDmId_Dm _ ->
-                        "Write a message in this thread"
+                 else
+                    (case guildOrDmIdNoThread of
+                        GuildOrDmId_Guild _ ->
+                            "Write a message in this thread"
+
+                        GuildOrDmId_Dm _ ->
+                            "Write a message in this thread"
+                    )
+                        |> MessageInput.textPlaceholder
                 )
                 (RichText.maxLength - String.length draft)
                 draft
@@ -5640,7 +6180,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     (if VisibleMessages.startIsVisible channel.visibleMessages then
                         [ Ui.el
                             [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                            (Ui.text "Start of thread")
+                            (Ui.text startOfThreadText)
                         , case guildOrDmIdNoThread of
                             DiscordGuildOrDmId_Guild { guildId, channelId } ->
                                 case LocalState.getDiscordGuildAndChannel guildId channelId local of
@@ -5701,12 +6241,14 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
                 channelTextInputId
-                (case guildOrDmIdNoThread of
+                ((case guildOrDmIdNoThread of
                     DiscordGuildOrDmId_Guild _ ->
                         "Write a message in this thread"
 
                     DiscordGuildOrDmId_Dm _ ->
                         "Write a message in this thread"
+                 )
+                    |> MessageInput.textPlaceholder
                 )
                 (RichText.discordCharsLeft OneToOne.empty draftRichText)
                 draft
@@ -5731,7 +6273,7 @@ threadStarterMessage :
     Bool
     -> GuildOrDmId
     -> Id ChannelMessageId
-    -> { a | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId)) }
+    -> { a | messages : MessageArray ChannelMessageId (Id UserId) }
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
@@ -5794,6 +6336,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                             edit
                             editRichText
                             loggedIn
+                            local.localUser.decryptedMessages
                             local.localUser.session.userId
                             allUsers
                             local
@@ -5844,7 +6387,7 @@ discordThreadStarterMessage :
     Bool
     -> DiscordGuildOrDmId
     -> Id ChannelMessageId
-    -> { a | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId)) }
+    -> { a | messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId) }
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
@@ -5912,6 +6455,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                             edit
                             editRichText
                             loggedIn
+                            SeqDict.empty
                             currentUserId
                             allUsers
                             local
@@ -5975,17 +6519,21 @@ messageEditingView :
     -> EditMessage
     -> Maybe (Nonempty (RichText userId))
     -> LoggedIn2
+    -> SeqDict BytesHash (Result () (MessageContent userId))
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
     -> Element FrontendMsg_
-messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local =
-    case message of
-        UserTextMessage data ->
+messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers charsLeft editing editingRichText loggedIn decrypted currentUserId allUsers local =
+    let
+        -- An encrypted message is edited the same way a plain one is. Only who wrote it and
+        -- what it was reacted to with are read off the message here, and both kinds say.
+        editingView : userId -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> Element FrontendMsg_
+        editingView createdBy reactions =
             let
                 maybeReactions : Maybe (Element MessageViewMsg)
                 maybeReactions =
-                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth data.reactions
+                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth reactions
 
                 ( guildOrDmIdNoThread, threadRoute ) =
                     guildOrDmId
@@ -5996,7 +6544,7 @@ messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessa
                         True
                         False
                         MessageMenu.editMessageTextInputId
-                        ""
+                        MessageInput.emptyPlaceholder
                         charsLeft
                         editing.text
                         editingRichText
@@ -6038,10 +6586,11 @@ messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessa
                     maybeRepliedTo2
                     revealedSpoilers
                     local.localUser.customEmojis
+                    decrypted
                     allUsers
                     |> Ui.el [ Ui.paddingXY 8 0 ]
                     |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
-                , User.toString data.createdBy allUsers
+                , User.toString createdBy allUsers
                     ++ " "
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold, Ui.paddingXY 8 0 ]
@@ -6088,13 +6637,27 @@ messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessa
                         Ui.none
                 , case ( threadRouteWithMessage, maybeThread ) of
                     ( NoThreadWithMessage messageId, Just thread ) ->
-                        previewThreadLastMessage local.localUser.timezone time local.localUser.customEmojis allUsers messageId thread
+                        previewThreadLastMessage
+                            local.localUser.timezone
+                            time
+                            local.localUser.customEmojis
+                            allUsers
+                            decrypted
+                            messageId
+                            thread
                             |> Ui.el [ Ui.paddingXY 8 0 ]
                             |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
 
                     _ ->
                         Ui.none
                 ]
+    in
+    case message of
+        UserTextMessage data ->
+            editingView data.createdBy data.reactions
+
+        EncryptedUserTextMessage data ->
+            editingView data.createdBy data.reactions
 
         UserJoinedMessage _ _ _ _ ->
             Ui.none
@@ -6123,16 +6686,20 @@ threadMessageEditingView :
     -> EditMessage
     -> Maybe (Nonempty (RichText userId))
     -> LoggedIn2
+    -> SeqDict BytesHash (Result () (MessageContent userId))
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
     -> Element FrontendMsg_
-threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local =
-    case message of
-        UserTextMessage data ->
+threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers charsLeft editing editingRichText loggedIn decrypted currentUserId allUsers local =
+    let
+        -- An encrypted message is edited the same way a plain one is. Only who wrote it and
+        -- what it was reacted to with are read off the message here, and both kinds say.
+        editingView : userId -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> Element FrontendMsg_
+        editingView createdBy reactions =
             let
                 maybeReactions =
-                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth data.reactions
+                    MessageView.reactionEmojiView local.localUser.emojiData MessageView.ReactionsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth reactions
 
                 ( guildOrDmIdNoThread, _ ) =
                     guildOrDmId
@@ -6146,7 +6713,7 @@ threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messa
                         True
                         False
                         MessageMenu.editMessageTextInputId
-                        ""
+                        MessageInput.emptyPlaceholder
                         charsLeft
                         editing.text
                         editingRichText
@@ -6179,10 +6746,11 @@ threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messa
                     maybeRepliedTo2
                     revealedSpoilers
                     local.localUser.customEmojis
+                    decrypted
                     allUsers
                     |> Ui.el [ Ui.paddingXY 8 0 ]
                     |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
-                , User.toString data.createdBy allUsers
+                , User.toString createdBy allUsers
                     ++ " "
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold, Ui.paddingXY 8 0 ]
@@ -6228,6 +6796,13 @@ threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messa
                     Nothing ->
                         Ui.none
                 ]
+    in
+    case message of
+        UserTextMessage data ->
+            editingView data.createdBy data.reactions
+
+        EncryptedUserTextMessage data ->
+            editingView data.createdBy data.reactions
 
         UserJoinedMessage _ _ _ _ ->
             Ui.none
@@ -6280,6 +6855,37 @@ messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message
         message
 
 
+messageViewThreadStarter :
+    Int
+    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
+    -> LocalUser
+    -> Int
+    -> FrontendGenericThread (Id UserId)
+    -> Message ChannelMessageId (Id UserId)
+    -> Element MessageViewMsg
+messageViewThreadStarter data revealedSpoilers localUser messageIndex thread message =
+    let
+        { containerWidth, isEditing, highlight, isHovered, isMobile, time } =
+            decodeMessageView data
+    in
+    messageView
+        time
+        isMobile
+        containerWidth
+        False
+        revealedSpoilers
+        highlight
+        isHovered
+        isEditing
+        localUser.session.userId
+        (User.allUsers localUser)
+        localUser
+        Nothing
+        (Just thread)
+        (Id.fromInt messageIndex)
+        message
+
+
 discordMessageViewNotThreadStarter :
     Int
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
@@ -6314,37 +6920,6 @@ discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId lo
         localUser
         Nothing
         Nothing
-        (Id.fromInt messageIndex)
-        message
-
-
-messageViewThreadStarter :
-    Int
-    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
-    -> LocalUser
-    -> Int
-    -> FrontendThread
-    -> Message ChannelMessageId (Id UserId)
-    -> Element MessageViewMsg
-messageViewThreadStarter data revealedSpoilers localUser messageIndex thread message =
-    let
-        { containerWidth, isEditing, highlight, isHovered, isMobile, time } =
-            decodeMessageView data
-    in
-    messageView
-        time
-        isMobile
-        containerWidth
-        False
-        revealedSpoilers
-        highlight
-        isHovered
-        isEditing
-        localUser.session.userId
-        (User.allUsers localUser)
-        localUser
-        Nothing
-        (Just thread)
         (Id.fromInt messageIndex)
         message
 
@@ -6477,6 +7052,11 @@ messageView :
     -> Message ChannelMessageId (Id UserId)
     -> Element MessageViewMsg
 messageView time isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter messageId message =
+    let
+        decrypted : SeqDict BytesHash (Result () (MessageContent (Id UserId)))
+        decrypted =
+            localUser.decryptedMessages
+    in
     case message of
         UserTextMessage data ->
             messageContainer
@@ -6490,7 +7070,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 allUsers
                 (case highlight of
                     NoHighlight ->
-                        if SeqSet.member currentUserId (RichText.mentionsUser data.content) then
+                        if SeqSet.member currentUserId (RichText.mentionsUser data.content.content) then
                             MentionHighlight
 
                         else
@@ -6505,6 +7085,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 localUser.user
                 data.reactions
                 maybeThreadStarter
+                decrypted
                 isHovered
                 (userTextMessageContent
                     time
@@ -6519,8 +7100,55 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                     (User.userColor localUser)
                     isHovered
                     messageId
+                    data.content
+                    False
                     data
                 )
+
+        EncryptedUserTextMessage data ->
+            case SeqDict.get (Encryption.hash data.content) decrypted of
+                Just result ->
+                    messageContainer
+                        containerWidth
+                        isThreadStarter
+                        localUser.timezone
+                        time
+                        localUser.user.availableCustomEmojis
+                        localUser.customEmojis
+                        localUser.emojiData
+                        allUsers
+                        highlight
+                        messageId
+                        (currentUserId == data.createdBy)
+                        currentUserId
+                        localUser.user
+                        data.reactions
+                        maybeThreadStarter
+                        decrypted
+                        isHovered
+                        (userTextMessageContent
+                            time
+                            (Dom.id "spoiler")
+                            containerWidth
+                            isBeingEdited
+                            isMobile
+                            maybeRepliedTo2
+                            localUser
+                            revealedSpoilers
+                            allUsers
+                            (User.userColor localUser)
+                            isHovered
+                            messageId
+                            (Result.withDefault
+                                { content = RichText.failedToDecryptMessage, embeds = Array.empty, attachedFiles = SeqDict.empty }
+                                result
+                            )
+                            True
+                            data
+                        )
+
+                Nothing ->
+                    Ui.none
 
         UserJoinedMessage joinedAt userId reactions drawings ->
             messageContainer
@@ -6539,6 +7167,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 localUser.user
                 reactions
                 maybeThreadStarter
+                decrypted
                 isHovered
                 (Ui.row
                     []
@@ -6571,6 +7200,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 localUser.user
                 SeqDict.empty
                 maybeThreadStarter
+                decrypted
                 isHovered
                 (deletedMessageContent
                     messageId
@@ -6597,6 +7227,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 localUser.user
                 callStartedData.reactions
                 maybeThreadStarter
+                decrypted
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
@@ -6637,6 +7268,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 localUser.user
                 gameStarted.reactions
                 maybeThreadStarter
+                decrypted
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
@@ -6690,7 +7322,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 allUsers
                 (case highlight of
                     NoHighlight ->
-                        if SeqSet.member currentUserId (RichText.mentionsUser data.content) then
+                        if SeqSet.member currentUserId (RichText.mentionsUser data.content.content) then
                             MentionHighlight
 
                         else
@@ -6705,6 +7337,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 localUser.user
                 data.reactions
                 maybeThreadStarter
+                SeqDict.empty
                 isHovered
                 (discordUserTextMessageContent
                     time
@@ -6717,6 +7350,41 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                     allUsers
                     isHovered
                     messageId
+                    data.content
+                    data
+                )
+
+        EncryptedUserTextMessage data ->
+            messageContainer
+                containerWidth
+                isThreadStarter
+                localUser.timezone
+                time
+                discordQuickReactionCustomEmojis
+                localUser.customEmojis
+                localUser.emojiData
+                allUsers
+                highlight
+                messageId
+                (currentUserId == data.createdBy)
+                currentUserId
+                localUser.user
+                data.reactions
+                maybeThreadStarter
+                SeqDict.empty
+                isHovered
+                (discordUserTextMessageContent
+                    time
+                    (Dom.id "spoiler")
+                    containerWidth
+                    isMobile
+                    maybeRepliedTo2
+                    localUser
+                    revealedSpoilers
+                    allUsers
+                    isHovered
+                    messageId
+                    { content = RichText.failedToDecryptMessage, embeds = Array.empty, attachedFiles = SeqDict.empty }
                     data
                 )
 
@@ -6737,6 +7405,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 localUser.user
                 reactions
                 maybeThreadStarter
+                SeqDict.empty
                 isHovered
                 (Ui.row
                     []
@@ -6769,6 +7438,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 localUser.user
                 SeqDict.empty
                 maybeThreadStarter
+                SeqDict.empty
                 isHovered
                 (deletedMessageContent
                     messageId
@@ -6795,6 +7465,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 localUser.user
                 callStartedData.reactions
                 maybeThreadStarter
+                SeqDict.empty
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
@@ -6835,6 +7506,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 localUser.user
                 gameStarted.reactions
                 maybeThreadStarter
+                SeqDict.empty
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
@@ -6874,13 +7546,18 @@ threadMessageView :
     -> Message ThreadMessageId (Id UserId)
     -> Element MessageViewMsg
 threadMessageView time isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited allUsers currentUserId localUser maybeRepliedTo2 messageId message =
+    let
+        decrypted : SeqDict BytesHash (Result () (MessageContent (Id UserId)))
+        decrypted =
+            localUser.decryptedMessages
+    in
     case message of
         UserTextMessage message2 ->
             threadMessageContainer
                 containerWidth
                 (case highlight of
                     NoHighlight ->
-                        if SeqSet.member currentUserId (RichText.mentionsUser message2.content) then
+                        if SeqSet.member currentUserId (RichText.mentionsUser message2.content.content) then
                             MentionHighlight
 
                         else
@@ -6912,8 +7589,50 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                     (User.userColor localUser)
                     isHovered
                     messageId
+                    message2.content
+                    False
                     message2
                 )
+
+        EncryptedUserTextMessage message2 ->
+            case SeqDict.get (Encryption.hash message2.content) decrypted of
+                Just result ->
+                    threadMessageContainer
+                        containerWidth
+                        highlight
+                        messageId
+                        (currentUserId == message2.createdBy)
+                        currentUserId
+                        localUser.user
+                        message2.reactions
+                        localUser.user.availableCustomEmojis
+                        localUser.customEmojis
+                        localUser.emojiData
+                        allUsers
+                        isHovered
+                        (userTextMessageContent
+                            time
+                            (Dom.id "threadSpoiler")
+                            containerWidth
+                            isBeingEdited
+                            isMobile
+                            maybeRepliedTo2
+                            localUser
+                            revealedSpoilers
+                            allUsers
+                            (User.userColor localUser)
+                            isHovered
+                            messageId
+                            (Result.withDefault
+                                { content = RichText.failedToDecryptMessage, embeds = Array.empty, attachedFiles = SeqDict.empty }
+                                result
+                            )
+                            True
+                            message2
+                        )
+
+                Nothing ->
+                    Ui.none
 
         UserJoinedMessage joinedAt userId reactions drawings ->
             threadMessageContainer
@@ -7055,7 +7774,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 containerWidth
                 (case highlight of
                     NoHighlight ->
-                        if SeqSet.member currentUserId (RichText.mentionsUser message2.content) then
+                        if SeqSet.member currentUserId (RichText.mentionsUser message2.content.content) then
                             MentionHighlight
 
                         else
@@ -7085,6 +7804,36 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                     allUsers
                     isHovered
                     messageId
+                    message2.content
+                    message2
+                )
+
+        EncryptedUserTextMessage message2 ->
+            threadMessageContainer
+                containerWidth
+                highlight
+                messageId
+                (currentUserId == message2.createdBy)
+                currentUserId
+                localUser.user
+                message2.reactions
+                discordQuickReactionCustomEmojis
+                localUser.customEmojis
+                localUser.emojiData
+                allUsers
+                isHovered
+                (discordUserTextMessageContent
+                    time
+                    (Dom.id "threadSpoiler")
+                    containerWidth
+                    isMobile
+                    maybeRepliedTo2
+                    localUser
+                    revealedSpoilers
+                    allUsers
+                    isHovered
+                    messageId
+                    { content = RichText.failedToDecryptMessage, embeds = Array.empty, attachedFiles = SeqDict.empty }
                     message2
                 )
 
@@ -7276,9 +8025,28 @@ userTextMessageContent :
     -> (Id UserId -> UserColor)
     -> IsHovered
     -> Id messageId
-    -> UserTextMessageData messageId (Id UserId)
+    -> MessageContent (Id UserId)
+    -> Bool
+    ->
+        { a
+            | createdAt : Time.Posix
+            , createdBy : Id UserId
+            , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId))
+            , editedAt : Maybe Time.Posix
+            , repliedTo : Maybe (Id messageId)
+            , drawings : Maybe (UserTextMessageDrawings (Id UserId))
+        }
     -> Element MessageViewMsg
-userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId message2 =
+userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers drawingColor isHovered messageId { content, embeds, attachedFiles } showEncryptionIcon message2 =
+    let
+        decrypted : SeqDict BytesHash (Result () (MessageContent (Id UserId)))
+        decrypted =
+            localUser.decryptedMessages
+
+        drawings : UserTextMessageDrawings (Id UserId)
+        drawings =
+            Maybe.withDefault Message.noDrawings message2.drawings
+    in
     Ui.row
         []
         [ User.profileImage (SeqDict.get message2.createdBy allUsers)
@@ -7288,7 +8056,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                     drawingColor
                     MessageView_PressedUserIconAnchor
                     (isHovered == IsHoveredWhileSelectingAnchor)
-                    message2.userIconDrawings
+                    drawings.userIconDrawings
                     ++ (if isHovered == IsHoveredWhileSelectingAnchor then
                             [ Ui.rounded User.profileImageRounding ]
 
@@ -7321,18 +8089,23 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                 maybeRepliedTo2
                 revealedSpoilers
                 localUser.customEmojis
+                decrypted
                 allUsers
             , Ui.row
                 []
                 [ User.toStringView message2.createdBy allUsers
+                , if showEncryptionIcon then
+                    Ui.html Icons.lockClosed
+
+                  else
+                    Ui.none
                 , messageTimestamp
                     drawingColor
-                    message2.timestampDrawings
+                    drawings.timestampDrawings
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     messageId
                     message2.createdAt
                     localUser.timezone
-                , messageIdView messageId
                 ]
             , Html.div
                 [ Html.Attributes.style "white-space" "pre-wrap" ]
@@ -7350,15 +8123,15 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                             Nothing ->
                                 SeqSet.empty
                     , users = allUsers
-                    , attachedFiles = message2.attachedFiles
+                    , attachedFiles = attachedFiles
                     , domainWhitelist = localUser.user.domainWhitelist
                     , customEmojis = localUser.customEmojis
                     , stickers = localUser.stickers
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
                     , time = time
-                    , drawings = message2.imageAttachmentDrawings
-                    , embedDrawings = message2.embedDrawings
+                    , drawings = drawings.imageAttachmentDrawings
+                    , embedDrawings = drawings.embedDrawings
                     , drawingUserColor = drawingColor
                     , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
                     , devicePixelRatio = localUser.devicePixelRatio
@@ -7379,8 +8152,8 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                             IsHoveredWhileSelectingAnchor ->
                                 False
                     }
-                    message2.embeds
-                    message2.content
+                    embeds
+                    content
                     ++ (if isBeingEdited then
                             [ Html.span
                                 [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
@@ -7420,9 +8193,23 @@ discordUserTextMessageContent :
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> IsHovered
     -> Id messageId
-    -> UserTextMessageData messageId (Discord.Id Discord.UserId)
+    -> MessageContent (Discord.Id Discord.UserId)
+    ->
+        { a
+            | createdAt : Time.Posix
+            , createdBy : Discord.Id Discord.UserId
+            , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet (Discord.Id Discord.UserId))
+            , editedAt : Maybe Time.Posix
+            , repliedTo : Maybe (Id messageId)
+            , drawings : Maybe (UserTextMessageDrawings (Discord.Id Discord.UserId))
+        }
     -> Element MessageViewMsg
-discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId message2 =
+discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId { content, embeds, attachedFiles } message2 =
+    let
+        drawings : UserTextMessageDrawings (Discord.Id Discord.UserId)
+        drawings =
+            Maybe.withDefault Message.noDrawings message2.drawings
+    in
     Ui.row
         []
         [ (case SeqDict.get message2.createdBy allUsers of
@@ -7438,7 +8225,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                     (User.discordUserColor localUser)
                     MessageView_PressedUserIconAnchor
                     (isHovered == IsHoveredWhileSelectingAnchor)
-                    message2.userIconDrawings
+                    drawings.userIconDrawings
                     ++ (if isHovered == IsHoveredWhileSelectingAnchor then
                             [ Ui.rounded User.profileImageRounding ]
 
@@ -7471,16 +8258,14 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                 maybeRepliedTo2
                 revealedSpoilers
                 localUser.customEmojis
+                SeqDict.empty
                 allUsers
             , Ui.row
                 []
-                [ User.toString message2.createdBy allUsers
-                    ++ " "
-                    |> Ui.text
-                    |> Ui.el [ Ui.Font.bold ]
+                [ User.toStringView message2.createdBy allUsers
                 , messageTimestamp
                     (User.discordUserColor localUser)
-                    message2.timestampDrawings
+                    drawings.timestampDrawings
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     messageId
                     message2.createdAt
@@ -7503,15 +8288,15 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                             Nothing ->
                                 SeqSet.empty
                     , users = allUsers
-                    , attachedFiles = message2.attachedFiles
+                    , attachedFiles = attachedFiles
                     , domainWhitelist = localUser.user.domainWhitelist
                     , customEmojis = localUser.customEmojis
                     , stickers = localUser.stickers
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
                     , time = time
-                    , drawings = message2.imageAttachmentDrawings
-                    , embedDrawings = message2.embedDrawings
+                    , drawings = drawings.imageAttachmentDrawings
+                    , embedDrawings = drawings.embedDrawings
                     , drawingUserColor = User.discordUserColor localUser
                     , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
                     , devicePixelRatio = localUser.devicePixelRatio
@@ -7532,8 +8317,8 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                             IsHoveredWhileSelectingAnchor ->
                                 False
                     }
-                    message2.embeds
-                    message2.content
+                    embeds
+                    content
                     ++ (case message2.editedAt of
                             Just editedAt ->
                                 [ Html.span
@@ -7619,6 +8404,38 @@ messagePreviewTimestamp createdAt timezone =
         [ MyUi.timestamp createdAt timezone |> Html.text ]
 
 
+replyToHeaderAboveMessage_userTextMessage :
+    Bool
+    -> Id messageId
+    -> Time.Zone
+    -> Time.Posix
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> SeqDict userId { a | name : PersonName }
+    -> SeqDict (Id messageId) (NonemptySet Int)
+    -> MessageContent userId
+    -> userId
+    -> Element MessageViewMsg
+replyToHeaderAboveMessage_userTextMessage isMobile repliedToIndex timezone time customEmojis allUsers revealedSpoilers contentAndEmbeds createdBy =
+    replyToHeaderAboveMessageHelper
+        isMobile
+        repliedToIndex
+        (userTextMessagePreview
+            timezone
+            time
+            customEmojis
+            allUsers
+            (case SeqDict.get repliedToIndex revealedSpoilers of
+                Just set ->
+                    NonemptySet.toSeqSet set
+
+                Nothing ->
+                    SeqSet.empty
+            )
+            contentAndEmbeds
+            createdBy
+        )
+
+
 replyToHeaderAboveMessage :
     Bool
     -> Time.Zone
@@ -7626,28 +8443,42 @@ replyToHeaderAboveMessage :
     -> Maybe ( Id messageId, Message messageId userId )
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> SeqDict BytesHash (Result () (MessageContent userId))
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> Element MessageViewMsg
-replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoilers customEmojis allUsers =
+replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoilers customEmojis decrypted allUsers =
     case maybeRepliedTo2 of
         Just ( repliedToIndex, UserTextMessage repliedToData ) ->
-            replyToHeaderAboveMessageHelper
+            replyToHeaderAboveMessage_userTextMessage
                 isMobile
                 repliedToIndex
-                (userTextMessagePreview
-                    timezone
-                    time
-                    customEmojis
-                    allUsers
-                    (case SeqDict.get repliedToIndex revealedSpoilers of
-                        Just set ->
-                            NonemptySet.toSeqSet set
+                timezone
+                time
+                customEmojis
+                allUsers
+                revealedSpoilers
+                repliedToData.content
+                repliedToData.createdBy
 
-                        Nothing ->
-                            SeqSet.empty
-                    )
-                    repliedToData
-                )
+        Just ( repliedToIndex, EncryptedUserTextMessage repliedToData ) ->
+            case SeqDict.get (Encryption.hash repliedToData.content) decrypted of
+                Just result ->
+                    replyToHeaderAboveMessage_userTextMessage
+                        isMobile
+                        repliedToIndex
+                        timezone
+                        time
+                        customEmojis
+                        allUsers
+                        revealedSpoilers
+                        (Result.withDefault
+                            { content = RichText.failedToDecryptMessage, embeds = Array.empty, attachedFiles = SeqDict.empty }
+                            result
+                        )
+                        repliedToData.createdBy
+
+                Nothing ->
+                    Ui.none
 
         Just ( repliedToIndex, UserJoinedMessage _ userId _ _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (userJoinedContent userId allUsers)
@@ -7677,9 +8508,10 @@ userTextMessagePreview :
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> SeqSet Int
-    -> UserTextMessageData messageId userId
+    -> MessageContent userId
+    -> userId
     -> Element MessageViewMsg
-userTextMessagePreview timezone time customEmojis allUsers revealedSpoilers message =
+userTextMessagePreview timezone time customEmojis allUsers revealedSpoilers contentAndEmbeds createdBy =
     Html.div
         [ Html.Attributes.style "white-space" "nowrap"
         , Html.Attributes.style "overflow" "hidden"
@@ -7689,18 +8521,18 @@ userTextMessagePreview timezone time customEmojis allUsers revealedSpoilers mess
             [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
             , Html.Attributes.style "padding" "0 6px 0 2px"
             ]
-            [ Html.text (User.toString message.createdBy allUsers) ]
+            [ Html.text (User.toString createdBy allUsers) ]
             :: RichText.preview
                 (\_ -> MessageView_NoOp)
                 { revealedSpoilers = revealedSpoilers
                 , users = allUsers
-                , attachedFiles = message.attachedFiles
+                , attachedFiles = contentAndEmbeds.attachedFiles
                 , customEmojis = customEmojis
                 , domainWhitelist = SeqSet.empty
                 , timezone = timezone
                 , time = time
                 }
-                message.content
+                contentAndEmbeds.content
         )
         |> Ui.html
 
@@ -7795,7 +8627,7 @@ callStartedCard userIdToColor isSelectingAnchor messageId drawings userId starte
         MessageViewMsg_PressedCallStartedCard
         (Ui.html Icons.phone)
         (User.toString userId allUsers)
-        ("started a call" ++ eventDurationText startedAt endedAt)
+        (startedACallText ++ eventDurationText startedAt endedAt)
 
 
 goMatchStartedCard :
@@ -7998,10 +8830,11 @@ messageContainer :
     -> FrontendCurrentUser
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> Maybe (FrontendGenericThread userId)
+    -> SeqDict BytesHash (Result () (MessageContent userId))
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer containerWidth isThreadStarter timezone currentTime availableCustomEmojis customEmojis emojiData allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent =
+messageContainer containerWidth isThreadStarter timezone currentTime availableCustomEmojis customEmojis emojiData allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread decrypted isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -8114,7 +8947,7 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
             :: Maybe.Extra.toList maybeReactions
             ++ (case maybeThread of
                     Just thread ->
-                        [ previewThreadLastMessage timezone currentTime customEmojis allUsers messageIndex thread
+                        [ previewThreadLastMessage timezone currentTime customEmojis allUsers decrypted messageIndex thread
                         ]
 
                     Nothing ->
@@ -8250,15 +9083,43 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
         (messageContent :: Maybe.Extra.toList maybeReactions)
 
 
+previewThreadLastMessage_userTextMessage :
+    Time.Posix
+    -> Time.Zone
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> SeqDict userId { a | name : PersonName }
+    -> MessageContent userId
+    -> userId
+    -> List (Html MessageViewMsg)
+previewThreadLastMessage_userTextMessage time timezone customEmojis allUsers contentAndEmbeds createdBy =
+    Html.span
+        [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
+        , Html.Attributes.style "padding" "0 6px 0 2px"
+        ]
+        [ Html.text (User.toString createdBy allUsers) ]
+        :: RichText.preview
+            (\_ -> MessageView_NoOp)
+            { revealedSpoilers = SeqSet.empty
+            , users = allUsers
+            , attachedFiles = contentAndEmbeds.attachedFiles
+            , customEmojis = customEmojis
+            , domainWhitelist = SeqSet.empty
+            , timezone = timezone
+            , time = time
+            }
+            contentAndEmbeds.content
+
+
 previewThreadLastMessage :
     Time.Zone
     -> Time.Posix
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
+    -> SeqDict BytesHash (Result () (MessageContent userId))
     -> Id ChannelMessageId
     -> FrontendGenericThread userId
     -> Element MessageViewMsg
-previewThreadLastMessage timezone time customEmojis allUsers messageId thread =
+previewThreadLastMessage timezone time customEmojis allUsers decrypted messageId thread =
     let
         lastMessage =
             MessageArray.last thread.messages
@@ -8305,22 +9166,30 @@ previewThreadLastMessage timezone time customEmojis allUsers messageId thread =
                     Just last ->
                         case last of
                             UserTextMessage data ->
-                                Html.span
-                                    [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
-                                    , Html.Attributes.style "padding" "0 6px 0 2px"
-                                    ]
-                                    [ Html.text (User.toString data.createdBy allUsers) ]
-                                    :: RichText.preview
-                                        (\_ -> MessageView_NoOp)
-                                        { revealedSpoilers = SeqSet.empty
-                                        , users = allUsers
-                                        , attachedFiles = data.attachedFiles
-                                        , customEmojis = customEmojis
-                                        , domainWhitelist = SeqSet.empty
-                                        , timezone = timezone
-                                        , time = time
-                                        }
-                                        data.content
+                                previewThreadLastMessage_userTextMessage
+                                    time
+                                    timezone
+                                    customEmojis
+                                    allUsers
+                                    data.content
+                                    data.createdBy
+
+                            EncryptedUserTextMessage data ->
+                                case SeqDict.get (Encryption.hash data.content) decrypted of
+                                    Just result ->
+                                        previewThreadLastMessage_userTextMessage
+                                            time
+                                            timezone
+                                            customEmojis
+                                            allUsers
+                                            (Result.withDefault
+                                                { content = RichText.failedToDecryptMessage, embeds = Array.empty, attachedFiles = SeqDict.empty }
+                                                result
+                                            )
+                                            data.createdBy
+
+                                    Nothing ->
+                                        []
 
                             UserJoinedMessage _ userId _ _ ->
                                 [ Html.span
@@ -8734,7 +9603,7 @@ channelColumnNoResults searchFilter channelRows =
             , Ui.Font.color MyUi.font2
             , Ui.paddingXY 8 8
             ]
-            [ Ui.text "No matching channels\u{00A0}found" ]
+            [ Ui.text noMatchingChannelsText ]
         ]
 
     else
@@ -8791,7 +9660,7 @@ channelSearchRow isMobile channelSearch =
         ]
         (Ui.Input.text
             [ Ui.id (Dom.idToString channelSearchInputId)
-            , Ui.background MyUi.inputBackground
+            , Ui.background (Ui.rgba 0 0 0 0)
             , Ui.border 0
             , Ui.paddingWith { left = 8, top = 8, bottom = 8, right = clearPaddingX * 2 + 24 + 8 }
             , Ui.Font.color MyUi.font1
@@ -8938,17 +9807,13 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
         )
 
 
-{-| The threads of one DM, listed underneath it in the friends column. The
-`threadRoute` is the one being viewed in this DM, or Nothing when another DM (or
-no DM at all) is open.
--}
 dmColumnThreads :
     Bool
     -> Time.Posix
     -> Maybe ThreadRouteWithFriends
     -> LocalUser
     -> Id UserId
-    -> { b | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId)) }
+    -> { b | messages : MessageArray ChannelMessageId (Id UserId) }
     -> SeqDict (Id ChannelMessageId) FrontendThread
     -> Element FrontendMsg_
 dmColumnThreads isMobile now threadRoute localUser otherUserId channel threads =
@@ -9031,7 +9896,7 @@ dmColumnThreads isMobile now threadRoute localUser otherUserId channel threads =
                     , channelsVisible = ChannelsHiddenOnMobile
                     }
                 )
-                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex channel)
+                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex localUser.decryptedMessages channel)
         )
         threads2
         |> Ui.column []
@@ -9116,7 +9981,7 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
                     (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideChannelSettings) Nothing)
                     ChannelsHiddenOnMobile
                 )
-                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex channel)
+                (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex localUser.decryptedMessages channel)
         )
         threads2
         |> Ui.column []
@@ -9270,7 +10135,7 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
                     , channelsVisible = ChannelsHiddenOnMobile
                     }
                 )
-                (threadPreviewText localUser.timezone (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers) threadMessageIndex channel)
+                (threadPreviewText localUser.timezone (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers) threadMessageIndex SeqDict.empty channel)
         )
         threads2
         |> Ui.column []
@@ -9435,6 +10300,10 @@ friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearc
         currentTimeRoundedToMinute : Int
         currentTimeRoundedToMinute =
             Time.posixToMillis currentTime // msInMinute |> (*) msInMinute
+
+        packed : Int
+        packed =
+            encodeFriendsColumn canScroll2 currentTimeRoundedToMinute
     in
     if (friendsSearch /= "") || friendsSearchHasFocus then
         -- The search text changes too often for laziness to be worth it here
@@ -9452,69 +10321,86 @@ friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearc
     else
         case openedOtherUserId of
             NoDmChannelSelected ->
-                Ui.Lazy.lazy6
+                Ui.Lazy.lazy5
                     friendsColumn_NoDmChannelSelected
-                    canScroll2
+                    packed
                     isMobile
-                    currentTimeRoundedToMinute
                     local.dmChannels
                     local.discordDmChannels
                     local.localUser
 
             SelectedDmChannel dmRouteData ->
-                Ui.Lazy.lazy6
+                Ui.Lazy.lazy5
                     (if isMobile then
                         friendsColumn_SelectedDmChannel_Mobile
 
                      else
                         friendsColumn_SelectedDmChannel_NotMobile
                     )
-                    canScroll2
-                    currentTimeRoundedToMinute
+                    packed
                     dmRouteData
                     local.dmChannels
                     local.discordDmChannels
                     local.localUser
 
             SelectedDiscordDmChannel discordDmRouteData ->
-                Ui.Lazy.lazy6
+                Ui.Lazy.lazy5
                     (if isMobile then
                         friendsColumn_SelectedDiscordDmChannel_Mobile
 
                      else
                         friendsColumn_SelectedDiscordDmChannel_NotMobile
                     )
-                    canScroll2
-                    currentTimeRoundedToMinute
+                    packed
                     discordDmRouteData
                     local.dmChannels
                     local.discordDmChannels
                     local.localUser
 
 
-friendsColumn_NoDmChannelSelected : Bool -> Bool -> Int -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
-friendsColumn_NoDmChannelSelected canScroll2 isMobile currentTime dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 isMobile currentTime "" False NoDmChannelSelected dmChannels discordDmChannels localUser
+friendsColumn_NoDmChannelSelected : Int -> Bool -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
+friendsColumn_NoDmChannelSelected packed isMobile dmChannels discordDmChannels localUser =
+    let
+        { canScroll, time } =
+            decodeFriendsColumn packed
+    in
+    friendsColumn canScroll isMobile time "" False NoDmChannelSelected dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDiscordDmChannel_Mobile : Bool -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
-friendsColumn_SelectedDiscordDmChannel_Mobile canScroll2 currentTime discordDmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 True currentTime "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
+friendsColumn_SelectedDiscordDmChannel_Mobile : Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
+friendsColumn_SelectedDiscordDmChannel_Mobile packed discordDmRoute dmChannels discordDmChannels localUser =
+    let
+        { canScroll, time } =
+            decodeFriendsColumn packed
+    in
+    friendsColumn canScroll True time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDiscordDmChannel_NotMobile : Bool -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
-friendsColumn_SelectedDiscordDmChannel_NotMobile canScroll2 currentTime discordDmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 False currentTime "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
+friendsColumn_SelectedDiscordDmChannel_NotMobile : Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
+friendsColumn_SelectedDiscordDmChannel_NotMobile packed discordDmRoute dmChannels discordDmChannels localUser =
+    let
+        { canScroll, time } =
+            decodeFriendsColumn packed
+    in
+    friendsColumn canScroll False time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDmChannel_Mobile : Bool -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
-friendsColumn_SelectedDmChannel_Mobile canScroll2 currentTime dmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 True currentTime "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
+friendsColumn_SelectedDmChannel_Mobile : Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
+friendsColumn_SelectedDmChannel_Mobile packed dmRoute dmChannels discordDmChannels localUser =
+    let
+        { canScroll, time } =
+            decodeFriendsColumn packed
+    in
+    friendsColumn canScroll True time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDmChannel_NotMobile : Bool -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
-friendsColumn_SelectedDmChannel_NotMobile canScroll2 currentTime dmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 False currentTime "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
+friendsColumn_SelectedDmChannel_NotMobile : Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
+friendsColumn_SelectedDmChannel_NotMobile packed dmRoute dmChannels discordDmChannels localUser =
+    let
+        { canScroll, time } =
+            decodeFriendsColumn packed
+    in
+    friendsColumn canScroll False time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
 
 
 friendsColumn :
@@ -9586,20 +10472,22 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                                         Time.millisToPosix 0
                                 , Ui.column
                                     []
-                                    [ Ui.Lazy.lazy6
+                                    [ Ui.Lazy.lazy5
                                         (if isMobile then
                                             friendLabelMobile
 
                                          else
                                             friendLabelNotMobile
                                         )
-                                        currentTime
-                                        (case threadRoute of
-                                            Just (NoThreadWithFriends _ _) ->
-                                                True
+                                        (encodeFriendLabel
+                                            (case threadRoute of
+                                                Just (NoThreadWithFriends _ _) ->
+                                                    True
 
-                                            _ ->
-                                                False
+                                                _ ->
+                                                    False
+                                            )
+                                            currentTime
                                         )
                                         localUser
                                         otherUserId
@@ -9746,7 +10634,7 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                     , Ui.paddingXY 8 8
                     , Ui.Font.color MyUi.font1
                     ]
-                    (Ui.text "Direct messages")
+                    (Ui.text directMessagesText)
                 , Ui.el
                     [ Ui.Font.color MyUi.font2
                     , Ui.width (Ui.px 40)
@@ -9785,26 +10673,32 @@ friendsSearchInputId =
 
 friendLabelMobile :
     Int
-    -> Bool
     -> LocalUser
     -> Id UserId
     -> FrontendUser
     -> FrontendDmChannel
     -> Element FrontendMsg_
-friendLabelMobile time isSelected localUser otherUserId otherUser channel =
-    friendLabel True (Time.millisToPosix time) isSelected localUser otherUserId otherUser channel
+friendLabelMobile packed localUser otherUserId otherUser channel =
+    let
+        { isSelected, time } =
+            decodeFriendLabel packed
+    in
+    friendLabel True time isSelected localUser otherUserId otherUser channel
 
 
 friendLabelNotMobile :
     Int
-    -> Bool
     -> LocalUser
     -> Id UserId
     -> FrontendUser
     -> FrontendDmChannel
     -> Element FrontendMsg_
-friendLabelNotMobile time isSelected localUser otherUserId otherUser channel =
-    friendLabel False (Time.millisToPosix time) isSelected localUser otherUserId otherUser channel
+friendLabelNotMobile packed localUser otherUserId otherUser channel =
+    let
+        { isSelected, time } =
+            decodeFriendLabel packed
+    in
+    friendLabel False time isSelected localUser otherUserId otherUser channel
 
 
 type SomeoneIsTyping
@@ -9852,6 +10746,10 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
         allUsers =
             User.allUsers localUser
 
+        decrypted : SeqDict BytesHash (Result () (MessageContent (Id UserId)))
+        decrypted =
+            localUser.decryptedMessages
+
         message : Maybe (Message ChannelMessageId (Id UserId))
         message =
             MessageArray.last channel.messages
@@ -9860,10 +10758,10 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
         messagePreview =
             case someoneIsTyping time (SeqDict.remove localUser.session.userId channel.lastTypedAt) of
                 SomeoneIsTyping ->
-                    "Typing..."
+                    typingText
 
                 SomeoneIsEditing ->
-                    "Editing..."
+                    editingText
 
                 NoOneIsTyping ->
                     case message of
@@ -9876,7 +10774,32 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                      else
                                         ""
                                     )
-                                        ++ RichText.toString localUser.timezone True allUsers a.content
+                                        ++ RichText.toString localUser.timezone True allUsers a.content.content
+
+                                EncryptedUserTextMessage a ->
+                                    (if a.createdBy == localUser.session.userId then
+                                        "You: "
+
+                                     else
+                                        ""
+                                    )
+                                        ++ (case SeqDict.get (Encryption.hash a.content) decrypted of
+                                                Just result ->
+                                                    RichText.toString
+                                                        localUser.timezone
+                                                        True
+                                                        allUsers
+                                                        (case result of
+                                                            Ok ok ->
+                                                                ok.content
+
+                                                            Err () ->
+                                                                RichText.failedToDecryptMessage
+                                                        )
+
+                                                Nothing ->
+                                                    ""
+                                           )
 
                                 UserJoinedMessage _ userId _ _ ->
                                     User.toString userId allUsers
@@ -9982,10 +10905,10 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
         messagePreview =
             case someoneIsTyping time (SeqDict.diff channel.lastTypedAt (LinkedAndOtherDiscordUsers.linkedUsers localUser.discordUsers)) of
                 SomeoneIsTyping ->
-                    "Typing..."
+                    typingText
 
                 SomeoneIsEditing ->
-                    "Editing..."
+                    editingText
 
                 NoOneIsTyping ->
                     case message of
@@ -10002,7 +10925,14 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                             localUser.timezone
                                             True
                                             (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
-                                            a.content
+                                            a.content.content
+
+                                EncryptedUserTextMessage a ->
+                                    if LinkedAndOtherDiscordUsers.isLinkedUser a.createdBy localUser.discordUsers then
+                                        "You: " ++ RichText.failedToDecryptMessageText
+
+                                    else
+                                        RichText.failedToDecryptMessageText
 
                                 UserJoinedMessage _ userId _ _ ->
                                     User.toString

@@ -15,9 +15,13 @@ module BackendExtra exposing
     , asGuildMemberRpc
     , asGuildOwner
     , asUser
+    , channelDataToDecrypt
+    , decryptOldMessages
     , discordDmChannelToFrontend
     , discordGuildToFrontend
     , discordGuildToFrontendForUser
+    , dmChannelsThatNeedEncrypting
+    , encryptOldMessages
     , getLinkedDiscordUsersAndOtherUsers
     , getLoginCode
     , getLoginData
@@ -29,6 +33,7 @@ module BackendExtra exposing
     , ownMessageIsReadBackend
     , requestedForToGuildOrDmId
     , sendDm
+    , sendEncryptedDm
     , sendGuildMessage
     , sendLoginEmail
     , shouldRateLimit
@@ -48,7 +53,7 @@ import Bytes.Encode
 import Call exposing (CallId(..))
 import Discord
 import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, FrontendDmChannel)
+import DmChannel exposing (BackendDmChannel, DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
 import DmChannelId exposing (DmChannelId)
 import Drawing
 import Duration
@@ -60,6 +65,7 @@ import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
+import Encryption exposing (EncryptedData)
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Http
@@ -75,7 +81,7 @@ import Log exposing (Log)
 import LoginForm
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..))
-import Message exposing (Message(..))
+import Message exposing (Message(..), MessageContent)
 import NonemptyDict exposing (NonemptyDict)
 import Pages.Admin exposing (InitAdminData)
 import Pagination exposing (PageId)
@@ -91,7 +97,7 @@ import SessionIdHash
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import ToBackendLog exposing (ToBackendLog(..))
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), ChannelDataToDecrypt, ChannelDataToEncrypt, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, FrontendUser)
 import UserAgent exposing (UserAgent)
@@ -654,7 +660,10 @@ messageUserIds : Message messageId userId -> List userId
 messageUserIds message =
     case message of
         UserTextMessage data ->
-            data.createdBy :: SeqSet.toList (RichText.mentionsUser data.content)
+            data.createdBy :: SeqSet.toList (RichText.mentionsUser data.content.content)
+
+        EncryptedUserTextMessage data ->
+            [ data.createdBy ]
 
         UserJoinedMessage _ userId _ _ ->
             [ userId ]
@@ -1892,6 +1901,212 @@ readerIsViewingDm readerId senderId threadRoute model =
         model.users
 
 
+dmChannelsThatNeedEncrypting : UserSession -> SeqDict DmChannelId BackendDmChannel -> SeqDict Viewing_DmId ChannelDataToEncrypt
+dmChannelsThatNeedEncrypting session dmChannels =
+    SeqDict.foldl
+        (\dmChannelId dmChannel dict ->
+            case
+                ( DmChannelId.otherUserId session.userId dmChannelId
+                , dmChannel.e2ee
+                )
+            of
+                ( Just otherUserId, DmChannel.E2eeEnabled _ ) ->
+                    let
+                        conversation : ChannelDataToEncrypt
+                        conversation =
+                            { channel = plainTextMessages dmChannel.messages
+                            , threads =
+                                SeqDict.foldl
+                                    (\threadId thread threads ->
+                                        let
+                                            plainText : SeqDict (Id ThreadMessageId) (MessageContent (Id UserId))
+                                            plainText =
+                                                plainTextMessages thread.messages
+                                        in
+                                        if SeqDict.isEmpty plainText then
+                                            threads
+
+                                        else
+                                            SeqDict.insert threadId plainText threads
+                                    )
+                                    SeqDict.empty
+                                    dmChannel.threads
+                            }
+                    in
+                    if SeqDict.isEmpty conversation.channel && SeqDict.isEmpty conversation.threads then
+                        dict
+
+                    else
+                        SeqDict.insert { otherUserId = otherUserId } conversation dict
+
+                _ ->
+                    dict
+        )
+        SeqDict.empty
+        dmChannels
+
+
+channelDataToDecrypt : BackendDmChannel -> ChannelDataToDecrypt
+channelDataToDecrypt dmChannel =
+    { channel = cipherTextMessages dmChannel.messages
+    , threads =
+        SeqDict.foldl
+            (\threadId thread threads ->
+                case NonemptyDict.fromSeqDict (cipherTextMessages thread.messages) of
+                    Just nonempty ->
+                        SeqDict.insert threadId nonempty threads
+
+                    Nothing ->
+                        threads
+            )
+            SeqDict.empty
+            dmChannel.threads
+    }
+
+
+cipherTextMessages :
+    IdArray messageId (Message messageId (Id UserId))
+    -> SeqDict (Id messageId) (EncryptedData (MessageContent (Id UserId)))
+cipherTextMessages messages =
+    IdArray.foldlWithId
+        (\messageId message dict ->
+            case message of
+                EncryptedUserTextMessage data ->
+                    SeqDict.insert messageId data.content dict
+
+                UserTextMessage _ ->
+                    dict
+
+                UserJoinedMessage _ _ _ _ ->
+                    dict
+
+                DeletedMessage _ ->
+                    dict
+
+                CallStarted _ ->
+                    dict
+
+                GameStarted _ ->
+                    dict
+        )
+        SeqDict.empty
+        messages
+
+
+plainTextMessages :
+    IdArray messageId (Message messageId (Id UserId))
+    -> SeqDict (Id messageId) (MessageContent (Id UserId))
+plainTextMessages messages =
+    IdArray.foldlWithId
+        (\messageId message dict ->
+            case message of
+                UserTextMessage data ->
+                    SeqDict.insert messageId data.content dict
+
+                EncryptedUserTextMessage _ ->
+                    dict
+
+                UserJoinedMessage _ _ _ _ ->
+                    dict
+
+                DeletedMessage _ ->
+                    dict
+
+                CallStarted _ ->
+                    dict
+
+                GameStarted _ ->
+                    dict
+        )
+        SeqDict.empty
+        messages
+
+
+{-| Store and pass on a DM whose contents the server cannot read.
+
+Almost everything `sendDm` does with a message needs the text: working out who was
+mentioned, what to put in a notification, which links to fetch embeds for. None of that
+is possible here, so this keeps only what is left, and the notification says a message
+arrived without saying what it was.
+
+-}
+sendEncryptedDm :
+    Time.Posix
+    -> ClientId
+    -> ChangeId
+    -> Viewing_DmId
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent (Id UserId))
+    -> ThreadRouteWithMaybeMessage
+    -> UserSession
+    -> BackendUser
+    -> DmChannelId
+    -> BackendDmChannel
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+sendEncryptedDm time clientId changeId id fileHashes contentAndEmbeds threadRouteWithReplyTo session user dmChannelId dmChannel model =
+    case RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits of
+        Ok sendMessageRateLimits ->
+            let
+                ( threadRouteWithMessage, dmChannel2 ) =
+                    case threadRouteWithReplyTo of
+                        ViewThreadWithMaybeMessage threadId repliedTo ->
+                            LocalState.createThreadMessageBackend
+                                threadId
+                                (Message.encryptedUserTextMessageFrontend time session.userId fileHashes contentAndEmbeds repliedTo)
+                                dmChannel
+                                |> Tuple.mapFirst (ViewThreadWithMessage threadId)
+
+                        NoThreadWithMaybeMessage repliedTo ->
+                            LocalState.createChannelMessageBackend
+                                (Message.encryptedUserTextMessageFrontend time session.userId fileHashes contentAndEmbeds repliedTo)
+                                dmChannel
+                                |> Tuple.mapFirst NoThreadWithMessage
+
+                ( sessions, notificationCmd ) =
+                    Broadcast.encryptedDmNotification time session.userId id model
+            in
+            ( { model
+                | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
+                , users =
+                    NonemptyDict.insert
+                        session.userId
+                        (User.setLastViewedMessage
+                            (GuildOrDmId (GuildOrDmId_Dm id))
+                            threadRouteWithMessage
+                            user
+                        )
+                        (readerIsViewingDm id.otherUserId session.userId threadRouteWithMessage model)
+                , sendMessageRateLimits = sendMessageRateLimits
+                , sessions = sessions
+              }
+            , Command.batch
+                [ Local_SendEncryptedMessage time id fileHashes contentAndEmbeds threadRouteWithReplyTo
+                    |> LocalChangeResponse changeId
+                    |> Lamdera.sendToFrontend clientId
+                , Broadcast.toDmChannelExcludingOne
+                    clientId
+                    session.userId
+                    id
+                    (\id2 ->
+                        Server_SendEncryptedMessage
+                            session.userId
+                            (User.backendToFrontendForUser user)
+                            time
+                            id2
+                            fileHashes
+                            contentAndEmbeds
+                            threadRouteWithReplyTo
+                    )
+                    model
+                , notificationCmd
+                ]
+            )
+
+        Err () ->
+            ( model, invalidChangeResponse changeId clientId )
+
+
 sendDm :
     BackendModel
     -> Time.Posix
@@ -1907,7 +2122,7 @@ sendDm :
     -> BackendUser
     -> BackendUser
     -> DmChannelId
-    -> DmChannel
+    -> BackendDmChannel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles emojis session user otherUser dmChannelId dmChannel =
     let
@@ -2425,6 +2640,39 @@ toBackendLog toBackend =
                 Local_SetMuteDiscordGuild _ _ _ ->
                     ToBackendLog_Local_SetMuteDiscordGuild
 
+                Local_RequestE2ee _ ->
+                    ToBackendLog_Local_RequestE2ee
+
+                Local_DeclineE2eeRequestAsInitiator _ ->
+                    ToBackendLog_Local_CancelE2eeRequest
+
+                Local_DeclineE2eeRequest _ ->
+                    ToBackendLog_Local_DeclineE2eeRequest
+
+                Local_SetPublicKey _ _ ->
+                    ToBackendLog_Local_SetPublicKey
+
+                Local_EncryptOldMessages _ _ ->
+                    ToBackendLog_Local_EncryptOldMessages
+
+                Local_DisableE2ee _ _ ->
+                    ToBackendLog_Local_DisableE2ee
+
+                Local_DecryptOldMessages _ _ _ ->
+                    ToBackendLog_Local_DecryptOldMessages
+
+                Local_SetE2eeRisksAccepted _ ->
+                    ToBackendLog_Local_SetE2eeRisksAccepted
+
+                Local_AcceptE2ee _ _ _ ->
+                    ToBackendLog_Local_AcceptE2ee
+
+                Local_SendEncryptedMessage _ _ _ _ _ ->
+                    ToBackendLog_Local_SendEncryptedMessage
+
+                Local_SendEncryptedEditMessage _ _ _ _ _ ->
+                    ToBackendLog_Local_SendEncryptedEditMessage
+
         TwoFactorToBackend _ ->
             ToBackendLog_TwoFactorToBackend
 
@@ -2789,7 +3037,7 @@ asDmUser :
     BackendModel
     -> SessionId
     -> Viewing_DmId
-    -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> DmChannel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> BackendDmChannel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asDmUser model sessionId { otherUserId } func =
     case SeqDict.get sessionId model.sessions of
@@ -2826,7 +3074,7 @@ asDmUserRpc :
     -> SessionId
     -> ClientId
     -> Viewing_DmId
-    -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> DmChannel -> ( Result Http.Error String, BackendModel, Cmd BackendMsg ))
+    -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> BackendDmChannel -> ( Result Http.Error String, BackendModel, Cmd BackendMsg ))
     -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
 asDmUserRpc model sessionId clientId { otherUserId } func =
     case ( SeqDict.get sessionId model.sessions, SeqDict.get sessionId model.connections ) of
@@ -2986,3 +3234,133 @@ asDiscordDmUser_AllowUserThatNeedsAuthAgain model sessionId { currentUserId, cha
 
         Nothing ->
             ( model, Command.none )
+
+
+decryptOldMessages :
+    Time.Posix
+    -> ClientId
+    -> ChangeId
+    -> LocalChange
+    -> BackendModel
+    -> List ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+    -> UserSession
+    -> DmChannelId
+    -> BackendDmChannel
+    -> ( BackendModel, Command BackendOnly ToFrontend backendMsg )
+decryptOldMessages time clientId changeId localMsg model messages session dmChannelId dmChannel =
+    case dmChannel.e2ee of
+        DmChannel.E2eeEnabled _ ->
+            let
+                dmChannel2 : BackendDmChannel
+                dmChannel2 =
+                    List.foldl
+                        (\( threadRoute, content ) channel ->
+                            case threadRoute of
+                                NoThreadWithMessage messageId ->
+                                    { channel
+                                        | messages =
+                                            DmChannel.updateArray
+                                                messageId
+                                                (Message.toDecrypted content)
+                                                channel.messages
+                                    }
+
+                                ViewThreadWithMessage threadId messageId ->
+                                    { channel
+                                        | threads =
+                                            SeqDict.updateIfExists
+                                                threadId
+                                                (\thread ->
+                                                    { thread
+                                                        | messages =
+                                                            DmChannel.updateArray
+                                                                messageId
+                                                                (Message.toDecrypted content)
+                                                                thread.messages
+                                                    }
+                                                )
+                                                channel.threads
+                                    }
+                        )
+                        dmChannel
+                        messages
+            in
+            if channelDataToDecrypt dmChannel2 == { channel = SeqDict.empty, threads = SeqDict.empty } then
+                ( { model
+                    | dmChannels =
+                        SeqDict.insert
+                            dmChannelId
+                            { dmChannel2 | e2ee = DmChannel.E2eeDisabled (Just ( session.userId, time )) }
+                            model.dmChannels
+                  }
+                , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                )
+
+            else
+                ( model, invalidChangeResponse changeId clientId )
+
+        DmChannel.E2eeDisabled _ ->
+            ( model, invalidChangeResponse changeId clientId )
+
+        DmChannel.E2eeRequestedBy _ ->
+            ( model, invalidChangeResponse changeId clientId )
+
+        DmChannel.E2eeDeclinedBy _ ->
+            ( model, invalidChangeResponse changeId clientId )
+
+
+encryptOldMessages :
+    ClientId
+    -> ChangeId
+    -> LocalChange
+    -> BackendModel
+    -> List ( ThreadRouteWithMessage, SeqSet FileHash, EncryptedData (MessageContent (Id UserId)) )
+    -> DmChannelId
+    -> BackendDmChannel
+    -> ( BackendModel, Command BackendOnly ToFrontend backendMsg )
+encryptOldMessages clientId changeId localMsg model messages dmChannelId dmChannel =
+    case dmChannel.e2ee of
+        DmChannel.E2eeEnabled _ ->
+            ( { model
+                | dmChannels =
+                    SeqDict.insert
+                        dmChannelId
+                        (List.foldl
+                            (\( threadRoute, fileHashes, encryptedData ) channel ->
+                                case threadRoute of
+                                    NoThreadWithMessage messageId ->
+                                        { channel
+                                            | messages =
+                                                DmChannel.updateArray
+                                                    messageId
+                                                    (Message.toEncrypted fileHashes encryptedData)
+                                                    channel.messages
+                                        }
+
+                                    ViewThreadWithMessage threadId messageId ->
+                                        { channel
+                                            | threads =
+                                                SeqDict.updateIfExists
+                                                    threadId
+                                                    (\thread ->
+                                                        { thread
+                                                            | messages =
+                                                                DmChannel.updateArray
+                                                                    messageId
+                                                                    (Message.toEncrypted fileHashes encryptedData)
+                                                                    thread.messages
+                                                        }
+                                                    )
+                                                    channel.threads
+                                        }
+                            )
+                            dmChannel
+                            messages
+                        )
+                        model.dmChannels
+              }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        _ ->
+            ( model, invalidChangeResponse changeId clientId )

@@ -354,23 +354,23 @@ tests normalConfig =
                         -- The end of game summary under the Moves log lists each count next to the
                         -- player it belongs to in a separate element too.
                         (Test.Html.Query.has
-                            [ Test.Html.Selector.exactText "Game over"
+                            [ Test.Html.Selector.exactText WordSpellingGame.gameOverText
                             , Test.Html.Selector.exactText E2EHelper.adminName
                             , Test.Html.Selector.exactText ": 4 (winner)"
                             , Test.Html.Selector.exactText "Stevie Steve"
                             , Test.Html.Selector.exactText ": 0"
-                            , Test.Html.Selector.exactText "Tiles placed:"
+                            , Test.Html.Selector.exactText WordSpellingGame.tilesPlacedText
                             , Test.Html.Selector.exactText "2"
-                            , Test.Html.Selector.exactText "Invalid words:"
+                            , Test.Html.Selector.exactText WordSpellingGame.invalidWordsText
                             , Test.Html.Selector.exactText "0"
-                            , Test.Html.Selector.exactText "Top scoring word:"
+                            , Test.Html.Selector.exactText WordSpellingGame.topScoringWordText
                             , Test.Html.Selector.exactText "AA (+4) by "
                             ]
                         )
                     , user.checkView
                         100
                         (Test.Html.Query.has
-                            [ Test.Html.Selector.exactText "Game over"
+                            [ Test.Html.Selector.exactText WordSpellingGame.gameOverText
                             , Test.Html.Selector.exactText E2EHelper.adminName
                             , Test.Html.Selector.exactText ": 4 (winner)"
                             , Test.Html.Selector.exactText "Stevie Steve"
@@ -792,7 +792,7 @@ tests normalConfig =
                                             [ Test.Html.Selector.exactText E2EHelper.adminName
                                             , Test.Html.Selector.exactText "Stevie Steve"
                                             , Test.Html.Selector.exactText "Joe"
-                                            , Test.Html.Selector.text "Moves"
+                                            , Test.Html.Selector.text WordSpellingGame.movesText
                                             , Test.Html.Selector.text "played AA (+8)"
                                             ]
                                         )
