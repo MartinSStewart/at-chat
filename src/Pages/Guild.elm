@@ -2730,7 +2730,7 @@ privateKeyInput otherUserId prompt keyInput =
     let
         keyLabel : { element : Element FrontendMsg_, id : Ui.Input.Label }
         keyLabel =
-            Ui.Input.label "guild_e2eePrivateKey" [] prompt
+            Ui.Input.label "guild_e2eePrivateKey" [ MyUi.htmlStyle "word-wrap" "anywhere" ] prompt
     in
     Ui.column
         [ Ui.spacing 4 ]
