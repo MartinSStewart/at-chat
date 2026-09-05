@@ -140,13 +140,11 @@ measuredFileMetadata measured =
         MeasuredVideo videoSize duration ->
             FileMetadata_Video
                 { videoSize = videoSize
-                , frames = Nothing
                 , createdAt = Nothing
 
                 -- The size the browser reports already has any rotation applied, the same
                 -- way the server reports it.
                 , orientation = NoChange
-                , frameRate = Nothing
                 , codec = Nothing
                 , title = Nothing
                 , gpsLocation = Nothing
@@ -538,10 +536,8 @@ videoMetadataSerializeCodec : Serialize.Codec e VideoMetadata
 videoMetadataSerializeCodec =
     Serialize.record VideoMetadata
         |> Serialize.field .videoSize coordSerializeCodec
-        |> Serialize.field .frames (Serialize.maybe (quantitySerializeCodec Serialize.int))
         |> Serialize.field .createdAt (Serialize.maybe posixSerializeCodec)
         |> Serialize.field .orientation orientationSerializeCodec
-        |> Serialize.field .frameRate (Serialize.maybe (quantitySerializeCodec Serialize.float))
         |> Serialize.field .codec (Serialize.maybe Serialize.string)
         |> Serialize.field .title (Serialize.maybe Serialize.string)
         |> Serialize.field .gpsLocation (Serialize.maybe locationSerializeCodec)
@@ -710,16 +706,12 @@ type VideoFrames
 type alias VideoMetadata =
     { -- The size the video is displayed at, with any rotation already applied.
       videoSize : Coord CssPixels
-    , frames : Maybe (Quantity Int VideoFrames)
     , createdAt : Maybe Time.Posix
     , orientation : Orientation
-    , frameRate : Maybe (Quantity Float (Rate VideoFrames Seconds))
     , codec : Maybe String
     , title : Maybe String
     , gpsLocation : Maybe Location
-    , -- How long the video runs. The server works this out from the frame count and frame
-      -- rate instead, so this is only filled in for a video the browser measured itself.
-      duration : Maybe Duration
+    , duration : Maybe Duration
     }
 
 
@@ -727,10 +719,8 @@ videoMetadataCodec : Codec VideoMetadata
 videoMetadataCodec =
     Codec.object VideoMetadata
         |> Codec.field "video_size" .videoSize (Codec.tuple CodecExtra.quantityInt CodecExtra.quantityInt)
-        |> Codec.field "frames" .frames (Codec.nullable CodecExtra.quantityInt)
         |> Codec.field "created_at_ms" .createdAt (Codec.nullable CodecExtra.time)
         |> Codec.field "orientation" .orientation orientationCodec
-        |> Codec.field "frame_rate" .frameRate (Codec.nullable CodecExtra.quantityFloat)
         |> Codec.field "codec" .codec (Codec.nullable Codec.string)
         |> Codec.field "title" .title (Codec.nullable Codec.string)
         |> Codec.field "gps_location" .gpsLocation (Codec.nullable locationCodec)
@@ -1212,9 +1202,7 @@ imageInfoView timezone onPressClose fileData =
                             :: List.filterMap
                                 identity
                                 [ Maybe.map (imageLabel "Title") metadata.title
-                                , Maybe.map (\duration -> imageLabel "Duration" (durationToString duration)) (videoDuration metadata)
-                                , Maybe.map (\frames -> imageLabel "Frames" (String.fromInt (Quantity.unwrap frames))) metadata.frames
-                                , Maybe.map (\frameRate -> imageLabel "Frame rate" (frameRateToString frameRate)) metadata.frameRate
+                                , Maybe.map (\duration -> imageLabel "Duration" (durationToString duration)) metadata.duration
 
                                 -- Every video has an orientation, and almost every
                                 -- one of them is the uninteresting answer.
@@ -1257,22 +1245,6 @@ infoPanel contents =
         , Ui.spacing 16
         ]
         contents
-
-
-{-| Neither container writes down how long the video runs, so this works it out
-from the two things they do write down.
--}
-videoDuration : VideoMetadata -> Maybe Duration
-videoDuration metadata =
-    case metadata.duration of
-        Just duration ->
-            Just duration
-
-        Nothing ->
-            Maybe.map2
-                (\frames frameRate -> Quantity.at_ frameRate (Quantity.toFloatQuantity frames))
-                metadata.frames
-                metadata.frameRate
 
 
 durationToString : Duration -> String
@@ -1366,7 +1338,7 @@ imageHasMetadata metadata =
 
 videoHasMetadata : VideoMetadata -> Bool
 videoHasMetadata metadata =
-    (metadata.frames /= Nothing)
+    (metadata.duration /= Nothing)
         || (metadata.createdAt /= Nothing)
         || (metadata.orientation /= NoChange)
         || (metadata.codec /= Nothing)
