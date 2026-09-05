@@ -1045,24 +1045,17 @@ exports.init = async function init(app)
         outer.style.msOverflowStyle = 'scrollbar'; // needed for WinJS apps
         document.body.appendChild(outer);
 
-        // Creating inner element and placing it in the container
         const inner = document.createElement('div');
         outer.appendChild(inner);
 
-        // Calculating difference between container's full width and the child width
         const scrollbarWidth = (outer.offsetWidth - inner.offsetWidth);
 
-        // Removing temporary elements from the DOM
         outer.parentNode.removeChild(outer);
 
-        // Check if the app is running as an installed PWA
         const isPwa = window.matchMedia('(display-mode: standalone)').matches ||
             window.navigator.standalone === true ||
             document.referrer.includes('android-app://');
 
-        // The safe-area inset at the top of the screen (e.g. the notch on a phone), in pixels.
-        // Touch events report positions relative to the viewport top (behind the inset), but the UI
-        // is laid out below it, so the game board needs this to line drops up with the finger.
         const insetProbe = document.createElement('div');
         insetProbe.style.position = 'fixed';
         insetProbe.style.top = '0';
@@ -1091,13 +1084,7 @@ exports.init = async function init(app)
 
         app.ports.load_startup_data_from_js.send({
             // Event timeStamps are milliseconds since timeOrigin (the monotonic performance clock),
-            // not since the unix epoch. We convert them to a wall-clock Time.Posix by adding
-            // timeOrigin. `performance.timeOrigin` is fixed at page load, but the monotonic clock
-            // that event timeStamps use pauses/diverges from wall time while the tab is backgrounded
-            // or the machine sleeps, so a fixed origin makes touch times drift (off by a second, then
-            // by far more after a long sleep). Instead we compute the origin as
-            // `Date.now() - performance.now()`, and re-send it whenever the page becomes visible/
-            // focused again (see the listeners below) so it re-anchors to the current wall clock.
+            // not since the unix epoch.
             timeOrigin: Date.now() - performance.now(),
             loadStartupDataTime: Date.now(),
             userAgent: window.navigator.userAgent,
