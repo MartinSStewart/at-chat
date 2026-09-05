@@ -1,0 +1,97 @@
+module Evergreen.V368.ToBackendLog exposing (..)
+
+import Effect.Time
+import Evergreen.V368.Id
+
+
+type ToBackendLog
+    = ToBackendLog_CheckLoginRequest
+    | ToBackendLog_LoginWithTokenRequest
+    | ToBackendLog_LoginWithTwoFactorRequest
+    | ToBackendLog_LoginWithRecoveryPasswordRequest
+    | ToBackendLog_GetLoginTokenRequest
+    | ToBackendLog_AdminToBackend
+    | ToBackendLog_LogOutRequest
+    | ToBackendLog_TwoFactorToBackend
+    | ToBackendLog_JoinGuildByInviteRequest
+    | ToBackendLog_FinishUserCreationRequest
+    | ToBackendLog_AiChatToBackend
+    | ToBackendLog_ReloadDataRequest
+    | ToBackendLog_LinkSlackOAuthCode
+    | ToBackendLog_LinkDiscordRequest
+    | ToBackendLog_ProfilePictureEditorToBackend
+    | ToBackendLog_AdminDataRequest
+    | ToBackendLog_GetPublicGoMatchRequest
+    | ToBackendLog_ExportChannelRequest
+    | ToBackendLog_Local_Invalid
+    | ToBackendLog_Local_Admin
+    | ToBackendLog_Local_SendMessage
+    | ToBackendLog_Local_Discord_SendMessage
+    | ToBackendLog_Local_NewChannel
+    | ToBackendLog_Local_EditChannel
+    | ToBackendLog_Local_DeleteChannel
+    | ToBackendLog_Local_EditGuildName
+    | ToBackendLog_Local_DeleteGuild
+    | ToBackendLog_Local_LeaveGuild
+    | ToBackendLog_Local_NewInviteLink
+    | ToBackendLog_Local_DeleteInviteLink
+    | ToBackendLog_Local_NewGuild
+    | ToBackendLog_Local_MemberTyping
+    | ToBackendLog_Local_AddReactionEmoji
+    | ToBackendLog_Local_RemoveReactionEmoji
+    | ToBackendLog_Local_SendEditMessage
+    | ToBackendLog_Local_Discord_SendEditGuildMessage
+    | ToBackendLog_Local_Discord_SendEditDmMessage
+    | ToBackendLog_Local_MemberEditTyping
+    | ToBackendLog_Local_SetLastViewed
+    | ToBackendLog_Local_DeleteMessage
+    | ToBackendLog_Local_CurrentlyViewing
+    | ToBackendLog_Local_SetName
+    | ToBackendLog_Local_LoadChannelMessages
+    | ToBackendLog_Local_LoadThreadMessages
+    | ToBackendLog_Local_Discord_LoadChannelMessages
+    | ToBackendLog_Local_Discord_LoadThreadMessages
+    | ToBackendLog_Local_SetGuildNotificationLevel
+    | ToBackendLog_Local_SetDiscordGuildNotificationLevel
+    | ToBackendLog_Local_SetNotificationMode
+    | ToBackendLog_Local_ExpandUserOptionSection
+    | ToBackendLog_Local_SetSheepGameQuestions
+    | ToBackendLog_Local_CollapseUserOptionSection
+    | ToBackendLog_Local_SetEmailNotifications
+    | ToBackendLog_Local_RegisterPushSubscription
+    | ToBackendLog_Local_TextEditor
+    | ToBackendLog_Local_UnlinkDiscordUser
+    | ToBackendLog_Local_StartReloadingDiscordUser
+    | ToBackendLog_Local_LinkDiscordAcknowledgementIsChecked
+    | ToBackendLog_Local_SetDomainWhitelist
+    | ToBackendLog_Local_SetEmojiSkinTone
+    | ToBackendLog_Local_SetUserColor
+    | ToBackendLog_Local_AddCustomEmojisToUser
+    | ToBackendLog_Local_VoiceChatChange
+    | ToBackendLog_Local_Game
+    | ToBackendLog_Local_Drawing
+    | ToBackendLog_Local_SetMuteChannel
+    | ToBackendLog_Local_SetMuteThread
+    | ToBackendLog_Local_SetMuteDiscordChannel
+    | ToBackendLog_Local_SetMuteDiscordThread
+    | ToBackendLog_Local_SetMuteGuild
+    | ToBackendLog_Local_SetMuteDiscordGuild
+    | ToBackendLog_Local_RequestE2ee
+    | ToBackendLog_Local_CancelE2eeRequest
+    | ToBackendLog_Local_DeclineE2eeRequest
+    | ToBackendLog_Local_SetPublicKey
+    | ToBackendLog_Local_EncryptOldMessages
+    | ToBackendLog_Local_DisableE2ee
+    | ToBackendLog_Local_DecryptOldMessages
+    | ToBackendLog_Local_SetE2eeRisksAccepted
+    | ToBackendLog_Local_AcceptE2ee
+    | ToBackendLog_Local_SendEncryptedMessage
+    | ToBackendLog_Local_SendEncryptedEditMessage
+
+
+type alias ToBackendLogData =
+    { toBackendLog : ToBackendLog
+    , userId : Maybe (Evergreen.V368.Id.Id Evergreen.V368.Id.UserId)
+    , startTime : Effect.Time.Posix
+    , endTime : Effect.Time.Posix
+    }
