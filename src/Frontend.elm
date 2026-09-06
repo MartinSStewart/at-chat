@@ -448,7 +448,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
                         , useInviteAfterLoggedIn = Nothing
                         , textInputFocus = Nothing
                         }
-                    , Ports.clearBrowserStorage
+                    , Command.batch [ Ports.clearBrowserStorage, Ports.setAppBadge 0 ]
                     )
 
         ( aiChatModel, aiChatCmd ) =
@@ -478,20 +478,15 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , toFrontendLogs = Nothing
             , popSound = loading.popSound
             , startupData = startupData
-            , appBadgeCount = Nothing
             }
 
         ( model2, cmdA ) =
             FrontendExtra.routeRequest Nothing model.route model
-
-        ( model3, badgeCmd ) =
-            checkAppBadgeChange model2
     in
-    ( model3
+    ( model2
     , Command.batch
         [ cmdB
         , cmdA
-        , badgeCmd
         , Command.map AiChatToBackend AiChatMsg aiChatCmd
         , checkAppVersion True
         , case loginResult of
@@ -659,6 +654,7 @@ loadedInitHelper startupData emojiData loginData loading =
             Call.NoVideo
             (Call.displayMode (MyUi.isMobile loading) local.localUser.session.userId loading.route local.calls)
             loggedIn.voiceChat
+        , GuildColumn.unreadNotificationCount local |> Ports.setAppBadge
         ]
     )
 
@@ -783,20 +779,17 @@ update _ msg model =
                     let
                         ( loadedNew, cmd ) =
                             updateLoaded msg loaded
-
-                        ( loadedNew2, badgeCmd ) =
-                            checkAppBadgeChange loadedNew
                     in
-                    ( case loadedNew2.loginStatus of
+                    ( case loadedNew.loginStatus of
                         LoggedIn loggedIn ->
-                            { loadedNew2
+                            { loadedNew
                                 | loginStatus = LoggedIn { loggedIn | previousTextInputFocus = Nothing }
                             }
                                 |> Loaded
 
                         NotLoggedIn _ ->
-                            Loaded loadedNew2
-                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew2, badgeCmd ]
+                            Loaded loadedNew
+                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ]
                     , Audio.cmdNone
                     )
 
@@ -804,12 +797,9 @@ update _ msg model =
                     let
                         ( loadedNew, cmd ) =
                             updateLoaded msg loaded
-
-                        ( loadedNew2, badgeCmd ) =
-                            checkAppBadgeChange loadedNew
                     in
-                    ( Loaded loadedNew2
-                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew2, badgeCmd ]
+                    ( Loaded loadedNew
+                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ]
                     , Audio.cmdNone
                     )
 
@@ -6222,28 +6212,6 @@ copyText text model =
     )
 
 
-{-| Keep the app icon badge showing how many unread messages the user has. Only sent
-to JS when the count changes, since it runs after every update.
--}
-checkAppBadgeChange : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg msg )
-checkAppBadgeChange model =
-    let
-        count : Int
-        count =
-            case model.loginStatus of
-                LoggedIn loggedIn ->
-                    GuildColumn.unreadNotificationCount (Local.model loggedIn.localState)
-
-                NotLoggedIn _ ->
-                    0
-    in
-    if model.appBadgeCount == Just count then
-        ( model, Command.none )
-
-    else
-        ( { model | appBadgeCount = Just count }, Ports.setAppBadge count )
-
-
 checkCallDisplayModeChange : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
 checkCallDisplayModeChange modelOld modelNew =
     case ( modelOld.loginStatus, modelNew.loginStatus ) of
@@ -7809,11 +7777,8 @@ updateFromBackend _ msg model =
                             Nothing ->
                                 loaded
                         )
-
-                ( loaded3, badgeCmd ) =
-                    checkAppBadgeChange loaded2
             in
-            ( Loaded loaded3, Command.batch [ cmds, badgeCmd ], Audio.cmdNone )
+            ( Loaded loaded2, cmds, Audio.cmdNone )
 
 
 updateLoadedFromBackend : ToFrontend -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
@@ -8257,6 +8222,7 @@ updateLoadedFromBackend msg model =
 
                             _ ->
                                 Command.none
+                        , GuildColumn.unreadNotificationCount local |> Ports.setAppBadge
                         ]
                     )
                 )
@@ -8277,311 +8243,319 @@ updateLoadedFromBackend msg model =
                         loggedIn2 : LoggedIn2
                         loggedIn2 =
                             { loggedIn | localState = localState }
-                    in
-                    case change of
-                        ServerChange serverChange ->
-                            case serverChange of
-                                Server_TextEditor _ ->
-                                    ( loggedIn2
-                                    , case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
-                                        Just range ->
-                                            Ports.setCursorPosition TextEditor.inputId range
 
-                                        Nothing ->
-                                            Command.none
-                                    )
+                        ( loggedIn3, cmd ) =
+                            case change of
+                                ServerChange serverChange ->
+                                    case serverChange of
+                                        Server_TextEditor _ ->
+                                            ( loggedIn2
+                                            , case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
+                                                Just range ->
+                                                    Ports.setCursorPosition TextEditor.inputId range
 
-                                Server_YouJoinedGuildByInvite (Ok { guildId, guild }) ->
-                                    ( loggedIn2
-                                    , case model.route of
-                                        GuildRoute inviteGuildId _ _ ->
-                                            if inviteGuildId == guildId then
-                                                FrontendExtra.routeReplace
-                                                    model
-                                                    (GuildRoute
-                                                        guildId
-                                                        (ChannelRoute
-                                                            (LocalState.announcementChannel guild)
-                                                            (NoThreadWithFriends Nothing HideChannelSettings)
-                                                            Nothing
-                                                        )
-                                                        ChannelsHiddenOnMobile
-                                                    )
+                                                Nothing ->
+                                                    Command.none
+                                            )
 
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-                                    )
-
-                                Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ ->
-                                    FrontendExtra.handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local loggedIn2 model
-
-                                Server_SendEncryptedMessage senderId _ _ id _ content maybeRepliedTo ->
-                                    ( FrontendExtra.mapEncryptionRequests
-                                        (\requests ->
-                                            { requests
-                                                | nextDecryptionRequestId =
-                                                    Id.increment requests.nextDecryptionRequestId
-                                                , pendingDecryptedMessages =
-                                                    SeqDict.insert
-                                                        requests.nextDecryptionRequestId
-                                                        { hash = Encryption.hash content
-                                                        , id = id
-                                                        , senderId = senderId
-                                                        , threadRoute = maybeRepliedTo
-                                                        }
-                                                        requests.pendingDecryptedMessages
-                                            }
-                                        )
-                                        loggedIn2
-                                    , Encryption.decryptMessage
-                                        loggedIn2.encryptionRequests.nextDecryptionRequestId
-                                        id
-                                        content
-                                    )
-
-                                Server_SendEncryptedEditMessage _ _ id _ _ content ->
-                                    -- The message is already where it belongs, so all that
-                                    -- is wanted back is what the new ciphertext says. That
-                                    -- is what a batch decryption does, and one message is a
-                                    -- batch of one.
-                                    ( FrontendExtra.mapEncryptionRequests
-                                        (\requests ->
-                                            { requests
-                                                | nextDecryptManyRequestId =
-                                                    Id.increment requests.nextDecryptManyRequestId
-                                                , pendingDecryptedManyMessages =
-                                                    SeqDict.insert
-                                                        requests.nextDecryptManyRequestId
-                                                        { messageHashes = [ Encryption.hash content ]
-                                                        , shiftScrollFrom = Nothing
-                                                        }
-                                                        requests.pendingDecryptedManyMessages
-                                            }
-                                        )
-                                        loggedIn2
-                                    , Encryption.decryptManyMessages
-                                        loggedIn2.encryptionRequests.nextDecryptManyRequestId
-                                        id
-                                        [ content ]
-                                    )
-
-                                Server_Discord_SendMessage _ guildOrDmId _ content maybeRepliedTo _ _ ->
-                                    let
-                                        scrollsToBottom : Bool
-                                        scrollsToBottom =
-                                            -- The drawing tab holds the scroll position, otherwise the
-                                            -- new message would throw off the stroke the user is drawing
-                                            (Route.toChannelHeaderTab model.route /= Just ChannelHeaderTab_Draw)
-                                                && (loggedIn2.channelScrollPosition == ScrolledToBottom)
-
-                                        isViewingConversation : Bool
-                                        isViewingConversation =
-                                            Route.toGuildOrDmId local.localUser.session.userId model.route
-                                                == Just
-                                                    ( DiscordGuildOrDmId guildOrDmId
-                                                    , Id.threadRouteWithoutMaybeMessage maybeRepliedTo
-                                                    )
-
-                                        helper senderId channel =
-                                            Command.batch
-                                                [ FrontendExtra.playNotificationSoundForDiscordMessage
-                                                    senderId
-                                                    guildOrDmId
-                                                    maybeRepliedTo
-                                                    channel
-                                                    local
-                                                    content
-                                                    model
-                                                , if scrollsToBottom then
-                                                    if MyUi.isMobile model then
-                                                        Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
+                                        Server_YouJoinedGuildByInvite (Ok { guildId, guild }) ->
+                                            ( loggedIn2
+                                            , case model.route of
+                                                GuildRoute inviteGuildId _ _ ->
+                                                    if inviteGuildId == guildId then
+                                                        FrontendExtra.routeReplace
+                                                            model
+                                                            (GuildRoute
+                                                                guildId
+                                                                (ChannelRoute
+                                                                    (LocalState.announcementChannel guild)
+                                                                    (NoThreadWithFriends Nothing HideChannelSettings)
+                                                                    Nothing
+                                                                )
+                                                                ChannelsHiddenOnMobile
+                                                            )
 
                                                     else
-                                                        Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+                                                        Command.none
 
-                                                  else
+                                                _ ->
                                                     Command.none
-                                                ]
-                                    in
-                                    ( if isViewingConversation && not scrollsToBottom then
-                                        { loggedIn2
-                                            | newMessagesWhileNotScrolledToBottom =
-                                                loggedIn2.newMessagesWhileNotScrolledToBottom + 1
-                                            , channelScrollPosition =
-                                                case loggedIn2.channelScrollPosition of
-                                                    ScrolledToBottom ->
-                                                        ScrolledToMiddle
-
-                                                    ScrolledToTop ->
-                                                        loggedIn2.channelScrollPosition
-
-                                                    ScrolledToMiddle ->
-                                                        loggedIn2.channelScrollPosition
-                                        }
-
-                                      else
-                                        loggedIn2
-                                    , case guildOrDmId of
-                                        DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId } ->
-                                            case LocalState.getDiscordGuildAndChannel guildId channelId local of
-                                                Just ( _, channel ) ->
-                                                    helper currentUserId channel
-
-                                                Nothing ->
-                                                    Command.none
-
-                                        DiscordGuildOrDmId_Dm data ->
-                                            case SeqDict.get data.channelId local.discordDmChannels of
-                                                Just channel ->
-                                                    helper
-                                                        data.currentUserId
-                                                        { messages = channel.messages, threads = SeqDict.empty }
-
-                                                Nothing ->
-                                                    Command.none
-                                    )
-
-                                Server_GotDmMessageEmbed userId threadRoute _ ->
-                                    let
-                                        id : ( AnyGuildOrDmId, ThreadRoute )
-                                        id =
-                                            ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = userId })
-                                            , Id.threadRouteWithoutMessage threadRoute
                                             )
-                                    in
-                                    ( loggedIn2
-                                    , if Route.toGuildOrDmId local.localUser.session.userId model.route == Just id then
-                                        Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
 
-                                      else
-                                        Command.none
-                                    )
+                                        Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ ->
+                                            FrontendExtra.handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local loggedIn2 model
 
-                                Server_GotGuildMessageEmbed guildId channelId threadRoute _ ->
-                                    let
-                                        id : ( AnyGuildOrDmId, ThreadRoute )
-                                        id =
-                                            ( GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
-                                            , Id.threadRouteWithoutMessage threadRoute
+                                        Server_SendEncryptedMessage senderId _ _ id _ content maybeRepliedTo ->
+                                            ( FrontendExtra.mapEncryptionRequests
+                                                (\requests ->
+                                                    { requests
+                                                        | nextDecryptionRequestId =
+                                                            Id.increment requests.nextDecryptionRequestId
+                                                        , pendingDecryptedMessages =
+                                                            SeqDict.insert
+                                                                requests.nextDecryptionRequestId
+                                                                { hash = Encryption.hash content
+                                                                , id = id
+                                                                , senderId = senderId
+                                                                , threadRoute = maybeRepliedTo
+                                                                }
+                                                                requests.pendingDecryptedMessages
+                                                    }
+                                                )
+                                                loggedIn2
+                                            , Encryption.decryptMessage
+                                                loggedIn2.encryptionRequests.nextDecryptionRequestId
+                                                id
+                                                content
                                             )
-                                    in
-                                    ( loggedIn2
-                                    , if Route.toGuildOrDmId local.localUser.session.userId model.route == Just id then
-                                        Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
 
-                                      else
-                                        Command.none
-                                    )
+                                        Server_SendEncryptedEditMessage _ _ id _ _ content ->
+                                            -- The message is already where it belongs, so all that
+                                            -- is wanted back is what the new ciphertext says. That
+                                            -- is what a batch decryption does, and one message is a
+                                            -- batch of one.
+                                            ( FrontendExtra.mapEncryptionRequests
+                                                (\requests ->
+                                                    { requests
+                                                        | nextDecryptManyRequestId =
+                                                            Id.increment requests.nextDecryptManyRequestId
+                                                        , pendingDecryptedManyMessages =
+                                                            SeqDict.insert
+                                                                requests.nextDecryptManyRequestId
+                                                                { messageHashes = [ Encryption.hash content ]
+                                                                , shiftScrollFrom = Nothing
+                                                                }
+                                                                requests.pendingDecryptedManyMessages
+                                                    }
+                                                )
+                                                loggedIn2
+                                            , Encryption.decryptManyMessages
+                                                loggedIn2.encryptionRequests.nextDecryptManyRequestId
+                                                id
+                                                [ content ]
+                                            )
 
-                                Server_GotDiscordDmMessageEmbed channelId _ _ ->
-                                    ( loggedIn2
-                                    , case Route.toGuildOrDmId local.localUser.session.userId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), _ ) ->
-                                            if channelId == data.channelId then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
+                                        Server_Discord_SendMessage _ guildOrDmId _ content maybeRepliedTo _ _ ->
+                                            let
+                                                scrollsToBottom : Bool
+                                                scrollsToBottom =
+                                                    -- The drawing tab holds the scroll position, otherwise the
+                                                    -- new message would throw off the stroke the user is drawing
+                                                    (Route.toChannelHeaderTab model.route /= Just ChannelHeaderTab_Draw)
+                                                        && (loggedIn2.channelScrollPosition == ScrolledToBottom)
 
-                                            else
-                                                Command.none
+                                                isViewingConversation : Bool
+                                                isViewingConversation =
+                                                    Route.toGuildOrDmId local.localUser.session.userId model.route
+                                                        == Just
+                                                            ( DiscordGuildOrDmId guildOrDmId
+                                                            , Id.threadRouteWithoutMaybeMessage maybeRepliedTo
+                                                            )
 
-                                        _ ->
-                                            Command.none
-                                    )
+                                                helper senderId channel =
+                                                    Command.batch
+                                                        [ FrontendExtra.playNotificationSoundForDiscordMessage
+                                                            senderId
+                                                            guildOrDmId
+                                                            maybeRepliedTo
+                                                            channel
+                                                            local
+                                                            content
+                                                            model
+                                                        , if scrollsToBottom then
+                                                            if MyUi.isMobile model then
+                                                                Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
 
-                                Server_GotDiscordGuildMessageEmbed guildIdA channelIdA threadRouteA _ ->
-                                    ( loggedIn2
-                                    , case Route.toGuildOrDmId local.localUser.session.userId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { guildId, channelId }), threadRouteB ) ->
-                                            if
-                                                (guildIdA == guildId)
-                                                    && (channelIdA == channelId)
-                                                    && (Id.threadRouteWithoutMessage threadRouteA == threadRouteB)
-                                            then
-                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
+                                                            else
+                                                                Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
 
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-                                    )
-
-                                Server_AddReactionEmoji _ _ _ _ ->
-                                    ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition )
-
-                                Server_DiscordAddReactionGuildEmoji _ _ _ _ _ ->
-                                    ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition )
-
-                                Server_DiscordAddReactionDmEmoji _ _ _ _ ->
-                                    ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition )
-
-                                Server_VoiceChatChange voiceChatChange ->
-                                    ( loggedIn2
-                                    , Call.serverChangeCmd
-                                        voiceChatChange
-                                        local.localUser.session.userId
-                                        local.calls
-                                        loggedIn2.voiceChat
-                                    )
-
-                                Server_Game _ guildOrDmId gameChange ->
-                                    let
-                                        ( updatedGameModel, maybeScrollTo ) =
-                                            Game.gameChangeFromServer
-                                                model.time
-                                                local.localUser
-                                                gameChange
-                                                (SeqDict.get guildOrDmId loggedIn2.games)
-                                    in
-                                    ( { loggedIn2
-                                        | games = SeqDict.update guildOrDmId (\_ -> updatedGameModel) loggedIn2.games
-                                      }
-                                    , Command.batch
-                                        [ -- A question the host has just put on screen is scrolled onto for
-                                          -- anyone who was already at the bottom of the tab
-                                          case maybeScrollTo of
-                                            Just scrollTo ->
-                                                scrollElementToTop scrollTo
-
-                                            Nothing ->
-                                                Command.none
-                                        , -- Another player's move adds a Past moves entry; if we're
-                                          -- watching that match, keep the list pinned to the bottom when
-                                          -- it already was (mirrors the conversation view).
-                                          case gameChange of
-                                            Game.LocalChange_WordSpellingGame matchId (WordSpellingGame.Action _) ->
-                                                case FrontendExtra.currentGamesTab local model.route of
-                                                    Just gamesTab ->
-                                                        if gamesTab.guildOrDmId == guildOrDmId && gamesTab.maybeMatchId == Just matchId then
-                                                            Scroll.toBottomOfChannelIfAtBottom
-                                                                WordSpellingGame.pastWordsContainerId
-                                                                SetScrollToBottom
-                                                                (case updatedGameModel of
-                                                                    Just gameModel3 ->
-                                                                        Game.wordSpellingScrollPosition matchId gameModel3
-
-                                                                    Nothing ->
-                                                                        ScrolledToBottom
-                                                                )
-
-                                                        else
+                                                          else
                                                             Command.none
+                                                        ]
+                                            in
+                                            ( if isViewingConversation && not scrollsToBottom then
+                                                { loggedIn2
+                                                    | newMessagesWhileNotScrolledToBottom =
+                                                        loggedIn2.newMessagesWhileNotScrolledToBottom + 1
+                                                    , channelScrollPosition =
+                                                        case loggedIn2.channelScrollPosition of
+                                                            ScrolledToBottom ->
+                                                                ScrolledToMiddle
+
+                                                            ScrolledToTop ->
+                                                                loggedIn2.channelScrollPosition
+
+                                                            ScrolledToMiddle ->
+                                                                loggedIn2.channelScrollPosition
+                                                }
+
+                                              else
+                                                loggedIn2
+                                            , case guildOrDmId of
+                                                DiscordGuildOrDmId_Guild { currentUserId, guildId, channelId } ->
+                                                    case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                                                        Just ( _, channel ) ->
+                                                            helper currentUserId channel
+
+                                                        Nothing ->
+                                                            Command.none
+
+                                                DiscordGuildOrDmId_Dm data ->
+                                                    case SeqDict.get data.channelId local.discordDmChannels of
+                                                        Just channel ->
+                                                            helper
+                                                                data.currentUserId
+                                                                { messages = channel.messages, threads = SeqDict.empty }
+
+                                                        Nothing ->
+                                                            Command.none
+                                            )
+
+                                        Server_GotDmMessageEmbed userId threadRoute _ ->
+                                            let
+                                                id : ( AnyGuildOrDmId, ThreadRoute )
+                                                id =
+                                                    ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = userId })
+                                                    , Id.threadRouteWithoutMessage threadRoute
+                                                    )
+                                            in
+                                            ( loggedIn2
+                                            , if Route.toGuildOrDmId local.localUser.session.userId model.route == Just id then
+                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
+
+                                              else
+                                                Command.none
+                                            )
+
+                                        Server_GotGuildMessageEmbed guildId channelId threadRoute _ ->
+                                            let
+                                                id : ( AnyGuildOrDmId, ThreadRoute )
+                                                id =
+                                                    ( GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
+                                                    , Id.threadRouteWithoutMessage threadRoute
+                                                    )
+                                            in
+                                            ( loggedIn2
+                                            , if Route.toGuildOrDmId local.localUser.session.userId model.route == Just id then
+                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
+
+                                              else
+                                                Command.none
+                                            )
+
+                                        Server_GotDiscordDmMessageEmbed channelId _ _ ->
+                                            ( loggedIn2
+                                            , case Route.toGuildOrDmId local.localUser.session.userId model.route of
+                                                Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), _ ) ->
+                                                    if channelId == data.channelId then
+                                                        Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
+
+                                                    else
+                                                        Command.none
+
+                                                _ ->
+                                                    Command.none
+                                            )
+
+                                        Server_GotDiscordGuildMessageEmbed guildIdA channelIdA threadRouteA _ ->
+                                            ( loggedIn2
+                                            , case Route.toGuildOrDmId local.localUser.session.userId model.route of
+                                                Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { guildId, channelId }), threadRouteB ) ->
+                                                    if
+                                                        (guildIdA == guildId)
+                                                            && (channelIdA == channelId)
+                                                            && (Id.threadRouteWithoutMessage threadRouteA == threadRouteB)
+                                                    then
+                                                        Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
+
+                                                    else
+                                                        Command.none
+
+                                                _ ->
+                                                    Command.none
+                                            )
+
+                                        Server_AddReactionEmoji _ _ _ _ ->
+                                            ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition )
+
+                                        Server_DiscordAddReactionGuildEmoji _ _ _ _ _ ->
+                                            ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition )
+
+                                        Server_DiscordAddReactionDmEmoji _ _ _ _ ->
+                                            ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition )
+
+                                        Server_VoiceChatChange voiceChatChange ->
+                                            ( loggedIn2
+                                            , Call.serverChangeCmd
+                                                voiceChatChange
+                                                local.localUser.session.userId
+                                                local.calls
+                                                loggedIn2.voiceChat
+                                            )
+
+                                        Server_Game _ guildOrDmId gameChange ->
+                                            let
+                                                ( updatedGameModel, maybeScrollTo ) =
+                                                    Game.gameChangeFromServer
+                                                        model.time
+                                                        local.localUser
+                                                        gameChange
+                                                        (SeqDict.get guildOrDmId loggedIn2.games)
+                                            in
+                                            ( { loggedIn2
+                                                | games = SeqDict.update guildOrDmId (\_ -> updatedGameModel) loggedIn2.games
+                                              }
+                                            , Command.batch
+                                                [ -- A question the host has just put on screen is scrolled onto for
+                                                  -- anyone who was already at the bottom of the tab
+                                                  case maybeScrollTo of
+                                                    Just scrollTo ->
+                                                        scrollElementToTop scrollTo
 
                                                     Nothing ->
                                                         Command.none
+                                                , -- Another player's move adds a Past moves entry; if we're
+                                                  -- watching that match, keep the list pinned to the bottom when
+                                                  -- it already was (mirrors the conversation view).
+                                                  case gameChange of
+                                                    Game.LocalChange_WordSpellingGame matchId (WordSpellingGame.Action _) ->
+                                                        case FrontendExtra.currentGamesTab local model.route of
+                                                            Just gamesTab ->
+                                                                if gamesTab.guildOrDmId == guildOrDmId && gamesTab.maybeMatchId == Just matchId then
+                                                                    Scroll.toBottomOfChannelIfAtBottom
+                                                                        WordSpellingGame.pastWordsContainerId
+                                                                        SetScrollToBottom
+                                                                        (case updatedGameModel of
+                                                                            Just gameModel3 ->
+                                                                                Game.wordSpellingScrollPosition matchId gameModel3
 
-                                            _ ->
-                                                Command.none
-                                        ]
-                                    )
+                                                                            Nothing ->
+                                                                                ScrolledToBottom
+                                                                        )
+
+                                                                else
+                                                                    Command.none
+
+                                                            Nothing ->
+                                                                Command.none
+
+                                                    _ ->
+                                                        Command.none
+                                                ]
+                                            )
+
+                                        _ ->
+                                            ( loggedIn2, Command.none )
 
                                 _ ->
                                     ( loggedIn2, Command.none )
-
-                        _ ->
-                            ( loggedIn2, Command.none )
+                    in
+                    ( loggedIn3
+                    , Command.batch
+                        [ cmd
+                        , GuildColumn.unreadNotificationCount local |> Ports.setAppBadge
+                        ]
+                    )
                 )
                 model
 
@@ -8621,9 +8595,9 @@ updateLoadedFromBackend msg model =
                                 local : LocalState
                                 local =
                                     Local.model loggedIn.localState
-                            in
-                            ( { loggedIn
-                                | localState =
+
+                                localState : Local LocalMsg LocalState
+                                localState =
                                     loginDataToLocalState
                                         model.startupData
                                         local.localUser.decryptedMessages
@@ -8631,9 +8605,9 @@ updateLoadedFromBackend msg model =
                                         model.emojiData
                                         loginData
                                         |> Local.init
-                                , isReloading = False
-                              }
-                            , Command.none
+                            in
+                            ( { loggedIn | localState = localState, isReloading = False }
+                            , GuildColumn.unreadNotificationCount (Local.model localState) |> Ports.setAppBadge
                             )
                         )
                         model
