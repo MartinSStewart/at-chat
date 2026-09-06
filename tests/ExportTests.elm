@@ -7,6 +7,7 @@ something the import decoder can read back.
 import Backend
 import Bytes exposing (Bytes)
 import Bytes.Decode
+import Bytes.Encode
 import ChannelDescription
 import Discord
 import DmChannel exposing (DiscordDmChannel)
@@ -93,7 +94,100 @@ tests =
 
                     Nothing ->
                         Expect.fail "The export could not be decoded"
+        , describe "Chunked download"
+            (List.map
+                (\( chunkWidth, size ) ->
+                    test
+                        ("A "
+                            ++ String.fromInt size
+                            ++ " byte backup sent in "
+                            ++ String.fromInt chunkWidth
+                            ++ " byte chunks arrives unchanged"
+                        )
+                        (\_ ->
+                            let
+                                original : Bytes
+                                original =
+                                    bytesOfLength size
+                            in
+                            Expect.equal
+                                (toByteList original)
+                                (toByteList (reassemble (chunksOf chunkWidth original)))
+                        )
+                )
+                [ ( 7, 1 )
+                , ( 7, 6 )
+                , ( 7, 7 )
+                , ( 7, 8 )
+                , ( 7, 13 )
+                , ( 7, 14 )
+                , ( 7, 15 )
+                , ( 7, 100 )
+                , ( 1, 20 )
+                ]
+            )
         ]
+
+
+{-| The chunks the backend sends, in the order it sends them. Mirrors what
+`DownloadBackupChunkStep` does with `splitOffChunk`, including when it stops.
+-}
+chunksOf : Int -> Bytes -> List Bytes
+chunksOf chunkWidth bytes =
+    if Bytes.width bytes == 0 then
+        []
+
+    else
+        chunksOfHelper chunkWidth bytes []
+
+
+chunksOfHelper : Int -> Bytes -> List Bytes -> List Bytes
+chunksOfHelper chunkWidth remainingBytes collected =
+    let
+        ( chunk, remaining ) =
+            Backend.splitOffChunk chunkWidth remainingBytes
+    in
+    if Bytes.width remaining > 0 then
+        chunksOfHelper chunkWidth remaining (chunk :: collected)
+
+    else
+        List.reverse (chunk :: collected)
+
+
+{-| How the admin page puts the chunks back together once they have all arrived.
+-}
+reassemble : List Bytes -> Bytes
+reassemble chunks =
+    List.map Bytes.Encode.bytes chunks
+        |> Bytes.Encode.sequence
+        |> Bytes.Encode.encode
+
+
+bytesOfLength : Int -> Bytes
+bytesOfLength length =
+    List.range 0 (length - 1)
+        |> List.map (\index -> Bytes.Encode.unsignedInt8 (modBy 251 index))
+        |> Bytes.Encode.sequence
+        |> Bytes.Encode.encode
+
+
+toByteList : Bytes -> List Int
+toByteList bytes =
+    Bytes.Decode.decode
+        (Bytes.Decode.loop
+            ( Bytes.width bytes, [] )
+            (\( remaining, collected ) ->
+                if remaining > 0 then
+                    Bytes.Decode.map
+                        (\byte -> Bytes.Decode.Loop ( remaining - 1, byte :: collected ))
+                        Bytes.Decode.unsignedInt8
+
+                else
+                    Bytes.Decode.succeed (Bytes.Decode.Done (List.reverse collected))
+            )
+        )
+        bytes
+        |> Maybe.withDefault []
 
 
 {-| The progress of every step the export takes, in order, stopping before the step
