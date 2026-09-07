@@ -386,7 +386,7 @@ pendingChangesText localChange =
         Local_AcceptE2ee _ _ _ ->
             "Started end-to-end encryption"
 
-        Local_SendEncryptedMessage _ _ _ _ _ ->
+        Local_SendEncryptedMessage _ _ _ _ _ _ ->
             "Sent an encrypted message"
 
         Local_SendEncryptedEditMessage _ _ _ _ _ ->
@@ -3955,7 +3955,7 @@ changeUpdate localMsg local =
                         content
                         local
 
-                Local_SendEncryptedMessage createdAt { otherUserId } fileHashes content threadRouteWithRepliedTo ->
+                Local_SendEncryptedMessage createdAt { otherUserId } fileHashes content _ threadRouteWithRepliedTo ->
                     let
                         localUser : LocalUser
                         localUser =

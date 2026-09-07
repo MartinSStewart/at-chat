@@ -285,7 +285,10 @@ type alias LoggedIn2 =
 
 
 type alias EncryptionRequests =
-    { pendingEncryptedMessages : SeqDict (Id EncryptRequestId) PendingEncryptedMessage
+    { -- Shares nextEncryptManyRequestId with pendingEncryptedManyMessages, since a message
+      -- is encrypted along with the line its push notification shows and so goes over as two
+      -- at once (see Encryption.encryptMessageAndNotification).
+      pendingEncryptedMessages : SeqDict (Id EncryptManyRequestId) PendingEncryptedMessage
     , nextEncryptionRequestId : Id EncryptRequestId
     , pendingDecryptedMessages : SeqDict (Id DecryptRequestId) PendingDecryptedMessage
     , nextDecryptionRequestId : Id DecryptRequestId
@@ -296,9 +299,7 @@ type alias EncryptionRequests =
     , nextDecryptManyRequestId : Id DecryptManyRequestId
     , pendingEncryptedManyMessages : SeqDict (Id EncryptManyRequestId) PendingEncryptedManyMessages
     , nextEncryptManyRequestId : Id EncryptManyRequestId
-    , -- Shares nextEncryptionRequestId with pendingEncryptedMessages, so a request id only
-      -- ever appears in one of the two.
-      pendingEncryptedEdits : SeqDict (Id EncryptRequestId) PendingEncryptedEdit
+    , pendingEncryptedEdits : SeqDict (Id EncryptRequestId) PendingEncryptedEdit
     , pendingEncryptedFiles : SeqDict (Id EncryptFileRequestId) PendingEncryptedFile
     , nextEncryptFileRequestId : Id EncryptFileRequestId
     }
@@ -1196,7 +1197,9 @@ type LocalChange
     | Local_DecryptOldMessages Viewing_DmId Time.Posix (List ( ThreadRouteWithMessage, MessageContent (Id UserId) ))
     | Local_SetE2eeRisksAccepted Bool
     | Local_AcceptE2ee Viewing_DmId Time.Posix (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
-    | Local_SendEncryptedMessage Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
+    | -- The second ciphertext is the line the recipient's push notification shows. The
+      -- server can't write one for a message it can't read, so the sender encrypts it too.
+      Local_SendEncryptedMessage Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) (EncryptedData String) ThreadRouteWithMaybeMessage
     | Local_SendEncryptedEditMessage Time.Posix Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId)))
 
 
