@@ -22,40 +22,7 @@ import Test exposing (Test, describe, test)
 
 tests : Test
 tests =
-    describe "Codecs" [ roundTripTests, portWireFormatTests, notificationMessageTests ]
-
-
-{-| The message an encrypted push notification carries, as the sender's browser encodes it
-before encrypting. tests/ServiceWorkerTests.js pins the same bytes and feeds them through
-public/service-worker.js, so the two fail together if the format moves and the worker is
-left showing nothing for a message it should have been able to read.
--}
-notificationMessageTests : Test
-notificationMessageTests =
-    describe "The message an encrypted notification carries"
-        [ test "Encodes to the bytes the service worker tests decrypt" <|
-            \_ ->
-                Serialize.encodeToBytes Message.contentAndEmbedsCodec notificationSampleMessage
-                    |> toByteList
-                    |> Expect.equal notificationMessageBytes
-        ]
-
-
-{-| Base64 of these is what tests/ServiceWorkerTests.js encrypts and hands to the worker.
--}
-notificationMessageBytes : List Int
-notificationMessageBytes =
-    [ 1, 0, 0, 0, 1, 0, 0, 0, 72, 0, 0, 0, 10, 101, 108, 108, 111, 32, 116, 104, 101, 114, 101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
-
-
-{-| Plain text, so that what the notification should say is obvious.
--}
-notificationSampleMessage : Message.MessageContent (Id.Id Id.UserId)
-notificationSampleMessage =
-    { content = List.Nonempty.singleton (RichText.NormalText 'H' "ello there")
-    , embeds = Array.empty
-    , attachedFiles = SeqDict.empty
-    }
+    describe "Codecs" [ roundTripTests, portWireFormatTests ]
 
 
 {-| The bytes elm-pkg-js/stuff.js writes by hand for a file it has encrypted. Pinning them

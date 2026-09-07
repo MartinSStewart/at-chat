@@ -47,7 +47,7 @@ first and stops if it doesn't build. Don't skip past that step by requiring the
 compiled output some other way — a runner that starts without compiling reports on
 whatever was built last, and passing tests then mean nothing.
 
-Run the service worker tests:
+Run the service worker tests (plain node, no Elm involved):
 
 ```
 node tests/ServiceWorkerTests.js
@@ -55,18 +55,7 @@ node tests/ServiceWorkerTests.js
 
 The service worker only exists inside a browser, so the end-to-end tests can't reach it.
 These stand in for `indexedDB`, `caches` and `fetch` and run `public/service-worker.js`
-itself, along with the compiled Elm it imports.
-
-Rebuild that Elm after touching anything `src/NotificationDecoder.elm` reaches:
-
-```
-npm run notification-decoder
-```
-
-The service worker reads an encrypted push notification by decrypting it and then decoding
-the message with the app's own codec, which means it imports a compiled copy of it from
-`public/notification-decoder.js`. That file is generated and committed, so it goes stale
-without this.
+itself.
 
 Run the encryption port tests (also plain node):
 

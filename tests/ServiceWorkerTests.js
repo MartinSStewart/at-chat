@@ -44,80 +44,6 @@ async function encryptFile(plainText) {
     return { key: key, cipherText: combined };
 }
 
-// A message encoded by Message.contentAndEmbedsCodec, reading "Hello there" and nothing
-// else. Nothing type checks a service worker against an Elm codec, so the same bytes are
-// pinned on both sides: notificationMessageTests in tests/CodecRoundTripTests.elm checks
-// that Elm still encodes this message to exactly these, and this checks that the worker
-// still turns them into the line the notification shows.
-const notificationMessageBase64 = "AQAAAAEAAABIAAAACmVsbG8gdGhlcmUAAAAAAAAAAAAAAAA=";
-
-const notificationMessageText = "Hello there";
-
-// Who sent it. The recipient's browser files a conversation's key under the other
-// participant's user id, so this is both what the push says and what the key is stored
-// under.
-const senderUserId = 7;
-
-// What the server sends when it has no readable body of its own, and what the worker falls
-// back to when it can't open the one it was given.
-const encryptedFallbackText = "Sent you an encrypted message";
-
-// Encrypts the way the encrypt-message branch of elm-pkg-js/stuff.js does: a fresh 12 byte
-// IV in front of the ciphertext, so decrypting needs nothing but the one blob.
-async function encryptMessage(key, plainText) {
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const cipherText = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, plainText);
-
-    const combined = new Uint8Array(iv.length + cipherText.byteLength);
-    combined.set(iv, 0);
-    combined.set(new Uint8Array(cipherText), iv.length);
-
-    return combined;
-}
-
-function base64ToBytes(base64) {
-    return new Uint8Array(Buffer.from(base64, "base64"));
-}
-
-function bytesToBase64(bytes) {
-    return Buffer.from(bytes).toString("base64");
-}
-
-// A conversation key the way stuff.js derives one: the shared secret run through HKDF, and
-// not exportable afterwards.
-async function conversationKey(sharedSecret) {
-    const hkdfKey = await crypto.subtle.importKey(
-        "raw", sharedSecret, "HKDF", false, ["deriveKey"]);
-
-    return await crypto.subtle.deriveKey(
-        { name: "HKDF"
-        , hash: "SHA-256"
-        , salt: new Uint8Array(32)
-        , info: new TextEncoder().encode("at-chat dm e2ee v1")
-        },
-        hkdfKey,
-        { name: "AES-GCM", length: 256 },
-        false,
-        ["encrypt", "decrypt"]);
-}
-
-// Delivers a push and waits for the worker to finish with it, since showing the
-// notification is asynchronous and only reachable through waitUntil.
-async function deliverPush(listeners, notification) {
-    let waited = null;
-
-    listeners.push({
-        data: { json: () => ({ notification: notification }) },
-        waitUntil: (promise) => { waited = promise; }
-    });
-
-    if (waited === null) {
-        throw new Error("The service worker didn't handle the push");
-    }
-
-    await waited;
-}
-
 // Just enough IndexedDB for the two functions the service worker uses. Databases are a Map
 // of store name to a Map of key to value.
 function fakeIndexedDb(databases) {
@@ -201,19 +127,13 @@ function fakeCaches() {
 function loadServiceWorker(options) {
     const listeners = {};
     const servedFrom = options.origin === undefined ? origin : options.origin;
-    const shown = options.shown === undefined ? [] : options.shown;
 
     const context = {
         self: {
             addEventListener: (name, handler) => { listeners[name] = handler; },
             skipWaiting: () => Promise.resolve(),
             clients: { claim: () => Promise.resolve() },
-            registration: {
-                showNotification: (title, options) => {
-                    shown.push({ title: title, options: options });
-                    return Promise.resolve();
-                }
-            },
+            registration: {},
             // Where the worker script itself was served from.
             location: { origin: servedFrom, href: servedFrom + "/service-worker.js" }
         },
@@ -231,17 +151,7 @@ function loadServiceWorker(options) {
         Number: Number,
         String: String,
         Promise: Promise,
-        Uint8Array: Uint8Array,
-        atob: atob,
-        btoa: btoa,
-        TextDecoder: TextDecoder,
-        TextEncoder: TextEncoder,
-        // The worker pulls in the compiled Elm that reads a decrypted message. Running it
-        // in the same context is what a browser does, and it is what puts self.Elm there.
-        importScripts: (url) => vm.runInContext(
-            fs.readFileSync(path.join(__dirname, "..", "public", url), "utf8"),
-            context,
-            { filename: url })
+        Uint8Array: Uint8Array
     };
 
     context.clients = context.self.clients;
@@ -301,7 +211,6 @@ async function run() {
 
     const databases = new Map();
     databases.set("at-chat-file-keys", new Map([["file-keys", new Map()]]));
-    databases.set("at-chat-e2ee", new Map([["dm-keys", new Map()]]));
 
     const served = new Map();
     served.set(
@@ -315,12 +224,9 @@ async function run() {
 
     const caches = fakeCaches();
 
-    const shown = [];
-
     const listeners = loadServiceWorker({
         indexedDB: fakeIndexedDb(databases),
         caches: caches,
-        shown: shown,
         fetch: (request) => {
             fetchCount++;
             const handler = served.get(cacheKey(request));
@@ -517,75 +423,6 @@ async function run() {
         if (Buffer.compare(Buffer.from(body), Buffer.from(plainText)) !== 0) {
             throw new Error("The body isn't the file that was encrypted");
         }
-    });
-
-    // An encrypted message never reaches the server in the clear, so the push carries the
-    // ciphertext the sender uploaded and the body the server can write says only that
-    // something arrived. These check that a device holding the conversation's key shows the
-    // message instead, and that every way of not holding it falls back rather than showing
-    // the reader base64.
-    const encryptedNotification = async (key) => ({
-        title: "Someone",
-        body: encryptedFallbackText,
-        encrypted_body: bytesToBase64(
-            await encryptMessage(key, base64ToBytes(notificationMessageBase64))),
-        sent_by: senderUserId,
-        icon: "/at-logo-no-background.png",
-        data: "https://at-chat.example/"
-    });
-
-    await check("An encrypted push says what the message says", async () => {
-        const key = await conversationKey(new Uint8Array(32).fill(9));
-        const notification = await encryptedNotification(key);
-
-        databases.get("at-chat-e2ee").get("dm-keys").set(senderUserId, key);
-
-        shown.length = 0;
-        await deliverPush(listeners, notification);
-
-        expectEqual(shown.length, 1, "the number of notifications shown");
-        expectEqual(shown[0].title, "Someone", "the notification title");
-        expectEqual(shown[0].options.body, notificationMessageText, "the notification body");
-    });
-
-    await check("A device with no key for the conversation says something arrived", async () => {
-        const key = await conversationKey(new Uint8Array(32).fill(9));
-        const notification = await encryptedNotification(key);
-
-        databases.get("at-chat-e2ee").get("dm-keys").delete(senderUserId);
-
-        shown.length = 0;
-        await deliverPush(listeners, notification);
-
-        expectEqual(shown.length, 1, "the number of notifications shown");
-        expectEqual(shown[0].options.body, encryptedFallbackText, "the notification body");
-    });
-
-    await check("A key from another conversation doesn't open it", async () => {
-        const notification = await encryptedNotification(
-            await conversationKey(new Uint8Array(32).fill(9)));
-
-        databases.get("at-chat-e2ee").get("dm-keys").set(
-            senderUserId, await conversationKey(new Uint8Array(32).fill(4)));
-
-        shown.length = 0;
-        await deliverPush(listeners, notification);
-
-        expectEqual(shown.length, 1, "the number of notifications shown");
-        expectEqual(shown[0].options.body, encryptedFallbackText, "the notification body");
-    });
-
-    await check("A push the server could write is shown as it stands", async () => {
-        shown.length = 0;
-        await deliverPush(listeners, {
-            title: "Someone",
-            body: "An ordinary message",
-            icon: "/at-logo-no-background.png",
-            data: "https://at-chat.example/"
-        });
-
-        expectEqual(shown.length, 1, "the number of notifications shown");
-        expectEqual(shown[0].options.body, "An ordinary message", "the notification body");
     });
 
     // The worker asks for the ciphertext under a hardcoded index into the server's content

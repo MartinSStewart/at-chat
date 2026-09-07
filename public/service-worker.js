@@ -1,8 +1,3 @@
-// The Elm program that reads a decrypted message (see src/NotificationDecoder.elm). A
-// service worker only accepts importScripts while it is first evaluating, so this can't
-// wait until a push that needs it actually turns up. It defines a global named Elm.
-importScripts("/notification-decoder.js");
-
 function log(text) {
     let request = indexedDB.open("at-chat-db", 1);
     request.onerror = (event) => {};
@@ -107,120 +102,6 @@ async function incrementAppBadge() {
     }
 }
 
-// Conversation keys, written by the page as two people agree on one (see e2eeWithStore in
-// elm-pkg-js/stuff.js). Each entry is a non-exportable AES-GCM CryptoKey filed under the
-// other participant's user id, so an encrypted push can be opened here without the raw key
-// ever being readable by anything.
-const e2eeDbName = "at-chat-e2ee";
-const e2eeStoreName = "dm-keys";
-
-function e2eeOpenDb() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(e2eeDbName, 1);
-        request.onerror = () => reject(request.error);
-        request.onupgradeneeded = () => {
-            // The page normally creates the store first. Creating it here too means a push
-            // that arrives before this browser has ever agreed a key opens an empty store
-            // rather than a database with no store in it.
-            if (!request.result.objectStoreNames.contains(e2eeStoreName)) {
-                request.result.createObjectStore(e2eeStoreName);
-            }
-        };
-        request.onsuccess = () => resolve(request.result);
-    });
-}
-
-function readConversationKey(otherUserId) {
-    return e2eeOpenDb().then(db => new Promise((resolve, reject) => {
-        const transaction = db.transaction(e2eeStoreName, "readonly");
-        const request = transaction.objectStore(e2eeStoreName).get(otherUserId);
-        request.onerror = () => { db.close(); reject(request.error); };
-        request.onsuccess = () => { db.close(); resolve(request.result); };
-    }));
-}
-
-function base64ToBytes(base64) {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-
-    for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-    }
-
-    return bytes;
-}
-
-function bytesToBase64(bytes) {
-    let binary = "";
-
-    for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-
-    return btoa(binary);
-}
-
-// The Elm program that turns a decrypted message into the line the notification shows. It
-// is started on the first encrypted push rather than on load, so a worker woken for
-// anything else never pays for it.
-let notificationDecoder = null;
-
-let notificationDecoderRequestId = 0;
-
-function decodeMessage(bytes) {
-    if (notificationDecoder === null) {
-        notificationDecoder = Elm.NotificationDecoder.init();
-    }
-
-    const requestId = notificationDecoderRequestId++;
-
-    return new Promise((resolve) => {
-        const onResponse = (response) => {
-            if (response.requestId !== requestId) {
-                return;
-            }
-
-            notificationDecoder.ports.decode_notification_from_elm.unsubscribe(onResponse);
-            resolve(response.text);
-        };
-
-        notificationDecoder.ports.decode_notification_from_elm.subscribe(onResponse);
-        notificationDecoder.ports.decode_notification_to_elm.send(
-            { requestId: requestId, message: bytesToBase64(bytes) });
-    });
-}
-
-// What an encrypted push should say, or null when this device can't say: it never agreed a
-// key for that conversation, the key it has doesn't open this message, or the bytes turn
-// out not to be a message. The caller shows the server's own wording instead, which says
-// that something encrypted arrived without saying what.
-async function decryptNotificationBody(sentBy, encryptedBody) {
-    if (typeof sentBy !== "number" || typeof encryptedBody !== "string") {
-        return null;
-    }
-
-    try {
-        const key = await readConversationKey(sentBy);
-
-        if (!key) {
-            return null;
-        }
-
-        const bytes = base64ToBytes(encryptedBody);
-
-        // A fresh IV per message, sitting in front of the ciphertext (see the encrypt-message
-        // branch of elm-pkg-js/stuff.js, which is what wrote this).
-        const plainText = await crypto.subtle.decrypt(
-            { name: "AES-GCM", iv: bytes.slice(0, 12) }, key, bytes.slice(12));
-
-        return await decodeMessage(new Uint8Array(plainText));
-    }
-    catch (error) {
-        log("Notification decryption error: " + error.message);
-        return null;
-    }
-}
-
 // Register event listener for the 'push' event.
 self.addEventListener('push', function(event) {
     // The badge write is async, so the work has to be wrapped in waitUntil to stop
@@ -230,16 +111,9 @@ self.addEventListener('push', function(event) {
         {
             const data = event.data.json().notification;
 
-            // An encrypted message is one the server couldn't read, so it sent the
-            // ciphertext and a body saying only that something arrived. Opening it here is
-            // what makes the notification say what was actually said.
-            const decrypted = data.encrypted_body === undefined
-                ? null
-                : await decryptNotificationBody(data.sent_by, data.encrypted_body);
-
             await self.registration.showNotification(
                 data.title,
-                { body: decrypted === null ? data.body : decrypted
+                { body: data.body
                 , icon: data.icon
                 , data: data.data
                 });
