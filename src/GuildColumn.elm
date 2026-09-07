@@ -680,24 +680,6 @@ unreadNotificationCount local =
     dmCount + discordDmCount + guildCount + discordGuildCount
 
 
-{-| Whether applying this change to LocalState can move `unreadNotificationCount`, so
-that the app icon badge is only recomputed when it might actually have moved. The count
-folds over every guild, channel, thread and DM, which is far too much work to redo on a
-change that can't affect it, typing indicators above all: those arrive on every keystroke
-that gets past the debouncer.
-
-The count is built from `lastViewedMessage`, `lastViewedThreadMessage`, `directMentions`,
-`discordDirectMentions`, `muteSettings`, `notifyOnAllMessages`, which Discord users are
-linked, and the number of messages in each channel and thread. Only the _number_ of
-messages matters, so editing, deleting or loading a message leaves the count alone: those
-all write into indices the array already spans instead of extending it.
-
-Changes rare enough that recomputing costs nothing are answered True whenever the
-reasoning isn't obvious, so that being wrong here shows up as wasted work rather than as a
-stale badge. The case is deliberately exhaustive: a new LocalChange variant has to be
-classified rather than falling into a default.
-
--}
 canChangeUnreadNotificationCount : LocalChange -> Bool
 canChangeUnreadNotificationCount change =
     case change of

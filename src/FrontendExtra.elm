@@ -1528,12 +1528,7 @@ handleLocalChange time maybeLocalChange loggedIn cmds =
             , Command.batch
                 [ cmds
                 , LocalModelChangeRequest changeId localChange |> Lamdera.sendToBackend
-                , -- The unread count can only move when a change is applied to LocalState,
-                  -- so the badge is updated here (and everywhere else LocalState is
-                  -- replaced) instead of being recomputed after every update. Recomputing
-                  -- it means folding over every guild, channel, thread and DM, so changes
-                  -- that can't move it skip the fold entirely.
-                  if GuildColumn.canChangeUnreadNotificationCount localChange then
+                , if GuildColumn.canChangeUnreadNotificationCount localChange then
                     GuildColumn.unreadNotificationCount (Local.model localState2) |> Ports.setAppBadge
 
                   else
