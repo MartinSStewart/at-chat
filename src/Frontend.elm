@@ -3382,6 +3382,39 @@ updateLoaded msg model =
                                 local =
                                     Local.model loggedIn2.localState
 
+                                {- The messages that arrived while the key was missing are still
+                                   sitting there encrypted, so they are decrypted now that the key
+                                   is on this device. Without this the conversation only becomes
+                                   readable after a reload, which is when the backlog is decrypted.
+                                -}
+                                stillEncrypted : List (Encryption.EncryptedData (MessageContent (Id UserId)))
+                                stillEncrypted =
+                                    case SeqDict.get otherUserId local.dmChannels of
+                                        Just dmChannel ->
+                                            encryptedMessagesIn dmChannel
+
+                                        Nothing ->
+                                            []
+
+                                ( loggedIn3, decryptCmd ) =
+                                    case stillEncrypted of
+                                        [] ->
+                                            ( loggedIn2, Command.none )
+
+                                        _ ->
+                                            ( FrontendExtra.mapEncryptionRequests
+                                                (rememberDecryptManyRequest
+                                                    { messageHashes = List.map Encryption.hash stillEncrypted
+                                                    , shiftScrollFrom = Nothing
+                                                    }
+                                                )
+                                                loggedIn2
+                                            , Encryption.decryptManyMessages
+                                                loggedIn2.encryptionRequests.nextDecryptManyRequestId
+                                                { otherUserId = otherUserId }
+                                                stillEncrypted
+                                            )
+
                                 acceptE2ee : Bool
                                 acceptE2ee =
                                     case SeqDict.get otherUserId local.dmChannels of
@@ -3406,11 +3439,11 @@ updateLoaded msg model =
                                 FrontendExtra.handleLocalChange
                                     model.time
                                     (Local_AcceptE2ee { otherUserId = otherUserId } model.time EmptyPlaceholder |> Just)
-                                    loggedIn2
-                                    Command.none
+                                    loggedIn3
+                                    decryptCmd
 
                             else
-                                ( loggedIn2, Command.none )
+                                ( loggedIn3, decryptCmd )
 
                         Ok (Encryption.FromJs_SharedSecretFailed _ error) ->
                             ( { loggedIn | e2eeError = Just error }, Command.none )
