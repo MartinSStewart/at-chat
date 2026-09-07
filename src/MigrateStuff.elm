@@ -5,23 +5,23 @@ import Browser
 import Bytes exposing (Bytes)
 import Bytes.Decode exposing (Decoder)
 import Bytes.Encode
-import Evergreen.Migrate.V215
-import Evergreen.V214.Discord
-import Evergreen.V214.DmChannel
-import Evergreen.V214.Id
-import Evergreen.V214.LocalState
-import Evergreen.V214.Types
-import Evergreen.V215.Types
+import Evergreen.V368.Discord
+import Evergreen.V368.DmChannel
+import Evergreen.V368.DmChannelId
+import Evergreen.V368.Id
+import Evergreen.V368.LocalState
+import Evergreen.V368.Types
 import File.Download
 import Html
+import Html.Attributes
 import Html.Events
 import Http
 import Lamdera.Wire3
-import Pages.Admin
+import MyUi
 import SeqDict
 import Task
 import Time
-import Types
+import Types exposing (ExportStep(..))
 
 
 type Msg
@@ -37,7 +37,10 @@ main =
                 ( Err "Loading..."
                 , Http.task
                     { method = "GET"
-                    , url = "/backend-export-2026-05-13-03:56:33.bin"
+                    , url =
+                        "/backend-export (13).bin"
+
+                    --"/backend-export-2026-09-05-14:34:56.bin"
                     , headers = []
                     , body = Http.emptyBody
                     , resolver =
@@ -52,20 +55,19 @@ main =
                                             _ =
                                                 Debug.log "asd2f" ""
                                         in
-                                        --case Bytes.Decode.decode Evergreen.V214.Types.w3_decode_BackendModel bytes of
-                                        case
-                                            Bytes.Decode.decode decodeStreamedBackendModel bytes
-                                        of
-                                            Just backendModel ->
+                                        case Bytes.Decode.decode decodeStreamedBackendModel bytes of
+                                            Just _ ->
                                                 let
                                                     _ =
                                                         Debug.log "asdf" ""
 
                                                     bytes2 : Bytes
                                                     bytes2 =
-                                                        Evergreen.Migrate.V215.migrate_Types_BackendModel backendModel
-                                                            |> Evergreen.V215.Types.w3_encode_BackendModel
-                                                            |> Bytes.Encode.encode
+                                                        Bytes.Encode.sequence [] |> Bytes.Encode.encode
+
+                                                    --Evergreen.Migrate.V368.migrate_Types_BackendModel backendModel
+                                                    --    |> Evergreen.V368.Types.w3_encode_BackendModel
+                                                    --    |> Bytes.Encode.encode
                                                 in
                                                 case Bytes.Decode.decode Types.w3_decode_BackendModel bytes2 of
                                                     Just backendModel3 ->
@@ -75,14 +77,11 @@ main =
 
                                                             exportHelper export =
                                                                 case Backend.handleExportBackendStep export of
-                                                                    ( Pages.Admin.ExportingFinalStep bytes3, _ ) ->
+                                                                    ExportFinished bytes3 ->
                                                                         Ok bytes3
 
-                                                                    ( _, Just export2 ) ->
+                                                                    ExportInProgress _ export2 ->
                                                                         exportHelper export2
-
-                                                                    _ ->
-                                                                        Err "Failed to export 2"
                                                         in
                                                         case backendModel4.scheduledExportState of
                                                             Just exportState ->
@@ -134,45 +133,63 @@ main =
                         Html.button [ Html.Events.onClick PressedDownload ] [ Html.text "Download" ]
 
                     Err error ->
-                        Html.text error
+                        Html.div [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font1) ] [ Html.text error ]
         , subscriptions = \_ -> Sub.none
         }
 
 
-decodeBackendModel : Decoder Evergreen.V214.Types.BackendModel
+decodeBackendModel : Decoder Evergreen.V368.Types.BackendModel
 decodeBackendModel =
-    Evergreen.V214.Types.w3_decode_BackendModel
+    Evergreen.V368.Types.w3_decode_BackendModel
 
 
-decodeGuild : Decoder ( a, b )
+decodeGuild : Decoder ( Evergreen.V368.Id.Id a, Evergreen.V368.LocalState.BackendGuild )
 decodeGuild =
+    Bytes.Decode.map3
+        (\key value channels -> ( key, { value | channels = SeqDict.fromList channels } ))
+        (Evergreen.V368.Id.w3_decode_Id Lamdera.Wire3.failDecode)
+        Evergreen.V368.LocalState.w3_decode_BackendGuild
+        (decodeLengthPrefixedList "Guild channel" decodeGuildChannel)
+
+
+decodeGuildChannel : Decoder ( Evergreen.V368.Id.Id a, Evergreen.V368.LocalState.BackendChannel )
+decodeGuildChannel =
     Bytes.Decode.map2 Tuple.pair
-        (Evergreen.V214.Id.w3_decode_Id Lamdera.Wire3.failDecode)
-        Evergreen.V214.LocalState.w3_decode_BackendGuild
+        (Evergreen.V368.Id.w3_decode_Id Lamdera.Wire3.failDecode)
+        Evergreen.V368.LocalState.w3_decode_BackendChannel
 
 
-decodeDmChannel : Decoder ( Evergreen.V214.DmChannel.DmChannelId, Evergreen.V214.DmChannel.DmChannel )
+decodeDmChannel : Decoder ( Evergreen.V368.DmChannelId.DmChannelId, Evergreen.V368.DmChannel.BackendDmChannel )
 decodeDmChannel =
     Bytes.Decode.map2 Tuple.pair
-        Evergreen.V214.DmChannel.w3_decode_DmChannelId
-        Evergreen.V214.DmChannel.w3_decode_DmChannel
+        Evergreen.V368.DmChannelId.w3_decode_DmChannelId
+        Evergreen.V368.DmChannel.w3_decode_BackendDmChannel
 
 
-decodeDiscordGuild : Decoder ( a, b )
+decodeDiscordGuild : Decoder ( Evergreen.V368.Discord.Id a, Evergreen.V368.LocalState.DiscordBackendGuild )
 decodeDiscordGuild =
+    Bytes.Decode.map3
+        (\key value channels -> ( key, { value | channels = SeqDict.fromList channels } ))
+        (Evergreen.V368.Discord.w3_decode_Id Lamdera.Wire3.failDecode)
+        Evergreen.V368.LocalState.w3_decode_DiscordBackendGuild
+        (decodeLengthPrefixedList "DiscordGuild channel" decodeDiscordGuildChannel)
+
+
+decodeDiscordGuildChannel : Decoder ( Evergreen.V368.Discord.Id a, Evergreen.V368.LocalState.DiscordBackendChannel )
+decodeDiscordGuildChannel =
     Bytes.Decode.map2 Tuple.pair
-        (Evergreen.V214.Discord.w3_decode_Id Lamdera.Wire3.failDecode)
-        Evergreen.V214.LocalState.w3_decode_DiscordBackendGuild
+        (Evergreen.V368.Discord.w3_decode_Id Lamdera.Wire3.failDecode)
+        (Evergreen.V368.LocalState.w3_decode_DiscordBackendChannel |> Bytes.Decode.map (Debug.log "channel"))
 
 
-decodeDiscordDmChannel : Decoder ( Evergreen.V214.Discord.Id Evergreen.V214.Discord.PrivateChannelId, Evergreen.V214.DmChannel.DiscordDmChannel )
+decodeDiscordDmChannel : Decoder ( Evergreen.V368.Discord.Id Evergreen.V368.Discord.PrivateChannelId, Evergreen.V368.DmChannel.DiscordDmChannel )
 decodeDiscordDmChannel =
     Bytes.Decode.map2 Tuple.pair
-        (Evergreen.V214.Discord.w3_decode_Id Lamdera.Wire3.failDecode)
-        Evergreen.V214.DmChannel.w3_decode_DiscordDmChannel
+        (Evergreen.V368.Discord.w3_decode_Id Lamdera.Wire3.failDecode)
+        Evergreen.V368.DmChannel.w3_decode_DiscordDmChannel
 
 
-decodeStreamedBackendModel : Decoder Evergreen.V214.Types.BackendModel
+decodeStreamedBackendModel : Decoder Evergreen.V368.Types.BackendModel
 decodeStreamedBackendModel =
     Bytes.Decode.map5
         (\baseModel guilds dmChannels discordGuilds discordDmChannels ->
@@ -184,20 +201,20 @@ decodeStreamedBackendModel =
             }
         )
         decodeBackendModel
-        (decodeLengthPrefixedList decodeGuild)
-        (decodeLengthPrefixedList decodeDmChannel)
-        (decodeLengthPrefixedList decodeDiscordGuild)
-        (decodeLengthPrefixedList decodeDiscordDmChannel)
+        (decodeLengthPrefixedList "Guild" decodeGuild)
+        (decodeLengthPrefixedList "DmChannel" decodeDmChannel)
+        (decodeLengthPrefixedList "DiscordGuild" decodeDiscordGuild)
+        (decodeLengthPrefixedList "DiscordDmChannel" decodeDiscordDmChannel)
 
 
-decodeLengthPrefixedList : Decoder a -> Decoder (List a)
-decodeLengthPrefixedList itemDecoder =
+decodeLengthPrefixedList : String -> Decoder a -> Decoder (List a)
+decodeLengthPrefixedList name itemDecoder =
     Bytes.Decode.unsignedInt32 Bytes.BE
         |> Bytes.Decode.andThen
             (\count ->
                 let
                     _ =
-                        Debug.log "count" count
+                        Debug.log (name ++ " count") count
                 in
                 Bytes.Decode.loop
                     ( count, [] )

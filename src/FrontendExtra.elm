@@ -73,6 +73,7 @@ import FileName
 import FileStatus exposing (FileData, FileHash, FileId, FileStatus(..), IsEncrypted(..))
 import Game
 import Go
+import GuildColumn
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -1355,7 +1356,7 @@ logout model =
                     else
                         ( model2, Command.none )
             in
-            ( model3, Command.batch [ cmd, Ports.clearBrowserStorage ] )
+            ( model3, Command.batch [ cmd, Ports.clearBrowserStorage, Ports.setAppBadge 0 ] )
 
         NotLoggedIn _ ->
             ( model, Command.none )
@@ -1527,6 +1528,10 @@ handleLocalChange time maybeLocalChange loggedIn cmds =
             , Command.batch
                 [ cmds
                 , LocalModelChangeRequest changeId localChange |> Lamdera.sendToBackend
+                , -- The unread count can only move when a change is applied to LocalState,
+                  -- so the badge is updated here (and everywhere else LocalState is
+                  -- replaced) instead of being recomputed after every update.
+                  GuildColumn.unreadNotificationCount (Local.model localState2) |> Ports.setAppBadge
                 ]
             )
 
