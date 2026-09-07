@@ -49,8 +49,10 @@ function e2eeWithStore(mode, run) {
 
 // Keys for encrypted file attachments, which the service worker reads so that it can
 // decrypt a file the browser fetches on its own (see public/service-worker.js). Kept apart
-// from the conversation keys above so the service worker never opens that database, and so
-// adding this store didn't need a version bump on one already in use.
+// from the conversation keys above because a file's key belongs to the one file rather than
+// to a conversation, and so adding this store didn't need a version bump on one already in
+// use. The worker reads the conversation keys too now, to open an encrypted push
+// notification, so both databases are opened from both sides.
 const fileKeyDbName = "at-chat-file-keys";
 const fileKeyStoreName = "file-keys";
 

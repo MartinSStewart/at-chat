@@ -41,8 +41,6 @@ module Broadcast exposing
     , usersViewingDiscordDm
     )
 
-import Base64
-import Bytes exposing (Bytes)
 import Codec exposing (Codec)
 import Discord
 import DiscordUserData exposing (DiscordUserData(..))
@@ -1281,7 +1279,8 @@ type alias PushNotification =
     , privateKey : PrivateVapidKey
     , title : String
     , body : String
-    , bodyEncrypted : Bool
+    , encryptedBody : Maybe String
+    , sentBy : Maybe Int
     , icon : String
     , navigate : String
     , data : Maybe String
@@ -1299,7 +1298,8 @@ pushNotificationCodec =
         |> Codec.field "private_key" .privateKey privateVapidKeyCodec
         |> Codec.field "title" .title Codec.string
         |> Codec.field "body" .body Codec.string
-        |> Codec.field "body_encrypted" .bodyEncrypted Codec.bool
+        |> Codec.field "encrypted_body" .encryptedBody (Codec.nullable Codec.string)
+        |> Codec.field "sent_by" .sentBy (Codec.nullable Codec.int)
         |> Codec.field "icon" .icon Codec.string
         |> Codec.field "navigate" .navigate Codec.string
         |> Codec.field "data" .data (Codec.nullable Codec.string)
@@ -1313,9 +1313,14 @@ privateVapidKeyCodec =
     Codec.map PrivateVapidKey (\(PrivateVapidKey a) -> a) Codec.string
 
 
+{-| What a push notification says. An encrypted message is one the server can't read, so
+there is nothing for it to write: it forwards the ciphertext the sender uploaded and the
+device that has the conversation's key opens it (see `public/service-worker.js`). The
+sender's id comes along because that is what the recipient's device filed the key under.
+-}
 type PushNotificationBody
     = UnencryptedBody String
-    | EncryptedBody (EncryptedData (MessageContent (Id UserId)))
+    | EncryptedBody (Id UserId) (EncryptedData (MessageContent (Id UserId)))
 
 
 pushNotification :
@@ -1352,20 +1357,30 @@ pushNotification sessionId userId time title body icon navigateTo subscribeData 
                 , auth = subscribeData.keys.auth
                 , privateKey = model.privateVapidKey
                 , title = title
-                , body =
+                , -- Always readable. A device without the conversation's key, or one whose
+                  -- browser can't reach the key from a service worker, shows this instead of
+                  -- the message.
+                  body =
                     case body of
                         UnencryptedBody text ->
                             text
 
-                        EncryptedBody bytes ->
-                            Encryption.toBase64 bytes
-                , bodyEncrypted =
+                        EncryptedBody _ _ ->
+                            encryptedDmText
+                , encryptedBody =
                     case body of
                         UnencryptedBody _ ->
-                            False
+                            Nothing
 
-                        EncryptedBody _ ->
-                            True
+                        EncryptedBody _ bytes ->
+                            Encryption.toBase64 bytes |> Just
+                , sentBy =
+                    case body of
+                        UnencryptedBody _ ->
+                            Nothing
+
+                        EncryptedBody senderId _ ->
+                            Id.toInt senderId |> Just
                 , icon = icon
                 , navigate = Maybe.withDefault Env.domain link
                 , data = link
@@ -1710,7 +1725,7 @@ encryptedDmNotification time senderId { otherUserId } messageContents model =
                         Nothing ->
                             Env.domain ++ "/at-logo-no-background.png"
                     )
-                    (EncryptedBody messageContents)
+                    (EncryptedBody senderId messageContents)
                     encryptedDmText
                     (Email.Html.text encryptedDmText)
                     (DmRoute
