@@ -891,7 +891,11 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             False
             discordOp0Ready
             discordOp0ReadySupplemental
-            (\_ -> [])
+            (\_ ->
+                [ T.checkBackend 1000 (checkDiscordUserAvatarLoaded E2EHelper.currentDiscordUserId)
+                , T.checkBackend 0 (checkDiscordUserAvatarLoaded unlinkedDiscordUserId)
+                ]
+            )
         ]
     , E2EHelper.startTest "Forwarded message"
         E2EHelper.startTime
@@ -3483,6 +3487,39 @@ discordGuildMessageFromGuildOnlyUser connection content =
                 ("{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ unique ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"" ++ Iso8601.fromTime data.time ++ "\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"" ++ unique ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at\",\"public_flags\":0,\"id\":\"1401255355928936478\",\"global_name\":\"AT\",\"discriminator\":\"0\",\"avatar\":null},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}")
             ]
         )
+
+
+{-| at0232, one of the users the ready data brings along who hasn't linked an at-chat
+account. Nothing has been written down about them before the ready data arrives, so their
+avatar loads through the ordinary path and they're the contrast to the linked user.
+-}
+unlinkedDiscordUserId : Discord.Id Discord.UserId
+unlinkedDiscordUserId =
+    Unsafe.uint64 "161098476632014848" |> Discord.idFromUInt64
+
+
+{-| Linking an account writes down the Discord avatar hash but never fetches the picture
+behind it, so the linked user is the one who already looks up to date to the avatar loader
+while still having no icon. Their picture has to arrive along with everyone else's when
+the ready data lands, rather than leaving them on the default Discord avatar.
+-}
+checkDiscordUserAvatarLoaded : Discord.Id Discord.UserId -> E2EHelper.BackendModel2 -> Result String ()
+checkDiscordUserAvatarLoaded discordUserId backend =
+    case SeqDict.get discordUserId (E2EHelper.unwrapBackend backend).discordUsers of
+        Just discordUser ->
+            case DiscordUserData.icon discordUser of
+                Just _ ->
+                    Ok ()
+
+                Nothing ->
+                    Err
+                        ("Discord user "
+                            ++ Discord.idToString discordUserId
+                            ++ " is still on the default Discord avatar"
+                        )
+
+        Nothing ->
+            Err ("Discord user " ++ Discord.idToString discordUserId ++ " is missing from the backend")
 
 
 {-| Send a Discord DM `MESSAGE_CREATE` gateway event (no `guild_id`) for the private
