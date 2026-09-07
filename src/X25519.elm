@@ -1,6 +1,7 @@
 module X25519 exposing
-    ( PrivateKey
-    , PublicKey
+    ( Key
+    , PrivateKey(..)
+    , PublicKey(..)
     , SharedSecret
     , privateKeyFromBytes
     , privateKeyFromListInt
@@ -49,7 +50,7 @@ import Bytes.Decode
 import Bytes.Encode
 
 
-{-| 32 bytes, as eight 32 bit words, least significant word first. Words are unsigned, so
+{-| Opqaue. 32 bytes, as eight 32 bit words, least significant word first. Words are unsigned, so
 each one is somewhere in [0, 2^32), which Elm's `Int` holds exactly.
 -}
 type alias Key =
@@ -77,7 +78,7 @@ keyZero =
     }
 
 
-{-| 32 bytes of secret, exactly as they came out of the random source. The clamping RFC
+{-| OpaqueVariants. 32 bytes of secret, exactly as they came out of the random source. The clamping RFC
 7748 requires happens when the key is used, not when it is stored, which is what lets a
 key survive a round trip through `privateKeyToBytes`.
 -}
@@ -85,6 +86,8 @@ type PrivateKey
     = PrivateKey Key
 
 
+{-| OpaqueVariants
+-}
 type PublicKey
     = PublicKey Key
 

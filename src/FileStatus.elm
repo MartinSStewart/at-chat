@@ -1,5 +1,5 @@
 module FileStatus exposing
-    ( AesPrivateKey
+    ( AesPrivateKey(..)
     , ContentType(..)
     , ContentTypeType(..)
     , EncryptedThumbnail(..)
@@ -206,6 +206,8 @@ type AesPrivateKey
     = AesPrivateKey Bytes
 
 
+{-| OpaqueVariants
+-}
 aesPrivateKey : Bytes -> AesPrivateKey
 aesPrivateKey =
     AesPrivateKey
