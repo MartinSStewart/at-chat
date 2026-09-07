@@ -1448,15 +1448,9 @@ pub struct Notification<D> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub actions: Option<Vec<NotificationAction>>,
 
-    /// Base64 of the line the sender encrypted, when the message is one the server can't
-    /// read and so can't write a body for. Not part of the declarative notification spec:
-    /// the service worker reads it, decrypts it with the conversation's key, and shows that
-    /// in place of `body`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub encrypted_body: Option<String>,
 
-    /// Who sent the encrypted message. The recipient's device files a conversation's key
-    /// under the other participant's user id, so this is what looks the key up.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sent_by: Option<f64>,
 }

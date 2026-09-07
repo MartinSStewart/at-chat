@@ -2022,14 +2022,6 @@ plainTextMessages messages =
         messages
 
 
-{-| Store and pass on a DM whose contents the server cannot read.
-
-Almost everything `sendDm` does with a message needs the text: working out who was
-mentioned, which links to fetch embeds for. None of that is possible here, so this keeps
-only what is left. The notification is the exception: the sender wrote and encrypted that
-line too, so it is passed along for the recipient's own device to open.
-
--}
 sendEncryptedDm :
     Time.Posix
     -> ClientId
