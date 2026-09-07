@@ -2126,12 +2126,50 @@ richTextMessage isMobile normalConfig =
 
                             [] ->
                                 Debug.todo (substring ++ " isn't part of messageText so it can't be selected")
+
+                    -- On a phone the enter key writes a line break and the message is sent by
+                    -- pressing the button next to the input, so there is nothing for the
+                    -- keyboard shortcut to do there.
+                    sendMessage : T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                    sendMessage =
+                        if isMobile then
+                            admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
+
+                        else
+                            admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+
+                    -- Replying to a message is reached differently on each: hovering a message
+                    -- on a desktop brings up a row of buttons next to it, while on a phone there
+                    -- is nothing to hover and the message is long pressed to open a menu
+                    -- instead. The long press arrives as a contextmenu event, and the menu
+                    -- slides in, which is what the wait before pressing reply is for.
+                    replyToRichTextMessage : T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                    replyToRichTextMessage =
+                        if isMobile then
+                            T.group
+                                [ admin.custom
+                                    100
+                                    (Dom.id "guild_message_2")
+                                    "contextmenu"
+                                    (Json.Encode.object
+                                        [ ( "clientX", Json.Encode.float 50 )
+                                        , ( "clientY", Json.Encode.float 150 )
+                                        ]
+                                    )
+                                , admin.click 2000 (Dom.id "messageMenu_replyTo")
+                                ]
+
+                        else
+                            T.group
+                                [ admin.mouseEnter 100 (Dom.id "guild_message_2") ( 100, 100 ) []
+                                , admin.click 100 (Dom.id "miniView_reply")
+                                ]
                 in
                 [ -- Focus the channel text input and type the message.
                   E2EHelper.focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.click 100 (Dom.id "channel_textinput")
                 , admin.input 100 (Dom.id "channel_textinput") "# Rich text demo"
-                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , sendMessage
                 , admin.input 100 (Dom.id "channel_textinput") messageText
 
                 -- Snapshot the formatted preview while the message is still in the text input.
@@ -2166,11 +2204,7 @@ richTextMessage isMobile normalConfig =
                 , E2EHelper.tallSnapshot admin 100 { name = "Rich text selection across bullet points" }
 
                 -- Send the message and snapshot how it renders in the channel.
-                , if isMobile then
-                    admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
-
-                  else
-                    admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , sendMessage
                 , E2EHelper.focusEvent admin 100 Nothing Nothing
                 , E2EHelper.tallSnapshot admin 1000 { name = "Rich text message after being sent" }
 
@@ -2193,14 +2227,17 @@ richTextMessage isMobile normalConfig =
                             |> Test.Html.Query.index 2
                             |> Test.Html.Query.has [ Test.Html.Selector.text "Third bullet with a " ]
                     )
-                , admin.mouseEnter 100 (Dom.id "guild_message_2") ( 100, 100 ) []
-                , admin.click 100 (Dom.id "miniView_reply")
+                , replyToRichTextMessage
                 , admin.input 100 (Dom.id "channel_textinput") "Reply"
-                , if isMobile then
-                    admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
+                , sendMessage
 
-                  else
-                    admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                -- The snapshot below is only worth looking at if there is a reply header in
+                -- it, and the two ways of starting a reply are easy to break one at a time,
+                -- so check the header is there rather than leaving it to the eye. The id
+                -- names the message being replied to.
+                , admin.checkView
+                    1000
+                    (Test.Html.Query.has [ Test.Html.Selector.id "guild_replyLink_2" ])
                 , E2EHelper.tallSnapshot admin 1000 { name = "Rich text message previewed in reply" }
                 ]
             )

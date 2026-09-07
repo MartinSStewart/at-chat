@@ -84,6 +84,7 @@ config =
             [ "tests/E2ETests.elm"
             , "src/E2EHelper.elm"
             , "src/E2EDiscord.elm"
+            , "src/E2EMisc.elm"
             ]
         |> defaultIgnore
     , NoExposingEverything.rule |> Review.Rule.ignoreErrorsForFiles [ "src/Env.elm" ] |> defaultIgnore

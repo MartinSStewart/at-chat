@@ -47,7 +47,6 @@ import Pages.Admin
 import Pages.Guild
 import Pages.Home
 import PersonName
-import Range exposing (Range)
 import RateLimit
 import RichText
 import Route
@@ -1160,39 +1159,6 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
                 , E2EHelper.clickSpoiler admin (Dom.id "threadSpoiler_0_0")
                 , E2EHelper.clickSpoiler admin (Dom.id "threadSpoiler_0_2")
-                ]
-            )
-        ]
-    , E2EHelper.startTest
-        -- The profile image of a message that replies to another one has to line up with
-        -- the author's name, the same as it does on a message with no reply above it. It
-        -- used to be nudged down by a hardcoded guess at how tall the reply header came
-        -- out, which drifted, so this snapshots a phone sized reply next to a plain
-        -- message to keep both of them in view.
-        "Reply header on a phone"
-        E2EHelper.startTime
-        normalConfig
-        [ T.connectFrontend
-            100
-            E2EHelper.sessionId2
-            "/"
-            E2EHelper.iphone14Window
-            (\admin ->
-                [ E2EHelper.handleLogin E2EHelper.safariIphone E2EHelper.adminEmail admin
-                , admin.click 100 (Dom.id "guild_openGuild_0")
-                , E2EHelper.writeMessageMobile admin "Original message"
-                , admin.custom
-                    100
-                    (Dom.id "guild_message_0")
-                    "contextmenu"
-                    (Json.Encode.object
-                        [ ( "clientX", Json.Encode.float 50 )
-                        , ( "clientY", Json.Encode.float 150 )
-                        ]
-                    )
-                , admin.click 2000 (Dom.id "messageMenu_replyTo")
-                , E2EHelper.writeMessageMobile admin "Reply"
-                , E2EHelper.tallSnapshot admin 1000 { name = "Reply header on a phone" }
                 ]
             )
         ]
