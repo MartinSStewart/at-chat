@@ -902,7 +902,7 @@ container topPadding isExpanded htmlId onPressedExpand backgroundColor isMobile2
 
                     else
                         16
-                , top = topPadding
+                , top = 12
                 , bottom = 0
                 }
             , Ui.row
