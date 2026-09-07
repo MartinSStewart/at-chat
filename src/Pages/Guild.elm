@@ -2738,7 +2738,6 @@ privateKeyInput otherUserId prompt keyInput =
         , Ui.Input.currentPassword
             [ Ui.background MyUi.inputBackground
             , Ui.paddingXY 8 8
-            , Ui.widthMax 300
             , Ui.borderColor MyUi.inputBorder
             ]
             { text = keyInput.text
@@ -2747,7 +2746,7 @@ privateKeyInput otherUserId prompt keyInput =
             , label = keyLabel.id
             , show = False
             }
-            |> Ui.el [ ChannelHeader.e2eeRequestDot ]
+            |> Ui.el [ ChannelHeader.e2eeRequestDot, Ui.widthMax 300 ]
         , case keyInput.error of
             Just error ->
                 Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
