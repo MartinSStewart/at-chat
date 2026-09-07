@@ -7654,14 +7654,14 @@ dragChannelSidebar range time delta sidebar =
                 { record | offset = clamp range.min range.max (record.offset + delta), time = time }
 
 
+{-| Touching a text input mustn't start a drag, since dragging hides the virtual keyboard
+and the touch was meant for the input. Every text input counts, not just the ones the
+conversation view draws: the private key box is one, and hiding the keyboard out from under
+it is what stopped a key from being pasted in on iOS.
+-}
 isTouchingTextInput : NonemptyDict Int Touch -> Bool
 isTouchingTextInput touches =
-    NonemptyDict.any
-        (\_ touch ->
-            (touch.target == Just MessageMenu.editMessageTextInputId)
-                || (touch.target == Just Pages.Guild.channelTextInputId)
-        )
-        touches
+    NonemptyDict.any (\_ touch -> touch.targetIsTextInput) touches
 
 
 {-| Back out of whichever of the three mobile screens the reader is on: the member column

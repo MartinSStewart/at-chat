@@ -13,7 +13,6 @@ module Touch exposing
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Duration exposing (Duration)
-import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Json.Decode exposing (Decoder)
 import List.Nonempty exposing (Nonempty(..))
@@ -25,7 +24,7 @@ import Vector2d exposing (Vector2d)
 
 type alias Touch =
     { client : Point2d CssPixels ScreenCoordinate
-    , target : Maybe HtmlId
+    , targetIsTextInput : Bool
     }
 
 
@@ -100,7 +99,10 @@ decoderPointerEvent msg =
         (\identifier clientX clientY time ->
             msg
                 (Duration.milliseconds time)
-                (NonemptyDict.singleton identifier { client = Point2d.xy clientX clientY, target = Nothing })
+                (NonemptyDict.singleton
+                    identifier
+                    { client = Point2d.xy clientX clientY, targetIsTextInput = False }
+                )
         )
         (Json.Decode.field "pointerId" Json.Decode.int)
         (Json.Decode.field "clientX" decodeQuantity)
@@ -111,32 +113,28 @@ decoderPointerEvent msg =
 decodeTouch : Decoder ( Int, Touch )
 decodeTouch =
     Json.Decode.map4
-        (\identifier clientX clientY target ->
-            ( identifier, { client = Point2d.xy clientX clientY, target = target } )
+        (\identifier clientX clientY targetIsTextInput ->
+            ( identifier
+            , { client = Point2d.xy clientX clientY, targetIsTextInput = targetIsTextInput }
+            )
         )
         (Json.Decode.field "identifier" Json.Decode.int)
         (Json.Decode.field "clientX" decodeQuantity)
         (Json.Decode.field "clientY" decodeQuantity)
-        (Json.Decode.field "target" (decodeId 10))
+        (Json.Decode.field "target" decodeIsTextInput)
 
 
-decodeId : Int -> Decoder (Maybe HtmlId)
-decodeId depth =
-    if depth > 0 then
-        Json.Decode.field "id" Json.Decode.string
-            |> Json.Decode.andThen
-                (\id ->
-                    if id == "" then
-                        Json.Decode.field
-                            "parentElement"
-                            (Json.Decode.nullable (decodeId (depth - 1)) |> Json.Decode.map (Maybe.andThen identity))
-
-                    else
-                        Json.Decode.succeed (Just (Dom.id id))
-                )
-
-    else
-        Json.Decode.succeed Nothing
+{-| Whether the touch landed on something that takes typed text. This asks the element what
+it is rather than checking it against a list of ids, so that every text input counts,
+including ones added later. A target that doesn't say what it is counts as not one.
+-}
+decodeIsTextInput : Decoder Bool
+decodeIsTextInput =
+    Json.Decode.oneOf
+        [ Json.Decode.field "tagName" Json.Decode.string
+            |> Json.Decode.map (\tagName -> tagName == "TEXTAREA" || tagName == "INPUT")
+        , Json.Decode.succeed False
+        ]
 
 
 decodeQuantity : Decoder (Quantity Float unit)

@@ -23,6 +23,7 @@ module E2EMisc exposing
     , swipedAwayConversationStopsBeingViewedTest
     , timeOfDaySuggestionTest
     , timeOffsetSuggestionTest
+    , touchingTextInputDoesntStartDragTest
     )
 
 import Audio
@@ -57,6 +58,7 @@ import String.Nonempty
 import Test.Html.Query
 import Test.Html.Selector
 import TimeInMinutes
+import Touch
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 import UserColor
 import UserSession
@@ -1989,3 +1991,97 @@ savedColor : T.Data FrontendModel E2EHelper.BackendModel2 -> Maybe UserColor.Use
 savedColor state =
     NonemptyDict.get Broadcast.adminUserId (E2EHelper.unwrapBackend state.backend).users
         |> Maybe.map .color
+
+
+{-| Touching a text input on mobile mustn't start a drag, because starting one hides the
+virtual keyboard so that the sidebar isn't dragged out from behind it. Which touches count
+used to be decided from a list holding the two message textareas, so the private key box
+wasn't one of them and lost the keyboard the moment it was touched, which is what stopped a
+key from being pasted into it on iOS.
+-}
+touchingTextInputDoesntStartDragTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+touchingTextInputDoesntStartDragTest config =
+    E2EHelper.startTest
+        "Touching a text input on mobile doesn't start a drag"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.iphone14Window
+            (\_ user ->
+                [ -- The private key box is an input rather than one of the message
+                  -- textareas, and counts all the same.
+                  user.custom 100 (Dom.id "elm-ui-root-id") "touchstart" (touchStartOnTag "INPUT")
+                , user.checkModel 100 checkNoDragStarted
+                , user.custom 100 (Dom.id "elm-ui-root-id") "touchstart" (touchStartOnTag "TEXTAREA")
+                , user.checkModel 100 checkNoDragStarted
+
+                -- Touching anything else still starts one, which is what drags the channel
+                -- sidebar.
+                , user.custom 100 (Dom.id "elm-ui-root-id") "touchstart" (touchStartOnTag "DIV")
+                , user.checkModel 100 checkDragStarted
+                ]
+            )
+        ]
+
+
+{-| One touch that landed on an element with the given tag name, reported the way the
+mobile frontend decodes touch events.
+-}
+touchStartOnTag : String -> Json.Encode.Value
+touchStartOnTag tagName =
+    Json.Encode.object
+        [ ( "timeStamp", Json.Encode.float 1000 )
+        , ( "touches"
+          , Json.Encode.object
+                [ ( "length", Json.Encode.int 1 )
+                , ( "0"
+                  , Json.Encode.object
+                        [ ( "identifier", Json.Encode.int 0 )
+                        , ( "clientX", Json.Encode.float 200 )
+                        , ( "clientY", Json.Encode.float 700 )
+                        , ( "target", Json.Encode.object [ ( "tagName", Json.Encode.string tagName ) ] )
+                        ]
+                  )
+                ]
+          )
+        ]
+
+
+checkNoDragStarted : FrontendModel -> Result String ()
+checkNoDragStarted model =
+    withDrag
+        model
+        (\drag ->
+            case drag of
+                Touch.NoDrag ->
+                    Ok ()
+
+                _ ->
+                    Err "Touching a text input started a drag, which hides the virtual keyboard"
+        )
+
+
+checkDragStarted : FrontendModel -> Result String ()
+checkDragStarted model =
+    withDrag
+        model
+        (\drag ->
+            case drag of
+                Touch.NoDrag ->
+                    Err "Touching something that isn't a text input should still start a drag"
+
+                _ ->
+                    Ok ()
+        )
+
+
+withDrag : FrontendModel -> (Touch.Drag -> Result String ()) -> Result String ()
+withDrag model func =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            func loaded.drag
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"

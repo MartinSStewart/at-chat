@@ -8856,15 +8856,7 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
                 (\toMsg target -> toMsg target.imageUrl target.linkUrl)
                 (Touch.decodeTouchEvent
                     (\time touches imageUrl linkUrl ->
-                        MessageView_TouchStart
-                            time
-                            isThreadStarter
-                            imageUrl
-                            linkUrl
-                            (NonemptyDict.map
-                                (\_ touch -> { touch | target = channelMessageHtmlId messageIndex |> Just })
-                                touches
-                            )
+                        MessageView_TouchStart time isThreadStarter imageUrl linkUrl touches
                     )
                 )
                 decodeEventTarget
@@ -8993,15 +8985,7 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
                 (\toMsg target -> toMsg target.imageUrl target.linkUrl)
                 (Touch.decodeTouchEvent
                     (\time touches imageUrl linkUrl ->
-                        MessageView_TouchStart
-                            time
-                            False
-                            imageUrl
-                            linkUrl
-                            (NonemptyDict.map
-                                (\_ touch -> { touch | target = threadMessageHtmlId messageIndex |> Just })
-                                touches
-                            )
+                        MessageView_TouchStart time False imageUrl linkUrl touches
                     )
                 )
                 decodeEventTarget
