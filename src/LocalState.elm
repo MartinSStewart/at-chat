@@ -2261,6 +2261,28 @@ editEncryptedMessageHelperNoThread time editedBy fileHashes newContent messageIn
             else
                 Err ()
 
+        {- A session without the private key writes in plain text even when the
+           conversation is encrypted, so an encrypted conversation can hold plain text
+           messages. Editing one from a session that does have the key is what turns it
+           into an encrypted message.
+        -}
+        Just (UserTextMessage data) ->
+            if data.createdBy == editedBy then
+                { channel
+                    | messages =
+                        IdArray.set
+                            messageIndex
+                            (EncryptedUserTextMessage
+                                (Message.editAndEncryptUserTextMessage time fileHashes newContent data)
+                            )
+                            channel.messages
+                    , lastTypedAt = forgetEditTypingAt editedBy messageIndex channel.lastTypedAt
+                }
+                    |> Ok
+
+            else
+                Err ()
+
         _ ->
             Err ()
 
@@ -2310,6 +2332,26 @@ editEncryptedMessageFrontendHelperNoThread time editedBy fileHashes newContent m
                             messageIndex
                             (EncryptedUserTextMessage
                                 (Message.editEncryptedUserTextMessage time fileHashes newContent data)
+                            )
+                            channel.messages
+                    , lastTypedAt = forgetEditTypingAt editedBy messageIndex channel.lastTypedAt
+                }
+                    |> Ok
+
+            else
+                Err ()
+
+        {- The plain text counterpart of the branch above, for a message written from a
+           session that had no private key.
+        -}
+        Just (UserTextMessage data) ->
+            if data.createdBy == editedBy then
+                { channel
+                    | messages =
+                        MessageArray.set
+                            messageIndex
+                            (EncryptedUserTextMessage
+                                (Message.editAndEncryptUserTextMessage time fileHashes newContent data)
                             )
                             channel.messages
                     , lastTypedAt = forgetEditTypingAt editedBy messageIndex channel.lastTypedAt

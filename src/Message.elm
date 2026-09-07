@@ -16,6 +16,7 @@ module Message exposing
     , contentAndEmbedsCodec
     , createdAt
     , drawing
+    , editAndEncryptUserTextMessage
     , editEncryptedUserTextMessage
     , editUserTextMessage
     , encryptedUserTextMessageFrontend
@@ -242,6 +243,29 @@ editEncryptedUserTextMessage :
     -> EncryptedUserTextMessageData messageId userId
 editEncryptedUserTextMessage time fileHashes newContent data =
     { data | editedAt = Just time, content = newContent, fileHashes = fileHashes }
+
+
+{-| An edit made from a session that has the private key, to a message that is sitting in
+the conversation as plain text. That happens when the message was written from a session
+without the key, which can only write in plain text, so the edit is also what turns the
+message into an encrypted one.
+-}
+editAndEncryptUserTextMessage :
+    Time.Posix
+    -> SeqSet FileHash
+    -> EncryptedData (MessageContent userId)
+    -> UserTextMessageData messageId userId
+    -> EncryptedUserTextMessageData messageId userId
+editAndEncryptUserTextMessage time fileHashes newContent data =
+    { createdAt = data.createdAt
+    , createdBy = data.createdBy
+    , content = newContent
+    , fileHashes = fileHashes
+    , reactions = data.reactions
+    , editedAt = Just time
+    , repliedTo = data.repliedTo
+    , drawings = data.drawings
+    }
 
 
 editUserTextMessage :
