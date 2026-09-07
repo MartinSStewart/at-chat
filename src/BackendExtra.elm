@@ -2064,7 +2064,7 @@ sendEncryptedDm time clientId changeId id fileHashes contentAndEmbeds threadRout
                                 |> Tuple.mapFirst NoThreadWithMessage
 
                 ( sessions, notificationCmd ) =
-                    Broadcast.encryptedDmNotification time session.userId id model
+                    Broadcast.encryptedDmNotification time session.userId id contentAndEmbeds model
             in
             ( { model
                 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
