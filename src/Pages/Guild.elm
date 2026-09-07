@@ -2738,7 +2738,6 @@ privateKeyInput otherUserId prompt keyInput =
         , Ui.Input.currentPassword
             [ Ui.background MyUi.inputBackground
             , Ui.paddingXY 8 8
-            , Ui.widthMax 300
             , Ui.borderColor MyUi.inputBorder
             ]
             { text = keyInput.text
@@ -2747,7 +2746,7 @@ privateKeyInput otherUserId prompt keyInput =
             , label = keyLabel.id
             , show = False
             }
-            |> Ui.el [ ChannelHeader.e2eeRequestDot ]
+            |> Ui.el [ ChannelHeader.e2eeRequestDot, Ui.widthMax 300 ]
         , case keyInput.error of
             Just error ->
                 Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text error)
@@ -5100,6 +5099,19 @@ conversationContainerId =
     Dom.id "conversationContainer"
 
 
+emojiSelectorPaddingX : Int
+emojiSelectorPaddingX =
+    4
+
+
+emojiSelectorX isMobile model =
+    if isMobile then
+        Coord.xRaw model.windowSize - emojiSelectorPaddingX * 2
+
+    else
+        Coord.xRaw model.windowSize - MyUi.channelAndGuildColumnWidth model.windowSize - emojiSelectorPaddingX * 2
+
+
 emojiSelector :
     Bool
     -> SeqSet (Id CustomEmojiId)
@@ -5113,63 +5125,22 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
         emojiConfig : EmojiConfig
         emojiConfig =
             local.localUser.user.emojiConfig
-
-        paddingX : number
-        paddingX =
-            4
-
-        x : Int
-        x =
-            if isMobile then
-                Coord.xRaw model.windowSize - paddingX * 2
-
-            else
-                Coord.xRaw model.windowSize - MyUi.channelAndGuildColumnWidth model.windowSize - paddingX * 2
-
-        {- Reacting doesn't happen anywhere in particular, so the selector opens along the
-           bottom rather than pointing at whatever was pressed.
-        -}
-        atBottomOfTheConversation : Ui.Attribute FrontendMsg_
-        atBottomOfTheConversation =
-            Ui.inFront
-                (Emoji.selector
-                    model.startupData.scrollbarWidth
-                    x
-                    loggedIn.emojiSelector
-                    emojiConfig
-                    model.emojiData
-                    availableCustomEmojis
-                    local.localUser.customEmojis
-                    availableStickers
-                    local.localUser.stickers
-                    |> Ui.el
-                        [ Ui.alignBottom
-                        , Ui.paddingXY paddingX 0
-                        , if isMobile then
-                            Ui.width Ui.fill
-
-                          else
-                            Ui.width Ui.shrink
-                        , emojiSelectorZIndex
-                        ]
-                    |> Ui.map EmojiSelectorMsg
-                )
     in
     case loggedIn.showEmojiSelector of
         EmojiSelectorHidden ->
             Ui.noAttr
 
         EmojiSelectorForReaction _ _ ->
-            atBottomOfTheConversation
+            emojiSelectorAtBottomOfTheConversation isMobile availableCustomEmojis availableStickers local loggedIn model
 
         EmojiSelectorForSheepGameReaction _ _ _ ->
-            atBottomOfTheConversation
+            emojiSelectorAtBottomOfTheConversation isMobile availableCustomEmojis availableStickers local loggedIn model
 
         EmojiSelectorForMessage _ ->
             Ui.inFront
                 (Emoji.selector
                     model.startupData.scrollbarWidth
-                    x
+                    (emojiSelectorX isMobile model)
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
@@ -5179,7 +5150,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                     local.localUser.stickers
                     |> Ui.el
                         [ Ui.alignBottom
-                        , Ui.paddingXY paddingX 0
+                        , Ui.paddingXY emojiSelectorPaddingX 0
                         , if isMobile then
                             Ui.width Ui.fill
 
@@ -5198,7 +5169,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
             Ui.inFront
                 (Emoji.selector
                     model.startupData.scrollbarWidth
-                    x
+                    (emojiSelectorX isMobile model)
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
@@ -5207,7 +5178,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                     availableStickers
                     local.localUser.stickers
                     |> Ui.el
-                        [ Ui.paddingXY paddingX 0
+                        [ Ui.paddingXY emojiSelectorPaddingX 0
                         , Ui.move
                             { x = 0
                             , y =
@@ -5238,7 +5209,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
             Ui.inFront
                 (Emoji.selector
                     model.startupData.scrollbarWidth
-                    x
+                    (emojiSelectorX isMobile model)
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
@@ -5247,12 +5218,46 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                     availableStickers
                     local.localUser.stickers
                     |> Ui.el
-                        [ Ui.paddingXY paddingX 0
+                        [ Ui.paddingXY emojiSelectorPaddingX 0
                         , Ui.move { x = 0, y = y, z = 0 }
                         , emojiSelectorZIndex
                         ]
                     |> Ui.map EmojiSelectorMsg
                 )
+
+
+emojiSelectorAtBottomOfTheConversation :
+    Bool
+    -> SeqSet (Id CustomEmojiId)
+    -> SeqSet (Id StickerId)
+    -> LocalState
+    -> LoggedIn2
+    -> LoadedFrontend
+    -> Ui.Attribute FrontendMsg_
+emojiSelectorAtBottomOfTheConversation isMobile availableCustomEmojis availableStickers local loggedIn model =
+    Ui.inFront
+        (Emoji.selector
+            model.startupData.scrollbarWidth
+            (emojiSelectorX isMobile model)
+            loggedIn.emojiSelector
+            local.localUser.user.emojiConfig
+            model.emojiData
+            availableCustomEmojis
+            local.localUser.customEmojis
+            availableStickers
+            local.localUser.stickers
+            |> Ui.el
+                [ Ui.alignBottom
+                , Ui.paddingXY emojiSelectorPaddingX 0
+                , if isMobile then
+                    Ui.width Ui.fill
+
+                  else
+                    Ui.width Ui.shrink
+                , emojiSelectorZIndex
+                ]
+            |> Ui.map EmojiSelectorMsg
+        )
 
 
 emojiSelectorZIndex : Ui.Attribute msg

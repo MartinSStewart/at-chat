@@ -1,5 +1,6 @@
 module GuildColumn exposing
-    ( channelOrThreadHasNotifications
+    ( canChangeUnreadNotificationCount
+    , channelOrThreadHasNotifications
     , discordDmCurrentUserId
     , discordDmHasNotifications
     , discordGuildCurrentUserId
@@ -30,7 +31,7 @@ import OneOrGreater exposing (OneOrGreater)
 import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet
-import Types exposing (FrontendMsg_(..), LoadedFrontend)
+import Types exposing (FrontendMsg_(..), LoadedFrontend, LocalChange(..))
 import Ui exposing (Element)
 import Ui.Gradient
 import Ui.Lazy
@@ -677,6 +678,213 @@ unreadNotificationCount local =
                 local.discordGuilds
     in
     dmCount + discordDmCount + guildCount + discordGuildCount
+
+
+canChangeUnreadNotificationCount : LocalChange -> Bool
+canChangeUnreadNotificationCount change =
+    case change of
+        Local_Invalid ->
+            False
+
+        Local_Admin _ ->
+            True
+
+        Local_SendMessage _ _ _ _ _ _ _ ->
+            True
+
+        Local_Discord_SendMessage _ _ _ _ _ _ ->
+            True
+
+        Local_NewChannel _ _ _ _ ->
+            True
+
+        Local_EditChannel _ _ _ _ ->
+            False
+
+        Local_DeleteChannel _ _ ->
+            True
+
+        Local_EditGuildName _ _ ->
+            False
+
+        Local_DeleteGuild _ ->
+            True
+
+        Local_LeaveGuild _ ->
+            True
+
+        Local_NewInviteLink _ _ _ ->
+            False
+
+        Local_DeleteInviteLink _ _ ->
+            False
+
+        Local_NewGuild _ _ _ ->
+            True
+
+        -- Typing is recorded on the channel rather than as a message. This is the change
+        -- the badge was being recomputed for on nearly every keystroke.
+        Local_MemberTyping _ _ ->
+            False
+
+        Local_AddReactionEmoji _ _ _ ->
+            False
+
+        Local_RemoveReactionEmoji _ _ _ ->
+            False
+
+        Local_SendEditMessage _ _ _ _ _ _ ->
+            False
+
+        Local_Discord_SendEditGuildMessage _ _ _ _ _ _ _ ->
+            False
+
+        Local_Discord_SendEditDmMessage _ _ _ _ _ ->
+            False
+
+        Local_MemberEditTyping _ _ _ ->
+            False
+
+        Local_SetLastViewed _ _ ->
+            True
+
+        -- The message is replaced with a DeletedMessage rather than dropped, so the
+        -- channel is still the same number of messages long.
+        Local_DeleteMessage _ _ ->
+            False
+
+        Local_CurrentlyViewing _ _ ->
+            True
+
+        Local_SetName _ ->
+            False
+
+        -- Loading fills in messages that were already being counted but weren't held in
+        -- memory. MessageArray.setMany ignores anything outside the range the array
+        -- already spans, so the number of messages can't move.
+        Local_LoadChannelMessages _ _ _ ->
+            False
+
+        Local_LoadThreadMessages _ _ _ _ ->
+            False
+
+        Local_Discord_LoadChannelMessages _ _ _ ->
+            False
+
+        Local_Discord_LoadThreadMessages _ _ _ _ ->
+            False
+
+        Local_SetGuildNotificationLevel _ _ ->
+            True
+
+        Local_SetDiscordGuildNotificationLevel _ _ _ ->
+            True
+
+        Local_SetNotificationMode _ ->
+            False
+
+        Local_ExpandUserOptionSection _ ->
+            False
+
+        Local_CollapseUserOptionSection _ ->
+            False
+
+        Local_SetSheepGameQuestions _ ->
+            False
+
+        Local_SetEmailNotifications _ ->
+            False
+
+        Local_RegisterPushSubscription _ _ ->
+            False
+
+        Local_TextEditor _ ->
+            False
+
+        -- Which Discord users are linked decides which Discord guilds and DMs are ours to
+        -- count in the first place.
+        Local_UnlinkDiscordUser _ ->
+            True
+
+        Local_StartReloadingDiscordUser _ _ ->
+            True
+
+        Local_LinkDiscordAcknowledgementIsChecked _ ->
+            False
+
+        Local_SetDomainWhitelist _ _ ->
+            False
+
+        Local_SetEmojiSkinTone _ ->
+            False
+
+        Local_SetUserColor _ ->
+            False
+
+        Local_AddCustomEmojisToUser _ ->
+            False
+
+        Local_VoiceChatChange _ ->
+            True
+
+        -- Starting a match posts a message.
+        Local_Game _ _ ->
+            True
+
+        -- A drawing hangs off a message or a date divider without adding one.
+        Local_Drawing _ _ _ ->
+            False
+
+        Local_SetMuteChannel _ _ _ ->
+            True
+
+        Local_SetMuteThread _ _ _ _ ->
+            True
+
+        Local_SetMuteDiscordChannel _ _ _ _ ->
+            True
+
+        Local_SetMuteDiscordThread _ _ _ _ _ ->
+            True
+
+        Local_SetMuteGuild _ _ ->
+            True
+
+        Local_SetMuteDiscordGuild _ _ _ ->
+            True
+
+        Local_RequestE2ee _ ->
+            False
+
+        Local_DeclineE2eeRequestAsInitiator _ ->
+            False
+
+        Local_DeclineE2eeRequest _ ->
+            False
+
+        Local_SetPublicKey _ _ ->
+            False
+
+        Local_EncryptOldMessages _ _ ->
+            False
+
+        Local_DisableE2ee _ _ ->
+            False
+
+        Local_DecryptOldMessages _ _ _ ->
+            False
+
+        Local_SetE2eeRisksAccepted _ ->
+            False
+
+        Local_AcceptE2ee _ _ _ ->
+            False
+
+        Local_SendEncryptedMessage _ _ _ _ _ ->
+            True
+
+        Local_SendEncryptedEditMessage _ _ _ _ _ ->
+            False
 
 
 redNotificationCount : ChannelNotificationType -> Int

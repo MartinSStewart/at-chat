@@ -694,6 +694,70 @@ tests config =
             )
         ]
     , E2EHelper.startTest
+        "Edit a plain text message from a session that has the private key"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.openDm admin 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                        , respondToSharedSecretStored admin Broadcast.adminUserId
+                        , admin.click 100 (Dom.id "guild_hideMembers")
+
+                        -- Another session of the same account has no private key, so what
+                        -- it writes lands in the encrypted conversation as plain text.
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId1
+                            "/"
+                            E2EHelper.desktopWindow
+                            (\adminC ->
+                                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminC
+                                , adminC.click 100 (Dom.id "guild_friendLabel_0")
+                                , E2EHelper.writeMessage adminC 100 plainTextMessage
+                                , T.checkBackend 100 (checkSoloDmPlainTextStored plainTextMessage)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.exactText plainTextMessage ])
+
+                                -- Editing it from the session that does have the key is
+                                -- what turns it into an encrypted message.
+                                , editEncryptedMessage admin plainTextMessage editedMessage
+                                , T.checkBackend 100 (checkSoloDmMessageStored editedMessage)
+                                , T.checkBackend 100 (checkSoloDmHasNoPlainText editedMessage)
+                                , T.checkBackend 100 (checkSoloDmHasNoPlainText plainTextMessage)
+
+                                -- Editing replaces the message rather than adding one.
+                                , T.checkBackend 100 (checkSoloDmMessageCount 1)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.exactText editedMessage ])
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText plainTextMessage ])
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Decrypt the messages already in a conversation when the page loads"
         E2EHelper.startTime
         config
@@ -754,6 +818,84 @@ tests config =
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text backlogMessage ])
                                 , adminB.snapshotView 100 { name = "Backlog decrypted on page load" }
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Decrypt the messages already in a conversation when the private key is entered"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+                , E2EHelper.openDm admin 100 "0"
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_e2eeSection")
+                , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
+                , addPrivateKeyToAccount admin
+                    (\adminPrivateKey ->
+                        [ admin.click 100 (Dom.id "guild_enableE2ee")
+                        , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                        , respondToSharedSecretStored admin Broadcast.adminUserId
+                        , admin.click 100 (Dom.id "guild_hideMembers")
+                        , writeEncryptedMessage admin 100 backlogMessage
+                        , T.checkBackend 100 (checkSoloDmHasNoPlainText backlogMessage)
+
+                        -- A second device loads without the key for this conversation, so
+                        -- the message that is already in it stays unreadable.
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId0
+                            "/"
+                            E2EHelper.desktopWindow
+                            (\adminB ->
+                                [ T.andThen
+                                    10
+                                    (\data ->
+                                        [ adminB.portEvent
+                                            0
+                                            "load_startup_data_from_js"
+                                            (E2EHelper.startupDataJsonWithE2eeKeys
+                                                data.time
+                                                E2EHelper.firefoxDesktop
+                                                []
+                                            )
+                                        ]
+                                    )
+                                , adminB.click 100 (Dom.id "guild_friendLabel_0")
+
+                                -- Opening the conversation asks for its messages to be
+                                -- decrypted, which the browser can't do without the key.
+                                , respondToManyMessagesDecryptedFailed adminB
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text backlogMessage ])
+
+                                -- Typing the key in is enough on its own: the messages are
+                                -- decrypted without the page being reloaded first.
+                                , adminB.click 100 (Dom.id "guild_showMembers")
+                                , adminB.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
+                                , respondToSharedSecretStored adminB Broadcast.adminUserId
+                                , respondToManyMessagesDecrypted adminB
+                                , adminB.click 100 (Dom.id "guild_hideMembers")
+                                , adminB.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text backlogMessage ])
+                                , adminB.snapshotView
+                                    100
+                                    { name = "Backlog decrypted after entering the private key" }
                                 ]
                             )
                         ]
@@ -1577,6 +1719,11 @@ editEncryptedMessage user originalText editedText =
 editedMessage : String
 editedMessage =
     "Note to self, corrected"
+
+
+plainTextMessage : String
+plainTextMessage =
+    "Written from a session with no key"
 
 
 backlogMessage : String

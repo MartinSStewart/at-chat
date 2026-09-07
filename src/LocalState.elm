@@ -2261,6 +2261,23 @@ editEncryptedMessageHelperNoThread time editedBy fileHashes newContent messageIn
             else
                 Err ()
 
+        Just (UserTextMessage data) ->
+            if data.createdBy == editedBy then
+                { channel
+                    | messages =
+                        IdArray.set
+                            messageIndex
+                            (EncryptedUserTextMessage
+                                (Message.editAndEncryptUserTextMessage time fileHashes newContent data)
+                            )
+                            channel.messages
+                    , lastTypedAt = forgetEditTypingAt editedBy messageIndex channel.lastTypedAt
+                }
+                    |> Ok
+
+            else
+                Err ()
+
         _ ->
             Err ()
 
@@ -2310,6 +2327,23 @@ editEncryptedMessageFrontendHelperNoThread time editedBy fileHashes newContent m
                             messageIndex
                             (EncryptedUserTextMessage
                                 (Message.editEncryptedUserTextMessage time fileHashes newContent data)
+                            )
+                            channel.messages
+                    , lastTypedAt = forgetEditTypingAt editedBy messageIndex channel.lastTypedAt
+                }
+                    |> Ok
+
+            else
+                Err ()
+
+        Just (UserTextMessage data) ->
+            if data.createdBy == editedBy then
+                { channel
+                    | messages =
+                        MessageArray.set
+                            messageIndex
+                            (EncryptedUserTextMessage
+                                (Message.editAndEncryptUserTextMessage time fileHashes newContent data)
                             )
                             channel.messages
                     , lastTypedAt = forgetEditTypingAt editedBy messageIndex channel.lastTypedAt
