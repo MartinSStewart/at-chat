@@ -1766,7 +1766,7 @@ e2eeRequestNotification time requestedBy { otherUserId } model =
                         Nothing ->
                             Env.domain ++ "/at-logo-no-background.png"
                     )
-                    e2eeRequestText
+                    (UnencryptedBody e2eeRequestText)
                     e2eeRequestText
                     (Email.Html.text e2eeRequestText)
                     (DmRoute
