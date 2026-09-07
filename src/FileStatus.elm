@@ -202,12 +202,12 @@ type EncryptedThumbnail
     | HasEncryptedThumbnail
 
 
+{-| OpaqueVariants
+-}
 type AesPrivateKey
     = AesPrivateKey Bytes
 
 
-{-| OpaqueVariants
--}
 aesPrivateKey : Bytes -> AesPrivateKey
 aesPrivateKey =
     AesPrivateKey

@@ -5104,6 +5104,7 @@ emojiSelectorPaddingX =
     4
 
 
+emojiSelectorX : Bool -> LoadedFrontend -> Int
 emojiSelectorX isMobile model =
     if isMobile then
         Coord.xRaw model.windowSize - emojiSelectorPaddingX * 2
