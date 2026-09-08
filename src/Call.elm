@@ -1294,6 +1294,7 @@ type ToJs
     | ToJs_StartLocalStream StartLocalStreamData
     | ToJs_StopLocalStream
     | ToJs_SetVolume ConnectionId Float
+    | ToJs_DebugDataRequest
 
 
 type alias StartLocalStreamData =
@@ -1372,43 +1373,46 @@ peerJoinedArgsCodec =
 voiceChatToJsCodec : Codec ToJs
 voiceChatToJsCodec =
     Codec.custom
-        (\eStartCall eLeaveCall ePeerJoined ePeerLeft eSetMuted eSetAudioInput eSetVideoPaused eSetPeerVideoPaused eGetMediaDevices eStartLocalStream eStopLocalStream eSetVolume value ->
+        (\eA eB eC eD eF eG eH eI eJ eK eL eM eN value ->
             case value of
                 ToJs_StartCall a ->
-                    eStartCall a
+                    eA a
 
                 ToJs_LeaveCall ->
-                    eLeaveCall
+                    eB
 
                 ToJs_PeerJoined a ->
-                    ePeerJoined a
+                    eC a
 
                 ToJs_PeerLeft a ->
-                    ePeerLeft a
+                    eD a
 
                 ToJs_SetAudioInputEnabled a ->
-                    eSetMuted a
+                    eF a
 
                 ToJs_SetInput a b ->
-                    eSetAudioInput a b
+                    eG a b
 
                 ToJs_SetVideoInputEnabled a ->
-                    eSetVideoPaused a
+                    eH a
 
                 ToJs_SetPeerVideoInputEnabled a b ->
-                    eSetPeerVideoPaused a b
+                    eI a b
 
                 ToJs_GetMediaDevices ->
-                    eGetMediaDevices
+                    eJ
 
                 ToJs_StartLocalStream a ->
-                    eStartLocalStream a
+                    eK a
 
                 ToJs_StopLocalStream ->
-                    eStopLocalStream
+                    eL
 
                 ToJs_SetVolume a b ->
-                    eSetVolume a b
+                    eM a b
+
+                ToJs_DebugDataRequest ->
+                    eN
         )
         |> Codec.variant1 "start-call" ToJs_StartCall startCallDataCodec
         |> Codec.variant0 "leave-call" ToJs_LeaveCall
@@ -1422,6 +1426,7 @@ voiceChatToJsCodec =
         |> Codec.variant1 "start-local-stream" ToJs_StartLocalStream startLocalStreamDataCodec
         |> Codec.variant0 "stop-local-stream" ToJs_StopLocalStream
         |> Codec.variant2 "set-volume" ToJs_SetVolume connectionIdCodec Codec.float
+        |> Codec.variant0 "debug-data-request" ToJs_DebugDataRequest
         |> Codec.buildCustom
 
 

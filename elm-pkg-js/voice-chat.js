@@ -907,6 +907,8 @@ exports.init = async function init(app) {
             await startLocalStream(msg.args[0]);
         } else if (msg.tag === "stop-local-stream") {
             await stopLocalStream();
+        } else if (msg.tag === "debug-data-request") {
+            // TODO
         }
     });
 

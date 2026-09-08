@@ -127,7 +127,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                         ]
                     , Ui.row
                         [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-                        [ voiceChatButton
+                        [ callTab
                             isMobile
                             (Route.toChannelHeaderTab model.route)
                             (GuildRoomId { guildId = guildId, channelId = channelId })
@@ -608,7 +608,7 @@ dmHeaderButtons isMobile route showSettingsRedDot currentTab otherUserId local =
     in
     Ui.row
         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-        [ voiceChatButton isMobile currentTab (DmRoomId { otherUserId = otherUserId }) local.localUser local.calls
+        [ callTab isMobile currentTab (DmRoomId { otherUserId = otherUserId }) local.localUser local.calls
         , Ui.Lazy.lazy2 gameButton isMobile currentTab
         , drawingTab isMobile currentTab (dmChannelSettingsTab2 == Nothing)
         , dmChannelSettingsTab2 |> Maybe.withDefault Ui.none
@@ -681,8 +681,8 @@ gameButton isMobile currentTab =
         (Ui.el [ MyUi.hoverText "Games" ] (Ui.html Icons.go))
 
 
-voiceChatButton : Bool -> Maybe ChannelHeaderTab -> CallId -> LocalUser -> Call.Local -> Element FrontendMsg_
-voiceChatButton isMobile currentTab roomId localUser calls =
+callTab : Bool -> Maybe ChannelHeaderTab -> CallId -> LocalUser -> Call.Local -> Element FrontendMsg_
+callTab isMobile currentTab roomId localUser calls =
     let
         joinedUsers : SeqDict (Id UserId) OneOrGreater
         joinedUsers =
@@ -725,7 +725,7 @@ voiceChatButton isMobile currentTab roomId localUser calls =
                                     , Html.Attributes.attribute "aria-label" (PersonName.toString user.name ++ " is in a call")
                                         |> Ui.htmlAttribute
                                     ]
-                                    (User.profileImage (Just user))
+                                    (User.smallProfileImage (Just user))
 
                             Nothing ->
                                 Ui.none
