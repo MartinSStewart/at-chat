@@ -3528,9 +3528,6 @@ updateLoaded msg model =
                                 , encrypted
                                 )
                             of
-                                -- A new message goes over as two: the message itself and the
-                                -- line its push notification shows, in that order (see
-                                -- Encryption.encryptMessageAndNotification).
                                 ( Just pending, [ cipherText, notification ] ) ->
                                     let
                                         draft : ( AnyGuildOrDmId, ThreadRoute )

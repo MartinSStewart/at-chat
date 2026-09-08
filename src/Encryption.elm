@@ -250,18 +250,6 @@ encryptManyMessages requestId id dataCodec messages =
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
 
 
-{-| Encrypts a message along with the line its push notification should show.
-
-The server can't read an encrypted message, so it can't write the notification either. The
-sending device is the one that can: it knows the message and it knows everyone's names, so
-it writes the line here and encrypts it with the same conversation key. The recipient's
-service worker only has to decrypt it and read it as text (see `public/service-worker.js`),
-which is why the notification half is plain UTF-8 with nothing wrapped around it.
-
-Both go over in one request so there is a single round trip to the browser and the two
-ciphertexts arrive together, in this order.
-
--}
 encryptMessageAndNotification :
     Id EncryptManyRequestId
     -> Viewing_DmId
