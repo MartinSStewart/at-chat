@@ -1762,7 +1762,7 @@ connectionsSection isMobile timezone user adminData =
 
           else
             Ui.column
-                [ Ui.spacing 4 ]
+                [ Ui.spacing 16 ]
                 (List.map
                     (\( sessionIdHash, clients ) ->
                         Ui.column
