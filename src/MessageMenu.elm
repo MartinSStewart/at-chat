@@ -738,6 +738,13 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                 )
                 (PressedCopyText text)
                 |> ButtonItem
+            , button
+                isMobile
+                (Dom.id "messageMenu_markAsUnread")
+                Icons.backward
+                "Mark as unread"
+                (MessageMenu_PressedMarkAsUnread guildOrDmId threadRoute)
+                |> ButtonItem
             , case maybeImageUrl of
                 Just imageUrl ->
                     GroupItem
@@ -754,13 +761,6 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
                 Nothing ->
                     NoItem
-            , button
-                isMobile
-                (Dom.id "messageMenu_markAsUnread")
-                Icons.backward
-                "Mark as unread"
-                (MessageMenu_PressedMarkAsUnread guildOrDmId threadRoute)
-                |> ButtonItem
             , case newCustomEmojiIds of
                 Just newCustomEmojiIds2 ->
                     button
