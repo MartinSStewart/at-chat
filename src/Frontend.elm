@@ -357,6 +357,8 @@ subscriptions _ model =
 
                                             MessageMenuFixed _ ->
                                                 Subscription.none
+                                , Call.debugDataSubscription loggedIn.voiceChat
+                                    |> Subscription.map VoiceChatMsg
                                 , ImageEditor.subscriptions |> Subscription.map ProfilePictureEditorMsg
                                 , case loggedIn.guildIconEditor of
                                     Just ( guildId, _ ) ->
@@ -4905,6 +4907,16 @@ updateLoaded msg model =
                                     , Command.none
                                     )
 
+                                Call.FromJs_DebugData sections ->
+                                    let
+                                        voiceChat : Call.Model
+                                        voiceChat =
+                                            loggedIn.voiceChat
+                                    in
+                                    ( { loggedIn | voiceChat = { voiceChat | debugData = sections } }
+                                    , Command.none
+                                    )
+
                         Err error ->
                             let
                                 _ =
@@ -5214,6 +5226,34 @@ updateLoaded msg model =
                             )
                         )
                         model
+
+                Call.PressedToggleDebugData ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : Call.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+
+                                pollDebugData : Bool
+                                pollDebugData =
+                                    not voiceChat.pollDebugData
+                            in
+                            ( { loggedIn
+                                | voiceChat = { voiceChat | pollDebugData = pollDebugData, debugData = [] }
+                              }
+                            , -- Without this the panel would sit empty until the first tick.
+                              if pollDebugData then
+                                Call.toJs Call.ToJs_DebugDataRequest
+
+                              else
+                                Command.none
+                            )
+                        )
+                        model
+
+                Call.PolledDebugData ->
+                    ( model, Call.toJs Call.ToJs_DebugDataRequest )
 
                 Call.DoubleClickedVideoNode ->
                     case model.loginStatus of

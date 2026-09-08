@@ -925,6 +925,14 @@ mockVoiceChatPorts request =
                     -- JS sets element.volume. No response.
                     Nothing
 
+                Call.ToJs_DebugDataRequest ->
+                    -- Nothing here holds the state the real JS reports on, so
+                    -- this stands in for it.
+                    fromJsEvent
+                        (Call.FromJs_DebugData
+                            [ { title = "Call", rows = [ { label = "in a call", value = "true" } ] } ]
+                        )
+
         Err error ->
             let
                 _ =
