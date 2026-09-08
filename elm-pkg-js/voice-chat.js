@@ -100,8 +100,8 @@ exports.init = async function init(app) {
     // the wrong one produces no picture and no error worth acting on.
     const VIDEO = 0;
     const AUDIO = 1;
-
-    const CODECS = ["avc1.42001E", "vp8"];
+    // vp8 goes first because on Linux Mint OS Xfce avc1 will be reported as supported and then fail when used.
+    const CODECS = ["vp8","avc1.42001E"];
     const HEADER_AFTER_SENDER = 11;
 
     const textEncoder = new TextEncoder();
@@ -144,8 +144,8 @@ exports.init = async function init(app) {
     // the first, Chrome has both.
     async function pickVideoCodec(width, height) {
         const candidates = [
-            { codec: CODECS[0], avc: { format: "annexb" } },
-            { codec: CODECS[1] },
+            { codec: CODECS[0] },
+            { codec: CODECS[1], avc: { format: "annexb" } },
         ];
         for (let index = 0; index < candidates.length; index++) {
             const config = Object.assign({
