@@ -102,6 +102,72 @@ async function incrementAppBadge() {
     }
 }
 
+// Conversation keys, written by the page as two people agree on one (see e2eeWithStore in
+// elm-pkg-js/stuff.js). Each entry is a non-exportable AES-GCM CryptoKey filed under the
+// other participant's user id, so an encrypted push can be opened here without the raw key
+// ever being readable by anything.
+const e2eeDbName = "at-chat-e2ee";
+const e2eeStoreName = "dm-keys";
+
+function e2eeOpenDb() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(e2eeDbName, 1);
+        request.onerror = () => reject(request.error);
+        request.onupgradeneeded = () => {
+            // The page normally creates the store first. Creating it here too means a push
+            // that arrives before this browser has ever agreed a key opens an empty store
+            // rather than a database with no store in it.
+            if (!request.result.objectStoreNames.contains(e2eeStoreName)) {
+                request.result.createObjectStore(e2eeStoreName);
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+    });
+}
+
+function readConversationKey(otherUserId) {
+    return e2eeOpenDb().then(db => new Promise((resolve, reject) => {
+        const transaction = db.transaction(e2eeStoreName, "readonly");
+        const request = transaction.objectStore(e2eeStoreName).get(otherUserId);
+        request.onerror = () => { db.close(); reject(request.error); };
+        request.onsuccess = () => { db.close(); resolve(request.result); };
+    }));
+}
+
+// What an encrypted push should say, or null when this device can't say: it never agreed a
+// key for that conversation, or the key it has doesn't open this one. The caller shows the
+// server's own wording instead, which says that something arrived without saying what.
+//
+// The sender wrote this line and encrypted it along with the message (see
+// Encryption.encryptMessageAndNotification), so what comes out is the text itself with
+// nothing wrapped around it.
+async function decryptNotificationBody(sentBy, encryptedBody) {
+    if (typeof sentBy !== "number" || typeof encryptedBody !== "string") {
+        return null;
+    }
+
+    try {
+        const key = await readConversationKey(sentBy);
+
+        if (!key) {
+            return null;
+        }
+
+        const bytes = Uint8Array.from(atob(encryptedBody), (character) => character.charCodeAt(0));
+
+        // A fresh IV per message, sitting in front of the ciphertext (see the
+        // encrypt-message branch of elm-pkg-js/stuff.js, which is what wrote this).
+        const plainText = await crypto.subtle.decrypt(
+            { name: "AES-GCM", iv: bytes.slice(0, 12) }, key, bytes.slice(12));
+
+        return new TextDecoder().decode(plainText);
+    }
+    catch (error) {
+        log("Notification decryption error: " + error.message);
+        return null;
+    }
+}
+
 // Register event listener for the 'push' event.
 self.addEventListener('push', function(event) {
     // The badge write is async, so the work has to be wrapped in waitUntil to stop
@@ -111,9 +177,16 @@ self.addEventListener('push', function(event) {
         {
             const data = event.data.json().notification;
 
+            // An encrypted message is one the server couldn't read, so the sender encrypted
+            // the notification too and the server passed it along. Opening it here is what
+            // makes the notification say what was actually said.
+            const decrypted = data.encrypted_body === undefined
+                ? null
+                : await decryptNotificationBody(data.sent_by, data.encrypted_body);
+
             await self.registration.showNotification(
                 data.title,
-                { body: data.body
+                { body: decrypted === null ? data.body : decrypted
                 , icon: data.icon
                 , data: data.data
                 });

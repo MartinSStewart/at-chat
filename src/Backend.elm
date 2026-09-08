@@ -5304,7 +5304,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             session.userId
                                             time
                                             "Success!"
-                                            "Push notifications enabled"
+                                            (Broadcast.UnencryptedBody "Push notifications enabled")
                                             "https://at-chat.app/at-logo-no-background.png"
                                             Nothing
                                             subscribeData
@@ -6250,7 +6250,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
-                Local_SendEncryptedMessage _ id fileHashes content threadRoute ->
+                Local_SendEncryptedMessage _ id fileHashes content notification threadRoute ->
                     BackendExtra.asDmUser
                         model
                         sessionId
@@ -6265,6 +6265,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         id
                                         fileHashes
                                         content
+                                        notification
                                         threadRoute
                                         session
                                         user
@@ -7545,7 +7546,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                             userId
                                             title
                                             (Env.domain ++ "/word-spelling-game-preview.webp")
-                                            pushNotificationText
+                                            (Broadcast.UnencryptedBody pushNotificationText)
                                             emailText
                                             emailHtml
                                             (Just notificationRoute)

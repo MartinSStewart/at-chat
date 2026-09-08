@@ -540,6 +540,8 @@ async fn push_notification_endpoint(
         private_key,
         title,
         body,
+        encrypted_body,
+        sent_by,
         icon,
         navigate,
         data,
@@ -550,8 +552,15 @@ async fn push_notification_endpoint(
     // You would likely get this by deserializing a browser `pushSubscription` object.
     let subscription_info: SubscriptionInfo = SubscriptionInfo::new(endpoint, p256dh, auth);
 
-    let content: Notification<String> =
-        Notification::new(title, navigate, Some(body), Some(icon), data);
+    let content: Notification<String> = Notification::new(
+        title,
+        navigate,
+        Some(body),
+        Some(icon),
+        data,
+        encrypted_body,
+        sent_by,
+    );
 
     let key = match web_push::VapidSignatureBuilder::from_base64(&private_key, &subscription_info) {
         Ok(key2) => key2,
@@ -1438,6 +1447,12 @@ pub struct Notification<D> {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub actions: Option<Vec<NotificationAction>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encrypted_body: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sent_by: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1457,6 +1472,8 @@ impl<D: Serialize> Notification<D> {
         body: Option<String>,
         icon: Option<String>,
         data: Option<D>,
+        encrypted_body: Option<String>,
+        sent_by: Option<f64>,
     ) -> Self {
         Self {
             title,
@@ -1475,6 +1492,8 @@ impl<D: Serialize> Notification<D> {
             require_interaction: None,
             data,
             actions: None,
+            encrypted_body,
+            sent_by,
         }
     }
 
@@ -1508,6 +1527,8 @@ pub struct PushNotification {
     pub private_key: String,
     pub title: String,
     pub body: String,
+    pub encrypted_body: Option<String>,
+    pub sent_by: Option<f64>,
     pub icon: String,
     pub navigate: String,
     pub data: Option<String>,

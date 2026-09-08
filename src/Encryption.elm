@@ -14,11 +14,13 @@ port module Encryption exposing
     , encryptFile
     , encryptManyMessages
     , encryptMessage
+    , encryptMessageAndNotification
     , encryptedData
     , fromJs
     , fromJsCodec
     , hash
     , info
+    , notificationText
     , storeFileKeys
     , storeSharedSecret
     , toBase64
@@ -44,6 +46,7 @@ import Array
 import Base64
 import Bytes exposing (Bytes)
 import Bytes.Decode
+import Bytes.Encode
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
@@ -245,6 +248,49 @@ encryptManyMessages requestId id dataCodec messages =
             }
         )
         |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
+
+
+{-| Encrypts a message along with the line its push notification should show.
+
+The server can't read an encrypted message, so it can't write the notification either. The
+sending device is the one that can: it knows the message and it knows everyone's names, so
+it writes the line here and encrypts it with the same conversation key. The recipient's
+service worker only has to decrypt it and read it as text (see `public/service-worker.js`),
+which is why the notification half is plain UTF-8 with nothing wrapped around it.
+
+Both go over in one request so there is a single round trip to the browser and the two
+ciphertexts arrive together, in this order.
+
+-}
+encryptMessageAndNotification :
+    Id EncryptManyRequestId
+    -> Viewing_DmId
+    -> Serialize.Codec e a
+    -> a
+    -> String
+    -> Command FrontendOnly toMsg msg
+encryptMessageAndNotification requestId id dataCodec message notification =
+    Serialize.encodeToBytes
+        (toJsCodec Serialize.unit)
+        (ToJs_EncryptManyMessages
+            { requestId = requestId
+            , otherUserId = id.otherUserId
+            , data =
+                [ Serialize.encodeToBytesWithoutVersion dataCodec message
+                , Bytes.Encode.encode (Bytes.Encode.string notification)
+                ]
+            }
+        )
+        |> Command.sendToJsBytes "encryption_to_js" encryption_to_js
+
+
+{-| The type parameter says what a ciphertext decrypts to, and the port hands back both
+halves of `encryptMessageAndNotification` under whichever one the request was made with.
+This puts the right one on the notification half.
+-}
+notificationText : EncryptedData a -> EncryptedData String
+notificationText (EncryptedData bytes) =
+    EncryptedData bytes
 
 
 decryptManyMessages : Id DecryptManyRequestId -> Viewing_DmId -> List (EncryptedData a) -> Command FrontendOnly toMsg msg

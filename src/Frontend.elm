@@ -3449,12 +3449,8 @@ updateLoaded msg model =
                             ( { loggedIn | e2eeError = Just error }, Command.none )
 
                         Ok (Encryption.FromJs_NewMessageEncrypted requestId cipherText) ->
-                            case
-                                ( SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedEdits
-                                , SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedMessages
-                                )
-                            of
-                                ( Just pending, _ ) ->
+                            case SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedEdits of
+                                Just pending ->
                                     FrontendExtra.handleLocalChange
                                         model.time
                                         (Local_SendEncryptedEditMessage
@@ -3477,47 +3473,7 @@ updateLoaded msg model =
                                         )
                                         (FrontendExtra.storeDecryptedFileKeys [ Ok pending.contentAndEmbeds ])
 
-                                ( Nothing, Just pending ) ->
-                                    let
-                                        draft : ( AnyGuildOrDmId, ThreadRoute )
-                                        draft =
-                                            ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = pending.otherUserId })
-                                            , Id.threadRouteWithoutMaybeMessage pending.threadRoute
-                                            )
-                                    in
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (Local_SendEncryptedMessage
-                                            model.time
-                                            { otherUserId = pending.otherUserId }
-                                            (SeqDict.values pending.contentAndEmbeds.attachedFiles
-                                                |> List.map .fileHash
-                                                |> SeqSet.fromList
-                                            )
-                                            cipherText
-                                            pending.threadRoute
-                                            |> Just
-                                        )
-                                        (FrontendExtra.fileDecryptedMessages
-                                            [ ( Encryption.hash cipherText, Ok pending.contentAndEmbeds ) ]
-                                            (FrontendExtra.mapEncryptionRequests
-                                                (forgetEncryptRequest requestId)
-                                                { loggedIn
-                                                    | drafts = SeqDict.remove draft loggedIn.drafts
-                                                    , replyTo = SeqDict.remove draft loggedIn.replyTo
-                                                    , filesToUpload = SeqDict.remove draft loggedIn.filesToUpload
-                                                }
-                                            )
-                                        )
-                                        (Command.batch
-                                            [ Scroll.toBottomOfChannel
-                                                Pages.Guild.conversationContainerId
-                                                SetScrollToBottom
-                                            , FrontendExtra.storeDecryptedFileKeys [ Ok pending.contentAndEmbeds ]
-                                            ]
-                                        )
-
-                                ( Nothing, Nothing ) ->
+                                Nothing ->
                                     ( loggedIn, Command.none )
 
                         Ok (Encryption.FromJs_NewMessageEncryptFailed requestId error) ->
@@ -3567,56 +3523,57 @@ updateLoaded msg model =
                                     handleManyMessagesDecrypted requestId results loggedIn
 
                         Ok (Encryption.FromJs_ManyMessagesEncrypted requestId encrypted) ->
-                            case SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedManyMessages of
-                                Just pending ->
+                            case
+                                ( SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedMessages
+                                , encrypted
+                                )
+                            of
+                                -- A new message goes over as two: the message itself and the
+                                -- line its push notification shows, in that order (see
+                                -- Encryption.encryptMessageAndNotification).
+                                ( Just pending, [ cipherText, notification ] ) ->
                                     let
-                                        pairs :
-                                            List
-                                                ( ( ThreadRouteWithMessage, MessageContent (Id UserId) )
-                                                , Encryption.EncryptedData (MessageContent (Id UserId))
-                                                )
-                                        pairs =
-                                            List.map2
-                                                Tuple.pair
-                                                pending.messages
-                                                encrypted
+                                        draft : ( AnyGuildOrDmId, ThreadRoute )
+                                        draft =
+                                            ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = pending.otherUserId })
+                                            , Id.threadRouteWithoutMaybeMessage pending.threadRoute
+                                            )
                                     in
                                     FrontendExtra.handleLocalChange
                                         model.time
-                                        (List.map
-                                            (\( ( threadRoute, content ), encryptedData ) ->
-                                                ( threadRoute
-                                                , SeqDict.values content.attachedFiles
-                                                    |> List.map .fileHash
-                                                    |> SeqSet.fromList
-                                                , encryptedData
-                                                )
+                                        (Local_SendEncryptedMessage
+                                            model.time
+                                            { otherUserId = pending.otherUserId }
+                                            (SeqDict.values pending.contentAndEmbeds.attachedFiles
+                                                |> List.map .fileHash
+                                                |> SeqSet.fromList
                                             )
-                                            pairs
-                                            |> Local_EncryptOldMessages pending.id
+                                            cipherText
+                                            (Encryption.notificationText notification)
+                                            pending.threadRoute
                                             |> Just
                                         )
                                         (FrontendExtra.fileDecryptedMessages
-                                            (List.map
-                                                (\( ( _, contentAndEmbeds ), encryptedData ) ->
-                                                    ( Encryption.hash encryptedData, Ok contentAndEmbeds )
-                                                )
-                                                pairs
-                                            )
+                                            [ ( Encryption.hash cipherText, Ok pending.contentAndEmbeds ) ]
                                             (FrontendExtra.mapEncryptionRequests
                                                 (forgetEncryptManyRequest requestId)
-                                                loggedIn
+                                                { loggedIn
+                                                    | drafts = SeqDict.remove draft loggedIn.drafts
+                                                    , replyTo = SeqDict.remove draft loggedIn.replyTo
+                                                    , filesToUpload = SeqDict.remove draft loggedIn.filesToUpload
+                                                }
                                             )
                                         )
-                                        (FrontendExtra.storeDecryptedFileKeys
-                                            (List.map
-                                                (\( ( _, contentAndEmbeds ), _ ) -> Ok contentAndEmbeds)
-                                                pairs
-                                            )
+                                        (Command.batch
+                                            [ Scroll.toBottomOfChannel
+                                                Pages.Guild.conversationContainerId
+                                                SetScrollToBottom
+                                            , FrontendExtra.storeDecryptedFileKeys [ Ok pending.contentAndEmbeds ]
+                                            ]
                                         )
 
-                                Nothing ->
-                                    ( loggedIn, Command.none )
+                                _ ->
+                                    manyMessagesEncrypted requestId encrypted model loggedIn
 
                         Ok (Encryption.FromJs_ManyMessagesEncryptFailed requestId error) ->
                             ( FrontendExtra.mapEncryptionRequests
@@ -9348,10 +9305,7 @@ both is what happens either way.
 -}
 forgetEncryptRequest : Id Encryption.EncryptRequestId -> EncryptionRequests -> EncryptionRequests
 forgetEncryptRequest requestId requests =
-    { requests
-        | pendingEncryptedMessages = SeqDict.remove requestId requests.pendingEncryptedMessages
-        , pendingEncryptedEdits = SeqDict.remove requestId requests.pendingEncryptedEdits
-    }
+    { requests | pendingEncryptedEdits = SeqDict.remove requestId requests.pendingEncryptedEdits }
 
 
 {-| Deleting an attachment cancels its upload, but there is nothing to cancel while the
@@ -9409,10 +9363,73 @@ forgetEncryptFileRequest requestId requests =
     { requests | pendingEncryptedFiles = SeqDict.remove requestId requests.pendingEncryptedFiles }
 
 
+{-| Ciphertexts for a whole conversation that is being encrypted after the fact, which is
+the other thing that goes over as many messages at once.
+-}
+manyMessagesEncrypted :
+    Id EncryptManyRequestId
+    -> List (Encryption.EncryptedData (MessageContent (Id UserId)))
+    -> LoadedFrontend
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+manyMessagesEncrypted requestId encrypted model loggedIn =
+    case SeqDict.get requestId loggedIn.encryptionRequests.pendingEncryptedManyMessages of
+        Just pending ->
+            let
+                pairs :
+                    List
+                        ( ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+                        , Encryption.EncryptedData (MessageContent (Id UserId))
+                        )
+                pairs =
+                    List.map2
+                        Tuple.pair
+                        pending.messages
+                        encrypted
+            in
+            FrontendExtra.handleLocalChange
+                model.time
+                (List.map
+                    (\( ( threadRoute, content ), encryptedData ) ->
+                        ( threadRoute
+                        , SeqDict.values content.attachedFiles
+                            |> List.map .fileHash
+                            |> SeqSet.fromList
+                        , encryptedData
+                        )
+                    )
+                    pairs
+                    |> Local_EncryptOldMessages pending.id
+                    |> Just
+                )
+                (FrontendExtra.fileDecryptedMessages
+                    (List.map
+                        (\( ( _, contentAndEmbeds ), encryptedData ) ->
+                            ( Encryption.hash encryptedData, Ok contentAndEmbeds )
+                        )
+                        pairs
+                    )
+                    (FrontendExtra.mapEncryptionRequests
+                        (forgetEncryptManyRequest requestId)
+                        loggedIn
+                    )
+                )
+                (FrontendExtra.storeDecryptedFileKeys
+                    (List.map
+                        (\( ( _, contentAndEmbeds ), _ ) -> Ok contentAndEmbeds)
+                        pairs
+                    )
+                )
+
+        Nothing ->
+            ( loggedIn, Command.none )
+
+
 forgetEncryptManyRequest : Id EncryptManyRequestId -> EncryptionRequests -> EncryptionRequests
 forgetEncryptManyRequest requestId requests =
     { requests
         | pendingEncryptedManyMessages = SeqDict.remove requestId requests.pendingEncryptedManyMessages
+        , pendingEncryptedMessages = SeqDict.remove requestId requests.pendingEncryptedMessages
     }
 
 
@@ -9777,8 +9794,8 @@ storeSharedSecret otherUserId privateKey loggedIn =
 
 
 {-| The edit can't be sent until the browser has encrypted it, so the request is remembered
-until the ciphertext comes back. Request ids are handed out by the same counter
-`startEncryptingMessage` uses, so one is only ever waiting on one of the two.
+until the ciphertext comes back. Editing doesn't notify anyone, so unlike
+`startEncryptingMessage` there is only the one thing to encrypt.
 -}
 startEncryptingEdit :
     Viewing_DmId
@@ -9818,14 +9835,18 @@ startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
             ( GuildOrDmId (GuildOrDmId_Dm id), threadRoute )
+
+        localUser : User.LocalUser
+        localUser =
+            (Local.model loggedIn.localState).localUser
     in
     ( FrontendExtra.mapEncryptionRequests
         (\requests ->
             { requests
-                | nextEncryptionRequestId = Id.increment requests.nextEncryptionRequestId
+                | nextEncryptManyRequestId = Id.increment requests.nextEncryptManyRequestId
                 , pendingEncryptedMessages =
                     SeqDict.insert
-                        requests.nextEncryptionRequestId
+                        requests.nextEncryptManyRequestId
                         { otherUserId = id.otherUserId
                         , threadRoute =
                             case threadRoute of
@@ -9842,9 +9863,18 @@ startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
             }
         )
         { loggedIn | e2eeError = Nothing }
-    , Encryption.encryptMessage
-        loggedIn.encryptionRequests.nextEncryptionRequestId
+    , Encryption.encryptMessageAndNotification
+        loggedIn.encryptionRequests.nextEncryptManyRequestId
         id
         Message.contentAndEmbedsCodec
         contentAndEmbeds
+        -- The server can't write the recipient's push notification for a message it can't
+        -- read, so the line it will show is written here, where the message and everyone's
+        -- names both are, and encrypted along with it.
+        (RichText.toString
+            localUser.timezone
+            True
+            (User.allUsers localUser)
+            contentAndEmbeds.content
+        )
     )

@@ -2561,7 +2561,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_AcceptE2ee _ _ _ ->
                     True
 
-                Local_SendEncryptedMessage _ _ _ _ _ ->
+                Local_SendEncryptedMessage _ _ _ _ _ _ ->
                     True
 
                 Local_SendEncryptedEditMessage _ _ _ _ _ ->
@@ -3092,6 +3092,7 @@ allAttackerLocalChanges =
         startTime
         { otherUserId = Broadcast.adminUserId }
         SeqSet.empty
+        (EncryptedData (Bytes.Encode.encode (Bytes.Encode.sequence [])))
         (EncryptedData (Bytes.Encode.encode (Bytes.Encode.sequence [])))
         (NoThreadWithMaybeMessage Nothing)
     , Local_SendEncryptedEditMessage

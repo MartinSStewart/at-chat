@@ -18,6 +18,7 @@ module E2EMisc exposing
     , profileImageOpensDm
     , reactionPopupNamesEmojiTest
     , reloadingAConversationLeavesItUnreadTest
+    , richTextMessage
     , startingACallOrGameStaysReadTest
     , staysReadWhileViewingTest
     , swipedAwayConversationStopsBeingViewedTest
@@ -51,6 +52,7 @@ import Message
 import MessageDropdown
 import NonemptyDict
 import Pages.Guild
+import Range exposing (Range)
 import RichText
 import Route exposing (ChannelsVisibleOnMobile(..))
 import SeqDict
@@ -2085,3 +2087,158 @@ withDrag model func =
 
         Types.Loading _ ->
             Err "Expected the frontend to have finished loading"
+
+
+richTextMessage : Bool -> T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+richTextMessage isMobile normalConfig =
+    E2EHelper.startTest
+        ("Message with bullet points and rich text formatting"
+            ++ (if isMobile then
+                    " (mobile)"
+
+                else
+                    ""
+               )
+        )
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            (if isMobile then
+                E2EHelper.iphone14Window
+
+             else
+                E2EHelper.desktopWindow
+            )
+            (\admin _ ->
+                let
+                    -- Uses bullet points along with various other rich text formatting.
+                    messageText : String
+                    messageText =
+                        "This line has *bold*, _italic_, __underline__, ~~strikethrough~~, ||spoiler|| and `inline code`.\n* First bullet point\n* Second bullet with *bold* text\n* Third bullet with a [link](https://elm-lang.org/)\n```elm\nadd a b =\n    a + b\n```\n```ascii\n════════════════════════════\n _,  ____ ____  ,-  \n¢ºº < Yo.│ No.> ··?\\\n/¥\\  ¯¯¯¯ ¯¯¯¯  /V\\ \n/¯|    ___      ´╥` \n░▒▓█```"
+
+                    -- Selections are looked up by substring so that they stay on the text they are
+                    -- meant to highlight when messageText is edited.
+                    selectionAround : String -> Range
+                    selectionAround substring =
+                        case String.indexes substring messageText of
+                            index :: _ ->
+                                { start = index, end = index + String.length substring }
+
+                            [] ->
+                                Debug.todo (substring ++ " isn't part of messageText so it can't be selected")
+
+                    -- On a phone the enter key writes a line break and the message is sent by
+                    -- pressing the button next to the input, so there is nothing for the
+                    -- keyboard shortcut to do there.
+                    sendMessage : T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                    sendMessage =
+                        if isMobile then
+                            admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
+
+                        else
+                            admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+
+                    -- Replying to a message is reached differently on each: hovering a message
+                    -- on a desktop brings up a row of buttons next to it, while on a phone there
+                    -- is nothing to hover and the message is long pressed to open a menu
+                    -- instead. The long press arrives as a contextmenu event, and the menu
+                    -- slides in, which is what the wait before pressing reply is for.
+                    replyToRichTextMessage : T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                    replyToRichTextMessage =
+                        if isMobile then
+                            T.group
+                                [ admin.custom
+                                    100
+                                    (Dom.id "guild_message_2")
+                                    "contextmenu"
+                                    (Json.Encode.object
+                                        [ ( "clientX", Json.Encode.float 50 )
+                                        , ( "clientY", Json.Encode.float 150 )
+                                        ]
+                                    )
+                                , admin.click 2000 (Dom.id "messageMenu_replyTo")
+                                ]
+
+                        else
+                            T.group
+                                [ admin.mouseEnter 100 (Dom.id "guild_message_2") ( 100, 100 ) []
+                                , admin.click 100 (Dom.id "miniView_reply")
+                                ]
+                in
+                [ -- Focus the channel text input and type the message.
+                  E2EHelper.focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.click 100 (Dom.id "channel_textinput")
+                , admin.input 100 (Dom.id "channel_textinput") "# Rich text demo"
+                , sendMessage
+                , admin.input 100 (Dom.id "channel_textinput") messageText
+
+                -- Snapshot the formatted preview while the message is still in the text input.
+                , E2EHelper.tallSnapshot admin 100 { name = "Rich text message in text input" }
+
+                -- The textarea is drawn on top of the rich text so that the caret stays visible,
+                -- which means the rich text draws the selection highlight itself. Check that the
+                -- highlight lands on the right text for a few different selections.
+                , E2EHelper.selectionEvent
+                    admin
+                    100
+                    (Dom.id "channel_textinput")
+                    (selectionAround "*bold*, _italic_, __underline__, ~~strikethrough~~, ||spoiler||")
+                , E2EHelper.tallSnapshot admin 100 { name = "Rich text selection across inline formatting" }
+                , E2EHelper.selectionEvent
+                    admin
+                    100
+                    (Dom.id "channel_textinput")
+                    (selectionAround "```elm\nadd a b =\n    a + b\n```")
+                , E2EHelper.tallSnapshot admin 100 { name = "Rich text selection over a code block" }
+                , E2EHelper.selectionEvent
+                    admin
+                    100
+                    (Dom.id "channel_textinput")
+                    (selectionAround "/)\n```el")
+                , E2EHelper.tallSnapshot admin 100 { name = "Rich text partial selection over a code block" }
+                , E2EHelper.selectionEvent
+                    admin
+                    100
+                    (Dom.id "channel_textinput")
+                    (selectionAround "First bullet point\n* Second bullet with *bold* text")
+                , E2EHelper.tallSnapshot admin 100 { name = "Rich text selection across bullet points" }
+
+                -- Send the message and snapshot how it renders in the channel.
+                , sendMessage
+                , E2EHelper.focusEvent admin 100 Nothing Nothing
+                , E2EHelper.tallSnapshot admin 1000 { name = "Rich text message after being sent" }
+
+                -- The bullet points should render in the same order they were written.
+                , admin.checkView
+                    100
+                    (\html ->
+                        html
+                            |> Test.Html.Query.find [ Test.Html.Selector.tag "ul" ]
+                            |> Test.Html.Query.findAll [ Test.Html.Selector.tag "li" ]
+                            |> Test.Html.Query.index 0
+                            |> Test.Html.Query.has [ Test.Html.Selector.text "First bullet point" ]
+                    )
+                , admin.checkView
+                    100
+                    (\html ->
+                        html
+                            |> Test.Html.Query.find [ Test.Html.Selector.tag "ul" ]
+                            |> Test.Html.Query.findAll [ Test.Html.Selector.tag "li" ]
+                            |> Test.Html.Query.index 2
+                            |> Test.Html.Query.has [ Test.Html.Selector.text "Third bullet with a " ]
+                    )
+                , replyToRichTextMessage
+                , admin.input 100 (Dom.id "channel_textinput") "Reply"
+                , sendMessage
+
+                -- The snapshot below is only worth looking at if there is a reply header in
+                -- it, and the two ways of starting a reply are easy to break one at a time,
+                -- so check the header is there rather than leaving it to the eye. The id
+                -- names the message being replied to.
+                , admin.checkView
+                    1000
+                    (Test.Html.Query.has [ Test.Html.Selector.id "guild_replyLink_2" ])
+                , E2EHelper.tallSnapshot admin 1000 { name = "Rich text message previewed in reply" }
+                ]
+            )
+        ]

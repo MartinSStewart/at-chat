@@ -880,7 +880,7 @@ canChangeUnreadNotificationCount change =
         Local_AcceptE2ee _ _ _ ->
             False
 
-        Local_SendEncryptedMessage _ _ _ _ _ ->
+        Local_SendEncryptedMessage _ _ _ _ _ _ ->
             True
 
         Local_SendEncryptedEditMessage _ _ _ _ _ ->

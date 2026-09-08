@@ -1052,9 +1052,10 @@ exports.init = async function init(app)
 
         outer.parentNode.removeChild(outer);
 
-        const isPwa = window.matchMedia('(display-mode: standalone)').matches ||
-            window.navigator.standalone === true ||
-            document.referrer.includes('android-app://');
+        // head.html decides this before the document is parsed, because whether the app is
+        // installed also decides whether the viewport covers the system UI. Reading its answer
+        // back here keeps the layout and the pwaStatus the Elm side sees in agreement.
+        const isPwa = window.isPwa === true;
 
         const insetProbe = document.createElement('div');
         insetProbe.style.position = 'fixed';

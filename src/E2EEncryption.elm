@@ -333,6 +333,11 @@ tests config =
                                 , admin.click 100 (Dom.id "guild_hideMembers")
                                 , E2EHelper.writeMessage admin 100 "Hello in secret"
                                 , T.checkBackend 100 (checkNoPlainTextReachedTheServer "Hello in secret")
+
+                                -- The line the recipient's push notification will show is
+                                -- written here rather than by the server, which can't read
+                                -- the message, and goes over to be encrypted alongside it.
+                                , T.checkState 100 (checkNotificationHandedOver admin "Hello in secret")
                                 , respondToMessageEncrypted admin
                                 , T.checkBackend 100 (checkEncryptedMessageStored "Hello in secret")
 
@@ -1918,6 +1923,10 @@ respondToSharedSecretStored client otherUserId =
         |> sendFromJs client
 
 
+{-| Sending a message hands the browser two things at once, the message and the line its
+push notification shows, while editing one hands over just the message. This answers
+whichever of the two was asked for.
+-}
 respondToMessageEncrypted :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
@@ -1934,6 +1943,10 @@ respondToMessageEncrypted client =
                 requestId
                 (Encryption.encryptedData (stubCipherText bytes))
         )
+        (\requestId messages ->
+            List.map (\bytes -> Encryption.encryptedData (stubCipherText bytes)) messages
+                |> Encryption.FromJs_ManyMessagesEncrypted requestId
+        )
 
 
 respondToEncryptionPortWithMissingKey :
@@ -1945,8 +1958,18 @@ respondToEncryptionPortWithMissingKey client =
         (\requestId _ ->
             Encryption.FromJs_NewMessageEncryptFailed
                 requestId
-                "No encryption key is stored on this device for that conversation"
+                missingKeyError
         )
+        (\requestId _ ->
+            Encryption.FromJs_ManyMessagesEncryptFailed
+                requestId
+                missingKeyError
+        )
+
+
+missingKeyError : String
+missingKeyError =
+    "No encryption key is stored on this device for that conversation"
 
 
 respondToMessageDecrypted :
@@ -2033,6 +2056,41 @@ respondToManyMessagesEncrypted client =
                 [] ->
                     [ T.checkState 0 (\_ -> Err "The client didn't ask for a conversation to be encrypted") ]
         )
+
+
+{-| What the client last asked the browser to encrypt as a push notification: the second
+half of a message's request (see Encryption.encryptMessageAndNotification). Reading it back
+as plain UTF-8 is the check that it is text the service worker can show, rather than
+something only Elm knows how to unpack.
+-}
+checkNotificationHandedOver :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> String
+    -> T.Data FrontendModel BackendModel2
+    -> Result String ()
+checkNotificationHandedOver client expected data =
+    case List.filterMap encryptManyRequest (encryptionPortRequests client.clientId data) of
+        ( _, [ _, notification ] ) :: _ ->
+            case Bytes.Decode.decode (Bytes.Decode.string (Bytes.width notification)) notification of
+                Just text ->
+                    if text == expected then
+                        Ok ()
+
+                    else
+                        Err ("The notification handed over was " ++ text ++ " rather than " ++ expected)
+
+                Nothing ->
+                    Err "The notification handed over isn't text"
+
+        ( _, messages ) :: _ ->
+            Err
+                ("A message should be handed over with its notification, but "
+                    ++ String.fromInt (List.length messages)
+                    ++ " things were"
+                )
+
+        [] ->
+            Err "The client didn't ask for a message to be encrypted"
 
 
 encryptManyRequest :
@@ -2146,21 +2204,36 @@ encryptionPortRequests clientId data =
 answerEncryptRequest :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
     -> (Id Encryption.EncryptRequestId -> MessageContent (Id UserId) -> Encryption.FromJs (MessageContent (Id UserId)))
+    -> (Id Encryption.EncryptManyRequestId -> List Bytes -> Encryption.FromJs (MessageContent (Id UserId)))
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-answerEncryptRequest client toReply =
+answerEncryptRequest client toReply toManyReply =
     T.andThen
         100
         (\data ->
-            case List.filterMap encryptRequest (encryptionPortRequests client.clientId data) of
-                [] ->
-                    [ T.checkState 0 (\_ -> Err "The client didn't ask for a message to be encrypted") ]
+            let
+                requests : List (Encryption.ToJs (MessageContent (Id UserId)))
+                requests =
+                    encryptionPortRequests client.clientId data
 
-                requests ->
+                replies : List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2)
+                replies =
                     List.map
                         (\( requestId, contentAndEmbeds ) ->
                             toReply requestId contentAndEmbeds |> sendFromJs client
                         )
-                        requests
+                        (List.filterMap encryptRequest requests)
+                        ++ List.map
+                            (\( requestId, messages ) ->
+                                toManyReply requestId messages |> sendFromJs client
+                            )
+                            (List.filterMap encryptManyRequest requests)
+            in
+            case replies of
+                [] ->
+                    [ T.checkState 0 (\_ -> Err "The client didn't ask for a message to be encrypted") ]
+
+                _ ->
+                    replies
         )
 
 

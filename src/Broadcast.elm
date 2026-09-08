@@ -1,5 +1,6 @@
 module Broadcast exposing
     ( PushNotification
+    , PushNotificationBody(..)
     , adminUserId
     , broadcastDm
     , discordDmNotification
@@ -54,6 +55,7 @@ import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
+import Encryption exposing (EncryptedData)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Id exposing (GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
@@ -915,7 +917,7 @@ notification time userToNotify title senderIcon userToString plainText message n
                             session.userId
                             time
                             title
-                            plainText
+                            (UnencryptedBody plainText)
                             (case senderIcon of
                                 Just icon ->
                                     FileStatus.fileUrl FileStatus.pngContent icon
@@ -944,7 +946,7 @@ notificationAlt :
     -> Id UserId
     -> NonemptyString
     -> String
-    -> String
+    -> PushNotificationBody
     -> String
     -> Email.Html.Html
     -> Maybe Route
@@ -1277,6 +1279,8 @@ type alias PushNotification =
     , privateKey : PrivateVapidKey
     , title : String
     , body : String
+    , encryptedBody : Maybe String
+    , sentBy : Maybe Int
     , icon : String
     , navigate : String
     , data : Maybe String
@@ -1291,9 +1295,11 @@ pushNotificationCodec =
         |> Codec.field "endpoint" .endpoint Codec.string
         |> Codec.field "p256dh" .p256dh Codec.string
         |> Codec.field "auth" .auth Codec.string
-        |> Codec.field "private_key" .privateKey privateKeyCodec
+        |> Codec.field "private_key" .privateKey privateVapidKeyCodec
         |> Codec.field "title" .title Codec.string
         |> Codec.field "body" .body Codec.string
+        |> Codec.field "encrypted_body" .encryptedBody (Codec.nullable Codec.string)
+        |> Codec.field "sent_by" .sentBy (Codec.nullable Codec.int)
         |> Codec.field "icon" .icon Codec.string
         |> Codec.field "navigate" .navigate Codec.string
         |> Codec.field "data" .data (Codec.nullable Codec.string)
@@ -1302,9 +1308,19 @@ pushNotificationCodec =
         |> Codec.buildObject
 
 
-privateKeyCodec : Codec PrivateVapidKey
-privateKeyCodec =
+privateVapidKeyCodec : Codec PrivateVapidKey
+privateVapidKeyCodec =
     Codec.map PrivateVapidKey (\(PrivateVapidKey a) -> a) Codec.string
+
+
+{-| What a push notification says. An encrypted message is one the server can't read, so
+there is nothing for it to write: the sender encrypted the line too, and it is forwarded for
+the device holding the conversation's key to open (see `public/service-worker.js`). The
+sender's id comes along because that is what the recipient's device filed the key under.
+-}
+type PushNotificationBody
+    = UnencryptedBody String
+    | EncryptedBody (Id UserId) (EncryptedData String)
 
 
 pushNotification :
@@ -1312,7 +1328,7 @@ pushNotification :
     -> Id UserId
     -> Time.Posix
     -> String
-    -> String
+    -> PushNotificationBody
     -> String
     -> Maybe Route
     -> SubscribeData
@@ -1341,7 +1357,30 @@ pushNotification sessionId userId time title body icon navigateTo subscribeData 
                 , auth = subscribeData.keys.auth
                 , privateKey = model.privateVapidKey
                 , title = title
-                , body = body
+                , -- Always readable. A device that never agreed a key for the conversation,
+                  -- or whose browser can't reach one from a service worker, shows this
+                  -- instead of the message.
+                  body =
+                    case body of
+                        UnencryptedBody text ->
+                            text
+
+                        EncryptedBody _ _ ->
+                            encryptedDmText
+                , encryptedBody =
+                    case body of
+                        UnencryptedBody _ ->
+                            Nothing
+
+                        EncryptedBody _ bytes ->
+                            Encryption.toBase64 bytes |> Just
+                , sentBy =
+                    case body of
+                        UnencryptedBody _ ->
+                            Nothing
+
+                        EncryptedBody senderId _ ->
+                            Id.toInt senderId |> Just
                 , icon = icon
                 , navigate = Maybe.withDefault Env.domain link
                 , data = link
@@ -1648,9 +1687,10 @@ encryptedDmNotification :
     Time.Posix
     -> Id UserId
     -> Viewing_DmId
+    -> EncryptedData String
     -> BackendModel
     -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
-encryptedDmNotification time senderId { otherUserId } model =
+encryptedDmNotification time senderId { otherUserId } notificationText model =
     let
         isViewing : Bool
         isViewing =
@@ -1685,7 +1725,7 @@ encryptedDmNotification time senderId { otherUserId } model =
                         Nothing ->
                             Env.domain ++ "/at-logo-no-background.png"
                     )
-                    encryptedDmText
+                    (EncryptedBody senderId notificationText)
                     encryptedDmText
                     (Email.Html.text encryptedDmText)
                     (DmRoute
@@ -1741,7 +1781,7 @@ e2eeRequestNotification time requestedBy { otherUserId } model =
                         Nothing ->
                             Env.domain ++ "/at-logo-no-background.png"
                     )
-                    e2eeRequestText
+                    (UnencryptedBody e2eeRequestText)
                     e2eeRequestText
                     (Email.Html.text e2eeRequestText)
                     (DmRoute

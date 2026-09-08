@@ -2022,14 +2022,6 @@ plainTextMessages messages =
         messages
 
 
-{-| Store and pass on a DM whose contents the server cannot read.
-
-Almost everything `sendDm` does with a message needs the text: working out who was
-mentioned, what to put in a notification, which links to fetch embeds for. None of that
-is possible here, so this keeps only what is left, and the notification says a message
-arrived without saying what it was.
-
--}
 sendEncryptedDm :
     Time.Posix
     -> ClientId
@@ -2037,6 +2029,7 @@ sendEncryptedDm :
     -> Viewing_DmId
     -> SeqSet FileHash
     -> EncryptedData (MessageContent (Id UserId))
+    -> EncryptedData String
     -> ThreadRouteWithMaybeMessage
     -> UserSession
     -> BackendUser
@@ -2044,7 +2037,7 @@ sendEncryptedDm :
     -> BackendDmChannel
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendEncryptedDm time clientId changeId id fileHashes contentAndEmbeds threadRouteWithReplyTo session user dmChannelId dmChannel model =
+sendEncryptedDm time clientId changeId id fileHashes contentAndEmbeds notification threadRouteWithReplyTo session user dmChannelId dmChannel model =
     case RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits of
         Ok sendMessageRateLimits ->
             let
@@ -2064,7 +2057,7 @@ sendEncryptedDm time clientId changeId id fileHashes contentAndEmbeds threadRout
                                 |> Tuple.mapFirst NoThreadWithMessage
 
                 ( sessions, notificationCmd ) =
-                    Broadcast.encryptedDmNotification time session.userId id model
+                    Broadcast.encryptedDmNotification time session.userId id notification model
             in
             ( { model
                 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
@@ -2081,7 +2074,7 @@ sendEncryptedDm time clientId changeId id fileHashes contentAndEmbeds threadRout
                 , sessions = sessions
               }
             , Command.batch
-                [ Local_SendEncryptedMessage time id fileHashes contentAndEmbeds threadRouteWithReplyTo
+                [ Local_SendEncryptedMessage time id fileHashes contentAndEmbeds notification threadRouteWithReplyTo
                     |> LocalChangeResponse changeId
                     |> Lamdera.sendToFrontend clientId
                 , Broadcast.toDmChannelExcludingOne
@@ -2667,7 +2660,7 @@ toBackendLog toBackend =
                 Local_AcceptE2ee _ _ _ ->
                     ToBackendLog_Local_AcceptE2ee
 
-                Local_SendEncryptedMessage _ _ _ _ _ ->
+                Local_SendEncryptedMessage _ _ _ _ _ _ ->
                     ToBackendLog_Local_SendEncryptedMessage
 
                 Local_SendEncryptedEditMessage _ _ _ _ _ ->

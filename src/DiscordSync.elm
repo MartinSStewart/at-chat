@@ -4098,7 +4098,17 @@ getUserAvatars secretKey existingUsers users =
                     needsUpdate =
                         case SeqDict.get user.id existingUsers of
                             Just existingUser ->
-                                userAvatar existingUser /= user.avatar
+                                if userAvatar existingUser == user.avatar then
+                                    -- A matching hash doesn't mean we have the picture. The hash is
+                                    -- written down whenever Discord mentions the user, but the image
+                                    -- behind it is fetched separately and only lands here. Linking an
+                                    -- account records the hash without ever fetching, so a linked user
+                                    -- otherwise looks up to date from the moment they link and keeps
+                                    -- the default Discord picture forever.
+                                    user.avatar /= Nothing && DiscordUserData.icon existingUser == Nothing
+
+                                else
+                                    True
 
                             Nothing ->
                                 True

@@ -8053,137 +8053,135 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
         drawings =
             Maybe.withDefault Message.noDrawings message2.drawings
     in
-    Ui.row
+    Ui.column
         []
-        [ User.profileImage (SeqDict.get message2.createdBy allUsers)
-            |> Ui.el
-                (Drawing.anchorHighlight
-                    (Drawing.profileImageAnchorId messageId)
-                    drawingColor
-                    MessageView_PressedUserIconAnchor
-                    (isHovered == IsHoveredWhileSelectingAnchor)
-                    drawings.userIconDrawings
-                    ++ (if isHovered == IsHoveredWhileSelectingAnchor then
-                            [ Ui.rounded User.profileImageRounding ]
-
-                        else
-                            openDmButton messageId (MessageView_PressedUserIconButton message2.createdBy)
-                       )
-                )
-            |> Ui.el
-                [ Ui.paddingWith
-                    { left = 0
-                    , right = MessageView.profileImagePaddingRight
-                    , top =
-                        case maybeRepliedTo2 of
-                            Just _ ->
-                                24
-
-                            Nothing ->
-                                2
-                    , bottom = 0
-                    }
-                , Ui.width Ui.shrink
-                , Ui.alignTop
-                ]
-        , Ui.column
+        [ replyToHeaderAboveMessage
+            isMobile
+            localUser.timezone
+            time
+            maybeRepliedTo2
+            revealedSpoilers
+            localUser.customEmojis
+            decrypted
+            allUsers
+            |> indentPastProfileImage maybeRepliedTo2
+        , Ui.row
             []
-            [ replyToHeaderAboveMessage
-                isMobile
-                localUser.timezone
-                time
-                maybeRepliedTo2
-                revealedSpoilers
-                localUser.customEmojis
-                decrypted
-                allUsers
-            , Ui.row
+            [ User.profileImage (SeqDict.get message2.createdBy allUsers)
+                |> Ui.el
+                    (Drawing.anchorHighlight
+                        (Drawing.profileImageAnchorId messageId)
+                        drawingColor
+                        MessageView_PressedUserIconAnchor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        drawings.userIconDrawings
+                        ++ (if isHovered == IsHoveredWhileSelectingAnchor then
+                                [ Ui.rounded User.profileImageRounding ]
+
+                            else
+                                openDmButton messageId (MessageView_PressedUserIconButton message2.createdBy)
+                           )
+                    )
+                |> Ui.el
+                    [ Ui.paddingWith
+                        { left = 0
+                        , right = MessageView.profileImagePaddingRight
+                        , top = 2
+                        , bottom = 0
+                        }
+                    , Ui.width Ui.shrink
+                    , Ui.alignTop
+                    ]
+            , Ui.column
                 []
-                [ User.toStringView message2.createdBy allUsers
-                , if showEncryptionIcon then
-                    Ui.html Icons.lockClosed
+                [ Ui.row
+                    []
+                    [ User.toStringView message2.createdBy allUsers
+                    , if showEncryptionIcon then
+                        Ui.html Icons.lockClosed
 
-                  else
-                    Ui.none
-                , messageTimestamp
-                    drawingColor
-                    drawings.timestampDrawings
-                    (isHovered == IsHoveredWhileSelectingAnchor)
-                    messageId
-                    message2.createdAt
-                    localUser.timezone
-                ]
-            , Html.div
-                [ Html.Attributes.style "white-space" "pre-wrap" ]
-                (RichText.view
-                    (Dom.id (Dom.idToString spoilerHtmlId ++ "_" ++ Id.toString messageId))
-                    containerWidth
-                    MessageView_PressedNonWhitelistLink
-                    MessageView_PressedSpoiler
-                    MessageView_PressedImage
-                    { revealedSpoilers =
-                        case SeqDict.get messageId revealedSpoilers of
-                            Just nonempty ->
-                                NonemptySet.toSeqSet nonempty
-
-                            Nothing ->
-                                SeqSet.empty
-                    , users = allUsers
-                    , attachedFiles = attachedFiles
-                    , domainWhitelist = localUser.user.domainWhitelist
-                    , customEmojis = localUser.customEmojis
-                    , stickers = localUser.stickers
-                    , animationMode = isHoveredToAnimationMode isHovered
-                    , timezone = localUser.timezone
-                    , time = time
-                    , drawings = drawings.imageAttachmentDrawings
-                    , embedDrawings = drawings.embedDrawings
-                    , drawingUserColor = drawingColor
-                    , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
-                    , devicePixelRatio = localUser.devicePixelRatio
-                    , isHovered =
-                        case isHovered of
-                            IsNotHovered ->
-                                False
-
-                            IsHovered ->
-                                True
-
-                            IsHoveredButNoMenu ->
-                                True
-
-                            IsHoveredReactionsOnly ->
-                                True
-
-                            IsHoveredWhileSelectingAnchor ->
-                                False
-                    }
-                    embeds
-                    content
-                    ++ (if isBeingEdited then
-                            [ Html.span
-                                [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
-                                , Html.Attributes.style "font-size" "12px"
-                                ]
-                                [ Html.text " (editing...)" ]
-                            ]
-
-                        else
-                            case message2.editedAt of
-                                Just editedAt ->
-                                    [ Html.span
-                                        [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
-                                        , Html.Attributes.style "font-size" "12px"
-                                        , MyUi.datestamp localUser.timezone editedAt |> Html.Attributes.title
-                                        ]
-                                        [ Html.text " (edited)" ]
-                                    ]
+                      else
+                        Ui.none
+                    , messageTimestamp
+                        drawingColor
+                        drawings.timestampDrawings
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        messageId
+                        message2.createdAt
+                        localUser.timezone
+                    ]
+                , Html.div
+                    [ Html.Attributes.style "white-space" "pre-wrap" ]
+                    (RichText.view
+                        (Dom.id (Dom.idToString spoilerHtmlId ++ "_" ++ Id.toString messageId))
+                        containerWidth
+                        MessageView_PressedNonWhitelistLink
+                        MessageView_PressedSpoiler
+                        MessageView_PressedImage
+                        { revealedSpoilers =
+                            case SeqDict.get messageId revealedSpoilers of
+                                Just nonempty ->
+                                    NonemptySet.toSeqSet nonempty
 
                                 Nothing ->
-                                    []
-                       )
-                )
-                |> Ui.html
+                                    SeqSet.empty
+                        , users = allUsers
+                        , attachedFiles = attachedFiles
+                        , domainWhitelist = localUser.user.domainWhitelist
+                        , customEmojis = localUser.customEmojis
+                        , stickers = localUser.stickers
+                        , animationMode = isHoveredToAnimationMode isHovered
+                        , timezone = localUser.timezone
+                        , time = time
+                        , drawings = drawings.imageAttachmentDrawings
+                        , embedDrawings = drawings.embedDrawings
+                        , drawingUserColor = drawingColor
+                        , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
+                        , devicePixelRatio = localUser.devicePixelRatio
+                        , isHovered =
+                            case isHovered of
+                                IsNotHovered ->
+                                    False
+
+                                IsHovered ->
+                                    True
+
+                                IsHoveredButNoMenu ->
+                                    True
+
+                                IsHoveredReactionsOnly ->
+                                    True
+
+                                IsHoveredWhileSelectingAnchor ->
+                                    False
+                        }
+                        embeds
+                        content
+                        ++ (if isBeingEdited then
+                                [ Html.span
+                                    [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
+                                    , Html.Attributes.style "font-size" "12px"
+                                    ]
+                                    [ Html.text " (editing...)" ]
+                                ]
+
+                            else
+                                case message2.editedAt of
+                                    Just editedAt ->
+                                        [ Html.span
+                                            [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
+                                            , Html.Attributes.style "font-size" "12px"
+                                            , MyUi.datestamp localUser.timezone editedAt |> Html.Attributes.title
+                                            ]
+                                            [ Html.text " (edited)" ]
+                                        ]
+
+                                    Nothing ->
+                                        []
+                           )
+                    )
+                    |> Ui.html
+                ]
             ]
         ]
 
@@ -8216,130 +8214,128 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
         drawings =
             Maybe.withDefault Message.noDrawings message2.drawings
     in
-    Ui.row
+    Ui.column
         []
-        [ (case SeqDict.get message2.createdBy allUsers of
-            Just user ->
-                User.discordProfileImage message2.createdBy user.icon
-
-            Nothing ->
-                User.discordProfileImage message2.createdBy Nothing
-          )
-            |> Ui.el
-                (Drawing.anchorHighlight
-                    (Drawing.profileImageAnchorId messageId)
-                    (User.discordUserColor localUser)
-                    MessageView_PressedUserIconAnchor
-                    (isHovered == IsHoveredWhileSelectingAnchor)
-                    drawings.userIconDrawings
-                    ++ (if isHovered == IsHoveredWhileSelectingAnchor then
-                            [ Ui.rounded User.profileImageRounding ]
-
-                        else
-                            openDmButton messageId (MessageView_PressedDiscordUserIconButton message2.createdBy)
-                       )
-                )
-            |> Ui.el
-                [ Ui.paddingWith
-                    { left = 0
-                    , right = MessageView.profileImagePaddingRight
-                    , top =
-                        case maybeRepliedTo2 of
-                            Just _ ->
-                                24
-
-                            Nothing ->
-                                2
-                    , bottom = 0
-                    }
-                , Ui.width Ui.shrink
-                , Ui.alignTop
-                ]
-        , Ui.column
+        [ replyToHeaderAboveMessage
+            isMobile
+            localUser.timezone
+            time
+            maybeRepliedTo2
+            revealedSpoilers
+            localUser.customEmojis
+            SeqDict.empty
+            allUsers
+            |> indentPastProfileImage maybeRepliedTo2
+        , Ui.row
             []
-            [ replyToHeaderAboveMessage
-                isMobile
-                localUser.timezone
-                time
-                maybeRepliedTo2
-                revealedSpoilers
-                localUser.customEmojis
-                SeqDict.empty
-                allUsers
-            , Ui.row
+            [ (case SeqDict.get message2.createdBy allUsers of
+                Just user ->
+                    User.discordProfileImage message2.createdBy user.icon
+
+                Nothing ->
+                    User.discordProfileImage message2.createdBy Nothing
+              )
+                |> Ui.el
+                    (Drawing.anchorHighlight
+                        (Drawing.profileImageAnchorId messageId)
+                        (User.discordUserColor localUser)
+                        MessageView_PressedUserIconAnchor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        drawings.userIconDrawings
+                        ++ (if isHovered == IsHoveredWhileSelectingAnchor then
+                                [ Ui.rounded User.profileImageRounding ]
+
+                            else
+                                openDmButton messageId (MessageView_PressedDiscordUserIconButton message2.createdBy)
+                           )
+                    )
+                |> Ui.el
+                    [ Ui.paddingWith
+                        { left = 0
+                        , right = MessageView.profileImagePaddingRight
+                        , top = 2
+                        , bottom = 0
+                        }
+                    , Ui.width Ui.shrink
+                    , Ui.alignTop
+                    ]
+            , Ui.column
                 []
-                [ User.toStringView message2.createdBy allUsers
-                , messageTimestamp
-                    (User.discordUserColor localUser)
-                    drawings.timestampDrawings
-                    (isHovered == IsHoveredWhileSelectingAnchor)
-                    messageId
-                    message2.createdAt
-                    localUser.timezone
-                , messageIdView messageId
-                ]
-            , Html.div
-                [ Html.Attributes.style "white-space" "pre-wrap" ]
-                (RichText.view
-                    (Dom.id (Dom.idToString spoilerHtmlId ++ "_" ++ Id.toString messageId))
-                    containerWidth
-                    MessageView_PressedNonWhitelistLink
-                    MessageView_PressedSpoiler
-                    MessageView_PressedImage
-                    { revealedSpoilers =
-                        case SeqDict.get messageId revealedSpoilers of
-                            Just nonempty ->
-                                NonemptySet.toSeqSet nonempty
+                [ Ui.row
+                    []
+                    [ User.toStringView message2.createdBy allUsers
+                    , messageTimestamp
+                        (User.discordUserColor localUser)
+                        drawings.timestampDrawings
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        messageId
+                        message2.createdAt
+                        localUser.timezone
+                    , messageIdView messageId
+                    ]
+                , Html.div
+                    [ Html.Attributes.style "white-space" "pre-wrap" ]
+                    (RichText.view
+                        (Dom.id (Dom.idToString spoilerHtmlId ++ "_" ++ Id.toString messageId))
+                        containerWidth
+                        MessageView_PressedNonWhitelistLink
+                        MessageView_PressedSpoiler
+                        MessageView_PressedImage
+                        { revealedSpoilers =
+                            case SeqDict.get messageId revealedSpoilers of
+                                Just nonempty ->
+                                    NonemptySet.toSeqSet nonempty
 
-                            Nothing ->
-                                SeqSet.empty
-                    , users = allUsers
-                    , attachedFiles = attachedFiles
-                    , domainWhitelist = localUser.user.domainWhitelist
-                    , customEmojis = localUser.customEmojis
-                    , stickers = localUser.stickers
-                    , animationMode = isHoveredToAnimationMode isHovered
-                    , timezone = localUser.timezone
-                    , time = time
-                    , drawings = drawings.imageAttachmentDrawings
-                    , embedDrawings = drawings.embedDrawings
-                    , drawingUserColor = User.discordUserColor localUser
-                    , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
-                    , devicePixelRatio = localUser.devicePixelRatio
-                    , isHovered =
-                        case isHovered of
-                            IsNotHovered ->
-                                False
+                                Nothing ->
+                                    SeqSet.empty
+                        , users = allUsers
+                        , attachedFiles = attachedFiles
+                        , domainWhitelist = localUser.user.domainWhitelist
+                        , customEmojis = localUser.customEmojis
+                        , stickers = localUser.stickers
+                        , animationMode = isHoveredToAnimationMode isHovered
+                        , timezone = localUser.timezone
+                        , time = time
+                        , drawings = drawings.imageAttachmentDrawings
+                        , embedDrawings = drawings.embedDrawings
+                        , drawingUserColor = User.discordUserColor localUser
+                        , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
+                        , devicePixelRatio = localUser.devicePixelRatio
+                        , isHovered =
+                            case isHovered of
+                                IsNotHovered ->
+                                    False
 
-                            IsHovered ->
-                                True
+                                IsHovered ->
+                                    True
 
-                            IsHoveredButNoMenu ->
-                                True
+                                IsHoveredButNoMenu ->
+                                    True
 
-                            IsHoveredReactionsOnly ->
-                                True
+                                IsHoveredReactionsOnly ->
+                                    True
 
-                            IsHoveredWhileSelectingAnchor ->
-                                False
-                    }
-                    embeds
-                    content
-                    ++ (case message2.editedAt of
-                            Just editedAt ->
-                                [ Html.span
-                                    [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
-                                    , Html.Attributes.style "font-size" "12px"
-                                    , MyUi.datestamp localUser.timezone editedAt |> Html.Attributes.title
+                                IsHoveredWhileSelectingAnchor ->
+                                    False
+                        }
+                        embeds
+                        content
+                        ++ (case message2.editedAt of
+                                Just editedAt ->
+                                    [ Html.span
+                                        [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
+                                        , Html.Attributes.style "font-size" "12px"
+                                        , MyUi.datestamp localUser.timezone editedAt |> Html.Attributes.title
+                                        ]
+                                        [ Html.text " (edited)" ]
                                     ]
-                                    [ Html.text " (edited)" ]
-                                ]
 
-                            Nothing ->
-                                []
-                       )
-                )
-                |> Ui.html
+                                Nothing ->
+                                    []
+                           )
+                    )
+                    |> Ui.html
+                ]
             ]
         ]
 
@@ -8551,6 +8547,28 @@ channelMessageHtmlId messageIndex =
 threadMessageHtmlId : Id ThreadMessageId -> HtmlId
 threadMessageHtmlId messageIndex =
     "thread_message_" ++ Id.toString messageIndex |> Dom.id
+
+
+{-| The reply header is drawn above the message it belongs to, but starting where the
+message text starts rather than where the profile image does, so it needs the profile
+image's column of space skipped past. It sits outside the row holding the image and the
+message so that the image lines up with the author's name on its own, without anything
+having to know how tall the header came out.
+
+`Ui.none` is left alone rather than padded, so a message without a reply is laid out
+exactly as it was before.
+
+-}
+indentPastProfileImage : Maybe repliedTo -> Element msg -> Element msg
+indentPastProfileImage maybeRepliedTo2 header =
+    case maybeRepliedTo2 of
+        Just _ ->
+            Ui.el
+                [ Ui.paddingLeft (User.profileImageSize + MessageView.profileImagePaddingRight) ]
+                header
+
+        Nothing ->
+            header
 
 
 replyToHeaderAboveMessageHelper : Bool -> Id messageId -> Element MessageViewMsg -> Element MessageViewMsg
