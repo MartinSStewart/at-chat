@@ -1,6 +1,4 @@
 * Fix ping user dropdown appearing too low on mobile
-* Typing indicator not appearing for Discord guilds (won't do, due to server overhead or added complexity of
-  managing individual Discord guild subscriptions)
 * Login/signup button doesn't work if failed to link Discord message is visible
 * Prevent files larger than 10mb being attached to Discord messages (unless it's a nitro user)
 * Make it more clear when a message hasn't been sent yet
@@ -19,9 +17,6 @@
 * A message in a Discord thread didn't show a white dot on the guild until after I refreshed the page
 * Two messages get sent and it seems to happen for Discord and normal users. In the latest case, it was in a DM and the
   user saw duplicated messages for both themselves and the other user.
-* Scroll down warning is shown on iphone in DMs when the user is already scrolled down and writes a message.
-* Emoji in reaction emoji tooltip gets horizontally swished if there are many names (maybe MyUi.noShrinking is needed)
-* "add to home screen" is called "install and create shortcut" on Android (Chrome)
 * Add unread overview to mobile
 * Figure out why messages can be sent before files have loaded
 * lishaduck's android phone has slow loading times and shows both a loading step with just the at-chat logo and then
@@ -32,6 +27,7 @@
   issues (but weren't using video)
 * The app badge can get stuck at a number even when all the messages have been viewed
 
-Requested features:
+Won't do:
 
-* Add one-time view images
+* Typing indicator not appearing for Discord guilds (won't do, due to server overhead or added complexity of
+  managing individual Discord guild subscriptions)
