@@ -16,7 +16,7 @@ import DmChannel exposing (E2eeStatus(..))
 import Drawing exposing (Drawing)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Effect.Lamdera exposing (ClientId)
+import Effect.Lamdera as Lamdera exposing (ClientId)
 import EmailAddress
 import Env
 import Icons
@@ -733,7 +733,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                             PressedCopyText
                             FrontendNoOp
                             loaded
-                            (Effect.Lamdera.clientIdToString loaded.clientId)
+                            (Lamdera.clientIdToString loaded.clientId)
                         ]
                     , MyUi.secondaryButton
                         (Dom.id "userOptions_unregisterServiceWorkers")
