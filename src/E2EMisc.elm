@@ -1,5 +1,6 @@
 module E2EMisc exposing
-    ( channelSearchTest
+    ( adminConnectionsShowWhatIsViewedTest
+    , channelSearchTest
     , codeBlockInputTest
     , colorPickerTest
     , dmThreadsTest
@@ -51,6 +52,7 @@ import MembersAndOwner
 import Message
 import MessageDropdown
 import NonemptyDict
+import Pages.Admin
 import Pages.Guild
 import Range exposing (Range)
 import RichText
@@ -62,6 +64,7 @@ import Test.Html.Selector
 import TimeInMinutes
 import Touch
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import User
 import UserColor
 import UserSession
 
@@ -585,6 +588,47 @@ checkDmThreadIsRead otherUserId threadMessageIndex model =
 
         Types.Loading _ ->
             Err "Expected the frontend to have finished loading"
+
+
+{-| The connections section of the admin page names the channel each connection has open,
+so a tab sitting in a guild channel is listed by that channel's name while the admin page's
+own tab, which isn't in a conversation, is listed as viewing nothing.
+-}
+adminConnectionsShowWhatIsViewedTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+adminConnectionsShowWhatIsViewedTest config =
+    E2EHelper.startTest
+        "Admin page shows what each connection is viewing"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\_ _ ->
+                [ T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/admin"
+                    E2EHelper.desktopWindow
+                    (\adminPage ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ adminPage.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId User.ConnectionsSection)
+                        , E2EHelper.hasExactText
+                            adminPage
+                            [ "Viewing: My new guild! #general", "Viewing: Nothing" ]
+                        ]
+                    )
+                ]
+            )
+        ]
 
 
 {-| A message someone else writes into the conversation you are looking at, with nothing

@@ -66,7 +66,7 @@ import Html
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (GuildId, Id, UserId)
+import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), BackupContents(..), ConnectionData, DiscordGatewayStatus, DiscordRole, DiscordUserData_ForAdmin(..), LastBackup, LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
@@ -103,7 +103,7 @@ import Ui.Shadow
 import Ui.Table
 import User exposing (AdminUiSection(..), BackendUser, EmailNotifications(..), LocalUser)
 import UserAgent exposing (UserAgent)
-import UserSession exposing (NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserSession, Viewing(..))
 
 
 importedText : String
@@ -1772,24 +1772,28 @@ connectionsSection isMobile timezone user adminData =
                                 [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.spacing 2 ]
                                 (List.map
                                     (\( clientId, data ) ->
-                                        Ui.row
-                                            [ Ui.spacing 8, Ui.Font.size 14, Ui.widthMax 600 ]
-                                            [ Ui.text ("Client: " ++ Lamdera.clientIdToString clientId)
-                                            , (case data.lastRequest of
-                                                LastRequest time ->
-                                                    "Last request: "
-                                                        ++ MyUi.datestamp timezone time
-                                                        ++ " "
-                                                        ++ MyUi.timestamp time timezone
-                                                        |> Ui.text
+                                        Ui.column
+                                            [ Ui.spacing 2, Ui.Font.size 14, Ui.widthMax 600 ]
+                                            [ Ui.row
+                                                [ Ui.spacing 8 ]
+                                                [ Ui.text ("Client: " ++ Lamdera.clientIdToString clientId)
+                                                , (case data.lastRequest of
+                                                    LastRequest time ->
+                                                        "Last request: "
+                                                            ++ MyUi.datestamp timezone time
+                                                            ++ " "
+                                                            ++ MyUi.timestamp time timezone
+                                                            |> Ui.text
 
-                                                NoRequestsMade ->
-                                                    Ui.text "No requests made"
-                                              )
-                                                |> Ui.el [ Ui.alignRight, Ui.width Ui.shrink ]
-                                            , MyUi.deleteButton
-                                                (Dom.id ("admin_disconnectClient_" ++ Lamdera.clientIdToString clientId))
-                                                (PressedDisconnectClient sessionIdHash clientId)
+                                                    NoRequestsMade ->
+                                                        Ui.text "No requests made"
+                                                  )
+                                                    |> Ui.el [ Ui.alignRight, Ui.width Ui.shrink ]
+                                                , MyUi.deleteButton
+                                                    (Dom.id ("admin_disconnectClient_" ++ Lamdera.clientIdToString clientId))
+                                                    (PressedDisconnectClient sessionIdHash clientId)
+                                                ]
+                                            , Ui.text ("Viewing: " ++ viewingToString adminData data.currentlyViewing)
                                             ]
                                     )
                                     (NonemptyDict.toList clients)
@@ -1799,6 +1803,134 @@ connectionsSection isMobile timezone user adminData =
                     (SeqDict.toList adminData.connections)
                 )
         ]
+
+
+{-| What a connection currently has open, written out for the connections section. Ids are
+resolved to guild, channel and user names where the admin data has them, and fall back to
+the raw id when it doesn't (a guild that was deleted, a Discord user that was never loaded).
+-}
+viewingToString : AdminData -> Viewing -> String
+viewingToString adminData viewing =
+    case viewing of
+        Viewing_Dm data ->
+            "DM with " ++ viewingUserName adminData data.id.otherUserId
+
+        Viewing_DmThread data ->
+            "DM with "
+                ++ viewingUserName adminData data.id.otherUserId
+                ++ ", thread "
+                ++ Id.toString data.id.threadId
+
+        Viewing_DiscordDm data ->
+            "Discord DM " ++ viewingDiscordDmName adminData data.id.currentUserId data.id.channelId
+
+        Viewing_Channel data ->
+            viewingChannelName adminData data.id.guildId data.id.channelId
+
+        Viewing_ChannelThread data ->
+            viewingChannelName adminData data.id.guildId data.id.channelId
+                ++ ", thread "
+                ++ Id.toString data.id.threadId
+
+        Viewing_DiscordChannel data ->
+            "Discord " ++ viewingDiscordChannelName adminData data.id.guildId data.id.channelId
+
+        Viewing_DiscordChannelThread data ->
+            "Discord "
+                ++ viewingDiscordChannelName adminData data.id.guildId data.id.channelId
+                ++ ", thread "
+                ++ Id.toString data.id.threadId
+
+        Viewing_None ->
+            "Nothing"
+
+        Viewing_Overview ->
+            "Unread overview"
+
+
+viewingUserName : AdminData -> Id UserId -> String
+viewingUserName adminData userId =
+    case NonemptyDict.get userId adminData.users of
+        Just user ->
+            PersonName.toString user.name
+
+        Nothing ->
+            "user " ++ Id.toString userId
+
+
+viewingDiscordUserName : AdminData -> Discord.Id Discord.UserId -> String
+viewingDiscordUserName adminData discordUserId =
+    case SeqDict.get discordUserId adminData.discordUsers of
+        Just (FullData_ForAdmin data) ->
+            data.user.username
+
+        Just (BasicData_ForAdmin data) ->
+            data.user.username
+
+        Just (NeedsAuthAgain_ForAdmin data) ->
+            data.user.username
+
+        Nothing ->
+            "user " ++ Discord.idToString discordUserId
+
+
+viewingChannelName : AdminData -> Id GuildId -> Id ChannelId -> String
+viewingChannelName adminData guildId channelId =
+    case SeqDict.get guildId adminData.guilds of
+        Just guild ->
+            GuildName.toString guild.name
+                ++ " #"
+                ++ (case SeqDict.get channelId guild.channels of
+                        Just channel ->
+                            ChannelName.toString channel.name
+
+                        Nothing ->
+                            Id.toString channelId
+                   )
+
+        Nothing ->
+            "guild " ++ Id.toString guildId ++ " #" ++ Id.toString channelId
+
+
+viewingDiscordChannelName : AdminData -> Discord.Id Discord.GuildId -> Discord.Id Discord.ChannelId -> String
+viewingDiscordChannelName adminData guildId channelId =
+    case SeqDict.get guildId adminData.discordGuilds of
+        Just guild ->
+            GuildName.toString guild.name
+                ++ " #"
+                ++ (case SeqDict.get channelId guild.channels of
+                        Just channel ->
+                            ChannelName.toString channel.name
+
+                        Nothing ->
+                            Discord.idToString channelId
+                   )
+
+        Nothing ->
+            "guild " ++ Discord.idToString guildId ++ " #" ++ Discord.idToString channelId
+
+
+{-| Names the Discord DM by whoever is in it besides the user looking at it, since Discord DM
+channels don't have names of their own.
+-}
+viewingDiscordDmName : AdminData -> Discord.Id Discord.UserId -> Discord.Id Discord.PrivateChannelId -> String
+viewingDiscordDmName adminData currentUserId channelId =
+    case SeqDict.get channelId adminData.discordDmChannels of
+        Just channel ->
+            case
+                NonemptyDict.keys channel.members
+                    |> List.Nonempty.toList
+                    |> List.filter (\discordUserId -> discordUserId /= currentUserId)
+                    |> List.map (viewingDiscordUserName adminData)
+            of
+                [] ->
+                    Discord.idToString channelId
+
+                names ->
+                    "with " ++ String.join ", " names
+
+        Nothing ->
+            Discord.idToString channelId
 
 
 sessionsSection : Bool -> Time.Zone -> BackendUser -> AdminData -> Element Msg
