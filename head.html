@@ -3,26 +3,15 @@
 <meta name="viewport" id="viewport-meta"
       content="width=device-width, initial-scale=1, minimum-scale=1.0, maximum-scale=1.0">
 <script>
-  // viewport-fit=cover lets the page lay itself out edge to edge, underneath whatever
-  // system UI is drawn on top of it, and env(safe-area-inset-*) is then what keeps the
-  // content clear of the notch and the home indicator. That's what we want when the app
-  // is installed and owns the whole screen, but in a normal mobile browser the browser's
-  // own toolbars are drawn on top too, and the insets say nothing about them, so the
-  // message input at the bottom of the app ends up hidden behind the address bar. So the
-  // page only opts into covering when it is running as an installed app; a browser tab
-  // gets the default viewport-fit=auto and is laid out above the toolbars.
-  //
-  // This has to happen here rather than in elm-pkg-js/stuff.js because the viewport is
-  // read while the document is parsed. stuff.js reads window.isPwa back out of here so
-  // that the layout and the pwaStatus the Elm side sees can't disagree.
-  window.isPwa = window.matchMedia('(display-mode: standalone)').matches ||
-      window.navigator.standalone === true ||
-      document.referrer.includes('android-app://');
+    // This has to happen here rather than in elm-pkg-js/stuff.js because the viewport is read while the document is parsed.
+    window.isPwa = window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true ||
+        document.referrer.includes('android-app://');
 
-  if (window.isPwa) {
-      document.getElementById('viewport-meta').content =
-          'viewport-fit=cover, width=device-width, initial-scale=1, minimum-scale=1.0, maximum-scale=1.0';
-  }
+    if (window.isPwa) {
+        document.getElementById('viewport-meta').content =
+            'viewport-fit=cover, width=device-width, initial-scale=1, minimum-scale=1.0, maximum-scale=1.0';
+    }
 </script>
 <meta name="csrf-token" content="HBJzdi8BKyMiIhp0RCwuJnESMAEIM3YXJv1BKSlaalBL7zoPGqam0wNo">
 <meta name="description" content="Chat with friends">

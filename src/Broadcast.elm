@@ -1313,11 +1313,6 @@ privateVapidKeyCodec =
     Codec.map PrivateVapidKey (\(PrivateVapidKey a) -> a) Codec.string
 
 
-{-| What a push notification says. An encrypted message is one the server can't read, so
-there is nothing for it to write: the sender encrypted the line too, and it is forwarded for
-the device holding the conversation's key to open (see `public/service-worker.js`). The
-sender's id comes along because that is what the recipient's device filed the key under.
--}
 type PushNotificationBody
     = UnencryptedBody String
     | EncryptedBody (Id UserId) (EncryptedData String)

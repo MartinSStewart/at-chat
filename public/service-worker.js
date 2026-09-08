@@ -17,14 +17,7 @@ function log(text) {
     };
 }
 
-// Activate a newer service-worker.js as soon as it finishes installing instead
-// of waiting for every tab to close, and immediately take over already-open
-// pages so the new version applies without a manual reload.
 self.addEventListener('install', (event) => {
-    // Record when this service worker was installed so it can be surfaced in
-    // the debug section. Stored in Cache Storage because that's readable from
-    // both the service worker and the page. The body is a human-readable ISO
-    // timestamp so it's obvious when inspected directly in devtools.
     event.waitUntil((async () => {
         try {
             const cache = await caches.open('service_worker_installed_at');
@@ -47,13 +40,6 @@ self.addEventListener('activate', (event) => {
     event.waitUntil(self.clients.claim());
 });
 
-// Number of unread messages shown on the app icon (home screen, dock, taskbar) via
-// the Badging API. The app itself sets this to the number of messages with a red
-// notification circle whenever that count changes, and each push that arrives while
-// the app is closed adds one to it. It's kept in Cache Storage rather than a variable
-// because the service worker is shut down between pushes, so an in-memory count would
-// be back to zero by the time the next one arrives, and because the app writes the
-// same entry (see set_app_badge_to_js in elm-pkg-js/stuff.js).
 const badgeCountCacheName = 'app_badge_count';
 
 const badgeCountKey = 'count';
@@ -65,8 +51,6 @@ async function incrementAppBadge() {
 
     let count = 1;
 
-    // Failing to read or write the count is not a reason to skip the badge itself,
-    // so this gets its own try/catch and falls back to showing a count of one.
     try {
         const cache = await caches.open(badgeCountCacheName);
         const stored = await cache.match(badgeCountKey);
@@ -93,8 +77,6 @@ async function incrementAppBadge() {
     }
 
     try {
-        // Browsers that only badge installed apps reject this when the site is
-        // running in a normal tab, which is nothing to worry about.
         await navigator.setAppBadge(count);
     }
     catch (error) {
@@ -102,10 +84,6 @@ async function incrementAppBadge() {
     }
 }
 
-// Conversation keys, written by the page as two people agree on one (see e2eeWithStore in
-// elm-pkg-js/stuff.js). Each entry is a non-exportable AES-GCM CryptoKey filed under the
-// other participant's user id, so an encrypted push can be opened here without the raw key
-// ever being readable by anything.
 const e2eeDbName = "at-chat-e2ee";
 const e2eeStoreName = "dm-keys";
 
@@ -114,9 +92,6 @@ function e2eeOpenDb() {
         const request = indexedDB.open(e2eeDbName, 1);
         request.onerror = () => reject(request.error);
         request.onupgradeneeded = () => {
-            // The page normally creates the store first. Creating it here too means a push
-            // that arrives before this browser has ever agreed a key opens an empty store
-            // rather than a database with no store in it.
             if (!request.result.objectStoreNames.contains(e2eeStoreName)) {
                 request.result.createObjectStore(e2eeStoreName);
             }
@@ -134,13 +109,6 @@ function readConversationKey(otherUserId) {
     }));
 }
 
-// What an encrypted push should say, or null when this device can't say: it never agreed a
-// key for that conversation, or the key it has doesn't open this one. The caller shows the
-// server's own wording instead, which says that something arrived without saying what.
-//
-// The sender wrote this line and encrypted it along with the message (see
-// Encryption.encryptMessageAndNotification), so what comes out is the text itself with
-// nothing wrapped around it.
 async function decryptNotificationBody(sentBy, encryptedBody) {
     if (typeof sentBy !== "number" || typeof encryptedBody !== "string") {
         return null;
@@ -155,8 +123,6 @@ async function decryptNotificationBody(sentBy, encryptedBody) {
 
         const bytes = Uint8Array.from(atob(encryptedBody), (character) => character.charCodeAt(0));
 
-        // A fresh IV per message, sitting in front of the ciphertext (see the
-        // encrypt-message branch of elm-pkg-js/stuff.js, which is what wrote this).
         const plainText = await crypto.subtle.decrypt(
             { name: "AES-GCM", iv: bytes.slice(0, 12) }, key, bytes.slice(12));
 
@@ -168,18 +134,12 @@ async function decryptNotificationBody(sentBy, encryptedBody) {
     }
 }
 
-// Register event listener for the 'push' event.
 self.addEventListener('push', function(event) {
-    // The badge write is async, so the work has to be wrapped in waitUntil to stop
-    // the service worker being terminated halfway through it.
     event.waitUntil((async () => {
         try
         {
             const data = event.data.json().notification;
 
-            // An encrypted message is one the server couldn't read, so the sender encrypted
-            // the notification too and the server passed it along. Opening it here is what
-            // makes the notification say what was actually said.
             const decrypted = data.encrypted_body === undefined
                 ? null
                 : await decryptNotificationBody(data.sent_by, data.encrypted_body);
@@ -208,13 +168,9 @@ self.addEventListener('notificationclick', function(event) {
     try {
         event.notification.close();
 
-        // Wrap the async work in waitUntil so the service worker isn't terminated
-        // before it finishes.
         event.waitUntil(
             clients.matchAll({ type: "window", includeUncontrolled: true })
                 .then((windowClients) => {
-                    // If a window is already open, navigate it and bring it to the
-                    // foreground.
                     for (const client of windowClients) {
                         if ('focus' in client) {
                             client.postMessage(notificationData);
@@ -222,9 +178,6 @@ self.addEventListener('notificationclick', function(event) {
                         }
                     }
 
-                    // No window open (the common case when the app is closed): open
-                    // a new one. Previously this branch was commented out, so the
-                    // notification closed without opening anything.
                     if (clients.openWindow) {
                         return clients.openWindow(notificationData);
                     }
@@ -243,11 +196,6 @@ const cacheName = 'resource_cache_v1';
 
 const frontendCacheName = 'frontend_cache_v1';
 
-
-// Keys for encrypted file attachments, written by the page (see fileKeyWithStore in
-// elm-pkg-js/stuff.js) and only ever read here. Each entry is a non-exportable CryptoKey
-// stored under the hash the ciphertext is served at, so the raw key is never on disk and
-// this worker can decrypt without being able to hand the key to anything else.
 const fileKeyDbName = "at-chat-file-keys";
 const fileKeyStoreName = "file-keys";
 
@@ -276,9 +224,6 @@ function readFileKey(fileHash) {
     }));
 }
 
-// The page stores a key as it decrypts the message the file is attached to, and the
-// browser can ask for the file before that write has landed. Only encrypted files reach
-// this, so waiting costs nothing anywhere else.
 const fileKeyWaitAttempts = 20;
 
 const fileKeyWaitMs = 100;
@@ -308,12 +253,6 @@ async function waitForFileKey(fileHash) {
 // what kind of file it is holding.
 const octetStreamContentType = 136;
 
-// Encrypted attachments are addressed as /file/e/<content type>/<hash> so that this worker
-// knows to decrypt them, and so that a browser without it installed gets a plain 404
-// instead of rendering ciphertext. The content type there is the header value itself,
-// percent encoded (see FileStatus.encryptedFileUrl), because it never leaves the browser:
-// it is put on the file here, after the bytes have been decrypted, rather than being asked
-// of the server.
 async function decryptedFileResponse(isDevelopment, encryptedUrl) {
     const start = encryptedUrl.indexOf('/file/e/');
     const rest = encryptedUrl.slice(start + '/file/e/'.length);
@@ -348,8 +287,6 @@ async function decryptedFileResponse(isDevelopment, encryptedUrl) {
         return new Response("No key is stored on this device for that file", { status: 404 });
     }
 
-    // Only the ciphertext is cached. Keeping the decrypted body out of Cache Storage means
-    // a file that is encrypted on the server isn't sitting in the clear on disk here.
     const cache = await caches.open(cacheName);
     let cipherTextResponse = await cache.match(cipherTextUrl);
 
@@ -361,9 +298,6 @@ async function decryptedFileResponse(isDevelopment, encryptedUrl) {
         }
     }
 
-    // Read once and cache from the bytes rather than caching a clone. Draining two branches
-    // of a teed body truncates whichever is read second once it runs past the browser's tee
-    // buffer, which is the same trap the frontend bundle above works around.
     const cipherText = await cipherTextResponse.arrayBuffer();
 
     if (cipherText.byteLength < 1000 * 1000) {
@@ -403,8 +337,6 @@ self.addEventListener('fetch', (event) => {
     // The hashed frontend bundle, e.g. https://at-chat.app/frontend.a1b2c3.js
     if (url.startsWith(domain + 'frontend.') && url.endsWith('.js')) {
         event.respondWith(caches.open(frontendCacheName).then(async (cache) => {
-            // Cache first: if this exact version is already cached, serve it
-            // straight from disk so the site loads faster.
             const cachedResponse = await cache.match(url);
             if (cachedResponse) {
                 return cachedResponse;
@@ -424,14 +356,7 @@ self.addEventListener('fetch', (event) => {
                 // itself. Reading the network body twice (once via the clone we
                 // hand to cache.put, once via the response we return) tees the
                 // stream, and the branch that is drained second can be truncated
-                // to the browser's tee buffer limit (~320 KiB). Lamdera's
-                // hot-reload loads the new bundle with `<script type="module">`,
-                // so a truncated body reaches the parser mid-expression and
-                // throws "missing ) after argument list", breaking the in-place
-                // upgrade (a full page refresh then works because it reads the
-                // complete bytes back out of this cache). Returning the cached
-                // copy guarantees the page receives the same complete bytes we
-                // just stored.
+                // to the browser's tee buffer limit (~320 KiB).
                 const cachedFetchedResponse = await cache.match(event.request);
                 if (cachedFetchedResponse) {
                     return cachedFetchedResponse;
