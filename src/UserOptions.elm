@@ -718,6 +718,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                           else
                             Ui.width Ui.shrink
                         , Ui.paddingXY 16 0
+                        , Ui.spacing 16
                         ]
                         [ MyUi.copyBox
                             (Dom.id "userOptions_sessionIdHash")
@@ -726,6 +727,13 @@ view windowSize textInputFocus time local loggedIn loaded model =
                             FrontendNoOp
                             loaded
                             (SessionIdHash.toString local.localUser.session.sessionIdHash)
+                        , MyUi.copyBox
+                            (Dom.id "userOptions_clientIdHash")
+                            (Just "ClientId")
+                            PressedCopyText
+                            FrontendNoOp
+                            loaded
+                            (Effect.Lamdera.clientIdToString loaded.clientId)
                         ]
                     , MyUi.secondaryButton
                         (Dom.id "userOptions_unregisterServiceWorkers")
