@@ -2564,7 +2564,21 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                 [ Ui.attrIf risksAccepted (Ui.opacity 0.5), Ui.spacing 8 ]
                 [ MyUi.warningHeader "Before you enable E2EE:"
                 , Ui.text "You'll get a private key that you need to store in a password manager. If you lose it, you'll permanently lose access to all your encrypted messages."
-                , Ui.el [ Ui.Font.color MyUi.textLinkColor, Ui.linkNewTab (Route.encode (Route.HomePageRoute (Just Route.E2eeInfoOverlay))) ] (Ui.text "Read more about E2EE here")
+                , Ui.el
+                    [ Ui.Font.color MyUi.textLinkColorOnDarkBackground
+                    , Ui.link
+                        (Route.encode
+                            (Route.DmRoute
+                                { channelId = DmChannelId.fromUserIds otherUserId localUser.session.userId
+                                , threadRoute = NoThreadWithFriends Nothing ShowChannelSettings
+                                , tab = Nothing
+                                , channelsVisible = ChannelsVisibleOnMobile
+                                , overlay = Just Route.E2eeInfoOverlay
+                                }
+                            )
+                        )
+                    ]
+                    (Ui.text "Read more about E2EE here")
                 , Ui.row
                     []
                     [ Ui.Input.checkbox

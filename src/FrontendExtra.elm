@@ -127,6 +127,7 @@ import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Input
+import Ui.Lazy
 import Ui.Prose
 import Url exposing (Url)
 import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
@@ -545,7 +546,7 @@ layout model attributes child =
                )
             :: (case Route.toOverlay model.route of
                     Just Route.E2eeInfoOverlay ->
-                        e2eeInfoOverlay isMobile |> Ui.inFront
+                        Ui.Lazy.lazy e2eeInfoOverlay isMobile |> Ui.inFront
 
                     Just Route.UserOptionsOverlay ->
                         Ui.noAttr
@@ -1252,28 +1253,9 @@ e2eeInfoOverlay isMobile =
     Ui.el
         [ Ui.height Ui.fill
         , Ui.heightMin 0
-        , Ui.background MyUi.background3
+        , Ui.background MyUi.background1
         , Ui.inFront
-            (MyUi.rowButton
-                (Dom.id "frontend_closeE2eeInfo")
-                PressedCloseOverlay
-                [ Ui.padding 16
-                , Ui.alignRight
-                , Ui.alignTop
-                , Ui.width Ui.shrink
-                , Ui.spacing 8
-                , Ui.background MyUi.background3
-                , MyUi.htmlStyle "margin-top" MyUi.insetTop
-                , MyUi.hoverText "Close"
-                ]
-                [ if isMobile then
-                    Ui.none
-
-                  else
-                    Ui.el [ Ui.alignBottom ] (Ui.text "Close")
-                , Ui.html Icons.x
-                ]
-            )
+            (UserOptions.closeButton isMobile PressedCloseOverlay)
         ]
         (Ui.el [ Ui.scrollable, Ui.heightMin 0 ] (Encryption.info FrontendNoOp))
 
