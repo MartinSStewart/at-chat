@@ -778,7 +778,7 @@ discordPrivateChatWith isMobile route currentTab name =
 tabBodyView : Bool -> LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg_)
 tabBodyView isMobile local loggedIn model =
     case model.route of
-        GuildRoute guildId channelRoute _ ->
+        GuildRoute guildId channelRoute _ _ ->
             case channelRoute of
                 ChannelRoute channelId _ (Just tab) ->
                     case tab of
@@ -863,7 +863,7 @@ tabBodyView isMobile local loggedIn model =
                 Nothing ->
                     Nothing
 
-        HomePageRoute ->
+        HomePageRoute _ ->
             Nothing
 
         AdminRoute _ ->
@@ -972,9 +972,6 @@ tabBodyView isMobile local loggedIn model =
             Nothing
 
         PublicGoMatchRoute _ ->
-            Nothing
-
-        E2eeInfo ->
             Nothing
 
 

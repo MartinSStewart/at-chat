@@ -451,6 +451,7 @@ wordSpellingGameEmail =
                                 (Just (UserSession.ChannelHeaderTab_Games (Just (Id.fromInt 0))))
                             )
                             ChannelsVisibleOnMobile
+                            Nothing
                         )
                         sharedC
                         descriptionD

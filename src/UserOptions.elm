@@ -276,7 +276,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
                     [ Ui.el [ Ui.paddingXY 16 0 ] (Ui.text "User settings")
                     , MyUi.rowButton
                         (Dom.id "userOptions_closeUserOptions")
-                        PressedCloseUserOptions
+                        PressedCloseOverlay
                         [ Ui.padding 16
                         , Ui.alignRight
                         , Ui.Font.color

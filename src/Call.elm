@@ -329,7 +329,7 @@ displayMode isMobile currentUserId route local =
                     NoVideo
     in
     case route of
-        HomePageRoute ->
+        HomePageRoute _ ->
             thumbnailOrNoVideo
 
         AdminRoute _ ->
@@ -338,7 +338,7 @@ displayMode isMobile currentUserId route local =
         NewGuildRoute ->
             thumbnailOrNoVideo
 
-        GuildRoute guildId channelRoute channelsVisible ->
+        GuildRoute guildId channelRoute channelsVisible _ ->
             -- Only mobile puts the channel list over the conversation the videos are laid
             -- out on top of, so only mobile can leave them with nothing to sit on
             case ( isMobile, channelsVisible ) of
@@ -431,9 +431,6 @@ displayMode isMobile currentUserId route local =
             thumbnailOrNoVideo
 
         PublicGoMatchRoute _ ->
-            thumbnailOrNoVideo
-
-        E2eeInfo ->
             thumbnailOrNoVideo
 
 

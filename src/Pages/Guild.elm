@@ -884,6 +884,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                     guildId
                                                     (ChannelRoute channelId (NoThreadWithFriends Nothing HideChannelSettings) Nothing)
                                                     ChannelsHiddenOnMobile
+                                                    Nothing
                                           , guildOrDmId = guildOrDmId
                                           , threadRoute = NoThreadWithMessage unread.newestMessageId
                                           , additionalUnread = unread.additionalUnread
@@ -920,6 +921,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                                 Nothing
                                                             )
                                                             ChannelsHiddenOnMobile
+                                                            Nothing
                                                     , guildOrDmId = guildOrDmId
                                                     , threadRoute =
                                                         ViewThreadWithMessage threadId unread.newestMessageId
@@ -956,6 +958,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                 , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                                                 , tab = Nothing
                                                 , channelsVisible = ChannelsHiddenOnMobile
+                                                , overlay = Nothing
                                                 }
                                       , guildOrDmId = guildOrDmId
                                       , threadRoute = NoThreadWithMessage unread.newestMessageId
@@ -990,6 +993,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                         , threadRoute = ViewThreadWithFriends threadId Nothing HideChannelSettings
                                                         , tab = Nothing
                                                         , channelsVisible = ChannelsHiddenOnMobile
+                                                        , overlay = Nothing
                                                         }
                                                 , guildOrDmId = guildOrDmId
                                                 , threadRoute = ViewThreadWithMessage threadId unread.newestMessageId
@@ -1033,6 +1037,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                                         (NoThreadWithFriends Nothing HideChannelSettings)
                                                                         Nothing
                                                                 , channelsVisible = ChannelsHiddenOnMobile
+                                                                , overlay = Nothing
                                                                 }
                                                       , guildOrDmId = guildOrDmId
                                                       , threadRoute = NoThreadWithMessage unread.newestMessageId
@@ -1072,6 +1077,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                                                 (ViewThreadWithFriends threadId Nothing HideChannelSettings)
                                                                                 Nothing
                                                                         , channelsVisible = ChannelsHiddenOnMobile
+                                                                        , overlay = Nothing
                                                                         }
                                                                 , guildOrDmId = guildOrDmId
                                                                 , threadRoute =
@@ -1125,6 +1131,7 @@ unreadOverviewChannels local allDiscordUsers =
                                             , showMembersTab = HideChannelSettings
                                             , tab = Nothing
                                             , channelsVisible = ChannelsHiddenOnMobile
+                                            , overlay = Nothing
                                             }
                                     , guildOrDmId = guildOrDmId
                                     , threadRoute = NoThreadWithMessage unread.newestMessageId
@@ -2557,7 +2564,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                 [ Ui.attrIf risksAccepted (Ui.opacity 0.5), Ui.spacing 8 ]
                 [ MyUi.warningHeader "Before you enable E2EE:"
                 , Ui.text "You'll get a private key that you need to store in a password manager. If you lose it, you'll permanently lose access to all your encrypted messages."
-                , Ui.el [ Ui.Font.color MyUi.textLinkColor, Ui.linkNewTab (Route.encode Route.E2eeInfo) ] (Ui.text "Read more about E2EE here")
+                , Ui.el [ Ui.Font.color MyUi.textLinkColor, Ui.linkNewTab (Route.encode (Route.HomePageRoute (Just Route.E2eeInfoOverlay))) ] (Ui.text "Read more about E2EE here")
                 , Ui.row
                     []
                     [ Ui.Input.checkbox
@@ -2945,6 +2952,7 @@ memberLabel isMobile localUser userId =
             , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
             , tab = Nothing
             , channelsVisible = ChannelsHiddenOnMobile
+            , overlay = Nothing
             }
         )
         [ Ui.spacing 8
@@ -3376,7 +3384,7 @@ guildSettingsView model loggedIn local guildId guild =
                             let
                                 url : String
                                 url =
-                                    Route.encode (GuildRoute guildId (JoinRoute inviteId) ChannelsHiddenOnMobile)
+                                    Route.encode (GuildRoute guildId (JoinRoute inviteId) ChannelsHiddenOnMobile Nothing)
 
                                 inviteLink : String
                                 inviteLink =
@@ -9456,7 +9464,7 @@ channelColumn isMobile time localUser guildId guild channelRoute canScroll2 chan
                     in
                     GuildColumn.rowLinkButton
                         (Dom.id "guild_newChannel")
-                        (GuildRoute guildId NewChannelRoute ChannelsHiddenOnMobile)
+                        (GuildRoute guildId NewChannelRoute ChannelsHiddenOnMobile Nothing)
                         [ Ui.paddingXY 4 8
                         , Ui.Font.color MyUi.font3
                         , Ui.attrIf isSelected (Ui.background MyUi.selectedHighlight)
@@ -9478,7 +9486,7 @@ channelColumn isMobile time localUser guildId guild channelRoute canScroll2 chan
         [ Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName)
         , GuildColumn.elLinkButton
             (Dom.id "guild_inviteLinkCreatorRoute")
-            (GuildRoute guildId GuildSettingsRoute ChannelsHiddenOnMobile)
+            (GuildRoute guildId GuildSettingsRoute ChannelsHiddenOnMobile Nothing)
             [ Ui.Font.color MyUi.font2
             , Ui.width (Ui.px 40)
             , Ui.alignRight
@@ -9727,6 +9735,7 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
                 , guildId = routeData.guildId
                 , channelRoute = DiscordChannel_GuildSettingsRoute
                 , channelsVisible = ChannelsHiddenOnMobile
+                , overlay = Nothing
                 }
             )
             [ Ui.Font.color MyUi.font2
@@ -9902,6 +9911,7 @@ dmColumnThreads isMobile now threadRoute localUser otherUserId channel threads =
                     , threadRoute = ViewThreadWithFriends threadMessageIndex Nothing HideChannelSettings
                     , tab = Nothing
                     , channelsVisible = ChannelsHiddenOnMobile
+                    , overlay = Nothing
                     }
                 )
                 (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex localUser.decryptedMessages channel)
@@ -9988,6 +9998,7 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
                     guildId
                     (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideChannelSettings) Nothing)
                     ChannelsHiddenOnMobile
+                    Nothing
                 )
                 (threadPreviewText localUser.timezone (User.allUsers localUser) threadMessageIndex localUser.decryptedMessages channel)
         )
@@ -10141,6 +10152,7 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
                             (ViewThreadWithFriends threadMessageIndex Nothing HideChannelSettings)
                             Nothing
                     , channelsVisible = ChannelsHiddenOnMobile
+                    , overlay = Nothing
                     }
                 )
                 (threadPreviewText localUser.timezone (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers) threadMessageIndex SeqDict.empty channel)
@@ -10175,6 +10187,7 @@ channelColumnRow isMobile isMuted hasNotification channelRoute guildId channelId
             guildId
             (ChannelRoute channelId (NoThreadWithFriends Nothing HideChannelSettings) Nothing)
             ChannelsHiddenOnMobile
+            Nothing
         )
         [ Ui.paddingWith { left = 26, right = 8, top = 0, bottom = 0 }
         , Ui.el
@@ -10254,6 +10267,7 @@ discordChannelColumnRow isMobile isMuted hasNotifications routeData channelId ch
                     (NoThreadWithFriends Nothing HideChannelSettings)
                     Nothing
             , channelsVisible = ChannelsHiddenOnMobile
+            , overlay = Nothing
             }
         )
         [ Ui.paddingWith
@@ -10832,6 +10846,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
             , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
             , tab = Nothing
             , channelsVisible = ChannelsHiddenOnMobile
+            , overlay = Nothing
             }
         )
         [ Ui.clipWithEllipsis
@@ -11002,6 +11017,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                         , showMembersTab = HideChannelSettings
                         , tab = Nothing
                         , channelsVisible = ChannelsHiddenOnMobile
+                        , overlay = Nothing
                         }
                     )
                 )
@@ -11252,7 +11268,7 @@ newGuildFormView form =
             [ Ui.spacing 16, Ui.paddingXY 16 0 ]
             [ MyUi.secondaryButton
                 (Dom.id "guild_cancelNewGuild")
-                (PressedLink HomePageRoute)
+                (PressedLink (HomePageRoute Nothing))
                 "Cancel"
             , submitButton (Dom.id "guild_createGuildSubmit") (PressedSubmitNewGuild form) "Create guild"
             ]

@@ -7,6 +7,7 @@ module Route exposing
     , DiscordGuildRouteData
     , DmRouteData
     , LinkDiscordError(..)
+    , Overlay(..)
     , Route(..)
     , ShowChannelSettings(..)
     , ThreadRouteWithFriends(..)
@@ -20,9 +21,11 @@ module Route exposing
     , sameThread
     , setChannelHeaderTab
     , setChannelsVisible
+    , setOverlay
     , setShowMembers
     , toChannelHeaderTab
     , toGuildOrDmId
+    , toOverlay
     , toShowMembersTab
     , toShowMembersTabVisible
     )
@@ -45,10 +48,10 @@ import UserSession exposing (ChannelHeaderTab(..))
 
 
 type Route
-    = HomePageRoute
+    = HomePageRoute (Maybe Overlay)
     | AdminRoute { highlightLog : Maybe (Id Pagination.ItemId) }
     | NewGuildRoute
-    | GuildRoute (Id GuildId) ChannelRoute ChannelsVisibleOnMobile
+    | GuildRoute (Id GuildId) ChannelRoute ChannelsVisibleOnMobile (Maybe Overlay)
     | DiscordGuildRoute DiscordGuildRouteData
     | DmRoute DmRouteData
     | DiscordDmRoute DiscordDmRouteData
@@ -57,7 +60,14 @@ type Route
     | TextEditorRoute
     | LinkDiscord (Result LinkDiscordError Discord.UserAuth)
     | PublicGoMatchRoute (SecretId GamePublicId)
-    | E2eeInfo
+
+
+{-| A panel that covers the page it was opened from without replacing it. Closing it leaves
+the reader back on that page, so the page it covers is part of the route it appears in.
+-}
+type Overlay
+    = E2eeInfoOverlay
+    | UserOptionsOverlay
 
 
 type LinkDiscordError
@@ -73,11 +83,17 @@ type alias DiscordDmRouteData =
     , showMembersTab : ShowChannelSettings
     , tab : Maybe ChannelHeaderTab
     , channelsVisible : ChannelsVisibleOnMobile
+    , overlay : Maybe Overlay
     }
 
 
 type alias DmRouteData =
-    { channelId : DmChannelId, threadRoute : ThreadRouteWithFriends, tab : Maybe ChannelHeaderTab, channelsVisible : ChannelsVisibleOnMobile }
+    { channelId : DmChannelId
+    , threadRoute : ThreadRouteWithFriends
+    , tab : Maybe ChannelHeaderTab
+    , channelsVisible : ChannelsVisibleOnMobile
+    , overlay : Maybe Overlay
+    }
 
 
 type alias DiscordGuildRouteData =
@@ -85,6 +101,7 @@ type alias DiscordGuildRouteData =
     , guildId : Discord.Id Discord.GuildId
     , channelRoute : DiscordChannelRoute
     , channelsVisible : ChannelsVisibleOnMobile
+    , overlay : Maybe Overlay
     }
 
 
@@ -126,6 +143,21 @@ guildChannelsVisibleParam =
     "show-channels"
 
 
+overlayParam : String
+overlayParam =
+    "overlay"
+
+
+e2eeInfoOverlayValue : String
+e2eeInfoOverlayValue =
+    "end-to-end-encryption"
+
+
+userOptionsOverlayValue : String
+userOptionsOverlayValue =
+    "user-options"
+
+
 decode : Url -> Route
 decode url =
     let
@@ -149,6 +181,22 @@ decode url =
 
                 _ ->
                     ChannelsHiddenOnMobile
+
+        overlay : Maybe Overlay
+        overlay =
+            case Dict.get overlayParam url2.queryParameters of
+                Just [ value ] ->
+                    if value == e2eeInfoOverlayValue then
+                        Just E2eeInfoOverlay
+
+                    else if value == userOptionsOverlayValue then
+                        Just UserOptionsOverlay
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
     in
     case url2.path of
         [ "admin" ] ->
@@ -183,6 +231,7 @@ decode url =
                                             (decodeChannelHeaderTab url2)
                                         )
                                         channelsVisible
+                                        overlay
 
                                 ( Just channelId2, [ "t", threadMessageIndex ] ) ->
                                     GuildRoute
@@ -193,6 +242,7 @@ decode url =
                                             (decodeChannelHeaderTab url2)
                                         )
                                         channelsVisible
+                                        overlay
 
                                 ( Just channelId2, [ "m", messageIndex ] ) ->
                                     GuildRoute
@@ -203,6 +253,7 @@ decode url =
                                             (decodeChannelHeaderTab url2)
                                         )
                                         channelsVisible
+                                        overlay
 
                                 ( Just channelId2, [] ) ->
                                     GuildRoute
@@ -213,24 +264,25 @@ decode url =
                                             (decodeChannelHeaderTab url2)
                                         )
                                         channelsVisible
+                                        overlay
 
                                 _ ->
-                                    HomePageRoute
+                                    HomePageRoute overlay
 
                         [ "new" ] ->
-                            GuildRoute guildId2 NewChannelRoute channelsVisible
+                            GuildRoute guildId2 NewChannelRoute channelsVisible overlay
 
                         [ "settings" ] ->
-                            GuildRoute guildId2 GuildSettingsRoute channelsVisible
+                            GuildRoute guildId2 GuildSettingsRoute channelsVisible overlay
 
                         [ "join", inviteLinkId ] ->
-                            GuildRoute guildId2 (JoinRoute (SecretId.fromString inviteLinkId)) channelsVisible
+                            GuildRoute guildId2 (JoinRoute (SecretId.fromString inviteLinkId)) channelsVisible overlay
 
                         _ ->
-                            HomePageRoute
+                            HomePageRoute overlay
 
                 Nothing ->
-                    HomePageRoute
+                    HomePageRoute overlay
 
         "dg" :: userId :: guildId :: rest ->
             case ( Discord.idFromString userId, Discord.idFromString guildId ) of
@@ -248,6 +300,7 @@ decode url =
                                             (decodeChannelHeaderTab url2)
                                         )
                                         channelsVisible
+                                        overlay
                                         |> DiscordGuildRoute
 
                                 ( Just channelId2, [ "t", threadMessageIndex ] ) ->
@@ -260,6 +313,7 @@ decode url =
                                             (decodeChannelHeaderTab url2)
                                         )
                                         channelsVisible
+                                        overlay
                                         |> DiscordGuildRoute
 
                                 ( Just channelId2, [ "m", messageIndex ] ) ->
@@ -272,6 +326,7 @@ decode url =
                                             (decodeChannelHeaderTab url2)
                                         )
                                         channelsVisible
+                                        overlay
                                         |> DiscordGuildRoute
 
                                 ( Just channelId2, [] ) ->
@@ -284,24 +339,25 @@ decode url =
                                             (decodeChannelHeaderTab url2)
                                         )
                                         channelsVisible
+                                        overlay
                                         |> DiscordGuildRoute
 
                                 _ ->
-                                    HomePageRoute
+                                    HomePageRoute overlay
 
                         [ "new" ] ->
-                            DiscordGuildRouteData userId2 guildId2 DiscordChannel_NewChannelRoute channelsVisible
+                            DiscordGuildRouteData userId2 guildId2 DiscordChannel_NewChannelRoute channelsVisible overlay
                                 |> DiscordGuildRoute
 
                         [ "settings" ] ->
-                            DiscordGuildRouteData userId2 guildId2 DiscordChannel_GuildSettingsRoute channelsVisible
+                            DiscordGuildRouteData userId2 guildId2 DiscordChannel_GuildSettingsRoute channelsVisible overlay
                                 |> DiscordGuildRoute
 
                         _ ->
-                            HomePageRoute
+                            HomePageRoute overlay
 
                 _ ->
-                    HomePageRoute
+                    HomePageRoute overlay
 
         "d" :: channelId :: rest ->
             case DmChannelId.fromString channelId of
@@ -312,6 +368,7 @@ decode url =
                             , threadRoute = stringToThread showMembers threadMessageIndex messageIndex
                             , tab = decodeChannelHeaderTab url2
                             , channelsVisible = channelsVisible
+                            , overlay = overlay
                             }
 
                         [ "t", threadMessageIndex ] ->
@@ -319,6 +376,7 @@ decode url =
                             , threadRoute = stringToThread showMembers threadMessageIndex ""
                             , tab = decodeChannelHeaderTab url2
                             , channelsVisible = channelsVisible
+                            , overlay = overlay
                             }
 
                         [ "m", messageIndex ] ->
@@ -326,6 +384,7 @@ decode url =
                             , threadRoute = NoThreadWithFriends (Id.fromString messageIndex) showMembers
                             , tab = decodeChannelHeaderTab url2
                             , channelsVisible = channelsVisible
+                            , overlay = overlay
                             }
 
                         _ ->
@@ -333,12 +392,13 @@ decode url =
                             , threadRoute = NoThreadWithFriends Nothing showMembers
                             , tab = decodeChannelHeaderTab url2
                             , channelsVisible = channelsVisible
+                            , overlay = overlay
                             }
                     )
                         |> DmRoute
 
                 Err () ->
-                    HomePageRoute
+                    HomePageRoute overlay
 
         "dd" :: userId :: otherUserId :: rest ->
             case ( Discord.idFromString userId, Discord.idFromString otherUserId ) of
@@ -356,10 +416,11 @@ decode url =
                         , showMembersTab = showMembers
                         , tab = decodeChannelHeaderTab url2
                         , channelsVisible = channelsVisible
+                        , overlay = overlay
                         }
 
                 _ ->
-                    HomePageRoute
+                    HomePageRoute overlay
 
         [ "slack-oauth" ] ->
             case ( Dict.get "code" url2.queryParameters, Dict.get "state" url2.queryParameters ) of
@@ -385,11 +446,8 @@ decode url =
         [ "go-match", goMatchPublicId ] ->
             PublicGoMatchRoute (SecretId.fromString goMatchPublicId)
 
-        [ "end-to-end-encryption" ] ->
-            E2eeInfo
-
         _ ->
-            HomePageRoute
+            HomePageRoute overlay
 
 
 decodeChannelHeaderTab : AppUrl -> Maybe ChannelHeaderTab
@@ -432,7 +490,7 @@ toChannelHeaderTab route =
         DmRoute dmRoute ->
             dmRoute.tab
 
-        HomePageRoute ->
+        HomePageRoute _ ->
             Nothing
 
         AdminRoute _ ->
@@ -441,7 +499,7 @@ toChannelHeaderTab route =
         NewGuildRoute ->
             Nothing
 
-        GuildRoute _ channelRoute _ ->
+        GuildRoute _ channelRoute _ _ ->
             case channelRoute of
                 ChannelRoute _ _ maybeTab ->
                     maybeTab
@@ -484,9 +542,6 @@ toChannelHeaderTab route =
         PublicGoMatchRoute _ ->
             Nothing
 
-        E2eeInfo ->
-            Nothing
-
 
 type ChannelSidebarMode
     = ChannelSidebarNotDragging { offset : Float }
@@ -527,7 +582,7 @@ toShowMembersTabVisible { sidebarMode } route =
         DmRoute dmRoute ->
             threadRouteToShowMembersTab dmRoute.threadRoute |> Tuple.mapFirst helper
 
-        HomePageRoute ->
+        HomePageRoute _ ->
             ( HideChannelSettings, False )
 
         AdminRoute _ ->
@@ -536,7 +591,7 @@ toShowMembersTabVisible { sidebarMode } route =
         NewGuildRoute ->
             ( HideChannelSettings, False )
 
-        GuildRoute _ channelRoute _ ->
+        GuildRoute _ channelRoute _ _ ->
             case channelRoute of
                 ChannelRoute _ threadRoute _ ->
                     threadRouteToShowMembersTab threadRoute |> Tuple.mapFirst helper
@@ -577,9 +632,6 @@ toShowMembersTabVisible { sidebarMode } route =
             ( HideChannelSettings, False )
 
         PublicGoMatchRoute _ ->
-            ( HideChannelSettings, False )
-
-        E2eeInfo ->
             ( HideChannelSettings, False )
 
 
@@ -592,7 +644,7 @@ toShowMembersTab route =
         DmRoute dmRoute ->
             threadRouteToShowMembersTab dmRoute.threadRoute
 
-        HomePageRoute ->
+        HomePageRoute _ ->
             ( HideChannelSettings, False )
 
         AdminRoute _ ->
@@ -601,7 +653,7 @@ toShowMembersTab route =
         NewGuildRoute ->
             ( HideChannelSettings, False )
 
-        GuildRoute _ channelRoute _ ->
+        GuildRoute _ channelRoute _ _ ->
             case channelRoute of
                 ChannelRoute _ threadRoute _ ->
                     threadRouteToShowMembersTab threadRoute
@@ -642,9 +694,6 @@ toShowMembersTab route =
             ( HideChannelSettings, False )
 
         PublicGoMatchRoute _ ->
-            ( HideChannelSettings, False )
-
-        E2eeInfo ->
             ( HideChannelSettings, False )
 
 
@@ -666,8 +715,8 @@ setChannelHeaderTab tab route =
         DmRoute dmRoute ->
             DmRoute { dmRoute | tab = tab }
 
-        GuildRoute guildId (ChannelRoute channelId threadRoute _) channelsVisible ->
-            GuildRoute guildId (ChannelRoute channelId threadRoute tab) channelsVisible
+        GuildRoute guildId (ChannelRoute channelId threadRoute _) channelsVisible overlay ->
+            GuildRoute guildId (ChannelRoute channelId threadRoute tab) channelsVisible overlay
 
         DiscordGuildRoute routeData ->
             case routeData.channelRoute of
@@ -688,11 +737,12 @@ setChannelHeaderTab tab route =
 setShowMembers : ShowChannelSettings -> Route -> Route
 setShowMembers showMembers route =
     case route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute tab) channelsVisible ->
+        GuildRoute guildId (ChannelRoute channelId threadRoute tab) channelsVisible overlay ->
             GuildRoute
                 guildId
                 (ChannelRoute channelId (threadRouteWithShowMembers showMembers threadRoute) tab)
                 channelsVisible
+                overlay
 
         DiscordGuildRoute ({ channelRoute } as routeData) ->
             case channelRoute of
@@ -732,13 +782,13 @@ threadRouteWithShowMembers showMembers threadRoute =
 setChannelsVisible : ChannelsVisibleOnMobile -> Route -> Route
 setChannelsVisible channelsVisible route =
     case route of
-        GuildRoute guildId channelRoute _ ->
-            GuildRoute guildId channelRoute channelsVisible
+        GuildRoute guildId channelRoute _ overlay ->
+            GuildRoute guildId channelRoute channelsVisible overlay
 
         DiscordGuildRoute routeData ->
             DiscordGuildRoute { routeData | channelsVisible = channelsVisible }
 
-        HomePageRoute ->
+        HomePageRoute _ ->
             route
 
         AdminRoute _ ->
@@ -768,7 +818,87 @@ setChannelsVisible channelsVisible route =
         PublicGoMatchRoute _ ->
             route
 
-        E2eeInfo ->
+
+toOverlay : Route -> Maybe Overlay
+toOverlay route =
+    case route of
+        HomePageRoute overlay ->
+            overlay
+
+        GuildRoute _ _ _ overlay ->
+            overlay
+
+        DiscordGuildRoute routeData ->
+            routeData.overlay
+
+        DmRoute routeData ->
+            routeData.overlay
+
+        DiscordDmRoute routeData ->
+            routeData.overlay
+
+        AdminRoute _ ->
+            Nothing
+
+        NewGuildRoute ->
+            Nothing
+
+        AiChatRoute ->
+            Nothing
+
+        SlackOAuthRedirect _ ->
+            Nothing
+
+        TextEditorRoute ->
+            Nothing
+
+        LinkDiscord _ ->
+            Nothing
+
+        PublicGoMatchRoute _ ->
+            Nothing
+
+
+{-| Opens or closes an overlay on the routes that can show one, leaves the other routes
+unchanged.
+-}
+setOverlay : Maybe Overlay -> Route -> Route
+setOverlay overlay route =
+    case route of
+        HomePageRoute _ ->
+            HomePageRoute overlay
+
+        GuildRoute guildId channelRoute channelsVisible _ ->
+            GuildRoute guildId channelRoute channelsVisible overlay
+
+        DiscordGuildRoute routeData ->
+            DiscordGuildRoute { routeData | overlay = overlay }
+
+        DmRoute routeData ->
+            DmRoute { routeData | overlay = overlay }
+
+        DiscordDmRoute routeData ->
+            DiscordDmRoute { routeData | overlay = overlay }
+
+        AdminRoute _ ->
+            route
+
+        NewGuildRoute ->
+            route
+
+        AiChatRoute ->
+            route
+
+        SlackOAuthRedirect _ ->
+            route
+
+        TextEditorRoute ->
+            route
+
+        LinkDiscord _ ->
+            route
+
+        PublicGoMatchRoute _ ->
             route
 
 
@@ -818,8 +948,8 @@ encode route =
     let
         ( path, query ) =
             case route of
-                HomePageRoute ->
-                    ( [], [] )
+                HomePageRoute overlay ->
+                    ( [], encodeOverlay overlay )
 
                 AdminRoute params ->
                     ( [ "admin" ]
@@ -837,7 +967,7 @@ encode route =
                 AiChatRoute ->
                     ( [ "ai-chat" ], [] )
 
-                GuildRoute guildId maybeChannelId channelsVisible ->
+                GuildRoute guildId maybeChannelId channelsVisible overlay ->
                     case maybeChannelId of
                         ChannelRoute channelId thread tab ->
                             case thread of
@@ -853,6 +983,7 @@ encode route =
                                     , encodeShowMembers showMembers
                                         ++ encodeChannelHeaderTab tab
                                         ++ encodeChannelsVisible channelsVisible
+                                        ++ encodeOverlay overlay
                                     )
 
                                 NoThreadWithFriends maybeMessageId showMembers ->
@@ -861,20 +992,25 @@ encode route =
                                     , encodeShowMembers showMembers
                                         ++ encodeChannelHeaderTab tab
                                         ++ encodeChannelsVisible channelsVisible
+                                        ++ encodeOverlay overlay
                                     )
 
                         NewChannelRoute ->
-                            ( [ "g", Id.toString guildId, "new" ], encodeChannelsVisible channelsVisible )
+                            ( [ "g", Id.toString guildId, "new" ]
+                            , encodeChannelsVisible channelsVisible ++ encodeOverlay overlay
+                            )
 
                         GuildSettingsRoute ->
-                            ( [ "g", Id.toString guildId, "settings" ], encodeChannelsVisible channelsVisible )
+                            ( [ "g", Id.toString guildId, "settings" ]
+                            , encodeChannelsVisible channelsVisible ++ encodeOverlay overlay
+                            )
 
                         JoinRoute inviteLinkId ->
                             ( [ "g", Id.toString guildId, "join", SecretId.toString inviteLinkId ]
-                            , encodeChannelsVisible channelsVisible
+                            , encodeChannelsVisible channelsVisible ++ encodeOverlay overlay
                             )
 
-                DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute, channelsVisible } ->
+                DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute, channelsVisible, overlay } ->
                     case channelRoute of
                         DiscordChannel_ChannelRoute channelId thread tab ->
                             case thread of
@@ -891,6 +1027,7 @@ encode route =
                                     , encodeShowMembers showMembers
                                         ++ encodeChannelHeaderTab tab
                                         ++ encodeChannelsVisible channelsVisible
+                                        ++ encodeOverlay overlay
                                     )
 
                                 NoThreadWithFriends maybeMessageId showMembers ->
@@ -904,38 +1041,48 @@ encode route =
                                     , encodeShowMembers showMembers
                                         ++ encodeChannelHeaderTab tab
                                         ++ encodeChannelsVisible channelsVisible
+                                        ++ encodeOverlay overlay
                                     )
 
                         DiscordChannel_NewChannelRoute ->
                             ( [ "dg", Discord.idToString currentDiscordUserId, Discord.idToString guildId, "new" ]
-                            , encodeChannelsVisible channelsVisible
+                            , encodeChannelsVisible channelsVisible ++ encodeOverlay overlay
                             )
 
                         DiscordChannel_GuildSettingsRoute ->
                             ( [ "dg", Discord.idToString currentDiscordUserId, Discord.idToString guildId, "settings" ]
-                            , encodeChannelsVisible channelsVisible
+                            , encodeChannelsVisible channelsVisible ++ encodeOverlay overlay
                             )
 
-                DmRoute { channelId, threadRoute, tab, channelsVisible } ->
+                DmRoute { channelId, threadRoute, tab, channelsVisible, overlay } ->
                     case threadRoute of
                         ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
                             ( [ "d", DmChannelId.toString channelId, "t", Id.toString threadMessageIndex ]
                                 ++ maybeMessageIdToString maybeMessageId
-                            , encodeShowMembers showMembers ++ encodeChannelHeaderTab tab ++ encodeChannelsVisible channelsVisible
+                            , encodeShowMembers showMembers
+                                ++ encodeChannelHeaderTab tab
+                                ++ encodeChannelsVisible channelsVisible
+                                ++ encodeOverlay overlay
                             )
 
                         NoThreadWithFriends maybeMessageId showMembers ->
                             ( [ "d", DmChannelId.toString channelId ] ++ maybeMessageIdToString maybeMessageId
-                            , encodeShowMembers showMembers ++ encodeChannelHeaderTab tab ++ encodeChannelsVisible channelsVisible
+                            , encodeShowMembers showMembers
+                                ++ encodeChannelHeaderTab tab
+                                ++ encodeChannelsVisible channelsVisible
+                                ++ encodeOverlay overlay
                             )
 
-                DiscordDmRoute { currentDiscordUserId, channelId, viewingMessage, showMembersTab, tab, channelsVisible } ->
+                DiscordDmRoute { currentDiscordUserId, channelId, viewingMessage, showMembersTab, tab, channelsVisible, overlay } ->
                     ( [ "dd"
                       , Discord.idToString currentDiscordUserId
                       , Discord.idToString channelId
                       ]
                         ++ maybeMessageIdToString viewingMessage
-                    , encodeShowMembers showMembersTab ++ encodeChannelHeaderTab tab ++ encodeChannelsVisible channelsVisible
+                    , encodeShowMembers showMembersTab
+                        ++ encodeChannelHeaderTab tab
+                        ++ encodeChannelsVisible channelsVisible
+                        ++ encodeOverlay overlay
                     )
 
                 SlackOAuthRedirect _ ->
@@ -951,9 +1098,6 @@ encode route =
 
                 PublicGoMatchRoute goMatchPublicId ->
                     ( [ "go-match", SecretId.toString goMatchPublicId ], [] )
-
-                E2eeInfo ->
-                    ( [ "end-to-end-encryption" ], [] )
     in
     Url.Builder.absolute path query
 
@@ -985,6 +1129,19 @@ encodeChannelsVisible channelsVisible =
             [ Url.Builder.string guildChannelsVisibleParam "True" ]
 
         ChannelsHiddenOnMobile ->
+            []
+
+
+encodeOverlay : Maybe Overlay -> List Url.Builder.QueryParameter
+encodeOverlay overlay =
+    case overlay of
+        Just E2eeInfoOverlay ->
+            [ Url.Builder.string overlayParam e2eeInfoOverlayValue ]
+
+        Just UserOptionsOverlay ->
+            [ Url.Builder.string overlayParam userOptionsOverlayValue ]
+
+        Nothing ->
             []
 
 
@@ -1027,7 +1184,7 @@ maybeMessageIdToString maybeMessageIndex =
 requiresLogin : Route -> Bool
 requiresLogin route =
     case route of
-        HomePageRoute ->
+        HomePageRoute _ ->
             False
 
         AdminRoute _ ->
@@ -1039,7 +1196,7 @@ requiresLogin route =
         AiChatRoute ->
             False
 
-        GuildRoute _ _ _ ->
+        GuildRoute _ _ _ _ ->
             True
 
         DiscordGuildRoute _ ->
@@ -1063,9 +1220,6 @@ requiresLogin route =
         PublicGoMatchRoute _ ->
             False
 
-        E2eeInfo ->
-            False
-
 
 {-| Whether moving between these two routes leaves the reader looking at a conversation they
 weren't already looking at, which is what counts as having seen the messages waiting in it.
@@ -1086,7 +1240,7 @@ routeChangeCountsAsMessageView old new =
 sameConversation : Route -> Route -> Bool
 sameConversation old new =
     case ( old, new ) of
-        ( GuildRoute oldGuildId (ChannelRoute oldChannelId oldThreadRoute _) oldChannelsVisible, GuildRoute newGuildId (ChannelRoute newChannelId newThreadRoute _) newChannelsVisible ) ->
+        ( GuildRoute oldGuildId (ChannelRoute oldChannelId oldThreadRoute _) oldChannelsVisible _, GuildRoute newGuildId (ChannelRoute newChannelId newThreadRoute _) newChannelsVisible _ ) ->
             (oldGuildId == newGuildId)
                 && (oldChannelId == newChannelId)
                 && sameThread oldThreadRoute newThreadRoute
@@ -1134,7 +1288,7 @@ sameThread threadRoute previousThreadRoute =
 toGuildOrDmId : Id UserId -> Route -> Maybe ( AnyGuildOrDmId, ThreadRoute )
 toGuildOrDmId userId route =
     case route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute _) _ ->
+        GuildRoute guildId (ChannelRoute channelId threadRoute _) _ _ ->
             ( GuildOrDmId_Guild { guildId = guildId, channelId = channelId } |> GuildOrDmId
             , case threadRoute of
                 ViewThreadWithFriends threadMessageId _ _ ->

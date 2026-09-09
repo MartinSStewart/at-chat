@@ -576,6 +576,7 @@ messageNotification usersMentioned time sender id threadRoute message members mo
                                     id.guildId
                                     (ChannelRoute id.channelId threadRouteWithFriends Nothing)
                                     ChannelsHiddenOnMobile
+                                    Nothing
                                     |> Just
                                 )
                                 sessions
@@ -709,6 +710,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                     , guildId = guildId
                                     , channelRoute = DiscordChannel_ChannelRoute channelId threadRouteWithFriends Nothing
                                     , channelsVisible = ChannelsHiddenOnMobile
+                                    , overlay = Nothing
                                     }
                                     |> Just
                                 )
@@ -1226,6 +1228,7 @@ discordDmNotification time channelId senderId senderName senderIcon text message
                     , showMembersTab = HideChannelSettings
                     , tab = Nothing
                     , channelsVisible = ChannelsHiddenOnMobile
+                    , overlay = Nothing
                     }
                     |> Just
                 )
@@ -1568,6 +1571,7 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
                                             ViewThreadWithFriends threadId Nothing HideChannelSettings
                                 , tab = Nothing
                                 , channelsVisible = ChannelsHiddenOnMobile
+                                , overlay = Nothing
                                 }
                                 |> Just
                             )
@@ -1664,6 +1668,7 @@ gameStartedDmNotification time senderId { otherUserId } gameType model =
                         , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                         , tab = Nothing
                         , channelsVisible = ChannelsHiddenOnMobile
+                        , overlay = Nothing
                         }
                         |> Just
                     )
@@ -1728,6 +1733,7 @@ encryptedDmNotification time senderId { otherUserId } notificationText model =
                         , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                         , tab = Nothing
                         , channelsVisible = ChannelsHiddenOnMobile
+                        , overlay = Nothing
                         }
                         |> Just
                     )
@@ -1784,6 +1790,7 @@ e2eeRequestNotification time requestedBy { otherUserId } model =
                         , threadRoute = NoThreadWithFriends Nothing ShowChannelSettings
                         , tab = Nothing
                         , channelsVisible = ChannelsHiddenOnMobile
+                        , overlay = Nothing
                         }
                         |> Just
                     )
@@ -1874,6 +1881,7 @@ gameStartedGuildNotification time sender id gameType members model =
                                     id.guildId
                                     (ChannelRoute id.channelId (NoThreadWithFriends Nothing HideChannelSettings) Nothing)
                                     ChannelsHiddenOnMobile
+                                    Nothing
                                     |> Just
                                 )
                                 sessions

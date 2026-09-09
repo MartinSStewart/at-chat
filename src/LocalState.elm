@@ -3362,7 +3362,7 @@ previouslyLastViewedThreadMessage guildOrDmId threadId local =
 routeToViewing : Bool -> Route -> LocalState -> SetViewing
 routeToViewing isMobile route local =
     case route of
-        HomePageRoute ->
+        HomePageRoute _ ->
             -- The home page shows the unread overview when no DM is selected
             ViewOverview EmptyPlaceholder
 
@@ -3372,7 +3372,7 @@ routeToViewing isMobile route local =
         NewGuildRoute ->
             StopViewingChannel
 
-        GuildRoute guildId channelRoute channelsVisible ->
+        GuildRoute guildId channelRoute channelsVisible _ ->
             -- Only mobile puts the channel list over the conversation, so only mobile can
             -- leave the reader looking at something other than the channel the route names
             if SeqDict.member guildId local.guilds && not (isMobile && channelsVisible == ChannelsVisibleOnMobile) then
@@ -3530,9 +3530,6 @@ routeToViewing isMobile route local =
             StopViewingChannel
 
         PublicGoMatchRoute _ ->
-            StopViewingChannel
-
-        E2eeInfo ->
             StopViewingChannel
 
 

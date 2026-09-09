@@ -4,7 +4,7 @@ import DmChannelId
 import Expect
 import Fuzz exposing (Fuzzer)
 import Id exposing (Id)
-import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), Overlay(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import Test exposing (Test)
 import Url
@@ -43,26 +43,36 @@ roundtrip =
 routeFuzzer : Fuzzer Route
 routeFuzzer =
     Fuzz.oneOf
-        [ Fuzz.constant HomePageRoute
+        [ Fuzz.map HomePageRoute overlayFuzzer
         , Fuzz.map AdminRoute (Fuzz.map (\highlightLog -> { highlightLog = highlightLog }) (Fuzz.maybe idFuzzer))
         , Fuzz.constant NewGuildRoute
         , Fuzz.constant AiChatRoute
-        , Fuzz.map3 GuildRoute idFuzzer channelRouteFuzzer channelsVisibleFuzzer
+        , Fuzz.map4 GuildRoute idFuzzer channelRouteFuzzer channelsVisibleFuzzer overlayFuzzer
         , Fuzz.map5
-            (\userId otherUserId threadRoute tab channelsVisible ->
+            (\userId otherUserId threadRoute tab ( channelsVisible, overlay ) ->
                 DmRoute
                     { channelId = DmChannelId.fromUserIds userId otherUserId
                     , threadRoute = threadRoute
                     , tab = tab
                     , channelsVisible = channelsVisible
+                    , overlay = overlay
                     }
             )
             idFuzzer
             idFuzzer
             threadRouteFuzzer
             (Fuzz.maybe tabFuzzer)
-            channelsVisibleFuzzer
+            (Fuzz.pair channelsVisibleFuzzer overlayFuzzer)
         , Fuzz.map PublicGoMatchRoute secretIdFuzzer
+        ]
+
+
+overlayFuzzer : Fuzzer (Maybe Overlay)
+overlayFuzzer =
+    Fuzz.oneOfValues
+        [ Nothing
+        , Just E2eeInfoOverlay
+        , Just UserOptionsOverlay
         ]
 
 

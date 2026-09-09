@@ -938,7 +938,7 @@ updateLoaded msg model =
                                     )
 
                                 Pages.Admin.GoToHomepage ->
-                                    FrontendExtra.routePush { model | loginStatus = LoggedIn loggedIn2 } HomePageRoute
+                                    FrontendExtra.routePush { model | loginStatus = LoggedIn loggedIn2 } (HomePageRoute Nothing)
 
                                 Pages.Admin.CopyToClipboard text ->
                                     ( { model | lastCopied = Just { copiedAt = model.time, copied = CopiedText text } }
@@ -994,7 +994,7 @@ updateLoaded msg model =
                                     { model | loginStatus = NotLoggedIn { notLoggedIn | loginForm = Nothing } }
                             in
                             if Route.requiresLogin model2.route then
-                                FrontendExtra.routePush model2 HomePageRoute
+                                FrontendExtra.routePush model2 (HomePageRoute Nothing)
 
                             else
                                 ( model2, Command.none )
@@ -1090,6 +1090,7 @@ updateLoaded msg model =
                                             guildId
                                             (ChannelRoute nextChannelId (NoThreadWithFriends Nothing HideChannelSettings) Nothing)
                                             ChannelsHiddenOnMobile
+                                            Nothing
                                         )
                             in
                             ( model2, Command.batch [ routeCmd, cmd ] )
@@ -1187,6 +1188,7 @@ updateLoaded msg model =
                                                 Nothing
                                             )
                                             ChannelsVisibleOnMobile
+                                            Nothing
                                         )
 
                                 Nothing ->
@@ -1261,7 +1263,7 @@ updateLoaded msg model =
                 LoggedIn loggedIn ->
                     let
                         ( model2, cmd ) =
-                            FrontendExtra.routePush model HomePageRoute
+                            FrontendExtra.routePush model (HomePageRoute Nothing)
 
                         ( loggedIn2, cmd2 ) =
                             FrontendExtra.handleLocalChange
@@ -1282,7 +1284,7 @@ updateLoaded msg model =
                 LoggedIn loggedIn ->
                     let
                         ( model2, cmd ) =
-                            FrontendExtra.routePush model HomePageRoute
+                            FrontendExtra.routePush model (HomePageRoute Nothing)
 
                         ( loggedIn2, cmd2 ) =
                             FrontendExtra.handleLocalChange
@@ -1658,13 +1660,14 @@ updateLoaded msg model =
 
         MessageMenu_PressedOpenThread messageIndex ->
             case ( model.route, model.loginStatus ) of
-                ( GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends _ _) _) _, LoggedIn loggedIn ) ->
+                ( GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends _ _) _) _ _, LoggedIn loggedIn ) ->
                     FrontendExtra.routePush
                         { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
                         (GuildRoute
                             guildId
                             (ChannelRoute channelId (ViewThreadWithFriends messageIndex Nothing HideChannelSettings) Nothing)
                             ChannelsHiddenOnMobile
+                            Nothing
                         )
 
                 ( DmRoute dmRoute, LoggedIn loggedIn ) ->
@@ -2074,6 +2077,7 @@ updateLoaded msg model =
                             , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                             , tab = Nothing
                             , channelsVisible = ChannelsHiddenOnMobile
+                            , overlay = Nothing
                             }
                         )
 
@@ -2092,6 +2096,7 @@ updateLoaded msg model =
                             , showMembersTab = HideChannelSettings
                             , tab = Nothing
                             , channelsVisible = ChannelsHiddenOnMobile
+                            , overlay = Nothing
                             }
                         )
 
@@ -2213,24 +2218,10 @@ updateLoaded msg model =
                 model
 
         PressedShowUserOption ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | userOptions =
-                            Just
-                                (UserOptions.init
-                                    (Local.model loggedIn.localState).localUser.user.domainWhitelist
-                                )
-                      }
-                    , Command.none
-                    )
-                )
-                model
+            FrontendExtra.routePush model (Route.setOverlay (Just Route.UserOptionsOverlay) model.route)
 
-        PressedCloseUserOptions ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn -> ( { loggedIn | userOptions = Nothing }, Command.none ))
-                model
+        PressedCloseOverlay ->
+            FrontendExtra.routePush model (Route.setOverlay Nothing model.route)
 
         PressedExpandContainer section ->
             FrontendExtra.updateLoggedIn
@@ -2645,6 +2636,7 @@ updateLoaded msg model =
                                                                 Nothing
                                                             )
                                                             ChannelsHiddenOnMobile
+                                                            Nothing
                                                         )
 
                                                 ( GuildOrDmId_Guild { guildId, channelId }, NoThreadWithMaybeMessage (Just repliedTo) ) ->
@@ -2658,6 +2650,7 @@ updateLoaded msg model =
                                                                 Nothing
                                                             )
                                                             ChannelsHiddenOnMobile
+                                                            Nothing
                                                         )
 
                                                 ( GuildOrDmId_Dm { otherUserId }, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
@@ -2672,6 +2665,7 @@ updateLoaded msg model =
                                                                 ViewThreadWithFriends threadId (Just repliedTo) HideChannelSettings
                                                             , tab = Nothing
                                                             , channelsVisible = ChannelsHiddenOnMobile
+                                                            , overlay = Nothing
                                                             }
                                                         )
 
@@ -2687,6 +2681,7 @@ updateLoaded msg model =
                                                                 NoThreadWithFriends (Just repliedTo) HideChannelSettings
                                                             , tab = Nothing
                                                             , channelsVisible = ChannelsHiddenOnMobile
+                                                            , overlay = Nothing
                                                             }
                                                         )
 
@@ -2711,6 +2706,7 @@ updateLoaded msg model =
                                                                 (ViewThreadWithFriends threadId (Just repliedTo) HideChannelSettings)
                                                                 Nothing
                                                          , channelsVisible = ChannelsHiddenOnMobile
+                                                         , overlay = Nothing
                                                          }
                                                             |> DiscordGuildRoute
                                                         )
@@ -2726,6 +2722,7 @@ updateLoaded msg model =
                                                                 (NoThreadWithFriends (Just repliedTo) HideChannelSettings)
                                                                 Nothing
                                                          , channelsVisible = ChannelsHiddenOnMobile
+                                                         , overlay = Nothing
                                                          }
                                                             |> DiscordGuildRoute
                                                         )
@@ -2740,6 +2737,7 @@ updateLoaded msg model =
                                                             , showMembersTab = HideChannelSettings
                                                             , tab = Nothing
                                                             , channelsVisible = ChannelsHiddenOnMobile
+                                                            , overlay = Nothing
                                                             }
                                                         )
 
@@ -2806,6 +2804,7 @@ updateLoaded msg model =
                                     guildId
                                     (ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideChannelSettings) Nothing)
                                     ChannelsHiddenOnMobile
+                                    Nothing
                                 )
 
                         ( GuildOrDmId (GuildOrDmId_Dm { otherUserId }), NoThreadWithMessage messageId ) ->
@@ -2818,6 +2817,7 @@ updateLoaded msg model =
                                     , threadRoute = ViewThreadWithFriends messageId Nothing HideChannelSettings
                                     , tab = Nothing
                                     , channelsVisible = ChannelsHiddenOnMobile
+                                    , overlay = Nothing
                                     }
                                         |> DmRoute
                                         |> FrontendExtra.routePush model
@@ -2836,6 +2836,7 @@ updateLoaded msg model =
                                         (ViewThreadWithFriends messageId Nothing HideChannelSettings)
                                         Nothing
                                  , channelsVisible = ChannelsHiddenOnMobile
+                                 , overlay = Nothing
                                  }
                                     |> DiscordGuildRoute
                                 )
@@ -2850,6 +2851,7 @@ updateLoaded msg model =
                                     , showMembersTab = HideChannelSettings
                                     , tab = Nothing
                                     , channelsVisible = ChannelsHiddenOnMobile
+                                    , overlay = Nothing
                                     }
                                 )
 
@@ -2912,7 +2914,7 @@ updateLoaded msg model =
                         DmRoute dmRoute ->
                             FrontendExtra.routePush model (DmRoute { dmRoute | tab = Just ChannelHeaderTab_VoiceChat })
 
-                        HomePageRoute ->
+                        HomePageRoute _ ->
                             ( model, Command.none )
 
                         AdminRoute _ ->
@@ -2921,7 +2923,7 @@ updateLoaded msg model =
                         NewGuildRoute ->
                             ( model, Command.none )
 
-                        GuildRoute guildId channelRoute channelsVisible ->
+                        GuildRoute guildId channelRoute channelsVisible overlay ->
                             case channelRoute of
                                 ChannelRoute channelId (NoThreadWithFriends a b) _ ->
                                     FrontendExtra.routePush
@@ -2934,6 +2936,7 @@ updateLoaded msg model =
                                                 (Just ChannelHeaderTab_VoiceChat)
                                             )
                                             channelsVisible
+                                            overlay
                                         )
 
                                 ChannelRoute _ (ViewThreadWithFriends _ _ _) _ ->
@@ -2967,9 +2970,6 @@ updateLoaded msg model =
                             ( model, Command.none )
 
                         PublicGoMatchRoute _ ->
-                            ( model, Command.none )
-
-                        E2eeInfo ->
                             ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
@@ -3728,7 +3728,7 @@ updateLoaded msg model =
                             ( { model | loginStatus = LoggedIn loggedIn2 }, cmds )
 
                         TextEditor.OutMsg_Back ->
-                            FrontendExtra.routePush model Route.HomePageRoute
+                            FrontendExtra.routePush model (Route.HomePageRoute Nothing)
 
                         TextEditor.NoOutMsg ->
                             ( { model | loginStatus = LoggedIn { loggedIn | textEditor = textEditor } }, Command.none )
@@ -3796,6 +3796,7 @@ updateLoaded msg model =
                                     , showMembersTab = HideChannelSettings
                                     , tab = Nothing
                                     , channelsVisible = ChannelsHiddenOnMobile
+                                    , overlay = Nothing
                                     }
                                 )
 
@@ -5282,6 +5283,7 @@ updateLoaded msg model =
                                             , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                                             , tab = Just ChannelHeaderTab_VoiceChat
                                             , channelsVisible = ChannelsHiddenOnMobile
+                                            , overlay = Nothing
                                             }
                                         )
 
@@ -5296,6 +5298,7 @@ updateLoaded msg model =
                                                 (Just ChannelHeaderTab_VoiceChat)
                                             )
                                             ChannelsHiddenOnMobile
+                                            Nothing
                                         )
 
                         NotLoggedIn _ ->
@@ -5384,7 +5387,7 @@ updateLoaded msg model =
                 DmRoute dmRoute ->
                     FrontendExtra.routePush model (DmRoute { dmRoute | tab = sameTab tab dmRoute.tab })
 
-                HomePageRoute ->
+                HomePageRoute _ ->
                     ( model, Command.none )
 
                 AdminRoute _ ->
@@ -5393,7 +5396,7 @@ updateLoaded msg model =
                 NewGuildRoute ->
                     ( model, Command.none )
 
-                GuildRoute guildId channelRoute channelsVisible ->
+                GuildRoute guildId channelRoute channelsVisible overlay ->
                     case channelRoute of
                         ChannelRoute channelId threadRoute currentTab ->
                             FrontendExtra.routePush
@@ -5402,6 +5405,7 @@ updateLoaded msg model =
                                     guildId
                                     (ChannelRoute channelId threadRoute (sameTab tab currentTab))
                                     channelsVisible
+                                    overlay
                                 )
 
                         _ ->
@@ -5443,9 +5447,6 @@ updateLoaded msg model =
                     ( model, Command.none )
 
                 PublicGoMatchRoute _ ->
-                    ( model, Command.none )
-
-                E2eeInfo ->
                     ( model, Command.none )
 
         GoSpectatorMsg spectatorMsg ->
@@ -5709,6 +5710,7 @@ updateLoaded msg model =
                                     (Just ChannelHeaderTab_VoiceChat)
                                 )
                                 ChannelsHiddenOnMobile
+                                Nothing
                                 |> FrontendExtra.routePush model
 
                         GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
@@ -5722,6 +5724,7 @@ updateLoaded msg model =
                                         , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                                         , tab = Just ChannelHeaderTab_VoiceChat
                                         , channelsVisible = ChannelsHiddenOnMobile
+                                        , overlay = Nothing
                                         }
                                         |> FrontendExtra.routePush model
 
@@ -5742,6 +5745,7 @@ updateLoaded msg model =
                                     (Just (ChannelHeaderTab_Games (Just messageId)))
                                 )
                                 ChannelsHiddenOnMobile
+                                Nothing
                                 |> FrontendExtra.routePush model
 
                         GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
@@ -5755,6 +5759,7 @@ updateLoaded msg model =
                                         , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                                         , tab = Just (ChannelHeaderTab_Games (Just messageId))
                                         , channelsVisible = ChannelsHiddenOnMobile
+                                        , overlay = Nothing
                                         }
                                         |> FrontendExtra.routePush model
 
@@ -5950,6 +5955,7 @@ handlePressedUserIconButton otherUserId model =
                     , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                     , tab = Nothing
                     , channelsVisible = ChannelsHiddenOnMobile
+                    , overlay = Nothing
                     }
                 )
 
@@ -5972,6 +5978,7 @@ handlePressedDiscordUserIconButton otherUserId model =
                             , showMembersTab = HideChannelSettings
                             , tab = Nothing
                             , channelsVisible = ChannelsHiddenOnMobile
+                            , overlay = Nothing
                             }
                         )
 
@@ -6953,7 +6960,7 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
 setShowMembers : ShowChannelSettings -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 setShowMembers showMembers model =
     case model.route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute tab) channelsVisible ->
+        GuildRoute guildId (ChannelRoute channelId threadRoute tab) channelsVisible overlay ->
             case threadRoute of
                 NoThreadWithFriends a _ ->
                     FrontendExtra.routePush
@@ -6962,6 +6969,7 @@ setShowMembers showMembers model =
                             guildId
                             (ChannelRoute channelId (NoThreadWithFriends a showMembers) tab)
                             channelsVisible
+                            overlay
                         )
 
                 ViewThreadWithFriends threadId a _ ->
@@ -6971,9 +6979,10 @@ setShowMembers showMembers model =
                             guildId
                             (ChannelRoute channelId (ViewThreadWithFriends threadId a showMembers) tab)
                             channelsVisible
+                            overlay
                         )
 
-        GuildRoute _ _ _ ->
+        GuildRoute _ _ _ _ ->
             ( model, Command.none )
 
         DmRoute dmRoute ->
@@ -7011,7 +7020,7 @@ setShowMembers showMembers model =
         DiscordDmRoute dmRoute ->
             FrontendExtra.routePush model (DiscordDmRoute { dmRoute | showMembersTab = showMembers })
 
-        HomePageRoute ->
+        HomePageRoute _ ->
             ( model, Command.none )
 
         AdminRoute _ ->
@@ -7033,9 +7042,6 @@ setShowMembers showMembers model =
             ( model, Command.none )
 
         PublicGoMatchRoute _ ->
-            ( model, Command.none )
-
-        E2eeInfo ->
             ( model, Command.none )
 
 
@@ -7693,13 +7699,13 @@ channelSidebarTarget route =
                             1
             in
             case route of
-                GuildRoute _ _ channelsVisible ->
+                GuildRoute _ _ channelsVisible _ ->
                     helper channelsVisible
 
                 DiscordGuildRoute routeData ->
                     helper routeData.channelsVisible
 
-                HomePageRoute ->
+                HomePageRoute _ ->
                     2
 
                 AdminRoute _ ->
@@ -7727,9 +7733,6 @@ channelSidebarTarget route =
                     2
 
                 PublicGoMatchRoute _ ->
-                    2
-
-                E2eeInfo ->
                     2
 
 
@@ -7834,7 +7837,7 @@ updateLoadedFromBackend msg model =
                                 [ cmdA
                                 , cmdB
                                 , case ( model2.route, notLoggedIn.useInviteAfterLoggedIn ) of
-                                    ( GuildRoute guildId _ _, Just inviteLinkId ) ->
+                                    ( GuildRoute guildId _ _ _, Just inviteLinkId ) ->
                                         JoinGuildByInviteRequest guildId inviteLinkId
                                             |> Lamdera.sendToBackend
 
@@ -8114,6 +8117,7 @@ updateLoadedFromBackend msg model =
                                                     Nothing
                                                 )
                                                 ChannelsHiddenOnMobile
+                                                Nothing
                                             )
 
                                     Nothing ->
@@ -8288,7 +8292,7 @@ updateLoadedFromBackend msg model =
                                         Server_YouJoinedGuildByInvite (Ok { guildId, guild }) ->
                                             ( loggedIn2
                                             , case model.route of
-                                                GuildRoute inviteGuildId _ _ ->
+                                                GuildRoute inviteGuildId _ _ _ ->
                                                     if inviteGuildId == guildId then
                                                         FrontendExtra.routeReplace
                                                             model
@@ -8300,6 +8304,7 @@ updateLoadedFromBackend msg model =
                                                                     Nothing
                                                                 )
                                                                 ChannelsHiddenOnMobile
+                                                                Nothing
                                                             )
 
                                                     else
@@ -8649,7 +8654,7 @@ updateLoadedFromBackend msg model =
                         ( LinkDiscord _, Nothing ) ->
                             case result of
                                 Ok () ->
-                                    ( loggedIn, FrontendExtra.routeReplace model HomePageRoute )
+                                    ( loggedIn, FrontendExtra.routeReplace model (HomePageRoute Nothing) )
 
                                 Err _ ->
                                     ( loggedIn, FrontendExtra.routeReplace model (LinkDiscord (Err LinkDiscordServerError)) )
@@ -8743,8 +8748,8 @@ view _ model =
                                 in
                                 FrontendExtra.layout
                                     loaded
-                                    [ case loggedIn.userOptions of
-                                        Just userOptions ->
+                                    [ case ( Route.toOverlay loaded.route, loggedIn.userOptions ) of
+                                        ( Just Route.UserOptionsOverlay, Just userOptions ) ->
                                             UserOptions.view
                                                 loaded.windowSize
                                                 loggedIn.textInputFocus
@@ -8755,7 +8760,7 @@ view _ model =
                                                 userOptions
                                                 |> Ui.inFront
 
-                                        Nothing ->
+                                        _ ->
                                             Ui.noAttr
                                     , case loggedIn.externalLinkWarning of
                                         Just url ->
@@ -8818,7 +8823,7 @@ view _ model =
                                         ]
                 in
                 case loaded.route of
-                    HomePageRoute ->
+                    HomePageRoute _ ->
                         case loaded.loginStatus of
                             LoggedIn _ ->
                                 requiresLogin
@@ -8923,7 +8928,7 @@ view _ model =
                                     Ui.noAttr
                                 ]
 
-                    GuildRoute guildId maybeChannelId _ ->
+                    GuildRoute guildId maybeChannelId _ _ ->
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)
 
                     DiscordGuildRoute data ->
@@ -9023,12 +9028,6 @@ view _ model =
                                 PublicGoMatch_NotLoaded ->
                                     errorPage loaded "Something went wrong when loading Go match"
                             )
-
-                    E2eeInfo ->
-                        FrontendExtra.layout
-                            loaded
-                            [ Ui.background MyUi.background3, Ui.scrollable ]
-                            (Encryption.info FrontendNoOp)
         ]
     }
 
@@ -9046,7 +9045,7 @@ errorPage model text =
                 [ Ui.width Ui.shrink, Ui.centerX ]
                 (MyUi.simpleButton
                     (Dom.id "frontend_goToHomepage")
-                    (PressedLink HomePageRoute)
+                    (PressedLink (HomePageRoute Nothing))
                     (Ui.text "Go to homepage")
                 )
             ]
@@ -9056,7 +9055,7 @@ errorPage model text =
 routeToInitialDataRequest : Route -> InitialLoadRequest
 routeToInitialDataRequest route =
     case route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute tab) _ ->
+        GuildRoute guildId (ChannelRoute channelId threadRoute tab) _ _ ->
             InitialLoadRequested_Guild
                 guildId
                 channelId

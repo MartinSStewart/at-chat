@@ -160,7 +160,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                         Ui.Lazy.lazy4 discordDmGuildIcon route localUser channelId dmChannel
                     )
                     (SeqDict.toList discordDmChannels)
-                ++ GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
+                ++ GuildIcon.showFriendsButton (isHomePageRoute route) (PressedLink (HomePageRoute Nothing))
                 :: List.map
                     (\( guildId, guild ) -> Ui.Lazy.lazy4 guildIcon localUser route guildId guild)
                     (SeqDict.toList guilds)
@@ -187,6 +187,16 @@ discordGuildCurrentUserId localUser guild =
         (LinkedAndOtherDiscordUsers.linkedUsers localUser.discordUsers)
         |> SeqDict.keys
         |> List.head
+
+
+isHomePageRoute : Route -> Bool
+isHomePageRoute route =
+    case route of
+        HomePageRoute _ ->
+            True
+
+        _ ->
+            False
 
 
 discordGuildIcon : LocalUser -> Route -> Discord.Id Discord.GuildId -> DiscordFrontendGuild -> Element FrontendMsg_
@@ -217,6 +227,7 @@ discordGuildIcon localUser route guildId guild =
                                 (NoThreadWithFriends Nothing HideChannelSettings)
                                 Nothing
                  , channelsVisible = ChannelsVisibleOnMobile
+                 , overlay = Nothing
                  }
                     |> DiscordGuildRoute
                 )
@@ -267,11 +278,12 @@ guildIcon localUser route guildId guild =
                         Nothing
             )
             ChannelsVisibleOnMobile
+            Nothing
         )
         []
         (GuildIcon.view
             (case route of
-                GuildRoute a _ _ ->
+                GuildRoute a _ _ _ ->
                     if a == guildId then
                         GuildIcon.IsSelected
 
@@ -299,6 +311,7 @@ dmGuildIcon route localUser otherUserId dmChannel =
                             , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                             , tab = Nothing
                             , channelsVisible = ChannelsHiddenOnMobile
+                            , overlay = Nothing
                             }
                         )
                         []
@@ -357,6 +370,7 @@ discordDmGuildIcon route localUser channelId dmChannel =
                             , showMembersTab = HideChannelSettings
                             , tab = Nothing
                             , channelsVisible = ChannelsHiddenOnMobile
+                            , overlay = Nothing
                             }
                         )
                         []

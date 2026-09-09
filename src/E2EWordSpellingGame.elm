@@ -401,6 +401,7 @@ tests normalConfig =
                                 , threadRoute = Route.NoThreadWithFriends Nothing HideChannelSettings
                                 , tab = Just (UserSession.ChannelHeaderTab_Games (Just (Id.fromInt 0)))
                                 , channelsVisible = ChannelsHiddenOnMobile
+                                , overlay = Nothing
                                 }
                             )
                         )
