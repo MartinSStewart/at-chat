@@ -1090,15 +1090,25 @@ profileImage user =
     profileImageHtml user |> Ui.html
 
 
-smallProfileImage : Maybe { a | color : UserColor, icon : Maybe FileHash } -> Element msg
-smallProfileImage user =
+smallProfileImage : Bool -> Maybe { a | color : UserColor, icon : Maybe FileHash } -> Element msg
+smallProfileImage roundLeftOnly user =
     let
         rounding =
             Ui.roundedWith
                 { topLeft = smallProfileImageRounding
                 , bottomLeft = smallProfileImageRounding
-                , topRight = 0
-                , bottomRight = 0
+                , topRight =
+                    if roundLeftOnly then
+                        smallProfileImageRounding
+
+                    else
+                        0
+                , bottomRight =
+                    if roundLeftOnly then
+                        smallProfileImageRounding
+
+                    else
+                        0
                 }
     in
     case user of

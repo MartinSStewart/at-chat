@@ -725,7 +725,7 @@ callTab isMobile currentTab roomId localUser calls =
                                     , Html.Attributes.attribute "aria-label" (PersonName.toString user.name ++ " is in a call")
                                         |> Ui.htmlAttribute
                                     ]
-                                    (User.smallProfileImage (Just user))
+                                    (User.smallProfileImage False (Just user))
 
                             Nothing ->
                                 Ui.none
