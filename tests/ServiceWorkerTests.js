@@ -537,7 +537,7 @@ async function run() {
         await deliverPush(listeners, notification);
 
         expectEqual(shown.length, 1, "the number of notifications shown");
-        expectEqual(shown[0].options.body, encryptedFallbackText, "the notification body");
+        expectEqual(shown[0].options.body, "Private key missing, message couldn't be decrypted.", "the notification body");
     });
 
     await check("A key from another conversation doesn't open it", async () => {
@@ -551,7 +551,7 @@ async function run() {
         await deliverPush(listeners, notification);
 
         expectEqual(shown.length, 1, "the number of notifications shown");
-        expectEqual(shown[0].options.body, encryptedFallbackText, "the notification body");
+        expectEqual(shown[0].options.body, "Message decryption failed", "the notification body");
     });
 
     await check("A push the server could write is shown as it stands", async () => {
