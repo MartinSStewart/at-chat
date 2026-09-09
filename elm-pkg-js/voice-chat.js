@@ -100,8 +100,8 @@ exports.init = async function init(app) {
     // the wrong one produces no picture and no error worth acting on.
     const VIDEO = 0;
     const AUDIO = 1;
-
-    const CODECS = ["avc1.42001E", "vp8"];
+    // vp8 goes first because on Linux Mint OS Xfce avc1 will be reported as supported and then fail when used.
+    const CODECS = ["vp8","avc1.42001E"];
     const HEADER_AFTER_SENDER = 11;
 
     const textEncoder = new TextEncoder();
@@ -144,8 +144,8 @@ exports.init = async function init(app) {
     // the first, Chrome has both.
     async function pickVideoCodec(width, height) {
         const candidates = [
-            { codec: CODECS[0], avc: { format: "annexb" } },
-            { codec: CODECS[1] },
+            { codec: CODECS[0] },
+            { codec: CODECS[1], avc: { format: "annexb" } },
         ];
         for (let index = 0; index < candidates.length; index++) {
             const config = Object.assign({
@@ -857,6 +857,162 @@ exports.init = async function init(app) {
         startLocalSpeaking(localStreamPreview);
     }
 
+    // --- debug data ---
+    //
+    // Everything the call is built out of, flattened into labelled strings for
+    // the panel Elm draws. Nothing here is read back by the app, so it is only
+    // ever as detailed as it takes to explain what a call is doing; a field
+    // added below needs no matching change on the Elm side.
+    const SOCKET_STATES = ["connecting", "open", "closing", "closed"];
+
+    function row(label, value) {
+        return { label: label, value: String(value) };
+    }
+
+    function codecName(index) {
+        if (index === null || index === undefined) return "none";
+        return CODECS[index] || "unknown (" + index + ")";
+    }
+
+    function encoderRow(label, encoder) {
+        if (!encoder) return row(label, "none");
+        return row(label, encoder.state + " queue=" + encoder.encodeQueueSize);
+    }
+
+    function decoderRow(label, decoder) {
+        if (!decoder) return row(label, "none");
+        return row(label, decoder.state + " queue=" + decoder.decodeQueueSize);
+    }
+
+    function audioContextValue(audioContext) {
+        if (!audioContext) return "none";
+        return (
+            audioContext.state +
+            " " + audioContext.sampleRate + "Hz" +
+            " clock=" + audioContext.currentTime.toFixed(2) + "s"
+        );
+    }
+
+    function trackRow(track, index) {
+        const settings = typeof track.getSettings === "function" ? track.getSettings() : {};
+        return row(
+            track.kind + " track " + index,
+            (track.label || "(unnamed)") +
+                " enabled=" + track.enabled +
+                " muted=" + track.muted +
+                " " + track.readyState +
+                (settings.width ? " " + settings.width + "x" + settings.height : "") +
+                (settings.frameRate ? " " + Math.round(settings.frameRate) + "fps" : "") +
+                (settings.sampleRate ? " " + settings.sampleRate + "Hz" : "")
+        );
+    }
+
+    function streamSection(title, stream) {
+        if (!stream) return { title: title, rows: [row("stream", "none")] };
+        const tracks = stream.getTracks();
+        if (tracks.length === 0) return { title: title, rows: [row("tracks", "none")] };
+        return { title: title, rows: tracks.map(trackRow) };
+    }
+
+    function canvasValue(canvas) {
+        if (!canvas) return "not found yet";
+        return canvas.width + "x" + canvas.height + " inDocument=" + canvas.isConnected;
+    }
+
+    function debugSections() {
+        const sections = [
+            {
+                title: "Browser",
+                rows: [
+                    row("VideoEncoder", typeof VideoEncoder !== "undefined"),
+                    row("AudioEncoder", typeof AudioEncoder !== "undefined"),
+                    row(
+                        "requestVideoFrameCallback",
+                        typeof HTMLVideoElement !== "undefined" &&
+                            typeof HTMLVideoElement.prototype.requestVideoFrameCallback === "function"
+                    ),
+                ],
+            },
+        ];
+
+        if (!call) {
+            sections.push({ title: "Call", rows: [row("in a call", false)] });
+        } else {
+            const state = call;
+            sections.push({
+                title: "Call",
+                rows: [
+                    row("in a call", true),
+                    row("roomId", state.roomId),
+                    row("selfId", state.selfId),
+                    row("stopped", state.stopped),
+                    row(
+                        "socket",
+                        state.socket
+                            ? SOCKET_STATES[state.socket.readyState] + " buffered=" + state.socket.bufferedAmount
+                            : "none"
+                    ),
+                    row("peers", state.peers.size),
+                    row("video codec", codecName(state.videoCodec)),
+                    row("video input enabled", state.videoInputEnabled),
+                    row("force key frame", state.forceKeyFrame),
+                    encoderRow("video encoder", state.videoEncoder),
+                    row(
+                        "video encoder size",
+                        state.videoSize ? state.videoSize.width + "x" + state.videoSize.height : "none"
+                    ),
+                    row("video clock start", state.videoStartTime === null ? "no frames yet" : state.videoStartTime.toFixed(0) + "ms"),
+                    encoderRow("audio encoder", state.audioEncoder),
+                    row("audio frames captured", state.framesCaptured),
+                    row("audio nodes", state.audioNodes.length),
+                    row("audio context", audioContextValue(state.audioContext)),
+                    row(
+                        "capture video",
+                        state.captureVideo.videoWidth + "x" + state.captureVideo.videoHeight +
+                            " readyState=" + state.captureVideo.readyState +
+                            " paused=" + state.captureVideo.paused
+                    ),
+                    row("preview shares call stream", localStreamPreview === state.stream),
+                ],
+            });
+
+            sections.push(streamSection("Call stream", state.stream));
+
+            state.peers.forEach(function (peer, senderKey) {
+                sections.push({
+                    title: "Peer " + senderKey,
+                    rows: [
+                        row("video codec", codecName(peer.videoCodec)),
+                        decoderRow("video decoder", peer.videoDecoder),
+                        row("seen a key frame", peer.videoReady),
+                        row("canvas", canvasValue(peer.canvas)),
+                        decoderRow("audio decoder", peer.audioDecoder),
+                        row("volume", peer.gain.gain.value),
+                        row(
+                            "audio queued",
+                            Math.max(0, peer.playheadSeconds - state.audioContext.currentTime).toFixed(2) + "s"
+                        ),
+                        row("speaking", peer.isSpeaking),
+                    ],
+                });
+            });
+        }
+
+        sections.push(streamSection("Preview stream", localStreamPreview));
+
+        sections.push({
+            title: "Local mic level",
+            rows: localSpeaking
+                ? [
+                      row("speaking", localSpeaking.isSpeaking),
+                      row("audio context", audioContextValue(localSpeaking.audioContext)),
+                  ]
+                : [row("measuring", false)],
+        });
+
+        return sections;
+    }
+
     app.ports.voice_chat_to_js.subscribe(async function (msg) {
         if (msg.tag === "start-call") {
             await startCall(msg.args[0]);
@@ -907,6 +1063,8 @@ exports.init = async function init(app) {
             await startLocalStream(msg.args[0]);
         } else if (msg.tag === "stop-local-stream") {
             await stopLocalStream();
+        } else if (msg.tag === "debug-data-request") {
+            app.ports.voice_chat_from_js.send({ tag: "debug-data", args: [debugSections()] });
         }
     });
 

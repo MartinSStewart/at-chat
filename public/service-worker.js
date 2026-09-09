@@ -111,14 +111,14 @@ function readConversationKey(otherUserId) {
 
 async function decryptNotificationBody(sentBy, encryptedBody) {
     if (typeof sentBy !== "number" || typeof encryptedBody !== "string") {
-        return null;
+        return "Error while decrypting message";
     }
 
     try {
         const key = await readConversationKey(sentBy);
 
         if (!key) {
-            return null;
+            return "Private key missing, message couldn't be decrypted.";
         }
 
         const bytes = Uint8Array.from(atob(encryptedBody), (character) => character.charCodeAt(0));
@@ -130,7 +130,7 @@ async function decryptNotificationBody(sentBy, encryptedBody) {
     }
     catch (error) {
         log("Notification decryption error: " + error.message);
-        return null;
+        return "Message decryption failed";
     }
 }
 

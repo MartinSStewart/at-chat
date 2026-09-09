@@ -2993,7 +2993,7 @@ scoreRowView localUser maxPoints answerResult =
     in
     Ui.row
         [ Ui.spacing 1 ]
-        [ User.smallProfileImage (User.getUser userId localUser)
+        [ User.smallProfileImage True (User.getUser userId localUser)
         , Ui.row
             [ Ui.height Ui.fill ]
             [ Ui.el

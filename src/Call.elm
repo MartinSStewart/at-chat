@@ -1,6 +1,8 @@
 port module Call exposing
     ( CallId(..)
     , ConnectionId
+    , DebugRow
+    , DebugSection
     , DeviceKind(..)
     , DisplayMode(..)
     , FromJs(..)
@@ -19,6 +21,7 @@ port module Call exposing
     , StartLocalStreamData
     , ToJs(..)
     , conversationOffset
+    , debugDataSubscription
     , defaultRemoteCallData
     , displayMode
     , displayModeChangeCmd
@@ -47,6 +50,7 @@ import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import DmChannelId
+import Duration
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
@@ -101,6 +105,8 @@ type Msg
     | MouseEnterVideoNode LocalOrConnection
     | MouseExitVideoNode LocalOrConnection
     | DoubleClickedVideoNode
+    | PressedToggleDebugData
+    | PolledDebugData
 
 
 type alias Local =
@@ -131,6 +137,8 @@ type alias Model =
     , videoHover : Maybe LocalOrConnection
     , -- Thumbnail coordinate ranges from 0 to 1. Actual pixel position is derived by multiplying this by the windowSize
       thumbnailPosition : ( Float, Float )
+    , pollDebugData : Bool
+    , debugData : List DebugSection
     }
 
 
@@ -169,6 +177,8 @@ initModel =
     , volume = SeqDict.empty
     , videoHover = Nothing
     , thumbnailPosition = ( 1, 0.1 )
+    , pollDebugData = False
+    , debugData = []
     }
 
 
@@ -516,8 +526,32 @@ videoNodes localUser config loggedIn local =
         isMobile : Bool
         isMobile =
             MyUi.isMobile { windowSize = config.windowSize }
+
+        displayMode2 : DisplayMode
+        displayMode2 =
+            displayMode isMobile localUser.session.userId config.route local
+
+        -- The button that turns polling on lives in the voice chat panel, so
+        -- the panel being open is also the only place it can be turned off
+        -- again.
+        showDebugData : Bool
+        showDebugData =
+            model.pollDebugData
+                && (case displayMode2 of
+                        NoVideo ->
+                            False
+
+                        ShowLocalVideo ->
+                            True
+
+                        ShowLocalVideoAndCall _ ->
+                            True
+
+                        ShowLocalVideoAndCallThumbnail _ ->
+                            False
+                   )
     in
-    (case displayMode isMobile localUser.session.userId config.route local of
+    (case displayMode2 of
         NoVideo ->
             [ videoNode
                 localUser.session.userId
@@ -647,7 +681,83 @@ videoNodes localUser config loggedIn local =
                     )
                     sessions
     )
+        ++ (if showDebugData then
+                [ ( "call_debugData"
+                  , debugDataView
+                        { left = voiceChatX, top = voiceChatY, maxHeight = maxHeight }
+                        model.debugData
+                  )
+                ]
+
+            else
+                []
+           )
         |> Html.Keyed.node "div" []
+
+
+{-| Drawn as part of the video layer rather than inside the voice chat panel,
+because the videos sit on top of that panel and would cover it.
+-}
+debugDataView : { left : Int, top : Int, maxHeight : Int } -> List DebugSection -> Html msg
+debugDataView position sections =
+    Html.div
+        [ Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "left" (String.fromInt position.left ++ "px")
+        , Html.Attributes.style "top" ("calc(" ++ MyUi.insetTop ++ " + " ++ String.fromInt position.top ++ "px)")
+        , Html.Attributes.style "width" "440px"
+        , Html.Attributes.style "max-width" "calc(100% - 16px)"
+        , Html.Attributes.style "max-height" (String.fromInt position.maxHeight ++ "px")
+        , Html.Attributes.style "overflow-y" "auto"
+        , Html.Attributes.style "z-index" "1000"
+        , Html.Attributes.style "background-color" "rgba(0,0,0,0.85)"
+        , Html.Attributes.style "color" "white"
+        , Html.Attributes.style "font-family" "monospace"
+        , Html.Attributes.style "font-size" "11px"
+        , Html.Attributes.style "line-height" "1.5"
+        , Html.Attributes.style "padding" "8px"
+        , Html.Attributes.style "border-radius" "8px"
+        , Html.Attributes.style "pointer-events" "auto"
+        ]
+        (case sections of
+            [] ->
+                [ Html.text "Waiting for JS to reply..." ]
+
+            _ ->
+                List.map debugSectionView sections
+        )
+
+
+debugSectionView : DebugSection -> Html msg
+debugSectionView section =
+    Html.div
+        [ Html.Attributes.style "margin-bottom" "8px" ]
+        (Html.div
+            [ Html.Attributes.style "font-weight" "bold"
+            , Html.Attributes.style "color" "rgb(150, 200, 255)"
+            ]
+            [ Html.text section.title ]
+            :: List.map debugRowView section.rows
+        )
+
+
+debugRowView : DebugRow -> Html msg
+debugRowView debugRow =
+    Html.div
+        [ Html.Attributes.style "display" "flex"
+        , Html.Attributes.style "gap" "8px"
+        ]
+        [ Html.div
+            [ Html.Attributes.style "flex" "0 0 45%"
+            , Html.Attributes.style "color" "rgb(170, 180, 190)"
+            , Html.Attributes.style "overflow-wrap" "anywhere"
+            ]
+            [ Html.text debugRow.label ]
+        , Html.div
+            [ Html.Attributes.style "flex" "1"
+            , Html.Attributes.style "overflow-wrap" "anywhere"
+            ]
+            [ Html.text debugRow.value ]
+        ]
 
 
 insideThumbnail : Coord CssPixels -> { a | windowSize : Coord CssPixels } -> Model -> Bool
@@ -1113,7 +1223,18 @@ view windowSize roomId calls model =
                         , Ui.width Ui.shrink
                         , Ui.spacing 8
                         ]
-                        [ MyUi.rowButton
+                        [ MyUi.simpleButton
+                            (Dom.id "voiceChat_toggleDebugData")
+                            PressedToggleDebugData
+                            (Ui.text
+                                (if model.pollDebugData then
+                                    "Stop\u{00A0}polling\u{00A0}JS"
+
+                                 else
+                                    "Poll\u{00A0}JS\u{00A0}state"
+                                )
+                            )
+                        , MyUi.rowButton
                             (if hasJoined2 then
                                 Dom.id "guild_leaveVoiceChat"
 
@@ -1294,6 +1415,7 @@ type ToJs
     | ToJs_StartLocalStream StartLocalStreamData
     | ToJs_StopLocalStream
     | ToJs_SetVolume ConnectionId Float
+    | ToJs_DebugDataRequest
 
 
 type alias StartLocalStreamData =
@@ -1372,43 +1494,46 @@ peerJoinedArgsCodec =
 voiceChatToJsCodec : Codec ToJs
 voiceChatToJsCodec =
     Codec.custom
-        (\eStartCall eLeaveCall ePeerJoined ePeerLeft eSetMuted eSetAudioInput eSetVideoPaused eSetPeerVideoPaused eGetMediaDevices eStartLocalStream eStopLocalStream eSetVolume value ->
+        (\eA eB eC eD eF eG eH eI eJ eK eL eM eN value ->
             case value of
                 ToJs_StartCall a ->
-                    eStartCall a
+                    eA a
 
                 ToJs_LeaveCall ->
-                    eLeaveCall
+                    eB
 
                 ToJs_PeerJoined a ->
-                    ePeerJoined a
+                    eC a
 
                 ToJs_PeerLeft a ->
-                    ePeerLeft a
+                    eD a
 
                 ToJs_SetAudioInputEnabled a ->
-                    eSetMuted a
+                    eF a
 
                 ToJs_SetInput a b ->
-                    eSetAudioInput a b
+                    eG a b
 
                 ToJs_SetVideoInputEnabled a ->
-                    eSetVideoPaused a
+                    eH a
 
                 ToJs_SetPeerVideoInputEnabled a b ->
-                    eSetPeerVideoPaused a b
+                    eI a b
 
                 ToJs_GetMediaDevices ->
-                    eGetMediaDevices
+                    eJ
 
                 ToJs_StartLocalStream a ->
-                    eStartLocalStream a
+                    eK a
 
                 ToJs_StopLocalStream ->
-                    eStopLocalStream
+                    eL
 
                 ToJs_SetVolume a b ->
-                    eSetVolume a b
+                    eM a b
+
+                ToJs_DebugDataRequest ->
+                    eN
         )
         |> Codec.variant1 "start-call" ToJs_StartCall startCallDataCodec
         |> Codec.variant0 "leave-call" ToJs_LeaveCall
@@ -1422,6 +1547,7 @@ voiceChatToJsCodec =
         |> Codec.variant1 "start-local-stream" ToJs_StartLocalStream startLocalStreamDataCodec
         |> Codec.variant0 "stop-local-stream" ToJs_StopLocalStream
         |> Codec.variant2 "set-volume" ToJs_SetVolume connectionIdCodec Codec.float
+        |> Codec.variant0 "debug-data-request" ToJs_DebugDataRequest
         |> Codec.buildCustom
 
 
@@ -1473,6 +1599,7 @@ type FromJs
     | FromJs_GotUserMediaDevicesError String
     | FromJs_SpeakingChanged LocalOrConnection Bool
     | FromJs_StartConnectionError String
+    | FromJs_DebugData (List DebugSection)
 
 
 type LocalOrConnection
@@ -1499,7 +1626,7 @@ localOrConnectionCodec =
 voiceChatFromJsCodec : Codec FromJs
 voiceChatFromJsCodec =
     Codec.custom
-        (\cEncoder dEncoder eEncoder fEncoder value ->
+        (\cEncoder dEncoder eEncoder fEncoder gEncoder value ->
             case value of
                 FromJs_GotUserMediaDevices a b ->
                     cEncoder a b
@@ -1512,12 +1639,56 @@ voiceChatFromJsCodec =
 
                 FromJs_StartConnectionError string ->
                     fEncoder string
+
+                FromJs_DebugData a ->
+                    gEncoder a
         )
         |> Codec.variant2 "got-media-devices" FromJs_GotUserMediaDevices (Codec.list mediaDevicesCodec) (Codec.list IdString.codec)
         |> Codec.variant1 "got-media-devices-error" FromJs_GotUserMediaDevicesError Codec.string
         |> Codec.variant2 "is-speaking-changed" FromJs_SpeakingChanged localOrConnectionCodec Codec.bool
         |> Codec.variant1 "start-connection-error" FromJs_StartConnectionError Codec.string
+        |> Codec.variant1 "debug-data" FromJs_DebugData (Codec.list debugSectionCodec)
         |> Codec.buildCustom
+
+
+{-| Whatever JS knows about the call it is running, as text it has already
+formatted. Elm only draws this, so JS can add to it without anything here
+changing.
+-}
+type alias DebugSection =
+    { title : String, rows : List DebugRow }
+
+
+type alias DebugRow =
+    { label : String, value : String }
+
+
+debugSectionCodec : Codec DebugSection
+debugSectionCodec =
+    Codec.object DebugSection
+        |> Codec.field "title" .title Codec.string
+        |> Codec.field "rows" .rows (Codec.list debugRowCodec)
+        |> Codec.buildObject
+
+
+debugRowCodec : Codec DebugRow
+debugRowCodec =
+    Codec.object DebugRow
+        |> Codec.field "label" .label Codec.string
+        |> Codec.field "value" .value Codec.string
+        |> Codec.buildObject
+
+
+{-| JS has no way to announce that something about the call changed, so seeing
+it change means asking again on a timer.
+-}
+debugDataSubscription : Model -> Subscription FrontendOnly Msg
+debugDataSubscription model =
+    if model.pollDebugData then
+        Time.every (Duration.milliseconds 500) (\_ -> PolledDebugData)
+
+    else
+        Subscription.none
 
 
 type alias MediaDevice =
@@ -1767,6 +1938,12 @@ isPressMsg msg =
             False
 
         DoubleClickedVideoNode ->
+            False
+
+        PressedToggleDebugData ->
+            True
+
+        PolledDebugData ->
             False
 
 
