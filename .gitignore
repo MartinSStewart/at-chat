@@ -10,7 +10,10 @@ tests/var/lib/atchat/storage/
 tests/var/lib/atchat/backups/
 index.html
 at-chat-backups/
-bench-results/
+benchmarks/benchmarks.js
+
+# The root index.html is build output, benchmarks/index.html is not.
+!benchmarks/index.html
 
 __pycache__/
 

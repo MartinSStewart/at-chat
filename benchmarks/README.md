@@ -1,27 +1,29 @@
 # Benchmarks
 
-[elm-bench](https://package.elm-lang.org/packages/gampleman/elm-bench/latest/) suites for
-the parts of the app and its vendored packages that show up in a profile.
+[elm-explorations/benchmark](https://package.elm-lang.org/packages/elm-explorations/benchmark/latest/)
+suites for the parts of the app and its vendored packages that show up in a profile.
 
 ```
 npm run benchmarks
 ```
 
-Add `-t chromium`, `-t firefox` or `-t webkit` (each needs `npx playwright install`) to see
-whether an optimization holds across engines, and `--filter <pattern>` to run one suite.
+That compiles `benchmarks/benchmarks.js`. Open `benchmarks/index.html` straight off disk in
+whichever browser you're trying to make faster, and leave it until every row has settled,
+which takes a few minutes. The runner reports each comparison as a percentage, so a row
+saying the tail recursive version is 180% faster means it did 2.8x the work in the same time.
 
-Every `Bench.rank`, `Bench.compare` and `Bench.scale` first checks that its implementations
-agree, so a rewrite that changed the output fails before any numbers are printed. That check
-runs through elm-test-rs and needs to reach package.elm-lang.org. Where it can't, pass
-`--skip-test` for the numbers and run the check by hand against the project's own
-elm-test-rs, which solves from the local package cache:
+The page is written by hand rather than compiled with `--output=some.html`, because the page
+the compiler emits waits for a `lamdera live` dev server to tell it to start and stays blank
+when opened on its own.
+
+The suites live in `benchmarks/src`, which is one of the project's source directories, so
+they compile with everything else and need no separate `elm.json`.
+
+Each optimization keeps the version it replaced next to it under `src/ToChildren/`. That way
+the comparison still runs after the change has been made, and `tests/ToChildrenTests.elm`
+can check that the two build the same thing, which is what makes the numbers worth anything.
+That test runs with the rest of the suite:
 
 ```
-npx elm-bench run --project benchmarks --compiler "$(realpath node_modules/.bin/lamdera)" --skip-test
-cd benchmarks/elm-stuff/node-benchmark-runner \
-  && ../../../node_modules/.bin/elm-test-rs src/BenchmarkVerification.elm \
-       --compiler ../../../node_modules/.bin/lamdera
+npx elm-test-rs --compiler "$(realpath node_modules/.bin/lamdera)"
 ```
-
-Each optimization keeps the version it replaced next to it under `src/ToChildren/`, so the
-benchmark still compares against what the code used to do after the change has been made.

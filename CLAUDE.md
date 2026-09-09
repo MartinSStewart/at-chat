@@ -83,10 +83,10 @@ Measure anything you rewrite for speed rather than guessing:
 npm run benchmarks
 ```
 
-The suites live in `benchmarks/` and each one keeps the version it replaced next to the new
-one, so the comparison still runs after the change has been made. `benchmarks/README.md`
-covers filtering, other JS engines, and what to do when the correctness check can't reach
-package.elm-lang.org.
+That builds `benchmarks/benchmarks.html`, which you open in a browser and leave running for
+a few minutes. The suites live in `benchmarks/src`, which is one of the source directories in
+`elm.json`, and each one keeps the version it replaced next to the new one so the comparison
+still runs after the change has been made. A test in `tests/` checks the two agree.
 
 ## Code style
 
