@@ -1535,19 +1535,18 @@ adminData model lastLogPageViewed =
             model.loadingDiscordChannels
     , logs = Pagination.init lastLogPageViewed model.logs
     , connections =
-        SeqDict.toList model.connections
-            |> List.map
-                (\( sessionId, clients ) ->
-                    ( case SeqDict.get sessionId model.sessions of
-                        Just session ->
-                            session.sessionIdHash
+        List.map
+            (\( sessionId, clients ) ->
+                ( case SeqDict.get sessionId model.sessions of
+                    Just session ->
+                        session.sessionIdHash
 
-                        Nothing ->
-                            SessionIdHash.fromString "Session not found"
-                    , clients
-                    )
+                    Nothing ->
+                        SessionIdHash.fromString "Session not found"
+                , clients
                 )
-            |> SeqDict.fromList
+            )
+            (SeqDict.toList model.connections)
     , filesCount = SeqDict.size model.files
     , toBackendLogs = Array.slice (Array.length model.toBackendLogs - 1000) (Array.length model.toBackendLogs) model.toBackendLogs
     , vulnerabilityChecks =

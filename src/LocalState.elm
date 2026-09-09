@@ -718,7 +718,7 @@ type alias AdminData =
     , signupsEnabled : Bool
     , discordLinkingEnabled : Bool
     , logs : Pagination LogWithTime
-    , connections : SeqDict SessionIdHash (NonemptyDict ClientId ConnectionData)
+    , connections : List ( SessionIdHash, NonemptyDict ClientId ConnectionData )
     , filesCount : Int
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
