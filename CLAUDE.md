@@ -77,6 +77,17 @@ Compiling, formatting and passing tests isn't enough on its own — elm-review c
 unused code, redundant patterns and style rules that would otherwise need a cleanup
 commit afterwards. `--fix-all` applies the mechanical fixes.
 
+Measure anything you rewrite for speed rather than guessing:
+
+```
+npm run benchmarks
+```
+
+The suites live in `benchmarks/` and each one keeps the version it replaced next to the new
+one, so the comparison still runs after the change has been made. `benchmarks/README.md`
+covers filtering, other JS engines, and what to do when the correctness check can't reach
+package.elm-lang.org.
+
 ## Code style
 
 ### Prefer duplication over parameters when sharing code
