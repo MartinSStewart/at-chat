@@ -20,6 +20,7 @@ module E2EMisc exposing
     , reactionPopupNamesEmojiTest
     , reloadingAConversationLeavesItUnreadTest
     , richTextMessage
+    , selfDmShowsInAdminConnectionsTest
     , startingACallOrGameStaysReadTest
     , staysReadWhileViewingTest
     , swipedAwayConversationStopsBeingViewedTest
@@ -651,6 +652,70 @@ adminConnectionsShowWhatIsViewedTest config =
                         , E2EHelper.hasExactText
                             adminPage
                             [ "Viewing: My new guild! #general", "Viewing: Nothing" ]
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| The admin opens the DM with themselves, signs in again from a second session, and opens
+the admin page there in a fresh tab, which is how the connections section gets its snapshot
+in production. The first session is sitting in that DM, so that is what the section should
+say it is viewing.
+-}
+selfDmShowsInAdminConnectionsTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+selfDmShowsInAdminConnectionsTest config =
+    E2EHelper.startTest
+        "Admin page shows a connection sitting in its own DM"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , admin.click 100 (Dom.id "guild_openChannel_0")
+
+                -- Every member of a guild has an entry in the member list, the owner
+                -- included, so the admin opens the DM with themselves through their own.
+                , admin.click 100 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_openDm_0")
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    "/"
+                    E2EHelper.desktopWindow
+                    (\adminPage ->
+                        [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminPage
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId1
+                            "/admin"
+                            E2EHelper.desktopWindow
+                            (\adminPageTab ->
+                                [ T.andThen
+                                    10
+                                    (\data ->
+                                        [ adminPageTab.portEvent
+                                            10
+                                            "load_startup_data_from_js"
+                                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                        ]
+                                    )
+                                , adminPageTab.click 100 (Pages.Admin.expandSectionButtonId User.ConnectionsSection)
+                                , E2EHelper.hasExactText
+                                    adminPageTab
+                                    [ "Viewing: DM with " ++ E2EHelper.adminName ]
+                                ]
+                            )
                         ]
                     )
                 ]

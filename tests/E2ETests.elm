@@ -339,6 +339,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.leaveGuildTest normalConfig
     , E2EMisc.profileImageOpensDm normalConfig
     , E2EMisc.reactionPopupNamesEmojiTest normalConfig
+    , E2EMisc.selfDmShowsInAdminConnectionsTest normalConfig
     , E2EMisc.reloadingAConversationLeavesItUnreadTest normalConfig
     , E2EMisc.timeOfDaySuggestionTest normalConfig
     , E2EMisc.timeOffsetSuggestionTest normalConfig
