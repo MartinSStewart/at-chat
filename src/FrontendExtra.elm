@@ -4818,16 +4818,15 @@ changeUpdate localMsg local =
                     { local | otherSessions = SeqDict.remove sessionId local.otherSessions }
 
                 Server_CurrentlyViewing sessionIdHash clientId currentlyViewing ->
-                    let
-                        localUser : LocalUser
-                        localUser =
-                            local.localUser
-                    in
-                    if sessionIdHash == localUser.session.sessionIdHash then
-                        { local
-                            | localUser =
-                                { localUser | currentlyViewing = currentlyViewing }
-                        }
+                    -- Only the clients that didn't make the change are told about it (see
+                    -- Broadcast.toUser), so our own session hash means another tab of ours
+                    -- moved rather than this one. Nothing on the frontend shows what a
+                    -- sibling tab has open, and localUser.currentlyViewing is what this
+                    -- client last told the backend: writing a sibling's value into it leaves
+                    -- routeViewingLocalChange comparing against the wrong tab, which then
+                    -- skips telling the backend where this one went.
+                    if sessionIdHash == local.localUser.session.sessionIdHash then
+                        local
 
                     else
                         { local
