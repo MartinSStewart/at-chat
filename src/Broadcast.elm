@@ -46,10 +46,11 @@ import Discord
 import DiscordUserData exposing (DiscordUserData(..))
 import DmChannelId
 import Drawing
-import Duration
+import Duration exposing (Duration)
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
+import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
 import Email.Html
 import Email.Html.Attributes
@@ -1343,7 +1344,7 @@ pushNotification sessionId userId time title body icon navigateTo subscribeData 
                 Nothing ->
                     Nothing
     in
-    Http.request
+    Http.task
         { method = "POST"
         , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
         , url = FileStatus.domain ++ "/file/internal/push-notification"
@@ -1386,9 +1387,8 @@ pushNotification sessionId userId time title body icon navigateTo subscribeData 
                 , isDeclarative = False
                 }
                 |> Http.jsonBody
-        , expect =
-            Http.expectStringResponse
-                (SentNotification sessionId userId time subscribeData)
+        , resolver =
+            Http.stringResolver
                 (\response ->
                     case response of
                         Http.BadUrl_ url ->
@@ -1406,9 +1406,46 @@ pushNotification sessionId userId time title body icon navigateTo subscribeData 
                         Http.GoodStatus_ _ _ ->
                             Ok ()
                 )
-        , timeout = Duration.seconds 30 |> Just
-        , tracker = Nothing
+        , timeout = pushNotificationTimeout |> Just
         }
+        |> retryOnTimeout pushNotificationRetries
+        |> Task.attempt (SentNotification sessionId userId time subscribeData)
+
+
+pushNotificationTimeout : Duration
+pushNotificationTimeout =
+    Duration.seconds 30
+
+
+{-| How many more times to send a push notification that timed out, on top of the first
+attempt. A notification nobody hears about is worse than a late one, and with the timeout
+above it takes two and a half minutes to run out of attempts.
+
+Only a timeout is worth another go. A bad status or a network error is the push service
+saying no rather than being slow, and asking again won't change the answer.
+
+-}
+pushNotificationRetries : Int
+pushNotificationRetries =
+    4
+
+
+retryOnTimeout : Int -> Task restriction Http.Error a -> Task restriction Http.Error a
+retryOnTimeout retriesLeft task =
+    Task.onError
+        (\error ->
+            case error of
+                Http.Timeout ->
+                    if retriesLeft > 0 then
+                        retryOnTimeout (retriesLeft - 1) task
+
+                    else
+                        Task.fail error
+
+                _ ->
+                    Task.fail error
+        )
+        task
 
 
 toEveryoneWhoCanSeeUser :
