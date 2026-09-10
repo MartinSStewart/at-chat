@@ -50,6 +50,7 @@ import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
+import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
 import Email.Html
 import Email.Html.Attributes
@@ -576,6 +577,7 @@ messageNotification usersMentioned time sender id threadRoute message members mo
                                     id.guildId
                                     (ChannelRoute id.channelId threadRouteWithFriends Nothing)
                                     ChannelsHiddenOnMobile
+                                    Nothing
                                     |> Just
                                 )
                                 sessions
@@ -709,6 +711,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                     , guildId = guildId
                                     , channelRoute = DiscordChannel_ChannelRoute channelId threadRouteWithFriends Nothing
                                     , channelsVisible = ChannelsHiddenOnMobile
+                                    , overlay = Nothing
                                     }
                                     |> Just
                                 )
@@ -1226,6 +1229,7 @@ discordDmNotification time channelId senderId senderName senderIcon text message
                     , showMembersTab = HideChannelSettings
                     , tab = Nothing
                     , channelsVisible = ChannelsHiddenOnMobile
+                    , overlay = Nothing
                     }
                     |> Just
                 )
@@ -1340,7 +1344,7 @@ pushNotification sessionId userId time title body icon navigateTo subscribeData 
                 Nothing ->
                     Nothing
     in
-    Http.request
+    Http.task
         { method = "POST"
         , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
         , url = FileStatus.domain ++ "/file/internal/push-notification"
@@ -1383,9 +1387,8 @@ pushNotification sessionId userId time title body icon navigateTo subscribeData 
                 , isDeclarative = False
                 }
                 |> Http.jsonBody
-        , expect =
-            Http.expectStringResponse
-                (SentNotification sessionId userId time subscribeData)
+        , resolver =
+            Http.stringResolver
                 (\response ->
                     case response of
                         Http.BadUrl_ url ->
@@ -1404,8 +1407,27 @@ pushNotification sessionId userId time title body icon navigateTo subscribeData 
                             Ok ()
                 )
         , timeout = Duration.seconds 30 |> Just
-        , tracker = Nothing
         }
+        |> retryOnTimeout 4
+        |> Task.attempt (SentNotification sessionId userId time subscribeData)
+
+
+retryOnTimeout : Int -> Task restriction Http.Error a -> Task restriction Http.Error a
+retryOnTimeout retriesLeft task =
+    Task.onError
+        (\error ->
+            case error of
+                Http.Timeout ->
+                    if retriesLeft > 0 then
+                        retryOnTimeout (retriesLeft - 1) task
+
+                    else
+                        Task.fail error
+
+                _ ->
+                    Task.fail error
+        )
+        task
 
 
 toEveryoneWhoCanSeeUser :
@@ -1568,6 +1590,7 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
                                             ViewThreadWithFriends threadId Nothing HideChannelSettings
                                 , tab = Nothing
                                 , channelsVisible = ChannelsHiddenOnMobile
+                                , overlay = Nothing
                                 }
                                 |> Just
                             )
@@ -1664,6 +1687,7 @@ gameStartedDmNotification time senderId { otherUserId } gameType model =
                         , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                         , tab = Nothing
                         , channelsVisible = ChannelsHiddenOnMobile
+                        , overlay = Nothing
                         }
                         |> Just
                     )
@@ -1728,6 +1752,7 @@ encryptedDmNotification time senderId { otherUserId } notificationText model =
                         , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
                         , tab = Nothing
                         , channelsVisible = ChannelsHiddenOnMobile
+                        , overlay = Nothing
                         }
                         |> Just
                     )
@@ -1784,6 +1809,7 @@ e2eeRequestNotification time requestedBy { otherUserId } model =
                         , threadRoute = NoThreadWithFriends Nothing ShowChannelSettings
                         , tab = Nothing
                         , channelsVisible = ChannelsHiddenOnMobile
+                        , overlay = Nothing
                         }
                         |> Just
                     )
@@ -1874,6 +1900,7 @@ gameStartedGuildNotification time sender id gameType members model =
                                     id.guildId
                                     (ChannelRoute id.channelId (NoThreadWithFriends Nothing HideChannelSettings) Nothing)
                                     ChannelsHiddenOnMobile
+                                    Nothing
                                     |> Just
                                 )
                                 sessions

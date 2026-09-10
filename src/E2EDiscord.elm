@@ -981,6 +981,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             (Route.NoThreadWithFriends Nothing Route.ShowChannelSettings)
                             Nothing
                     , channelsVisible = Route.ChannelsHiddenOnMobile
+                    , overlay = Nothing
                     }
                 )
             )
@@ -2442,6 +2443,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             (Route.NoThreadWithFriends Nothing HideChannelSettings)
                             Nothing
                     , channelsVisible = Route.ChannelsHiddenOnMobile
+                    , overlay = Nothing
                     }
                 )
             )
@@ -2603,6 +2605,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                     (Route.NoThreadWithFriends Nothing HideChannelSettings)
                                     Nothing
                             , channelsVisible = Route.ChannelsHiddenOnMobile
+                            , overlay = Nothing
                             }
                         )
                     )
@@ -2876,6 +2879,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             (Route.NoThreadWithFriends Nothing Route.ShowChannelSettings)
                             Nothing
                     , channelsVisible = Route.ChannelsHiddenOnMobile
+                    , overlay = Nothing
                     }
                 )
             )
@@ -2904,7 +2908,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
         , T.connectFrontend
             100
             E2EHelper.sessionId0
-            (Route.encode Route.HomePageRoute)
+            (Route.encode (Route.HomePageRoute Nothing))
             E2EHelper.desktopWindow
             (\overviewViewer ->
                 [ T.andThen

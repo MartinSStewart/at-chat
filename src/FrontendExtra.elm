@@ -127,9 +127,11 @@ import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Input
+import Ui.Lazy
 import Ui.Prose
 import Url exposing (Url)
 import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
+import UserOptions
 import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 import WordSpellingGame
@@ -542,6 +544,16 @@ layout model attributes child =
                     Nothing ->
                         Ui.noAttr
                )
+            :: (case Route.toOverlay model.route of
+                    Just Route.E2eeInfoOverlay ->
+                        Ui.Lazy.lazy e2eeInfoOverlay isMobile |> Ui.inFront
+
+                    Just Route.UserOptionsOverlay ->
+                        Ui.noAttr
+
+                    Nothing ->
+                        Ui.noAttr
+               )
             :: attributes
             ++ (if MyUi.isMobile model then
                     [ Ui.clip
@@ -630,7 +642,7 @@ canDropFiles :
     -> Maybe (Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ ))
 canDropFiles isMobile currentUserId route =
     case route of
-        HomePageRoute ->
+        HomePageRoute _ ->
             Nothing
 
         AdminRoute _ ->
@@ -639,7 +651,7 @@ canDropFiles isMobile currentUserId route =
         NewGuildRoute ->
             Nothing
 
-        GuildRoute guildId channelRoute channelsVisible ->
+        GuildRoute guildId channelRoute channelsVisible _ ->
             if channelsVisible == ChannelsVisibleOnMobile && isMobile then
                 Nothing
 
@@ -746,9 +758,6 @@ canDropFiles isMobile currentUserId route =
             Nothing
 
         PublicGoMatchRoute _ ->
-            Nothing
-
-        E2eeInfo ->
             Nothing
 
 
@@ -1236,6 +1245,21 @@ newPrivateKeyWarning isMobile loaded email privateKey =
         )
 
 
+{-| Covers whatever page it was opened from with the explanation of what at-chat's E2EE
+does and doesn't protect. Closing it leaves the reader back on that page.
+-}
+e2eeInfoOverlay : Bool -> Element FrontendMsg_
+e2eeInfoOverlay isMobile =
+    Ui.el
+        [ Ui.height Ui.fill
+        , Ui.heightMin 0
+        , Ui.background MyUi.background1
+        , Ui.inFront
+            (UserOptions.closeButton isMobile PressedCloseOverlay)
+        ]
+        (Ui.el [ Ui.scrollable, Ui.heightMin 0 ] (Encryption.info FrontendNoOp))
+
+
 externalLinkWarning : SeqSet Domain -> Bool -> Url -> Element FrontendMsg_
 externalLinkWarning domainWhitelist isMobile url =
     let
@@ -1351,7 +1375,7 @@ logout model =
 
                 ( model3, cmd ) =
                     if Route.requiresLogin model2.route then
-                        routePush model2 HomePageRoute
+                        routePush model2 (HomePageRoute Nothing)
 
                     else
                         ( model2, Command.none )
@@ -1622,13 +1646,30 @@ routeRequest previousRoute newRoute model =
                                 else
                                     Drawing.init
                             , newMessagesWhileNotScrolledToBottom = 0
+                            , userOptions =
+                                case Route.toOverlay newRoute of
+                                    Just Route.UserOptionsOverlay ->
+                                        case loggedIn.userOptions of
+                                            Just userOptions ->
+                                                Just userOptions
+
+                                            Nothing ->
+                                                UserOptions.init
+                                                    (Local.model loggedIn.localState).localUser.user.domainWhitelist
+                                                    |> Just
+
+                                    Just Route.E2eeInfoOverlay ->
+                                        Nothing
+
+                                    Nothing ->
+                                        Nothing
                         }
                         Command.none
                 )
                 { model | route = newRoute }
     in
     (case newRoute of
-        HomePageRoute ->
+        HomePageRoute _ ->
             ( { model2
                 | loginStatus =
                     case model2.loginStatus of
@@ -1649,7 +1690,7 @@ routeRequest previousRoute newRoute model =
                         admin =
                             loggedIn.admin
                     in
-                    ( { loggedIn | admin = { admin | highlightLog = highlightLog }, userOptions = Nothing }
+                    ( { loggedIn | admin = { admin | highlightLog = highlightLog } }
                     , case (Local.model loggedIn.localState).adminData of
                         IsAdminButDataNotLoaded ->
                             (case highlightLog of
@@ -1674,7 +1715,7 @@ routeRequest previousRoute newRoute model =
             -- Opening the create guild page always starts with a blank form
             updateLoggedIn (\loggedIn -> ( { loggedIn | newGuildForm = Nothing }, Command.none )) model2
 
-        GuildRoute guildId channelRoute _ ->
+        GuildRoute guildId channelRoute _ _ ->
             let
                 model3 : LoadedFrontend
                 model3 =
@@ -1687,7 +1728,7 @@ routeRequest previousRoute newRoute model =
                         tab
                         threadRoute
                         (case previousRoute of
-                            Just (GuildRoute previousGuildId (ChannelRoute previousChannelId previousThreadRoute _) _) ->
+                            Just (GuildRoute previousGuildId (ChannelRoute previousChannelId previousThreadRoute _) _ _) ->
                                 (guildId == previousGuildId)
                                     && (channelId == previousChannelId)
                                     && Route.sameThread threadRoute previousThreadRoute
@@ -1735,6 +1776,7 @@ routeRequest previousRoute newRoute model =
                                                     Nothing
                                                 )
                                                 ChannelsVisibleOnMobile
+                                                Nothing
                                             )
 
                                     Nothing ->
@@ -1885,9 +1927,6 @@ routeRequest previousRoute newRoute model =
             ( { model2 | publicGoMatch = PublicGoMatch_Loading }
             , Lamdera.sendToBackend (GetPublicGoMatchRequest publicGoMatchId)
             )
-
-        E2eeInfo ->
-            ( model2, Command.none )
     )
         |> Tuple.mapSecond (\a -> Command.batch [ viewCmd, a ])
 
@@ -1993,7 +2032,7 @@ currentGamesTab local route =
                 _ ->
                     Nothing
 
-        GuildRoute guildId (ChannelRoute channelId _ (Just (ChannelHeaderTab_Games maybeMatchId))) _ ->
+        GuildRoute guildId (ChannelRoute channelId _ (Just (ChannelHeaderTab_Games maybeMatchId))) _ _ ->
             case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
                 Just ( _, channel ) ->
                     Just
@@ -2364,7 +2403,7 @@ isPressMsg msg =
         PressedShowUserOption ->
             True
 
-        PressedCloseUserOptions ->
+        PressedCloseOverlay ->
             True
 
         TwoFactorMsg twoFactorMsg ->

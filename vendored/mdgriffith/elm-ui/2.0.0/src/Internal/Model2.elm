@@ -1187,17 +1187,55 @@ toChildren :
     -> List (Html.Html msg)
 toChildren myBits analyzedBits attrs children =
     if BitField.has AnalyzeBits.nearbys analyzedBits then
-        let
-            behind =
-                toBehindElements myBits [] attrs
-
-            after =
-                toNearbyElements myBits [] attrs
-        in
-        behind ++ List.map (\(Element toChild) -> toChild myBits) children ++ after
+        -- toBehindElements prepends what it finds onto the list it was handed, so passing
+        -- the children in builds the same list as appending the behind elements in front
+        -- of them afterwards.
+        toBehindElements
+            myBits
+            (unwrapChildren myBits (toNearbyElements myBits [] attrs) children)
+            attrs
 
     else
-        List.map (\(Element toChild) -> toChild myBits) children
+        unwrapChildren myBits [] children
+
+
+{-| Every child rendered in order, followed by `rest`.
+
+Two tail recursive passes rather than `List.map`, which goes through `List.foldr`. See
+benchmarks/src/Benchmarks.elm.
+
+-}
+unwrapChildren :
+    Inheritance.Encoded
+    -> List (Html.Html msg)
+    -> List (Element msg)
+    -> List (Html.Html msg)
+unwrapChildren inheritance rest children =
+    prependReversed rest (unwrapChildrenHelp inheritance [] children)
+
+
+unwrapChildrenHelp :
+    Inheritance.Encoded
+    -> List (Html.Html msg)
+    -> List (Element msg)
+    -> List (Html.Html msg)
+unwrapChildrenHelp inheritance rendered children =
+    case children of
+        [] ->
+            rendered
+
+        (Element toChild) :: remain ->
+            unwrapChildrenHelp inheritance (toChild inheritance :: rendered) remain
+
+
+prependReversed : List a -> List a -> List a
+prependReversed rest reversed =
+    case reversed of
+        [] ->
+            rest
+
+        first :: remain ->
+            prependReversed (first :: rest) remain
 
 
 elementKeyed :
@@ -1388,12 +1426,35 @@ toChildrenKeyed myBits analyzedBits attrs children =
                 toNearbyElements myBits [] attrs
                     |> List.map (Tuple.pair "after")
         in
-        behind
-            ++ List.map (\( key, Element toChild ) -> ( key, toChild myBits )) children
-            ++ after
+        behind ++ unwrapKeyedChildren myBits after children
 
     else
-        List.map (\( key, Element toChild ) -> ( key, toChild myBits )) children
+        unwrapKeyedChildren myBits [] children
+
+
+{-| Every keyed child rendered in order, followed by `rest`.
+-}
+unwrapKeyedChildren :
+    Inheritance.Encoded
+    -> List ( String, Html.Html msg )
+    -> List ( String, Element msg )
+    -> List ( String, Html.Html msg )
+unwrapKeyedChildren inheritance rest children =
+    prependReversed rest (unwrapKeyedChildrenHelp inheritance [] children)
+
+
+unwrapKeyedChildrenHelp :
+    Inheritance.Encoded
+    -> List ( String, Html.Html msg )
+    -> List ( String, Element msg )
+    -> List ( String, Html.Html msg )
+unwrapKeyedChildrenHelp inheritance rendered children =
+    case children of
+        [] ->
+            rendered
+
+        ( key, Element toChild ) :: remain ->
+            unwrapKeyedChildrenHelp inheritance (( key, toChild inheritance ) :: rendered) remain
 
 
 fontSizeAdjusted : Int -> Float -> Float

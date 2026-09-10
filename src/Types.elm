@@ -622,7 +622,7 @@ type FrontendMsg_
     | PressedCancelMessageEdit ( AnyGuildOrDmId, ThreadRoute )
     | CheckMessageAltPress Time.Posix AnyGuildOrDmId ThreadRouteWithMessage Bool (Maybe String) (Maybe String)
     | PressedShowUserOption
-    | PressedCloseUserOptions
+    | PressedCloseOverlay
     | PressedExpandContainer UserOptionSection
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg

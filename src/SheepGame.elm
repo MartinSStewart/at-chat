@@ -1930,7 +1930,7 @@ gameView time windowSize showMemberTab localUser drag loggedIn setup shared mode
                 Grouping ->
                     Ui.column
                         [ Ui.paddingXY (paddingX isMobile) 16, Ui.centerX, Ui.widthMax maxWidth, Ui.spacing 16 ]
-                        (groupingView time contentWidth localUser loggedIn setup shared model)
+                        (groupingView isMobile time contentWidth localUser loggedIn setup shared model)
 
                 Revealing ->
                     Ui.column
@@ -2210,7 +2210,8 @@ answeredCountText count =
 {-| The host decides which answers count as the same thing. Everyone else waits.
 -}
 groupingView :
-    Time.Posix
+    Bool
+    -> Time.Posix
     -> Int
     -> LocalUser
     -> LoggedIn a
@@ -2218,7 +2219,7 @@ groupingView :
     -> Shared
     -> GameData
     -> List (Element GameMsg)
-groupingView time contentWidth localUser loggedIn setup shared model =
+groupingView isMobile time contentWidth localUser loggedIn setup shared model =
     if isHost localUser.session.userId setup then
         [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Group the answers")
         , Ui.Prose.paragraph
@@ -2226,8 +2227,9 @@ groupingView time contentWidth localUser loggedIn setup shared model =
             [ Ui.text "Answers sharing a letter score together. Change a letter to split an answer off or to merge it with another." ]
         , Ui.column
             [ Ui.spacing 16 ]
-            (List.Nonempty.toList setup.questions
-                |> List.indexedMap (groupingQuestionView time contentWidth localUser loggedIn shared model)
+            (List.indexedMap
+                (groupingQuestionView isMobile time contentWidth localUser loggedIn setup shared model)
+                (resultsData setup shared).questions
             )
         , Ui.row
             [ Ui.spacing 8 ]
@@ -2251,16 +2253,18 @@ groupingView time contentWidth localUser loggedIn setup shared model =
 
 
 groupingQuestionView :
-    Time.Posix
+    Bool
+    -> Time.Posix
     -> Int
     -> LocalUser
     -> LoggedIn a
+    -> ValidatedSetup
     -> Shared
     -> GameData
     -> Int
-    -> ValidatedInput
+    -> QuestionResult
     -> Element GameMsg
-groupingQuestionView time contentWidth localUser loggedIn shared model questionIndex question =
+groupingQuestionView isMobile time contentWidth localUser loggedIn setup shared model questionIndex result =
     let
         questionId : Id QuestionId
         questionId =
@@ -2275,8 +2279,8 @@ groupingQuestionView time contentWidth localUser loggedIn shared model questionI
                 contentWidth
                 localUser
                 (Dom.id ("sheepGame_groupingQuestion_" ++ Id.toString questionId))
-                question.attachedFiles
-                question.text
+                result.question.attachedFiles
+                result.question.text
             )
         , Ui.column
             [ Ui.spacing 4 ]
@@ -2298,6 +2302,39 @@ groupingQuestionView time contentWidth localUser loggedIn shared model questionI
                 loggedIn
                 questionId
                 (IdArray.get questionId model.noteDrafts |> Maybe.withDefault emptyInput)
+            ]
+        , Ui.column
+            [ Ui.spacing 2 ]
+            [ Ui.el
+                [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
+                (Ui.text "Preview")
+            , Ui.column
+                [ Ui.spacing 16 ]
+                [ answerGroupsView isMobile time localUser contentWidth Nothing questionId result.answers
+                , case validatedDraft localUser questionId model.noteDrafts of
+                    Just notes ->
+                        messageWithProfile
+                            setup.createdBy
+                            localUser
+                            (contentView
+                                time
+                                contentWidth
+                                localUser
+                                (Dom.id ("sheepGame_groupingNotesPreview_" ++ Id.toString questionId))
+                                notes.attachedFiles
+                                notes.text
+                            )
+                            |> reactableResult
+                                (paddingX isMobile)
+                                localUser
+                                contentWidth
+                                (NotesReaction questionId)
+                                Nothing
+                                notes.reactions
+
+                    Nothing ->
+                        Ui.none
+                ]
             ]
         ]
 

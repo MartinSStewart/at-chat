@@ -77,6 +77,8 @@ Compiling, formatting and passing tests isn't enough on its own — elm-review c
 unused code, redundant patterns and style rules that would otherwise need a cleanup
 commit afterwards. `--fix-all` applies the mechanical fixes.
 
+Measure anything you rewrite for speed rather than guessing:
+
 ## Code style
 
 ### Prefer duplication over parameters when sharing code

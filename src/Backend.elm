@@ -7491,6 +7491,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                             (Just (UserSession.ChannelHeaderTab_Games (Just matchId)))
                                         )
                                         ChannelsHiddenOnMobile
+                                        Nothing
 
                                 GuildOrDmId_Dm id ->
                                     Route.DmRoute
@@ -7498,6 +7499,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                         , threadRoute = Route.NoThreadWithFriends Nothing Route.HideChannelSettings
                                         , tab = Just (UserSession.ChannelHeaderTab_Games (Just matchId))
                                         , channelsVisible = ChannelsHiddenOnMobile
+                                        , overlay = Nothing
                                         }
 
                         userToString : Id UserId -> String

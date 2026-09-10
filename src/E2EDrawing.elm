@@ -309,6 +309,7 @@ drawOnMessages imageUploadConfig =
                                                 Nothing
                                             )
                                             Route.ChannelsHiddenOnMobile
+                                            Nothing
                                         )
                                     )
                                     E2EHelper.desktopWindow
@@ -451,6 +452,7 @@ drawingScalesWithImages imageUploadConfig =
                                                 Nothing
                                             )
                                             Route.ChannelsHiddenOnMobile
+                                            Nothing
                                         )
                                     )
                                     { width = 400, height = 800 }

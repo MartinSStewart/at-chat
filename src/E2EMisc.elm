@@ -750,6 +750,7 @@ reloadingAConversationLeavesItUnreadTest config =
                                 Nothing
                             )
                             ChannelsHiddenOnMobile
+                            Nothing
                         )
                     )
                     E2EHelper.desktopWindow
@@ -1271,6 +1272,7 @@ dmThreadsTest config =
                             , threadRoute = Route.ViewThreadWithFriends (Id.fromInt 0) Nothing Route.HideChannelSettings
                             , tab = Nothing
                             , channelsVisible = ChannelsHiddenOnMobile
+                            , overlay = Nothing
                             }
                         )
                     )

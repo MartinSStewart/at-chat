@@ -1,5 +1,6 @@
 module UserOptions exposing
-    ( currentDeviceText
+    ( closeButton
+    , currentDeviceText
     , discordBookmarkletId
     , domainWhitelistToString
     , init
@@ -226,6 +227,34 @@ gotoAdmin =
         )
 
 
+closeButton : Bool -> msg -> Element msg
+closeButton isMobile onPress =
+    MyUi.rowButton
+        (Dom.id "userOptions_closeUserOptions")
+        onPress
+        [ Ui.padding 16
+        , Ui.alignRight
+        , Ui.Font.size 20
+        , Ui.Font.color
+            (if isMobile then
+                MyUi.font1
+
+             else
+                MyUi.font3
+            )
+        , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+        , Ui.spacing 8
+        , MyUi.hoverText "Close"
+        ]
+        [ if isMobile then
+            Ui.none
+
+          else
+            Ui.el [ Ui.alignBottom ] (Ui.text "Close")
+        , Ui.html Icons.x
+        ]
+
+
 view :
     Coord CssPixels
     -> Maybe { a | htmlId : HtmlId, selection : Range }
@@ -272,31 +301,9 @@ view windowSize textInputFocus time local loggedIn loaded model =
                     |> Ui.inFront
                 ]
                 (Ui.row
-                    [ Ui.Font.size 20, Ui.widthMax 1000, Ui.centerX ]
-                    [ Ui.el [ Ui.paddingXY 16 0 ] (Ui.text "User settings")
-                    , MyUi.rowButton
-                        (Dom.id "userOptions_closeUserOptions")
-                        PressedCloseUserOptions
-                        [ Ui.padding 16
-                        , Ui.alignRight
-                        , Ui.Font.color
-                            (if isMobile then
-                                MyUi.font1
-
-                             else
-                                MyUi.font3
-                            )
-                        , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
-                        , Ui.spacing 8
-                        , MyUi.hoverText "Close"
-                        ]
-                        [ if isMobile then
-                            Ui.none
-
-                          else
-                            Ui.el [ Ui.alignBottom ] (Ui.text "Close")
-                        , Ui.html Icons.x
-                        ]
+                    [ Ui.widthMax 1000, Ui.centerX ]
+                    [ Ui.el [ Ui.paddingXY 16 0, Ui.Font.size 20 ] (Ui.text "User settings")
+                    , closeButton isMobile PressedCloseOverlay
                     ]
                 )
             )

@@ -303,7 +303,7 @@ type alias InitAdminData =
     , signupsEnabled : Bool
     , discordLinkingEnabled : Bool
     , logs : Pagination LogWithTime
-    , connections : SeqDict SessionIdHash (NonemptyDict ClientId ConnectionData)
+    , connections : List ( SessionIdHash, NonemptyDict ClientId ConnectionData )
     , filesCount : Int
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
@@ -672,9 +672,9 @@ updateAdmin changedBy change adminData local =
         DisconnectClient sessionIdHash clientId ->
             { local
                 | adminData =
-                    case disconnectClient sessionIdHash clientId adminData.connections of
+                    case disconnectClient sessionIdHash clientId (SeqDict.fromList adminData.connections) of
                         Ok ( _, connections ) ->
-                            IsAdmin { adminData | connections = connections }
+                            IsAdmin { adminData | connections = SeqDict.toList connections }
 
                         Err () ->
                             IsAdmin adminData
@@ -1757,7 +1757,7 @@ connectionsSection isMobile timezone user adminData =
         isMobile
         user.expandedSections
         ConnectionsSection
-        [ if SeqDict.isEmpty adminData.connections then
+        [ if List.isEmpty adminData.connections then
             Ui.text "No connections"
 
           else
@@ -1800,7 +1800,7 @@ connectionsSection isMobile timezone user adminData =
                                 )
                             ]
                     )
-                    (SeqDict.toList adminData.connections)
+                    adminData.connections
                 )
         ]
 

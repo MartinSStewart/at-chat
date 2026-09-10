@@ -158,7 +158,7 @@ The following is not encrypted:
 * Attached file IDs and the approximate size of the files
 * Previously uploaded files from before E2EE was enabled
 * Who wrote the message
-* If the message is a reply to a previous message
+* If the message is a reply to a previous message or part of a thread
 * Drawings
 * Message edit time
 * Emoji reactions

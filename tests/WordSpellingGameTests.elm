@@ -568,7 +568,7 @@ tests =
                 \_ ->
                     WordSpellingGame.nextTurnNotifications
                         notifUserName
-                        Route.HomePageRoute
+                        (Route.HomePageRoute Nothing)
                         (notifShared 0 notifPlayers)
                         [ WordSpellingGame.Description_ReplacedTray (Id.fromInt 0) ]
                         (notifShared 1 notifPlayers)
@@ -598,7 +598,7 @@ tests =
                     in
                     WordSpellingGame.nextTurnNotifications
                         notifUserName
-                        Route.HomePageRoute
+                        (Route.HomePageRoute Nothing)
                         (notifShared 2 notifPlayers)
                         [ WordSpellingGame.Description_PlacedWord
                             (Id.fromInt 0)
@@ -620,7 +620,7 @@ tests =
                 \_ ->
                     WordSpellingGame.nextTurnNotifications
                         notifUserName
-                        Route.HomePageRoute
+                        (Route.HomePageRoute Nothing)
                         (notifShared 0 notifPlayers)
                         [ WordSpellingGame.Description_Joined (Id.fromInt 2) ]
                         (notifShared 0 notifPlayers)
@@ -634,7 +634,7 @@ tests =
                     in
                     WordSpellingGame.nextTurnNotifications
                         notifUserName
-                        Route.HomePageRoute
+                        (Route.HomePageRoute Nothing)
                         (notifShared 3 alreadyOver)
                         []
                         (notifShared 3 alreadyOver)

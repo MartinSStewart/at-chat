@@ -1348,7 +1348,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     --            , T.connectFrontend
     --                100
     --                sessionId1
-    --                (Route.encode Route.HomePageRoute)
+    --                (Route.encode (Route.HomePageRoute Nothing))
     --                E2EHelper.desktopWindow
     --                (\userReload ->
     --                    [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
@@ -1384,7 +1384,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
-                    (Route.encode Route.HomePageRoute)
+                    (Route.encode (Route.HomePageRoute Nothing))
                     E2EHelper.desktopWindow
                     (\userReload ->
                         [ T.andThen
@@ -1574,7 +1574,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
-                    (Route.encode Route.HomePageRoute)
+                    (Route.encode (Route.HomePageRoute Nothing))
                     E2EHelper.desktopWindow
                     (\_ ->
                         [ E2EHelper.tallSnapshot user 100 { name = "Guild icon new message notification on reload" } ]
@@ -1614,7 +1614,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
-                    (Route.encode Route.HomePageRoute)
+                    (Route.encode (Route.HomePageRoute Nothing))
                     E2EHelper.desktopWindow
                     (\userReload ->
                         [ T.andThen
@@ -1720,7 +1720,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
-                    (Route.encode Route.HomePageRoute)
+                    (Route.encode (Route.HomePageRoute Nothing))
                     E2EHelper.desktopWindow
                     (\userReload ->
                         [ T.andThen
@@ -1775,7 +1775,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , T.connectFrontend
                             100
                             E2EHelper.sessionId1
-                            (Route.encode Route.HomePageRoute)
+                            (Route.encode (Route.HomePageRoute Nothing))
                             E2EHelper.desktopWindow
                             (\userReload2 ->
                                 [ T.andThen
@@ -1812,7 +1812,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
-                    (Route.encode Route.HomePageRoute)
+                    (Route.encode (Route.HomePageRoute Nothing))
                     E2EHelper.desktopWindow
                     (\userReload ->
                         [ T.andThen
@@ -1917,7 +1917,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
-                    (Route.encode Route.HomePageRoute)
+                    (Route.encode (Route.HomePageRoute Nothing))
                     E2EHelper.desktopWindow
                     (\userReload ->
                         [ T.andThen
@@ -2032,7 +2032,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
-                    (Route.encode Route.HomePageRoute)
+                    (Route.encode (Route.HomePageRoute Nothing))
                     E2EHelper.desktopWindow
                     (\userReload ->
                         [ T.andThen
