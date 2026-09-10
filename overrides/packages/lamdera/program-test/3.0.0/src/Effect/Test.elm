@@ -5021,6 +5021,11 @@ runTask maybeClientId state task =
                 Nothing ->
                     runTask maybeClientId (helper state) (function ())
 
+        CryptoTask _ simulatedTask ->
+            -- Web Crypto only exists in a browser, so a simulated run uses the stand-in
+            -- result Effect.Crypto paired with the real task instead.
+            runTask maybeClientId state simulatedTask
+
 
 handleHttpResponseWithTestError :
     Maybe ClientId

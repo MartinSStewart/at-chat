@@ -31,6 +31,7 @@ HTTP requests or writing to a database.
 -}
 
 import Effect.Internal exposing (Command(..), Task(..))
+import Task
 
 
 {-| Here are some common tasks:
@@ -449,3 +450,6 @@ onError f task =
 
         WebsocketClose websocketConnection function ->
             WebsocketClose websocketConnection (function >> onError f)
+
+        CryptoTask realTask simulatedTask ->
+            CryptoTask (Task.map (onError f) realTask) (onError f simulatedTask)

@@ -605,6 +605,9 @@ toTask simulatedTask =
             Websocket.close connection
                 |> Task.andThen (\result -> toTask (function result))
 
+        Effect.Internal.CryptoTask realTask _ ->
+            realTask |> Task.onError never |> Task.andThen toTask
+
 
 toSub : Subscription restriction msg -> Sub msg
 toSub sub =

@@ -7,6 +7,7 @@
     "exposed-modules": [
         "Crypto",
         "Effect.Command",
+        "Effect.Crypto",
         "Effect.Http",
         "Effect.File",
         "Effect.Browser",

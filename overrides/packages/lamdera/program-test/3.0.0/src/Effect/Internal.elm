@@ -48,6 +48,7 @@ import Json.Encode
 import Lamdera
 import Math.Matrix4 exposing (Mat4)
 import Math.Vector2 exposing (Vec2)
+import Task
 import Time
 import WebGL
 import WebGLFix.Internal
@@ -152,6 +153,7 @@ type Task restriction x a
     | WebsocketCreateHandle String (Websocket.Connection -> Task restriction x a)
     | WebsocketSendString Websocket.Connection String (Result Websocket.SendError () -> Task restriction x a)
     | WebsocketClose Websocket.Connection (() -> Task restriction x a)
+    | CryptoTask (Task.Task Never (Task restriction x a)) (Task restriction x a)
 
 
 type alias XrPose =
@@ -456,6 +458,9 @@ andThen f task =
         WebsocketClose connection function ->
             WebsocketClose connection (function >> andThen f)
 
+        CryptoTask realTask simulatedTask ->
+            CryptoTask (Task.map (andThen f) realTask) (andThen f simulatedTask)
+
 
 taskMapError : (x -> y) -> Task restriction x a -> Task restriction y a
 taskMapError f task =
@@ -552,3 +557,6 @@ taskMapError f task =
 
         WebsocketClose connection function ->
             WebsocketClose connection (function >> taskMapError f)
+
+        CryptoTask realTask simulatedTask ->
+            CryptoTask (Task.map (taskMapError f) realTask) (taskMapError f simulatedTask)
