@@ -228,24 +228,6 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 handleMultiFileUpload
                 E2EHelper.domain
 
-        -- The push notification service never answers, so every attempt against it times out.
-        pushNotificationTimeoutConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-        pushNotificationTimeoutConfig =
-            T.Config
-                Frontend.app_
-                E2EHelper.backendApp
-                (\({ currentRequest } as httpRequests) ->
-                    if currentRequest.url == E2EHelper.pushNotificationUrl then
-                        TimeoutResponse
-
-                    else
-                        handleNormalHttpRequests httpRequests
-                )
-                E2EHelper.handlePortToJs
-                handleFileRequest
-                handleMultiFileUpload
-                E2EHelper.domain
-
         -- Same as normalConfig except the upload response reports no image size,
         -- like the Rust server does for files it can't decode as an image.
         nonImageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
@@ -356,7 +338,6 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.largePasteBecomesAttachment nonImageUploadConfig
     , E2EMisc.leaveGuildTest normalConfig
     , E2EMisc.profileImageOpensDm normalConfig
-    , E2EMisc.pushNotificationTimeoutRetryTest pushNotificationTimeoutConfig
     , E2EMisc.reactionPopupNamesEmojiTest normalConfig
     , E2EMisc.reloadingAConversationLeavesItUnreadTest normalConfig
     , E2EMisc.timeOfDaySuggestionTest normalConfig

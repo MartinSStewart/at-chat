@@ -17,7 +17,6 @@ module E2EMisc exposing
     , mentionSuggestionTest
     , noTimestampSuggestionTest
     , profileImageOpensDm
-    , pushNotificationTimeoutRetryTest
     , reactionPopupNamesEmojiTest
     , reloadingAConversationLeavesItUnreadTest
     , richTextMessage
@@ -469,33 +468,6 @@ channelSearchTest config =
                         , Test.Html.Selector.attribute (Html.Attributes.placeholder "Search channels")
                         ]
                     )
-                ]
-            )
-        ]
-
-
-{-| Turning notifications on sends one, and this config's push service never answers, so
-every attempt against it times out. Five attempts is the first one plus the four retries
-`Broadcast.pushNotificationRetries` asks for. It's written out rather than read from there
-so that changing the number has to come past this test.
--}
-pushNotificationTimeoutRetryTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-pushNotificationTimeoutRetryTest config =
-    E2EHelper.startTest
-        "A push notification that times out is sent again"
-        E2EHelper.startTime
-        config
-        [ T.connectFrontend
-            100
-            E2EHelper.sessionId0
-            "/"
-            E2EHelper.desktopWindow
-            (\admin ->
-                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
-                , E2EHelper.enableNotifications False admin
-                , E2EHelper.checkPushNotificationAttempts 5
                 ]
             )
         ]

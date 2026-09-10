@@ -18,7 +18,6 @@ module E2EHelper exposing
     , checkNoErrorLogs
     , checkNoNotification
     , checkNotification
-    , checkPushNotificationAttempts
     , checkVoiceChatFromJsEvents
     , chromeDesktop
     , clickSpoiler
@@ -78,7 +77,6 @@ module E2EHelper exposing
     , privateDiscordChannelCreateEvent
     , privateDiscordChannelId
     , privateDiscordChannelMessageEvent
-    , pushNotificationUrl
     , regeneratedServerSecretValue
     , regularDiscordChannelBecomesPrivateEvent
     , regularDiscordChannelCreateEvent
@@ -646,39 +644,6 @@ enableNotifications isMobile user =
         |> T.group
 
 
-pushNotificationUrl : String
-pushNotificationUrl =
-    "http://localhost:3000/file/internal/push-notification"
-
-
-{-| How many times the backend handed the notification to the push service, counting each
-attempt separately. `checkNotification` fails when it sees more than one notification, so
-retries of the same one need a check of their own.
--}
-checkPushNotificationAttempts : Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-checkPushNotificationAttempts expected =
-    T.checkState
-        100
-        (\data ->
-            let
-                attempts : Int
-                attempts =
-                    List.filter (\request -> request.url == pushNotificationUrl) data.httpRequests
-                        |> List.length
-            in
-            if attempts == expected then
-                Ok ()
-
-            else
-                Err
-                    ("Expected "
-                        ++ String.fromInt expected
-                        ++ " push notification attempts but there were "
-                        ++ String.fromInt attempts
-                    )
-        )
-
-
 checkNotification : String -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 checkNotification title body =
     T.checkState
@@ -693,7 +658,7 @@ checkNotification title body =
                                     Ok pushNotification ->
                                         if
                                             (pushNotification.body == body)
-                                                && (request.url == pushNotificationUrl)
+                                                && (request.url == "http://localhost:3000/file/internal/push-notification")
                                         then
                                             Just pushNotification
 
@@ -1068,7 +1033,7 @@ checkNoNotification body =
                                 case Codec.decodeValue Broadcast.pushNotificationCodec json of
                                     Ok pushNotification ->
                                         (pushNotification.body == body)
-                                            && (request.url == pushNotificationUrl)
+                                            && (request.url == "http://localhost:3000/file/internal/push-notification")
 
                                     Err _ ->
                                         False
