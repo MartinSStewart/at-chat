@@ -46,7 +46,7 @@ import Discord
 import DiscordUserData exposing (DiscordUserData(..))
 import DmChannelId
 import Drawing
-import Duration exposing (Duration)
+import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
