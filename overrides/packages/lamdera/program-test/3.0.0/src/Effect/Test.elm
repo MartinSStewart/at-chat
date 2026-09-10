@@ -60,6 +60,7 @@ import Browser.Navigation
 import Bytes exposing (Bytes)
 import Bytes.Decode
 import Bytes.Encode
+import Crypto
 import DebugParser exposing (ElmValue(..), ExpandableValue(..), SequenceType(..))
 import Dict as RegularDict
 import Duration exposing (Duration)
@@ -5021,10 +5022,385 @@ runTask maybeClientId state task =
                 Nothing ->
                     runTask maybeClientId (helper state) (function ())
 
-        CryptoTask _ simulatedTask ->
-            -- Web Crypto only exists in a browser, so a simulated run uses the stand-in
-            -- result Effect.Crypto paired with the real task instead.
-            runTask maybeClientId state simulatedTask
+        CryptoTaskAesCtr operation function ->
+            runTask maybeClientId state (function (simulateAesCipher operation))
+
+        CryptoTaskAesCbc operation function ->
+            runTask maybeClientId state (function (simulateAesCipher operation))
+
+        CryptoTaskAesGcm operation function ->
+            runTask maybeClientId state (function (simulateAesCipher operation))
+
+        CryptoTaskHmac operation function ->
+            runTask maybeClientId state (function (simulateHmac operation))
+
+        CryptoTaskRsaOaep operation function ->
+            runTask maybeClientId state (function (simulatePublicKeyCipher operation))
+
+        CryptoTaskRsaPss operation function ->
+            runTask maybeClientId state (function (simulateRsaSignature operation))
+
+        CryptoTaskRsaSsaPkcs1V1_5 operation function ->
+            runTask maybeClientId state (function (simulateRsaSignature operation))
+
+        CryptoTaskEcdsa operation function ->
+            runTask maybeClientId state (function (simulateEcSignature operation))
+
+        CryptoTaskPlain operation function ->
+            runTask maybeClientId state (function (simulatePlain operation))
+
+
+
+-- CRYPTO
+--
+-- Web Crypto only exists in a browser, so a simulated run answers these itself. What is
+-- here now are stand-ins: encryption is the identity, so a round trip still gives back
+-- what went in, and a signature is empty. They are not encryption, and a test that
+-- asserts on ciphertext is asserting on nothing.
+--
+-- A simulated key carries its bytes, so pure Elm implementations can replace these
+-- without changing anything above. The two AES simulators below already serve all three
+-- AES algorithms, since only the params differ between them.
+
+
+zeroBytes : Int -> Bytes
+zeroBytes width =
+    Bytes.Encode.encode (Bytes.Encode.sequence (List.repeat width (Bytes.Encode.unsignedInt8 0)))
+
+
+emptyBytes : Bytes
+emptyBytes =
+    Bytes.Encode.encode (Bytes.Encode.sequence [])
+
+
+aesLengthToWidth : Crypto.AesLength -> Int
+aesLengthToWidth length =
+    case length of
+        Crypto.AesLength128 ->
+            16
+
+        Crypto.AesLength192 ->
+            24
+
+        Crypto.AesLength256 ->
+            32
+
+
+aesLengthFromWidth : Int -> Crypto.AesLength
+aesLengthFromWidth width =
+    if width <= 16 then
+        Crypto.AesLength128
+
+    else if width <= 24 then
+        Crypto.AesLength192
+
+    else
+        Crypto.AesLength256
+
+
+simulatedKeyBytes : Effect.Internal.CryptoKey key keyData -> Bytes
+simulatedKeyBytes key =
+    case key of
+        Effect.Internal.SimulatedCryptoKey keyData ->
+            keyData.keyBytes
+
+        Effect.Internal.BrowserCryptoKey _ ->
+            emptyBytes
+
+
+simulateAesCipher :
+    Effect.Internal.CipherOperation key Crypto.AesKeyParams params
+    -> Effect.Internal.CipherResult key Crypto.AesKeyParams
+simulateAesCipher operation =
+    case operation of
+        Effect.Internal.GenerateCipherKey _ params ->
+            Effect.Internal.GotCipherKey
+                (Effect.Internal.SimulatedCryptoKey
+                    { keyBytes = zeroBytes (aesLengthToWidth params.length), data = params }
+                )
+
+        Effect.Internal.ImportCipherKeyFromRaw _ extractable bytes ->
+            Effect.Internal.GotCipherKey
+                (Effect.Internal.SimulatedCryptoKey
+                    { keyBytes = bytes
+                    , data = { length = aesLengthFromWidth (Bytes.width bytes), extractable = extractable }
+                    }
+                )
+
+        Effect.Internal.ImportCipherKeyFromJwk _ extractable _ ->
+            Effect.Internal.GotCipherKey
+                (Effect.Internal.SimulatedCryptoKey
+                    { keyBytes = zeroBytes 32
+                    , data = { length = Crypto.AesLength256, extractable = extractable }
+                    }
+                )
+
+        Effect.Internal.ExportCipherKeyAsRaw key ->
+            Effect.Internal.GotCipherBytes (simulatedKeyBytes key)
+
+        Effect.Internal.ExportCipherKeyAsJwk _ ->
+            Effect.Internal.GotCipherJwk Json.Encode.null
+
+        Effect.Internal.Encrypt _ _ bytes ->
+            Effect.Internal.GotCipherBytes bytes
+
+        Effect.Internal.Decrypt _ _ bytes ->
+            Effect.Internal.GotCipherBytes bytes
+
+
+simulateHmac :
+    Effect.Internal.MacOperation key Crypto.HmacKeyParams
+    -> Effect.Internal.MacResult key Crypto.HmacKeyParams
+simulateHmac operation =
+    case operation of
+        Effect.Internal.GenerateMacKey _ params ->
+            Effect.Internal.GotMacKey
+                (Effect.Internal.SimulatedCryptoKey
+                    { keyBytes = zeroBytes (Maybe.withDefault 256 params.length // 8), data = params }
+                )
+
+        Effect.Internal.ImportMacKeyFromRaw _ extractable hash length bytes ->
+            Effect.Internal.GotMacKey
+                (Effect.Internal.SimulatedCryptoKey
+                    { keyBytes = bytes
+                    , data = { length = length, hash = hash, extractable = extractable }
+                    }
+                )
+
+        Effect.Internal.ImportMacKeyFromJwk _ extractable hash length _ ->
+            Effect.Internal.GotMacKey
+                (Effect.Internal.SimulatedCryptoKey
+                    { keyBytes = zeroBytes (Maybe.withDefault 256 length // 8)
+                    , data = { length = length, hash = hash, extractable = extractable }
+                    }
+                )
+
+        Effect.Internal.ExportMacKeyAsRaw key ->
+            Effect.Internal.GotMacBytes (simulatedKeyBytes key)
+
+        Effect.Internal.ExportMacKeyAsJwk _ ->
+            Effect.Internal.GotMacJwk Json.Encode.null
+
+        Effect.Internal.SignWithMacKey _ _ ->
+            Effect.Internal.GotMacBytes emptyBytes
+
+        Effect.Internal.VerifyWithMacKey _ _ bytes ->
+            Effect.Internal.GotMacBytes bytes
+
+
+simulatedRsaKeyData : Crypto.RsaKeyParams
+simulatedRsaKeyData =
+    { modulusLength = 2048, hash = Crypto.Sha256, extractable = Crypto.CanBeExtracted }
+
+
+simulatePublicKeyCipher :
+    Effect.Internal.PublicKeyCipherOperation key params
+    -> Effect.Internal.PublicKeyCipherResult key
+simulatePublicKeyCipher operation =
+    case operation of
+        Effect.Internal.GenerateCipherKeyPair _ params ->
+            Effect.Internal.GotCipherKeyPair
+                (Effect.Internal.SimulatedCryptoPublicKey { keyBytes = emptyBytes, data = params })
+                (Effect.Internal.SimulatedCryptoPrivateKey { keyBytes = emptyBytes, data = params })
+
+        Effect.Internal.ImportCipherPublicKeyFromSpki _ _ bytes ->
+            Effect.Internal.GotCipherPublicKey
+                (Effect.Internal.SimulatedCryptoPublicKey { keyBytes = bytes, data = simulatedRsaKeyData })
+
+        Effect.Internal.ImportCipherPublicKeyFromJwk _ _ _ ->
+            Effect.Internal.GotCipherPublicKey
+                (Effect.Internal.SimulatedCryptoPublicKey { keyBytes = emptyBytes, data = simulatedRsaKeyData })
+
+        Effect.Internal.ImportCipherPrivateKeyFromPkcs8 _ _ _ bytes ->
+            Effect.Internal.GotCipherPrivateKey
+                (Effect.Internal.SimulatedCryptoPrivateKey { keyBytes = bytes, data = simulatedRsaKeyData })
+
+        Effect.Internal.ImportCipherPrivateKeyFromJwk _ _ _ _ ->
+            Effect.Internal.GotCipherPrivateKey
+                (Effect.Internal.SimulatedCryptoPrivateKey { keyBytes = emptyBytes, data = simulatedRsaKeyData })
+
+        Effect.Internal.ExportCipherPublicKeyAsSpki _ ->
+            Effect.Internal.GotPublicKeyCipherBytes emptyBytes
+
+        Effect.Internal.ExportCipherPublicKeyAsJwk _ ->
+            Effect.Internal.GotPublicKeyCipherJwk Json.Encode.null
+
+        Effect.Internal.ExportCipherPrivateKeyAsPkcs8 _ ->
+            Effect.Internal.GotPublicKeyCipherBytes emptyBytes
+
+        Effect.Internal.ExportCipherPrivateKeyAsJwk _ ->
+            Effect.Internal.GotPublicKeyCipherJwk Json.Encode.null
+
+        Effect.Internal.EncryptWithPublicKey _ _ bytes ->
+            Effect.Internal.GotPublicKeyCipherBytes bytes
+
+        Effect.Internal.DecryptWithPrivateKey _ _ bytes ->
+            Effect.Internal.GotPublicKeyCipherBytes bytes
+
+
+simulateRsaSignature :
+    Effect.Internal.RsaSignatureOperation key params
+    -> Effect.Internal.RsaSignatureResult key
+simulateRsaSignature operation =
+    case operation of
+        Effect.Internal.GenerateRsaSignatureKeyPair _ params ->
+            Effect.Internal.GotRsaSignatureKeyPair
+                (Effect.Internal.SimulatedCryptoPublicKey { keyBytes = emptyBytes, data = params })
+                (Effect.Internal.SimulatedCryptoPrivateKey { keyBytes = emptyBytes, data = params })
+
+        Effect.Internal.ImportRsaSignaturePublicKeyFromSpki _ _ bytes ->
+            Effect.Internal.GotRsaSignaturePublicKey
+                (Effect.Internal.SimulatedCryptoPublicKey { keyBytes = bytes, data = simulatedRsaKeyData })
+
+        Effect.Internal.ImportRsaSignaturePublicKeyFromJwk _ _ _ ->
+            Effect.Internal.GotRsaSignaturePublicKey
+                (Effect.Internal.SimulatedCryptoPublicKey { keyBytes = emptyBytes, data = simulatedRsaKeyData })
+
+        Effect.Internal.ImportRsaSignaturePrivateKeyFromPkcs8 _ _ _ bytes ->
+            Effect.Internal.GotRsaSignaturePrivateKey
+                (Effect.Internal.SimulatedCryptoPrivateKey { keyBytes = bytes, data = simulatedRsaKeyData })
+
+        Effect.Internal.ImportRsaSignaturePrivateKeyFromJwk _ _ _ _ ->
+            Effect.Internal.GotRsaSignaturePrivateKey
+                (Effect.Internal.SimulatedCryptoPrivateKey { keyBytes = emptyBytes, data = simulatedRsaKeyData })
+
+        Effect.Internal.ExportRsaSignaturePublicKeyAsSpki _ ->
+            Effect.Internal.GotRsaSignatureBytes emptyBytes
+
+        Effect.Internal.ExportRsaSignaturePublicKeyAsJwk _ ->
+            Effect.Internal.GotRsaSignatureJwk Json.Encode.null
+
+        Effect.Internal.ExportRsaSignaturePrivateKeyAsPkcs8 _ ->
+            Effect.Internal.GotRsaSignatureBytes emptyBytes
+
+        Effect.Internal.ExportRsaSignaturePrivateKeyAsJwk _ ->
+            Effect.Internal.GotRsaSignatureJwk Json.Encode.null
+
+        Effect.Internal.SignWithRsaPrivateKey _ _ _ ->
+            Effect.Internal.GotRsaSignatureBytes emptyBytes
+
+        Effect.Internal.VerifyWithRsaPublicKey _ _ _ bytes ->
+            Effect.Internal.GotRsaSignatureBytes bytes
+
+
+simulatedEcKeyData : Crypto.EcKeyParams
+simulatedEcKeyData =
+    { namedCurve = Crypto.P256, extractable = Crypto.CanBeExtracted }
+
+
+simulateEcSignature : Effect.Internal.EcSignatureOperation key -> Effect.Internal.EcSignatureResult key
+simulateEcSignature operation =
+    case operation of
+        Effect.Internal.GenerateEcSignatureKeyPair _ params ->
+            Effect.Internal.GotEcSignatureKeyPair
+                (Effect.Internal.SimulatedCryptoPublicKey { keyBytes = emptyBytes, data = params })
+                (Effect.Internal.SimulatedCryptoPrivateKey { keyBytes = emptyBytes, data = params })
+
+        Effect.Internal.ImportEcSignaturePublicKeyFromRaw _ namedCurve bytes ->
+            Effect.Internal.GotEcSignaturePublicKey
+                (Effect.Internal.SimulatedCryptoPublicKey
+                    { keyBytes = bytes, data = { namedCurve = namedCurve, extractable = Crypto.CanBeExtracted } }
+                )
+
+        Effect.Internal.ImportEcSignaturePublicKeyFromSpki _ namedCurve bytes ->
+            Effect.Internal.GotEcSignaturePublicKey
+                (Effect.Internal.SimulatedCryptoPublicKey
+                    { keyBytes = bytes, data = { namedCurve = namedCurve, extractable = Crypto.CanBeExtracted } }
+                )
+
+        Effect.Internal.ImportEcSignaturePublicKeyFromJwk _ namedCurve _ ->
+            Effect.Internal.GotEcSignaturePublicKey
+                (Effect.Internal.SimulatedCryptoPublicKey
+                    { keyBytes = emptyBytes, data = { namedCurve = namedCurve, extractable = Crypto.CanBeExtracted } }
+                )
+
+        Effect.Internal.ImportEcSignaturePrivateKeyFromPkcs8 _ extractable namedCurve bytes ->
+            Effect.Internal.GotEcSignaturePrivateKey
+                (Effect.Internal.SimulatedCryptoPrivateKey
+                    { keyBytes = bytes, data = { namedCurve = namedCurve, extractable = extractable } }
+                )
+
+        Effect.Internal.ImportEcSignaturePrivateKeyFromSpki _ extractable namedCurve bytes ->
+            Effect.Internal.GotEcSignaturePrivateKey
+                (Effect.Internal.SimulatedCryptoPrivateKey
+                    { keyBytes = bytes, data = { namedCurve = namedCurve, extractable = extractable } }
+                )
+
+        Effect.Internal.ImportEcSignaturePrivateKeyFromJwk _ extractable namedCurve _ ->
+            Effect.Internal.GotEcSignaturePrivateKey
+                (Effect.Internal.SimulatedCryptoPrivateKey
+                    { keyBytes = emptyBytes, data = { namedCurve = namedCurve, extractable = extractable } }
+                )
+
+        Effect.Internal.ExportEcSignaturePublicKeyAsRaw _ ->
+            Effect.Internal.GotEcSignatureBytes emptyBytes
+
+        Effect.Internal.ExportEcSignaturePublicKeyAsSpki _ ->
+            Effect.Internal.GotEcSignatureBytes emptyBytes
+
+        Effect.Internal.ExportEcSignaturePublicKeyAsJwk _ ->
+            Effect.Internal.GotEcSignatureJwk Json.Encode.null
+
+        Effect.Internal.ExportEcSignaturePrivateKeyAsPkcs8 _ ->
+            Effect.Internal.GotEcSignatureBytes emptyBytes
+
+        Effect.Internal.ExportEcSignaturePrivateKeyAsJwk _ ->
+            Effect.Internal.GotEcSignatureJwk Json.Encode.null
+
+        Effect.Internal.SignWithEcPrivateKey _ _ _ ->
+            Effect.Internal.GotEcSignatureBytes emptyBytes
+
+        Effect.Internal.VerifyWithEcPublicKey _ _ _ bytes ->
+            Effect.Internal.GotEcSignatureBytes bytes
+
+
+simulatePlain : Effect.Internal.PlainOperation -> Effect.Internal.PlainResult
+simulatePlain operation =
+    case operation of
+        Effect.Internal.GetSecureContext ->
+            Effect.Internal.GotSecureContext Effect.Internal.SimulatedSecureContext
+
+        Effect.Internal.RandomUuid _ ->
+            Effect.Internal.GotUuid "00000000-0000-4000-8000-000000000000"
+
+        Effect.Internal.GetRandomValues valueType count ->
+            Effect.Internal.GotPlainBytes
+                (zeroBytes
+                    (case valueType of
+                        Effect.Internal.RandomInt8 ->
+                            clamp 0 65536 count
+
+                        Effect.Internal.RandomUInt8 ->
+                            clamp 0 65536 count
+
+                        Effect.Internal.RandomInt16 ->
+                            2 * clamp 0 32768 count
+
+                        Effect.Internal.RandomUInt16 ->
+                            2 * clamp 0 32768 count
+
+                        Effect.Internal.RandomInt32 ->
+                            4 * clamp 0 16384 count
+
+                        Effect.Internal.RandomUInt32 ->
+                            4 * clamp 0 16384 count
+                    )
+                )
+
+        Effect.Internal.Digest _ algorithm _ ->
+            Effect.Internal.GotPlainBytes
+                (zeroBytes
+                    (case algorithm of
+                        Crypto.Sha256 ->
+                            32
+
+                        Crypto.Sha384 ->
+                            48
+
+                        Crypto.Sha512 ->
+                            64
+                    )
+                )
 
 
 handleHttpResponseWithTestError :

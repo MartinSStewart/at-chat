@@ -22,6 +22,7 @@ import Browser.Navigation
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
+import Crypto
 import Duration
 import Effect.Browser.Navigation
 import Effect.Command exposing (BackendOnly, Command, FrontendOnly)
@@ -31,6 +32,7 @@ import File
 import File.Download
 import File.Select
 import Http
+import Json.Encode
 import Lamdera
 import Process
 import Task
@@ -605,8 +607,972 @@ toTask simulatedTask =
             Websocket.close connection
                 |> Task.andThen (\result -> toTask (function result))
 
-        Effect.Internal.CryptoTask realTask _ ->
-            realTask |> Task.onError never |> Task.andThen toTask
+        Effect.Internal.CryptoTaskAesCtr operation function ->
+            runAesCtr operation |> Task.andThen (\result -> toTask (function result))
+
+        Effect.Internal.CryptoTaskAesCbc operation function ->
+            runAesCbc operation |> Task.andThen (\result -> toTask (function result))
+
+        Effect.Internal.CryptoTaskAesGcm operation function ->
+            runAesGcm operation |> Task.andThen (\result -> toTask (function result))
+
+        Effect.Internal.CryptoTaskHmac operation function ->
+            runHmac operation |> Task.andThen (\result -> toTask (function result))
+
+        Effect.Internal.CryptoTaskRsaOaep operation function ->
+            runRsaOaep operation |> Task.andThen (\result -> toTask (function result))
+
+        Effect.Internal.CryptoTaskRsaPss operation function ->
+            runRsaPss operation |> Task.andThen (\result -> toTask (function result))
+
+        Effect.Internal.CryptoTaskRsaSsaPkcs1V1_5 operation function ->
+            runRsaSsaPkcs1V1_5 operation |> Task.andThen (\result -> toTask (function result))
+
+        Effect.Internal.CryptoTaskEcdsa operation function ->
+            runEcdsa operation |> Task.andThen (\result -> toTask (function result))
+
+        Effect.Internal.CryptoTaskPlain operation function ->
+            runPlain operation |> Task.andThen (\result -> toTask (function result))
+
+
+
+-- CRYPTO
+--
+-- One interpreter per algorithm. They are written out rather than shared through a
+-- record of functions, because each one calls a different set of Crypto functions and
+-- the only thing they have in common is their shape.
+
+
+browserContext : Effect.Internal.CryptoSecureContext -> Maybe Crypto.SecureContext
+browserContext context =
+    case context of
+        Effect.Internal.BrowserSecureContext secureContext ->
+            Just secureContext
+
+        Effect.Internal.SimulatedSecureContext ->
+            Nothing
+
+
+browserKey : Effect.Internal.CryptoKey key keyData -> Maybe (Crypto.Key key keyData)
+browserKey key =
+    case key of
+        Effect.Internal.BrowserCryptoKey realKey ->
+            Just realKey
+
+        Effect.Internal.SimulatedCryptoKey _ ->
+            Nothing
+
+
+browserPublicKey : Effect.Internal.CryptoPublicKey key keyData -> Maybe (Crypto.PublicKey key keyData)
+browserPublicKey key =
+    case key of
+        Effect.Internal.BrowserCryptoPublicKey realKey ->
+            Just realKey
+
+        Effect.Internal.SimulatedCryptoPublicKey _ ->
+            Nothing
+
+
+browserPrivateKey : Effect.Internal.CryptoPrivateKey key keyData -> Maybe (Crypto.PrivateKey key keyData)
+browserPrivateKey key =
+    case key of
+        Effect.Internal.BrowserCryptoPrivateKey realKey ->
+            Just realKey
+
+        Effect.Internal.SimulatedCryptoPrivateKey _ ->
+            Nothing
+
+
+
+-- Folding a failed crypto task into the result, so an interpreter never fails and the
+-- error reaches Effect.Crypto, which knows which error type this operation has.
+
+
+cipherKey : Effect.Internal.CryptoError -> Task.Task e (Crypto.Key key keyData) -> Task.Task x (Effect.Internal.CipherResult key keyData)
+cipherKey error task =
+    task
+        |> Task.map (Effect.Internal.BrowserCryptoKey >> Effect.Internal.GotCipherKey)
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.CipherFailed error))
+
+
+cipherBytes : Effect.Internal.CryptoError -> Task.Task e Bytes.Bytes -> Task.Task x (Effect.Internal.CipherResult key keyData)
+cipherBytes error task =
+    task
+        |> Task.map Effect.Internal.GotCipherBytes
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.CipherFailed error))
+
+
+cipherJwk : Effect.Internal.CryptoError -> Task.Task e Json.Encode.Value -> Task.Task x (Effect.Internal.CipherResult key keyData)
+cipherJwk error task =
+    task
+        |> Task.map Effect.Internal.GotCipherJwk
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.CipherFailed error))
+
+
+cipherUnavailable : Task.Task x (Effect.Internal.CipherResult key keyData)
+cipherUnavailable =
+    Task.succeed (Effect.Internal.CipherFailed Effect.Internal.CryptoSimulatedValueOutsideTest)
+
+
+runAesCtr :
+    Effect.Internal.CipherOperation Crypto.AesCtrKey Crypto.AesKeyParams Crypto.AesCtrParams
+    -> Task.Task x (Effect.Internal.CipherResult Crypto.AesCtrKey Crypto.AesKeyParams)
+runAesCtr operation =
+    case operation of
+        Effect.Internal.GenerateCipherKey context params ->
+            case browserContext context of
+                Just secureContext ->
+                    cipherKey Effect.Internal.CryptoKeyGenerationFailed (Crypto.generateAesCtrKey secureContext params)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.ImportCipherKeyFromRaw context extractable bytes ->
+            case browserContext context of
+                Just secureContext ->
+                    cipherKey Effect.Internal.CryptoKeyImportFailed (Crypto.importAesCtrKeyFromRaw secureContext extractable bytes)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.ImportCipherKeyFromJwk context extractable jwk ->
+            case browserContext context of
+                Just secureContext ->
+                    cipherKey Effect.Internal.CryptoKeyImportFailed (Crypto.importAesCtrKeyFromJwk secureContext extractable jwk)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.ExportCipherKeyAsRaw key ->
+            case browserKey key of
+                Just realKey ->
+                    cipherBytes Effect.Internal.CryptoKeyNotExportable (Crypto.exportAesCtrKeyAsRaw realKey)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.ExportCipherKeyAsJwk key ->
+            case browserKey key of
+                Just realKey ->
+                    cipherJwk Effect.Internal.CryptoKeyNotExportable (Crypto.exportAesCtrKeyAsJwk realKey)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.Encrypt params key bytes ->
+            case browserKey key of
+                Just realKey ->
+                    cipherBytes Effect.Internal.CryptoEncryptionFailed (Crypto.encryptWithAesCtr params realKey bytes)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.Decrypt params key bytes ->
+            case browserKey key of
+                Just realKey ->
+                    cipherBytes Effect.Internal.CryptoDecryptionFailed (Crypto.decryptWithAesCtr params realKey bytes)
+
+                Nothing ->
+                    cipherUnavailable
+
+
+runAesCbc :
+    Effect.Internal.CipherOperation Crypto.AesCbcKey Crypto.AesKeyParams Crypto.AesCbcParams
+    -> Task.Task x (Effect.Internal.CipherResult Crypto.AesCbcKey Crypto.AesKeyParams)
+runAesCbc operation =
+    case operation of
+        Effect.Internal.GenerateCipherKey context params ->
+            case browserContext context of
+                Just secureContext ->
+                    cipherKey Effect.Internal.CryptoKeyGenerationFailed (Crypto.generateAesCbcKey secureContext params)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.ImportCipherKeyFromRaw context extractable bytes ->
+            case browserContext context of
+                Just secureContext ->
+                    cipherKey Effect.Internal.CryptoKeyImportFailed (Crypto.importAesCbcKeyFromRaw secureContext extractable bytes)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.ImportCipherKeyFromJwk context extractable jwk ->
+            case browserContext context of
+                Just secureContext ->
+                    cipherKey Effect.Internal.CryptoKeyImportFailed (Crypto.importAesCbcKeyFromJwk secureContext extractable jwk)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.ExportCipherKeyAsRaw key ->
+            case browserKey key of
+                Just realKey ->
+                    cipherBytes Effect.Internal.CryptoKeyNotExportable (Crypto.exportAesCbcKeyAsRaw realKey)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.ExportCipherKeyAsJwk key ->
+            case browserKey key of
+                Just realKey ->
+                    cipherJwk Effect.Internal.CryptoKeyNotExportable (Crypto.exportAesCbcKeyAsJwk realKey)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.Encrypt params key bytes ->
+            case browserKey key of
+                Just realKey ->
+                    cipherBytes Effect.Internal.CryptoEncryptionFailed (Crypto.encryptWithAesCbc params realKey bytes)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.Decrypt params key bytes ->
+            case browserKey key of
+                Just realKey ->
+                    cipherBytes Effect.Internal.CryptoDecryptionFailed (Crypto.decryptWithAesCbc params realKey bytes)
+
+                Nothing ->
+                    cipherUnavailable
+
+
+runAesGcm :
+    Effect.Internal.CipherOperation Crypto.AesGcmKey Crypto.AesKeyParams Crypto.AesGcmParams
+    -> Task.Task x (Effect.Internal.CipherResult Crypto.AesGcmKey Crypto.AesKeyParams)
+runAesGcm operation =
+    case operation of
+        Effect.Internal.GenerateCipherKey context params ->
+            case browserContext context of
+                Just secureContext ->
+                    cipherKey Effect.Internal.CryptoKeyGenerationFailed (Crypto.generateAesGcmKey secureContext params)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.ImportCipherKeyFromRaw context extractable bytes ->
+            case browserContext context of
+                Just secureContext ->
+                    cipherKey Effect.Internal.CryptoKeyImportFailed (Crypto.importAesGcmKeyFromRaw secureContext extractable bytes)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.ImportCipherKeyFromJwk context extractable jwk ->
+            case browserContext context of
+                Just secureContext ->
+                    cipherKey Effect.Internal.CryptoKeyImportFailed (Crypto.importAesGcmKeyFromJwk secureContext extractable jwk)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.ExportCipherKeyAsRaw key ->
+            case browserKey key of
+                Just realKey ->
+                    cipherBytes Effect.Internal.CryptoKeyNotExportable (Crypto.exportAesGcmKeyAsRaw realKey)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.ExportCipherKeyAsJwk key ->
+            case browserKey key of
+                Just realKey ->
+                    cipherJwk Effect.Internal.CryptoKeyNotExportable (Crypto.exportAesGcmKeyAsJwk realKey)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.Encrypt params key bytes ->
+            case browserKey key of
+                Just realKey ->
+                    cipherBytes Effect.Internal.CryptoEncryptionFailed (Crypto.encryptWithAesGcm params realKey bytes)
+
+                Nothing ->
+                    cipherUnavailable
+
+        Effect.Internal.Decrypt params key bytes ->
+            case browserKey key of
+                Just realKey ->
+                    cipherBytes Effect.Internal.CryptoDecryptionFailed (Crypto.decryptWithAesGcm params realKey bytes)
+
+                Nothing ->
+                    cipherUnavailable
+
+
+macKey : Effect.Internal.CryptoError -> Task.Task e (Crypto.Key key keyData) -> Task.Task x (Effect.Internal.MacResult key keyData)
+macKey error task =
+    task
+        |> Task.map (Effect.Internal.BrowserCryptoKey >> Effect.Internal.GotMacKey)
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.MacFailed error))
+
+
+macBytes : Effect.Internal.CryptoError -> Task.Task e Bytes.Bytes -> Task.Task x (Effect.Internal.MacResult key keyData)
+macBytes error task =
+    task
+        |> Task.map Effect.Internal.GotMacBytes
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.MacFailed error))
+
+
+macJwk : Effect.Internal.CryptoError -> Task.Task e Json.Encode.Value -> Task.Task x (Effect.Internal.MacResult key keyData)
+macJwk error task =
+    task
+        |> Task.map Effect.Internal.GotMacJwk
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.MacFailed error))
+
+
+macUnavailable : Task.Task x (Effect.Internal.MacResult key keyData)
+macUnavailable =
+    Task.succeed (Effect.Internal.MacFailed Effect.Internal.CryptoSimulatedValueOutsideTest)
+
+
+runHmac :
+    Effect.Internal.MacOperation Crypto.HmacKey Crypto.HmacKeyParams
+    -> Task.Task x (Effect.Internal.MacResult Crypto.HmacKey Crypto.HmacKeyParams)
+runHmac operation =
+    case operation of
+        Effect.Internal.GenerateMacKey context params ->
+            case browserContext context of
+                Just secureContext ->
+                    macKey Effect.Internal.CryptoKeyGenerationFailed (Crypto.generateHmacKey secureContext params)
+
+                Nothing ->
+                    macUnavailable
+
+        Effect.Internal.ImportMacKeyFromRaw context extractable hash length bytes ->
+            case browserContext context of
+                Just secureContext ->
+                    macKey Effect.Internal.CryptoKeyImportFailed (Crypto.importHmacKeyFromRaw secureContext extractable hash length bytes)
+
+                Nothing ->
+                    macUnavailable
+
+        Effect.Internal.ImportMacKeyFromJwk context extractable hash length jwk ->
+            case browserContext context of
+                Just secureContext ->
+                    macKey Effect.Internal.CryptoKeyImportFailed (Crypto.importHmacKeyFromJwk secureContext extractable hash length jwk)
+
+                Nothing ->
+                    macUnavailable
+
+        Effect.Internal.ExportMacKeyAsRaw key ->
+            case browserKey key of
+                Just realKey ->
+                    macBytes Effect.Internal.CryptoKeyNotExportable (Crypto.exportHmacKeyAsRaw realKey)
+
+                Nothing ->
+                    macUnavailable
+
+        Effect.Internal.ExportMacKeyAsJwk key ->
+            case browserKey key of
+                Just realKey ->
+                    macJwk Effect.Internal.CryptoKeyNotExportable (Crypto.exportHmacKeyAsJwk realKey)
+
+                Nothing ->
+                    macUnavailable
+
+        Effect.Internal.SignWithMacKey key bytes ->
+            case browserKey key of
+                Just realKey ->
+                    macBytes Effect.Internal.CryptoSigningFailed (Crypto.signWithHmac realKey bytes)
+
+                Nothing ->
+                    macUnavailable
+
+        Effect.Internal.VerifyWithMacKey key signature bytes ->
+            case browserKey key of
+                Just realKey ->
+                    macBytes Effect.Internal.CryptoVerificationFailed (Crypto.verifyWithHmac realKey signature bytes)
+
+                Nothing ->
+                    macUnavailable
+
+
+rsaSignatureKeyPair : Task.Task e (Crypto.KeyPair key Crypto.RsaKeyParams) -> Task.Task x (Effect.Internal.RsaSignatureResult key)
+rsaSignatureKeyPair task =
+    task
+        |> Task.map
+            (\keyPair ->
+                Effect.Internal.GotRsaSignatureKeyPair
+                    (Effect.Internal.BrowserCryptoPublicKey keyPair.publicKey)
+                    (Effect.Internal.BrowserCryptoPrivateKey keyPair.privateKey)
+            )
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.RsaSignatureFailed Effect.Internal.CryptoKeyGenerationFailed))
+
+
+rsaSignaturePublicKey : Task.Task e (Crypto.PublicKey key Crypto.RsaKeyParams) -> Task.Task x (Effect.Internal.RsaSignatureResult key)
+rsaSignaturePublicKey task =
+    task
+        |> Task.map (Effect.Internal.BrowserCryptoPublicKey >> Effect.Internal.GotRsaSignaturePublicKey)
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.RsaSignatureFailed Effect.Internal.CryptoKeyImportFailed))
+
+
+rsaSignaturePrivateKey : Task.Task e (Crypto.PrivateKey key Crypto.RsaKeyParams) -> Task.Task x (Effect.Internal.RsaSignatureResult key)
+rsaSignaturePrivateKey task =
+    task
+        |> Task.map (Effect.Internal.BrowserCryptoPrivateKey >> Effect.Internal.GotRsaSignaturePrivateKey)
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.RsaSignatureFailed Effect.Internal.CryptoKeyImportFailed))
+
+
+rsaSignatureBytes : Effect.Internal.CryptoError -> Task.Task e Bytes.Bytes -> Task.Task x (Effect.Internal.RsaSignatureResult key)
+rsaSignatureBytes error task =
+    task
+        |> Task.map Effect.Internal.GotRsaSignatureBytes
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.RsaSignatureFailed error))
+
+
+rsaSignatureJwk : Effect.Internal.CryptoError -> Task.Task e Json.Encode.Value -> Task.Task x (Effect.Internal.RsaSignatureResult key)
+rsaSignatureJwk error task =
+    task
+        |> Task.map Effect.Internal.GotRsaSignatureJwk
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.RsaSignatureFailed error))
+
+
+rsaSignatureUnavailable : Task.Task x (Effect.Internal.RsaSignatureResult key)
+rsaSignatureUnavailable =
+    Task.succeed (Effect.Internal.RsaSignatureFailed Effect.Internal.CryptoSimulatedValueOutsideTest)
+
+
+runRsaPss :
+    Effect.Internal.RsaSignatureOperation Crypto.RsaPssKey Crypto.RsaPssParams
+    -> Task.Task x (Effect.Internal.RsaSignatureResult Crypto.RsaPssKey)
+runRsaPss operation =
+    case operation of
+        Effect.Internal.GenerateRsaSignatureKeyPair context params ->
+            case browserContext context of
+                Just secureContext ->
+                    rsaSignatureKeyPair (Crypto.generateRsaPssKeyPair secureContext params)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ImportRsaSignaturePublicKeyFromSpki context params bytes ->
+            case browserContext context of
+                Just secureContext ->
+                    rsaSignaturePublicKey (Crypto.importRsaPssPublicKeyFromSpki secureContext params bytes)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ImportRsaSignaturePublicKeyFromJwk context params jwk ->
+            case browserContext context of
+                Just secureContext ->
+                    rsaSignaturePublicKey (Crypto.importRsaPssPublicKeyFromJwk secureContext params jwk)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ImportRsaSignaturePrivateKeyFromPkcs8 context extractable params bytes ->
+            case browserContext context of
+                Just secureContext ->
+                    rsaSignaturePrivateKey (Crypto.importRsaPssPrivateKeyFromPkcs8 secureContext extractable params bytes)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ImportRsaSignaturePrivateKeyFromJwk context extractable params jwk ->
+            case browserContext context of
+                Just secureContext ->
+                    rsaSignaturePrivateKey (Crypto.importRsaPssPrivateKeyFromJwk secureContext extractable params jwk)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ExportRsaSignaturePublicKeyAsSpki key ->
+            case browserPublicKey key of
+                Just realKey ->
+                    rsaSignatureBytes Effect.Internal.CryptoKeyNotExportable (Crypto.exportRsaPssPublicKeyAsSpki realKey)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ExportRsaSignaturePublicKeyAsJwk key ->
+            case browserPublicKey key of
+                Just realKey ->
+                    rsaSignatureJwk Effect.Internal.CryptoKeyNotExportable (Crypto.exportRsaPssPublicKeyAsJwk realKey)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ExportRsaSignaturePrivateKeyAsPkcs8 key ->
+            case browserPrivateKey key of
+                Just realKey ->
+                    rsaSignatureBytes Effect.Internal.CryptoKeyNotExportable (Crypto.exportRsaPssPrivateKeyAsPkcs8 realKey)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ExportRsaSignaturePrivateKeyAsJwk key ->
+            case browserPrivateKey key of
+                Just realKey ->
+                    rsaSignatureJwk Effect.Internal.CryptoKeyNotExportable (Crypto.exportRsaPssPrivateKeyAsJwk realKey)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.SignWithRsaPrivateKey params key bytes ->
+            case browserPrivateKey key of
+                Just realKey ->
+                    rsaSignatureBytes Effect.Internal.CryptoSigningFailed (Crypto.signWithRsaPss params realKey bytes)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.VerifyWithRsaPublicKey params key signature bytes ->
+            case browserPublicKey key of
+                Just realKey ->
+                    rsaSignatureBytes Effect.Internal.CryptoVerificationFailed (Crypto.verifyWithRsaPss params realKey signature bytes)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+
+runRsaSsaPkcs1V1_5 :
+    Effect.Internal.RsaSignatureOperation Crypto.RsaSsaPkcs1V1_5Key ()
+    -> Task.Task x (Effect.Internal.RsaSignatureResult Crypto.RsaSsaPkcs1V1_5Key)
+runRsaSsaPkcs1V1_5 operation =
+    case operation of
+        Effect.Internal.GenerateRsaSignatureKeyPair context params ->
+            case browserContext context of
+                Just secureContext ->
+                    rsaSignatureKeyPair (Crypto.generateRsaSsaPkcs1V1_5KeyPair secureContext params)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ImportRsaSignaturePublicKeyFromSpki context params bytes ->
+            case browserContext context of
+                Just secureContext ->
+                    rsaSignaturePublicKey (Crypto.importRsaSsaPkcs1V1_5PublicKeyFromSpki secureContext params bytes)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ImportRsaSignaturePublicKeyFromJwk context params jwk ->
+            case browserContext context of
+                Just secureContext ->
+                    rsaSignaturePublicKey (Crypto.importRsaSsaPkcs1V1_5PublicKeyFromJwk secureContext params jwk)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ImportRsaSignaturePrivateKeyFromPkcs8 context extractable params bytes ->
+            case browserContext context of
+                Just secureContext ->
+                    rsaSignaturePrivateKey (Crypto.importRsaSsaPkcs1V1_5PrivateKeyFromPkcs8 secureContext extractable params bytes)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ImportRsaSignaturePrivateKeyFromJwk context extractable params jwk ->
+            case browserContext context of
+                Just secureContext ->
+                    rsaSignaturePrivateKey (Crypto.importRsaSsaPkcs1V1_5PrivateKeyFromJwk secureContext extractable params jwk)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ExportRsaSignaturePublicKeyAsSpki key ->
+            case browserPublicKey key of
+                Just realKey ->
+                    rsaSignatureBytes Effect.Internal.CryptoKeyNotExportable (Crypto.exportRsaSsaPkcs1V1_5PublicKeyAsSpki realKey)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ExportRsaSignaturePublicKeyAsJwk key ->
+            case browserPublicKey key of
+                Just realKey ->
+                    rsaSignatureJwk Effect.Internal.CryptoKeyNotExportable (Crypto.exportRsaSsaPkcs1V1_5PublicKeyAsJwk realKey)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ExportRsaSignaturePrivateKeyAsPkcs8 key ->
+            case browserPrivateKey key of
+                Just realKey ->
+                    rsaSignatureBytes Effect.Internal.CryptoKeyNotExportable (Crypto.exportRsaSsaPkcs1V1_5PrivateKeyAsPkcs8 realKey)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.ExportRsaSignaturePrivateKeyAsJwk key ->
+            case browserPrivateKey key of
+                Just realKey ->
+                    rsaSignatureJwk Effect.Internal.CryptoKeyNotExportable (Crypto.exportRsaSsaPkcs1V1_5PrivateKeyAsJwk realKey)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.SignWithRsaPrivateKey () key bytes ->
+            case browserPrivateKey key of
+                Just realKey ->
+                    rsaSignatureBytes Effect.Internal.CryptoSigningFailed (Crypto.signWithRsaSsaPkcs1V1_5 realKey bytes)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+        Effect.Internal.VerifyWithRsaPublicKey () key signature bytes ->
+            case browserPublicKey key of
+                Just realKey ->
+                    rsaSignatureBytes Effect.Internal.CryptoVerificationFailed (Crypto.verifyWithRsaSsaPkcs1V1_5 realKey signature bytes)
+
+                Nothing ->
+                    rsaSignatureUnavailable
+
+
+publicKeyCipherKeyPair : Task.Task e (Crypto.KeyPair key Crypto.RsaKeyParams) -> Task.Task x (Effect.Internal.PublicKeyCipherResult key)
+publicKeyCipherKeyPair task =
+    task
+        |> Task.map
+            (\keyPair ->
+                Effect.Internal.GotCipherKeyPair
+                    (Effect.Internal.BrowserCryptoPublicKey keyPair.publicKey)
+                    (Effect.Internal.BrowserCryptoPrivateKey keyPair.privateKey)
+            )
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.PublicKeyCipherFailed Effect.Internal.CryptoKeyGenerationFailed))
+
+
+publicKeyCipherPublicKey : Task.Task e (Crypto.PublicKey key Crypto.RsaKeyParams) -> Task.Task x (Effect.Internal.PublicKeyCipherResult key)
+publicKeyCipherPublicKey task =
+    task
+        |> Task.map (Effect.Internal.BrowserCryptoPublicKey >> Effect.Internal.GotCipherPublicKey)
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.PublicKeyCipherFailed Effect.Internal.CryptoKeyImportFailed))
+
+
+publicKeyCipherPrivateKey : Task.Task e (Crypto.PrivateKey key Crypto.RsaKeyParams) -> Task.Task x (Effect.Internal.PublicKeyCipherResult key)
+publicKeyCipherPrivateKey task =
+    task
+        |> Task.map (Effect.Internal.BrowserCryptoPrivateKey >> Effect.Internal.GotCipherPrivateKey)
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.PublicKeyCipherFailed Effect.Internal.CryptoKeyImportFailed))
+
+
+publicKeyCipherBytes : Effect.Internal.CryptoError -> Task.Task e Bytes.Bytes -> Task.Task x (Effect.Internal.PublicKeyCipherResult key)
+publicKeyCipherBytes error task =
+    task
+        |> Task.map Effect.Internal.GotPublicKeyCipherBytes
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.PublicKeyCipherFailed error))
+
+
+publicKeyCipherJwk : Effect.Internal.CryptoError -> Task.Task e Json.Encode.Value -> Task.Task x (Effect.Internal.PublicKeyCipherResult key)
+publicKeyCipherJwk error task =
+    task
+        |> Task.map Effect.Internal.GotPublicKeyCipherJwk
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.PublicKeyCipherFailed error))
+
+
+publicKeyCipherUnavailable : Task.Task x (Effect.Internal.PublicKeyCipherResult key)
+publicKeyCipherUnavailable =
+    Task.succeed (Effect.Internal.PublicKeyCipherFailed Effect.Internal.CryptoSimulatedValueOutsideTest)
+
+
+runRsaOaep :
+    Effect.Internal.PublicKeyCipherOperation Crypto.RsaOaepKey Crypto.RsaOaepParams
+    -> Task.Task x (Effect.Internal.PublicKeyCipherResult Crypto.RsaOaepKey)
+runRsaOaep operation =
+    case operation of
+        Effect.Internal.GenerateCipherKeyPair context params ->
+            case browserContext context of
+                Just secureContext ->
+                    publicKeyCipherKeyPair (Crypto.generateRsaOaepKeyPair secureContext params)
+
+                Nothing ->
+                    publicKeyCipherUnavailable
+
+        Effect.Internal.ImportCipherPublicKeyFromSpki context params bytes ->
+            case browserContext context of
+                Just secureContext ->
+                    publicKeyCipherPublicKey (Crypto.importRsaOaepPublicKeyFromSpki secureContext params bytes)
+
+                Nothing ->
+                    publicKeyCipherUnavailable
+
+        Effect.Internal.ImportCipherPublicKeyFromJwk context params jwk ->
+            case browserContext context of
+                Just secureContext ->
+                    publicKeyCipherPublicKey (Crypto.importRsaOaepPublicKeyFromJwk secureContext params jwk)
+
+                Nothing ->
+                    publicKeyCipherUnavailable
+
+        Effect.Internal.ImportCipherPrivateKeyFromPkcs8 context extractable params bytes ->
+            case browserContext context of
+                Just secureContext ->
+                    publicKeyCipherPrivateKey (Crypto.importRsaOaepPrivateKeyFromPkcs8 secureContext extractable params bytes)
+
+                Nothing ->
+                    publicKeyCipherUnavailable
+
+        Effect.Internal.ImportCipherPrivateKeyFromJwk context extractable params jwk ->
+            case browserContext context of
+                Just secureContext ->
+                    publicKeyCipherPrivateKey (Crypto.importRsaOaepPrivateKeyFromJwk secureContext extractable params jwk)
+
+                Nothing ->
+                    publicKeyCipherUnavailable
+
+        Effect.Internal.ExportCipherPublicKeyAsSpki key ->
+            case browserPublicKey key of
+                Just realKey ->
+                    publicKeyCipherBytes Effect.Internal.CryptoKeyNotExportable (Crypto.exportRsaOaepPublicKeyAsSpki realKey)
+
+                Nothing ->
+                    publicKeyCipherUnavailable
+
+        Effect.Internal.ExportCipherPublicKeyAsJwk key ->
+            case browserPublicKey key of
+                Just realKey ->
+                    publicKeyCipherJwk Effect.Internal.CryptoKeyNotExportable (Crypto.exportRsaOaepPublicKeyAsJwk realKey)
+
+                Nothing ->
+                    publicKeyCipherUnavailable
+
+        Effect.Internal.ExportCipherPrivateKeyAsPkcs8 key ->
+            case browserPrivateKey key of
+                Just realKey ->
+                    publicKeyCipherBytes Effect.Internal.CryptoKeyNotExportable (Crypto.exportRsaOaepPrivateKeyAsPkcs8 realKey)
+
+                Nothing ->
+                    publicKeyCipherUnavailable
+
+        Effect.Internal.ExportCipherPrivateKeyAsJwk key ->
+            case browserPrivateKey key of
+                Just realKey ->
+                    publicKeyCipherJwk Effect.Internal.CryptoKeyNotExportable (Crypto.exportRsaOaepPrivateKeyAsJwk realKey)
+
+                Nothing ->
+                    publicKeyCipherUnavailable
+
+        Effect.Internal.EncryptWithPublicKey params key bytes ->
+            case browserPublicKey key of
+                Just realKey ->
+                    publicKeyCipherBytes Effect.Internal.CryptoEncryptionFailed (Crypto.encryptWithRsaOaep params realKey bytes)
+
+                Nothing ->
+                    publicKeyCipherUnavailable
+
+        Effect.Internal.DecryptWithPrivateKey params key bytes ->
+            case browserPrivateKey key of
+                Just realKey ->
+                    publicKeyCipherBytes Effect.Internal.CryptoDecryptionFailed (Crypto.decryptWithRsaOaep params realKey bytes)
+
+                Nothing ->
+                    publicKeyCipherUnavailable
+
+
+ecSignatureKeyPair : Task.Task e (Crypto.KeyPair key Crypto.EcKeyParams) -> Task.Task x (Effect.Internal.EcSignatureResult key)
+ecSignatureKeyPair task =
+    task
+        |> Task.map
+            (\keyPair ->
+                Effect.Internal.GotEcSignatureKeyPair
+                    (Effect.Internal.BrowserCryptoPublicKey keyPair.publicKey)
+                    (Effect.Internal.BrowserCryptoPrivateKey keyPair.privateKey)
+            )
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.EcSignatureFailed Effect.Internal.CryptoKeyGenerationFailed))
+
+
+ecSignaturePublicKey : Task.Task e (Crypto.PublicKey key Crypto.EcKeyParams) -> Task.Task x (Effect.Internal.EcSignatureResult key)
+ecSignaturePublicKey task =
+    task
+        |> Task.map (Effect.Internal.BrowserCryptoPublicKey >> Effect.Internal.GotEcSignaturePublicKey)
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.EcSignatureFailed Effect.Internal.CryptoKeyImportFailed))
+
+
+ecSignaturePrivateKey : Task.Task e (Crypto.PrivateKey key Crypto.EcKeyParams) -> Task.Task x (Effect.Internal.EcSignatureResult key)
+ecSignaturePrivateKey task =
+    task
+        |> Task.map (Effect.Internal.BrowserCryptoPrivateKey >> Effect.Internal.GotEcSignaturePrivateKey)
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.EcSignatureFailed Effect.Internal.CryptoKeyImportFailed))
+
+
+ecSignatureBytes : Effect.Internal.CryptoError -> Task.Task e Bytes.Bytes -> Task.Task x (Effect.Internal.EcSignatureResult key)
+ecSignatureBytes error task =
+    task
+        |> Task.map Effect.Internal.GotEcSignatureBytes
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.EcSignatureFailed error))
+
+
+ecSignatureJwk : Effect.Internal.CryptoError -> Task.Task e Json.Encode.Value -> Task.Task x (Effect.Internal.EcSignatureResult key)
+ecSignatureJwk error task =
+    task
+        |> Task.map Effect.Internal.GotEcSignatureJwk
+        |> Task.onError (\_ -> Task.succeed (Effect.Internal.EcSignatureFailed error))
+
+
+ecSignatureUnavailable : Task.Task x (Effect.Internal.EcSignatureResult key)
+ecSignatureUnavailable =
+    Task.succeed (Effect.Internal.EcSignatureFailed Effect.Internal.CryptoSimulatedValueOutsideTest)
+
+
+runEcdsa :
+    Effect.Internal.EcSignatureOperation Crypto.EcdsaKey
+    -> Task.Task x (Effect.Internal.EcSignatureResult Crypto.EcdsaKey)
+runEcdsa operation =
+    case operation of
+        Effect.Internal.GenerateEcSignatureKeyPair context params ->
+            case browserContext context of
+                Just secureContext ->
+                    ecSignatureKeyPair (Crypto.generateEcdsaKeyPair secureContext params)
+
+                Nothing ->
+                    ecSignatureUnavailable
+
+        Effect.Internal.ImportEcSignaturePublicKeyFromRaw context namedCurve bytes ->
+            case browserContext context of
+                Just secureContext ->
+                    ecSignaturePublicKey (Crypto.importEcdsaPublicKeyFromRaw secureContext namedCurve bytes)
+
+                Nothing ->
+                    ecSignatureUnavailable
+
+        Effect.Internal.ImportEcSignaturePublicKeyFromSpki context namedCurve bytes ->
+            case browserContext context of
+                Just secureContext ->
+                    ecSignaturePublicKey (Crypto.importEcdsaPublicKeyFromSpki secureContext namedCurve bytes)
+
+                Nothing ->
+                    ecSignatureUnavailable
+
+        Effect.Internal.ImportEcSignaturePublicKeyFromJwk context namedCurve jwk ->
+            case browserContext context of
+                Just secureContext ->
+                    ecSignaturePublicKey (Crypto.importEcdsaPublicKeyFromJwk secureContext namedCurve jwk)
+
+                Nothing ->
+                    ecSignatureUnavailable
+
+        Effect.Internal.ImportEcSignaturePrivateKeyFromPkcs8 context extractable namedCurve bytes ->
+            case browserContext context of
+                Just secureContext ->
+                    ecSignaturePrivateKey (Crypto.importEcdsaPrivateKeyFromPkcs8 secureContext extractable namedCurve bytes)
+
+                Nothing ->
+                    ecSignatureUnavailable
+
+        Effect.Internal.ImportEcSignaturePrivateKeyFromSpki context extractable namedCurve bytes ->
+            case browserContext context of
+                Just secureContext ->
+                    ecSignaturePrivateKey (Crypto.importEcdsaPrivateKeyFromSpki secureContext extractable namedCurve bytes)
+
+                Nothing ->
+                    ecSignatureUnavailable
+
+        Effect.Internal.ImportEcSignaturePrivateKeyFromJwk context extractable namedCurve jwk ->
+            case browserContext context of
+                Just secureContext ->
+                    ecSignaturePrivateKey (Crypto.importEcdsaPrivateKeyFromJwk secureContext extractable namedCurve jwk)
+
+                Nothing ->
+                    ecSignatureUnavailable
+
+        Effect.Internal.ExportEcSignaturePublicKeyAsRaw key ->
+            case browserPublicKey key of
+                Just realKey ->
+                    ecSignatureBytes Effect.Internal.CryptoKeyNotExportable (Crypto.exportEcdsaPublicKeyAsRaw realKey)
+
+                Nothing ->
+                    ecSignatureUnavailable
+
+        Effect.Internal.ExportEcSignaturePublicKeyAsSpki key ->
+            case browserPublicKey key of
+                Just realKey ->
+                    ecSignatureBytes Effect.Internal.CryptoKeyNotExportable (Crypto.exportEcdsaPublicKeyAsSpki realKey)
+
+                Nothing ->
+                    ecSignatureUnavailable
+
+        Effect.Internal.ExportEcSignaturePublicKeyAsJwk key ->
+            case browserPublicKey key of
+                Just realKey ->
+                    ecSignatureJwk Effect.Internal.CryptoKeyNotExportable (Crypto.exportEcdsaPublicKeyAsJwk realKey)
+
+                Nothing ->
+                    ecSignatureUnavailable
+
+        Effect.Internal.ExportEcSignaturePrivateKeyAsPkcs8 key ->
+            case browserPrivateKey key of
+                Just realKey ->
+                    ecSignatureBytes Effect.Internal.CryptoKeyNotExportable (Crypto.exportEcdsaPrivateKeyAsPkcs8 realKey)
+
+                Nothing ->
+                    ecSignatureUnavailable
+
+        Effect.Internal.ExportEcSignaturePrivateKeyAsJwk key ->
+            case browserPrivateKey key of
+                Just realKey ->
+                    ecSignatureJwk Effect.Internal.CryptoKeyNotExportable (Crypto.exportEcdsaPrivateKeyAsJwk realKey)
+
+                Nothing ->
+                    ecSignatureUnavailable
+
+        Effect.Internal.SignWithEcPrivateKey hash key bytes ->
+            case browserPrivateKey key of
+                Just realKey ->
+                    ecSignatureBytes Effect.Internal.CryptoSigningFailed (Crypto.signWithEcdsa hash realKey bytes)
+
+                Nothing ->
+                    ecSignatureUnavailable
+
+        Effect.Internal.VerifyWithEcPublicKey hash key signature bytes ->
+            case browserPublicKey key of
+                Just realKey ->
+                    ecSignatureBytes Effect.Internal.CryptoVerificationFailed (Crypto.verifyWithEcdsa hash realKey signature bytes)
+
+                Nothing ->
+                    ecSignatureUnavailable
+
+
+runPlain : Effect.Internal.PlainOperation -> Task.Task x Effect.Internal.PlainResult
+runPlain operation =
+    case operation of
+        Effect.Internal.GetSecureContext ->
+            Crypto.getSecureContext
+                |> Task.map (Effect.Internal.BrowserSecureContext >> Effect.Internal.GotSecureContext)
+                |> Task.onError (\_ -> Task.succeed (Effect.Internal.PlainFailed Effect.Internal.CryptoNotASecureContext))
+
+        Effect.Internal.RandomUuid context ->
+            case browserContext context of
+                Just secureContext ->
+                    Crypto.randomUuidV4 secureContext |> Task.map Effect.Internal.GotUuid
+
+                Nothing ->
+                    plainUnavailable
+
+        Effect.Internal.GetRandomValues valueType count ->
+            (case valueType of
+                Effect.Internal.RandomInt8 ->
+                    Crypto.getRandomInt8Values count
+
+                Effect.Internal.RandomUInt8 ->
+                    Crypto.getRandomUInt8Values count
+
+                Effect.Internal.RandomInt16 ->
+                    Crypto.getRandomInt16Values count
+
+                Effect.Internal.RandomUInt16 ->
+                    Crypto.getRandomUInt16Values count
+
+                Effect.Internal.RandomInt32 ->
+                    Crypto.getRandomInt32Values count
+
+                Effect.Internal.RandomUInt32 ->
+                    Crypto.getRandomUInt32Values count
+            )
+                |> Task.map Effect.Internal.GotPlainBytes
+
+        Effect.Internal.Digest context algorithm bytes ->
+            case browserContext context of
+                Just secureContext ->
+                    Crypto.digest secureContext algorithm bytes |> Task.map Effect.Internal.GotPlainBytes
+
+                Nothing ->
+                    plainUnavailable
+
+
+plainUnavailable : Task.Task x Effect.Internal.PlainResult
+plainUnavailable =
+    Task.succeed (Effect.Internal.PlainFailed Effect.Internal.CryptoSimulatedValueOutsideTest)
 
 
 toSub : Subscription restriction msg -> Sub msg

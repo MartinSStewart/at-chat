@@ -2,8 +2,17 @@ module Effect.Internal exposing
     ( BackendOnly
     , Bigger(..)
     , BrowserDomError(..)
+    , CipherOperation(..)
+    , CipherResult(..)
     , ClientId(..)
     , Command(..)
+    , CryptoError(..)
+    , CryptoKey(..)
+    , CryptoPrivateKey(..)
+    , CryptoPublicKey(..)
+    , CryptoSecureContext(..)
+    , EcSignatureOperation(..)
+    , EcSignatureResult(..)
     , File(..)
     , FileUploadContent(..)
     , FrontendOnly
@@ -11,9 +20,19 @@ module Effect.Internal exposing
     , HttpExpect(..)
     , HttpPart(..)
     , HttpRequest
+    , MacOperation(..)
+    , MacResult(..)
     , NavigationKey(..)
+    , PlainOperation(..)
+    , PlainResult(..)
+    , PublicKeyCipherOperation(..)
+    , PublicKeyCipherResult(..)
+    , RandomValueType(..)
     , Resize(..)
+    , RsaSignatureOperation(..)
+    , RsaSignatureResult(..)
     , SessionId(..)
+    , SimulatedKeyData
     , Smaller(..)
     , Subscription(..)
     , Task(..)
@@ -40,6 +59,7 @@ import Browser.Dom
 import Browser.Events
 import Browser.Navigation
 import Bytes exposing (Bytes)
+import Crypto
 import Duration exposing (Duration)
 import File
 import Http
@@ -48,7 +68,6 @@ import Json.Encode
 import Lamdera
 import Math.Matrix4 exposing (Mat4)
 import Math.Vector2 exposing (Vec2)
-import Task
 import Time
 import WebGL
 import WebGLFix.Internal
@@ -153,7 +172,15 @@ type Task restriction x a
     | WebsocketCreateHandle String (Websocket.Connection -> Task restriction x a)
     | WebsocketSendString Websocket.Connection String (Result Websocket.SendError () -> Task restriction x a)
     | WebsocketClose Websocket.Connection (() -> Task restriction x a)
-    | CryptoTask (Task.Task Never (Task restriction x a)) (Task restriction x a)
+    | CryptoTaskAesCtr (CipherOperation Crypto.AesCtrKey Crypto.AesKeyParams Crypto.AesCtrParams) (CipherResult Crypto.AesCtrKey Crypto.AesKeyParams -> Task restriction x a)
+    | CryptoTaskAesCbc (CipherOperation Crypto.AesCbcKey Crypto.AesKeyParams Crypto.AesCbcParams) (CipherResult Crypto.AesCbcKey Crypto.AesKeyParams -> Task restriction x a)
+    | CryptoTaskAesGcm (CipherOperation Crypto.AesGcmKey Crypto.AesKeyParams Crypto.AesGcmParams) (CipherResult Crypto.AesGcmKey Crypto.AesKeyParams -> Task restriction x a)
+    | CryptoTaskHmac (MacOperation Crypto.HmacKey Crypto.HmacKeyParams) (MacResult Crypto.HmacKey Crypto.HmacKeyParams -> Task restriction x a)
+    | CryptoTaskRsaOaep (PublicKeyCipherOperation Crypto.RsaOaepKey Crypto.RsaOaepParams) (PublicKeyCipherResult Crypto.RsaOaepKey -> Task restriction x a)
+    | CryptoTaskRsaPss (RsaSignatureOperation Crypto.RsaPssKey Crypto.RsaPssParams) (RsaSignatureResult Crypto.RsaPssKey -> Task restriction x a)
+    | CryptoTaskRsaSsaPkcs1V1_5 (RsaSignatureOperation Crypto.RsaSsaPkcs1V1_5Key ()) (RsaSignatureResult Crypto.RsaSsaPkcs1V1_5Key -> Task restriction x a)
+    | CryptoTaskEcdsa (EcSignatureOperation Crypto.EcdsaKey) (EcSignatureResult Crypto.EcdsaKey -> Task restriction x a)
+    | CryptoTaskPlain PlainOperation (PlainResult -> Task restriction x a)
 
 
 type alias XrPose =
@@ -255,6 +282,210 @@ type File
 type FileUploadContent
     = BytesFile Bytes
     | StringFile String
+
+
+{-| Proof that Web Crypto is available. `BrowserSecureContext` only ever comes out of
+`Effect.Lamdera`, and `SimulatedSecureContext` only ever out of `Effect.Test`, so an
+interpreter never sees the other one's.
+-}
+type CryptoSecureContext
+    = BrowserSecureContext Crypto.SecureContext
+    | SimulatedSecureContext
+
+
+{-| What a simulated key carries. A browser key is a handle the page cannot read, but a
+test has to compute with the key material itself, so the simulated branch holds bytes.
+-}
+type alias SimulatedKeyData keyData =
+    { keyBytes : Bytes, data : keyData }
+
+
+{-| A secret key.
+-}
+type CryptoKey key keyData
+    = BrowserCryptoKey (Crypto.Key key keyData)
+    | SimulatedCryptoKey (SimulatedKeyData keyData)
+
+
+{-| A public key.
+-}
+type CryptoPublicKey key keyData
+    = BrowserCryptoPublicKey (Crypto.PublicKey key keyData)
+    | SimulatedCryptoPublicKey (SimulatedKeyData keyData)
+
+
+{-| A private key.
+-}
+type CryptoPrivateKey key keyData
+    = BrowserCryptoPrivateKey (Crypto.PrivateKey key keyData)
+    | SimulatedCryptoPrivateKey (SimulatedKeyData keyData)
+
+
+{-| Why a crypto operation did not produce a result. Each `Effect.Crypto` function knows
+which operation it issued, so it maps this to that operation's own error type.
+-}
+type CryptoError
+    = CryptoKeyGenerationFailed
+    | CryptoKeyImportFailed
+    | CryptoKeyNotExportable
+    | CryptoEncryptionFailed
+    | CryptoDecryptionFailed
+    | CryptoSigningFailed
+    | CryptoVerificationFailed
+    | CryptoNotASecureContext
+    | CryptoSimulatedValueOutsideTest
+
+
+{-| Which width and signedness of random values to generate.
+-}
+type RandomValueType
+    = RandomInt8
+    | RandomUInt8
+    | RandomInt16
+    | RandomUInt16
+    | RandomInt32
+    | RandomUInt32
+
+
+{-| The operations that need no key. One `Task` variant covers all of them.
+-}
+type PlainOperation
+    = GetSecureContext
+    | RandomUuid CryptoSecureContext
+    | GetRandomValues RandomValueType Int
+    | Digest CryptoSecureContext Crypto.DigestAlgorithm Bytes
+
+
+{-| -}
+type PlainResult
+    = GotSecureContext CryptoSecureContext
+    | GotUuid String
+    | GotPlainBytes Bytes
+    | PlainFailed CryptoError
+
+
+{-| The operations a symmetric cipher supports. AES-CTR, AES-CBC and AES-GCM share this,
+differing only in `params`, so an interpreter can handle all three at once wherever the
+params do not matter.
+-}
+type CipherOperation key keyData params
+    = GenerateCipherKey CryptoSecureContext keyData
+    | ImportCipherKeyFromRaw CryptoSecureContext Crypto.Extractable Bytes
+    | ImportCipherKeyFromJwk CryptoSecureContext Crypto.Extractable Json.Encode.Value
+    | ExportCipherKeyAsRaw (CryptoKey key keyData)
+    | ExportCipherKeyAsJwk (CryptoKey key keyData)
+    | Encrypt params (CryptoKey key keyData) Bytes
+    | Decrypt params (CryptoKey key keyData) Bytes
+
+
+{-| -}
+type CipherResult key keyData
+    = GotCipherKey (CryptoKey key keyData)
+    | GotCipherBytes Bytes
+    | GotCipherJwk Json.Encode.Value
+    | CipherFailed CryptoError
+
+
+{-| The operations a message authentication code supports. Only HMAC uses this.
+-}
+type MacOperation key keyData
+    = GenerateMacKey CryptoSecureContext keyData
+    | ImportMacKeyFromRaw CryptoSecureContext Crypto.Extractable Crypto.DigestAlgorithm (Maybe Int) Bytes
+    | ImportMacKeyFromJwk CryptoSecureContext Crypto.Extractable Crypto.DigestAlgorithm (Maybe Int) Json.Encode.Value
+    | ExportMacKeyAsRaw (CryptoKey key keyData)
+    | ExportMacKeyAsJwk (CryptoKey key keyData)
+    | SignWithMacKey (CryptoKey key keyData) Bytes
+    | VerifyWithMacKey (CryptoKey key keyData) Bytes Bytes
+
+
+{-| -}
+type MacResult key keyData
+    = GotMacKey (CryptoKey key keyData)
+    | GotMacBytes Bytes
+    | GotMacJwk Json.Encode.Value
+    | MacFailed CryptoError
+
+
+{-| The operations a public key cipher supports. Only RSA-OAEP uses this.
+-}
+type PublicKeyCipherOperation key params
+    = GenerateCipherKeyPair CryptoSecureContext Crypto.RsaKeyParams
+    | ImportCipherPublicKeyFromSpki CryptoSecureContext Crypto.ImportRsaKeyParams Bytes
+    | ImportCipherPublicKeyFromJwk CryptoSecureContext Crypto.ImportRsaKeyParams Json.Encode.Value
+    | ImportCipherPrivateKeyFromPkcs8 CryptoSecureContext Crypto.Extractable Crypto.ImportRsaKeyParams Bytes
+    | ImportCipherPrivateKeyFromJwk CryptoSecureContext Crypto.Extractable Crypto.ImportRsaKeyParams Json.Encode.Value
+    | ExportCipherPublicKeyAsSpki (CryptoPublicKey key Crypto.RsaKeyParams)
+    | ExportCipherPublicKeyAsJwk (CryptoPublicKey key Crypto.RsaKeyParams)
+    | ExportCipherPrivateKeyAsPkcs8 (CryptoPrivateKey key Crypto.RsaKeyParams)
+    | ExportCipherPrivateKeyAsJwk (CryptoPrivateKey key Crypto.RsaKeyParams)
+    | EncryptWithPublicKey params (CryptoPublicKey key Crypto.RsaKeyParams) Bytes
+    | DecryptWithPrivateKey params (CryptoPrivateKey key Crypto.RsaKeyParams) Bytes
+
+
+{-| -}
+type PublicKeyCipherResult key
+    = GotCipherKeyPair (CryptoPublicKey key Crypto.RsaKeyParams) (CryptoPrivateKey key Crypto.RsaKeyParams)
+    | GotCipherPublicKey (CryptoPublicKey key Crypto.RsaKeyParams)
+    | GotCipherPrivateKey (CryptoPrivateKey key Crypto.RsaKeyParams)
+    | GotPublicKeyCipherBytes Bytes
+    | GotPublicKeyCipherJwk Json.Encode.Value
+    | PublicKeyCipherFailed CryptoError
+
+
+{-| The operations an RSA signature algorithm supports. RSA-PSS and RSASSA-PKCS1-v1\_5
+share this, differing only in the `params` their signing takes.
+-}
+type RsaSignatureOperation key params
+    = GenerateRsaSignatureKeyPair CryptoSecureContext Crypto.RsaKeyParams
+    | ImportRsaSignaturePublicKeyFromSpki CryptoSecureContext Crypto.ImportRsaKeyParams Bytes
+    | ImportRsaSignaturePublicKeyFromJwk CryptoSecureContext Crypto.ImportRsaKeyParams Json.Encode.Value
+    | ImportRsaSignaturePrivateKeyFromPkcs8 CryptoSecureContext Crypto.Extractable Crypto.ImportRsaKeyParams Bytes
+    | ImportRsaSignaturePrivateKeyFromJwk CryptoSecureContext Crypto.Extractable Crypto.ImportRsaKeyParams Json.Encode.Value
+    | ExportRsaSignaturePublicKeyAsSpki (CryptoPublicKey key Crypto.RsaKeyParams)
+    | ExportRsaSignaturePublicKeyAsJwk (CryptoPublicKey key Crypto.RsaKeyParams)
+    | ExportRsaSignaturePrivateKeyAsPkcs8 (CryptoPrivateKey key Crypto.RsaKeyParams)
+    | ExportRsaSignaturePrivateKeyAsJwk (CryptoPrivateKey key Crypto.RsaKeyParams)
+    | SignWithRsaPrivateKey params (CryptoPrivateKey key Crypto.RsaKeyParams) Bytes
+    | VerifyWithRsaPublicKey params (CryptoPublicKey key Crypto.RsaKeyParams) Bytes Bytes
+
+
+{-| -}
+type RsaSignatureResult key
+    = GotRsaSignatureKeyPair (CryptoPublicKey key Crypto.RsaKeyParams) (CryptoPrivateKey key Crypto.RsaKeyParams)
+    | GotRsaSignaturePublicKey (CryptoPublicKey key Crypto.RsaKeyParams)
+    | GotRsaSignaturePrivateKey (CryptoPrivateKey key Crypto.RsaKeyParams)
+    | GotRsaSignatureBytes Bytes
+    | GotRsaSignatureJwk Json.Encode.Value
+    | RsaSignatureFailed CryptoError
+
+
+{-| The operations an elliptic curve signature algorithm supports. Only ECDSA uses this.
+-}
+type EcSignatureOperation key
+    = GenerateEcSignatureKeyPair CryptoSecureContext Crypto.EcKeyParams
+    | ImportEcSignaturePublicKeyFromRaw CryptoSecureContext Crypto.EcNamedCurve Bytes
+    | ImportEcSignaturePublicKeyFromSpki CryptoSecureContext Crypto.EcNamedCurve Bytes
+    | ImportEcSignaturePublicKeyFromJwk CryptoSecureContext Crypto.EcNamedCurve Json.Encode.Value
+    | ImportEcSignaturePrivateKeyFromPkcs8 CryptoSecureContext Crypto.Extractable Crypto.EcNamedCurve Bytes
+    | ImportEcSignaturePrivateKeyFromSpki CryptoSecureContext Crypto.Extractable Crypto.EcNamedCurve Bytes
+    | ImportEcSignaturePrivateKeyFromJwk CryptoSecureContext Crypto.Extractable Crypto.EcNamedCurve Json.Encode.Value
+    | ExportEcSignaturePublicKeyAsRaw (CryptoPublicKey key Crypto.EcKeyParams)
+    | ExportEcSignaturePublicKeyAsSpki (CryptoPublicKey key Crypto.EcKeyParams)
+    | ExportEcSignaturePublicKeyAsJwk (CryptoPublicKey key Crypto.EcKeyParams)
+    | ExportEcSignaturePrivateKeyAsPkcs8 (CryptoPrivateKey key Crypto.EcKeyParams)
+    | ExportEcSignaturePrivateKeyAsJwk (CryptoPrivateKey key Crypto.EcKeyParams)
+    | SignWithEcPrivateKey Crypto.DigestAlgorithm (CryptoPrivateKey key Crypto.EcKeyParams) Bytes
+    | VerifyWithEcPublicKey Crypto.DigestAlgorithm (CryptoPublicKey key Crypto.EcKeyParams) Bytes Bytes
+
+
+{-| -}
+type EcSignatureResult key
+    = GotEcSignatureKeyPair (CryptoPublicKey key Crypto.EcKeyParams) (CryptoPrivateKey key Crypto.EcKeyParams)
+    | GotEcSignaturePublicKey (CryptoPublicKey key Crypto.EcKeyParams)
+    | GotEcSignaturePrivateKey (CryptoPrivateKey key Crypto.EcKeyParams)
+    | GotEcSignatureBytes Bytes
+    | GotEcSignatureJwk Json.Encode.Value
+    | EcSignatureFailed CryptoError
 
 
 type alias HttpRequest data restriction x a =
@@ -458,8 +689,32 @@ andThen f task =
         WebsocketClose connection function ->
             WebsocketClose connection (function >> andThen f)
 
-        CryptoTask realTask simulatedTask ->
-            CryptoTask (Task.map (andThen f) realTask) (andThen f simulatedTask)
+        CryptoTaskAesCtr operation function ->
+            CryptoTaskAesCtr operation (function >> andThen f)
+
+        CryptoTaskAesCbc operation function ->
+            CryptoTaskAesCbc operation (function >> andThen f)
+
+        CryptoTaskAesGcm operation function ->
+            CryptoTaskAesGcm operation (function >> andThen f)
+
+        CryptoTaskHmac operation function ->
+            CryptoTaskHmac operation (function >> andThen f)
+
+        CryptoTaskRsaOaep operation function ->
+            CryptoTaskRsaOaep operation (function >> andThen f)
+
+        CryptoTaskRsaPss operation function ->
+            CryptoTaskRsaPss operation (function >> andThen f)
+
+        CryptoTaskRsaSsaPkcs1V1_5 operation function ->
+            CryptoTaskRsaSsaPkcs1V1_5 operation (function >> andThen f)
+
+        CryptoTaskEcdsa operation function ->
+            CryptoTaskEcdsa operation (function >> andThen f)
+
+        CryptoTaskPlain operation function ->
+            CryptoTaskPlain operation (function >> andThen f)
 
 
 taskMapError : (x -> y) -> Task restriction x a -> Task restriction y a
@@ -558,5 +813,29 @@ taskMapError f task =
         WebsocketClose connection function ->
             WebsocketClose connection (function >> taskMapError f)
 
-        CryptoTask realTask simulatedTask ->
-            CryptoTask (Task.map (taskMapError f) realTask) (taskMapError f simulatedTask)
+        CryptoTaskAesCtr operation function ->
+            CryptoTaskAesCtr operation (function >> taskMapError f)
+
+        CryptoTaskAesCbc operation function ->
+            CryptoTaskAesCbc operation (function >> taskMapError f)
+
+        CryptoTaskAesGcm operation function ->
+            CryptoTaskAesGcm operation (function >> taskMapError f)
+
+        CryptoTaskHmac operation function ->
+            CryptoTaskHmac operation (function >> taskMapError f)
+
+        CryptoTaskRsaOaep operation function ->
+            CryptoTaskRsaOaep operation (function >> taskMapError f)
+
+        CryptoTaskRsaPss operation function ->
+            CryptoTaskRsaPss operation (function >> taskMapError f)
+
+        CryptoTaskRsaSsaPkcs1V1_5 operation function ->
+            CryptoTaskRsaSsaPkcs1V1_5 operation (function >> taskMapError f)
+
+        CryptoTaskEcdsa operation function ->
+            CryptoTaskEcdsa operation (function >> taskMapError f)
+
+        CryptoTaskPlain operation function ->
+            CryptoTaskPlain operation (function >> taskMapError f)
