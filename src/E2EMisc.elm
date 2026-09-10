@@ -604,8 +604,35 @@ adminConnectionsShowWhatIsViewedTest config =
         config
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
             E2EHelper.desktopWindow
-            (\_ _ ->
-                [ T.connectFrontend
+            (\admin _ ->
+                [ -- A second tab of the admin's own session. The backend tells the first tab
+                  -- where this one goes, and the first tab used to take that as its own, which
+                  -- left it thinking it had already said where it was and skipping the next
+                  -- move it made.
+                  T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/"
+                    E2EHelper.desktopWindow
+                    (\secondTab ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ secondTab.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , secondTab.click 100 (Dom.id "guild_openGuild_1")
+                        , secondTab.click 100 (Dom.id "guild_openChannel_0")
+                        , admin.click 100 (Dom.id "guild_openGuild_1")
+                        , admin.click 100 (Dom.id "guild_openChannel_0")
+                        , T.checkBackend 100 adminTabsAgreeOnWhatTheyAreViewing
+                        ]
+                    )
+                , T.connectFrontend
                     100
                     E2EHelper.sessionId0
                     "/admin"
@@ -629,6 +656,37 @@ adminConnectionsShowWhatIsViewedTest config =
                 ]
             )
         ]
+
+
+{-| Both of the admin's tabs are in the guild channel and equally caught up, so the backend
+should have exactly the same thing down for each of them.
+
+A tab that takes a sibling tab's viewing for its own gets this wrong. It compares the
+channel it moves to against what the other tab reported rather than against what it last
+said itself, and so tells the backend either nothing at all or the wrong thing about where
+it now is.
+
+-}
+adminTabsAgreeOnWhatTheyAreViewing : E2EHelper.BackendModel2 -> Result String ()
+adminTabsAgreeOnWhatTheyAreViewing backend =
+    case SeqDict.get E2EHelper.sessionId0 (E2EHelper.unwrapBackend backend).connections of
+        Just connections ->
+            case List.map (\( _, connection ) -> connection.currentlyViewing) (NonemptyDict.toList connections) of
+                first :: rest ->
+                    if List.all (\viewing -> viewing == first) rest then
+                        Ok ()
+
+                    else
+                        Err
+                            ("The admin's tabs are in the same channel but the backend has them viewing "
+                                ++ Debug.toString (first :: rest)
+                            )
+
+                [] ->
+                    Err "The admin's session has no connections to the backend"
+
+        Nothing ->
+            Err "The admin's session has no connections to the backend"
 
 
 {-| A message someone else writes into the conversation you are looking at, with nothing
