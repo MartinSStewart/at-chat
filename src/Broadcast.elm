@@ -1406,28 +1406,10 @@ pushNotification sessionId userId time title body icon navigateTo subscribeData 
                         Http.GoodStatus_ _ _ ->
                             Ok ()
                 )
-        , timeout = pushNotificationTimeout |> Just
+        , timeout = Duration.seconds 30 |> Just
         }
-        |> retryOnTimeout pushNotificationRetries
+        |> retryOnTimeout 4
         |> Task.attempt (SentNotification sessionId userId time subscribeData)
-
-
-pushNotificationTimeout : Duration
-pushNotificationTimeout =
-    Duration.seconds 30
-
-
-{-| How many more times to send a push notification that timed out, on top of the first
-attempt. A notification nobody hears about is worse than a late one, and with the timeout
-above it takes two and a half minutes to run out of attempts.
-
-Only a timeout is worth another go. A bad status or a network error is the push service
-saying no rather than being slow, and asking again won't change the answer.
-
--}
-pushNotificationRetries : Int
-pushNotificationRetries =
-    4
 
 
 retryOnTimeout : Int -> Task restriction Http.Error a -> Task restriction Http.Error a
