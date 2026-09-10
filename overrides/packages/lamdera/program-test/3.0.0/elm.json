@@ -5,6 +5,7 @@
     "license": "MIT",
     "version": "3.0.0",
     "exposed-modules": [
+        "Crypto",
         "Effect.Command",
         "Effect.Http",
         "Effect.File",
