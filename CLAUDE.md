@@ -79,15 +79,6 @@ commit afterwards. `--fix-all` applies the mechanical fixes.
 
 Measure anything you rewrite for speed rather than guessing:
 
-```
-npm run benchmarks
-```
-
-That builds `benchmarks/benchmarks.html`, which you open in a browser and leave running for
-a few minutes. The suites live in `benchmarks/src`, which is one of the source directories in
-`elm.json`, and each one keeps the version it replaced next to the new one so the comparison
-still runs after the change has been made. A test in `tests/` checks the two agree.
-
 ## Code style
 
 ### Prefer duplication over parameters when sharing code
