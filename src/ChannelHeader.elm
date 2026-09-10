@@ -78,7 +78,7 @@ showDmSettingsRedDot otherUserId local loggedIn =
                     False
 
                 DmChannel.E2eeEnabled _ ->
-                    not (SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice)
+                    not (SeqDict.member otherUserId loggedIn.e2eeKeysOnThisDevice)
 
         Nothing ->
             False

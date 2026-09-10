@@ -11,10 +11,12 @@ import Audio exposing (AudioCmd, AudioData)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import Bytes exposing (Bytes)
+import Bytes.Encode
 import Call exposing (MediaDevicesStatus(..))
 import ChannelDescription
 import ChannelName
 import Coord exposing (Coord)
+import Crypto
 import CssPixels exposing (CssPixels)
 import CustomEmoji
 import Discord
@@ -27,6 +29,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.Crypto
 import Effect.File.Download
 import Effect.File.Select
 import Effect.Http as Http
@@ -81,6 +84,7 @@ import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
+import Serialize
 import SheepGame
 import Sticker
 import String.Extra
@@ -591,7 +595,6 @@ loadedInitHelper startupData emojiData loginData loading =
             , e2eeKeysOnThisDevice = SeqSet.fromList startupData.e2eeKeys
             , encryptionRequests =
                 { pendingEncryptedMessages = SeqDict.empty
-                , nextEncryptionRequestId = Id.fromInt 0
                 , pendingDecryptedMessages = SeqDict.empty
                 , nextDecryptionRequestId = Id.fromInt 0
                 , pendingDecryptedManyMessages =
@@ -616,7 +619,6 @@ loadedInitHelper startupData emojiData loginData loading =
                 , nextDecryptManyRequestId = Id.fromInt (List.length backlog)
                 , pendingEncryptedManyMessages = SeqDict.empty
                 , nextEncryptManyRequestId = Id.fromInt 0
-                , pendingEncryptedEdits = SeqDict.empty
                 , pendingEncryptedFiles = SeqDict.empty
                 , nextEncryptFileRequestId = Id.fromInt 0
                 }
@@ -4166,27 +4168,17 @@ updateLoaded msg model =
                                             ( Just dmId, Just richText ) ->
                                                 -- The edit goes past the browser before it is
                                                 -- sent, the same way the message itself did.
-                                                startEncryptingEdit
-                                                    dmId
-                                                    (case threadRoute of
-                                                        ViewThread threadId ->
-                                                            ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
-
-                                                        NoThread ->
-                                                            NoThreadWithMessage edit.messageIndex
-                                                    )
-                                                    { content = richText
-                                                    , embeds = Array.empty
-                                                    , attachedFiles = FileStatus.onlyUploadedFiles edit.attachedFiles
-                                                    }
-                                                    (editWasSent loggedIn)
-                                                    |> Tuple.mapSecond
-                                                        (\cmd ->
-                                                            Command.batch
-                                                                [ cmd
-                                                                , FrontendExtra.setFocus model Pages.Guild.channelTextInputId
-                                                                ]
-                                                        )
+                                                ( editWasSent loggedIn
+                                                , Command.batch
+                                                    [ startEncryptingEdit
+                                                        dmId
+                                                        { content = richText
+                                                        , embeds = Array.empty
+                                                        , attachedFiles = FileStatus.onlyUploadedFiles edit.attachedFiles
+                                                        }
+                                                    , FrontendExtra.setFocus model Pages.Guild.channelTextInputId
+                                                    ]
+                                                )
 
                                             ( Just _, Nothing ) ->
                                                 ( editWasSent loggedIn
@@ -9336,14 +9328,6 @@ rememberEncryptManyRequests conversations requests =
     }
 
 
-{-| The two share a counter, so an id belongs to at most one of them and forgetting it from
-both is what happens either way.
--}
-forgetEncryptRequest : Id Encryption.EncryptRequestId -> EncryptionRequests -> EncryptionRequests
-forgetEncryptRequest requestId requests =
-    { requests | pendingEncryptedEdits = SeqDict.remove requestId requests.pendingEncryptedEdits }
-
-
 {-| Deleting an attachment cancels its upload, but there is nothing to cancel while the
 browser still has the file, so the ciphertext for one that has since been deleted is
 dropped rather than uploaded.
@@ -9834,30 +9818,43 @@ until the ciphertext comes back. Editing doesn't notify anyone, so unlike
 `startEncryptingMessage` there is only the one thing to encrypt.
 -}
 startEncryptingEdit :
-    Viewing_DmId
-    -> ThreadRouteWithMessage
+    { otherUserId : Viewing_DmId, key : Effect.Crypto.Key Crypto.AesGcmKey Crypto.AesKeyParams }
     -> MessageContent (Id UserId)
-    -> LoggedIn2
-    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-startEncryptingEdit id threadRoute contentAndEmbeds loggedIn =
-    ( FrontendExtra.mapEncryptionRequests
-        (\requests ->
-            { requests
-                | nextEncryptionRequestId = Id.increment requests.nextEncryptionRequestId
-                , pendingEncryptedEdits =
-                    SeqDict.insert
-                        requests.nextEncryptionRequestId
-                        { id = id, threadRoute = threadRoute, contentAndEmbeds = contentAndEmbeds }
-                        requests.pendingEncryptedEdits
-            }
-        )
-        { loggedIn | e2eeError = Nothing }
-    , Encryption.encryptMessage
-        loggedIn.encryptionRequests.nextEncryptionRequestId
-        id
-        Message.contentAndEmbedsCodec
-        contentAndEmbeds
-    )
+    -> Command FrontendOnly ToBackend FrontendMsg_
+startEncryptingEdit { otherUserId, key } contentAndEmbeds =
+    Effect.Crypto.getRandomUInt32Values 3
+        |> Task.andThen
+            (\iv ->
+                Effect.Crypto.encryptWithAesGcm
+                    { iv = iv
+                    , additionalData = Nothing
+                    , tagLength = Nothing
+                    }
+                    key
+                    (Serialize.encodeToBytes Message.contentAndEmbedsCodec contentAndEmbeds)
+            )
+        |> Task.attempt EncryptedEditMessage
+
+
+
+--( FrontendExtra.mapEncryptionRequests
+--    (\requests ->
+--        { requests
+--            | nextEncryptionRequestId = Id.increment requests.nextEncryptionRequestId
+--            , pendingEncryptedEdits =
+--                SeqDict.insert
+--                    requests.nextEncryptionRequestId
+--                    { id = id, threadRoute = threadRoute, contentAndEmbeds = contentAndEmbeds }
+--                    requests.pendingEncryptedEdits
+--        }
+--    )
+--    { loggedIn | e2eeError = Nothing }
+--, Encryption.encryptMessage
+--    loggedIn.encryptionRequests.nextEncryptionRequestId
+--    id
+--    Message.contentAndEmbedsCodec
+--    contentAndEmbeds
+--)
 
 
 startEncryptingMessage :

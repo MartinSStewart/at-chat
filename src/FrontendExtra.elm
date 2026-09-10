@@ -51,6 +51,7 @@ import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelHeader
 import ChannelName
+import Crypto
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordFrontendDmChannel, E2eeStatus(..), FrontendDmChannel)
@@ -61,6 +62,7 @@ import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.Crypto
 import Effect.File as File exposing (File)
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
@@ -1931,17 +1933,21 @@ routeRequest previousRoute newRoute model =
         |> Tuple.mapSecond (\a -> Command.batch [ viewCmd, a ])
 
 
-encryptedDmOtherUser : AnyGuildOrDmId -> LocalState -> LoggedIn2 -> Maybe Viewing_DmId
+encryptedDmOtherUser :
+    AnyGuildOrDmId
+    -> LocalState
+    -> LoggedIn2
+    -> Maybe { otherUserId : Viewing_DmId, key : Effect.Crypto.Key Crypto.AesGcmKey Crypto.AesKeyParams }
 encryptedDmOtherUser guildOrDmId local loggedIn =
     case guildOrDmId of
-        GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
+        GuildOrDmId (GuildOrDmId_Dm id) ->
             case
-                ( SeqDict.get otherUserId local.dmChannels |> Maybe.map .e2ee
-                , SeqSet.member otherUserId loggedIn.e2eeKeysOnThisDevice
+                ( SeqDict.get id.otherUserId local.dmChannels |> Maybe.map .e2ee
+                , SeqDict.get id.otherUserId loggedIn.e2eeKeysOnThisDevice
                 )
             of
-                ( Just (DmChannel.E2eeEnabled _), True ) ->
-                    Just { otherUserId = otherUserId }
+                ( Just (DmChannel.E2eeEnabled _), Just key ) ->
+                    Just { otherUserId = id, key = key }
 
                 _ ->
                     Nothing

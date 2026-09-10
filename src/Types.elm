@@ -68,6 +68,7 @@ import Call exposing (CallId, FromJs)
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
+import Crypto
 import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData)
@@ -81,6 +82,7 @@ import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility)
 import Effect.Browser.Navigation exposing (Key)
+import Effect.Crypto
 import Effect.File exposing (File)
 import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId, SessionId)
@@ -274,7 +276,7 @@ type alias LoggedIn2 =
     , showNewPrivateKey : Maybe X25519.PrivateKey
     , e2eeError : Maybe String
     , e2eePrivateKeyText : String
-    , e2eeKeysOnThisDevice : SeqSet (Id UserId)
+    , e2eeKeysOnThisDevice : SeqDict (Id UserId) (Effect.Crypto.Key Crypto.AesGcmKey Crypto.AesKeyParams)
     , encryptionRequests : EncryptionRequests
     , e2eeSectionsExpanded : SeqDict (Id UserId) Bool
     , {- We want to slightly change the letter spacing for textarea's on Safari in order to force it to recalculate word wrap.
@@ -289,7 +291,6 @@ type alias EncryptionRequests =
       -- is encrypted along with the line its push notification shows and so goes over as two
       -- at once (see Encryption.encryptMessageAndNotification).
       pendingEncryptedMessages : SeqDict (Id EncryptManyRequestId) PendingEncryptedMessage
-    , nextEncryptionRequestId : Id EncryptRequestId
     , pendingDecryptedMessages : SeqDict (Id DecryptRequestId) PendingDecryptedMessage
     , nextDecryptionRequestId : Id DecryptRequestId
     , pendingDecryptedManyMessages : SeqDict (Id DecryptManyRequestId) PendingDecryptedManyMessages
@@ -299,7 +300,6 @@ type alias EncryptionRequests =
     , nextDecryptManyRequestId : Id DecryptManyRequestId
     , pendingEncryptedManyMessages : SeqDict (Id EncryptManyRequestId) PendingEncryptedManyMessages
     , nextEncryptManyRequestId : Id EncryptManyRequestId
-    , pendingEncryptedEdits : SeqDict (Id EncryptRequestId) PendingEncryptedEdit
     , pendingEncryptedFiles : SeqDict (Id EncryptFileRequestId) PendingEncryptedFile
     , nextEncryptFileRequestId : Id EncryptFileRequestId
     }
