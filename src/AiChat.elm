@@ -130,7 +130,7 @@ type ResponseId
 
 type PendingResponse
     = Pending AiModelName
-    | GotResponse AiModelName String (Maybe Float)
+    | GotResponse AiModelName String (Maybe String) (Maybe Float)
     | GotError AiModelName Http.Error
 
 
@@ -344,14 +344,19 @@ pendingResponseCodec =
                 Pending arg0 ->
                     pendingEncoder arg0
 
-                GotResponse argA argB argC ->
-                    gotResponseEncoder argA argB argC
+                GotResponse argA argB argC argD ->
+                    gotResponseEncoder argA argB argC argD
 
                 GotError argA argB ->
                     gotErrorEncoder argA argB
         )
         |> Serialize.variant1 Pending aiModelCodec
-        |> Serialize.variant3 GotResponse aiModelCodec Serialize.string (Serialize.maybe Serialize.float)
+        |> Serialize.variant4
+            GotResponse
+            aiModelCodec
+            Serialize.string
+            (Serialize.maybe Serialize.string)
+            (Serialize.maybe Serialize.float)
         |> Serialize.variant2 GotError aiModelCodec errorCodec
         |> Serialize.finishCustomType
 
@@ -641,7 +646,7 @@ update msg model =
 
         PressedKeep responseId ->
             case SeqDict.get responseId model.pendingResponses of
-                Just (GotResponse _ text _) ->
+                Just (GotResponse _ text _ _) ->
                     saveToLocalStorage
                         { model
                             | pendingResponses = SeqDict.empty
@@ -791,8 +796,8 @@ update msg model =
                         SeqDict.updateIfExists responseId
                             (\response ->
                                 case response of
-                                    GotResponse modelId _ cost ->
-                                        GotResponse modelId text cost
+                                    GotResponse modelId _ reasoning cost ->
+                                        GotResponse modelId text reasoning cost
 
                                     Pending _ ->
                                         response
@@ -863,7 +868,7 @@ pendingResponseModelId response =
         Pending modelId ->
             modelId
 
-        GotResponse modelId _ _ ->
+        GotResponse modelId _ _ _ ->
             modelId
 
         GotError modelId _ ->
@@ -873,7 +878,7 @@ pendingResponseModelId response =
 pendingResponseCost : PendingResponse -> Maybe Float
 pendingResponseCost response =
     case response of
-        GotResponse _ _ cost ->
+        GotResponse _ _ _ cost ->
             cost
 
         Pending _ ->
@@ -935,7 +940,11 @@ updateFromBackend msg model =
                                                     [] ->
                                                         aiMessage.content
                                         in
-                                        GotResponse modelId (String.replace "\\\"" "\"" text) aiMessage.cost
+                                        GotResponse
+                                            modelId
+                                            (String.replace "\\\"" "\"" text)
+                                            aiMessage.reasoning
+                                            aiMessage.cost
 
                                     Err error ->
                                         GotError modelId error
@@ -1119,7 +1128,7 @@ responseView windowWidth responseCount responseId response =
             |> Ui.px
             |> Ui.width
         , [ case response of
-                GotResponse _ _ _ ->
+                GotResponse _ _ _ _ ->
                     responseButton (PressedKeep responseId) MyUi.background2 [] Icons.checkmark "Keep"
 
                 Pending _ ->
@@ -1166,8 +1175,8 @@ responseView windowWidth responseCount responseId response =
                         ]
                         (Ui.text "Loading...")
 
-                GotResponse _ response2 _ ->
-                    Ui.el
+                GotResponse _ response2 maybeReasoning _ ->
+                    Ui.column
                         [ Ui.scrollable
                         , Ui.roundedWith { topLeft = 4, topRight = 4, bottomRight = 0, bottomLeft = 0 }
                         , Ui.border 1
@@ -1175,7 +1184,13 @@ responseView windowWidth responseCount responseId response =
                         , responseContainerId responseId |> MyUi.id
                         , Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
                         ]
-                        (Ui.Input.multiline
+                        [ case maybeReasoning of
+                            Just reasoning ->
+                                reasoningView reasoning
+
+                            Nothing ->
+                                Ui.none
+                        , Ui.Input.multiline
                             [ Ui.paddingXY 8 8
                             , MyUi.htmlStyle "white-space" "pre-wrap"
                             , Ui.border 0
@@ -1187,7 +1202,7 @@ responseView windowWidth responseCount responseId response =
                             , spellcheck = True
                             , label = Ui.Input.labelHidden "AI response"
                             }
-                        )
+                        ]
 
                 GotError _ error ->
                     Ui.el
@@ -1237,6 +1252,35 @@ responseView windowWidth responseCount responseId response =
                     )
                 )
             ]
+        )
+
+
+{-| The chain of thought is long and usually not what you came for, so it sits above the
+answer collapsed. `details` handles the expanding itself, which saves tracking which
+responses are open.
+-}
+reasoningView : String -> Element msg
+reasoningView reasoning =
+    Ui.el
+        [ Ui.paddingXY 8 8
+        , Ui.Font.size 14
+        , Ui.Font.color MyUi.font3
+        , Ui.background MyUi.background2
+        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+        , Ui.borderColor MyUi.inputBorder
+        ]
+        (Html.details
+            []
+            [ Html.summary
+                [ Html.Attributes.style "cursor" "pointer" ]
+                [ Html.text "Chain of thought" ]
+            , Html.div
+                [ Html.Attributes.style "white-space" "pre-wrap"
+                , Html.Attributes.style "padding-top" "8px"
+                ]
+                [ Html.text reasoning ]
+            ]
+            |> Ui.html
         )
 
 
@@ -1585,6 +1629,7 @@ encodeMessage message =
 type alias AiResponse =
     { images : List String
     , content : String
+    , reasoning : Maybe String
     , cost : Maybe Float
     }
 
@@ -1592,6 +1637,7 @@ type alias AiResponse =
 type alias AiMessageContent =
     { images : List String
     , content : String
+    , reasoning : Maybe String
     }
 
 
@@ -1599,13 +1645,63 @@ decodeAiMessage : Decoder AiMessageContent
 decodeAiMessage =
     Json.Decode.oneOf
         [ Json.Decode.field "message"
-            (Json.Decode.map2
+            (Json.Decode.map3
                 AiMessageContent
                 (Json.Decode.Extra.optionalField "images" (Json.Decode.list decodeImage) |> Json.Decode.map (Maybe.withDefault []))
                 (Json.Decode.field "content" Json.Decode.string)
+                decodeReasoning
             )
-        , Json.Decode.field "text" Json.Decode.string |> Json.Decode.map (AiMessageContent [])
+        , Json.Decode.map2
+            (AiMessageContent [])
+            (Json.Decode.field "text" Json.Decode.string)
+            decodeReasoning
         ]
+
+
+{-| Reasoning models put their chain of thought in `reasoning`. Some fill in only
+`reasoning_details` instead, which mixes readable text and summary blocks in with encrypted
+ones that we have no way of showing.
+-}
+decodeReasoning : Decoder (Maybe String)
+decodeReasoning =
+    Json.Decode.map2
+        (\reasoning details ->
+            case nonEmptyText (Maybe.withDefault "" reasoning) of
+                Just text ->
+                    Just text
+
+                Nothing ->
+                    Maybe.withDefault [] details
+                        |> List.filterMap nonEmptyText
+                        |> String.join "\n\n"
+                        |> nonEmptyText
+        )
+        (optionalNullableField "reasoning" Json.Decode.string)
+        (optionalNullableField "reasoning_details" (Json.Decode.list decodeReasoningDetail))
+
+
+decodeReasoningDetail : Decoder String
+decodeReasoningDetail =
+    Json.Decode.oneOf
+        [ Json.Decode.field "text" Json.Decode.string
+        , Json.Decode.field "summary" Json.Decode.string
+        , Json.Decode.succeed ""
+        ]
+
+
+optionalNullableField : String -> Decoder a -> Decoder (Maybe a)
+optionalNullableField fieldName decoder =
+    Json.Decode.Extra.optionalField fieldName (Json.Decode.nullable decoder)
+        |> Json.Decode.map (Maybe.andThen identity)
+
+
+nonEmptyText : String -> Maybe String
+nonEmptyText text =
+    if String.trim text == "" then
+        Nothing
+
+    else
+        Just (String.trim text)
 
 
 decodeImage : Decoder String
@@ -1686,7 +1782,11 @@ openRouterRequest openRouterKey aiModel message =
                                 Json.Decode.decodeString
                                     (Json.Decode.map2
                                         (\content cost ->
-                                            { images = content.images, content = content.content, cost = cost }
+                                            { images = content.images
+                                            , content = content.content
+                                            , reasoning = content.reasoning
+                                            , cost = cost
+                                            }
                                         )
                                         (Json.Decode.field "choices" (Json.Decode.index 0 decodeAiMessage))
                                         (Json.Decode.maybe (Json.Decode.at [ "usage", "cost" ] Json.Decode.float))
