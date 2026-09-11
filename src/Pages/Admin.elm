@@ -27,6 +27,7 @@ module Pages.Admin exposing
     , initForUser
     , lastRegeneratedAtText
     , logSectionId
+    , noBackendMsgLogsText
     , notRegeneratedText
     , pendingChangesText
     , regeneratingText
@@ -39,6 +40,7 @@ module Pages.Admin exposing
 
 import Array exposing (Array)
 import Array.Extra
+import BackendMsgLog exposing (BackendMsgLogData, backendMsgLogToString)
 import Bytes exposing (Bytes)
 import Bytes.Encode
 import ChannelName
@@ -129,6 +131,11 @@ lastRegeneratedAtText =
 discordLinkingEnabledText : String
 discordLinkingEnabledText =
     "Discord account linking enabled"
+
+
+noBackendMsgLogsText : String
+noBackendMsgLogsText =
+    "No backendMsg logs"
 
 
 type Msg
@@ -306,6 +313,7 @@ type alias InitAdminData =
     , connections : List ( SessionIdHash, NonemptyDict ClientId ConnectionData )
     , filesCount : Int
     , toBackendLogs : Array ToBackendLogData
+    , backendMsgLogs : Array BackendMsgLogData
     , vulnerabilityChecks : String
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , lastBackup : Maybe LastBackup
@@ -1729,24 +1737,25 @@ view isMobile2 version time local adminData user model =
                     )
                 ]
             , adminData.vulnerabilityChecks |> Ui.text
-            , userSection isMobile2 local.localUser.timezone user adminData model
-            , guildsSection isMobile2 user adminData
-            , deletedGuildsSection isMobile2 user adminData
-            , discordGuildsSection isMobile2 user adminData
-            , dmChannelsSection isMobile2 user adminData
-            , discordDmChannelsSection isMobile2 user adminData
-            , discordUsersSection isMobile2 user adminData
-            , logSection isMobile2 local.localUser user adminData model
-            , apiKeysSection isMobile2 local user adminData model
-            , connectionsSection isMobile2 local.localUser.timezone user adminData
-            , sessionsSection isMobile2 local.localUser.timezone user adminData
+            , Ui.Lazy.lazy5 userSection isMobile2 local.localUser.timezone user adminData model
+            , Ui.Lazy.lazy3 guildsSection isMobile2 user adminData
+            , Ui.Lazy.lazy3 deletedGuildsSection isMobile2 user adminData
+            , Ui.Lazy.lazy3 discordGuildsSection isMobile2 user adminData
+            , Ui.Lazy.lazy3 dmChannelsSection isMobile2 user adminData
+            , Ui.Lazy.lazy3 discordDmChannelsSection isMobile2 user adminData
+            , Ui.Lazy.lazy3 discordUsersSection isMobile2 user adminData
+            , Ui.Lazy.lazy5 logSection isMobile2 local.localUser user adminData model
+            , Ui.Lazy.lazy5 apiKeysSection isMobile2 local user adminData model
+            , Ui.Lazy.lazy4 connectionsSection isMobile2 local.localUser.timezone user adminData
+            , Ui.Lazy.lazy4 sessionsSection isMobile2 local.localUser.timezone user adminData
             , websocketCloseEventsSection isMobile2 time local.localUser.timezone user adminData model
-            , webCodecsTestSection isMobile2 user
-            , wordSpellingGameSwedishSection isMobile2 user adminData
-            , filesSection isMobile2 user adminData
-            , stickersAndEmojisSection isMobile2 local user
-            , toBackendLogsSection isMobile2 time user adminData
-            , exportSection isMobile2 local.localUser.timezone user adminData model
+            , Ui.Lazy.lazy2 webCodecsTestSection isMobile2 user
+            , Ui.Lazy.lazy3 wordSpellingGameSwedishSection isMobile2 user adminData
+            , Ui.Lazy.lazy3 filesSection isMobile2 user adminData
+            , Ui.Lazy.lazy3 stickersAndEmojisSection isMobile2 local user
+            , Ui.Lazy.lazy4 toBackendLogsSection isMobile2 time user adminData
+            , Ui.Lazy.lazy4 backendMsgLogsSection isMobile2 time user adminData
+            , Ui.Lazy.lazy5 exportSection isMobile2 local.localUser.timezone user adminData model
             ]
         )
 
@@ -2664,25 +2673,70 @@ toBackendLogsSection isMobile currentTime user adminData =
         ]
 
 
+backendMsgLogsSection : Bool -> Time.Posix -> BackendUser -> AdminData -> Element Msg
+backendMsgLogsSection isMobile currentTime user adminData =
+    section
+        isMobile
+        user.expandedSections
+        BackendMsgLogsSection
+        [ if Array.isEmpty adminData.backendMsgLogs then
+            Ui.text noBackendMsgLogsText
+
+          else
+            Ui.column
+                [ Ui.spacing 12 ]
+                [ Ui.column
+                    [ Ui.spacing 4 ]
+                    [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text "Logs per hour")
+                    , eventsPerHourLineGraph
+                        currentTime
+                        "#4a90d9"
+                        (Array.toList adminData.backendMsgLogs |> List.map .startTime)
+                    ]
+                , backendMsgLogsTable adminData.backendMsgLogs
+                ]
+        ]
+
+
 toBackendLogsTable : Array ToBackendLogData -> Element Msg
 toBackendLogsTable logs =
-    let
-        duration : ToBackendLogData -> Duration
-        duration log =
-            Duration.from log.startTime log.endTime
+    Array.toList logs
+        |> List.map
+            (\log ->
+                { name = toBackendLogToString log.toBackendLog
+                , duration = Duration.from log.startTime log.endTime
+                }
+            )
+        |> logDurationsTable
 
+
+backendMsgLogsTable : Array BackendMsgLogData -> Element Msg
+backendMsgLogsTable logs =
+    Array.toList logs
+        |> List.map
+            (\log ->
+                { name = backendMsgLogToString log.backendMsgLog
+                , duration = Duration.from log.startTime log.endTime
+                }
+            )
+        |> logDurationsTable
+
+
+{-| Groups the durations by log type and shows how often each one ran along with how long
+the fastest, median and slowest of them took.
+-}
+logDurationsTable : List { name : String, duration : Duration } -> Element Msg
+logDurationsTable logs =
+    let
         grouped : SeqDict String (List Duration)
         grouped =
-            Array.foldl
+            List.foldl
                 (\log acc ->
                     let
-                        key =
-                            toBackendLogToString log.toBackendLog
-
                         durations =
-                            SeqDict.get key acc |> Maybe.withDefault []
+                            SeqDict.get log.name acc |> Maybe.withDefault []
                     in
-                    SeqDict.insert key (duration log :: durations) acc
+                    SeqDict.insert log.name (log.duration :: durations) acc
                 )
                 SeqDict.empty
                 logs
@@ -2753,7 +2807,7 @@ toBackendLogsTable logs =
     (Ui.row
         []
         [ header False 200 (Ui.text "Log type")
-        , header True 100 (Ui.text ("Count\u{00A0}(" ++ String.fromInt (Array.length logs) ++ ")"))
+        , header True 100 (Ui.text ("Count\u{00A0}(" ++ String.fromInt (List.length logs) ++ ")"))
         , header True 80 (Ui.text "Fastest")
         , header True 80 (Ui.text "Median")
         , header True 80 (Ui.text "Slowest")

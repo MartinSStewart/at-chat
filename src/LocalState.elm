@@ -145,6 +145,7 @@ module LocalState exposing
     )
 
 import Array exposing (Array)
+import BackendMsgLog exposing (BackendMsgLogData)
 import Call
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
@@ -721,6 +722,7 @@ type alias AdminData =
     , connections : List ( SessionIdHash, NonemptyDict ClientId ConnectionData )
     , filesCount : Int
     , toBackendLogs : Array ToBackendLogData
+    , backendMsgLogs : Array BackendMsgLogData
     , vulnerabilityChecks : String
     , serverSecretRefreshedAt : ServerSecretStatus
     , lastBackup : Maybe LastBackup

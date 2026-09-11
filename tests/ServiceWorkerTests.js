@@ -240,6 +240,23 @@ function readRepoFile(relativePath) {
 
 // The service worker answers with respondWith, so the response has to be caught on the way
 // past rather than returned.
+// The first bytes of a webp and of a jpeg, which is all the worker reads to tell a
+// thumbnail written as one from a thumbnail written as the other.
+function webpBytes() {
+    const bytes = crypto.getRandomValues(new Uint8Array(256));
+    bytes.set([0x52, 0x49, 0x46, 0x46], 0);
+    bytes.set([0x57, 0x45, 0x42, 0x50], 8);
+    return bytes;
+}
+
+
+function jpegBytes() {
+    const bytes = crypto.getRandomValues(new Uint8Array(256));
+    bytes.set([0xff, 0xd8, 0xff, 0xe0], 0);
+    return bytes;
+}
+
+
 function requestFile(listeners, url) {
     let responded = null;
 
@@ -404,7 +421,7 @@ async function run() {
     // taking the /file/e/ off the front of its address finds it where the server already
     // serves thumbnails from, and the key is already there to open it.
     await check("An encrypted thumbnail is served decrypted as webp", async () => {
-        const thumbnail = crypto.getRandomValues(new Uint8Array(256));
+        const thumbnail = webpBytes();
         const encryptedThumbnail = await crypto.subtle.encrypt(
             { name: "AES-GCM", iv: encrypted.cipherText.slice(0, 12) },
             encrypted.key,
@@ -430,6 +447,48 @@ async function run() {
         }
 
         if (response.headers.get("content-type") !== "image/webp") {
+            throw new Error("Got content type " + response.headers.get("content-type"));
+        }
+
+        if (Buffer.compare(Buffer.from(body), Buffer.from(thumbnail)) !== 0) {
+            throw new Error("The body isn't the thumbnail that was encrypted");
+        }
+    });
+
+    // A browser with no way to write webp makes the thumbnail a jpeg instead. Its address
+    // is the same either way, so the bytes are what say which of the two the page is being
+    // handed.
+    await check("A thumbnail a browser could only write as jpeg is served as jpeg", async () => {
+        // A file of its own, since the ciphertext of the webp above is cached under the
+        // address a thumbnail of that file is read from.
+        const jpegFileHash = "def456";
+        const thumbnail = jpegBytes();
+        const encryptedThumbnail = await crypto.subtle.encrypt(
+            { name: "AES-GCM", iv: encrypted.cipherText.slice(0, 12) },
+            encrypted.key,
+            thumbnail);
+
+        const combined = new Uint8Array(12 + encryptedThumbnail.byteLength);
+        combined.set(encrypted.cipherText.slice(0, 12), 0);
+        combined.set(new Uint8Array(encryptedThumbnail), 12);
+
+        databases.get("at-chat-file-keys").get("file-keys").set(
+            jpegFileHash,
+            await crypto.subtle.importKey(
+                "raw",
+                await crypto.subtle.exportKey("raw", encrypted.key),
+                "AES-GCM",
+                false,
+                ["decrypt"]));
+
+        served.set(
+            domain + "file/t/" + jpegFileHash,
+            () => new Response(combined, { status: 200 }));
+
+        const response = await requestFile(listeners, domain + "file/e/t/" + jpegFileHash);
+        const body = new Uint8Array(await response.arrayBuffer());
+
+        if (response.headers.get("content-type") !== "image/jpeg") {
             throw new Error("Got content type " + response.headers.get("content-type"));
         }
 

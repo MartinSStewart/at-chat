@@ -1167,6 +1167,15 @@ fileUploadTest config =
                         -- Reading the message back gives the key again, which is how a
                         -- device that didn't upload the file gets hold of it.
                         , T.checkState 100 (checkFileKeysLeftWithBrowser 2 admin.clientId)
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.attribute
+                                    (Html.Attributes.src
+                                        (FileStatus.encryptedThumbnailUrl (FileStatus.fileHash uploadedFileHash))
+                                    )
+                                ]
+                            )
                         ]
                     )
                 ]

@@ -197,7 +197,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             UnhandledHttpRequest
 
                 _ ->
-                    if String.startsWith "https://cdn.discordapp.com/avatars/" currentRequest.url then
+                    if
+                        String.startsWith "https://cdn.discordapp.com/avatars/" currentRequest.url
+                            || String.startsWith "https://cdn.discordapp.com/icons/" currentRequest.url
+                    then
                         BytesHttpResponse
                             { url = currentRequest.url
                             , statusCode = 200
@@ -362,6 +365,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
                 , admin.click 100 (Dom.id "guild_showUserOptions")
                 , admin.click 100 (Dom.id "userOptions_gotoAdmin")
+                , admin.click 100 (Dom.id "admin_expandSectionButton_BackendMsg logs")
+                , -- The backend only times its own messages in production, so there's nothing
+                  -- to show here in a test.
+                  admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text Pages.Admin.noBackendMsgLogsText ])
                 , admin.click 100 (Dom.id "admin_goToHomepage")
                 ]
             )

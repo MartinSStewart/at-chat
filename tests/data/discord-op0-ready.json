@@ -3206,6 +3206,7 @@
             "permission_overwrites": [],
             "name": "Textkanaler",
             "id": "705745250815311945",
+            "application_id": null,
             "flags": 0
           },
           {

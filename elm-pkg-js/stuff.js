@@ -410,9 +410,6 @@ async function e2eeInspectFile(bytes, contentType) {
     return { measured: null, thumbnail: null };
 }
 
-// Webp to match what the server makes for a file it can read, scaled down to the same box
-// it uses. Asking a canvas for a type it can't write is answered with a png rather than
-// with an error, so what came back has to be checked rather than trusted.
 async function e2eeThumbnail(bitmap) {
     const scale = Math.min(
         (e2eeMaxThumbnailHeight * 3) / bitmap.width,
@@ -431,11 +428,10 @@ async function e2eeThumbnail(bitmap) {
         canvas.height = Math.max(1, Math.round(bitmap.height * scale));
         canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
 
-        const blob = await new Promise((resolve) => {
-            canvas.toBlob(resolve, "image/webp", 0.8);
-        });
+        const blob = (await e2eeCanvasBlob(canvas, "image/webp"))
+            || (await e2eeCanvasBlob(canvas, "image/jpeg"));
 
-        if (blob === null || blob.type !== "image/webp") {
+        if (blob === null) {
             return null;
         }
 
@@ -443,6 +439,15 @@ async function e2eeThumbnail(bitmap) {
     } catch (error) {
         return null;
     }
+}
+
+function e2eeCanvasBlob(canvas, contentType) {
+    return new Promise((resolve) => {
+        canvas.toBlob(
+            (blob) => resolve(blob !== null && blob.type === contentType ? blob : null),
+            contentType,
+            0.8);
+    });
 }
 
 function e2eeMeasureVideo(bytes, contentType) {

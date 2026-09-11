@@ -253,6 +253,19 @@ async function waitForFileKey(fileHash) {
 // what kind of file it is holding.
 const octetStreamContentType = 136;
 
+// A thumbnail the browser made is webp where it could write one and jpeg where it couldn't,
+// and the address it is served from says neither, so the first bytes are what tell the two
+// apart. Jpeg is the one worth spotting: anything else the page is handed here was written
+// as webp.
+function thumbnailContentType(plainText) {
+    const bytes = new Uint8Array(plainText, 0, Math.min(3, plainText.byteLength));
+
+    return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+        ? "image/jpeg"
+        : "image/webp";
+}
+
+
 async function decryptedFileResponse(isDevelopment, encryptedUrl) {
     const start = encryptedUrl.indexOf('/file/e/');
     const rest = encryptedUrl.slice(start + '/file/e/'.length);
@@ -264,12 +277,13 @@ async function decryptedFileResponse(isDevelopment, encryptedUrl) {
 
     const fileHash = rest.slice(separator + 1);
 
-    // Thumbnails the browser made are always webp, and sit where the server's own
-    // thumbnails do, so their address never carried a content type in the first place.
+    // Thumbnails the browser made sit where the server's own thumbnails do, so their
+    // address never carried a content type in the first place. What kind of image one is
+    // comes out of the bytes once they have been decrypted.
     const isThumbnail = rest.slice(0, separator) === 't';
 
     const contentType = isThumbnail
-        ? "image/webp"
+        ? null
         : decodeURIComponent(rest.slice(0, separator));
 
     const origin = encryptedUrl.slice(0, start);
@@ -313,7 +327,11 @@ async function decryptedFileResponse(isDevelopment, encryptedUrl) {
         return new Response(plainText, {
             status: 200,
             statusText: "OK",
-            headers: { "Content-Type": contentType }
+            headers: {
+                "Content-Type": contentType === null
+                    ? thumbnailContentType(plainText)
+                    : contentType
+            }
         });
     } catch (error) {
         log("File decrypt error: " + error.message);

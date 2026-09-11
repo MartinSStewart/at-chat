@@ -774,6 +774,7 @@ type AdminUiSection
     | ConnectionsSection
     | FilesSection
     | ToBackendLogsSection
+    | BackendMsgLogsSection
     | StickersAndEmojisSection
     | WebsocketCloseEventsSection
     | SessionsSection
@@ -822,6 +823,9 @@ sectionToString section2 =
 
         ToBackendLogsSection ->
             "ToBackend logs"
+
+        BackendMsgLogsSection ->
+            "BackendMsg logs"
 
         StickersAndEmojisSection ->
             "Stickers and emojis"
