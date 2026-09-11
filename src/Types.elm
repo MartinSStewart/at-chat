@@ -22,6 +22,7 @@ module Types exposing
     , FrontendModel_(..)
     , FrontendMsg
     , FrontendMsg_(..)
+    , ImportChannelError(..)
     , ImportChannelStatus(..)
     , InitialLoadRequest(..)
     , LastBackupData
@@ -580,7 +581,7 @@ type FrontendMsg_
     | PressedDeleteGuild (Id GuildId)
     | PressedImportChannel (Id GuildId)
     | SelectedImportChannelFile (Id GuildId) File
-    | GotImportChannelFile (Id GuildId) String
+    | GotImportChannelFile (Id GuildId) { fileName : String, json : String }
     | PressedLeaveGuild (Id GuildId)
     | PressedCreateInviteLink (Id GuildId)
     | PressedDeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
@@ -762,8 +763,15 @@ type alias EditGuildForm =
 type ImportChannelStatus
     = NotImportingChannel
     | ImportingChannel
-    | ImportChannelFailed
+    | ImportChannelFailed ImportChannelError
     | ImportedChannel { encryptedMessages : Int }
+
+
+{-| Why a file the guild owner picked didn't turn into a channel.
+-}
+type ImportChannelError
+    = NotAChannelExport
+    | DiscordChannelsCantBeImported
 
 
 type alias NewGuildForm =
@@ -801,7 +809,7 @@ type ToBackend
     | AdminDataRequest (Maybe (Id PageId))
     | GetPublicGoMatchRequest (SecretId GamePublicId)
     | ExportChannelRequest ExportChannelId
-    | ImportChannelRequest (Id GuildId) String
+    | ImportChannelRequest (Id GuildId) { fileName : String, json : String }
 
 
 type BackendMsg
@@ -1010,7 +1018,7 @@ type ToFrontend
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
     | GetPublicGoMatchResponse (Result () Go.PublicGoMatchResponse)
     | ExportChannelResponse { fileName : String, json : String }
-    | ImportChannelResponse (Id GuildId) (Result () { encryptedMessages : Int })
+    | ImportChannelResponse (Id GuildId) (Result ImportChannelError { encryptedMessages : Int })
 
 
 type alias LoginData =

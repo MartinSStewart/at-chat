@@ -21,7 +21,6 @@ array, so the message at a given position is the same message in both exports.
 
 import Array exposing (Array)
 import Dict
-import Iso8601
 import Json.Decode
 import SafeJson exposing (SafeJson(..))
 import Time
@@ -42,9 +41,9 @@ a different (and worse) kind of problem than the two disagreeing about a message
 -}
 compareExports : Time.Posix -> String -> String -> Result String (List Difference)
 compareExports cutoff referenceExport newExport =
-    case ( parseMessages "reference export" referenceExport, parseMessages "new export" newExport ) of
+    case ( parseGroups "reference export" referenceExport, parseGroups "new export" newExport ) of
         ( Ok reference, Ok new ) ->
-            Ok (compareMessages cutoff "message " reference new)
+            Ok (compareGroups cutoff reference new)
 
         ( Err error, _ ) ->
             Err error
@@ -67,22 +66,88 @@ differenceToString difference =
                 ++ SafeJson.toString 0 new
 
 
-parseMessages : String -> String -> Result String (List SafeJson)
-parseMessages name export =
+{-| The channel's own messages, and then the messages of each of its threads. Threads hang
+off the channel rather than off the message they reply to, so they're listed separately and
+matched up by the id of that message.
+-}
+parseGroups : String -> String -> Result String (List ( String, List SafeJson ))
+parseGroups name export =
     case Json.Decode.decodeString SafeJson.decoder export of
-        Ok (JsonObject fields) ->
-            case Dict.get "messages" fields of
-                Just (JsonArray messages) ->
-                    Ok messages
+        Ok json ->
+            case channelOf json of
+                Just channel ->
+                    case messagesOf channel of
+                        Just messages ->
+                            Ok (( "message ", messages ) :: threadGroups channel)
 
-                _ ->
-                    Err ("The " ++ name ++ " has no \"messages\" array")
+                        Nothing ->
+                            Err ("The " ++ name ++ " has no \"messages\" array")
 
-        Ok _ ->
-            Err ("The " ++ name ++ " is not a JSON object")
+                Nothing ->
+                    Err ("The " ++ name ++ " isn't a channel export")
 
         Err error ->
             Err ("The " ++ name ++ " is not valid JSON: " ++ Json.Decode.errorToString error)
+
+
+{-| An export is the channel wrapped in the tag that says which kind of channel it is.
+-}
+channelOf : SafeJson -> Maybe SafeJson
+channelOf json =
+    case ( field "tag" json, field "args" json ) of
+        ( Just (JsonString _), Just (JsonArray [ channel ]) ) ->
+            Just channel
+
+        _ ->
+            Nothing
+
+
+messagesOf : SafeJson -> Maybe (List SafeJson)
+messagesOf json =
+    case field "messages" json of
+        Just (JsonArray messages) ->
+            Just messages
+
+        _ ->
+            Nothing
+
+
+threadGroups : SafeJson -> List ( String, List SafeJson )
+threadGroups channel =
+    case field "threads" channel of
+        Just (JsonArray entries) ->
+            List.filterMap
+                (\entry ->
+                    case ( field "k" entry, Maybe.andThen messagesOf (field "v" entry) ) of
+                        ( Just key, Just messages ) ->
+                            Just ( "thread " ++ SafeJson.toString 0 key ++ " message ", messages )
+
+                        _ ->
+                            Nothing
+                )
+                entries
+
+        _ ->
+            []
+
+
+compareGroups :
+    Time.Posix
+    -> List ( String, List SafeJson )
+    -> List ( String, List SafeJson )
+    -> List Difference
+compareGroups cutoff reference new =
+    List.concatMap
+        (\( path, referenceMessages ) ->
+            compareMessages
+                cutoff
+                path
+                referenceMessages
+                (List.filter (\( otherPath, _ ) -> otherPath == path) new
+                    |> List.concatMap Tuple.second
+                )
+        )
+        reference
 
 
 compareMessages : Time.Posix -> String -> List SafeJson -> List SafeJson -> List Difference
@@ -101,23 +166,16 @@ compareMessages cutoff path reference new =
             in
             case Array.get index newMessages of
                 Just newMessage ->
-                    (if isOldEnough cutoff referenceMessage && withoutThread referenceMessage /= withoutThread newMessage then
-                        [ MessageChanged messagePath (withoutThread referenceMessage) (withoutThread newMessage) ]
+                    if isOldEnough cutoff referenceMessage && referenceMessage /= newMessage then
+                        [ MessageChanged messagePath referenceMessage newMessage ]
 
-                     else
+                    else
                         []
-                    )
-                        ++ compareMessages
-                            cutoff
-                            (messagePath ++ " thread message ")
-                            (threadMessages referenceMessage)
-                            (threadMessages newMessage)
 
                 Nothing ->
-                    -- A recent message going missing is fine to ignore (it might not
-                    -- have existed yet when the backup was taken) but only if nothing
-                    -- old was nested inside it.
-                    if containsOldMessage cutoff referenceMessage then
+                    -- A recent message going missing is fine to ignore. It might not have
+                    -- existed yet when the backup was taken.
+                    if isOldEnough cutoff referenceMessage then
                         [ MessageMissing messagePath ]
 
                     else
@@ -127,22 +185,32 @@ compareMessages cutoff path reference new =
         |> List.concat
 
 
-{-| `deletedAt` is the fallback because a deleted message is the one kind of
-message that doesn't carry a `createdAt`.
+{-| Every kind of message carries a time as the first thing in it, either on its own (a
+message that was deleted, or someone joining) or as a field of the record that follows.
 -}
 messageTime : SafeJson -> Maybe Time.Posix
 messageTime message =
-    List.filterMap
-        (\key ->
-            case field key message of
-                Just (JsonString text) ->
-                    Iso8601.toTime text |> Result.toMaybe
+    case field "args" message of
+        Just (JsonArray (first :: _)) ->
+            case first of
+                JsonNumber millis ->
+                    Just (Time.millisToPosix (round millis))
 
                 _ ->
-                    Nothing
-        )
-        [ "createdAt", "deletedAt" ]
-        |> List.head
+                    List.filterMap
+                        (\key ->
+                            case field key first of
+                                Just (JsonNumber millis) ->
+                                    Just (Time.millisToPosix (round millis))
+
+                                _ ->
+                                    Nothing
+                        )
+                        [ "createdAt", "startedAt" ]
+                        |> List.head
+
+        _ ->
+            Nothing
 
 
 isOldEnough : Time.Posix -> SafeJson -> Bool
@@ -155,35 +223,6 @@ isOldEnough cutoff message =
             -- A message we can't date is checked anyway. Skipping it would let a
             -- corrupted timestamp hide every other change to that message.
             True
-
-
-containsOldMessage : Time.Posix -> SafeJson -> Bool
-containsOldMessage cutoff message =
-    isOldEnough cutoff message
-        || List.any (containsOldMessage cutoff) (threadMessages message)
-
-
-threadMessages : SafeJson -> List SafeJson
-threadMessages message =
-    case field "threadMessages" message of
-        Just (JsonArray messages) ->
-            messages
-
-        _ ->
-            []
-
-
-{-| Thread messages are compared separately, so they're removed before comparing
-the message they hang off of.
--}
-withoutThread : SafeJson -> SafeJson
-withoutThread message =
-    case message of
-        JsonObject fields ->
-            JsonObject (Dict.remove "threadMessages" fields)
-
-        _ ->
-            message
 
 
 field : String -> SafeJson -> Maybe SafeJson

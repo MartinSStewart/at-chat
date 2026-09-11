@@ -22,6 +22,8 @@ module Go exposing
     , ValidatedSetup
     , audio
     , boardSize9
+    , boardSizeFromInt
+    , boardSizeToInt
     , currentPlayersTurn
     , deadStones
     , dragEnd
@@ -210,6 +212,14 @@ boardSizeFromInt n =
 boardSizeToInt : BoardSize -> Int
 boardSizeToInt (BoardSize a) =
     a
+
+
+{-| Board sizes that arrive from outside, such as a channel import, are clamped rather than
+turned down, since a board a few rows too big is better than losing the match.
+-}
+boardSizeFromInt : Int -> BoardSize
+boardSizeFromInt int =
+    BoardSize (clamp minDimension maxDimension int)
 
 
 type alias ValidatedSetup =
