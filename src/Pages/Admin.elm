@@ -1729,24 +1729,24 @@ view isMobile2 version time local adminData user model =
                     )
                 ]
             , adminData.vulnerabilityChecks |> Ui.text
-            , userSection isMobile2 local.localUser.timezone user adminData model
-            , guildsSection isMobile2 user adminData
-            , deletedGuildsSection isMobile2 user adminData
-            , discordGuildsSection isMobile2 user adminData
-            , dmChannelsSection isMobile2 user adminData
-            , discordDmChannelsSection isMobile2 user adminData
-            , discordUsersSection isMobile2 user adminData
-            , logSection isMobile2 local.localUser user adminData model
-            , apiKeysSection isMobile2 local user adminData model
-            , connectionsSection isMobile2 local.localUser.timezone user adminData
-            , sessionsSection isMobile2 local.localUser.timezone user adminData
+            , Ui.Lazy.lazy5 userSection isMobile2 local.localUser.timezone user adminData model
+            , Ui.Lazy.lazy3 guildsSection isMobile2 user adminData
+            , Ui.Lazy.lazy3 deletedGuildsSection isMobile2 user adminData
+            , Ui.Lazy.lazy3 discordGuildsSection isMobile2 user adminData
+            , Ui.Lazy.lazy3 dmChannelsSection isMobile2 user adminData
+            , Ui.Lazy.lazy3 discordDmChannelsSection isMobile2 user adminData
+            , Ui.Lazy.lazy3 discordUsersSection isMobile2 user adminData
+            , Ui.Lazy.lazy5 logSection isMobile2 local.localUser user adminData model
+            , Ui.Lazy.lazy5 apiKeysSection isMobile2 local user adminData model
+            , Ui.Lazy.lazy4 connectionsSection isMobile2 local.localUser.timezone user adminData
+            , Ui.Lazy.lazy4 sessionsSection isMobile2 local.localUser.timezone user adminData
             , websocketCloseEventsSection isMobile2 time local.localUser.timezone user adminData model
-            , webCodecsTestSection isMobile2 user
-            , wordSpellingGameSwedishSection isMobile2 user adminData
-            , filesSection isMobile2 user adminData
-            , stickersAndEmojisSection isMobile2 local user
-            , toBackendLogsSection isMobile2 time user adminData
-            , exportSection isMobile2 local.localUser.timezone user adminData model
+            , Ui.Lazy.lazy2 webCodecsTestSection isMobile2 user
+            , Ui.Lazy.lazy3 wordSpellingGameSwedishSection isMobile2 user adminData
+            , Ui.Lazy.lazy3 filesSection isMobile2 user adminData
+            , Ui.Lazy.lazy3 stickersAndEmojisSection isMobile2 local user
+            , Ui.Lazy.lazy4 toBackendLogsSection isMobile2 time user adminData
+            , Ui.Lazy.lazy5 exportSection isMobile2 local.localUser.timezone user adminData model
             ]
         )
 
