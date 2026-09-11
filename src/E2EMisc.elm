@@ -64,7 +64,6 @@ import Test.Html.Selector
 import TimeInMinutes
 import Touch
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
-import User
 import UserColor
 import UserSession
 
@@ -620,7 +619,7 @@ adminConnectionsShowWhatIsViewedTest config =
                                     (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
                                 ]
                             )
-                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId User.ConnectionsSection)
+                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.ConnectionsSection)
                         , E2EHelper.hasExactText
                             adminPage
                             [ "Viewing: My new guild! #general", "Viewing: Nothing" ]
