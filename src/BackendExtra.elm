@@ -1,7 +1,6 @@
 module BackendExtra exposing
     ( addLog
     , addLogWithCmd
-    , adminBackendMsgLogs
     , adminData
     , adminDeletedGuilds
     , adminDiscordDmChannels
@@ -10,7 +9,6 @@ module BackendExtra exposing
     , adminDmChannels
     , adminGuilds
     , adminSessions
-    , adminToBackendLogs
     , asAdmin
     , asDiscordDmUser
     , asDiscordDmUser_AllowUserThatNeedsAuthAgain
@@ -1623,18 +1621,6 @@ adminSessions model =
     SeqDict.values model.sessions
         |> List.map (\session -> ( session.sessionIdHash, session ))
         |> SeqDict.fromList
-
-
-{-| Only the most recent logs are worth looking at, and the backend keeps a lot more than that.
--}
-adminToBackendLogs : BackendModel -> Array ToBackendLogData
-adminToBackendLogs model =
-    Array.slice (Array.length model.toBackendLogs - 1000) (Array.length model.toBackendLogs) model.toBackendLogs
-
-
-adminBackendMsgLogs : BackendModel -> Array BackendMsgLogData
-adminBackendMsgLogs model =
-    Array.slice (Array.length model.backendMsgLogs - 1000) (Array.length model.backendMsgLogs) model.backendMsgLogs
 
 
 wordListStatus : WordList -> LocalState.WordSpellingGameStatus

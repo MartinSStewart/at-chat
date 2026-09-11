@@ -8760,7 +8760,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             , adminDataResponse
                 changeId
                 clientId
-                (Pages.Admin.LoadToBackendLogs (FilledInByBackend (BackendExtra.adminToBackendLogs model)))
+                (Pages.Admin.LoadToBackendLogs (FilledInByBackend model.toBackendLogs))
             )
 
         Pages.Admin.LoadBackendMsgLogs _ ->
@@ -8768,7 +8768,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             , adminDataResponse
                 changeId
                 clientId
-                (Pages.Admin.LoadBackendMsgLogs (FilledInByBackend (BackendExtra.adminBackendMsgLogs model)))
+                (Pages.Admin.LoadBackendMsgLogs (FilledInByBackend model.backendMsgLogs))
             )
 
         Pages.Admin.HideLog logIndex ->
