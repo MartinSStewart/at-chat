@@ -189,17 +189,7 @@ type IsEncrypted
     | IsEncrypted AesPrivateKey EncryptedThumbnail
 
 
-{-| Whether a thumbnail was stored alongside an encrypted image. There is no key or hash to
-go with it: the thumbnail is encrypted with the file's key and stored under the file's hash.
-
-The server makes thumbnails by decoding an image, which it can't do for one it only has the
-ciphertext of, so this one was made by the browser. It only tries for an image big enough
-to need one, and an image the browser can't decode leaves it with nothing to scale down,
-hence the answer being recorded rather than worked out from the image's size.
-
-Whether it came out as webp or as jpeg isn't recorded: the address a thumbnail is served
-from carries no content type, so the service worker reads that out of the bytes.
-
+{-| Encrypted thumbnails can either be webp or jpeg (jpeg is a fallback because Safari can't create webp)
 -}
 type EncryptedThumbnail
     = NoEncryptedThumbnail
@@ -217,9 +207,6 @@ aesPrivateKey =
     AesPrivateKey
 
 
-{-| What the service worker needs in order to read an attached file back: the address the
-ciphertext is stored under, and the key that opens it.
--}
 fileKey : FileData -> Maybe { fileHash : String, key : Bytes }
 fileKey fileData =
     case ( fileData.isEncrypted, fileData.fileHash ) of

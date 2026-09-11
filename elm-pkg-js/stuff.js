@@ -410,14 +410,6 @@ async function e2eeInspectFile(bytes, contentType) {
     return { measured: null, thumbnail: null };
 }
 
-// Webp to match what the server makes for a file it can read, scaled down to the same box
-// it uses, and jpeg where the browser has no way to write webp. Safari is one of those, so
-// giving up on a browser that can't write webp left photos sent from it being fetched whole
-// every time the message was looked at.
-//
-// Which of the two it ended up as is never recorded: the address a thumbnail is served from
-// is the one the server's own thumbnails use and carries no content type, so the service
-// worker reads the answer out of the bytes instead.
 async function e2eeThumbnail(bitmap) {
     const scale = Math.min(
         (e2eeMaxThumbnailHeight * 3) / bitmap.width,
@@ -449,9 +441,6 @@ async function e2eeThumbnail(bitmap) {
     }
 }
 
-// Asking a canvas for a type it can't write is answered with a png rather than with an
-// error, so a blob that came back as something other than what was asked for is no answer
-// at all.
 function e2eeCanvasBlob(canvas, contentType) {
     return new Promise((resolve) => {
         canvas.toBlob(

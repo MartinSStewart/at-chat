@@ -26,6 +26,7 @@
 * Had 3 person call and one person joined with video and they had extremely bad RTT. Me and the other person had no
   issues (but weren't using video)
 * The app badge can get stuck at a number even when all the messages have been viewed
+* Code blocks aren't possible to spoiler
 
 Won't do:
 
