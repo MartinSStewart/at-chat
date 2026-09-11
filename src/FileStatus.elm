@@ -25,6 +25,7 @@ module FileStatus exposing
     , contentTypes
     , discordStickerUrl
     , domain
+    , encryptedThumbnailUrl
     , fileDataSerializeCodec
     , fileDataThumbnailUrl
     , fileDataUrl
@@ -193,8 +194,11 @@ go with it: the thumbnail is encrypted with the file's key and stored under the 
 
 The server makes thumbnails by decoding an image, which it can't do for one it only has the
 ciphertext of, so this one was made by the browser. It only tries for an image big enough
-to need one, and gives up if the browser has no way to write webp, hence the answer being
-recorded rather than worked out from the image's size.
+to need one, and an image the browser can't decode leaves it with nothing to scale down,
+hence the answer being recorded rather than worked out from the image's size.
+
+Whether it came out as webp or as jpeg isn't recorded: the address a thumbnail is served
+from carries no content type, so the service worker reads that out of the bytes.
 
 -}
 type EncryptedThumbnail
@@ -314,7 +318,8 @@ contentTypeHeader contentType2 =
 
 {-| A thumbnail sits where the server's own thumbnails do, under the file's hash, so the
 service worker takes the `/file/e/` off the front and finds it at the address it already
-serves thumbnails from.
+serves thumbnails from. There is no content type to put in it for the same reason, which is
+why the service worker works out what kind of image it decrypted from the bytes.
 -}
 encryptedThumbnailUrl : FileHash -> String
 encryptedThumbnailUrl (FileHash fileHash2) =

@@ -23,6 +23,7 @@ function loadPortHelpers() {
         source.slice(0, source.indexOf("exports.init"))
             + "\n; return { e2eeReadToJs: e2eeReadToJs"
             + ", e2eeFileEncryptedMessage: e2eeFileEncryptedMessage"
+            + ", e2eeThumbnail: e2eeThumbnail"
             + ", clearBrowserStorage: clearBrowserStorage"
             + ", e2eeManyMessagesDecryptedMessage: e2eeManyMessagesDecryptedMessage };")();
 }
@@ -85,6 +86,30 @@ const storeFileKeysRequestBytes =
     [1, 0, 6, 0, 0, 0, 2, 0, 0, 0, 3, 97, 98, 99, 0, 0, 0, 2, 7, 8, 0, 0, 0, 2, 100, 101,
      0, 0, 0, 1, 9];
 
+// Stands in for the canvas a thumbnail is drawn on. `writes` is the content types this
+// browser can write: asked for anything else it answers with a png, which is what a real
+// canvas does rather than reporting that it can't.
+function fakeCanvas(writes) {
+    return {
+        width: 0,
+        height: 0,
+        getContext: () => ({ drawImage: () => {} }),
+        toBlob: (callback, contentType) => {
+            const type = writes.includes(contentType) ? contentType : "image/png";
+
+            callback({
+                type: type,
+                arrayBuffer: () => Promise.resolve(new Uint8Array([1, 2, 3]).buffer)
+            });
+        }
+    };
+}
+
+
+// An image big enough to be worth a thumbnail. Only the size is read off it.
+const bigBitmap = { width: 4032, height: 3024 };
+
+
 async function run() {
     const js = loadPortHelpers();
     const failures = [];
@@ -133,6 +158,41 @@ async function run() {
                 { kind: "image", width: 640, height: 480 })),
             fileEncryptedBytes.imageWithThumbnail,
             "the message");
+    });
+
+    await check("A thumbnail is written as webp where the browser can write one", async () => {
+        global.document = { createElement: () => fakeCanvas(["image/webp"]) };
+
+        expectEqual(
+            Array.from(await js.e2eeThumbnail(bigBitmap)),
+            [1, 2, 3],
+            "the thumbnail");
+    });
+
+    // Safari is the reason this matters: giving up on a browser that can't write webp left
+    // every photo sent from one being fetched whole to be shown a few hundred pixels wide.
+    await check("A browser that can't write webp writes the thumbnail as jpeg", async () => {
+        global.document = { createElement: () => fakeCanvas(["image/jpeg"]) };
+
+        expectEqual(
+            Array.from(await js.e2eeThumbnail(bigBitmap)),
+            [1, 2, 3],
+            "the thumbnail");
+    });
+
+    await check("A browser that can write neither is left without a thumbnail", async () => {
+        global.document = { createElement: () => fakeCanvas([]) };
+
+        expectEqual(await js.e2eeThumbnail(bigBitmap), null, "the thumbnail");
+    });
+
+    await check("An image small enough to be shown whole gets no thumbnail", async () => {
+        global.document = { createElement: () => fakeCanvas(["image/webp"]) };
+
+        expectEqual(
+            await js.e2eeThumbnail({ width: 640, height: 480 }),
+            null,
+            "the thumbnail");
     });
 
     await check("A video whose length the container didn't say", () => {
