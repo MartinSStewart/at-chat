@@ -2592,6 +2592,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_NewChannel _ _ _ _ ->
                             True
 
+                        Types.Server_ImportedChannel _ _ _ ->
+                            True
+
                         Types.Server_EditChannel _ _ _ _ ->
                             True
 
@@ -2867,6 +2870,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
         ExportChannelResponse _ ->
             True
 
+        ImportChannelResponse _ _ ->
+            True
+
 
 allAttackerToBackendChanges : List ToBackend
 allAttackerToBackendChanges =
@@ -2890,6 +2896,7 @@ allAttackerToBackendChanges =
     , AdminDataRequest Nothing
     , GetPublicGoMatchRequest (SecretId.fromString "attacker-public-id")
     , ExportChannelRequest (ExportChannel_Guild legitGuildId (Id.fromInt 0))
+    , ImportChannelRequest legitGuildId """{"channel":{"name":"hacked"},"members":[],"messages":[]}"""
     , ExportChannelRequest
         (ExportChannel_Discord
             (Discord.idFromUInt64 (Unsafe.uint64 "184437096813953035"))

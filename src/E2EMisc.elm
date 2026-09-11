@@ -8,6 +8,7 @@ module E2EMisc exposing
     , exportChannelTest
     , exportDmChannelTest
     , friendsSearchTest
+    , importChannelTest
     , inactiveDmThreadsAreHiddenTest
     , inactiveThreadsAreHiddenTest
     , inviteUserAndDmChat
@@ -32,6 +33,7 @@ import Audio
 import Broadcast
 import DmChannel
 import DmChannelId
+import Drawing
 import Duration
 import E2EHelper
 import E2EVoiceChat
@@ -190,6 +192,31 @@ exportChannelTest config =
             E2EHelper.desktopWindow
             (\admin _ ->
                 [ E2EHelper.writeMessage admin 1000 "Hello everyone"
+
+                -- Something drawn on the message is part of the conversation, so it is exported
+                -- along with it
+                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                , T.andThen
+                    100
+                    (\data ->
+                        case E2EHelper.lastGuildChannelMessage data.backend of
+                            Just ( _, messageId, _ ) ->
+                                [ admin.mouseEnter
+                                    100
+                                    (Dom.id ("guild_message_" ++ Id.toString messageId))
+                                    ( 10, 10 )
+                                    []
+                                , admin.custom
+                                    100
+                                    (Drawing.profileImageAnchorId messageId)
+                                    "click"
+                                    (E2EHelper.drawingAnchorClick 30 25)
+                                , E2EHelper.drawZigzagStroke admin
+                                ]
+
+                            Nothing ->
+                                [ T.checkState 100 (\_ -> Err "The message wasn't written") ]
+                    )
                 , admin.click 1000 (Dom.id "guild_showMembers")
                 , admin.click 1000 (Dom.id "guild_exportChannel")
                 , T.checkState
@@ -202,7 +229,11 @@ exportChannelTest config =
                                         case
                                             List.filter
                                                 (\text -> not (String.contains text content))
-                                                [ "Hello everyone", "\"" ++ E2EHelper.adminName ++ "\"", "Stevie Steve" ]
+                                                [ "Hello everyone"
+                                                , "\"" ++ E2EHelper.adminName ++ "\""
+                                                , "Stevie Steve"
+                                                , "\"userIconDrawing\""
+                                                ]
                                         of
                                             [] ->
                                                 -- None of these messages were replied to, edited,
@@ -240,6 +271,42 @@ exportChannelTest config =
                                         ++ String.fromInt (List.length downloads)
                                     )
                     )
+                ]
+            )
+        ]
+
+
+{-| A guild owner can hand the guild settings a file the export channel button wrote and get a
+channel out of it. The channel that arrives holds the same conversation as the one that was
+exported, which is what makes an export a way of moving a channel rather than just reading it.
+-}
+importChannelTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+importChannelTest config =
+    E2EHelper.startTest
+        "Import a guild channel from an exported file"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.writeMessage admin 1000 "Hello everyone"
+                , admin.click 1000 (Dom.id "guild_inviteLinkCreatorRoute")
+                , E2EHelper.hasExactText admin [ Pages.Guild.importChannelText ]
+
+                -- Nothing has been exported yet, so the file picker offers a file that isn't a
+                -- channel export and it gets turned down instead of making a channel
+                , admin.click 1000 (Dom.id "guild_importChannel")
+                , E2EHelper.hasExactText admin [ Pages.Guild.importChannelFailedText ]
+                , admin.click 1000 (Dom.id "guild_openChannel_0")
+                , admin.click 1000 (Dom.id "guild_showMembers")
+                , admin.click 1000 (Dom.id "guild_exportChannel")
+                , admin.click 1000 (Dom.id "guild_inviteLinkCreatorRoute")
+                , admin.click 1000 (Dom.id "guild_importChannel")
+                , E2EHelper.hasExactText admin [ Pages.Guild.importedChannelText 0 ]
+                , admin.click 1000 (Dom.id "guild_openChannel_1")
+                , E2EHelper.hasExactText admin [ "Hello everyone" ]
                 ]
             )
         ]

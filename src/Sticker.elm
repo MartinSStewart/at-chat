@@ -4,6 +4,7 @@ module Sticker exposing
     , StickerUrl(..)
     , addUrl
     , animatedImageView
+    , fromBase4
     , idToString
     , stickerFailedToLoadText
     , toBase4
@@ -227,6 +228,52 @@ toBase4 n =
 
     else
         toBase4 (n // 4) ++ toBase4Helper (remainderBy 4 n)
+
+
+{-| Read back a number written with `toBase4`. The characters it uses are all invisible, so
+this is how something that carries one, such as a custom emoji in an exported channel, gets
+its id back.
+-}
+fromBase4 : String -> Maybe Int
+fromBase4 text =
+    case String.uncons text of
+        Just ( '-', rest ) ->
+            Maybe.map negate (fromBase4 rest)
+
+        Just _ ->
+            String.foldl
+                (\char total ->
+                    case ( total, fromBase4Helper char ) of
+                        ( Just total2, Just digit ) ->
+                            Just (4 * total2 + digit)
+
+                        _ ->
+                            Nothing
+                )
+                (Just 0)
+                text
+
+        Nothing ->
+            Nothing
+
+
+fromBase4Helper : Char -> Maybe Int
+fromBase4Helper char =
+    case char of
+        '\u{200B}' ->
+            Just 0
+
+        '\u{200C}' ->
+            Just 1
+
+        '\u{200D}' ->
+            Just 2
+
+        '\u{2060}' ->
+            Just 3
+
+        _ ->
+            Nothing
 
 
 toBase4Helper : Int -> String
