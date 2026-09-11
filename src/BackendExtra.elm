@@ -15,6 +15,7 @@ module BackendExtra exposing
     , asGuildMemberRpc
     , asGuildOwner
     , asUser
+    , backendMsgLog
     , channelDataToDecrypt
     , decryptOldMessages
     , discordDmChannelToFrontend
@@ -47,6 +48,7 @@ Most of the stuff in there doesn't neatly fit into it's own module so instead I'
 -}
 
 import Array
+import BackendMsgLog exposing (BackendMsgLog(..))
 import Broadcast
 import Bytes.Decode
 import Bytes.Encode
@@ -1549,6 +1551,7 @@ adminData model lastLogPageViewed =
             (SeqDict.toList model.connections)
     , filesCount = SeqDict.size model.files
     , toBackendLogs = Array.slice (Array.length model.toBackendLogs - 1000) (Array.length model.toBackendLogs) model.toBackendLogs
+    , backendMsgLogs = Array.slice (Array.length model.backendMsgLogs - 1000) (Array.length model.backendMsgLogs) model.backendMsgLogs
     , vulnerabilityChecks =
         case
             Bytes.Encode.sequence [ Bytes.Encode.unsignedInt8 255, Lamdera.Wire3.encodeFloat64 (0 / 0) ]
@@ -2445,6 +2448,217 @@ handleDrawingChange sessionId clientId changeId guildOrDmId anchor change model 
                         ]
                     )
                 )
+
+
+{-| The admin page groups BackendMsg updates by their variant name, so each message is
+boiled down to the variant it was built with before it's stored.
+-}
+backendMsgLog : BackendMsg -> BackendMsgLog
+backendMsgLog msg =
+    case msg of
+        SentLoginEmail _ _ _ ->
+            BackendMsgLog_SentLoginEmail
+
+        UserConnected _ _ ->
+            BackendMsgLog_UserConnected
+
+        UserDisconnected _ _ ->
+            BackendMsgLog_UserDisconnected
+
+        UserDisconnectedWithTime _ _ _ ->
+            BackendMsgLog_UserDisconnectedWithTime
+
+        BackendGotTime _ _ _ _ ->
+            BackendMsgLog_BackendGotTime
+
+        SentLogErrorEmail _ _ _ ->
+            BackendMsgLog_SentLogErrorEmail
+
+        SentNotificationEmail _ _ _ ->
+            BackendMsgLog_SentNotificationEmail
+
+        DiscordUserWebsocketMsg _ _ ->
+            BackendMsgLog_DiscordUserWebsocketMsg
+
+        SentDiscordGuildMessage _ _ _ _ _ _ _ _ _ ->
+            BackendMsgLog_SentDiscordGuildMessage
+
+        SentDiscordDmMessage _ _ _ _ _ _ _ ->
+            BackendMsgLog_SentDiscordDmMessage
+
+        DeletedDiscordGuildMessage _ _ _ _ _ _ ->
+            BackendMsgLog_DeletedDiscordGuildMessage
+
+        DeletedDiscordDmMessage _ _ _ _ _ ->
+            BackendMsgLog_DeletedDiscordDmMessage
+
+        EditedDiscordGuildMessage _ _ _ _ _ _ ->
+            BackendMsgLog_EditedDiscordGuildMessage
+
+        EditedDiscordDmMessage _ _ _ _ _ ->
+            BackendMsgLog_EditedDiscordDmMessage
+
+        DiscordAddedReactionToGuildMessage _ _ _ _ _ _ _ ->
+            BackendMsgLog_DiscordAddedReactionToGuildMessage
+
+        DiscordAddedReactionToDmMessage _ _ _ _ _ _ ->
+            BackendMsgLog_DiscordAddedReactionToDmMessage
+
+        DiscordRemovedReactionToGuildMessage _ _ _ _ _ _ _ ->
+            BackendMsgLog_DiscordRemovedReactionToGuildMessage
+
+        DiscordRemovedReactionToDmMessage _ _ _ _ _ _ ->
+            BackendMsgLog_DiscordRemovedReactionToDmMessage
+
+        DiscordTypingIndicatorSent ->
+            BackendMsgLog_DiscordTypingIndicatorSent
+
+        AiChatBackendMsg _ ->
+            BackendMsgLog_AiChatBackendMsg
+
+        GotDiscordUserAvatars _ _ ->
+            BackendMsgLog_GotDiscordUserAvatars
+
+        SentNotification _ _ _ _ _ ->
+            BackendMsgLog_SentNotification
+
+        GotVapidKeys _ ->
+            BackendMsgLog_GotVapidKeys
+
+        GotSlackChannels _ _ _ ->
+            BackendMsgLog_GotSlackChannels
+
+        GotSlackOAuth _ _ _ ->
+            BackendMsgLog_GotSlackOAuth
+
+        LinkDiscordUserStep1 _ _ _ _ _ ->
+            BackendMsgLog_LinkDiscordUserStep1
+
+        ReloadDiscordUserStep1 _ _ _ _ _ ->
+            BackendMsgLog_ReloadDiscordUserStep1
+
+        HandleReadyDataStep2 _ _ _ ->
+            BackendMsgLog_HandleReadyDataStep2
+
+        WebsocketCreatedHandleForUser _ _ ->
+            BackendMsgLog_WebsocketCreatedHandleForUser
+
+        WebsocketClosedByBackendForUser _ _ _ ->
+            BackendMsgLog_WebsocketClosedByBackendForUser
+
+        GatewayReconnectTick ->
+            BackendMsgLog_GatewayReconnectTick
+
+        WebsocketSentDataForUser _ _ ->
+            BackendMsgLog_WebsocketSentDataForUser
+
+        DiscordMessageCreate_AttachmentsUploaded _ _ ->
+            BackendMsgLog_DiscordMessageCreate_AttachmentsUploaded
+
+        DiscordMessageUpdate_AttachmentsUploaded _ _ ->
+            BackendMsgLog_DiscordMessageUpdate_AttachmentsUploaded
+
+        ReloadedDiscordGuildChannel _ _ _ _ ->
+            BackendMsgLog_ReloadedDiscordGuildChannel
+
+        ReloadedDiscordDmChannel _ _ _ ->
+            BackendMsgLog_ReloadedDiscordDmChannel
+
+        ExportBackendStep _ ->
+            BackendMsgLog_ExportBackendStep
+
+        CountToFrontendStep ->
+            BackendMsgLog_CountToFrontendStep
+
+        DownloadBackupChunkStep ->
+            BackendMsgLog_DownloadBackupChunkStep
+
+        ScheduledExportBackendStep _ ->
+            BackendMsgLog_ScheduledExportBackendStep
+
+        GotDiscordGuildChannelMessages _ _ _ _ _ ->
+            BackendMsgLog_GotDiscordGuildChannelMessages
+
+        GotDiscordDmChannelMessages _ _ _ _ ->
+            BackendMsgLog_GotDiscordDmChannelMessages
+
+        GotTimeForFailedToParseDiscordWebsocket _ _ _ ->
+            BackendMsgLog_GotTimeForFailedToParseDiscordWebsocket
+
+        GotTimeForDiscordForumPostRenamed _ _ ->
+            BackendMsgLog_GotTimeForDiscordForumPostRenamed
+
+        GotGuildMessageEmbed _ _ _ _ ->
+            BackendMsgLog_GotGuildMessageEmbed
+
+        GotDmMessageEmbed _ _ _ ->
+            BackendMsgLog_GotDmMessageEmbed
+
+        DiscordGotGuildMessageEmbed _ _ _ _ ->
+            BackendMsgLog_DiscordGotGuildMessageEmbed
+
+        DiscordGotDmMessageEmbed _ _ _ ->
+            BackendMsgLog_DiscordGotDmMessageEmbed
+
+        DiscordGotDataForJoinedOrCreatedGuild _ _ _ _ ->
+            BackendMsgLog_DiscordGotDataForJoinedOrCreatedGuild
+
+        DiscordGotGuildIcon _ _ ->
+            BackendMsgLog_DiscordGotGuildIcon
+
+        JoinedDiscordThread _ _ _ ->
+            BackendMsgLog_JoinedDiscordThread
+
+        ToBackendCompleted _ _ _ ->
+            BackendMsgLog_ToBackendCompleted
+
+        GotDiscordReadyDataStickers _ _ _ ->
+            BackendMsgLog_GotDiscordReadyDataStickers
+
+        GotDiscordMessageStickers _ _ _ ->
+            BackendMsgLog_GotDiscordMessageStickers
+
+        GotDiscordReadyDataCustomEmojis _ _ _ ->
+            BackendMsgLog_GotDiscordReadyDataCustomEmojis
+
+        GotDiscordMessageCustomEmojis _ _ _ ->
+            BackendMsgLog_GotDiscordMessageCustomEmojis
+
+        HourlyUpdate _ ->
+            BackendMsgLog_HourlyUpdate
+
+        GotDiscordStandardStickerPacks _ _ ->
+            BackendMsgLog_GotDiscordStandardStickerPacks
+
+        ScheduledExportUploadResult _ _ ->
+            BackendMsgLog_ScheduledExportUploadResult
+
+        RegeneratedServerSecret _ _ _ _ ->
+            BackendMsgLog_RegeneratedServerSecret
+
+        ReloadedDiscordGuildForAdmin _ _ _ _ _ _ ->
+            BackendMsgLog_ReloadedDiscordGuildForAdmin
+
+        GotTimeForWebsocketListenClose _ _ _ _ ->
+            BackendMsgLog_GotTimeForWebsocketListenClose
+
+        Rpc_GotFileUpload _ _ _ ->
+            BackendMsgLog_Rpc_GotFileUpload
+
+        GotEnglishWordList _ ->
+            BackendMsgLog_GotEnglishWordList
+
+        GotSwedishWordList _ ->
+            BackendMsgLog_GotSwedishWordList
+
+        Rpc_UserJoinedCall _ _ _ _ _ ->
+            BackendMsgLog_Rpc_UserJoinedCall
+
+        GotTimeForBackendMsg _ _ ->
+            BackendMsgLog_GotTimeForBackendMsg
+
+        BackendMsgCompleted _ _ ->
+            BackendMsgLog_BackendMsgCompleted
 
 
 toBackendLog : ToBackend -> ToBackendLog

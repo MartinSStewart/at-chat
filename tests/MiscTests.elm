@@ -1,6 +1,8 @@
 module MiscTests exposing (tests)
 
+import Array
 import Backend
+import BackendMsgLog exposing (BackendMsgLog(..))
 import Bytes.Encode
 import Coord
 import CssPixels exposing (CssPixels)
@@ -15,9 +17,66 @@ import Pages.Guild exposing (HighlightMessage(..), IsHovered(..))
 import SeqSet
 import String.Nonempty
 import Test exposing (Test)
+import Types exposing (BackendModel, BackendMsg(..))
 import User
 import UserAgent
 import X25519
+
+
+{-| In production every BackendMsg is wrapped in a GotTimeForBackendMsg so that it can be
+timed, and a BackendMsgCompleted then records how long it took.
+-}
+backendMsgLogTests : Test
+backendMsgLogTests =
+    let
+        model : BackendModel
+        model =
+            Backend.app_.init |> Tuple.first
+
+        startTime : Time.Posix
+        startTime =
+            Time.millisToPosix 1000
+
+        parseFailed : BackendMsg
+        parseFailed =
+            GotTimeForFailedToParseDiscordWebsocket Nothing "Invalid event name: NOPE" startTime
+    in
+    Test.describe
+        "BackendMsg logging"
+        [ Test.test "A wrapped message is handled like it would have been on its own" <|
+            \_ ->
+                Backend.app_.update (GotTimeForBackendMsg startTime parseFailed) model
+                    |> Tuple.first
+                    |> .logs
+                    |> Array.length
+                    |> Expect.equal 1
+        , Test.test "A message that somehow got wrapped twice is dropped instead of looping" <|
+            \_ ->
+                Backend.app_.update
+                    (GotTimeForBackendMsg startTime (GotTimeForBackendMsg startTime parseFailed))
+                    model
+                    |> Tuple.first
+                    |> .logs
+                    |> Array.length
+                    |> Expect.equal 0
+        , Test.test "Completing a message records which one it was and how long it took" <|
+            \_ ->
+                Backend.app_.update
+                    (BackendMsgCompleted
+                        BackendMsgLog_GatewayReconnectTick
+                        { startTime = startTime, endTime = Time.millisToPosix 1025 }
+                    )
+                    model
+                    |> Tuple.first
+                    |> .backendMsgLogs
+                    |> Array.toList
+                    |> Expect.equal
+                        [ { backendMsgLog = BackendMsgLog_GatewayReconnectTick
+                          , startTime = startTime
+                          , endTime = Time.millisToPosix 1025
+                          }
+                        ]
+        ]
 
 
 {-| The server reads more out of a file than the browser can, so what the browser measured
@@ -187,6 +246,7 @@ tests =
         [ redactPrivateKeysTests
         , attachmentUrlTests
         , uploadedFileMetadataTests
+        , backendMsgLogTests
         , Test.test "Round trip message view encoding" <|
             \_ ->
                 let

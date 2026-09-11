@@ -269,6 +269,7 @@ init =
       , lastScheduledExportTime = Nothing
       , sendMessageRateLimits = SeqDict.empty
       , toBackendLogs = Array.empty
+      , backendMsgLogs = Array.empty
       , stickers = SeqDict.empty
       , discordStickers = OneToOne.empty
       , customEmojis = SeqDict.empty
@@ -354,9 +355,76 @@ subscriptions model =
         ]
 
 
+{-| Every BackendMsg is timed the same way a ToBackend is: the message is held onto while
+Time.now runs, and once it's been handled a second Time.now says how long that took. The
+two messages that do the timing are handled here and never passed to updateHelper, so they
+can't be wrapped in a GotTimeForBackendMsg of their own and loop forever.
+
+Only production pays for the round trip. Outside of it the logs are never shown and the
+extra step would leave the end to end tests waiting a frame longer for every single thing
+the backend does.
+
+-}
 update : BackendMsg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 update msg model =
     case msg of
+        GotTimeForBackendMsg startTime backendMsg ->
+            let
+                ( model2, cmd ) =
+                    updateHelper backendMsg model
+            in
+            ( model2
+            , Command.batch
+                [ cmd
+                , Task.perform
+                    (\endTime ->
+                        BackendMsgCompleted
+                            (BackendExtra.backendMsgLog backendMsg)
+                            { startTime = startTime, endTime = endTime }
+                    )
+                    Time.now
+                ]
+            )
+
+        BackendMsgCompleted backendMsgLog { startTime, endTime } ->
+            let
+                count : Int
+                count =
+                    Array.length model.backendMsgLogs
+            in
+            ( { model
+                | backendMsgLogs =
+                    Array.push
+                        { backendMsgLog = backendMsgLog, startTime = startTime, endTime = endTime }
+                        (if count > 10000 then
+                            Array.slice (count - 5000) count model.backendMsgLogs
+
+                         else
+                            model.backendMsgLogs
+                        )
+              }
+            , Command.none
+            )
+
+        _ ->
+            if Env.isProduction then
+                ( model, Task.perform (\startTime -> GotTimeForBackendMsg startTime msg) Time.now )
+
+            else
+                updateHelper msg model
+
+
+updateHelper : BackendMsg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+updateHelper msg model =
+    case msg of
+        -- update handles these two and never passes them along, so reaching them here would
+        -- mean a message got wrapped twice. Dropping it ends the loop instead of feeding it.
+        GotTimeForBackendMsg _ _ ->
+            ( model, Command.none )
+
+        BackendMsgCompleted _ _ ->
+            ( model, Command.none )
+
         UserConnected sessionId clientId ->
             let
                 connections : SeqDict SessionId (NonemptyDict.NonemptyDict ClientId ConnectionData)

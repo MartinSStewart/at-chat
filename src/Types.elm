@@ -62,6 +62,7 @@ module Types exposing
 import AiChat
 import Array exposing (Array)
 import Audio
+import BackendMsgLog exposing (BackendMsgLog, BackendMsgLogData)
 import Browser exposing (UrlRequest)
 import Bytes exposing (Bytes)
 import Call exposing (CallId, FromJs)
@@ -488,6 +489,7 @@ type alias BackendModel =
     , lastScheduledExportTime : Maybe Time.Posix
     , sendMessageRateLimits : SeqDict (Id UserId) (Array Time.Posix)
     , toBackendLogs : Array ToBackendLogData
+    , backendMsgLogs : Array BackendMsgLogData
     , stickers : SeqDict (Id StickerId) StickerData
     , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
@@ -878,6 +880,8 @@ type BackendMsg
     | DiscordGotGuildIcon (Discord.Id Discord.GuildId) (Maybe FileStatus.UploadResponse)
     | JoinedDiscordThread (Discord.Id Discord.GuildId) (Result Discord.HttpError ()) Time.Posix
     | ToBackendCompleted ToBackendLog (Maybe (Id UserId)) { startTime : Time.Posix, endTime : Time.Posix }
+    | GotTimeForBackendMsg Time.Posix BackendMsg
+    | BackendMsgCompleted BackendMsgLog { startTime : Time.Posix, endTime : Time.Posix }
     | GotDiscordReadyDataStickers (Id UserId) (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | GotDiscordMessageStickers MessageFromGuildOrDm (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | GotDiscordReadyDataCustomEmojis (Id UserId) (List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )) Time.Posix

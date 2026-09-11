@@ -6203,6 +6203,7 @@ initAdminData adminData =
     , connections = adminData.connections
     , filesCount = adminData.filesCount
     , toBackendLogs = adminData.toBackendLogs
+    , backendMsgLogs = adminData.backendMsgLogs
     , vulnerabilityChecks = adminData.vulnerabilityChecks
     , serverSecretRefreshedAt = LocalState.NotBeingRegenerated adminData.serverSecretRegeneratedAt
     , lastBackup = adminData.lastBackup
