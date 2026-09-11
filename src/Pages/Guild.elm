@@ -3523,9 +3523,6 @@ importChannelSection guildId form =
     Ui.column
         [ Ui.spacing 8, Ui.paddingXY 16 0 ]
         [ Ui.el [ Ui.Font.bold ] (Ui.text importChannelText)
-        , Ui.el
-            [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ]
-            (Ui.text "Adds a channel to this guild from a file that the export channel button wrote.")
         , Ui.row
             [ Ui.spacing 8 ]
             [ submitButton (Dom.id "guild_importChannel") (PressedImportChannel guildId) importChannelText
