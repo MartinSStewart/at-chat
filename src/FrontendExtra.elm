@@ -5250,6 +5250,15 @@ changeUpdate localMsg local =
                                 local.discordGuilds
                     }
 
+                Server_DiscordUpdateGuild guildId name icon roles ->
+                    { local
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (\guild -> { guild | name = name, icon = icon, roles = roles })
+                                local.discordGuilds
+                    }
+
                 Server_DiscordUpdateRole guildId roleId role ->
                     { local
                         | discordGuilds =

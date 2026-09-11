@@ -1735,6 +1735,36 @@ update msg model =
                 ( _, Nothing ) ->
                     ( model, Command.none )
 
+        DiscordGotGuildIcon guildId uploadResponse ->
+            let
+                icon : Maybe FileStatus.FileHash
+                icon =
+                    Maybe.map .fileHash uploadResponse
+            in
+            case SeqDict.get guildId model.discordGuilds of
+                Just guild ->
+                    if guild.icon == icon then
+                        ( model, Command.none )
+
+                    else
+                        let
+                            model2 : BackendModel
+                            model2 =
+                                { model
+                                    | discordGuilds =
+                                        SeqDict.insert guildId { guild | icon = icon } model.discordGuilds
+                                }
+                        in
+                        ( model2
+                        , Broadcast.toDiscordGuild
+                            guildId
+                            (Server_DiscordUpdateGuild guildId guild.name icon guild.roles |> ServerChange)
+                            model2
+                        )
+
+                Nothing ->
+                    ( model, Command.none )
+
         JoinedDiscordThread guildId result time ->
             case result of
                 Ok () ->

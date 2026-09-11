@@ -875,6 +875,7 @@ type BackendMsg
             , icon : Maybe FileStatus.UploadResponse
             }
         )
+    | DiscordGotGuildIcon (Discord.Id Discord.GuildId) (Maybe FileStatus.UploadResponse)
     | JoinedDiscordThread (Discord.Id Discord.GuildId) (Result Discord.HttpError ()) Time.Posix
     | ToBackendCompleted ToBackendLog (Maybe (Id UserId)) { startTime : Time.Posix, endTime : Time.Posix }
     | GotDiscordReadyDataStickers (Id UserId) (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
@@ -1105,6 +1106,7 @@ type ServerChange
     | Server_GotDiscordDmMessageEmbed (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) ( Url, Result () EmbedData )
     | Server_DiscordGuildJoinedOrCreated (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) DiscordFrontendGuild
     | Server_DiscordUpdateChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (OptionalData (Maybe String)) (OptionalData (Maybe String)) (List Discord.Overwrite)
+    | Server_DiscordUpdateGuild (Discord.Id Discord.GuildId) GuildName (Maybe FileHash) (SeqDict (Discord.Id Discord.RoleId) DiscordRole)
     | Server_DiscordUpdateRole (Discord.Id Discord.GuildId) (Discord.Id Discord.RoleId) DiscordRole
     | Server_DiscordUpdateGuildCustomEmojis (Discord.Id Discord.GuildId) (SeqSet (Id CustomEmojiId))
     | Server_UpdateDiscordMembers (Discord.Id Discord.GuildId) (MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) })

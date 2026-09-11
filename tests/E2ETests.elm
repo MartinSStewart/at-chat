@@ -197,7 +197,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             UnhandledHttpRequest
 
                 _ ->
-                    if String.startsWith "https://cdn.discordapp.com/avatars/" currentRequest.url then
+                    if
+                        String.startsWith "https://cdn.discordapp.com/avatars/" currentRequest.url
+                            || String.startsWith "https://cdn.discordapp.com/icons/" currentRequest.url
+                    then
                         BytesHttpResponse
                             { url = currentRequest.url
                             , statusCode = 200

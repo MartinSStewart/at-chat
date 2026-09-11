@@ -2525,6 +2525,13 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             in
                             ( model3, cmd2 :: cmds )
 
+                        Discord.UserOutMsg_GuildUpdate guildUpdate ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleGuildUpdate guildUpdate model2
+                            in
+                            ( model3, cmd2 :: cmds )
+
                         Discord.UserOutMsg_GuildRoleUpdate roleUpdate ->
                             let
                                 ( model3, cmd2 ) =
@@ -2664,6 +2671,77 @@ handleChannelUpdated channel model =
                 (Server_DiscordUpdateChannel guildId channel.id channel.name channel.topic newOverwrites |> ServerChange)
                 model2
             )
+
+
+{-| A GUILD\_UPDATE event describes the guild as it looks after one of its settings
+changed. Renaming the guild, changing its icon and any change to its roles (including
+a role being deleted, which no other event tells us about) all arrive here, so the
+stored name, icon and roles are replaced with what the event says they are.
+
+We store the uploaded icon rather than the hash Discord names it by, so there's no way
+to tell from the event whether the icon changed. An icon that's still set is downloaded
+again and only broadcast if the file turns out to be a different one, while an icon that
+has been removed is cleared right away.
+
+-}
+handleGuildUpdate : Discord.GuildUpdate -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleGuildUpdate guildUpdate model =
+    case SeqDict.get guildUpdate.id model.discordGuilds of
+        Just guild ->
+            let
+                name : GuildName.GuildName
+                name =
+                    GuildName.fromStringLossy guildUpdate.name
+
+                roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
+                roles =
+                    Pages.Admin.rolesToDict guildUpdate.roles
+
+                icon : Maybe FileHash
+                icon =
+                    case guildUpdate.icon of
+                        Just _ ->
+                            guild.icon
+
+                        Nothing ->
+                            Nothing
+
+                model2 : BackendModel
+                model2 =
+                    { model
+                        | discordGuilds =
+                            SeqDict.insert
+                                guildUpdate.id
+                                { guild | name = name, icon = icon, roles = roles }
+                                model.discordGuilds
+                    }
+            in
+            ( model2
+            , Command.batch
+                [ Broadcast.toDiscordGuild
+                    guildUpdate.id
+                    (Server_DiscordUpdateGuild guildUpdate.id name icon roles |> ServerChange)
+                    model2
+                , case guildUpdate.icon of
+                    Just iconHash ->
+                        loadImage
+                            model2.serverSecret
+                            (Discord.guildIconUrl
+                                { size = Discord.DefaultImageSize
+                                , imageType = Discord.Choice1 Discord.Png
+                                }
+                                guildUpdate.id
+                                iconHash
+                            )
+                            |> Task.perform (DiscordGotGuildIcon guildUpdate.id)
+
+                    Nothing ->
+                        Command.none
+                ]
+            )
+
+        Nothing ->
+            ( model, Command.none )
 
 
 {-| A GUILD\_ROLE\_UPDATE event carries a role's current permissions. Those

@@ -17,6 +17,7 @@ import Effect.Websocket as Websocket
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Expect
 import GuildIcon
+import GuildName
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..), ThreadRouteWithMaybeMessage(..))
 import IdArray
@@ -28,6 +29,7 @@ import List.Extra
 import List.Nonempty
 import Local exposing (ChangeId(..))
 import LocalState
+import Log
 import MembersAndOwner
 import Message
 import MessageArray
@@ -254,9 +256,87 @@ checkGuildVisibleMessageCount admin isExpected data =
         )
 
 
-guildEmojisUpdateGuildId : Discord.Id Discord.GuildId
-guildEmojisUpdateGuildId =
+botTestGuildId : Discord.Id Discord.GuildId
+botTestGuildId =
     Unsafe.uint64 "705745250815311942" |> Discord.idFromUInt64
+
+
+{-| Checks the name, role names and whether an icon has been stored for the bot test
+guild (guild 705745250815311942) as the admin's frontend sees it.
+-}
+checkDiscordGuild :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> { name : String, roles : List String, hasIcon : Bool }
+    -> T.Data FrontendModel E2EHelper.BackendModel2
+    -> Result String ()
+checkDiscordGuild admin expected data =
+    withAdminLocalState admin
+        data
+        (\local ->
+            case SeqDict.get botTestGuildId local.discordGuilds of
+                Just guild ->
+                    let
+                        actual : { name : String, roles : List String, hasIcon : Bool }
+                        actual =
+                            { name = GuildName.toString guild.name
+                            , roles = SeqDict.values guild.roles |> List.map .name |> List.sort
+                            , hasIcon = guild.icon /= Nothing
+                            }
+                    in
+                    if actual == { expected | roles = List.sort expected.roles } then
+                        Ok ()
+
+                    else
+                        Err
+                            ("Expected the bot test guild to be named "
+                                ++ expected.name
+                                ++ " with the roles "
+                                ++ String.join ", " (List.sort expected.roles)
+                                ++ " and hasIcon="
+                                ++ boolToString expected.hasIcon
+                                ++ " but it is named "
+                                ++ actual.name
+                                ++ " with the roles "
+                                ++ String.join ", " actual.roles
+                                ++ " and hasIcon="
+                                ++ boolToString actual.hasIcon
+                            )
+
+                Nothing ->
+                    Err "The bot test guild is missing from the frontend"
+        )
+
+
+{-| Fails if the backend logged a Discord websocket message it couldn't parse.
+-}
+checkNoDiscordParseErrors : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkNoDiscordParseErrors data =
+    case
+        Array.toList (E2EHelper.unwrapBackend data.backend).logs
+            |> List.filterMap
+                (\{ log } ->
+                    case log of
+                        Log.FailedToParseDiscordWebsocket _ error ->
+                            Just error
+
+                        _ ->
+                            Nothing
+                )
+    of
+        [] ->
+            Ok ()
+
+        errors ->
+            Err ("The backend failed to parse a Discord websocket message: " ++ String.join ", " errors)
+
+
+boolToString : Bool -> String
+boolToString bool =
+    if bool then
+        "True"
+
+    else
+        "False"
 
 
 {-| Reads the names of the custom emojis the admin can use in the bot test guild
@@ -271,7 +351,7 @@ checkGuildCustomEmojis admin expected data =
     withAdminLocalState admin
         data
         (\local ->
-            case SeqDict.get guildEmojisUpdateGuildId local.discordGuilds of
+            case SeqDict.get botTestGuildId local.discordGuilds of
                 Just guild ->
                     let
                         names : List String
@@ -2981,6 +3061,51 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                           -- custom emoji itself is kept around for messages that already use it.
                           T.websocketSendString 100 connection """{"t":"GUILD_EMOJIS_UPDATE","s":11,"op":0,"d":{"guild_id":"705745250815311942","emojis":[{"roles":[],"require_colons":true,"name":"lamdera","managed":false,"id":"1499999999999999999","available":true,"animated":false}]}}"""
                         , T.checkState 1000 (checkGuildCustomEmojis admin [ "lamdera" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Guild update"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.checkState
+                            100
+                            (checkDiscordGuild
+                                admin
+                                { name = "Bot Test"
+                                , roles = [ "@everyone", "AT2-development", "AT3" ]
+                                , hasIcon = False
+                                }
+                            )
+                        , -- The guild has been renamed, given an icon and had the AT3 role deleted.
+                          -- A deleted role only shows up in GUILD_UPDATE, never in GUILD_ROLE_UPDATE.
+                          T.websocketSendString 100 connection """{"t":"GUILD_UPDATE","s":12,"op":0,"d":{"id":"705745250815311942","guild_id":"705745250815311942","name":"Bot Test renamed","icon":"cec688304e7f923a083704986c6aa80c","owner_id":"161098476632014848","afk_channel_id":null,"vanity_url_code":null,"description":null,"premium_tier":2,"premium_features":{"features":["BANNER"],"additional_emoji_slots":100},"clan":{"tag":"tngl","badge":"80e5e6bdbdd81e95b650670b2afba2cc"},"features":["COMMUNITY"],"roles":[{"unicode_emoji":null,"tags":{},"position":0,"permissions":"2248473465835073","name":"@everyone","mentionable":false,"managed":false,"id":"705745250815311942","icon":null,"hoist":false,"flags":0,"colors":{"tertiary_color":null,"secondary_color":null,"primary_color":0},"color":0},{"unicode_emoji":null,"tags":{"bot_id":"842829883185037333"},"position":1,"permissions":"6755399441132608","name":"AT2-development","mentionable":false,"managed":true,"id":"842840477475668019","icon":null,"hoist":false,"flags":0,"colors":{"tertiary_color":null,"secondary_color":null,"primary_color":0},"color":0}],"emojis":[],"stickers":[]}}"""
+                        , T.checkState
+                            1000
+                            (checkDiscordGuild
+                                admin
+                                { name = "Bot Test renamed"
+                                , roles = [ "@everyone", "AT2-development" ]
+                                , hasIcon = True
+                                }
+                            )
+                        , -- Boost related events carry nothing we keep track of, but they still have
+                          -- to parse or every one of them ends up in the error log.
+                          T.websocketSendString 100 connection """{"t":"GUILD_APPLIED_BOOSTS_UPDATE","s":13,"op":0,"d":{"guild_id":"705745250815311942","applied_guild_boosts":[{"id":"1493960145280041232","ends_at":"2026-05-01T00:00:00+00:00","pause_ends_at":null,"user_id":"161098476632014848"}]}}"""
+                        , T.websocketSendString 100 connection """{"t":"GUILD_POWERUP_ENTITLEMENTS_CREATE","s":14,"op":0,"d":{"guild_id":"705745250815311942","entitlements":[{"id":"1493960145280041233","sku_id":"1493960145280041234","user_id":"161098476632014848","type":1,"deleted":false,"consumed":false}]}}"""
+                        , T.checkState 100 checkNoDiscordParseErrors
                         ]
                     )
                 ]
