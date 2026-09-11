@@ -28,6 +28,8 @@
 * The app badge can get stuck at a number even when all the messages have been viewed
 * Code blocks aren't possible to spoiler
 * Double tapping send message shouldn't send twice
+* Video attachments not decoding when message is encrypted
+* Swiping quickly should move image more quickly so it can leave the screen for certain
 
 Won't do:
 
