@@ -27,6 +27,7 @@
   issues (but weren't using video)
 * The app badge can get stuck at a number even when all the messages have been viewed
 * Code blocks aren't possible to spoiler
+* Double tapping send message shouldn't send twice
 
 Won't do:
 
