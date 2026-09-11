@@ -2850,7 +2850,7 @@ type alias Channel =
     , recipients : OptionalData (List User)
     , icon : OptionalData (Maybe String)
     , ownerId : OptionalData (Id UserId)
-    , applicationId : OptionalData (Id ApplicationId)
+    , applicationId : OptionalData (Maybe (Id ApplicationId))
     , parentId : OptionalData (Maybe (Id ChannelId))
     , lastPinTimestamp : OptionalData Time.Posix
     , permissions : OptionalData Permissions
@@ -4459,7 +4459,7 @@ decodeChannel =
         |> JD.andMap (decodeOptionalData "recipients" (JD.list decodeUser))
         |> JD.andMap (decodeOptionalData "icon" (JD.nullable JD.string))
         |> JD.andMap (decodeOptionalData "owner_id" decodeId)
-        |> JD.andMap (decodeOptionalData "application_id" decodeId)
+        |> JD.andMap (decodeOptionalData "application_id" (JD.nullable decodeId))
         |> JD.andMap (decodeOptionalData "parent_id" (JD.nullable decodeId))
         |> JD.andMap (decodeOptionalData "last_pin_timestamp" Iso8601.decoder)
         |> JD.andMap (decodeOptionalData "permissions" decodePermissions)
