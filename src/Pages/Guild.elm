@@ -28,6 +28,9 @@ module Pages.Guild exposing
     , guildNotFoundText
     , guildView
     , homePageLoggedInView
+    , importChannelFailedText
+    , importChannelText
+    , importedChannelText
     , leaveGuildText
     , missingPrivateKeyText
     , newGuildFormInit
@@ -39,6 +42,7 @@ module Pages.Guild exposing
     , olderUnreadMessagesText
     , profileImageButtonId
     , requestAcceptedText
+    , setImportChannelStatus
     , startOfThreadText
     , startedACallText
     , threadMessageHtmlId
@@ -112,7 +116,7 @@ import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
-import Types exposing (EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
+import Types exposing (EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), ImportChannelStatus(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -3487,12 +3491,102 @@ guildSettingsView model loggedIn local guildId guild =
                     (MuteSettings.isGuildSpecificallyMute local.localUser.user.muteSettings guildId)
                 )
             , if isOwner then
+                importChannelSection guildId editGuildForm
+
+              else
+                Ui.none
+            , if isOwner then
                 deleteGuildSection guildId guild editGuildForm
 
               else
                 leaveGuildSection guildId editGuildForm
             ]
         )
+
+
+importChannelText : String
+importChannelText =
+    "Import channel"
+
+
+importChannelFailedText : String
+importChannelFailedText =
+    "That file isn't a channel export"
+
+
+{-| Turns a file that the export channel button wrote into a channel in this guild. Whatever
+was encrypted in the channel it came from can't be read here, so those messages arrive as
+deleted ones and the owner is told how many there were.
+-}
+importChannelSection : Id GuildId -> EditGuildForm -> Element FrontendMsg_
+importChannelSection guildId form =
+    Ui.column
+        [ Ui.spacing 8, Ui.paddingXY 16 0 ]
+        [ Ui.el [ Ui.Font.bold ] (Ui.text importChannelText)
+        , Ui.el
+            [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ]
+            (Ui.text "Adds a channel to this guild from a file that the export channel button wrote.")
+        , Ui.row
+            [ Ui.spacing 8 ]
+            [ submitButton (Dom.id "guild_importChannel") (PressedImportChannel guildId) importChannelText
+            , case form.importChannel of
+                NotImportingChannel ->
+                    Ui.none
+
+                ImportingChannel ->
+                    Ui.text "Importing..."
+
+                ImportChannelFailed ->
+                    Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text importChannelFailedText)
+
+                ImportedChannel { encryptedMessages } ->
+                    Ui.text (importedChannelText encryptedMessages)
+            ]
+        ]
+
+
+importedChannelText : Int -> String
+importedChannelText encryptedMessages =
+    if encryptedMessages == 0 then
+        "Imported!"
+
+    else if encryptedMessages == 1 then
+        "Imported! 1 encrypted message was left out"
+
+    else
+        "Imported! " ++ String.fromInt encryptedMessages ++ " encrypted messages were left out"
+
+
+{-| The import status is kept with the rest of the guild settings form, which might not exist
+yet when an import starts, so it gets filled in from the guild the same way opening the settings
+would have.
+-}
+setImportChannelStatus : Id GuildId -> ImportChannelStatus -> LocalState -> LoggedIn2 -> LoggedIn2
+setImportChannelStatus guildId status local loggedIn =
+    { loggedIn
+        | editGuildForm =
+            SeqDict.update
+                guildId
+                (\maybeForm ->
+                    case ( maybeForm, SeqDict.get guildId local.guilds ) of
+                        ( Just form, _ ) ->
+                            Just { form | importChannel = status }
+
+                        ( Nothing, Just guild ) ->
+                            Just
+                                { name = GuildName.toString guild.name
+                                , deleteConfirmation = ""
+                                , showDeleteConfirmation = False
+                                , showLeaveConfirmation = False
+                                , pressedSubmit = False
+                                , importChannel = status
+                                }
+
+                        ( Nothing, Nothing ) ->
+                            Nothing
+                )
+                loggedIn.editGuildForm
+    }
 
 
 editGuildFormInit : FrontendGuild -> EditGuildForm
@@ -3502,6 +3596,7 @@ editGuildFormInit guild =
     , showDeleteConfirmation = False
     , showLeaveConfirmation = False
     , pressedSubmit = False
+    , importChannel = NotImportingChannel
     }
 
 

@@ -22,6 +22,7 @@ module Types exposing
     , FrontendModel_(..)
     , FrontendMsg
     , FrontendMsg_(..)
+    , ImportChannelStatus(..)
     , InitialLoadRequest(..)
     , LastBackupData
     , LoadStatus(..)
@@ -102,7 +103,7 @@ import ImageViewer
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendChannel, BackendGuild, BackupContents, ConnectionData, DeletedBackendGuild, DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReload, DiscordFrontendGuild, DiscordRole, FrontendGuild, JoinGuildError, LastBackup, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
+import LocalState exposing (BackendChannel, BackendGuild, BackupContents, ConnectionData, DeletedBackendGuild, DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReload, DiscordFrontendGuild, DiscordRole, FrontendChannel, FrontendGuild, JoinGuildError, LastBackup, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -578,6 +579,9 @@ type FrontendMsg_
     | PressedResetEditGuildChanges (Id GuildId)
     | PressedSubmitEditGuildChanges (Id GuildId) EditGuildForm
     | PressedDeleteGuild (Id GuildId)
+    | PressedImportChannel (Id GuildId)
+    | SelectedImportChannelFile (Id GuildId) File
+    | GotImportChannelFile (Id GuildId) String
     | PressedLeaveGuild (Id GuildId)
     | PressedCreateInviteLink (Id GuildId)
     | PressedDeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
@@ -750,7 +754,17 @@ type alias EditGuildForm =
     , showDeleteConfirmation : Bool
     , showLeaveConfirmation : Bool
     , pressedSubmit : Bool
+    , importChannel : ImportChannelStatus
     }
+
+
+{-| Where the guild owner has got to with importing a channel they exported earlier.
+-}
+type ImportChannelStatus
+    = NotImportingChannel
+    | ImportingChannel
+    | ImportChannelFailed
+    | ImportedChannel { encryptedMessages : Int }
 
 
 type alias NewGuildForm =
@@ -788,6 +802,7 @@ type ToBackend
     | AdminDataRequest (Maybe (Id PageId))
     | GetPublicGoMatchRequest (SecretId GamePublicId)
     | ExportChannelRequest ExportChannelId
+    | ImportChannelRequest (Id GuildId) String
 
 
 type BackendMsg
@@ -996,6 +1011,7 @@ type ToFrontend
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
     | GetPublicGoMatchResponse (Result () Go.PublicGoMatchResponse)
     | ExportChannelResponse { fileName : String, json : String }
+    | ImportChannelResponse (Id GuildId) (Result () { encryptedMessages : Int })
 
 
 type alias LoginData =
@@ -1036,6 +1052,7 @@ type ServerChange
       Server_SendMessage (Id UserId) FrontendUser Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
     | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
+    | Server_ImportedChannel (Id GuildId) (Id ChannelId) FrontendChannel
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
     | Server_EditGuildName (Id GuildId) GuildName

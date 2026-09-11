@@ -5,6 +5,7 @@ module CustomEmoji exposing
     , addUrl
     , emojiNameFromString
     , emojiNameToString
+    , idFromString
     , idToString
     , view
     , viewHelper
@@ -197,3 +198,18 @@ viewHelper emojiSize yOffset customEmoji animationMode =
 idToString : Id CustomEmojiId -> String
 idToString id =
     "❓" ++ Sticker.toBase4 (Id.toInt id) ++ "\u{FEFF}"
+
+
+{-| Read back an id written by `idToString`.
+-}
+idFromString : String -> Maybe (Id CustomEmojiId)
+idFromString text =
+    case ( String.startsWith "❓" text, String.endsWith "\u{FEFF}" text ) of
+        ( True, True ) ->
+            String.dropLeft 1 text
+                |> String.dropRight 1
+                |> Sticker.fromBase4
+                |> Maybe.map Id.fromInt
+
+        _ ->
+            Nothing

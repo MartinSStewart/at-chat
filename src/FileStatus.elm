@@ -21,6 +21,8 @@ module FileStatus exposing
     , addFileHash
     , aesPrivateKey
     , contentType
+    , contentTypeFromInt
+    , contentTypeToInt
     , contentTypeType
     , contentTypes
     , discordStickerUrl
@@ -30,6 +32,7 @@ module FileStatus exposing
     , fileDataThumbnailUrl
     , fileDataUrl
     , fileHash
+    , fileHashToString
     , fileKey
     , fileUrl
     , gifContent
@@ -411,10 +414,28 @@ fileHash =
     FileHash
 
 
+fileHashToString : FileHash -> String
+fileHashToString (FileHash a) =
+    a
+
+
 {-| OpaqueVariants
 -}
 type ContentType
     = ContentType Int
+
+
+{-| What a content type looks like in a file url. Anything that writes one down, such as a
+channel export, needs to be able to read it back.
+-}
+contentTypeToInt : ContentType -> Int
+contentTypeToInt (ContentType a) =
+    a
+
+
+contentTypeFromInt : Int -> ContentType
+contentTypeFromInt =
+    ContentType
 
 
 contentType : String -> ContentType

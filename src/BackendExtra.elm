@@ -54,8 +54,8 @@ module BackendExtra exposing
 Most of the stuff in there doesn't neatly fit into it's own module so instead I'm just moving lots of functions here instead.
 -}
 
-import Array exposing (Array)
-import BackendMsgLog exposing (BackendMsgLog(..), BackendMsgLogData)
+import Array
+import BackendMsgLog exposing (BackendMsgLog(..))
 import Broadcast
 import Bytes.Decode
 import Bytes.Encode
@@ -105,7 +105,7 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
-import ToBackendLog exposing (ToBackendLog(..), ToBackendLogData)
+import ToBackendLog exposing (ToBackendLog(..))
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), ChannelDataToDecrypt, ChannelDataToEncrypt, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, FrontendUser)
@@ -2941,6 +2941,9 @@ toBackendLog toBackend =
 
         ExportChannelRequest _ ->
             ToBackendLog_ExportChannelRequest
+
+        ImportChannelRequest _ _ ->
+            ToBackendLog_ImportChannelRequest
 
 
 asGuildMember :

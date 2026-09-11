@@ -2283,6 +2283,15 @@ isPressMsg msg =
         PressedDeleteGuild _ ->
             True
 
+        PressedImportChannel _ ->
+            True
+
+        SelectedImportChannelFile _ _ ->
+            False
+
+        GotImportChannelFile _ _ ->
+            False
+
         PressedLeaveGuild _ ->
             True
 
@@ -4431,6 +4440,15 @@ changeUpdate localMsg local =
                             SeqDict.updateIfExists
                                 guildId
                                 (LocalState.createChannelFrontend time local.localUser.session.userId channelName channelDescription)
+                                local.guilds
+                    }
+
+                Server_ImportedChannel guildId channelId channel ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (\guild -> { guild | channels = SeqDict.insert channelId channel guild.channels })
                                 local.guilds
                     }
 

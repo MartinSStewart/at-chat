@@ -54,6 +54,7 @@ module LocalState exposing
     , callStartedText
     , canSendDiscordMessage
     , canViewDiscordChannel
+    , channelToFrontend
     , createChannel
     , createChannelFrontend
     , createChannelMessageBackend

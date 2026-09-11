@@ -18,6 +18,7 @@ import Bytes.Encode
 import Call exposing (RemoteCallData)
 import ChannelDescription
 import ChannelExport
+import ChannelImport
 import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
@@ -41,7 +42,7 @@ import FileStatus exposing (FileData, FileId)
 import Game
 import Go
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import ImageEditor
 import Lamdera as LamderaCore
@@ -6733,6 +6734,65 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Nothing ->
                     ( model, GetPublicGoMatchResponse (Err ()) |> Lamdera.sendToFrontend clientId )
+
+        ImportChannelRequest guildId json ->
+            BackendExtra.asGuildOwner
+                model
+                sessionId
+                guildId
+                (\userId _ guild ->
+                    case ChannelImport.decode json of
+                        Ok imported ->
+                            let
+                                channelId : Id ChannelId
+                                channelId =
+                                    Id.nextId guild.channels
+
+                                channel : BackendChannel
+                                channel =
+                                    { createdAt = Maybe.withDefault time imported.createdAt
+                                    , createdBy = Maybe.withDefault userId imported.createdBy
+                                    , name = imported.name
+                                    , description = imported.description
+                                    , messages = imported.messages
+                                    , status = LocalState.ChannelActive
+                                    , lastTypedAt = SeqDict.empty
+                                    , threads = imported.threads
+                                    , dateDividerDrawings = imported.dateDividerDrawings
+                                    , games = SeqDict.empty
+                                    }
+
+                                model2 : BackendModel
+                                model2 =
+                                    { model
+                                        | guilds =
+                                            SeqDict.insert
+                                                guildId
+                                                { guild | channels = SeqDict.insert channelId channel guild.channels }
+                                                model.guilds
+                                    }
+                            in
+                            ( model2
+                            , Command.batch
+                                [ case
+                                    LocalState.channelToFrontend guildId channelId Nothing model2.goMatchPublicIds channel
+                                  of
+                                    Just frontendChannel ->
+                                        Broadcast.toGuild
+                                            guildId
+                                            (Server_ImportedChannel guildId channelId frontendChannel |> ServerChange)
+                                            model2
+
+                                    Nothing ->
+                                        Command.none
+                                , ImportChannelResponse guildId (Ok { encryptedMessages = imported.encryptedMessages })
+                                    |> Lamdera.sendToFrontend clientId
+                                ]
+                            )
+
+                        Err _ ->
+                            ( model, ImportChannelResponse guildId (Err ()) |> Lamdera.sendToFrontend clientId )
+                )
 
         ExportChannelRequest exportChannelId ->
             case exportChannelId of

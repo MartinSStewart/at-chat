@@ -27,6 +27,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.File as File
 import Effect.File.Download
 import Effect.File.Select
 import Effect.Http as Http
@@ -90,7 +91,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Drag(..), DragTarget(..), ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), ImportChannelStatus(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -3216,6 +3217,27 @@ updateLoaded msg model =
 
         PressedExportChannel exportChannelId ->
             ( model, Lamdera.sendToBackend (ExportChannelRequest exportChannelId) )
+
+        PressedImportChannel guildId ->
+            ( model
+            , Effect.File.Select.file [ "application/json" ] (SelectedImportChannelFile guildId)
+            )
+
+        SelectedImportChannelFile guildId file ->
+            ( model, File.toString file |> Task.perform (GotImportChannelFile guildId) )
+
+        GotImportChannelFile guildId json ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( Pages.Guild.setImportChannelStatus
+                        guildId
+                        ImportingChannel
+                        (Local.model loggedIn.localState)
+                        loggedIn
+                    , Lamdera.sendToBackend (ImportChannelRequest guildId json)
+                    )
+                )
+                model
 
         PressedAddPrivateKeyToAccount ->
             case
@@ -8714,6 +8736,25 @@ updateLoadedFromBackend msg model =
 
         ExportChannelResponse { fileName, json } ->
             ( model, Effect.File.Download.string fileName "application/json" json )
+
+        ImportChannelResponse guildId result ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( Pages.Guild.setImportChannelStatus
+                        guildId
+                        (case result of
+                            Ok { encryptedMessages } ->
+                                ImportedChannel { encryptedMessages = encryptedMessages }
+
+                            Err () ->
+                                ImportChannelFailed
+                        )
+                        (Local.model loggedIn.localState)
+                        loggedIn
+                    , Command.none
+                    )
+                )
+                model
 
 
 view : AudioData -> FrontendModel_ -> Browser.Document FrontendMsg_
