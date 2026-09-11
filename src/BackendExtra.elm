@@ -1,7 +1,16 @@
 module BackendExtra exposing
     ( addLog
     , addLogWithCmd
+    , adminBackendMsgLogs
     , adminData
+    , adminDeletedGuilds
+    , adminDiscordDmChannels
+    , adminDiscordGuilds
+    , adminDiscordUsers
+    , adminDmChannels
+    , adminGuilds
+    , adminSessions
+    , adminToBackendLogs
     , asAdmin
     , asDiscordDmUser
     , asDiscordDmUser_AllowUserThatNeedsAuthAgain
@@ -47,8 +56,8 @@ module BackendExtra exposing
 Most of the stuff in there doesn't neatly fit into it's own module so instead I'm just moving lots of functions here instead.
 -}
 
-import Array
-import BackendMsgLog exposing (BackendMsgLog(..))
+import Array exposing (Array)
+import BackendMsgLog exposing (BackendMsgLog(..), BackendMsgLogData)
 import Broadcast
 import Bytes.Decode
 import Bytes.Encode
@@ -95,10 +104,10 @@ import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
-import SessionIdHash
+import SessionIdHash exposing (SessionIdHash)
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
-import ToBackendLog exposing (ToBackendLog(..))
+import ToBackendLog exposing (ToBackendLog(..), ToBackendLogData)
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), ChannelDataToDecrypt, ChannelDataToEncrypt, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, FrontendUser)
@@ -1432,8 +1441,7 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
 
 adminData : BackendModel -> Id PageId -> InitAdminData
 adminData model lastLogPageViewed =
-    { users = model.users
-    , emailNotificationsEnabled = model.emailNotificationsEnabled
+    { emailNotificationsEnabled = model.emailNotificationsEnabled
     , signupsEnabled = model.signupsEnabled
     , discordLinkingEnabled = model.discordLinkingEnabled
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
@@ -1441,94 +1449,6 @@ adminData model lastLogPageViewed =
     , slackClientSecret = model.slackClientSecret
     , openRouterKey = model.openRouterKey
     , postmarkApiKey = model.postmarkApiKey
-    , dmChannels =
-        SeqDict.map
-            (\_ channel ->
-                { messageCount = IdArray.length channel.messages
-                , threadCount = SeqDict.size channel.threads
-                }
-            )
-            model.dmChannels
-    , discordDmChannels =
-        SeqDict.map
-            (\_ channel ->
-                { members = channel.members
-                , messageCount = IdArray.length channel.messages
-                , firstMessage = IdArray.get (Id.fromInt 0) channel.messages
-                }
-            )
-            model.discordDmChannels
-    , discordUsers =
-        SeqDict.map
-            (\_ discordUser ->
-                case discordUser of
-                    FullData data ->
-                        FullData_ForAdmin
-                            { user = data.user
-                            , linkedTo = data.linkedTo
-                            , icon = data.icon
-                            , linkedAt = data.linkedAt
-                            , isLoadingData = data.isLoadingData
-                            , gateway =
-                                { websocketIsOpen = Maybe.Extra.isJust data.connection.websocketHandle
-                                , failedReconnectAttempts = data.connection.reconnect.failedAttempts
-                                }
-                            }
-
-                    BasicData data ->
-                        BasicData_ForAdmin data
-
-                    NeedsAuthAgain data ->
-                        NeedsAuthAgain_ForAdmin data
-            )
-            model.discordUsers
-    , discordGuilds =
-        SeqDict.map
-            (\_ guild ->
-                { name = guild.name
-                , channels =
-                    SeqDict.map
-                        (\_ channel ->
-                            { name = channel.name
-                            , messageCount = IdArray.length channel.messages
-                            , threadCount = SeqDict.size channel.threads
-                            , firstMessage = IdArray.get (Id.fromInt 0) channel.messages
-                            , permissionOverwrites = channel.permissionOverwrites
-                            }
-                        )
-                        guild.channels
-                , membersAndOwner = guild.membersAndOwner
-                , roles = guild.roles
-                }
-            )
-            model.discordGuilds
-    , guilds =
-        SeqDict.map
-            (\_ guild ->
-                { name = guild.name
-                , channels =
-                    SeqDict.map
-                        (\_ channel ->
-                            { name = channel.name
-                            , messageCount = IdArray.length channel.messages
-                            }
-                        )
-                        guild.channels
-                , memberCount = SeqDict.size (MembersAndOwner.members guild.membersAndOwner)
-                , owner = MembersAndOwner.owner guild.membersAndOwner
-                }
-            )
-            model.guilds
-    , deletedGuilds =
-        SeqDict.map
-            (\_ deletedGuild ->
-                { name = deletedGuild.guild.name
-                , owner = MembersAndOwner.owner deletedGuild.guild.membersAndOwner
-                , memberCount = SeqDict.size (MembersAndOwner.members deletedGuild.guild.membersAndOwner)
-                , deletedAt = deletedGuild.deletedAt
-                }
-            )
-            model.deletedGuilds
     , loadingDiscordChannels =
         SeqDict.map
             (\_ channel ->
@@ -1550,8 +1470,6 @@ adminData model lastLogPageViewed =
             )
             (SeqDict.toList model.connections)
     , filesCount = SeqDict.size model.files
-    , toBackendLogs = Array.slice (Array.length model.toBackendLogs - 1000) (Array.length model.toBackendLogs) model.toBackendLogs
-    , backendMsgLogs = Array.slice (Array.length model.backendMsgLogs - 1000) (Array.length model.backendMsgLogs) model.backendMsgLogs
     , vulnerabilityChecks =
         case
             Bytes.Encode.sequence [ Bytes.Encode.unsignedInt8 255, Lamdera.Wire3.encodeFloat64 (0 / 0) ]
@@ -1583,14 +1501,140 @@ adminData model lastLogPageViewed =
                                 ""
     , serverSecretRegeneratedAt = model.serverSecretRegeneratedAt
     , lastBackup = Maybe.map .backup model.lastBackup
-    , websocketCloseEvents = model.websocketCloseEvents
-    , sessions =
-        SeqDict.values model.sessions
-            |> List.map (\session -> ( session.sessionIdHash, session ))
-            |> SeqDict.fromList
     , wordSpellingGameEnglish = wordListStatus model.wordSpellingGameEnglish
     , wordSpellingGameSwedish = wordListStatus model.wordSpellingGameSwedish
     }
+
+
+{-| The parts of the admin page that aren't sent when it loads. Each is built when the admin
+opens a section that shows it, so the size of what the backend has stored doesn't decide how
+long the admin page takes to open.
+-}
+adminGuilds : BackendModel -> SeqDict (Id GuildId) LocalState.AdminData_Guild
+adminGuilds model =
+    SeqDict.map
+        (\_ guild ->
+            { name = guild.name
+            , channels =
+                SeqDict.map
+                    (\_ channel ->
+                        { name = channel.name
+                        , messageCount = IdArray.length channel.messages
+                        }
+                    )
+                    guild.channels
+            , memberCount = SeqDict.size (MembersAndOwner.members guild.membersAndOwner)
+            , owner = MembersAndOwner.owner guild.membersAndOwner
+            }
+        )
+        model.guilds
+
+
+adminDeletedGuilds : BackendModel -> SeqDict (Id GuildId) LocalState.AdminData_DeletedGuild
+adminDeletedGuilds model =
+    SeqDict.map
+        (\_ deletedGuild ->
+            { name = deletedGuild.guild.name
+            , owner = MembersAndOwner.owner deletedGuild.guild.membersAndOwner
+            , memberCount = SeqDict.size (MembersAndOwner.members deletedGuild.guild.membersAndOwner)
+            , deletedAt = deletedGuild.deletedAt
+            }
+        )
+        model.deletedGuilds
+
+
+adminDmChannels : BackendModel -> SeqDict DmChannelId LocalState.AdminData_DmChannel
+adminDmChannels model =
+    SeqDict.map
+        (\_ channel ->
+            { messageCount = IdArray.length channel.messages
+            , threadCount = SeqDict.size channel.threads
+            }
+        )
+        model.dmChannels
+
+
+adminDiscordGuilds : BackendModel -> SeqDict (Discord.Id Discord.GuildId) LocalState.AdminData_DiscordGuild
+adminDiscordGuilds model =
+    SeqDict.map
+        (\_ guild ->
+            { name = guild.name
+            , channels =
+                SeqDict.map
+                    (\_ channel ->
+                        { name = channel.name
+                        , messageCount = IdArray.length channel.messages
+                        , threadCount = SeqDict.size channel.threads
+                        , firstMessage = IdArray.get (Id.fromInt 0) channel.messages
+                        , permissionOverwrites = channel.permissionOverwrites
+                        }
+                    )
+                    guild.channels
+            , membersAndOwner = guild.membersAndOwner
+            , roles = guild.roles
+            }
+        )
+        model.discordGuilds
+
+
+adminDiscordDmChannels :
+    BackendModel
+    -> SeqDict (Discord.Id Discord.PrivateChannelId) LocalState.AdminData_DiscordDmChannel
+adminDiscordDmChannels model =
+    SeqDict.map
+        (\_ channel ->
+            { members = channel.members
+            , messageCount = IdArray.length channel.messages
+            , firstMessage = IdArray.get (Id.fromInt 0) channel.messages
+            }
+        )
+        model.discordDmChannels
+
+
+adminDiscordUsers : BackendModel -> SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
+adminDiscordUsers model =
+    SeqDict.map
+        (\_ discordUser ->
+            case discordUser of
+                FullData data ->
+                    FullData_ForAdmin
+                        { user = data.user
+                        , linkedTo = data.linkedTo
+                        , icon = data.icon
+                        , linkedAt = data.linkedAt
+                        , isLoadingData = data.isLoadingData
+                        , gateway =
+                            { websocketIsOpen = Maybe.Extra.isJust data.connection.websocketHandle
+                            , failedReconnectAttempts = data.connection.reconnect.failedAttempts
+                            }
+                        }
+
+                BasicData data ->
+                    BasicData_ForAdmin data
+
+                NeedsAuthAgain data ->
+                    NeedsAuthAgain_ForAdmin data
+        )
+        model.discordUsers
+
+
+adminSessions : BackendModel -> SeqDict SessionIdHash UserSession
+adminSessions model =
+    SeqDict.values model.sessions
+        |> List.map (\session -> ( session.sessionIdHash, session ))
+        |> SeqDict.fromList
+
+
+{-| Only the most recent logs are worth looking at, and the backend keeps a lot more than that.
+-}
+adminToBackendLogs : BackendModel -> Array ToBackendLogData
+adminToBackendLogs model =
+    Array.slice (Array.length model.toBackendLogs - 1000) (Array.length model.toBackendLogs) model.toBackendLogs
+
+
+adminBackendMsgLogs : BackendModel -> Array BackendMsgLogData
+adminBackendMsgLogs model =
+    Array.slice (Array.length model.backendMsgLogs - 1000) (Array.length model.backendMsgLogs) model.backendMsgLogs
 
 
 wordListStatus : WordList -> LocalState.WordSpellingGameStatus

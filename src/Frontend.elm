@@ -932,6 +932,22 @@ updateLoaded msg model =
                                     in
                                     ( { model | loginStatus = LoggedIn loggedIn3 }, cmd2 )
 
+                                Pages.Admin.AdminChanges adminChanges ->
+                                    let
+                                        ( loggedIn3, cmd2 ) =
+                                            List.foldl
+                                                (\adminChange ( loggedIn4, cmd3 ) ->
+                                                    FrontendExtra.handleLocalChange
+                                                        model.time
+                                                        (Local_Admin adminChange |> Just)
+                                                        loggedIn4
+                                                        cmd3
+                                                )
+                                                ( loggedIn2, Command.map AdminToBackend AdminPageMsg cmd )
+                                                adminChanges
+                                    in
+                                    ( { model | loginStatus = LoggedIn loggedIn3 }, cmd2 )
+
                                 Pages.Admin.NoOutMsg ->
                                     ( { model | loginStatus = LoggedIn loggedIn2 }
                                     , Command.map AdminToBackend AdminPageMsg cmd
@@ -8872,20 +8888,14 @@ view _ model =
                                     (\loggedIn local ->
                                         case local.adminData of
                                             IsAdmin adminData ->
-                                                case NonemptyDict.get local.localUser.session.userId adminData.users of
-                                                    Just user ->
-                                                        Pages.Admin.view
-                                                            (MyUi.isMobile loaded)
-                                                            loaded.versionNumber
-                                                            loaded.time
-                                                            local
-                                                            adminData
-                                                            user
-                                                            loggedIn.admin
-                                                            |> Ui.map AdminPageMsg
-
-                                                    Nothing ->
-                                                        Ui.text "User not found"
+                                                Pages.Admin.view
+                                                    (MyUi.isMobile loaded)
+                                                    loaded.versionNumber
+                                                    loaded.time
+                                                    local
+                                                    adminData
+                                                    loggedIn.admin
+                                                    |> Ui.map AdminPageMsg
 
                                             IsAdminButDataNotLoaded ->
                                                 Ui.text "Loading admin page..."

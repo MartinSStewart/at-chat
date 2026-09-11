@@ -1,5 +1,6 @@
 module Pages.Admin exposing
     ( AdminChange(..)
+    , AdminUiSection(..)
     , DownloadingBackup
     , EditedBackendUser
     , EditingCell
@@ -71,7 +72,7 @@ import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), BackupContents(..), ConnectionData, DiscordGatewayStatus, DiscordRole, DiscordUserData_ForAdmin(..), LastBackup, LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
+import LocalState exposing (AdminData, AdminDataStatus(..), AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), BackupContents(..), ConnectionData, DiscordGatewayStatus, DiscordRole, DiscordUserData_ForAdmin(..), LastBackup, LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -103,7 +104,7 @@ import Ui.Input
 import Ui.Lazy
 import Ui.Shadow
 import Ui.Table
-import User exposing (AdminUiSection(..), BackendUser, EmailNotifications(..), LocalUser)
+import User exposing (BackendUser, EmailNotifications(..), LocalUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserSession, Viewing(..))
 
@@ -239,6 +240,9 @@ type ExportProgress
 type alias Model =
     { highlightLog : Maybe (Id ItemId)
     , copiedLogLink : Maybe (Id ItemId)
+    , expandedSections : SeqSet AdminUiSection
+    , expandedGuilds : SeqSet (Id GuildId)
+    , expandedDiscordGuilds : SeqSet (Discord.Id Discord.GuildId)
     , userTable : UserTable
     , submitError : Maybe UsersChangeError
     , slackClientSecret : Editable.Model
@@ -293,32 +297,21 @@ type alias EditingCell =
 
 
 type alias InitAdminData =
-    { users : NonemptyDict (Id UserId) BackendUser
-    , emailNotificationsEnabled : Bool
+    { emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
     , postmarkApiKey : Postmark.ApiKey
-    , dmChannels : SeqDict DmChannelId AdminData_DmChannel
-    , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) AdminData_DiscordDmChannel
-    , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
-    , discordGuilds : SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild
-    , guilds : SeqDict (Id GuildId) AdminData_Guild
-    , deletedGuilds : SeqDict (Id GuildId) AdminData_DeletedGuild
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     , discordLinkingEnabled : Bool
     , logs : Pagination LogWithTime
     , connections : List ( SessionIdHash, NonemptyDict ClientId ConnectionData )
     , filesCount : Int
-    , toBackendLogs : Array ToBackendLogData
-    , backendMsgLogs : Array BackendMsgLogData
     , vulnerabilityChecks : String
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , lastBackup : Maybe LastBackup
-    , websocketCloseEvents : Array WebsocketClosedEvent
-    , sessions : SeqDict SessionIdHash UserSession
     , wordSpellingGameEnglish : WordSpellingGameStatus
     , wordSpellingGameSwedish : WordSpellingGameStatus
     }
@@ -331,9 +324,18 @@ type AdminChange
         , newUsers : Array EditedBackendUser
         , deletedUsers : SeqSet (Id UserId)
         }
-    | ExpandSection AdminUiSection
-    | CollapseSection AdminUiSection
     | LogPageChanged (Id PageId) (ToBeFilledInByBackend (Array LogWithTime))
+    | LoadUsers (ToBeFilledInByBackend (NonemptyDict (Id UserId) BackendUser))
+    | LoadGuilds (ToBeFilledInByBackend (SeqDict (Id GuildId) AdminData_Guild))
+    | LoadDeletedGuilds (ToBeFilledInByBackend (SeqDict (Id GuildId) AdminData_DeletedGuild))
+    | LoadDmChannels (ToBeFilledInByBackend (SeqDict DmChannelId AdminData_DmChannel))
+    | LoadDiscordGuilds (ToBeFilledInByBackend (SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild))
+    | LoadDiscordDmChannels (ToBeFilledInByBackend (SeqDict (Discord.Id Discord.PrivateChannelId) AdminData_DiscordDmChannel))
+    | LoadDiscordUsers (ToBeFilledInByBackend (SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin))
+    | LoadSessions (ToBeFilledInByBackend (SeqDict SessionIdHash UserSession))
+    | LoadWebsocketCloseEvents (ToBeFilledInByBackend (Array WebsocketClosedEvent))
+    | LoadToBackendLogs (ToBeFilledInByBackend (Array ToBackendLogData))
+    | LoadBackendMsgLogs (ToBeFilledInByBackend (Array BackendMsgLogData))
     | SetEmailNotificationsEnabled Bool
     | SetSignupsEnabled Bool
     | SetDiscordLinkingEnabled Bool
@@ -349,10 +351,6 @@ type AdminChange
     | StartReloadingDiscordGuildChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
     | StartReloadingDiscordDmChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | ReloadDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (ToBeFilledInByBackend (Result Discord.HttpError (List Discord.Role)))
-    | ExpandGuild (Id GuildId)
-    | CollapseGuild (Id GuildId)
-    | ExpandDiscordGuild (Discord.Id Discord.GuildId)
-    | CollapseDiscordGuild (Discord.Id Discord.GuildId)
     | HideLog (Id ItemId)
     | UnhideLog (Id ItemId)
     | DisconnectClient SessionIdHash ClientId
@@ -381,6 +379,9 @@ initForUser : Model
 initForUser =
     { highlightLog = Nothing
     , copiedLogLink = Nothing
+    , expandedSections = SeqSet.empty
+    , expandedGuilds = SeqSet.empty
+    , expandedDiscordGuilds = SeqSet.empty
     , userTable =
         { table = Table.init 1
         , changedUsers = SeqDict.empty
@@ -408,6 +409,9 @@ initForAdmin : { highlightLog : Maybe (Id ItemId) } -> Model
 initForAdmin { highlightLog } =
     { highlightLog = highlightLog
     , copiedLogLink = Nothing
+    , expandedSections = SeqSet.empty
+    , expandedGuilds = SeqSet.empty
+    , expandedDiscordGuilds = SeqSet.empty
     , userTable =
         { table = Table.init 1
         , changedUsers = SeqDict.empty
@@ -438,37 +442,17 @@ updateAdmin changedBy change adminData local =
             { local
                 | adminData =
                     IsAdmin
-                        (case applyChangesToBackendUsers changedBy changes adminData.users of
-                            Ok newUsers ->
-                                { adminData | users = newUsers }
-
-                            Err _ ->
-                                adminData
-                        )
-            }
-
-        ExpandSection section2 ->
-            { local
-                | adminData =
-                    IsAdmin
                         { adminData
                             | users =
-                                NonemptyDict.updateIfExists
-                                    changedBy
-                                    (\user -> { user | expandedSections = SeqSet.insert section2 user.expandedSections })
-                                    adminData.users
-                        }
-            }
+                                LocalState.updateAdminData
+                                    (\users ->
+                                        case applyChangesToBackendUsers changedBy changes users of
+                                            Ok newUsers ->
+                                                newUsers
 
-        CollapseSection section2 ->
-            { local
-                | adminData =
-                    IsAdmin
-                        { adminData
-                            | users =
-                                NonemptyDict.updateIfExists
-                                    changedBy
-                                    (\user -> { user | expandedSections = SeqSet.remove section2 user.expandedSections })
+                                            Err _ ->
+                                                users
+                                    )
                                     adminData.users
                         }
             }
@@ -479,13 +463,48 @@ updateAdmin changedBy change adminData local =
                     IsAdmin
                         { adminData
                             | users =
-                                NonemptyDict.updateIfExists
-                                    changedBy
-                                    (\user -> { user | lastLogPageViewed = pageIndex })
+                                LocalState.updateAdminData
+                                    (NonemptyDict.updateIfExists
+                                        changedBy
+                                        (\user -> { user | lastLogPageViewed = pageIndex })
+                                    )
                                     adminData.users
                             , logs = Pagination.setPage pageIndex filledInByBackend adminData.logs
                         }
             }
+
+        LoadUsers filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | users = loadedAdminData filledInByBackend } }
+
+        LoadGuilds filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | guilds = loadedAdminData filledInByBackend } }
+
+        LoadDeletedGuilds filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | deletedGuilds = loadedAdminData filledInByBackend } }
+
+        LoadDmChannels filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | dmChannels = loadedAdminData filledInByBackend } }
+
+        LoadDiscordGuilds filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | discordGuilds = loadedAdminData filledInByBackend } }
+
+        LoadDiscordDmChannels filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | discordDmChannels = loadedAdminData filledInByBackend } }
+
+        LoadDiscordUsers filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | discordUsers = loadedAdminData filledInByBackend } }
+
+        LoadSessions filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | sessions = loadedAdminData filledInByBackend } }
+
+        LoadWebsocketCloseEvents filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | websocketCloseEvents = loadedAdminData filledInByBackend } }
+
+        LoadToBackendLogs filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | toBackendLogs = loadedAdminData filledInByBackend } }
+
+        LoadBackendMsgLogs filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | backendMsgLogs = loadedAdminData filledInByBackend } }
 
         SetEmailNotificationsEnabled isEnabled ->
             { local | adminData = IsAdmin { adminData | emailNotificationsEnabled = isEnabled } }
@@ -512,35 +531,61 @@ updateAdmin changedBy change adminData local =
             { local | adminData = IsAdmin { adminData | postmarkKey = postmarkKey } }
 
         DeleteDiscordDmChannel channelId ->
-            { local | adminData = IsAdmin { adminData | discordDmChannels = SeqDict.remove channelId adminData.discordDmChannels } }
+            { local
+                | adminData =
+                    IsAdmin
+                        { adminData
+                            | discordDmChannels =
+                                LocalState.updateAdminData (SeqDict.remove channelId) adminData.discordDmChannels
+                        }
+            }
 
         DeleteDiscordGuild guildId ->
-            { local | adminData = IsAdmin { adminData | discordGuilds = SeqDict.remove guildId adminData.discordGuilds } }
+            { local
+                | adminData =
+                    IsAdmin
+                        { adminData
+                            | discordGuilds = LocalState.updateAdminData (SeqDict.remove guildId) adminData.discordGuilds
+                        }
+            }
 
         DeleteGuild guildId ->
-            { local | adminData = IsAdmin { adminData | guilds = SeqDict.remove guildId adminData.guilds } }
+            { local
+                | adminData =
+                    IsAdmin { adminData | guilds = LocalState.updateAdminData (SeqDict.remove guildId) adminData.guilds }
+            }
 
         RestoreGuild guildId ->
-            case SeqDict.get guildId adminData.deletedGuilds of
-                Just deletedGuild ->
-                    { local
-                        | adminData =
-                            IsAdmin
-                                { adminData
-                                    | deletedGuilds = SeqDict.remove guildId adminData.deletedGuilds
-                                    , guilds =
-                                        SeqDict.insert
-                                            guildId
-                                            { name = deletedGuild.name
-                                            , channels = SeqDict.empty
-                                            , memberCount = deletedGuild.memberCount
-                                            , owner = deletedGuild.owner
-                                            }
-                                            adminData.guilds
-                                }
-                    }
+            case adminData.deletedGuilds of
+                AdminDataLoaded deletedGuilds ->
+                    case SeqDict.get guildId deletedGuilds of
+                        Just deletedGuild ->
+                            { local
+                                | adminData =
+                                    IsAdmin
+                                        { adminData
+                                            | deletedGuilds = AdminDataLoaded (SeqDict.remove guildId deletedGuilds)
+                                            , guilds =
+                                                LocalState.updateAdminData
+                                                    (SeqDict.insert
+                                                        guildId
+                                                        { name = deletedGuild.name
+                                                        , channels = SeqDict.empty
+                                                        , memberCount = deletedGuild.memberCount
+                                                        , owner = deletedGuild.owner
+                                                        }
+                                                    )
+                                                    adminData.guilds
+                                        }
+                            }
 
-                Nothing ->
+                        Nothing ->
+                            local
+
+                AdminDataLoading ->
+                    local
+
+                AdminDataNotLoaded ->
                     local
 
         StartReloadingDiscordGuildChannel time userId guildId channelId ->
@@ -590,72 +635,17 @@ updateAdmin changedBy change adminData local =
                             IsAdmin
                                 { adminData
                                     | discordGuilds =
-                                        SeqDict.updateIfExists
-                                            guildId
-                                            (\guild -> { guild | roles = rolesToDict roles })
+                                        LocalState.updateAdminData
+                                            (SeqDict.updateIfExists
+                                                guildId
+                                                (\guild -> { guild | roles = rolesToDict roles })
+                                            )
                                             adminData.discordGuilds
                                 }
                     }
 
                 _ ->
                     local
-
-        ExpandGuild guildId ->
-            let
-                localUser =
-                    local.localUser
-            in
-            { local
-                | adminData =
-                    IsAdmin
-                        { adminData
-                            | users = NonemptyDict.updateIfExists changedBy (expandGuild guildId) adminData.users
-                        }
-                , localUser = { localUser | user = expandGuild guildId localUser.user }
-            }
-
-        CollapseGuild guildId ->
-            let
-                localUser =
-                    local.localUser
-            in
-            { local
-                | adminData =
-                    IsAdmin
-                        { adminData
-                            | users = NonemptyDict.updateIfExists changedBy (collapseGuild guildId) adminData.users
-                        }
-                , localUser = { localUser | user = collapseGuild guildId localUser.user }
-            }
-
-        ExpandDiscordGuild guildId ->
-            let
-                localUser =
-                    local.localUser
-            in
-            { local
-                | adminData =
-                    IsAdmin
-                        { adminData
-                            | users = NonemptyDict.updateIfExists changedBy (expandDiscordGuild guildId) adminData.users
-                        }
-                , localUser = { localUser | user = expandDiscordGuild guildId localUser.user }
-            }
-
-        CollapseDiscordGuild guildId ->
-            let
-                localUser =
-                    local.localUser
-            in
-            { local
-                | adminData =
-                    IsAdmin
-                        { adminData
-                            | users =
-                                NonemptyDict.updateIfExists changedBy (collapseDiscordGuild guildId) adminData.users
-                        }
-                , localUser = { localUser | user = collapseDiscordGuild guildId localUser.user }
-            }
 
         HideLog pageIndex ->
             { local
@@ -691,7 +681,10 @@ updateAdmin changedBy change adminData local =
         DeleteSession sessionIdHash ->
             { local
                 | adminData =
-                    IsAdmin { adminData | sessions = SeqDict.remove sessionIdHash adminData.sessions }
+                    IsAdmin
+                        { adminData
+                            | sessions = LocalState.updateAdminData (SeqDict.remove sessionIdHash) adminData.sessions
+                        }
             }
 
         RegenerateServerSecret time ->
@@ -755,28 +748,22 @@ disconnectClient sessionId clientId connections =
             Err ()
 
 
-expandGuild : Id GuildId -> BackendUser -> BackendUser
-expandGuild guildId user =
-    { user | expandedGuilds = SeqSet.insert guildId user.expandedGuilds }
+{-| Admin data that the backend was asked for. The request itself is sent with an empty
+placeholder, so seeing one here means the data is on its way.
+-}
+loadedAdminData : ToBeFilledInByBackend a -> AdminDataStatus a
+loadedAdminData filledInByBackend =
+    case filledInByBackend of
+        FilledInByBackend data ->
+            AdminDataLoaded data
 
-
-collapseGuild : Id GuildId -> BackendUser -> BackendUser
-collapseGuild guildId user =
-    { user | expandedGuilds = SeqSet.remove guildId user.expandedGuilds }
-
-
-expandDiscordGuild : Discord.Id Discord.GuildId -> BackendUser -> BackendUser
-expandDiscordGuild guildId user =
-    { user | expandedDiscordGuilds = SeqSet.insert guildId user.expandedDiscordGuilds }
-
-
-collapseDiscordGuild : Discord.Id Discord.GuildId -> BackendUser -> BackendUser
-collapseDiscordGuild guildId user =
-    { user | expandedDiscordGuilds = SeqSet.remove guildId user.expandedDiscordGuilds }
+        EmptyPlaceholder ->
+            AdminDataLoading
 
 
 type OutMsg
     = AdminChange AdminChange
+    | AdminChanges (List AdminChange)
     | GoToHomepage
     | NoOutMsg
     | CopyToClipboard String
@@ -825,19 +812,17 @@ update navigationKey time adminData localState msg model =
             ( model, Command.none, DeleteSession sessionIdHash |> AdminChange )
 
         PressedExpandSection section2 ->
-            ( model
-            , Command.none
-            , case NonemptyDict.get localState.localUser.session.userId adminData.users of
-                Just user ->
-                    if SeqSet.member section2 user.expandedSections then
-                        CollapseSection section2 |> AdminChange
+            if SeqSet.member section2 model.expandedSections then
+                ( { model | expandedSections = SeqSet.remove section2 model.expandedSections }
+                , Command.none
+                , NoOutMsg
+                )
 
-                    else
-                        ExpandSection section2 |> AdminChange
-
-                Nothing ->
-                    NoOutMsg
-            )
+            else
+                ( { model | expandedSections = SeqSet.insert section2 model.expandedSections }
+                , Command.none
+                , AdminChanges (sectionDataToLoad section2 adminData)
+                )
 
         PressedEditCell userTableId column ->
             updateUserTable
@@ -873,7 +858,7 @@ update navigationKey time adminData localState msg model =
                                     helper change
 
                                 Nothing ->
-                                    case NonemptyDict.get userId adminData.users of
+                                    case adminUser userId adminData of
                                         Just user ->
                                             userToEditUser user |> helper
 
@@ -959,14 +944,22 @@ update navigationKey time adminData localState msg model =
 
                 result : Result UsersChangeError (NonemptyDict (Id UserId) BackendUser)
                 result =
-                    applyChangesToBackendUsers
-                        localState.localUser.session.userId
-                        { time = time
-                        , newUsers = userTable2.newUsers
-                        , deletedUsers = userTable2.deletedUsers
-                        , changedUsers = userTable2.changedUsers
-                        }
-                        adminData.users
+                    case adminData.users of
+                        AdminDataLoaded users ->
+                            applyChangesToBackendUsers
+                                localState.localUser.session.userId
+                                { time = time
+                                , newUsers = userTable2.newUsers
+                                , deletedUsers = userTable2.deletedUsers
+                                , changedUsers = userTable2.changedUsers
+                                }
+                                users
+
+                        AdminDataLoading ->
+                            Err InvalidChangesToUser
+
+                        AdminDataNotLoaded ->
+                            Err InvalidChangesToUser
             in
             case result of
                 Ok _ ->
@@ -1021,7 +1014,7 @@ update navigationKey time adminData localState msg model =
                                     , text =
                                         case editingCell.userId of
                                             ExistingUserId userId ->
-                                                case NonemptyDict.get userId adminData.users of
+                                                case adminUser userId adminData of
                                                     Just user ->
                                                         userToEditUser user
                                                             |> localChangeToText column
@@ -1149,36 +1142,29 @@ update navigationKey time adminData localState msg model =
             ( model, Command.none, AdminChange (DeleteDiscordGuild guildId) )
 
         PressedExpandDiscordGuild guildId ->
-            let
-                user : User.FrontendCurrentUser
-                user =
-                    localState.localUser.user
-            in
-            ( model
-            , Command.none
-            , AdminChange
-                (if SeqSet.member guildId user.expandedDiscordGuilds then
-                    CollapseDiscordGuild guildId
+            ( { model
+                | expandedDiscordGuilds =
+                    if SeqSet.member guildId model.expandedDiscordGuilds then
+                        SeqSet.remove guildId model.expandedDiscordGuilds
 
-                 else
-                    ExpandDiscordGuild guildId
-                )
+                    else
+                        SeqSet.insert guildId model.expandedDiscordGuilds
+              }
+            , Command.none
+            , NoOutMsg
             )
 
         PressedExpandGuild guildId ->
-            let
-                user =
-                    localState.localUser.user
-            in
-            ( model
-            , Command.none
-            , AdminChange
-                (if SeqSet.member guildId user.expandedGuilds then
-                    CollapseGuild guildId
+            ( { model
+                | expandedGuilds =
+                    if SeqSet.member guildId model.expandedGuilds then
+                        SeqSet.remove guildId model.expandedGuilds
 
-                 else
-                    ExpandGuild guildId
-                )
+                    else
+                        SeqSet.insert guildId model.expandedGuilds
+              }
+            , Command.none
+            , NoOutMsg
             )
 
         PressedDeleteGuild guildId ->
@@ -1274,7 +1260,14 @@ update navigationKey time adminData localState msg model =
                         }
               }
             , Command.none
-            , NoOutMsg
+            , AdminChanges
+                (loadIfNeeded adminData.users (LoadUsers EmptyPlaceholder)
+                    ++ loadIfNeeded adminData.guilds (LoadGuilds EmptyPlaceholder)
+                    ++ loadIfNeeded adminData.dmChannels (LoadDmChannels EmptyPlaceholder)
+                    ++ loadIfNeeded adminData.discordGuilds (LoadDiscordGuilds EmptyPlaceholder)
+                    ++ loadIfNeeded adminData.discordDmChannels (LoadDiscordDmChannels EmptyPlaceholder)
+                    ++ loadIfNeeded adminData.discordUsers (LoadDiscordUsers EmptyPlaceholder)
+                )
             )
 
         ToggledExportSubsetGuild guildId isChecked ->
@@ -1390,7 +1383,7 @@ handleTogglingAdmin userTableId userTableState isAdmin adminData =
                                     Just { change | isAdmin = isAdmin }
 
                                 Nothing ->
-                                    case NonemptyDict.get userId adminData.users of
+                                    case adminUser userId adminData of
                                         Just user ->
                                             let
                                                 change : EditedBackendUser
@@ -1419,7 +1412,7 @@ applyEditCell : UserTable -> EditingCell -> AdminData -> UserTable
 applyEditCell userTable editingCell adminData =
     case editingCell.userId of
         ExistingUserId userId ->
-            case NonemptyDict.get userId adminData.users of
+            case adminUser userId adminData of
                 Just user ->
                     { userTable
                         | changedUsers =
@@ -1492,6 +1485,22 @@ previousUserColumn column =
 
         EmailAddressColumn ->
             NameColumn
+
+
+{-| A user the admin page has been sent. The user table is what the rest of the page names
+users from, so before it has been opened there is nothing to look them up in.
+-}
+adminUser : Id UserId -> AdminData -> Maybe BackendUser
+adminUser userId adminData =
+    case adminData.users of
+        AdminDataLoaded users ->
+            NonemptyDict.get userId users
+
+        AdminDataLoading ->
+            Nothing
+
+        AdminDataNotLoaded ->
+            Nothing
 
 
 userToEditUser : BackendUser -> EditedBackendUser
@@ -1619,14 +1628,41 @@ pendingChangesText change =
         ChangeUsers _ ->
             "Changed users via admin page"
 
-        ExpandSection _ ->
-            "Expanded section in admin page"
-
-        CollapseSection _ ->
-            "Collapsed section in admin page"
-
         LogPageChanged pageId _ ->
             "Switched to log page " ++ Id.toString pageId
+
+        LoadUsers _ ->
+            "Loading users in admin page"
+
+        LoadGuilds _ ->
+            "Loading guilds in admin page"
+
+        LoadDeletedGuilds _ ->
+            "Loading deleted guilds in admin page"
+
+        LoadDmChannels _ ->
+            "Loading DM channels in admin page"
+
+        LoadDiscordGuilds _ ->
+            "Loading Discord guilds in admin page"
+
+        LoadDiscordDmChannels _ ->
+            "Loading Discord DM channels in admin page"
+
+        LoadDiscordUsers _ ->
+            "Loading Discord users in admin page"
+
+        LoadSessions _ ->
+            "Loading sessions in admin page"
+
+        LoadWebsocketCloseEvents _ ->
+            "Loading websocket close events in admin page"
+
+        LoadToBackendLogs _ ->
+            "Loading toBackend logs in admin page"
+
+        LoadBackendMsgLogs _ ->
+            "Loading backendMsg logs in admin page"
 
         SetEmailNotificationsEnabled isEnabled ->
             if isEnabled then
@@ -1685,18 +1721,6 @@ pendingChangesText change =
         ReloadDiscordGuild _ _ _ ->
             "Reloaded Discord guild roles and channel permissions"
 
-        ExpandGuild _ ->
-            "Expanded guild in admin page"
-
-        CollapseGuild _ ->
-            "Collapsed guild in admin page"
-
-        ExpandDiscordGuild _ ->
-            "Expanded Discord guild in admin page"
-
-        CollapseDiscordGuild _ ->
-            "Collapsed Discord guild in admin page"
-
         HideLog logIndex ->
             "Hid log " ++ Id.toString logIndex
 
@@ -1713,8 +1737,8 @@ pendingChangesText change =
             "Regenerate server secret"
 
 
-view : Bool -> Maybe Int -> Time.Posix -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
-view isMobile2 version time local adminData user model =
+view : Bool -> Maybe Int -> Time.Posix -> LocalState -> AdminData -> Model -> Element Msg
+view isMobile2 version time local adminData model =
     Ui.el
         [ Ui.scrollable
         , Ui.background MyUi.background3
@@ -1737,34 +1761,34 @@ view isMobile2 version time local adminData user model =
                     )
                 ]
             , adminData.vulnerabilityChecks |> Ui.text
-            , Ui.Lazy.lazy5 userSection isMobile2 local.localUser.timezone user adminData model
-            , Ui.Lazy.lazy3 guildsSection isMobile2 user adminData
-            , Ui.Lazy.lazy3 deletedGuildsSection isMobile2 user adminData
-            , Ui.Lazy.lazy3 discordGuildsSection isMobile2 user adminData
-            , Ui.Lazy.lazy3 dmChannelsSection isMobile2 user adminData
-            , Ui.Lazy.lazy3 discordDmChannelsSection isMobile2 user adminData
-            , Ui.Lazy.lazy3 discordUsersSection isMobile2 user adminData
-            , Ui.Lazy.lazy5 logSection isMobile2 local.localUser user adminData model
-            , Ui.Lazy.lazy5 apiKeysSection isMobile2 local user adminData model
-            , Ui.Lazy.lazy4 connectionsSection isMobile2 local.localUser.timezone user adminData
-            , Ui.Lazy.lazy4 sessionsSection isMobile2 local.localUser.timezone user adminData
-            , websocketCloseEventsSection isMobile2 time local.localUser.timezone user adminData model
-            , Ui.Lazy.lazy2 webCodecsTestSection isMobile2 user
-            , Ui.Lazy.lazy3 wordSpellingGameSwedishSection isMobile2 user adminData
-            , Ui.Lazy.lazy3 filesSection isMobile2 user adminData
-            , Ui.Lazy.lazy3 stickersAndEmojisSection isMobile2 local user
-            , Ui.Lazy.lazy4 toBackendLogsSection isMobile2 time user adminData
-            , Ui.Lazy.lazy4 backendMsgLogsSection isMobile2 time user adminData
-            , Ui.Lazy.lazy5 exportSection isMobile2 local.localUser.timezone user adminData model
+            , Ui.Lazy.lazy5 userSection isMobile2 local.localUser.timezone model.expandedSections adminData model
+            , Ui.Lazy.lazy4 guildsSection isMobile2 model.expandedSections model.expandedGuilds adminData
+            , Ui.Lazy.lazy3 deletedGuildsSection isMobile2 model.expandedSections adminData
+            , Ui.Lazy.lazy4 discordGuildsSection isMobile2 model.expandedSections model.expandedDiscordGuilds adminData
+            , Ui.Lazy.lazy3 dmChannelsSection isMobile2 model.expandedSections adminData
+            , Ui.Lazy.lazy3 discordDmChannelsSection isMobile2 model.expandedSections adminData
+            , Ui.Lazy.lazy3 discordUsersSection isMobile2 model.expandedSections adminData
+            , Ui.Lazy.lazy5 logSection isMobile2 local.localUser model.expandedSections adminData model
+            , Ui.Lazy.lazy5 apiKeysSection isMobile2 local model.expandedSections adminData model
+            , Ui.Lazy.lazy4 connectionsSection isMobile2 local.localUser.timezone model.expandedSections adminData
+            , Ui.Lazy.lazy4 sessionsSection isMobile2 local.localUser.timezone model.expandedSections adminData
+            , websocketCloseEventsSection isMobile2 time local.localUser.timezone model.expandedSections adminData model
+            , Ui.Lazy.lazy2 webCodecsTestSection isMobile2 model.expandedSections
+            , Ui.Lazy.lazy3 wordSpellingGameSwedishSection isMobile2 model.expandedSections adminData
+            , Ui.Lazy.lazy3 filesSection isMobile2 model.expandedSections adminData
+            , Ui.Lazy.lazy3 stickersAndEmojisSection isMobile2 local model.expandedSections
+            , Ui.Lazy.lazy4 toBackendLogsSection isMobile2 time model.expandedSections adminData
+            , Ui.Lazy.lazy4 backendMsgLogsSection isMobile2 time model.expandedSections adminData
+            , Ui.Lazy.lazy5 exportSection isMobile2 local.localUser.timezone model.expandedSections adminData model
             ]
         )
 
 
-connectionsSection : Bool -> Time.Zone -> BackendUser -> AdminData -> Element Msg
-connectionsSection isMobile timezone user adminData =
+connectionsSection : Bool -> Time.Zone -> SeqSet AdminUiSection -> AdminData -> Element Msg
+connectionsSection isMobile timezone expandedSections adminData =
     section
         isMobile
-        user.expandedSections
+        expandedSections
         ConnectionsSection
         [ if List.isEmpty adminData.connections then
             Ui.text "No connections"
@@ -1859,7 +1883,7 @@ viewingToString adminData viewing =
 
 viewingUserName : AdminData -> Id UserId -> String
 viewingUserName adminData userId =
-    case NonemptyDict.get userId adminData.users of
+    case adminUser userId adminData of
         Just user ->
             PersonName.toString user.name
 
@@ -1869,7 +1893,7 @@ viewingUserName adminData userId =
 
 viewingDiscordUserName : AdminData -> Discord.Id Discord.UserId -> String
 viewingDiscordUserName adminData discordUserId =
-    case SeqDict.get discordUserId adminData.discordUsers of
+    case LocalState.getAdminData discordUserId adminData.discordUsers of
         Just (FullData_ForAdmin data) ->
             data.user.username
 
@@ -1885,7 +1909,7 @@ viewingDiscordUserName adminData discordUserId =
 
 viewingChannelName : AdminData -> Id GuildId -> Id ChannelId -> String
 viewingChannelName adminData guildId channelId =
-    case SeqDict.get guildId adminData.guilds of
+    case LocalState.getAdminData guildId adminData.guilds of
         Just guild ->
             GuildName.toString guild.name
                 ++ " #"
@@ -1903,7 +1927,7 @@ viewingChannelName adminData guildId channelId =
 
 viewingDiscordChannelName : AdminData -> Discord.Id Discord.GuildId -> Discord.Id Discord.ChannelId -> String
 viewingDiscordChannelName adminData guildId channelId =
-    case SeqDict.get guildId adminData.discordGuilds of
+    case LocalState.getAdminData guildId adminData.discordGuilds of
         Just guild ->
             GuildName.toString guild.name
                 ++ " #"
@@ -1924,7 +1948,7 @@ channels don't have names of their own.
 -}
 viewingDiscordDmName : AdminData -> Discord.Id Discord.UserId -> Discord.Id Discord.PrivateChannelId -> String
 viewingDiscordDmName adminData currentUserId channelId =
-    case SeqDict.get channelId adminData.discordDmChannels of
+    case LocalState.getAdminData channelId adminData.discordDmChannels of
         Just channel ->
             case
                 NonemptyDict.keys channel.members
@@ -1942,43 +1966,51 @@ viewingDiscordDmName adminData currentUserId channelId =
             Discord.idToString channelId
 
 
-sessionsSection : Bool -> Time.Zone -> BackendUser -> AdminData -> Element Msg
-sessionsSection isMobile timezone user adminData =
+sessionsSection : Bool -> Time.Zone -> SeqSet AdminUiSection -> AdminData -> Element Msg
+sessionsSection isMobile timezone expandedSections adminData =
     section
         isMobile
-        user.expandedSections
+        expandedSections
         SessionsSection
-        [ if SeqDict.isEmpty adminData.sessions then
-            Ui.text "No sessions"
+        [ case adminData.sessions of
+            AdminDataNotLoaded ->
+                Ui.text loadingText
 
-          else
-            Ui.column
-                [ Ui.spacing 8 ]
-                (List.map
-                    (\( sessionIdHash, session ) ->
-                        Ui.column
-                            [ Ui.spacing 2, Ui.Font.size 14, Ui.widthMax 600 ]
-                            [ Ui.row
-                                [ Ui.spacing 8 ]
-                                [ Ui.el [ Ui.Font.bold ] (Ui.text ("Session hash: " ++ SessionIdHash.toString sessionIdHash))
-                                , MyUi.deleteButton
-                                    (Dom.id ("admin_deleteSession_" ++ SessionIdHash.toString sessionIdHash))
-                                    (PressedDeleteSession sessionIdHash)
-                                ]
-                            , Ui.text ("User ID: " ++ Id.toString session.userId)
-                            , Ui.text ("Notifications: " ++ notificationModeToString session.notificationMode)
-                            , Ui.text ("Push subscription: " ++ pushSubscriptionToString timezone session.pushSubscription)
-                            , Ui.text ("User agent: " ++ userAgentToString session.userAgent)
-                            , Ui.text
-                                ("Signed in at: "
-                                    ++ MyUi.datestamp timezone session.signedInAt
-                                    ++ " "
-                                    ++ MyUi.timestamp session.signedInAt timezone
-                                )
-                            ]
-                    )
-                    (SeqDict.toList adminData.sessions)
-                )
+            AdminDataLoading ->
+                Ui.text loadingText
+
+            AdminDataLoaded sessions ->
+                if SeqDict.isEmpty sessions then
+                    Ui.text "No sessions"
+
+                else
+                    Ui.column
+                        [ Ui.spacing 8 ]
+                        (List.map
+                            (\( sessionIdHash, session ) ->
+                                Ui.column
+                                    [ Ui.spacing 2, Ui.Font.size 14, Ui.widthMax 600 ]
+                                    [ Ui.row
+                                        [ Ui.spacing 8 ]
+                                        [ Ui.el [ Ui.Font.bold ] (Ui.text ("Session hash: " ++ SessionIdHash.toString sessionIdHash))
+                                        , MyUi.deleteButton
+                                            (Dom.id ("admin_deleteSession_" ++ SessionIdHash.toString sessionIdHash))
+                                            (PressedDeleteSession sessionIdHash)
+                                        ]
+                                    , Ui.text ("User ID: " ++ Id.toString session.userId)
+                                    , Ui.text ("Notifications: " ++ notificationModeToString session.notificationMode)
+                                    , Ui.text ("Push subscription: " ++ pushSubscriptionToString timezone session.pushSubscription)
+                                    , Ui.text ("User agent: " ++ userAgentToString session.userAgent)
+                                    , Ui.text
+                                        ("Signed in at: "
+                                            ++ MyUi.datestamp timezone session.signedInAt
+                                            ++ " "
+                                            ++ MyUi.timestamp session.signedInAt timezone
+                                        )
+                                    ]
+                            )
+                            (SeqDict.toList sessions)
+                        )
         ]
 
 
@@ -2042,46 +2074,54 @@ websocketCloseEventToString event =
             ( ( "ListenCloseEvent", "#bb5ee0" ), time )
 
 
-websocketCloseEventsSection : Bool -> Time.Posix -> Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
-websocketCloseEventsSection isMobile currentTime timezone user adminData model =
-    let
-        allEvents : SeqDict ( String, String ) (Nonempty Time.Posix)
-        allEvents =
-            Array.foldl
-                (\event dict ->
-                    let
-                        ( name, time ) =
-                            websocketCloseEventToString event
-                    in
-                    SeqDictHelper.addToList name time dict
-                )
-                SeqDict.empty
-                adminData.websocketCloseEvents
-    in
+websocketCloseEventsSection : Bool -> Time.Posix -> Time.Zone -> SeqSet AdminUiSection -> AdminData -> Model -> Element Msg
+websocketCloseEventsSection isMobile currentTime timezone expandedSections adminData model =
     section
         isMobile
-        user.expandedSections
+        expandedSections
         WebsocketCloseEventsSection
-        [ if Array.isEmpty adminData.websocketCloseEvents then
-            Ui.text "No websocket close events recorded"
+        [ case adminData.websocketCloseEvents of
+            AdminDataNotLoaded ->
+                Ui.text loadingText
 
-          else
-            Ui.column
-                [ Ui.spacing 12 ]
-                (Ui.text ("Total recorded: " ++ String.fromInt (Array.length adminData.websocketCloseEvents))
-                    :: List.map
-                        (\( ( label, color ), times ) ->
-                            Ui.column
-                                [ Ui.spacing 4 ]
-                                [ Ui.el
-                                    [ Ui.Font.bold, Ui.Font.size 14 ]
-                                    (Ui.text (label ++ " (" ++ String.fromInt (List.Nonempty.length times) ++ ")"))
-                                , eventsPerHourLineGraph currentTime color (List.Nonempty.toList times)
-                                ]
+            AdminDataLoading ->
+                Ui.text loadingText
+
+            AdminDataLoaded events ->
+                if Array.isEmpty events then
+                    Ui.text "No websocket close events recorded"
+
+                else
+                    let
+                        eventsByType : SeqDict ( String, String ) (Nonempty Time.Posix)
+                        eventsByType =
+                            Array.foldl
+                                (\event dict ->
+                                    let
+                                        ( name, time ) =
+                                            websocketCloseEventToString event
+                                    in
+                                    SeqDictHelper.addToList name time dict
+                                )
+                                SeqDict.empty
+                                events
+                    in
+                    Ui.column
+                        [ Ui.spacing 12 ]
+                        (Ui.text ("Total recorded: " ++ String.fromInt (Array.length events))
+                            :: List.map
+                                (\( ( label, color ), times ) ->
+                                    Ui.column
+                                        [ Ui.spacing 4 ]
+                                        [ Ui.el
+                                            [ Ui.Font.bold, Ui.Font.size 14 ]
+                                            (Ui.text (label ++ " (" ++ String.fromInt (List.Nonempty.length times) ++ ")"))
+                                        , eventsPerHourLineGraph currentTime color (List.Nonempty.toList times)
+                                        ]
+                                )
+                                (SeqDict.toList eventsByType)
+                            ++ [ websocketCloseEventsList timezone model events ]
                         )
-                        (SeqDict.toList allEvents)
-                    ++ [ websocketCloseEventsList timezone model adminData.websocketCloseEvents ]
-                )
         ]
 
 
@@ -2418,20 +2458,20 @@ eventsPerHourLineGraph now color eventTimes =
         ]
 
 
-filesSection : Bool -> BackendUser -> AdminData -> Element Msg
-filesSection isMobile user adminData =
+filesSection : Bool -> SeqSet AdminUiSection -> AdminData -> Element Msg
+filesSection isMobile expandedSections adminData =
     section
         isMobile
-        user.expandedSections
+        expandedSections
         FilesSection
         [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
 
 
-wordSpellingGameSwedishSection : Bool -> BackendUser -> AdminData -> Element Msg
-wordSpellingGameSwedishSection isMobile user adminData =
+wordSpellingGameSwedishSection : Bool -> SeqSet AdminUiSection -> AdminData -> Element Msg
+wordSpellingGameSwedishSection isMobile expandedSections adminData =
     section
         isMobile
-        user.expandedSections
+        expandedSections
         WordSpellingGameSwedishSection
         [ Ui.text ("English: " ++ wordSpellingGameStatusText adminData.wordSpellingGameEnglish)
         , Ui.text ("Swedish: " ++ wordSpellingGameStatusText adminData.wordSpellingGameSwedish)
@@ -2464,11 +2504,11 @@ everything inside them, including the status text, which is why they are all
 rendered with no children.
 
 -}
-webCodecsTestSection : Bool -> BackendUser -> Element Msg
-webCodecsTestSection isMobile user =
+webCodecsTestSection : Bool -> SeqSet AdminUiSection -> Element Msg
+webCodecsTestSection isMobile expandedSections =
     section
         isMobile
-        user.expandedSections
+        expandedSections
         WebCodecsTestSection
         [ Ui.row
             [ Ui.spacing 8 ]
@@ -2523,8 +2563,8 @@ webCodecsTestSection isMobile user =
         ]
 
 
-stickersAndEmojisSection : Bool -> LocalState -> BackendUser -> Element Msg
-stickersAndEmojisSection isMobile local user =
+stickersAndEmojisSection : Bool -> LocalState -> SeqSet AdminUiSection -> Element Msg
+stickersAndEmojisSection isMobile local expandedSections =
     let
         stickers =
             local.localUser.stickers
@@ -2582,7 +2622,7 @@ stickersAndEmojisSection isMobile local user =
     in
     section
         isMobile
-        user.expandedSections
+        expandedSections
         StickersAndEmojisSection
         [ Ui.text ("Sticker count: " ++ String.fromInt stickerCount)
         , Ui.column
@@ -2648,53 +2688,69 @@ stickerUrlToString url =
             "Loading"
 
 
-toBackendLogsSection : Bool -> Time.Posix -> BackendUser -> AdminData -> Element Msg
-toBackendLogsSection isMobile currentTime user adminData =
+toBackendLogsSection : Bool -> Time.Posix -> SeqSet AdminUiSection -> AdminData -> Element Msg
+toBackendLogsSection isMobile currentTime expandedSections adminData =
     section
         isMobile
-        user.expandedSections
+        expandedSections
         ToBackendLogsSection
-        [ if Array.isEmpty adminData.toBackendLogs then
-            Ui.text "No toBackend logs"
+        [ case adminData.toBackendLogs of
+            AdminDataNotLoaded ->
+                Ui.text loadingText
 
-          else
-            Ui.column
-                [ Ui.spacing 12 ]
-                [ Ui.column
-                    [ Ui.spacing 4 ]
-                    [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text "Logs per hour")
-                    , eventsPerHourLineGraph
-                        currentTime
-                        "#4a90d9"
-                        (Array.toList adminData.toBackendLogs |> List.map .startTime)
-                    ]
-                , toBackendLogsTable adminData.toBackendLogs
-                ]
+            AdminDataLoading ->
+                Ui.text loadingText
+
+            AdminDataLoaded logs ->
+                if Array.isEmpty logs then
+                    Ui.text "No toBackend logs"
+
+                else
+                    Ui.column
+                        [ Ui.spacing 12 ]
+                        [ Ui.column
+                            [ Ui.spacing 4 ]
+                            [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text "Logs per hour")
+                            , eventsPerHourLineGraph
+                                currentTime
+                                "#4a90d9"
+                                (Array.toList logs |> List.map .startTime)
+                            ]
+                        , toBackendLogsTable logs
+                        ]
         ]
 
 
-backendMsgLogsSection : Bool -> Time.Posix -> BackendUser -> AdminData -> Element Msg
-backendMsgLogsSection isMobile currentTime user adminData =
+backendMsgLogsSection : Bool -> Time.Posix -> SeqSet AdminUiSection -> AdminData -> Element Msg
+backendMsgLogsSection isMobile currentTime expandedSections adminData =
     section
         isMobile
-        user.expandedSections
+        expandedSections
         BackendMsgLogsSection
-        [ if Array.isEmpty adminData.backendMsgLogs then
-            Ui.text noBackendMsgLogsText
+        [ case adminData.backendMsgLogs of
+            AdminDataNotLoaded ->
+                Ui.text loadingText
 
-          else
-            Ui.column
-                [ Ui.spacing 12 ]
-                [ Ui.column
-                    [ Ui.spacing 4 ]
-                    [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text "Logs per hour")
-                    , eventsPerHourLineGraph
-                        currentTime
-                        "#4a90d9"
-                        (Array.toList adminData.backendMsgLogs |> List.map .startTime)
-                    ]
-                , backendMsgLogsTable adminData.backendMsgLogs
-                ]
+            AdminDataLoading ->
+                Ui.text loadingText
+
+            AdminDataLoaded logs ->
+                if Array.isEmpty logs then
+                    Ui.text noBackendMsgLogsText
+
+                else
+                    Ui.column
+                        [ Ui.spacing 12 ]
+                        [ Ui.column
+                            [ Ui.spacing 4 ]
+                            [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text "Logs per hour")
+                            , eventsPerHourLineGraph
+                                currentTime
+                                "#4a90d9"
+                                (Array.toList logs |> List.map .startTime)
+                            ]
+                        , backendMsgLogsTable logs
+                        ]
         ]
 
 
@@ -2882,11 +2938,11 @@ exportProgressText progress =
             "Encoding Discord DM channels " ++ String.fromInt encoded ++ "/" ++ String.fromInt total
 
 
-exportSection : Bool -> Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
-exportSection isMobile timezone user adminData model =
+exportSection : Bool -> Time.Zone -> SeqSet AdminUiSection -> AdminData -> Model -> Element Msg
+exportSection isMobile timezone expandedSections adminData model =
     section
         isMobile
-        user.expandedSections
+        expandedSections
         ExportSection
         [ Ui.row
             [ Ui.spacing 8 ]
@@ -2982,216 +3038,221 @@ setMember isChecked item set =
 
 exportSubsetSelector : AdminData -> ExportSubsetSelection -> Element Msg
 exportSubsetSelector adminData selection =
-    let
-        selectedCount : Int
-        selectedCount =
-            SeqSet.size selection.guilds
-                + SeqSet.size selection.dmChannels
-                + SeqSet.size selection.discordGuilds
-                + SeqSet.size selection.discordDmChannels
-    in
-    Ui.column
-        [ Ui.spacing 8
-        , Ui.padding 8
-        , Ui.border 1
-        , Ui.borderColor (Ui.rgb 100 100 100)
-        , Ui.rounded 4
-        ]
-        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text "Select what to export")
-        , MyUi.details
-            (selectionSummary "Guilds" (SeqSet.size selection.guilds) (SeqDict.size adminData.guilds))
-            (if SeqDict.isEmpty adminData.guilds then
-                Ui.text "No guilds"
+    case ( ( adminData.guilds, adminData.dmChannels ), ( adminData.discordGuilds, adminData.discordDmChannels ), adminData.discordUsers ) of
+        ( ( AdminDataLoaded guilds, AdminDataLoaded dmChannels ), ( AdminDataLoaded discordGuilds, AdminDataLoaded discordDmChannels ), AdminDataLoaded discordUsers ) ->
+            let
+                selectedCount : Int
+                selectedCount =
+                    SeqSet.size selection.guilds
+                        + SeqSet.size selection.dmChannels
+                        + SeqSet.size selection.discordGuilds
+                        + SeqSet.size selection.discordDmChannels
+            in
+            Ui.column
+                [ Ui.spacing 8
+                , Ui.padding 8
+                , Ui.border 1
+                , Ui.borderColor (Ui.rgb 100 100 100)
+                , Ui.rounded 4
+                ]
+                [ Ui.el [ Ui.Font.weight 600 ] (Ui.text "Select what to export")
+                , MyUi.details
+                    (selectionSummary "Guilds" (SeqSet.size selection.guilds) (SeqDict.size guilds))
+                    (if SeqDict.isEmpty guilds then
+                        Ui.text "No guilds"
 
-             else
-                Ui.column
-                    [ Ui.spacing 4 ]
-                    (List.map
-                        (\( guildId, guild ) ->
-                            let
-                                label : { element : Element msg, id : Ui.Input.Label }
-                                label =
-                                    Ui.Input.label
-                                        ("admin_exportSubsetGuildToggle_" ++ Id.toString guildId)
-                                        [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
-                                        (Ui.text (GuildName.toString guild.name))
-                            in
-                            Ui.row
-                                [ Ui.Font.size 14 ]
-                                [ Ui.Input.checkbox
-                                    [ Ui.Font.size 14 ]
-                                    { onChange = ToggledExportSubsetGuild guildId
-                                    , icon = Nothing
-                                    , checked = SeqSet.member guildId selection.guilds
-                                    , label = label.id
-                                    }
-                                , label.element
-                                , Ui.row
-                                    [ Ui.spacing 8 ]
-                                    [ Ui.text ("Channels: " ++ String.fromInt (SeqDict.size guild.channels))
-                                    , Ui.text
-                                        ("Messages: "
-                                            ++ String.fromInt
-                                                (SeqDict.foldl
-                                                    (\_ channel total -> total + channel.messageCount)
-                                                    0
-                                                    guild.channels
+                     else
+                        Ui.column
+                            [ Ui.spacing 4 ]
+                            (List.map
+                                (\( guildId, guild ) ->
+                                    let
+                                        label : { element : Element msg, id : Ui.Input.Label }
+                                        label =
+                                            Ui.Input.label
+                                                ("admin_exportSubsetGuildToggle_" ++ Id.toString guildId)
+                                                [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
+                                                (Ui.text (GuildName.toString guild.name))
+                                    in
+                                    Ui.row
+                                        [ Ui.Font.size 14 ]
+                                        [ Ui.Input.checkbox
+                                            [ Ui.Font.size 14 ]
+                                            { onChange = ToggledExportSubsetGuild guildId
+                                            , icon = Nothing
+                                            , checked = SeqSet.member guildId selection.guilds
+                                            , label = label.id
+                                            }
+                                        , label.element
+                                        , Ui.row
+                                            [ Ui.spacing 8 ]
+                                            [ Ui.text ("Channels: " ++ String.fromInt (SeqDict.size guild.channels))
+                                            , Ui.text
+                                                ("Messages: "
+                                                    ++ String.fromInt
+                                                        (SeqDict.foldl
+                                                            (\_ channel total -> total + channel.messageCount)
+                                                            0
+                                                            guild.channels
+                                                        )
                                                 )
-                                        )
-                                    ]
-                                ]
-                        )
-                        (SeqDict.toList adminData.guilds)
+                                            ]
+                                        ]
+                                )
+                                (SeqDict.toList guilds)
+                            )
                     )
-            )
-        , MyUi.details
-            (selectionSummary "DM channels" (SeqSet.size selection.dmChannels) (SeqDict.size adminData.dmChannels))
-            (if SeqDict.isEmpty adminData.dmChannels then
-                Ui.text "No DM channels"
+                , MyUi.details
+                    (selectionSummary "DM channels" (SeqSet.size selection.dmChannels) (SeqDict.size dmChannels))
+                    (if SeqDict.isEmpty dmChannels then
+                        Ui.text "No DM channels"
 
-             else
-                Ui.column
-                    [ Ui.spacing 4 ]
-                    (List.map
-                        (\( channelId, channel ) ->
-                            let
-                                label : { element : Element msg, id : Ui.Input.Label }
-                                label =
-                                    Ui.Input.label
-                                        ("admin_exportSubsetDmToggle_" ++ DmChannelId.toString channelId)
-                                        [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
-                                        (dmChannelParticipants adminData channelId)
-                            in
-                            Ui.row
-                                [ Ui.Font.size 14 ]
-                                [ Ui.Input.checkbox
-                                    [ Ui.Font.size 14 ]
-                                    { onChange = ToggledExportSubsetDmChannel channelId
-                                    , icon = Nothing
-                                    , checked = SeqSet.member channelId selection.dmChannels
-                                    , label = label.id
-                                    }
-                                , label.element
-                                , Ui.row
-                                    [ Ui.spacing 8 ]
-                                    [ Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
-                                    , Ui.text ("Threads: " ++ String.fromInt channel.threadCount)
-                                    ]
-                                ]
-                        )
-                        (SeqDict.toList adminData.dmChannels)
+                     else
+                        Ui.column
+                            [ Ui.spacing 4 ]
+                            (List.map
+                                (\( channelId, channel ) ->
+                                    let
+                                        label : { element : Element msg, id : Ui.Input.Label }
+                                        label =
+                                            Ui.Input.label
+                                                ("admin_exportSubsetDmToggle_" ++ DmChannelId.toString channelId)
+                                                [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
+                                                (dmChannelParticipants adminData channelId)
+                                    in
+                                    Ui.row
+                                        [ Ui.Font.size 14 ]
+                                        [ Ui.Input.checkbox
+                                            [ Ui.Font.size 14 ]
+                                            { onChange = ToggledExportSubsetDmChannel channelId
+                                            , icon = Nothing
+                                            , checked = SeqSet.member channelId selection.dmChannels
+                                            , label = label.id
+                                            }
+                                        , label.element
+                                        , Ui.row
+                                            [ Ui.spacing 8 ]
+                                            [ Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                            , Ui.text ("Threads: " ++ String.fromInt channel.threadCount)
+                                            ]
+                                        ]
+                                )
+                                (SeqDict.toList dmChannels)
+                            )
                     )
-            )
-        , MyUi.details
-            (selectionSummary "Discord guilds" (SeqSet.size selection.discordGuilds) (SeqDict.size adminData.discordGuilds))
-            (if SeqDict.isEmpty adminData.discordGuilds then
-                Ui.text "No Discord guilds"
+                , MyUi.details
+                    (selectionSummary "Discord guilds" (SeqSet.size selection.discordGuilds) (SeqDict.size discordGuilds))
+                    (if SeqDict.isEmpty discordGuilds then
+                        Ui.text "No Discord guilds"
 
-             else
-                Ui.column
-                    [ Ui.spacing 4 ]
-                    (List.map
-                        (\( guildId, guild ) ->
-                            let
-                                label : { element : Element msg, id : Ui.Input.Label }
-                                label =
-                                    Ui.Input.label
-                                        ("admin_exportSubsetDiscordGuildToggle_" ++ Discord.idToString guildId)
-                                        [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
-                                        (Ui.text (GuildName.toString guild.name))
-                            in
-                            Ui.row
-                                [ Ui.Font.size 14 ]
-                                [ Ui.Input.checkbox
-                                    [ Ui.Font.size 14 ]
-                                    { onChange = ToggledExportSubsetDiscordGuild guildId
-                                    , icon = Nothing
-                                    , checked = SeqSet.member guildId selection.discordGuilds
-                                    , label = label.id
-                                    }
-                                , label.element
-                                , Ui.row
-                                    [ Ui.spacing 8 ]
-                                    [ Ui.text ("Channels: " ++ String.fromInt (SeqDict.size guild.channels))
-                                    , Ui.text
-                                        ("Messages: "
-                                            ++ String.fromInt
-                                                (SeqDict.foldl
-                                                    (\_ channel total -> total + channel.messageCount)
-                                                    0
-                                                    guild.channels
+                     else
+                        Ui.column
+                            [ Ui.spacing 4 ]
+                            (List.map
+                                (\( guildId, guild ) ->
+                                    let
+                                        label : { element : Element msg, id : Ui.Input.Label }
+                                        label =
+                                            Ui.Input.label
+                                                ("admin_exportSubsetDiscordGuildToggle_" ++ Discord.idToString guildId)
+                                                [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
+                                                (Ui.text (GuildName.toString guild.name))
+                                    in
+                                    Ui.row
+                                        [ Ui.Font.size 14 ]
+                                        [ Ui.Input.checkbox
+                                            [ Ui.Font.size 14 ]
+                                            { onChange = ToggledExportSubsetDiscordGuild guildId
+                                            , icon = Nothing
+                                            , checked = SeqSet.member guildId selection.discordGuilds
+                                            , label = label.id
+                                            }
+                                        , label.element
+                                        , Ui.row
+                                            [ Ui.spacing 8 ]
+                                            [ Ui.text ("Channels: " ++ String.fromInt (SeqDict.size guild.channels))
+                                            , Ui.text
+                                                ("Messages: "
+                                                    ++ String.fromInt
+                                                        (SeqDict.foldl
+                                                            (\_ channel total -> total + channel.messageCount)
+                                                            0
+                                                            guild.channels
+                                                        )
                                                 )
-                                        )
-                                    ]
-                                ]
-                        )
-                        (SeqDict.toList adminData.discordGuilds)
+                                            ]
+                                        ]
+                                )
+                                (SeqDict.toList discordGuilds)
+                            )
                     )
-            )
-        , MyUi.details
-            (selectionSummary
-                "Discord DM channels"
-                (SeqSet.size selection.discordDmChannels)
-                (SeqDict.size adminData.discordDmChannels)
-            )
-            (if SeqDict.isEmpty adminData.discordDmChannels then
-                Ui.text "No Discord DM channels"
-
-             else
-                Ui.column
-                    [ Ui.spacing 4 ]
-                    (List.map
-                        (\( channelId, channel ) ->
-                            let
-                                label : { element : Element msg, id : Ui.Input.Label }
-                                label =
-                                    Ui.Input.label
-                                        ("admin_exportSubsetToggle_" ++ Discord.idToString channelId)
-                                        [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
-                                        (Ui.text (Discord.idToString channelId))
-                            in
-                            Ui.row
-                                [ Ui.Font.size 14 ]
-                                [ Ui.Input.checkbox
-                                    [ Ui.Font.size 14 ]
-                                    { onChange = ToggledExportSubsetDiscordDmChannel channelId
-                                    , icon = Nothing
-                                    , checked = SeqSet.member channelId selection.discordDmChannels
-                                    , label = label.id
-                                    }
-                                , label.element
-                                , Ui.row
-                                    [ Ui.spacing 8 ]
-                                    [ NonemptyDict.toList channel.members
-                                        |> List.map
-                                            (\( discordUserId, _ ) ->
-                                                case SeqDict.get discordUserId adminData.discordUsers of
-                                                    Just discordUser ->
-                                                        discordUserLabel discordUserId discordUser
-
-                                                    Nothing ->
-                                                        Ui.text (Discord.idToString discordUserId)
-                                            )
-                                        |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
-                                    , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
-                                    ]
-                                ]
-                        )
-                        (SeqDict.toList adminData.discordDmChannels)
+                , MyUi.details
+                    (selectionSummary
+                        "Discord DM channels"
+                        (SeqSet.size selection.discordDmChannels)
+                        (SeqDict.size discordDmChannels)
                     )
-            )
-        , Ui.row
-            [ Ui.spacing 8 ]
-            [ MyUi.simpleButton
-                (Dom.id "admin_confirmExportSubsetButton")
-                PressedConfirmExportSubset
-                (Ui.text ("Confirm Export (" ++ String.fromInt selectedCount ++ ")"))
-            , MyUi.secondaryButton
-                (Dom.id "admin_cancelExportSubsetButton")
-                PressedCancelExportSubset
-                "Cancel"
-            ]
-        ]
+                    (if SeqDict.isEmpty discordDmChannels then
+                        Ui.text "No Discord DM channels"
+
+                     else
+                        Ui.column
+                            [ Ui.spacing 4 ]
+                            (List.map
+                                (\( channelId, channel ) ->
+                                    let
+                                        label : { element : Element msg, id : Ui.Input.Label }
+                                        label =
+                                            Ui.Input.label
+                                                ("admin_exportSubsetToggle_" ++ Discord.idToString channelId)
+                                                [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
+                                                (Ui.text (Discord.idToString channelId))
+                                    in
+                                    Ui.row
+                                        [ Ui.Font.size 14 ]
+                                        [ Ui.Input.checkbox
+                                            [ Ui.Font.size 14 ]
+                                            { onChange = ToggledExportSubsetDiscordDmChannel channelId
+                                            , icon = Nothing
+                                            , checked = SeqSet.member channelId selection.discordDmChannels
+                                            , label = label.id
+                                            }
+                                        , label.element
+                                        , Ui.row
+                                            [ Ui.spacing 8 ]
+                                            [ NonemptyDict.toList channel.members
+                                                |> List.map
+                                                    (\( discordUserId, _ ) ->
+                                                        case SeqDict.get discordUserId discordUsers of
+                                                            Just discordUser ->
+                                                                discordUserLabel discordUserId discordUser
+
+                                                            Nothing ->
+                                                                Ui.text (Discord.idToString discordUserId)
+                                                    )
+                                                |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
+                                            , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                            ]
+                                        ]
+                                )
+                                (SeqDict.toList discordDmChannels)
+                            )
+                    )
+                , Ui.row
+                    [ Ui.spacing 8 ]
+                    [ MyUi.simpleButton
+                        (Dom.id "admin_confirmExportSubsetButton")
+                        PressedConfirmExportSubset
+                        (Ui.text ("Confirm Export (" ++ String.fromInt selectedCount ++ ")"))
+                    , MyUi.secondaryButton
+                        (Dom.id "admin_cancelExportSubsetButton")
+                        PressedCancelExportSubset
+                        "Cancel"
+                    ]
+                ]
+
+        _ ->
+            Ui.text loadingText
 
 
 selectionSummary : String -> Int -> Int -> String
@@ -3199,11 +3260,11 @@ selectionSummary name selected total =
     name ++ " (" ++ String.fromInt selected ++ "/" ++ String.fromInt total ++ " selected)"
 
 
-apiKeysSection : Bool -> LocalState -> BackendUser -> AdminData -> Model -> Element Msg
-apiKeysSection isMobile local user adminData2 model =
+apiKeysSection : Bool -> LocalState -> SeqSet AdminUiSection -> AdminData -> Model -> Element Msg
+apiKeysSection isMobile local expandedSections adminData2 model =
     section
         isMobile
-        user.expandedSections
+        expandedSections
         ApiKeysSection
         [ Editable.view
             (Dom.id "userOptions_slackClientSecret")
@@ -3312,8 +3373,8 @@ apiKeysSection isMobile local user adminData2 model =
         ]
 
 
-userSection : Bool -> Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
-userSection isMobile timezone user adminData model =
+userSection : Bool -> Time.Zone -> SeqSet AdminUiSection -> AdminData -> Model -> Element Msg
+userSection isMobile timezone expandedSections adminData model =
     let
         emailNotificationsLabel : { element : Element msg, id : Ui.Input.Label }
         emailNotificationsLabel =
@@ -3338,7 +3399,7 @@ userSection isMobile timezone user adminData model =
     in
     section
         isMobile
-        user.expandedSections
+        expandedSections
         UsersSection
         [ Ui.row
             [ Ui.spacing 4 ]
@@ -3373,7 +3434,15 @@ userSection isMobile timezone user adminData model =
                 }
             , discordLinkingEnabledLabel.element
             ]
-        , Ui.Lazy.lazy4 userTableView timezone model.userTable adminData.users adminData.twoFactorAuthentication
+        , case adminData.users of
+            AdminDataNotLoaded ->
+                Ui.text loadingText
+
+            AdminDataLoading ->
+                Ui.text loadingText
+
+            AdminDataLoaded users ->
+                Ui.Lazy.lazy4 userTableView timezone model.userTable users adminData.twoFactorAuthentication
         , Ui.row
             [ Ui.spacing 16 ]
             (MyUi.simpleButton
@@ -3425,231 +3494,257 @@ userSection isMobile timezone user adminData model =
         ]
 
 
-guildsSection : Bool -> BackendUser -> AdminData -> Element Msg
-guildsSection isMobile user adminData =
+guildsSection : Bool -> SeqSet AdminUiSection -> SeqSet (Id GuildId) -> AdminData -> Element Msg
+guildsSection isMobile expandedSections expandedGuilds adminData =
     section
         isMobile
-        user.expandedSections
+        expandedSections
         GuildsSection
-        [ if SeqDict.isEmpty adminData.guilds then
-            Ui.text "No guilds"
+        [ case adminData.guilds of
+            AdminDataNotLoaded ->
+                Ui.text loadingText
 
-          else
-            Ui.column
-                [ Ui.spacing 4 ]
-                (List.map
-                    (\( guildId, guild ) ->
-                        let
-                            isExpanded : Bool
-                            isExpanded =
-                                SeqSet.member guildId user.expandedGuilds
+            AdminDataLoading ->
+                Ui.text loadingText
 
-                            channelCount : Int
-                            channelCount =
-                                SeqDict.size guild.channels
-                        in
-                        Ui.column
-                            [ Ui.spacing 4 ]
-                            [ Ui.row
-                                [ Ui.spacing 8, Ui.Font.size 14 ]
-                                [ Ui.el
-                                    [ Ui.width Ui.shrink
-                                    , Ui.Input.button (PressedExpandGuild guildId)
-                                    , MyUi.hoverText
-                                        (if isExpanded then
-                                            "Collapse"
+            AdminDataLoaded guilds ->
+                if SeqDict.isEmpty guilds then
+                    Ui.text "No guilds"
 
-                                         else
-                                            "Expand"
-                                        )
-                                    ]
-                                    (if isExpanded then
-                                        Icons.collapseContainer
-
-                                     else
-                                        Icons.expandContainer
-                                    )
-                                , Ui.text (Id.toString guildId)
-                                , Ui.text (GuildName.toString guild.name)
-                                , Ui.row
-                                    [ Ui.spacing 8 ]
-                                    [ Ui.text "Owner:"
-                                    , case NonemptyDict.get guild.owner adminData.users of
-                                        Just user2 ->
-                                            userLabel user2
-
-                                        Nothing ->
-                                            Ui.text (Id.toString guild.owner)
-                                    ]
-                                , Ui.text ("Channels: " ++ String.fromInt channelCount)
-                                , Ui.text ("Members: " ++ String.fromInt guild.memberCount)
-                                , MyUi.deleteButton (deleteGuildButtonId guildId) (PressedDeleteGuild guildId)
-                                ]
-                            , if isExpanded then
-                                Ui.column
-                                    [ Ui.spacing 2, Ui.paddingWith { left = 32, right = 0, top = 0, bottom = 0 } ]
-                                    (List.map
-                                        (\( _, channel ) ->
-                                            Ui.row
-                                                [ Ui.spacing 8, Ui.Font.size 13 ]
-                                                [ Ui.text ("#" ++ ChannelName.toString channel.name)
-                                                , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
-                                                ]
-                                        )
-                                        (SeqDict.toList guild.channels)
-                                    )
-
-                              else
-                                Ui.none
-                            ]
-                    )
-                    (SeqDict.toList adminData.guilds)
-                )
-        ]
-
-
-deletedGuildsSection : Bool -> BackendUser -> AdminData -> Element Msg
-deletedGuildsSection isMobile user adminData =
-    section
-        isMobile
-        user.expandedSections
-        DeletedGuildsSection
-        [ if SeqDict.isEmpty adminData.deletedGuilds then
-            Ui.text "No deleted guilds"
-
-          else
-            Ui.column
-                [ Ui.spacing 4 ]
-                (List.map
-                    (\( guildId, deletedGuild ) ->
-                        Ui.row
-                            [ Ui.spacing 8, Ui.Font.size 14 ]
-                            [ Ui.text (Id.toString guildId)
-                            , Ui.text (GuildName.toString deletedGuild.name)
-                            , Ui.row
-                                [ Ui.spacing 8 ]
-                                [ Ui.text "Owner:"
-                                , case NonemptyDict.get deletedGuild.owner adminData.users of
-                                    Just user2 ->
-                                        userLabel user2
-
-                                    Nothing ->
-                                        Ui.text (Id.toString deletedGuild.owner)
-                                ]
-                            , Ui.text ("Members: " ++ String.fromInt deletedGuild.memberCount)
-                            , MyUi.simpleButton
-                                (restoreGuildButtonId guildId)
-                                (PressedRestoreGuild guildId)
-                                (Ui.text "Restore")
-                            ]
-                    )
-                    (SeqDict.toList adminData.deletedGuilds)
-                )
-        ]
-
-
-discordGuildsSection : Bool -> BackendUser -> AdminData -> Element Msg
-discordGuildsSection isMobile user adminData =
-    section
-        isMobile
-        user.expandedSections
-        DiscordGuildsSection
-        [ if SeqDict.isEmpty adminData.discordGuilds then
-            Ui.text "No Discord guilds"
-
-          else
-            Ui.column
-                [ Ui.spacing 4 ]
-                (List.map
-                    (\( guildId, guild ) ->
-                        let
-                            isExpanded : Bool
-                            isExpanded =
-                                SeqSet.member guildId user.expandedDiscordGuilds
-
-                            channelCount : Int
-                            channelCount =
-                                SeqDict.size guild.channels
-
-                            owner : Discord.Id Discord.UserId
-                            owner =
-                                MembersAndOwner.owner guild.membersAndOwner
-
-                            members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) }
-                            members =
-                                MembersAndOwner.members guild.membersAndOwner
-                        in
-                        Ui.column
-                            [ Ui.spacing 4 ]
-                            [ Ui.row
-                                [ Ui.spacing 8, Ui.Font.size 14 ]
-                                [ Ui.el
-                                    [ Ui.width Ui.shrink
-                                    , Ui.Input.button (PressedExpandDiscordGuild guildId)
-                                    , MyUi.hoverText
-                                        (if isExpanded then
-                                            "Collapse"
-
-                                         else
-                                            "Expand"
-                                        )
-                                    ]
-                                    (if isExpanded then
-                                        Icons.collapseContainer
-
-                                     else
-                                        Icons.expandContainer
-                                    )
-                                , Ui.text (Discord.idToString guildId)
-                                , Ui.text (GuildName.toString guild.name)
-                                , Ui.row
-                                    [ Ui.spacing 8 ]
-                                    [ Ui.text "Owner:"
-                                    , case SeqDict.get owner adminData.discordUsers of
-                                        Just discordUser ->
-                                            discordUserLabel owner discordUser
-
-                                        Nothing ->
-                                            Ui.text (Discord.idToString owner)
-                                    ]
-                                , Ui.text ("Channels: " ++ String.fromInt channelCount)
-                                , Ui.text ("Members: " ++ String.fromInt (SeqDict.size members))
-                                , MyUi.deleteButton (deleteDiscordGuildButtonId guildId) (PressedDeleteDiscordGuild guildId)
-                                ]
-                            , if isExpanded then
+                else
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        (List.map
+                            (\( guildId, guild ) ->
                                 let
-                                    linkedGuildMembers : List (Discord.Id Discord.UserId)
-                                    linkedGuildMembers =
-                                        SeqDict.intersect
-                                            (SeqDict.filter
-                                                (\_ discordUser ->
-                                                    case discordUser of
-                                                        FullData_ForAdmin _ ->
-                                                            True
+                                    isExpanded : Bool
+                                    isExpanded =
+                                        SeqSet.member guildId expandedGuilds
 
-                                                        _ ->
-                                                            False
-                                                )
-                                                adminData.discordUsers
-                                            )
-                                            (SeqDict.insert owner { joinedAt = Nothing, roles = SeqSet.empty } members)
-                                            |> SeqDict.keys
+                                    channelCount : Int
+                                    channelCount =
+                                        SeqDict.size guild.channels
                                 in
                                 Ui.column
-                                    [ Ui.spacing 2, Ui.paddingWith { left = 32, right = 0, top = 0, bottom = 0 } ]
-                                    (discordGuildRoles (List.head linkedGuildMembers) guildId guild.roles
-                                        :: discordGuildRoleMembers guildId guild.roles members adminData
-                                        :: List.map
-                                            (discordGuildChannel linkedGuildMembers guild guildId adminData)
-                                            (SeqDict.toList guild.channels)
-                                    )
+                                    [ Ui.spacing 4 ]
+                                    [ Ui.row
+                                        [ Ui.spacing 8, Ui.Font.size 14 ]
+                                        [ Ui.el
+                                            [ Ui.width Ui.shrink
+                                            , Ui.Input.button (PressedExpandGuild guildId)
+                                            , MyUi.hoverText
+                                                (if isExpanded then
+                                                    "Collapse"
 
-                              else
-                                Ui.none
-                            ]
-                    )
-                    (SeqDict.toList adminData.discordGuilds)
-                )
+                                                 else
+                                                    "Expand"
+                                                )
+                                            ]
+                                            (if isExpanded then
+                                                Icons.collapseContainer
+
+                                             else
+                                                Icons.expandContainer
+                                            )
+                                        , Ui.text (Id.toString guildId)
+                                        , Ui.text (GuildName.toString guild.name)
+                                        , Ui.row
+                                            [ Ui.spacing 8 ]
+                                            [ Ui.text "Owner:"
+                                            , case adminUser guild.owner adminData of
+                                                Just user2 ->
+                                                    userLabel user2
+
+                                                Nothing ->
+                                                    Ui.text (Id.toString guild.owner)
+                                            ]
+                                        , Ui.text ("Channels: " ++ String.fromInt channelCount)
+                                        , Ui.text ("Members: " ++ String.fromInt guild.memberCount)
+                                        , MyUi.deleteButton (deleteGuildButtonId guildId) (PressedDeleteGuild guildId)
+                                        ]
+                                    , if isExpanded then
+                                        Ui.column
+                                            [ Ui.spacing 2, Ui.paddingWith { left = 32, right = 0, top = 0, bottom = 0 } ]
+                                            (List.map
+                                                (\( _, channel ) ->
+                                                    Ui.row
+                                                        [ Ui.spacing 8, Ui.Font.size 13 ]
+                                                        [ Ui.text ("#" ++ ChannelName.toString channel.name)
+                                                        , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                                        ]
+                                                )
+                                                (SeqDict.toList guild.channels)
+                                            )
+
+                                      else
+                                        Ui.none
+                                    ]
+                            )
+                            (SeqDict.toList guilds)
+                        )
+        ]
+
+
+deletedGuildsSection : Bool -> SeqSet AdminUiSection -> AdminData -> Element Msg
+deletedGuildsSection isMobile expandedSections adminData =
+    section
+        isMobile
+        expandedSections
+        DeletedGuildsSection
+        [ case adminData.deletedGuilds of
+            AdminDataNotLoaded ->
+                Ui.text loadingText
+
+            AdminDataLoading ->
+                Ui.text loadingText
+
+            AdminDataLoaded deletedGuilds ->
+                if SeqDict.isEmpty deletedGuilds then
+                    Ui.text "No deleted guilds"
+
+                else
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        (List.map
+                            (\( guildId, deletedGuild ) ->
+                                Ui.row
+                                    [ Ui.spacing 8, Ui.Font.size 14 ]
+                                    [ Ui.text (Id.toString guildId)
+                                    , Ui.text (GuildName.toString deletedGuild.name)
+                                    , Ui.row
+                                        [ Ui.spacing 8 ]
+                                        [ Ui.text "Owner:"
+                                        , case adminUser deletedGuild.owner adminData of
+                                            Just user2 ->
+                                                userLabel user2
+
+                                            Nothing ->
+                                                Ui.text (Id.toString deletedGuild.owner)
+                                        ]
+                                    , Ui.text ("Members: " ++ String.fromInt deletedGuild.memberCount)
+                                    , MyUi.simpleButton
+                                        (restoreGuildButtonId guildId)
+                                        (PressedRestoreGuild guildId)
+                                        (Ui.text "Restore")
+                                    ]
+                            )
+                            (SeqDict.toList deletedGuilds)
+                        )
+        ]
+
+
+discordGuildsSection :
+    Bool
+    -> SeqSet AdminUiSection
+    -> SeqSet (Discord.Id Discord.GuildId)
+    -> AdminData
+    -> Element Msg
+discordGuildsSection isMobile expandedSections expandedDiscordGuilds adminData =
+    section
+        isMobile
+        expandedSections
+        DiscordGuildsSection
+        [ case ( adminData.discordGuilds, adminData.discordUsers ) of
+            ( AdminDataLoaded discordGuilds, AdminDataLoaded discordUsers ) ->
+                if SeqDict.isEmpty discordGuilds then
+                    Ui.text "No Discord guilds"
+
+                else
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        (List.map
+                            (\( guildId, guild ) ->
+                                let
+                                    isExpanded : Bool
+                                    isExpanded =
+                                        SeqSet.member guildId expandedDiscordGuilds
+
+                                    channelCount : Int
+                                    channelCount =
+                                        SeqDict.size guild.channels
+
+                                    owner : Discord.Id Discord.UserId
+                                    owner =
+                                        MembersAndOwner.owner guild.membersAndOwner
+
+                                    members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) }
+                                    members =
+                                        MembersAndOwner.members guild.membersAndOwner
+                                in
+                                Ui.column
+                                    [ Ui.spacing 4 ]
+                                    [ Ui.row
+                                        [ Ui.spacing 8, Ui.Font.size 14 ]
+                                        [ Ui.el
+                                            [ Ui.width Ui.shrink
+                                            , Ui.Input.button (PressedExpandDiscordGuild guildId)
+                                            , MyUi.hoverText
+                                                (if isExpanded then
+                                                    "Collapse"
+
+                                                 else
+                                                    "Expand"
+                                                )
+                                            ]
+                                            (if isExpanded then
+                                                Icons.collapseContainer
+
+                                             else
+                                                Icons.expandContainer
+                                            )
+                                        , Ui.text (Discord.idToString guildId)
+                                        , Ui.text (GuildName.toString guild.name)
+                                        , Ui.row
+                                            [ Ui.spacing 8 ]
+                                            [ Ui.text "Owner:"
+                                            , case SeqDict.get owner discordUsers of
+                                                Just discordUser ->
+                                                    discordUserLabel owner discordUser
+
+                                                Nothing ->
+                                                    Ui.text (Discord.idToString owner)
+                                            ]
+                                        , Ui.text ("Channels: " ++ String.fromInt channelCount)
+                                        , Ui.text ("Members: " ++ String.fromInt (SeqDict.size members))
+                                        , MyUi.deleteButton (deleteDiscordGuildButtonId guildId) (PressedDeleteDiscordGuild guildId)
+                                        ]
+                                    , if isExpanded then
+                                        let
+                                            linkedGuildMembers : List (Discord.Id Discord.UserId)
+                                            linkedGuildMembers =
+                                                SeqDict.intersect
+                                                    (SeqDict.filter
+                                                        (\_ discordUser ->
+                                                            case discordUser of
+                                                                FullData_ForAdmin _ ->
+                                                                    True
+
+                                                                _ ->
+                                                                    False
+                                                        )
+                                                        discordUsers
+                                                    )
+                                                    (SeqDict.insert owner { joinedAt = Nothing, roles = SeqSet.empty } members)
+                                                    |> SeqDict.keys
+                                        in
+                                        Ui.column
+                                            [ Ui.spacing 2, Ui.paddingWith { left = 32, right = 0, top = 0, bottom = 0 } ]
+                                            (discordGuildRoles (List.head linkedGuildMembers) guildId guild.roles
+                                                :: discordGuildRoleMembers guildId guild.roles members discordUsers
+                                                :: List.map
+                                                    (discordGuildChannel linkedGuildMembers guild guildId adminData)
+                                                    (SeqDict.toList guild.channels)
+                                            )
+
+                                      else
+                                        Ui.none
+                                    ]
+                            )
+                            (SeqDict.toList discordGuilds)
+                        )
+
+            _ ->
+                Ui.text loadingText
         ]
 
 
@@ -3734,9 +3829,9 @@ discordGuildRoleMembers :
     Discord.Id Discord.GuildId
     -> SeqDict (Discord.Id Discord.RoleId) DiscordRole
     -> SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) }
-    -> AdminData
+    -> SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
     -> Element Msg
-discordGuildRoleMembers guildId roles members adminData =
+discordGuildRoleMembers guildId roles members discordUsers =
     let
         everyoneRoleId : String
         everyoneRoleId =
@@ -3753,7 +3848,7 @@ discordGuildRoleMembers guildId roles members adminData =
 
         userName : Discord.Id Discord.UserId -> String
         userName userId =
-            case SeqDict.get userId adminData.discordUsers of
+            case SeqDict.get userId discordUsers of
                 Just (FullData_ForAdmin data) ->
                     data.user.username
 
@@ -3799,7 +3894,7 @@ discordGuildRoleMembers guildId roles members adminData =
                                 [ Ui.spacing 8
                                 , Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }
                                 ]
-                                [ case SeqDict.get userId adminData.discordUsers of
+                                [ case SeqDict.get userId discordUsers of
                                     Just discordUser ->
                                         discordUserLabel userId discordUser
 
@@ -3908,7 +4003,7 @@ dmChannelParticipants adminData channelId =
     [ userIdA, userIdB ]
         |> List.map
             (\userId ->
-                case NonemptyDict.get userId adminData.users of
+                case adminUser userId adminData of
                     Just user ->
                         userLabel user
 
@@ -3918,161 +4013,182 @@ dmChannelParticipants adminData channelId =
         |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
 
 
-dmChannelsSection : Bool -> BackendUser -> AdminData -> Element Msg
-dmChannelsSection isMobile user adminData =
+dmChannelsSection : Bool -> SeqSet AdminUiSection -> AdminData -> Element Msg
+dmChannelsSection isMobile expandedSections adminData =
     section
         isMobile
-        user.expandedSections
+        expandedSections
         DmChannelsSection
-        [ if SeqDict.isEmpty adminData.dmChannels then
-            Ui.text "No DM channels"
+        [ case adminData.dmChannels of
+            AdminDataNotLoaded ->
+                Ui.text loadingText
 
-          else
-            Ui.column
-                [ Ui.spacing 4 ]
-                (List.map
-                    (\( channelId, channel ) ->
-                        Ui.row
-                            [ Ui.spacing 8, Ui.Font.size 14 ]
-                            [ dmChannelParticipants adminData channelId
-                            , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
-                            , Ui.text ("Threads: " ++ String.fromInt channel.threadCount)
-                            ]
-                    )
-                    (SeqDict.toList adminData.dmChannels)
-                )
+            AdminDataLoading ->
+                Ui.text loadingText
+
+            AdminDataLoaded dmChannels ->
+                if SeqDict.isEmpty dmChannels then
+                    Ui.text "No DM channels"
+
+                else
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        (List.map
+                            (\( channelId, channel ) ->
+                                Ui.row
+                                    [ Ui.spacing 8, Ui.Font.size 14 ]
+                                    [ dmChannelParticipants adminData channelId
+                                    , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                    , Ui.text ("Threads: " ++ String.fromInt channel.threadCount)
+                                    ]
+                            )
+                            (SeqDict.toList dmChannels)
+                        )
         ]
 
 
-discordDmChannelsSection : Bool -> BackendUser -> AdminData -> Element Msg
-discordDmChannelsSection isMobile user adminData =
+discordDmChannelsSection : Bool -> SeqSet AdminUiSection -> AdminData -> Element Msg
+discordDmChannelsSection isMobile expandedSections adminData =
     section
         isMobile
-        user.expandedSections
+        expandedSections
         DiscordDmChannelsSection
-        [ if SeqDict.isEmpty adminData.discordDmChannels then
-            Ui.text "No Discord DM channels"
+        [ case ( adminData.discordDmChannels, adminData.discordUsers ) of
+            ( AdminDataLoaded discordDmChannels, AdminDataLoaded discordUsers ) ->
+                if SeqDict.isEmpty discordDmChannels then
+                    Ui.text "No Discord DM channels"
 
-          else
-            Ui.column
-                [ Ui.spacing 4 ]
-                (List.map
-                    (\( channelId, channel ) ->
-                        let
-                            isReloading : Maybe (LoadingDiscordChannelStep Int)
-                            isReloading =
-                                LocalState.isDiscordDmChannelReloading channelId adminData.loadingDiscordChannels
+                else
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        (List.map
+                            (\( channelId, channel ) ->
+                                let
+                                    isReloading : Maybe (LoadingDiscordChannelStep Int)
+                                    isReloading =
+                                        LocalState.isDiscordDmChannelReloading channelId adminData.loadingDiscordChannels
 
-                            userThatCanReload : Maybe (Discord.Id Discord.UserId)
-                            userThatCanReload =
-                                NonemptyDict.keys channel.members
-                                    |> List.Nonempty.toList
-                                    |> SeqSet.fromList
-                                    |> SeqSet.intersect
-                                        (SeqDict.filter
-                                            (\_ discordUser ->
-                                                case discordUser of
-                                                    FullData_ForAdmin _ ->
-                                                        True
-
-                                                    _ ->
-                                                        False
-                                            )
-                                            adminData.discordUsers
-                                            |> SeqDict.keys
+                                    userThatCanReload : Maybe (Discord.Id Discord.UserId)
+                                    userThatCanReload =
+                                        NonemptyDict.keys channel.members
+                                            |> List.Nonempty.toList
                                             |> SeqSet.fromList
-                                        )
-                                    |> SeqSet.toList
-                                    |> List.head
-                        in
-                        Ui.row
-                            [ Ui.spacing 8, Ui.Font.size 14 ]
-                            [ loadingChannelView
-                                isReloading
-                                (case userThatCanReload of
-                                    Just userId ->
-                                        resetButton
-                                            (Dom.id ("admin_reloadDiscordDmChannel_" ++ Discord.idToString channelId))
-                                            (PressedReloadDiscordDmChannel userId channelId)
+                                            |> SeqSet.intersect
+                                                (SeqDict.filter
+                                                    (\_ discordUser ->
+                                                        case discordUser of
+                                                            FullData_ForAdmin _ ->
+                                                                True
 
-                                    Nothing ->
-                                        Ui.none
-                                )
-                            , Ui.text (Discord.idToString channelId)
-                            , Ui.row
-                                [ Ui.spacing 8 ]
-                                [ Ui.text "Members:"
-                                , NonemptyDict.toList channel.members
-                                    |> List.map
-                                        (\( discordUserId, _ ) ->
-                                            case SeqDict.get discordUserId adminData.discordUsers of
-                                                Just discordUser ->
-                                                    discordUserLabel discordUserId discordUser
+                                                            _ ->
+                                                                False
+                                                    )
+                                                    discordUsers
+                                                    |> SeqDict.keys
+                                                    |> SeqSet.fromList
+                                                )
+                                            |> SeqSet.toList
+                                            |> List.head
+                                in
+                                Ui.row
+                                    [ Ui.spacing 8, Ui.Font.size 14 ]
+                                    [ loadingChannelView
+                                        isReloading
+                                        (case userThatCanReload of
+                                            Just userId ->
+                                                resetButton
+                                                    (Dom.id ("admin_reloadDiscordDmChannel_" ++ Discord.idToString channelId))
+                                                    (PressedReloadDiscordDmChannel userId channelId)
 
-                                                Nothing ->
-                                                    Ui.text (Discord.idToString discordUserId)
+                                            Nothing ->
+                                                Ui.none
                                         )
-                                    |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
-                                ]
-                            , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
-                            , firstMessageView channel
-                            , loadingChannelErrorView (Discord.idToString channelId) isReloading
-                            , MyUi.deleteButton (deleteDiscordDmChannelButtonId channelId) (PressedDeleteDiscordDmChannel channelId)
-                            ]
-                    )
-                    (SeqDict.toList adminData.discordDmChannels)
-                )
+                                    , Ui.text (Discord.idToString channelId)
+                                    , Ui.row
+                                        [ Ui.spacing 8 ]
+                                        [ Ui.text "Members:"
+                                        , NonemptyDict.toList channel.members
+                                            |> List.map
+                                                (\( discordUserId, _ ) ->
+                                                    case SeqDict.get discordUserId discordUsers of
+                                                        Just discordUser ->
+                                                            discordUserLabel discordUserId discordUser
+
+                                                        Nothing ->
+                                                            Ui.text (Discord.idToString discordUserId)
+                                                )
+                                            |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
+                                        ]
+                                    , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                    , firstMessageView channel
+                                    , loadingChannelErrorView (Discord.idToString channelId) isReloading
+                                    , MyUi.deleteButton (deleteDiscordDmChannelButtonId channelId) (PressedDeleteDiscordDmChannel channelId)
+                                    ]
+                            )
+                            (SeqDict.toList discordDmChannels)
+                        )
+
+            _ ->
+                Ui.text loadingText
         ]
 
 
-discordUsersSection : Bool -> BackendUser -> AdminData -> Element Msg
-discordUsersSection isMobile user adminData =
+discordUsersSection : Bool -> SeqSet AdminUiSection -> AdminData -> Element Msg
+discordUsersSection isMobile expandedSections adminData =
     section
         isMobile
-        user.expandedSections
+        expandedSections
         DiscordUsersSection
-        [ if SeqDict.isEmpty adminData.discordUsers then
-            Ui.text "No Discord user"
+        [ case adminData.discordUsers of
+            AdminDataNotLoaded ->
+                Ui.text loadingText
 
-          else
-            Ui.column
-                [ Ui.spacing 4 ]
-                (List.map
-                    (\( discordUserId, discordUser ) ->
-                        Ui.row
-                            [ Ui.spacing 8, Ui.Font.size 14 ]
-                            [ Ui.el [ Ui.width (Ui.px 150) ] (Ui.text (Discord.idToString discordUserId))
-                            , discordUserLabel discordUserId discordUser
-                            , Ui.el
-                                [ Ui.widthMin 200, Ui.width Ui.shrink ]
-                                (case discordUser of
-                                    FullData_ForAdmin data ->
-                                        linkedToView adminData data.linkedTo
+            AdminDataLoading ->
+                Ui.text loadingText
 
-                                    BasicData_ForAdmin _ ->
-                                        Ui.none
+            AdminDataLoaded discordUsers ->
+                if SeqDict.isEmpty discordUsers then
+                    Ui.text "No Discord user"
 
-                                    NeedsAuthAgain_ForAdmin data ->
-                                        linkedToView adminData data.linkedTo
-                                )
-                            , Ui.el
-                                [ Ui.width (Ui.px 260) ]
-                                (case discordUser of
-                                    FullData_ForAdmin data ->
-                                        gatewayStatusView data.gateway
+                else
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        (List.map
+                            (\( discordUserId, discordUser ) ->
+                                Ui.row
+                                    [ Ui.spacing 8, Ui.Font.size 14 ]
+                                    [ Ui.el [ Ui.width (Ui.px 150) ] (Ui.text (Discord.idToString discordUserId))
+                                    , discordUserLabel discordUserId discordUser
+                                    , Ui.el
+                                        [ Ui.widthMin 200, Ui.width Ui.shrink ]
+                                        (case discordUser of
+                                            FullData_ForAdmin data ->
+                                                linkedToView adminData data.linkedTo
 
-                                    BasicData_ForAdmin _ ->
-                                        Ui.none
+                                            BasicData_ForAdmin _ ->
+                                                Ui.none
 
-                                    NeedsAuthAgain_ForAdmin _ ->
-                                        Ui.el
-                                            [ Ui.Font.color MyUi.errorColor ]
-                                            (Ui.text "No websocket, needs auth again")
-                                )
-                            ]
-                    )
-                    (SeqDict.toList adminData.discordUsers)
-                )
+                                            NeedsAuthAgain_ForAdmin data ->
+                                                linkedToView adminData data.linkedTo
+                                        )
+                                    , Ui.el
+                                        [ Ui.width (Ui.px 260) ]
+                                        (case discordUser of
+                                            FullData_ForAdmin data ->
+                                                gatewayStatusView data.gateway
+
+                                            BasicData_ForAdmin _ ->
+                                                Ui.none
+
+                                            NeedsAuthAgain_ForAdmin _ ->
+                                                Ui.el
+                                                    [ Ui.Font.color MyUi.errorColor ]
+                                                    (Ui.text "No websocket, needs auth again")
+                                        )
+                                    ]
+                            )
+                            (SeqDict.toList discordUsers)
+                        )
         ]
 
 
@@ -4153,7 +4269,7 @@ discordUserLabel userId discordUser =
 
 linkedToView : AdminData -> Id UserId -> Element msg
 linkedToView adminData userId =
-    case NonemptyDict.get userId adminData.users of
+    case adminUser userId adminData of
         Just user ->
             Ui.row
                 [ Ui.spacing 8, Ui.width Ui.shrink ]
@@ -4621,8 +4737,8 @@ reloadButton hoverText htmlId onPress =
         Icons.reset
 
 
-logSection : Bool -> LocalUser -> BackendUser -> AdminData -> Model -> Element Msg
-logSection isMobile2 localUser user adminData model =
+logSection : Bool -> LocalUser -> SeqSet AdminUiSection -> AdminData -> Model -> Element Msg
+logSection isMobile2 localUser expandedSections adminData model =
     let
         pageIndex : Int
         pageIndex =
@@ -4634,7 +4750,7 @@ logSection isMobile2 localUser user adminData model =
     in
     section
         isMobile2
-        user.expandedSections
+        expandedSections
         LogSection
         [ MyUi.simpleButton
             (Dom.id "admin_toggleHiddenLogs")
@@ -4711,6 +4827,187 @@ maxVisiblePages =
     20
 
 
+{-| What a section needs from the backend before it can show anything. Expanding a section
+asks for whatever hasn't arrived yet, so that opening the admin page doesn't wait on data
+that nothing on screen is using.
+-}
+sectionDataToLoad : AdminUiSection -> AdminData -> List AdminChange
+sectionDataToLoad section2 adminData =
+    case section2 of
+        UsersSection ->
+            loadIfNeeded adminData.users (LoadUsers EmptyPlaceholder)
+
+        LogSection ->
+            []
+
+        DmChannelsSection ->
+            -- DM channels are named after who is in them.
+            loadIfNeeded adminData.dmChannels (LoadDmChannels EmptyPlaceholder)
+                ++ loadIfNeeded adminData.users (LoadUsers EmptyPlaceholder)
+
+        DiscordDmChannelsSection ->
+            loadIfNeeded adminData.discordDmChannels (LoadDiscordDmChannels EmptyPlaceholder)
+                ++ loadIfNeeded adminData.discordUsers (LoadDiscordUsers EmptyPlaceholder)
+
+        DiscordUsersSection ->
+            -- Discord users are shown next to the account they're linked to.
+            loadIfNeeded adminData.discordUsers (LoadDiscordUsers EmptyPlaceholder)
+                ++ loadIfNeeded adminData.users (LoadUsers EmptyPlaceholder)
+
+        DiscordGuildsSection ->
+            loadIfNeeded adminData.discordGuilds (LoadDiscordGuilds EmptyPlaceholder)
+                ++ loadIfNeeded adminData.discordUsers (LoadDiscordUsers EmptyPlaceholder)
+
+        GuildsSection ->
+            -- Each guild is shown with its owner.
+            loadIfNeeded adminData.guilds (LoadGuilds EmptyPlaceholder)
+                ++ loadIfNeeded adminData.users (LoadUsers EmptyPlaceholder)
+
+        DeletedGuildsSection ->
+            loadIfNeeded adminData.deletedGuilds (LoadDeletedGuilds EmptyPlaceholder)
+                ++ loadIfNeeded adminData.users (LoadUsers EmptyPlaceholder)
+
+        ApiKeysSection ->
+            []
+
+        ExportSection ->
+            []
+
+        ConnectionsSection ->
+            -- What each connection is looking at is shown by name, so the guilds, channels
+            -- and users those names come from have to be here too.
+            loadIfNeeded adminData.users (LoadUsers EmptyPlaceholder)
+                ++ loadIfNeeded adminData.guilds (LoadGuilds EmptyPlaceholder)
+                ++ loadIfNeeded adminData.discordGuilds (LoadDiscordGuilds EmptyPlaceholder)
+                ++ loadIfNeeded adminData.discordDmChannels (LoadDiscordDmChannels EmptyPlaceholder)
+                ++ loadIfNeeded adminData.discordUsers (LoadDiscordUsers EmptyPlaceholder)
+
+        FilesSection ->
+            []
+
+        ToBackendLogsSection ->
+            loadIfNeeded adminData.toBackendLogs (LoadToBackendLogs EmptyPlaceholder)
+
+        BackendMsgLogsSection ->
+            loadIfNeeded adminData.backendMsgLogs (LoadBackendMsgLogs EmptyPlaceholder)
+
+        StickersAndEmojisSection ->
+            []
+
+        WebsocketCloseEventsSection ->
+            loadIfNeeded adminData.websocketCloseEvents (LoadWebsocketCloseEvents EmptyPlaceholder)
+
+        SessionsSection ->
+            loadIfNeeded adminData.sessions (LoadSessions EmptyPlaceholder)
+
+        WordSpellingGameSwedishSection ->
+            []
+
+        WebCodecsTestSection ->
+            []
+
+
+loadIfNeeded : AdminDataStatus a -> AdminChange -> List AdminChange
+loadIfNeeded adminDataStatus change =
+    case adminDataStatus of
+        AdminDataNotLoaded ->
+            [ change ]
+
+        AdminDataLoading ->
+            []
+
+        AdminDataLoaded _ ->
+            []
+
+
+loadingText : String
+loadingText =
+    "Loading..."
+
+
+type AdminUiSection
+    = UsersSection
+    | LogSection
+    | DmChannelsSection
+    | DiscordDmChannelsSection
+    | DiscordUsersSection
+    | DiscordGuildsSection
+    | GuildsSection
+    | DeletedGuildsSection
+    | ApiKeysSection
+    | ExportSection
+    | ConnectionsSection
+    | FilesSection
+    | ToBackendLogsSection
+    | BackendMsgLogsSection
+    | StickersAndEmojisSection
+    | WebsocketCloseEventsSection
+    | SessionsSection
+    | WordSpellingGameSwedishSection
+    | WebCodecsTestSection
+
+
+sectionToString : AdminUiSection -> String
+sectionToString section2 =
+    case section2 of
+        UsersSection ->
+            "Users"
+
+        LogSection ->
+            "Logs"
+
+        DmChannelsSection ->
+            "DM channels"
+
+        DiscordDmChannelsSection ->
+            "Discord DM channels"
+
+        DiscordUsersSection ->
+            "Discord users"
+
+        DiscordGuildsSection ->
+            "Discord guilds"
+
+        GuildsSection ->
+            "Guilds"
+
+        DeletedGuildsSection ->
+            "Deleted guilds"
+
+        ApiKeysSection ->
+            "API keys"
+
+        ExportSection ->
+            "Export/Import"
+
+        ConnectionsSection ->
+            "Connections"
+
+        FilesSection ->
+            "Files"
+
+        ToBackendLogsSection ->
+            "ToBackend logs"
+
+        BackendMsgLogsSection ->
+            "BackendMsg logs"
+
+        StickersAndEmojisSection ->
+            "Stickers and emojis"
+
+        WebCodecsTestSection ->
+            "WebCodecs streaming test"
+
+        WebsocketCloseEventsSection ->
+            "Websocket close events"
+
+        SessionsSection ->
+            "Sessions"
+
+        WordSpellingGameSwedishSection ->
+            "Word spelling game word lists"
+
+
 section : Bool -> SeqSet AdminUiSection -> AdminUiSection -> List (Element Msg) -> Element Msg
 section isMobile expandedSections section2 content =
     MyUi.container
@@ -4725,13 +5022,13 @@ section isMobile expandedSections section2 content =
             MyUi.background3
         )
         isMobile
-        (User.sectionToString section2)
+        (sectionToString section2)
         [ Ui.column [ Ui.paddingXY 16 0, Ui.spacing 16 ] content ]
 
 
 expandSectionButtonId : AdminUiSection -> HtmlId
 expandSectionButtonId section2 =
-    Dom.id ("admin_expandSectionButton_" ++ User.sectionToString section2)
+    Dom.id ("admin_expandSectionButton_" ++ sectionToString section2)
 
 
 applyChangesToBackendUsers :

@@ -1,6 +1,5 @@
 module User exposing
-    ( AdminUiSection(..)
-    , BackendUser
+    ( BackendUser
     , EmailNotifications(..)
     , FrontendCurrentUser
     , FrontendUser
@@ -34,7 +33,6 @@ module User exposing
     , profileImageRounding
     , profileImageSize
     , redactPrivateKeys
-    , sectionToString
     , setColor
     , setDiscordGuildNotificationLevel
     , setDomainWhitelist
@@ -108,7 +106,6 @@ type alias BackendUser =
     , email : EmailAddress
     , recentLoginEmails : List Time.Posix
     , lastLogPageViewed : Id PageId
-    , expandedSections : SeqSet AdminUiSection
     , createdAt : Time.Posix
     , emailNotifications : EmailNotifications
     , lastEmailNotification : Time.Posix
@@ -123,8 +120,6 @@ type alias BackendUser =
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
-    , expandedGuilds : SeqSet (Id GuildId)
-    , expandedDiscordGuilds : SeqSet (Discord.Id Discord.GuildId)
     , linkDiscordAcknowledgementIsChecked : Bool
     , domainWhitelist : SeqSet Domain
     , emojiConfig : EmojiConfig
@@ -370,7 +365,6 @@ init createdAt name email userIsAdmin =
     , email = email
     , recentLoginEmails = []
     , lastLogPageViewed = Id.fromInt 0
-    , expandedSections = SeqSet.empty
     , createdAt = createdAt
     , emailNotifications = NeverNotifyMe
     , lastEmailNotification = createdAt
@@ -385,8 +379,6 @@ init createdAt name email userIsAdmin =
     , directMentions = SeqDict.empty
     , discordDirectMentions = SeqDict.empty
     , lastPushNotification = Nothing
-    , expandedGuilds = SeqSet.empty
-    , expandedDiscordGuilds = SeqSet.empty
     , linkDiscordAcknowledgementIsChecked = False
     , domainWhitelist = SeqSet.empty
     , emojiConfig = { skinTone = Nothing, lastUsedEmojis = Array.empty }
@@ -760,89 +752,6 @@ type EmailNotifications
     | NotifyMeWhenMentioned
 
 
-type AdminUiSection
-    = UsersSection
-    | LogSection
-    | DmChannelsSection
-    | DiscordDmChannelsSection
-    | DiscordUsersSection
-    | DiscordGuildsSection
-    | GuildsSection
-    | DeletedGuildsSection
-    | ApiKeysSection
-    | ExportSection
-    | ConnectionsSection
-    | FilesSection
-    | ToBackendLogsSection
-    | BackendMsgLogsSection
-    | StickersAndEmojisSection
-    | WebsocketCloseEventsSection
-    | SessionsSection
-    | WordSpellingGameSwedishSection
-    | WebCodecsTestSection
-
-
-sectionToString : AdminUiSection -> String
-sectionToString section2 =
-    case section2 of
-        UsersSection ->
-            "Users"
-
-        LogSection ->
-            "Logs"
-
-        DmChannelsSection ->
-            "DM channels"
-
-        DiscordDmChannelsSection ->
-            "Discord DM channels"
-
-        DiscordUsersSection ->
-            "Discord users"
-
-        DiscordGuildsSection ->
-            "Discord guilds"
-
-        GuildsSection ->
-            "Guilds"
-
-        DeletedGuildsSection ->
-            "Deleted guilds"
-
-        ApiKeysSection ->
-            "API keys"
-
-        ExportSection ->
-            "Export/Import"
-
-        ConnectionsSection ->
-            "Connections"
-
-        FilesSection ->
-            "Files"
-
-        ToBackendLogsSection ->
-            "ToBackend logs"
-
-        BackendMsgLogsSection ->
-            "BackendMsg logs"
-
-        StickersAndEmojisSection ->
-            "Stickers and emojis"
-
-        WebCodecsTestSection ->
-            "WebCodecs streaming test"
-
-        WebsocketCloseEventsSection ->
-            "Websocket close events"
-
-        SessionsSection ->
-            "Sessions"
-
-        WordSpellingGameSwedishSection ->
-            "Word spelling game word lists"
-
-
 {-| User containing only publicly visible data
 -}
 type alias FrontendUser =
@@ -954,7 +863,6 @@ backendToFrontendCurrent user =
     , email = user.email
     , recentLoginEmails = user.recentLoginEmails
     , lastLogPageViewed = user.lastLogPageViewed
-    , expandedSections = user.expandedSections
     , createdAt = user.createdAt
     , emailNotifications = user.emailNotifications
     , lastEmailNotification = user.lastEmailNotification
@@ -969,8 +877,6 @@ backendToFrontendCurrent user =
     , directMentions = user.directMentions
     , discordDirectMentions = user.discordDirectMentions
     , lastPushNotification = user.lastPushNotification
-    , expandedGuilds = user.expandedGuilds
-    , expandedDiscordGuilds = user.expandedDiscordGuilds
     , linkDiscordAcknowledgementIsChecked = user.linkDiscordAcknowledgementIsChecked
     , domainWhitelist = user.domainWhitelist
     , emojiConfig = user.emojiConfig

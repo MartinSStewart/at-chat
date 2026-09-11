@@ -8623,6 +8623,16 @@ twoFactorAuthenticationUpdateFromFrontend clientId time toBackend model session 
                     ( model, Command.none )
 
 
+{-| Admin data the frontend asked for on its way back to the client that asked. Only that
+client gets it, since another admin's page won't have the section open.
+-}
+adminDataResponse : ChangeId -> ClientId -> Pages.Admin.AdminChange -> Command BackendOnly ToFrontend BackendMsg
+adminDataResponse changeId clientId adminChange =
+    Local_Admin adminChange
+        |> LocalChangeResponse changeId
+        |> Lamdera.sendToFrontend clientId
+
+
 adminChangeUpdate :
     ClientId
     -> ChangeId
@@ -8665,28 +8675,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 Err _ ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
-        Pages.Admin.ExpandSection section ->
-            ( { model
-                | users =
-                    NonemptyDict.insert
-                        userId
-                        { user | expandedSections = SeqSet.insert section user.expandedSections }
-                        model.users
-              }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
-        Pages.Admin.CollapseSection section ->
-            ( { model
-                | users =
-                    NonemptyDict.insert
-                        userId
-                        { user | expandedSections = SeqSet.remove section user.expandedSections }
-                        model.users
-              }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
         Pages.Admin.LogPageChanged pageId _ ->
             let
                 pageIndex =
@@ -8703,6 +8691,84 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 |> Local_Admin
                 |> LocalChangeResponse changeId
                 |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.LoadUsers _ ->
+            ( model, adminDataResponse changeId clientId (Pages.Admin.LoadUsers (FilledInByBackend model.users)) )
+
+        Pages.Admin.LoadGuilds _ ->
+            ( model, adminDataResponse changeId clientId (Pages.Admin.LoadGuilds (FilledInByBackend (BackendExtra.adminGuilds model))) )
+
+        Pages.Admin.LoadDeletedGuilds _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadDeletedGuilds (FilledInByBackend (BackendExtra.adminDeletedGuilds model)))
+            )
+
+        Pages.Admin.LoadDmChannels _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadDmChannels (FilledInByBackend (BackendExtra.adminDmChannels model)))
+            )
+
+        Pages.Admin.LoadDiscordGuilds _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadDiscordGuilds (FilledInByBackend (BackendExtra.adminDiscordGuilds model)))
+            )
+
+        Pages.Admin.LoadDiscordDmChannels _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadDiscordDmChannels (FilledInByBackend (BackendExtra.adminDiscordDmChannels model)))
+            )
+
+        Pages.Admin.LoadDiscordUsers _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadDiscordUsers (FilledInByBackend (BackendExtra.adminDiscordUsers model)))
+            )
+
+        Pages.Admin.LoadSessions _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadSessions (FilledInByBackend (BackendExtra.adminSessions model)))
+            )
+
+        Pages.Admin.LoadWebsocketCloseEvents _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadWebsocketCloseEvents (FilledInByBackend model.websocketCloseEvents))
+            )
+
+        Pages.Admin.LoadToBackendLogs _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadToBackendLogs (FilledInByBackend (BackendExtra.adminToBackendLogs model)))
+            )
+
+        Pages.Admin.LoadBackendMsgLogs _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadBackendMsgLogs (FilledInByBackend (BackendExtra.adminBackendMsgLogs model)))
             )
 
         Pages.Admin.HideLog logIndex ->
@@ -8971,50 +9037,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
                 _ ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-        Pages.Admin.ExpandGuild guildId ->
-            ( { model
-                | users =
-                    NonemptyDict.insert
-                        userId
-                        { user | expandedGuilds = SeqSet.insert guildId user.expandedGuilds }
-                        model.users
-              }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
-        Pages.Admin.CollapseGuild guildId ->
-            ( { model
-                | users =
-                    NonemptyDict.insert
-                        userId
-                        { user | expandedGuilds = SeqSet.remove guildId user.expandedGuilds }
-                        model.users
-              }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
-        Pages.Admin.ExpandDiscordGuild guildId ->
-            ( { model
-                | users =
-                    NonemptyDict.insert
-                        userId
-                        { user | expandedDiscordGuilds = SeqSet.insert guildId user.expandedDiscordGuilds }
-                        model.users
-              }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
-        Pages.Admin.CollapseDiscordGuild guildId ->
-            ( { model
-                | users =
-                    NonemptyDict.insert
-                        userId
-                        { user | expandedDiscordGuilds = SeqSet.remove guildId user.expandedDiscordGuilds }
-                        model.users
-              }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
 
         Pages.Admin.DisconnectClient sessionIdHash disconnectClientId ->
             case Broadcast.getSessionFromSessionIdHash sessionIdHash model of

@@ -1,5 +1,6 @@
 module LocalState exposing
     ( AdminData
+    , AdminDataStatus(..)
     , AdminData_DeletedGuild
     , AdminData_DiscordChannel
     , AdminData_DiscordDmChannel
@@ -95,6 +96,7 @@ module LocalState exposing
     , editMessageHelper
     , editMessageHelperNoThread
     , gameStartedText
+    , getAdminData
     , getDiscordGuildAndChannel
     , getGuildAndChannel
     , guildOrDmIdToLatestMessages
@@ -138,6 +140,7 @@ module LocalState exposing
     , routeToViewing
     , sentEnoughDiscordDmMessages
     , setDmE2ee
+    , updateAdminData
     , updateChannel
     , userIsLoadingDiscordChannel
     , usersMentionedOrRepliedToBackend
@@ -699,38 +702,82 @@ type alias LogWithTime =
 
 
 type alias AdminData =
-    { users : NonemptyDict (Id UserId) BackendUser
+    { users : AdminDataStatus (NonemptyDict (Id UserId) BackendUser)
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
     , postmarkKey : Postmark.ApiKey
-    , dmChannels : SeqDict DmChannelId AdminData_DmChannel
+    , dmChannels : AdminDataStatus (SeqDict DmChannelId AdminData_DmChannel)
     , discordDmChannels :
-        SeqDict
-            (Discord.Id Discord.PrivateChannelId)
-            AdminData_DiscordDmChannel
-    , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
-    , discordGuilds : SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild
-    , guilds : SeqDict (Id GuildId) AdminData_Guild
-    , deletedGuilds : SeqDict (Id GuildId) AdminData_DeletedGuild
+        AdminDataStatus
+            (SeqDict
+                (Discord.Id Discord.PrivateChannelId)
+                AdminData_DiscordDmChannel
+            )
+    , discordUsers : AdminDataStatus (SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin)
+    , discordGuilds : AdminDataStatus (SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild)
+    , guilds : AdminDataStatus (SeqDict (Id GuildId) AdminData_Guild)
+    , deletedGuilds : AdminDataStatus (SeqDict (Id GuildId) AdminData_DeletedGuild)
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     , discordLinkingEnabled : Bool
     , logs : Pagination LogWithTime
     , connections : List ( SessionIdHash, NonemptyDict ClientId ConnectionData )
     , filesCount : Int
-    , toBackendLogs : Array ToBackendLogData
-    , backendMsgLogs : Array BackendMsgLogData
+    , toBackendLogs : AdminDataStatus (Array ToBackendLogData)
+    , backendMsgLogs : AdminDataStatus (Array BackendMsgLogData)
     , vulnerabilityChecks : String
     , serverSecretRefreshedAt : ServerSecretStatus
     , lastBackup : Maybe LastBackup
-    , websocketCloseEvents : Array WebsocketClosedEvent
-    , sessions : SeqDict SessionIdHash UserSession
+    , websocketCloseEvents : AdminDataStatus (Array WebsocketClosedEvent)
+    , sessions : AdminDataStatus (SeqDict SessionIdHash UserSession)
     , wordSpellingGameEnglish : WordSpellingGameStatus
     , wordSpellingGameSwedish : WordSpellingGameStatus
     }
+
+
+{-| Admin data that isn't sent when the admin page loads. These are the parts that grow with
+how much the backend has stored, so they're only asked for once the admin opens a section
+that shows them.
+-}
+type AdminDataStatus a
+    = AdminDataNotLoaded
+    | AdminDataLoading
+    | AdminDataLoaded a
+
+
+{-| Look something up in admin data that only gets loaded when a section needs it. Data that
+hasn't arrived reads as missing, which the admin page falls back to showing raw ids for.
+-}
+getAdminData : k -> AdminDataStatus (SeqDict k v) -> Maybe v
+getAdminData key adminDataStatus =
+    case adminDataStatus of
+        AdminDataLoaded dict ->
+            SeqDict.get key dict
+
+        AdminDataLoading ->
+            Nothing
+
+        AdminDataNotLoaded ->
+            Nothing
+
+
+{-| Apply a change to admin data that has arrived. Data that hasn't been asked for yet is
+left alone, since it gets built from scratch by the backend when it is.
+-}
+updateAdminData : (a -> a) -> AdminDataStatus a -> AdminDataStatus a
+updateAdminData updateFunc adminDataStatus =
+    case adminDataStatus of
+        AdminDataLoaded data ->
+            AdminDataLoaded (updateFunc data)
+
+        AdminDataLoading ->
+            AdminDataLoading
+
+        AdminDataNotLoaded ->
+            AdminDataNotLoaded
 
 
 {-| A summary of the backend's word spelling game word list state, suitable for showing in the
