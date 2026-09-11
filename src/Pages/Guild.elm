@@ -116,7 +116,7 @@ import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
-import Types exposing (EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), ImportChannelStatus(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
+import Types exposing (EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), ImportChannelError(..), ImportChannelStatus(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -3509,9 +3509,14 @@ importChannelText =
     "Import channel"
 
 
-importChannelFailedText : String
-importChannelFailedText =
-    "That file isn't a channel export"
+importChannelFailedText : ImportChannelError -> String
+importChannelFailedText error =
+    case error of
+        NotAChannelExport ->
+            "That file isn't a channel export"
+
+        DiscordChannelsCantBeImported ->
+            "Discord channels can't be imported yet"
 
 
 {-| Turns a file that the export channel button wrote into a channel in this guild. Whatever
@@ -3533,8 +3538,8 @@ importChannelSection guildId form =
                 ImportingChannel ->
                     Ui.text "Importing..."
 
-                ImportChannelFailed ->
-                    Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text importChannelFailedText)
+                ImportChannelFailed error ->
+                    Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text (importChannelFailedText error))
 
                 ImportedChannel { encryptedMessages } ->
                     Ui.text (importedChannelText encryptedMessages)

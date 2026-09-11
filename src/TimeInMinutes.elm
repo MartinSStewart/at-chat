@@ -4,6 +4,7 @@ module TimeInMinutes exposing
     , codec
     , fromDateAndTime
     , fromMinutes
+    , toMinutes
     , toSeconds
     , toTime
     )
@@ -22,6 +23,11 @@ type TimeInMinutes
 toTime : TimeInMinutes -> Time.Posix
 toTime (TimeInMinutes int) =
     int * 60 * 1000 |> Time.millisToPosix
+
+
+toMinutes : TimeInMinutes -> Int
+toMinutes (TimeInMinutes int) =
+    int
 
 
 toSeconds : TimeInMinutes -> Int

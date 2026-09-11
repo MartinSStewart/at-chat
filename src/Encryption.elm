@@ -10,7 +10,6 @@ port module Encryption exposing
     , ToJs(..)
     , decryptManyMessages
     , decryptMessage
-    , encode
     , encryptFile
     , encryptManyMessages
     , encryptMessage
@@ -55,7 +54,6 @@ import FileStatus
 import Html
 import Html.Attributes
 import Id exposing (Id, UserId, Viewing_DmId)
-import Json.Encode
 import RichText
 import SeqDict
 import SeqSet
@@ -96,11 +94,6 @@ type EncryptManyRequestId
 
 type EncryptFileRequestId
     = EncryptFileRequestId Never
-
-
-encode : EncryptedData a -> Json.Encode.Value
-encode data =
-    Json.Encode.string (toBase64 data)
 
 
 toBase64 : EncryptedData a -> String

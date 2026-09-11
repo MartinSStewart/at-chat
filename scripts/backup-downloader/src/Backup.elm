@@ -601,7 +601,7 @@ foldGuild ( guildId, guild ) collected =
                             ++ ChannelName.toString channel.name
                             ++ "\""
                     , referenceName = guildReferenceName guildId channelId
-                    , json = ChannelExport.guildChannel collected.users guild channel
+                    , json = ChannelExport.guildChannel channel
                     }
                         :: collected.picked
 
@@ -634,7 +634,7 @@ foldDmChannel ( dmChannelId, channel ) collected =
                                 ++ userName collected.users userIdB
                                 ++ "\""
                         , referenceName = dmReferenceName dmChannelId
-                        , json = ChannelExport.dmChannel collected.users userIdA userIdB channel
+                        , json = ChannelExport.dmChannel channel
                         }
                     }
                     collected.dmPicked
@@ -670,7 +670,7 @@ foldDiscordDmChannel ( channelId, channel ) collected =
                                 ++ ChannelExport.discordDmName collected.discordUsers firstMember channel
                                 ++ "\""
                         , referenceName = discordDmReferenceName channelId
-                        , json = ChannelExport.discordDmChannel collected.discordUsers firstMember channel
+                        , json = ChannelExport.discordDmChannel channel
                         }
                     }
                     collected.discordDmPicked
@@ -733,7 +733,7 @@ foldDiscordGuild ( guildId, guild ) collected =
                             ++ ChannelName.toString channel.name
                             ++ "\""
                     , referenceName = discordReferenceName guildId channelId
-                    , json = ChannelExport.discordGuildChannel collected.discordUsers guildId guild channel
+                    , json = ChannelExport.discordGuildChannel channel
                     }
                         :: collected.discordPicked
 

@@ -19,6 +19,7 @@ import Call exposing (RemoteCallData)
 import ChannelDescription
 import ChannelExport
 import ChannelImport
+import ChannelName exposing (ChannelName)
 import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
@@ -84,7 +85,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
 import User exposing (BackendUser)
@@ -6735,13 +6736,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Nothing ->
                     ( model, GetPublicGoMatchResponse (Err ()) |> Lamdera.sendToFrontend clientId )
 
-        ImportChannelRequest guildId json ->
+        ImportChannelRequest guildId file ->
             BackendExtra.asGuildOwner
                 model
                 sessionId
                 guildId
                 (\userId _ guild ->
-                    case ChannelImport.decode json of
+                    case ChannelImport.decode file.json of
                         Ok imported ->
                             let
                                 channelId : Id ChannelId
@@ -6752,14 +6753,21 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 channel =
                                     { createdAt = Maybe.withDefault time imported.createdAt
                                     , createdBy = Maybe.withDefault userId imported.createdBy
-                                    , name = imported.name
-                                    , description = imported.description
+                                    , name =
+                                        case imported.name of
+                                            Just name ->
+                                                name
+
+                                            Nothing ->
+                                                importedChannelName file.fileName
+                                    , description =
+                                        Maybe.withDefault ChannelDescription.empty imported.description
                                     , messages = imported.messages
                                     , status = LocalState.ChannelActive
                                     , lastTypedAt = SeqDict.empty
                                     , threads = imported.threads
                                     , dateDividerDrawings = imported.dateDividerDrawings
-                                    , games = SeqDict.empty
+                                    , games = imported.games
                                     }
 
                                 model2 : BackendModel
@@ -6790,8 +6798,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 ]
                             )
 
-                        Err _ ->
-                            ( model, ImportChannelResponse guildId (Err ()) |> Lamdera.sendToFrontend clientId )
+                        Err ChannelImport.DiscordChannelsCantBeImported ->
+                            ( model
+                            , ImportChannelResponse guildId (Err DiscordChannelsCantBeImported)
+                                |> Lamdera.sendToFrontend clientId
+                            )
+
+                        Err (ChannelImport.NotAChannelExport _) ->
+                            ( model
+                            , ImportChannelResponse guildId (Err NotAChannelExport)
+                                |> Lamdera.sendToFrontend clientId
+                            )
                 )
 
         ExportChannelRequest exportChannelId ->
@@ -6807,7 +6824,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 Just channel ->
                                     ExportChannelResponse
                                         { fileName = ChannelExport.fileName channel.name
-                                        , json = ChannelExport.guildChannel model.users guild channel
+                                        , json = ChannelExport.guildChannel channel
                                         }
                                         |> Lamdera.sendToFrontend clientId
 
@@ -6821,11 +6838,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model
                         sessionId
                         { guildId = guildId, channelId = channelId, currentUserId = currentDiscordUserId }
-                        (\_ _ _ guild channel ->
+                        (\_ _ _ _ channel ->
                             ( model
                             , ExportChannelResponse
                                 { fileName = ChannelExport.fileName channel.name
-                                , json = ChannelExport.discordGuildChannel model.discordUsers guildId guild channel
+                                , json = ChannelExport.discordGuildChannel channel
                                 }
                                 |> Lamdera.sendToFrontend clientId
                             )
@@ -6836,11 +6853,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model
                         sessionId
                         { otherUserId = otherUserId }
-                        (\session _ otherUser _ dmChannel ->
+                        (\_ _ otherUser _ dmChannel ->
                             ( model
                             , ExportChannelResponse
                                 { fileName = ChannelExport.dmFileName (PersonName.toString otherUser.name)
-                                , json = ChannelExport.dmChannel model.users session.userId otherUserId dmChannel
+                                , json = ChannelExport.dmChannel dmChannel
                                 }
                                 |> Lamdera.sendToFrontend clientId
                             )
@@ -6857,11 +6874,25 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 { fileName =
                                     ChannelExport.discordDmName model.discordUsers currentDiscordUserId dmChannel
                                         |> ChannelExport.dmFileName
-                                , json = ChannelExport.discordDmChannel model.discordUsers currentDiscordUserId dmChannel
+                                , json = ChannelExport.discordDmChannel dmChannel
                                 }
                                 |> Lamdera.sendToFrontend clientId
                             )
                         )
+
+
+{-| A DM export carries no channel name of its own, so the name of the file it arrived in
+stands in for one.
+-}
+importedChannelName : String -> ChannelName
+importedChannelName fileName =
+    (if String.endsWith ".json" fileName then
+        String.dropRight 5 fileName
+
+     else
+        fileName
+    )
+        |> ChannelName.fromStringLossy
 
 
 handleGoMatchRequest :

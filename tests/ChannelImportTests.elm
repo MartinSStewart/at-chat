@@ -10,22 +10,25 @@ import ChannelDescription
 import ChannelExport
 import ChannelImport
 import Date
+import DmChannel
 import Drawing exposing (Drawing)
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Encryption
 import Expect
+import Game
+import Go
 import Id exposing (Id, UserId)
 import IdArray
-import Json.Decode
 import List.Nonempty
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..))
-import MembersAndOwner
+import LocalState exposing (BackendChannel, ChannelStatus(..), DiscordBackendChannel)
 import Message exposing (Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
+import OneToOne
 import RichText
 import SeqDict
 import SeqSet
+import SheepGame
 import String.Nonempty
 import Test exposing (Test)
 import Thread exposing (BackendThread)
@@ -41,7 +44,7 @@ tests =
             \_ ->
                 importedChannel
                     |> Result.map (\channel -> ( channel.name, channel.description ))
-                    |> Expect.equal (Ok ( testChannel.name, testChannel.description ))
+                    |> Expect.equal (Ok ( Just testChannel.name, Just testChannel.description ))
         , Test.test "Messages come back the way they were written" <|
             \_ ->
                 importedChannel
@@ -57,9 +60,14 @@ tests =
                 importedChannel
                     |> Result.map .dateDividerDrawings
                     |> Expect.equal (Ok testChannel.dateDividerDrawings)
+        , Test.test "Games come back with the moves that were played in them" <|
+            \_ ->
+                importedChannel
+                    |> Result.map .games
+                    |> Expect.equal (Ok testChannel.games)
         , Test.test "An encrypted message is imported as a deleted message and counted" <|
             \_ ->
-                (case ChannelImport.decode (exportOf { testChannel | messages = IdArray.fromList [ encryptedMessage ] }) of
+                (case decodeExportOf { testChannel | messages = IdArray.fromList [ encryptedMessage ] } of
                     Ok channel ->
                         Ok ( IdArray.toList channel.messages, channel.encryptedMessages )
 
@@ -70,19 +78,17 @@ tests =
         , Test.test "An encrypted message in a thread is counted too" <|
             \_ ->
                 (case
-                    ChannelImport.decode
-                        (exportOf
-                            { testChannel
-                                | messages = IdArray.fromList [ textMessage ]
-                                , threads =
-                                    SeqDict.singleton
-                                        (Id.fromInt 0)
-                                        { messages = IdArray.fromList [ encryptedMessage ]
-                                        , lastTypedAt = SeqDict.empty
-                                        , dateDividerDrawings = SeqDict.empty
-                                        }
-                            }
-                        )
+                    decodeExportOf
+                        { testChannel
+                            | messages = IdArray.fromList [ textMessage ]
+                            , threads =
+                                SeqDict.singleton
+                                    (Id.fromInt 0)
+                                    { messages = IdArray.fromList [ encryptedMessage ]
+                                    , lastTypedAt = SeqDict.empty
+                                    , dateDividerDrawings = SeqDict.empty
+                                    }
+                        }
                  of
                     Ok channel ->
                         Ok channel.encryptedMessages
@@ -91,6 +97,15 @@ tests =
                         Err error
                 )
                     |> Expect.equal (Ok 1)
+        , Test.test "A DM export is imported without a name, since a DM has none to give" <|
+            \_ ->
+                ChannelImport.decode (ChannelExport.dmChannel testDmChannel)
+                    |> Result.map (\channel -> ( channel.name, IdArray.toList channel.messages ))
+                    |> Expect.equal (Ok ( Nothing, [ textMessage ] ))
+        , Test.test "A Discord channel export is turned down, since its messages belong to Discord accounts" <|
+            \_ ->
+                ChannelImport.decode (ChannelExport.discordGuildChannel discordChannel)
+                    |> Expect.equal (Err ChannelImport.DiscordChannelsCantBeImported)
         , Test.test "A file that isn't a channel export is turned down" <|
             \_ ->
                 ChannelImport.decode "not a channel export"
@@ -99,14 +114,14 @@ tests =
         ]
 
 
-importedChannel : Result Json.Decode.Error ChannelImport.ImportedChannel
+importedChannel : Result ChannelImport.Error ChannelImport.ImportedChannel
 importedChannel =
-    ChannelImport.decode (exportOf testChannel)
+    decodeExportOf testChannel
 
 
-exportOf : BackendChannel -> String
-exportOf channel =
-    ChannelExport.guildChannel users testGuild channel
+decodeExportOf : BackendChannel -> Result ChannelImport.Error ChannelImport.ImportedChannel
+decodeExportOf channel =
+    ChannelImport.decode (ChannelExport.guildChannel channel)
 
 
 adminId : Id UserId
@@ -140,19 +155,6 @@ time seconds =
     Time.millisToPosix (seconds * 1000)
 
 
-testGuild : BackendGuild
-testGuild =
-    { createdAt = time 0
-    , createdBy = adminId
-    , name = Unsafe.guildName "Test guild"
-    , icon = Nothing
-    , channels = SeqDict.empty
-    , membersAndOwner =
-        MembersAndOwner.init (SeqDict.singleton otherUserId { joinedAt = time 1 }) adminId
-    , invites = SeqDict.empty
-    }
-
-
 {-| A channel with the parts of a message that used to be dropped by the export: a drawing on a
 message, a drawing on a date divider, and a thread that has both.
 -}
@@ -167,7 +169,37 @@ testChannel =
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.singleton (Id.fromInt 0) testThread
     , dateDividerDrawings = SeqDict.singleton (Date.fromRataDie 738000) (drawing adminId)
+    , games =
+        SeqDict.fromList [ ( Id.fromInt 0, goMatch ), ( Id.fromInt 1, sheepMatch ) ]
+    }
+
+
+testDmChannel : DmChannel.BackendDmChannel
+testDmChannel =
+    { messages = IdArray.fromList [ textMessage ]
+    , lastTypedAt = SeqDict.empty
+    , threads = SeqDict.empty
     , games = SeqDict.empty
+    , dateDividerDrawings = SeqDict.empty
+    , e2ee = DmChannel.E2eeDisabled Nothing
+    }
+
+
+{-| Discord channels are exported but not imported, so this one only needs to be something
+`ChannelExport` will write out.
+-}
+discordChannel : DiscordBackendChannel
+discordChannel =
+    { name = Unsafe.channelName "general"
+    , description = ChannelDescription.empty
+    , isForum = False
+    , messages = IdArray.empty
+    , status = ChannelActive
+    , lastTypedAt = SeqDict.empty
+    , linkedMessageIds = OneToOne.empty
+    , threads = SeqDict.empty
+    , dateDividerDrawings = SeqDict.empty
+    , permissionOverwrites = []
     }
 
 
@@ -221,6 +253,70 @@ encryptedMessage =
         , repliedTo = Nothing
         , drawings = Nothing
         }
+
+
+{-| A Go match holds nothing but its setup and its moves, so it comes back exactly as it
+went in.
+-}
+goMatch : Game.BackendGameData
+goMatch =
+    Game.GameData_Go
+        { width = Go.boardSize9
+        , height = Go.boardSize9
+        , handicap = 0
+        , komiHalfPoints = Go.KomiHalfPoints 13
+        , timeControl = Nothing
+        , createdBy = adminId
+        , gameCreatorPlayingAs = Go.Black
+        }
+        (Array.fromList
+            [ { time = time 5, change = Go.PlaceStone 2 2 }
+            , { time = time 6, change = Go.Joined otherUserId }
+            , { time = time 7, change = Go.PassTurn }
+            ]
+        )
+
+
+{-| The Sheep Game keeps the state its moves add up to alongside them. The export leaves
+that out and works it out again on the way back in, the same way the backend does, so the
+match this is compared against has to be built the same way.
+-}
+sheepMatch : Game.BackendGameData
+sheepMatch =
+    Game.GameData_SheepGame
+        sheepSetup
+        sheepActions
+        (Array.foldl (SheepGame.updateAction sheepSetup) SheepGame.initShared sheepActions)
+
+
+sheepSetup : SheepGame.ValidatedSetup
+sheepSetup =
+    { questions = List.Nonempty.Nonempty (sheepInput 'P' "ick a number") []
+    , createdBy = adminId
+    }
+
+
+sheepActions : Array.Array SheepGame.ActionWithTime
+sheepActions =
+    Array.fromList
+        [ { userId = otherUserId
+          , time = time 8
+          , change = SheepGame.SubmittedAnswer (Id.fromInt 0) (Just (sheepInput '7' ""))
+          }
+        , { userId = adminId, time = time 9, change = SheepGame.LockedAnswers }
+        ]
+
+
+sheepInput : Char -> String -> SheepGame.ValidatedInput
+sheepInput first rest =
+    { text =
+        RichText.fromNonemptyString
+            Time.utc
+            (NonemptyDict.toSeqDict users)
+            (String.Nonempty.NonemptyString first rest)
+    , attachedFiles = SeqDict.empty
+    , reactions = SeqDict.empty
+    }
 
 
 drawing : Id UserId -> Drawing (Id UserId)

@@ -31,6 +31,7 @@ module E2EMisc exposing
 
 import Audio
 import Broadcast
+import ChannelExport
 import DmChannel
 import DmChannelId
 import Drawing
@@ -46,6 +47,8 @@ import FileStatus
 import FrontendExtra
 import Html.Attributes
 import Id
+import IdArray
+import Json.Decode
 import Json.Encode
 import List.Nonempty
 import Local
@@ -65,7 +68,7 @@ import Test.Html.Query
 import Test.Html.Selector
 import TimeInMinutes
 import Touch
-import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ImportChannelError(..), ToBackend, ToFrontend)
 import UserColor
 import UserSession
 
@@ -222,58 +225,65 @@ exportChannelTest config =
                 , T.checkState
                     1000
                     (\data ->
-                        case data.downloads of
-                            [ download ] ->
-                                case download.content of
-                                    T.StringFile content ->
-                                        case
-                                            List.filter
-                                                (\text -> not (String.contains text content))
-                                                [ "Hello everyone"
-                                                , "\"" ++ E2EHelper.adminName ++ "\""
-                                                , "Stevie Steve"
-                                                , "\"userIconDrawing\""
-                                                ]
-                                        of
-                                            [] ->
-                                                -- None of these messages were replied to, edited,
-                                                -- reacted to or given files, so those fields should
-                                                -- be left out instead of exported as nulls and
-                                                -- empty lists.
-                                                case
-                                                    List.filter
-                                                        (\text -> String.contains text content)
-                                                        [ "\"editedAt\""
-                                                        , "\"repliedTo\""
-                                                        , "\"reactions\""
-                                                        , "\"attachedFiles\""
-                                                        , "\"embeds\""
-                                                        ]
-                                                of
-                                                    [] ->
-                                                        Ok ()
+                        case exportedChannel data of
+                            Ok (ChannelExport.GuildChannelExport channel) ->
+                                if List.any messageHasDrawing (IdArray.toList channel.messages) then
+                                    Ok ()
 
-                                                    empty ->
-                                                        Err
-                                                            ("Empty fields in the exported JSON: "
-                                                                ++ String.join ", " empty
-                                                            )
+                                else
+                                    Err "The drawing on the message wasn't exported"
 
-                                            missing ->
-                                                Err ("Missing from the exported JSON: " ++ String.join ", " missing)
+                            Ok _ ->
+                                Err "A guild channel was exported as some other kind of channel"
 
-                                    T.BytesFile _ ->
-                                        Err "The exported channel should be a text file"
-
-                            downloads ->
-                                Err
-                                    ("Expected a single download, instead got "
-                                        ++ String.fromInt (List.length downloads)
-                                    )
+                            Err error ->
+                                Err error
                     )
                 ]
             )
         ]
+
+
+{-| The one file the export button handed the browser, read back as the channel it holds.
+-}
+exportedChannel :
+    T.Data FrontendModel E2EHelper.BackendModel2
+    -> Result String ChannelExport.ChannelExport
+exportedChannel data =
+    case data.downloads of
+        [ download ] ->
+            case download.content of
+                T.StringFile content ->
+                    case ChannelExport.decode content of
+                        Ok channelExport ->
+                            Ok channelExport
+
+                        Err error ->
+                            Err
+                                ("The exported channel couldn't be read back: "
+                                    ++ Json.Decode.errorToString error
+                                )
+
+                T.BytesFile _ ->
+                    Err "The exported channel should be a text file"
+
+        downloads ->
+            Err ("Expected a single download, instead got " ++ String.fromInt (List.length downloads))
+
+
+messageHasDrawing : Message.Message messageId userId -> Bool
+messageHasDrawing message =
+    case message of
+        Message.UserTextMessage data ->
+            case data.drawings of
+                Just drawings ->
+                    List.isEmpty drawings.userIconDrawings.finished |> not
+
+                Nothing ->
+                    False
+
+        _ ->
+            False
 
 
 {-| A guild owner can hand the guild settings a file the export channel button wrote and get a
@@ -298,7 +308,7 @@ importChannelTest config =
                 -- Nothing has been exported yet, so the file picker offers a file that isn't a
                 -- channel export and it gets turned down instead of making a channel
                 , admin.click 1000 (Dom.id "guild_importChannel")
-                , E2EHelper.hasExactText admin [ Pages.Guild.importChannelFailedText ]
+                , E2EHelper.hasExactText admin [ Pages.Guild.importChannelFailedText NotAChannelExport ]
                 , admin.click 1000 (Dom.id "guild_openChannel_0")
                 , admin.click 1000 (Dom.id "guild_showMembers")
                 , admin.click 1000 (Dom.id "guild_exportChannel")
@@ -346,29 +356,19 @@ exportDmChannelTest config =
                         , T.checkState
                             1000
                             (\data ->
-                                case data.downloads of
-                                    [ download ] ->
-                                        case download.content of
-                                            T.StringFile content ->
-                                                case
-                                                    List.filter
-                                                        (\text -> not (String.contains text content))
-                                                        [ "Hello in a DM", "\"" ++ E2EHelper.adminName ++ "\"", "\"Sven\"" ]
-                                                of
-                                                    [] ->
-                                                        Ok ()
+                                case exportedChannel data of
+                                    Ok (ChannelExport.DmChannelExport channel) ->
+                                        if IdArray.length channel.messages == 1 then
+                                            Ok ()
 
-                                                    missing ->
-                                                        Err ("Missing from the exported JSON: " ++ String.join ", " missing)
+                                        else
+                                            Err "The DM's message wasn't exported"
 
-                                            T.BytesFile _ ->
-                                                Err "The exported channel should be a text file"
+                                    Ok _ ->
+                                        Err "A DM channel was exported as some other kind of channel"
 
-                                    downloads ->
-                                        Err
-                                            ("Expected a single download, instead got "
-                                                ++ String.fromInt (List.length downloads)
-                                            )
+                                    Err error ->
+                                        Err error
                             )
                         ]
                     )

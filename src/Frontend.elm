@@ -3224,9 +3224,13 @@ updateLoaded msg model =
             )
 
         SelectedImportChannelFile guildId file ->
-            ( model, File.toString file |> Task.perform (GotImportChannelFile guildId) )
+            ( model
+            , File.toString file
+                |> Task.perform
+                    (\json -> GotImportChannelFile guildId { fileName = File.name file, json = json })
+            )
 
-        GotImportChannelFile guildId json ->
+        GotImportChannelFile guildId file ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( Pages.Guild.setImportChannelStatus
@@ -3234,7 +3238,7 @@ updateLoaded msg model =
                         ImportingChannel
                         (Local.model loggedIn.localState)
                         loggedIn
-                    , Lamdera.sendToBackend (ImportChannelRequest guildId json)
+                    , Lamdera.sendToBackend (ImportChannelRequest guildId file)
                     )
                 )
                 model
@@ -8746,8 +8750,8 @@ updateLoadedFromBackend msg model =
                             Ok { encryptedMessages } ->
                                 ImportedChannel { encryptedMessages = encryptedMessages }
 
-                            Err () ->
-                                ImportChannelFailed
+                            Err error ->
+                                ImportChannelFailed error
                         )
                         (Local.model loggedIn.localState)
                         loggedIn

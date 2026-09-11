@@ -20,6 +20,7 @@ module FileStatus exposing
     , VideoMetadata
     , addFileHash
     , aesPrivateKey
+    , aesPrivateKeyToBytes
     , contentType
     , contentTypeFromInt
     , contentTypeToInt
@@ -208,6 +209,11 @@ type AesPrivateKey
 aesPrivateKey : Bytes -> AesPrivateKey
 aesPrivateKey =
     AesPrivateKey
+
+
+aesPrivateKeyToBytes : AesPrivateKey -> Bytes
+aesPrivateKeyToBytes (AesPrivateKey bytes) =
+    bytes
 
 
 fileKey : FileData -> Maybe { fileHash : String, key : Bytes }

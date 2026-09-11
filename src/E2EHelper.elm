@@ -2896,7 +2896,11 @@ allAttackerToBackendChanges =
     , AdminDataRequest Nothing
     , GetPublicGoMatchRequest (SecretId.fromString "attacker-public-id")
     , ExportChannelRequest (ExportChannel_Guild legitGuildId (Id.fromInt 0))
-    , ImportChannelRequest legitGuildId """{"channel":{"name":"hacked"},"members":[],"messages":[]}"""
+    , ImportChannelRequest
+        legitGuildId
+        { fileName = "hacked.json"
+        , json = """{"tag":"GuildChannelExport","args":[{"name":"hacked"}]}"""
+        }
     , ExportChannelRequest
         (ExportChannel_Discord
             (Discord.idFromUInt64 (Unsafe.uint64 "184437096813953035"))
