@@ -12,7 +12,6 @@ when inside the directory containing this file.
 -}
 
 import BackendOnly
-import Derive
 import Docs.ReviewAtDocs
 import EncoderDecoderNaming
 import ExposeAllRecordFields
@@ -22,11 +21,11 @@ import NoDebug.TodoOrToString
 import NoExposingEverything
 import NoImportingEverything
 import NoInconsistentAliases
+import NoInvalidTypesInToBackend
 import NoMissingTypeAnnotation
 import NoMissingTypeConstructor
 import NoMissingTypeExpose
 import NoModuleOnExposedNames
-import NoOpaqueInToBackend
 import NoRedundantUiAttributes
 import NoSimpleLetBody
 import NoStaleReferences
@@ -37,7 +36,6 @@ import NoUnused.Modules
 import NoUnused.Parameters
 import NoUnused.Patterns
 import NoUnused.Variables
-import NoUnusedFields
 import OpaqueTypes
 import Review.Rule exposing (Rule)
 import ReviewPipelineStyles
@@ -139,18 +137,23 @@ config =
             , "src/LamderaRPC.elm"
             ]
         |> Review.Rule.ignoreErrorsForDirectories [ "vendored" ]
-    , NoOpaqueInToBackend.rule
-        { exemptions =
-            [ ( [ "FileStatus" ], "FileHash" )
-            , ( [ "SecretId" ], "SecretId" )
-            , ( [ "Local" ], "ChangeId" )
-            , ( [ "AiChat" ], "Message" )
-            ]
-        }
     , EncoderDecoderNaming.rule
         |> Review.Rule.ignoreErrorsForFiles [ "src/LamderaRPC.elm" ]
         |> Review.Rule.ignoreErrorsForDirectories [ "src/Evergreen", "vendored/mdgriffith" ]
     , NoBrokenParserFunctions.rule
+    , NoInvalidTypesInToBackend.rule
+        { disallowed =
+            [ ( [ "Basics" ], "Float" )
+            , ( [ "Duration" ], "Duration" )
+            ]
+        , unlessWrappedIn =
+            [ ( [ "SafeFloat" ], "SafeFloat" )
+            , ( [ "UserSession" ], "ToBeFilledInByBackend" )
+            , ( [ "FileStatus" ], "VideoMetadata" )
+            , ( [ "Go" ], "TimeControl" )
+            ]
+        }
+        |> Review.Rule.ignoreErrorsForDirectories [ "vendored", "src/Evergreen" ]
     , BackendOnly.rule
         { functions =
             []

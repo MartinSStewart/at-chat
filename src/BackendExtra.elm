@@ -85,7 +85,7 @@ import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..))
 import Message exposing (Message(..), MessageContent)
 import NonemptyDict exposing (NonemptyDict)
-import Pages.Admin exposing (InitAdminData)
+import Pages.Admin exposing (InitAdminData, TypeThatIsAlwaysInvalid(..))
 import Pagination exposing (PageId)
 import Postmark
 import Quantity
@@ -1581,6 +1581,7 @@ adminData model lastLogPageViewed =
 
                             Nothing ->
                                 ""
+    , checkToFrontendValidation = TypeThatIsAlwaysInvalid
     , serverSecretRegeneratedAt = model.serverSecretRegeneratedAt
     , lastBackup = Maybe.map .backup model.lastBackup
     , websocketCloseEvents = model.websocketCloseEvents

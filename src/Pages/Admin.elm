@@ -13,6 +13,7 @@ module Pages.Admin exposing
     , OutMsg(..)
     , ToBackend(..)
     , ToFrontend(..)
+    , TypeThatIsAlwaysInvalid(..)
     , UserColumn(..)
     , UserTable
     , UserTableId(..)
@@ -198,6 +199,7 @@ type Msg
     | PressedStartWebCodecsTest
     | PressedStopWebCodecsTest
     | PressedCountToBackend
+    | PressedSendTypeThatIsAlwaysInvalid
 
 
 type ToBackend
@@ -205,6 +207,7 @@ type ToBackend
     | DownloadLastBackupRequest
     | ImportBackendRequest Bytes
     | CountToBackendRequest
+    | TypeThatIsAlwaysInvalidRequest TypeThatIsAlwaysInvalid
 
 
 type ExportSubset
@@ -315,6 +318,7 @@ type alias InitAdminData =
     , toBackendLogs : Array ToBackendLogData
     , backendMsgLogs : Array BackendMsgLogData
     , vulnerabilityChecks : String
+    , checkToFrontendValidation : TypeThatIsAlwaysInvalid
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , lastBackup : Maybe LastBackup
     , websocketCloseEvents : Array WebsocketClosedEvent
@@ -322,6 +326,15 @@ type alias InitAdminData =
     , wordSpellingGameEnglish : WordSpellingGameStatus
     , wordSpellingGameSwedish : WordSpellingGameStatus
     }
+
+
+type TypeThatIsAlwaysInvalid
+    = TypeThatIsAlwaysInvalid
+
+
+w3_validate_TypeThatIsAlwaysInvalid : TypeThatIsAlwaysInvalid -> Result String ()
+w3_validate_TypeThatIsAlwaysInvalid _ =
+    Err "TypeThatIsAlwaysInvalid is always invalid"
 
 
 type AdminChange
@@ -1254,6 +1267,12 @@ update navigationKey time adminData localState msg model =
         PressedCountToBackend ->
             ( { model | countToFrontend = "" }
             , Lamdera.sendToBackend CountToBackendRequest
+            , NoOutMsg
+            )
+
+        PressedSendTypeThatIsAlwaysInvalid ->
+            ( model
+            , Lamdera.sendToBackend (TypeThatIsAlwaysInvalidRequest TypeThatIsAlwaysInvalid)
             , NoOutMsg
             )
 
@@ -2967,6 +2986,14 @@ exportSection isMobile timezone user adminData model =
                 PressedCountToBackend
                 (Ui.text "Count to 200")
             , Ui.text model.countToFrontend
+            ]
+        , Ui.row
+            [ Ui.spacing 8 ]
+            [ MyUi.simpleButton
+                (Dom.id "admin_typeThatIsAlwaysInvalidButton")
+                PressedSendTypeThatIsAlwaysInvalid
+                (Ui.text "Send invalid type")
+            , Ui.text "The backend should never receive this. If it does, an error gets logged."
             ]
         ]
 

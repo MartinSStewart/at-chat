@@ -29,6 +29,11 @@ fromString text =
             Err "Can't be empty"
 
 
+w3_validate_ChannelName : ChannelName -> Result String ()
+w3_validate_ChannelName (ChannelName text) =
+    fromString (String.Nonempty.toString text) |> Result.map (\_ -> ())
+
+
 fromStringLossy : String -> ChannelName
 fromStringLossy text =
     case

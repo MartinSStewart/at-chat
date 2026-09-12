@@ -25,6 +25,15 @@ init members2 ownerId =
     MembersAndOwner (SeqDict.remove ownerId members2) ownerId
 
 
+w3_validate_MembersAndOwner : MembersAndOwner userId a -> Result String ()
+w3_validate_MembersAndOwner a =
+    if init (members a) (owner a) == a then
+        Ok ()
+
+    else
+        Err "Invalid MembersAndOwners"
+
+
 type IsMember
     = IsMember
     | IsOwner

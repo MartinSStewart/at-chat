@@ -163,6 +163,7 @@ import PersonName
 import Ports exposing (RegisterPushSubscription(..))
 import Range exposing (Range)
 import RichText exposing (Domain(..))
+import SafeFloat exposing (SafeFloat)
 import SafeJson exposing (SafeJson(..))
 import SecretId exposing (SecretId(..))
 import SeqDict
@@ -178,7 +179,6 @@ import Time
 import TwoFactorAuthentication
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, InitialLoadRequest(..), LocalChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import Untrusted
 import Url exposing (Protocol(..), Url)
 import User
 import UserAgent
@@ -1617,7 +1617,7 @@ discordUserAuth =
                 , ( "browser_user_agent", JsonString "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0" )
                 , ( "browser_version", JsonString "143.0" )
                 , ( "client_app_state", JsonString "unfocused" )
-                , ( "client_build_number", JsonNumber 453248 )
+                , ( "client_build_number", JsonNumber (Result.withDefault SafeFloat.zero (SafeFloat.fromFloat 453248)) )
                 , ( "client_event_source", JsonNull )
                 , ( "client_heartbeat_session_id", JsonString "1a49edbe-0c97-4445-996f-5cc93d84bbae" )
                 , ( "client_launch_id", JsonString "1b1343e7-e590-4b53-9d1b-b929fdd42419" )
@@ -2873,7 +2873,7 @@ allAttackerToBackendChanges =
     [ CheckLoginRequest InitialLoadRequested_None
     , LoginWithTokenRequest InitialLoadRequested_None 0 UserAgent.init
     , LoginWithTwoFactorRequest InitialLoadRequested_None 0 UserAgent.init
-    , GetLoginTokenRequest (Unsafe.emailAddress "attacker@example.com" |> Untrusted.untrust)
+    , GetLoginTokenRequest (Unsafe.emailAddress "attacker@example.com")
     , AdminToBackend (Pages.Admin.ExportBackendRequest Pages.Admin.ExportAll)
     , AdminToBackend Pages.Admin.DownloadLastBackupRequest
     , LocalModelChangeRequest (ChangeId 0) Local_Invalid
@@ -3087,7 +3087,7 @@ allAttackerLocalChanges =
     , Local_Drawing
         guildOrDmId_guild
         (Drawing.MessageAnchor threadRouteWithMessage Drawing.UserIconAnchor)
-        (Drawing.StartStroke ( 0, 0 ))
+        (Drawing.StartStroke ( SafeFloat.zero, SafeFloat.zero ))
     , Local_SetMuteDiscordGuild discordUserId discordGuildId MuteSettings.IsMuted
     , Local_SetMuteGuild legitGuildId MuteSettings.IsMuted
     , Local_RequestE2ee { otherUserId = Broadcast.adminUserId }
@@ -3452,8 +3452,12 @@ expectPolylineScale scale query =
             ]
 
 
-expectPointsCloseTo : List ( Float, Float ) -> List ( Float, Float ) -> Result String ()
+expectPointsCloseTo : List ( Float, Float ) -> List ( SafeFloat, SafeFloat ) -> Result String ()
 expectPointsCloseTo expected actual =
+    let
+        actual2 =
+            List.map (\( x, y ) -> ( SafeFloat.toFloat x, SafeFloat.toFloat y )) actual
+    in
     if
         (List.length expected == List.length actual)
             && List.all
@@ -3461,13 +3465,13 @@ expectPointsCloseTo expected actual =
                 (List.map2
                     (\( xA, yA ) ( xB, yB ) -> abs (xA - xB) < 0.001 && abs (yA - yB) < 0.001)
                     expected
-                    actual
+                    actual2
                 )
     then
         Ok ()
 
     else
-        Err ("Expected stroke points " ++ pointsToString expected ++ " but got " ++ pointsToString actual)
+        Err ("Expected stroke points " ++ pointsToString expected ++ " but got " ++ pointsToString actual2)
 
 
 pointsToString : List ( Float, Float ) -> String

@@ -87,6 +87,7 @@ import Json.Decode
 import MyUi
 import OneToOne exposing (OneToOne)
 import Quantity exposing (Quantity)
+import SafeFloat exposing (SafeFloat)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import Serialize
@@ -432,7 +433,7 @@ unknownContentType =
     ContentType 9999
 
 
-fileDataSerializeCodec : Serialize.Codec e FileData
+fileDataSerializeCodec : Serialize.Codec String FileData
 fileDataSerializeCodec =
     Serialize.record FileData
         |> Serialize.field .fileName FileName.codec
@@ -491,7 +492,7 @@ aesPrivateKeySerializeCodec =
     Serialize.map AesPrivateKey (\(AesPrivateKey a) -> a) Serialize.bytes
 
 
-fileMetadataSerializeCodec : Serialize.Codec e FileMetadata
+fileMetadataSerializeCodec : Serialize.Codec String FileMetadata
 fileMetadataSerializeCodec =
     Serialize.customType
         (\imageEncoder videoEncoder value ->
@@ -507,7 +508,7 @@ fileMetadataSerializeCodec =
         |> Serialize.finishCustomType
 
 
-imageMetadataSerializeCodec : Serialize.Codec e ImageMetadata
+imageMetadataSerializeCodec : Serialize.Codec String ImageMetadata
 imageMetadataSerializeCodec =
     Serialize.record ImageMetadata
         |> Serialize.field .imageSize coordSerializeCodec
@@ -515,8 +516,8 @@ imageMetadataSerializeCodec =
         |> Serialize.field .gpsLocation (Serialize.maybe locationSerializeCodec)
         |> Serialize.field .cameraOwner (Serialize.maybe Serialize.string)
         |> Serialize.field .exposureTime (Serialize.maybe exposureTimeSerializeCodec)
-        |> Serialize.field .fNumber (Serialize.maybe Serialize.float)
-        |> Serialize.field .focalLength (Serialize.maybe Serialize.float)
+        |> Serialize.field .fNumber (Serialize.maybe SafeFloat.serializeCodec)
+        |> Serialize.field .focalLength (Serialize.maybe SafeFloat.serializeCodec)
         |> Serialize.field .isoSpeedRating (Serialize.maybe Serialize.int)
         |> Serialize.field .make (Serialize.maybe Serialize.string)
         |> Serialize.field .model (Serialize.maybe Serialize.string)
@@ -525,7 +526,7 @@ imageMetadataSerializeCodec =
         |> Serialize.finishRecord
 
 
-videoMetadataSerializeCodec : Serialize.Codec e VideoMetadata
+videoMetadataSerializeCodec : Serialize.Codec String VideoMetadata
 videoMetadataSerializeCodec =
     Serialize.record VideoMetadata
         |> Serialize.field .videoSize coordSerializeCodec
@@ -583,11 +584,11 @@ orientationSerializeCodec =
         |> Serialize.finishCustomType
 
 
-locationSerializeCodec : Serialize.Codec e Location
+locationSerializeCodec : Serialize.Codec String Location
 locationSerializeCodec =
     Serialize.record Location
-        |> Serialize.field .lat Serialize.float
-        |> Serialize.field .lon Serialize.float
+        |> Serialize.field .lat SafeFloat.serializeCodec
+        |> Serialize.field .lon SafeFloat.serializeCodec
         |> Serialize.finishRecord
 
 
@@ -650,8 +651,8 @@ imageMetadataCodec =
         |> Codec.field "gps_location" .gpsLocation (Codec.nullable locationCodec)
         |> Codec.field "camera_owner" .cameraOwner (Codec.nullable Codec.string)
         |> Codec.field "exposure_time" .exposureTime (Codec.nullable exposureTimeCodec)
-        |> Codec.field "f_number" .fNumber (Codec.nullable Codec.float)
-        |> Codec.field "focal_length" .focalLength (Codec.nullable Codec.float)
+        |> Codec.field "f_number" .fNumber (Codec.nullable SafeFloat.codec)
+        |> Codec.field "focal_length" .focalLength (Codec.nullable SafeFloat.codec)
         |> Codec.field "iso_speed_rating" .isoSpeedRating (Codec.nullable Codec.int)
         |> Codec.field "make" .make (Codec.nullable Codec.string)
         |> Codec.field "model" .model (Codec.nullable Codec.string)
@@ -663,8 +664,8 @@ imageMetadataCodec =
 locationCodec : Codec Location
 locationCodec =
     Codec.object Location
-        |> Codec.field "lat" .lat Codec.float
-        |> Codec.field "lon" .lon Codec.float
+        |> Codec.field "lat" .lat SafeFloat.codec
+        |> Codec.field "lon" .lon SafeFloat.codec
         |> Codec.buildObject
 
 
@@ -682,8 +683,8 @@ type alias ImageMetadata =
     , gpsLocation : Maybe Location
     , cameraOwner : Maybe String
     , exposureTime : Maybe ExposureTime
-    , fNumber : Maybe Float
-    , focalLength : Maybe Float
+    , fNumber : Maybe SafeFloat
+    , focalLength : Maybe SafeFloat
     , isoSpeedRating : Maybe Int
     , make : Maybe String
     , model : Maybe String
@@ -798,7 +799,7 @@ orientationCodec =
 
 
 type alias Location =
-    { lat : Float, lon : Float }
+    { lat : SafeFloat, lon : SafeFloat }
 
 
 type alias ExposureTime =
@@ -1140,8 +1141,8 @@ imageInfoView timezone onPressClose fileData =
                                 , Maybe.map (\location -> imageLabel "Location" (locationToString location)) metadata.gpsLocation
                                 , Maybe.map (imageLabel "Camera owner") metadata.cameraOwner
                                 , Maybe.map (\exposure -> imageLabel "Exposure time" (exposureTimeToString exposure)) metadata.exposureTime
-                                , Maybe.map (\fNumber -> imageLabel "F-number" ("f/" ++ String.fromFloat fNumber)) metadata.fNumber
-                                , Maybe.map (\focal -> imageLabel "Focal length" (String.fromFloat focal ++ "mm")) metadata.focalLength
+                                , Maybe.map (\fNumber -> imageLabel "F-number" ("f/" ++ SafeFloat.toString fNumber)) metadata.fNumber
+                                , Maybe.map (\focal -> imageLabel "Focal length" (SafeFloat.toString focal ++ "mm")) metadata.focalLength
                                 , Maybe.map (\iso -> imageLabel "ISO" (String.fromInt iso)) metadata.isoSpeedRating
                                 , Maybe.map (imageLabel "Make") metadata.make
                                 , Maybe.map (imageLabel "Model") metadata.model
@@ -1272,7 +1273,7 @@ orientationToString orientation =
 
 locationToString : Location -> String
 locationToString location =
-    String.fromFloat location.lat ++ ", " ++ String.fromFloat location.lon
+    SafeFloat.toString location.lat ++ ", " ++ SafeFloat.toString location.lon
 
 
 exposureTimeToString : ExposureTime -> String

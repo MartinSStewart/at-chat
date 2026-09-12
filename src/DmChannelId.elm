@@ -17,6 +17,19 @@ type DmChannelId
     = DmChannelId (Id UserId) (Id UserId)
 
 
+w3_validate_DmChannelId : DmChannelId -> Result String ()
+w3_validate_DmChannelId dmChannelId =
+    let
+        ( userIdA, userIdB ) =
+            toUserIds dmChannelId
+    in
+    if fromUserIds userIdA userIdB == dmChannelId then
+        Ok ()
+
+    else
+        Err "Invalid DmChannelID"
+
+
 type GuildOrFullDmId
     = GuildOrFullDmId_Guild (Id GuildId) (Id ChannelId)
     | GuildOrFullDmId_Dm DmChannelId
