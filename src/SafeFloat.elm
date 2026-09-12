@@ -5,6 +5,7 @@ module SafeFloat exposing
     , encode
     , fromFloat
     , serializeCodec
+    , toFloat
     , toString
     , zero
     )
