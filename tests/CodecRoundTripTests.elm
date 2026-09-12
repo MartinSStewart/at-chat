@@ -15,6 +15,7 @@ import Id
 import List.Nonempty
 import Message
 import RichText
+import SafeFloat
 import SeqDict
 import Serialize
 import Test exposing (Test, describe, test)
@@ -211,11 +212,15 @@ roundTripTests =
                         (FileStatus.FileMetadata_Image
                             { imageSize = Coord.xy 4032 3024
                             , orientation = Just FileStatus.MirroredRotation270
-                            , gpsLocation = Just { lat = -33.8688, lon = 151.2093 }
+                            , gpsLocation =
+                                Just
+                                    { lat = SafeFloat.fromFloat -33.8688 |> Result.withDefault SafeFloat.zero
+                                    , lon = SafeFloat.fromFloat 151.2093 |> Result.withDefault SafeFloat.zero
+                                    }
                             , cameraOwner = Just "someone"
                             , exposureTime = Just { numerator = 1, denominator = 250 }
-                            , fNumber = Just 1.8
-                            , focalLength = Just 26.5
+                            , fNumber = Just (Result.withDefault SafeFloat.zero (SafeFloat.fromFloat 1.8))
+                            , focalLength = Just (Result.withDefault SafeFloat.zero (SafeFloat.fromFloat 26.5))
                             , isoSpeedRating = Just 400
                             , make = Just "Make"
                             , model = Just "Model"
@@ -268,7 +273,7 @@ roundTripTests =
                             , orientation = FileStatus.Rotation90
                             , codec = Just "avc1.640028"
                             , title = Just "A title"
-                            , gpsLocation = Just { lat = 0, lon = 0 }
+                            , gpsLocation = Just { lat = SafeFloat.zero, lon = SafeFloat.zero }
                             , duration = Just (Duration.seconds 12.5)
                             }
                         )
