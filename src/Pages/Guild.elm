@@ -5223,9 +5223,6 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                 y =
                     Coord.yRaw position
                         - MyUi.channelHeaderHeight
-                        -- A question near the bottom of the window doesn't have the room to
-                        -- draw the whole selector underneath it, so it slides back up far
-                        -- enough to fit rather than running off the screen.
                         |> min (Coord.yRaw model.windowSize - MyUi.channelHeaderHeight - Emoji.selectorHeight)
                         |> max 0
             in
