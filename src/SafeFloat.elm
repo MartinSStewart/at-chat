@@ -1,4 +1,4 @@
-module SafeFloat exposing (SafeFloat, codec, decode, encode, fromFloat, serializeCodec, toString)
+module SafeFloat exposing (SafeFloat, codec, decode, encode, serializeCodec, toString)
 
 import Codec exposing (Codec)
 import Json.Decode

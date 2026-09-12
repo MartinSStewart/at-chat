@@ -4,7 +4,6 @@ module Unsafe exposing
     , emojiName
     , guildName
     , personName
-    , safeFloat
     , uint64
     )
 
@@ -13,7 +12,6 @@ import CustomEmoji
 import EmailAddress exposing (EmailAddress)
 import GuildName exposing (GuildName)
 import PersonName exposing (PersonName)
-import SafeFloat exposing (SafeFloat)
 import UInt64
 
 
@@ -74,16 +72,6 @@ emojiName text =
             b
 
         Err () ->
-            unreachable 0
-
-
-safeFloat : Float -> SafeFloat
-safeFloat a =
-    case SafeFloat.fromFloat a of
-        Ok b ->
-            b
-
-        Err _ ->
             unreachable 0
 
 
