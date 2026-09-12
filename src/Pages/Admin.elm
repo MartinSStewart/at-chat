@@ -13,6 +13,7 @@ module Pages.Admin exposing
     , OutMsg(..)
     , ToBackend(..)
     , ToFrontend(..)
+    , TypeThatIsAlwaysInvalid(..)
     , UserColumn(..)
     , UserTable
     , UserTableId(..)
@@ -315,6 +316,7 @@ type alias InitAdminData =
     , toBackendLogs : Array ToBackendLogData
     , backendMsgLogs : Array BackendMsgLogData
     , vulnerabilityChecks : String
+    , checkToFrontendValidation : TypeThatIsAlwaysInvalid
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , lastBackup : Maybe LastBackup
     , websocketCloseEvents : Array WebsocketClosedEvent
@@ -322,6 +324,15 @@ type alias InitAdminData =
     , wordSpellingGameEnglish : WordSpellingGameStatus
     , wordSpellingGameSwedish : WordSpellingGameStatus
     }
+
+
+type TypeThatIsAlwaysInvalid
+    = TypeThatIsAlwaysInvalid
+
+
+w3_validate_TypeThatIsAlwaysInvalid : TypeThatIsAlwaysInvalid -> Result String ()
+w3_validate_TypeThatIsAlwaysInvalid _ =
+    Err "TypeThatIsAlwaysInvalid is always invalid"
 
 
 type AdminChange
