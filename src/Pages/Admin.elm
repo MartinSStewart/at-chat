@@ -97,6 +97,7 @@ import Svg.Attributes
 import Table
 import ToBackendLog exposing (ToBackendLogData, toBackendLogToString)
 import Toop exposing (T2(..), T3(..))
+import TypeThatIsAlwaysInvalid exposing (TypeThatIsAlwaysInvalid(..))
 import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
@@ -199,6 +200,7 @@ type Msg
     | PressedStartWebCodecsTest
     | PressedStopWebCodecsTest
     | PressedCountToBackend
+    | PressedSendTypeThatIsAlwaysInvalid
 
 
 type ToBackend
@@ -206,6 +208,7 @@ type ToBackend
     | DownloadLastBackupRequest
     | ImportBackendRequest Bytes
     | CountToBackendRequest
+    | TypeThatIsAlwaysInvalidRequest TypeThatIsAlwaysInvalid
 
 
 type ExportSubset
@@ -1265,6 +1268,12 @@ update navigationKey time adminData localState msg model =
         PressedCountToBackend ->
             ( { model | countToFrontend = "" }
             , Lamdera.sendToBackend CountToBackendRequest
+            , NoOutMsg
+            )
+
+        PressedSendTypeThatIsAlwaysInvalid ->
+            ( model
+            , Lamdera.sendToBackend (TypeThatIsAlwaysInvalidRequest TypeThatIsAlwaysInvalid)
             , NoOutMsg
             )
 
@@ -2978,6 +2987,14 @@ exportSection isMobile timezone user adminData model =
                 PressedCountToBackend
                 (Ui.text "Count to 200")
             , Ui.text model.countToFrontend
+            ]
+        , Ui.row
+            [ Ui.spacing 8 ]
+            [ MyUi.simpleButton
+                (Dom.id "admin_typeThatIsAlwaysInvalidButton")
+                PressedSendTypeThatIsAlwaysInvalid
+                (Ui.text "Send invalid type")
+            , Ui.text "The backend should never receive this. If it does, an error gets logged."
             ]
         ]
 

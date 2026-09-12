@@ -50,6 +50,7 @@ type Log
     | FailedToLoadDiscordGuildCustomEmojis (Nonempty ( Id CustomEmojiId, Http.Error )) Int
     | FailedToGenerateScheduledBackup Http.Error
     | FailedToRegenerateServerSecret Http.Error
+    | ReceivedTypeThatIsAlwaysInvalid
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -138,6 +139,9 @@ shouldNotifyAdmin log =
 
         FailedToRegenerateServerSecret _ ->
             Nothing
+
+        ReceivedTypeThatIsAlwaysInvalid ->
+            Just "ReceivedTypeThatIsAlwaysInvalid"
 
 
 monthToString : Month -> String
@@ -561,6 +565,15 @@ logContent onPressCopy customEmojis log =
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Regenerating server secret failed"
                 , fieldRow "Error" (Ui.text (httpErrorToString error))
+                ]
+
+        ReceivedTypeThatIsAlwaysInvalid ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Received TypeThatIsAlwaysInvalid"
+                , fieldRow
+                    "Error"
+                    (Ui.text "A ToBackend message that should have failed wire validation reached the backend")
                 ]
 
 

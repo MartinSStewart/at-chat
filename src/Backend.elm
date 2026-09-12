@@ -3004,7 +3004,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             BackendExtra.asAdmin
                 model
                 sessionId
-                (\_ _ -> updateFromFrontendAdmin clientId adminToBackend model)
+                (\_ _ -> updateFromFrontendAdmin time clientId adminToBackend model)
 
         LogOutRequest sessionIdHashToLogOut ->
             BackendExtra.asUser
@@ -9069,11 +9069,12 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
 
 updateFromFrontendAdmin :
-    ClientId
+    Time.Posix
+    -> ClientId
     -> Pages.Admin.ToBackend
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-updateFromFrontendAdmin clientId toBackend model =
+updateFromFrontendAdmin time clientId toBackend model =
     case toBackend of
         Pages.Admin.ExportBackendRequest isPartial ->
             let
@@ -9192,6 +9193,9 @@ updateFromFrontendAdmin clientId toBackend model =
                     ( model
                     , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Err ()) |> AdminToFrontend)
                     )
+
+        Pages.Admin.TypeThatIsAlwaysInvalidRequest _ ->
+            BackendExtra.addLog time Log.ReceivedTypeThatIsAlwaysInvalid model
 
 
 {-| How much of a backup gets sent in each ToFrontend message. Sending the whole backup
