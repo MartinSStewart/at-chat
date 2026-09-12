@@ -1,5 +1,5 @@
 module SafeFloat exposing
-    ( SafeFloat
+    ( SafeFloat(..)
     , codec
     , decode
     , encode
@@ -16,6 +16,8 @@ import Json.Encode
 import Serialize
 
 
+{-| OpaqueVariants
+-}
 type SafeFloat
     = SafeFloat Float
 

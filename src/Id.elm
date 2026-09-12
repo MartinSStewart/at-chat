@@ -8,7 +8,7 @@ module Id exposing
     , GamePublicId(..)
     , GuildId(..)
     , GuildOrDmId(..)
-    , Id
+    , Id(..)
     , InviteLinkId(..)
     , QuestionId(..)
     , StickerId(..)
