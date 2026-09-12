@@ -77,6 +77,7 @@ import Range exposing (Range, SelectionDirection)
 import RecoveryLogin
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
+import SafeFloat exposing (SafeFloat)
 import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -6080,7 +6081,7 @@ the selected anchor's top left corner, in the anchor's coordinate space. When
 zoomed in the conversation is magnified around the center of the anchor, so the
 pointer position is mapped back through that same transform.
 -}
-anchorRelativePoint : Drawing.SelectedAnchorData -> Float -> Float -> ( Float, Float )
+anchorRelativePoint : Drawing.SelectedAnchorData -> Float -> Float -> ( SafeFloat, SafeFloat )
 anchorRelativePoint selected x y =
     let
         anchorPosition : { x : Float, y : Float }
@@ -6090,8 +6091,8 @@ anchorRelativePoint selected x y =
         ( offsetX, offsetY ) =
             Drawing.zoomPointOffset selected
     in
-    ( (offsetX + (x - anchorPosition.x - offsetX) / selected.zoom) * selected.pointScale
-    , (offsetY + (y - anchorPosition.y - offsetY) / selected.zoom) * selected.pointScale
+    ( (offsetX + (x - anchorPosition.x - offsetX) / selected.zoom) * selected.pointScale |> SafeFloat.fromFloat |> Result.withDefault SafeFloat.zero
+    , (offsetY + (y - anchorPosition.y - offsetY) / selected.zoom) * selected.pointScale |> SafeFloat.fromFloat |> Result.withDefault SafeFloat.zero
     )
 
 
@@ -6128,7 +6129,7 @@ updateDrawing drawingMsg model =
                             case selected.stroke of
                                 Just stroke ->
                                     let
-                                        unsent : List ( Float, Float )
+                                        unsent : List ( SafeFloat, SafeFloat )
                                         unsent =
                                             anchorRelativePoint selected x y :: stroke.unsent
 
@@ -6169,10 +6170,9 @@ updateDrawing drawingMsg model =
                                 Just stroke ->
                                     FrontendExtra.handleLocalChange
                                         model.time
-                                        (Local_Drawing
-                                            selected.guildOrDmId
-                                            selected.anchorType
-                                            (Drawing.EndStroke (List.reverse stroke.unsent))
+                                        (List.reverse stroke.unsent
+                                            |> Drawing.EndStroke
+                                            |> Local_Drawing selected.guildOrDmId selected.anchorType
                                             |> Just
                                         )
                                         { loggedIn

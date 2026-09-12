@@ -227,13 +227,13 @@ finalProjectEvaluation disallowed exempt context =
             )
 
 
-toError : TypeInfo -> List String -> Rule.Error { useErrorForModule : () }
+toError : TypeInfo -> List ( ModuleName, String ) -> Rule.Error { useErrorForModule : () }
 toError info path =
     Rule.errorForModule info.key
         { message = "Found a disallowed type referenced by ToBackend"
         , details =
             [ "ToBackend references a type that this rule disallows, either directly or indirectly through other types."
-            , "Path: " ++ String.join " -> " path
+            , "Path: " ++ String.join " -> " (List.map (\( moduleName, typeName ) -> String.join "." moduleName ++ "." ++ typeName) path)
             ]
         }
         info.range
@@ -248,22 +248,22 @@ findDisallowedPath :
     -> Set ( ModuleName, String )
     -> Dict ( ModuleName, String ) TypeInfo
     -> ( ModuleName, String )
-    -> Maybe (List String)
+    -> Maybe (List ( ModuleName, String ))
 findDisallowedPath disallowed exempt types start =
     if Set.member start exempt then
         Nothing
 
     else
-        bfs disallowed exempt types [ ( start, [ Tuple.second start ] ) ] (Set.singleton start)
+        bfs disallowed exempt types [ ( start, [ start ] ) ] (Set.singleton start)
 
 
 bfs :
     Set ( ModuleName, String )
     -> Set ( ModuleName, String )
     -> Dict ( ModuleName, String ) TypeInfo
-    -> List ( ( ModuleName, String ), List String )
+    -> List ( ( ModuleName, String ), List ( ModuleName, String ) )
     -> Set ( ModuleName, String )
-    -> Maybe (List String)
+    -> Maybe (List ( ModuleName, String ))
 bfs disallowed exempt types queue visited =
     case queue of
         [] ->
@@ -277,7 +277,7 @@ bfs disallowed exempt types queue visited =
                 Just info ->
                     case disallowedHit disallowed exempt info.references of
                         Just hit ->
-                            Just (path ++ [ Tuple.second hit ])
+                            Just (path ++ [ hit ])
 
                         Nothing ->
                             let
@@ -289,7 +289,7 @@ bfs disallowed exempt types queue visited =
                                                     ( q, v )
 
                                                 else
-                                                    ( q ++ [ ( next, path ++ [ Tuple.second next ] ) ]
+                                                    ( q ++ [ ( next, path ++ [ next ] ) ]
                                                     , Set.insert next v
                                                     )
                                             )

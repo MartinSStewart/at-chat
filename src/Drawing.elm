@@ -44,6 +44,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import Point2d exposing (Point2d)
+import SafeFloat exposing (SafeFloat)
 import SeqDict exposing (SeqDict)
 import Svg
 import Svg.Attributes
@@ -75,7 +76,7 @@ full resolution coordinate space so that drawings stay aligned when the image
 is scaled down to fit smaller screens.
 -}
 type alias Stroke =
-    { points : Nonempty ( Float, Float )
+    { points : Nonempty ( SafeFloat, SafeFloat )
     }
 
 
@@ -83,7 +84,7 @@ type alias Drawing userId =
     { finished :
         List
             { createdBy : userId
-            , points : Nonempty ( Float, Float )
+            , points : Nonempty ( SafeFloat, SafeFloat )
             }
     , inProgress : SeqDict userId Stroke
     , -- Per-user redo stacks, most recently undone stroke first
@@ -97,12 +98,12 @@ emptyDrawing =
 
 
 type LocalChange
-    = StartStroke ( Float, Float )
-    | ContinueStroke (Nonempty ( Float, Float ))
+    = StartStroke ( SafeFloat, SafeFloat )
+    | ContinueStroke (Nonempty ( SafeFloat, SafeFloat ))
     | -- Carries the points that weren't sent in a ContinueStroke batch yet.
       -- They can't be sent as a separate ContinueStroke because two messages
       -- sent in the same frontend update aren't guaranteed to arrive in order.
-      EndStroke (List ( Float, Float ))
+      EndStroke (List ( SafeFloat, SafeFloat ))
     | UndoStroke
     | RedoStroke
 
@@ -150,8 +151,7 @@ type alias SelectedAnchorData =
 
 
 type alias ActiveStroke =
-    { -- Anchor relative points that haven't been sent to the backend yet, newest first
-      unsent : List ( Float, Float )
+    { unsent : List ( SafeFloat, SafeFloat )
     }
 
 
@@ -370,7 +370,7 @@ profileImageAnchorId messageId =
 
 {-| Finished and in-progress strokes that are attached to the given anchor type.
 -}
-strokesFor : Drawing userId -> List ( userId, Nonempty ( Float, Float ) )
+strokesFor : Drawing userId -> List ( userId, Nonempty ( SafeFloat, SafeFloat ) )
 strokesFor drawing =
     List.map (\finished -> ( finished.createdBy, finished.points )) drawing.finished
         ++ List.map (\( createdBy, stroke ) -> ( createdBy, stroke.points )) (SeqDict.toList drawing.inProgress)
@@ -405,7 +405,7 @@ imageAttachmentOverlays scale getColor drawing =
         (strokesFor drawing)
 
 
-strokeSvg : Float -> String -> Nonempty ( Float, Float ) -> Html msg
+strokeSvg : Float -> String -> Nonempty ( SafeFloat, SafeFloat ) -> Html msg
 strokeSvg scale color points =
     Svg.svg
         [ Svg.Attributes.width "1"
@@ -416,8 +416,8 @@ strokeSvg scale color points =
             [ ( x, y ) ] ->
                 Svg.circle
                     [ Svg.Attributes.r "1.5"
-                    , Svg.Attributes.cx (String.fromFloat x)
-                    , Svg.Attributes.cy (String.fromFloat y)
+                    , Svg.Attributes.cx (SafeFloat.toString x)
+                    , Svg.Attributes.cy (SafeFloat.toString y)
                     , Svg.Attributes.transform ("scale(" ++ String.fromFloat scale ++ ")")
                     , Html.Attributes.attribute "vector-effect" "non-scaling-stroke"
                     , Svg.Attributes.fill color
@@ -427,7 +427,7 @@ strokeSvg scale color points =
 
             points2 ->
                 Svg.polyline
-                    [ List.map (\( x, y ) -> String.fromFloat x ++ "," ++ String.fromFloat y) points2
+                    [ List.map (\( x, y ) -> SafeFloat.toString x ++ "," ++ SafeFloat.toString y) points2
                         |> String.join " "
                         |> Svg.Attributes.points
                     , Svg.Attributes.transform ("scale(" ++ String.fromFloat scale ++ ")")

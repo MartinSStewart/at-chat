@@ -1,4 +1,13 @@
-module SafeFloat exposing (SafeFloat, codec, decode, encode, serializeCodec, toString)
+module SafeFloat exposing
+    ( SafeFloat
+    , codec
+    , decode
+    , encode
+    , fromFloat
+    , serializeCodec
+    , toString
+    , zero
+    )
 
 import Codec exposing (Codec)
 import Json.Decode
@@ -8,6 +17,11 @@ import Serialize
 
 type SafeFloat
     = SafeFloat Float
+
+
+zero : SafeFloat
+zero =
+    SafeFloat 0
 
 
 fromFloat : Float -> Result String SafeFloat

@@ -146,7 +146,7 @@ config =
             [ ( [ "Basics" ], "Float" )
             , ( [ "Duration" ], "Duration" )
             ]
-        , unlessWrappedIn = [ ( [ "SafeFloat" ], "SafeFloat" ) ]
+        , unlessWrappedIn = [ ( [ "SafeFloat" ], "SafeFloat" ), ( [ "UserSession" ], "ToBeFilledInByBackend" ) ]
         }
         |> Review.Rule.ignoreErrorsForDirectories [ "vendored", "src/Evergreen" ]
     , BackendOnly.rule
