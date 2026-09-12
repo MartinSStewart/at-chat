@@ -3385,7 +3385,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             )
                         , adminPage.click
                             100
-                            (Pages.Admin.expandSectionButtonId User.DiscordUsersSection)
+                            (Pages.Admin.expandSectionButtonId Pages.Admin.DiscordUsersSection)
                         , adminPage.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "Websocket open" ])
@@ -3420,9 +3420,12 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                     (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
                                 ]
                             )
-                        , -- The section was expanded above and that's stored on the user, so
-                          -- this admin page opens with it already expanded.
-                          adminPage.checkView
+                        , -- Which sections are expanded is per admin page, so this one starts
+                          -- collapsed and has to be opened again.
+                          adminPage.click
+                            100
+                            (Pages.Admin.expandSectionButtonId Pages.Admin.DiscordUsersSection)
+                        , adminPage.checkView
                             100
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.exactText "Websocket open"

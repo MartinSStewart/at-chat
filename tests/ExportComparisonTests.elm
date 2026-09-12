@@ -7,13 +7,10 @@ import ExportComparison exposing (Difference(..))
 import Id
 import IdArray
 import Message exposing (Message(..))
-import NonemptyDict
 import SeqDict
 import Test exposing (Test)
 import Thread
 import Time
-import Unsafe
-import User
 
 
 {-| Everything is compared against this cutoff, so "old" means before it and
@@ -26,12 +23,12 @@ cutoff =
 
 old : String
 old =
-    "2001-09-09T01:00:00.000Z"
+    "999999999999"
 
 
 recent : String
 recent =
-    "2001-09-09T02:00:00.000Z"
+    "1000000000001"
 
 
 quote : String -> String
@@ -43,51 +40,79 @@ quote text =
 -}
 export : List String -> String
 export messages =
-    "{" ++ quote "channel" ++ ":{}," ++ quote "messages" ++ ":[" ++ String.join "," messages ++ "]}"
+    exportWithThreads messages []
+
+
+exportWithThreads : List String -> List ( String, List String ) -> String
+exportWithThreads messages threads =
+    "{"
+        ++ quote "tag"
+        ++ ":"
+        ++ quote "DmChannelExport"
+        ++ ","
+        ++ quote "args"
+        ++ ":[{"
+        ++ quote "messages"
+        ++ ":["
+        ++ String.join "," messages
+        ++ "],"
+        ++ quote "threads"
+        ++ ":["
+        ++ String.join ","
+            (List.map
+                (\( key, threadMessages ) ->
+                    "{"
+                        ++ quote "k"
+                        ++ ":"
+                        ++ key
+                        ++ ","
+                        ++ quote "v"
+                        ++ ":{"
+                        ++ quote "messages"
+                        ++ ":["
+                        ++ String.join "," threadMessages
+                        ++ "]}}"
+                )
+                threads
+            )
+        ++ "]}]}"
 
 
 message : String -> String -> String
 message createdAt content =
     "{"
-        ++ quote "type"
+        ++ quote "tag"
         ++ ":"
-        ++ quote "userTextMessage"
+        ++ quote "UserTextMessage"
         ++ ","
+        ++ quote "args"
+        ++ ":[{"
         ++ quote "createdAt"
         ++ ":"
-        ++ quote createdAt
+        ++ createdAt
         ++ ","
         ++ quote "content"
         ++ ":"
         ++ quote content
-        ++ "}"
+        ++ "}]}"
 
 
-deletedMessage : String -> String -> String
-deletedMessage deletedAt leftBehind =
+{-| Someone joining is dated by a timestamp that sits in the message directly rather than
+in a record inside it, which is the other shape the comparison has to be able to read.
+-}
+joinedMessage : String -> String -> String
+joinedMessage joinedAt reaction =
     "{"
-        ++ quote "type"
+        ++ quote "tag"
         ++ ":"
-        ++ quote "deleted"
+        ++ quote "UserJoinedMessage"
         ++ ","
-        ++ quote "deletedAt"
-        ++ ":"
-        ++ quote deletedAt
-        ++ ","
-        ++ quote "content"
-        ++ ":"
-        ++ quote leftBehind
-        ++ "}"
-
-
-withThread : String -> List String -> String
-withThread parent threadMessages =
-    String.dropRight 1 parent
-        ++ ","
-        ++ quote "threadMessages"
+        ++ quote "args"
         ++ ":["
-        ++ String.join "," threadMessages
-        ++ "]}"
+        ++ joinedAt
+        ++ ",0,"
+        ++ quote reaction
+        ++ ",null]}"
 
 
 {-| A real export, built by the code behind the "Export channel" button, so that
@@ -98,12 +123,6 @@ all of them are checked.
 channelExport : String
 channelExport =
     ChannelExport.dmChannel
-        (NonemptyDict.singleton
-            (Id.fromInt 1)
-            (User.init (Time.millisToPosix 0) (Unsafe.personName "Sven") (Unsafe.emailAddress "sven@example.com") False)
-        )
-        (Id.fromInt 1)
-        (Id.fromInt 2)
         { backendInit
             | messages = IdArray.fromList [ DeletedMessage (Time.millisToPosix 1), DeletedMessage (Time.millisToPosix 2) ]
             , threads =
@@ -183,30 +202,30 @@ tests =
         , Test.test "A new reply to an old message doesn't count as the old message changing" <|
             \_ ->
                 compare
-                    (export [ withThread (message old "hi") [] ])
-                    (export [ withThread (message old "hi") [ message recent "a reply" ] ])
+                    (exportWithThreads [ message old "hi" ] [ ( "0", [] ) ])
+                    (exportWithThreads [ message old "hi" ] [ ( "0", [ message recent "a reply" ] ) ])
                     |> Expect.equal (Ok [])
         , Test.test "An old thread message changing is a failure" <|
             \_ ->
                 compare
-                    (export [ withThread (message old "hi") [ message old "a reply" ] ])
-                    (export [ withThread (message old "hi") [ message old "a different reply" ] ])
+                    (exportWithThreads [ message old "hi" ] [ ( "0", [ message old "a reply" ] ) ])
+                    (exportWithThreads [ message old "hi" ] [ ( "0", [ message old "a different reply" ] ) ])
                     |> Result.map (List.map describe)
-                    |> Expect.equal (Ok [ "changed message 0 thread message 0" ])
+                    |> Expect.equal (Ok [ "changed thread 0 message 0" ])
         , Test.test "An old thread message under a recent message is still checked" <|
             \_ ->
                 compare
-                    (export [ withThread (message recent "hi") [ message old "a reply" ] ])
-                    (export [ withThread (message recent "edited") [ message old "changed" ] ])
+                    (exportWithThreads [ message recent "hi" ] [ ( "0", [ message old "a reply" ] ) ])
+                    (exportWithThreads [ message recent "edited" ] [ ( "0", [ message old "changed" ] ) ])
                     |> Result.map (List.map describe)
-                    |> Expect.equal (Ok [ "changed message 0 thread message 0" ])
-        , Test.test "A recent message that took an old thread with it is a failure" <|
+                    |> Expect.equal (Ok [ "changed thread 0 message 0" ])
+        , Test.test "An old thread the backup lost entirely is a failure" <|
             \_ ->
                 compare
-                    (export [ withThread (message recent "hi") [ message old "a reply" ] ])
-                    (export [])
+                    (exportWithThreads [ message recent "hi" ] [ ( "0", [ message old "a reply" ] ) ])
+                    (export [ message recent "hi" ])
                     |> Result.map (List.map describe)
-                    |> Expect.equal (Ok [ "missing message 0" ])
+                    |> Expect.equal (Ok [ "missing thread 0 message 0" ])
         , Test.test "A message with no readable timestamp is checked rather than skipped" <|
             \_ ->
                 compare
@@ -214,17 +233,17 @@ tests =
                     (export [ "{" ++ quote "content" ++ ":" ++ quote "changed" ++ "}" ])
                     |> Result.map (List.map describe)
                     |> Expect.equal (Ok [ "changed message 0" ])
-        , Test.test "A deleted message is dated by deletedAt, so a recent deletion is allowed to change" <|
+        , Test.test "A message dated by a bare timestamp is read, so a recent one is allowed to change" <|
             \_ ->
                 compare
-                    (export [ deletedMessage recent "hi" ])
-                    (export [ deletedMessage recent "changed" ])
+                    (export [ joinedMessage recent "hi" ])
+                    (export [ joinedMessage recent "changed" ])
                     |> Expect.equal (Ok [])
-        , Test.test "A deleted message is dated by deletedAt, so an old deletion is not allowed to change" <|
+        , Test.test "A message dated by a bare timestamp is read, so an old one is not allowed to change" <|
             \_ ->
                 compare
-                    (export [ deletedMessage old "hi" ])
-                    (export [ deletedMessage old "changed" ])
+                    (export [ joinedMessage old "hi" ])
+                    (export [ joinedMessage old "changed" ])
                     |> Result.map (List.map describe)
                     |> Expect.equal (Ok [ "changed message 0" ])
         , Test.test "A reference export that isn't JSON is reported as an error" <|
@@ -232,9 +251,15 @@ tests =
                 compare "not json" (export [])
                     |> Result.mapError (String.left 38)
                     |> Expect.equal (Err "The reference export is not valid JSON")
-        , Test.test "An export without a messages array is reported as an error" <|
+        , Test.test "Something that isn't a channel export at all is reported as an error" <|
             \_ ->
                 compare ("{" ++ quote "channel" ++ ":{}}") (export [])
+                    |> Expect.equal (Err "The reference export isn't a channel export")
+        , Test.test "An export without a messages array is reported as an error" <|
+            \_ ->
+                compare
+                    ("{" ++ quote "tag" ++ ":" ++ quote "DmChannelExport" ++ "," ++ quote "args" ++ ":[{}]}")
+                    (export [])
                     |> Expect.equal (Err "The reference export has no \"messages\" array")
         ]
 

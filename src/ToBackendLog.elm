@@ -27,6 +27,7 @@ type ToBackendLog
     | ToBackendLog_AdminDataRequest
     | ToBackendLog_GetPublicGoMatchRequest
     | ToBackendLog_ExportChannelRequest
+    | ToBackendLog_ImportChannelRequest
     | ToBackendLog_Local_Invalid
     | ToBackendLog_Local_Admin
     | ToBackendLog_Local_SendMessage
@@ -149,6 +150,9 @@ toBackendLogToString log =
 
         ToBackendLog_ExportChannelRequest ->
             "ExportChannelRequest"
+
+        ToBackendLog_ImportChannelRequest ->
+            "ImportChannelRequest"
 
         ToBackendLog_Local_Invalid ->
             "Local_Invalid"

@@ -220,6 +220,36 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         handleMultiFileUpload _ =
             UnhandledMultiFileUpload
 
+        -- What the file picker hands the import channel button. Before a channel has been
+        -- exported there is nothing to import, so the picker offers something that isn't a
+        -- channel export, which is how both the file that can be read and the one that can't
+        -- get tested.
+        handleChannelImportFileUpload : { data : T.Data FrontendModel E2EHelper.BackendModel2, mimeTypes : List String } -> FileUpload
+        handleChannelImportFileUpload { data } =
+            case List.map .content data.downloads of
+                [ T.StringFile json ] ->
+                    UploadFile (T.uploadStringFile "channel.json" "application/json" json E2EHelper.startTime)
+
+                _ ->
+                    UploadFile
+                        (T.uploadStringFile
+                            "channel.json"
+                            "application/json"
+                            "not a channel export"
+                            E2EHelper.startTime
+                        )
+
+        channelImportConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+        channelImportConfig =
+            T.Config
+                Frontend.app_
+                E2EHelper.backendApp
+                handleNormalHttpRequests
+                E2EHelper.handlePortToJs
+                handleChannelImportFileUpload
+                handleMultiFileUpload
+                E2EHelper.domain
+
         normalConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
         normalConfig =
             T.Config
@@ -337,6 +367,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.channelSearchTest normalConfig
     , E2EMisc.colorPickerTest normalConfig
     , E2EMisc.exportChannelTest normalConfig
+    , E2EMisc.importChannelTest channelImportConfig
     , E2EMisc.exportDmChannelTest normalConfig
     , E2EMisc.largePasteBecomesAttachment nonImageUploadConfig
     , E2EMisc.leaveGuildTest normalConfig

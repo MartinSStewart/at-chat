@@ -22,6 +22,8 @@ module Go exposing
     , ValidatedSetup
     , audio
     , boardSize9
+    , boardSizeFromInt
+    , boardSizeToInt
     , currentPlayersTurn
     , deadStones
     , dragEnd

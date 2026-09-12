@@ -8,6 +8,7 @@ module E2EMisc exposing
     , exportChannelTest
     , exportDmChannelTest
     , friendsSearchTest
+    , importChannelTest
     , inactiveDmThreadsAreHiddenTest
     , inactiveThreadsAreHiddenTest
     , inviteUserAndDmChat
@@ -30,8 +31,10 @@ module E2EMisc exposing
 
 import Audio
 import Broadcast
+import ChannelExport
 import DmChannel
 import DmChannelId
+import Drawing
 import Duration
 import E2EHelper
 import E2EVoiceChat
@@ -44,6 +47,8 @@ import FileStatus
 import FrontendExtra
 import Html.Attributes
 import Id
+import IdArray
+import Json.Decode
 import Json.Encode
 import List.Nonempty
 import Local
@@ -63,8 +68,7 @@ import Test.Html.Query
 import Test.Html.Selector
 import TimeInMinutes
 import Touch
-import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
-import User
+import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ImportChannelError(..), ToBackend, ToFrontend)
 import UserColor
 import UserSession
 
@@ -191,56 +195,128 @@ exportChannelTest config =
             E2EHelper.desktopWindow
             (\admin _ ->
                 [ E2EHelper.writeMessage admin 1000 "Hello everyone"
+
+                -- Something drawn on the message is part of the conversation, so it is exported
+                -- along with it
+                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                , T.andThen
+                    100
+                    (\data ->
+                        case E2EHelper.lastGuildChannelMessage data.backend of
+                            Just ( _, messageId, _ ) ->
+                                [ admin.mouseEnter
+                                    100
+                                    (Dom.id ("guild_message_" ++ Id.toString messageId))
+                                    ( 10, 10 )
+                                    []
+                                , admin.custom
+                                    100
+                                    (Drawing.profileImageAnchorId messageId)
+                                    "click"
+                                    (E2EHelper.drawingAnchorClick 30 25)
+                                , E2EHelper.drawZigzagStroke admin
+                                ]
+
+                            Nothing ->
+                                [ T.checkState 100 (\_ -> Err "The message wasn't written") ]
+                    )
                 , admin.click 1000 (Dom.id "guild_showMembers")
                 , admin.click 1000 (Dom.id "guild_exportChannel")
                 , T.checkState
                     1000
                     (\data ->
-                        case data.downloads of
-                            [ download ] ->
-                                case download.content of
-                                    T.StringFile content ->
-                                        case
-                                            List.filter
-                                                (\text -> not (String.contains text content))
-                                                [ "Hello everyone", "\"" ++ E2EHelper.adminName ++ "\"", "Stevie Steve" ]
-                                        of
-                                            [] ->
-                                                -- None of these messages were replied to, edited,
-                                                -- reacted to or given files, so those fields should
-                                                -- be left out instead of exported as nulls and
-                                                -- empty lists.
-                                                case
-                                                    List.filter
-                                                        (\text -> String.contains text content)
-                                                        [ "\"editedAt\""
-                                                        , "\"repliedTo\""
-                                                        , "\"reactions\""
-                                                        , "\"attachedFiles\""
-                                                        , "\"embeds\""
-                                                        ]
-                                                of
-                                                    [] ->
-                                                        Ok ()
+                        case exportedChannel data of
+                            Ok (ChannelExport.GuildChannelExport channel) ->
+                                if List.any messageHasDrawing (IdArray.toList channel.messages) then
+                                    Ok ()
 
-                                                    empty ->
-                                                        Err
-                                                            ("Empty fields in the exported JSON: "
-                                                                ++ String.join ", " empty
-                                                            )
+                                else
+                                    Err "The drawing on the message wasn't exported"
 
-                                            missing ->
-                                                Err ("Missing from the exported JSON: " ++ String.join ", " missing)
+                            Ok _ ->
+                                Err "A guild channel was exported as some other kind of channel"
 
-                                    T.BytesFile _ ->
-                                        Err "The exported channel should be a text file"
-
-                            downloads ->
-                                Err
-                                    ("Expected a single download, instead got "
-                                        ++ String.fromInt (List.length downloads)
-                                    )
+                            Err error ->
+                                Err error
                     )
+                ]
+            )
+        ]
+
+
+{-| The one file the export button handed the browser, read back as the channel it holds.
+-}
+exportedChannel :
+    T.Data FrontendModel E2EHelper.BackendModel2
+    -> Result String ChannelExport.ChannelExport
+exportedChannel data =
+    case data.downloads of
+        [ download ] ->
+            case download.content of
+                T.StringFile content ->
+                    case ChannelExport.decode content of
+                        Ok channelExport ->
+                            Ok channelExport
+
+                        Err error ->
+                            Err
+                                ("The exported channel couldn't be read back: "
+                                    ++ Json.Decode.errorToString error
+                                )
+
+                T.BytesFile _ ->
+                    Err "The exported channel should be a text file"
+
+        downloads ->
+            Err ("Expected a single download, instead got " ++ String.fromInt (List.length downloads))
+
+
+messageHasDrawing : Message.Message messageId userId -> Bool
+messageHasDrawing message =
+    case message of
+        Message.UserTextMessage data ->
+            case data.drawings of
+                Just drawings ->
+                    List.isEmpty drawings.userIconDrawings.finished |> not
+
+                Nothing ->
+                    False
+
+        _ ->
+            False
+
+
+{-| A guild owner can hand the guild settings a file the export channel button wrote and get a
+channel out of it. The channel that arrives holds the same conversation as the one that was
+exported, which is what makes an export a way of moving a channel rather than just reading it.
+-}
+importChannelTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+importChannelTest config =
+    E2EHelper.startTest
+        "Import a guild channel from an exported file"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.writeMessage admin 1000 "Hello everyone"
+                , admin.click 1000 (Dom.id "guild_inviteLinkCreatorRoute")
+                , E2EHelper.hasExactText admin [ Pages.Guild.importChannelText ]
+
+                -- Nothing has been exported yet, so the file picker offers a file that isn't a
+                -- channel export and it gets turned down instead of making a channel
+                , admin.click 1000 (Dom.id "guild_importChannel")
+                , E2EHelper.hasExactText admin [ Pages.Guild.importChannelFailedText NotAChannelExport ]
+                , admin.click 1000 (Dom.id "guild_openChannel_0")
+                , admin.click 1000 (Dom.id "guild_showMembers")
+                , admin.click 1000 (Dom.id "guild_exportChannel")
+                , admin.click 1000 (Dom.id "guild_inviteLinkCreatorRoute")
+                , admin.click 1000 (Dom.id "guild_importChannel")
+                , E2EHelper.hasExactText admin [ Pages.Guild.importedChannelText 0 ]
+                , admin.click 1000 (Dom.id "guild_openChannel_1")
+                , E2EHelper.hasExactText admin [ "Hello everyone" ]
                 ]
             )
         ]
@@ -280,29 +356,19 @@ exportDmChannelTest config =
                         , T.checkState
                             1000
                             (\data ->
-                                case data.downloads of
-                                    [ download ] ->
-                                        case download.content of
-                                            T.StringFile content ->
-                                                case
-                                                    List.filter
-                                                        (\text -> not (String.contains text content))
-                                                        [ "Hello in a DM", "\"" ++ E2EHelper.adminName ++ "\"", "\"Sven\"" ]
-                                                of
-                                                    [] ->
-                                                        Ok ()
+                                case exportedChannel data of
+                                    Ok (ChannelExport.DmChannelExport channel) ->
+                                        if IdArray.length channel.messages == 1 then
+                                            Ok ()
 
-                                                    missing ->
-                                                        Err ("Missing from the exported JSON: " ++ String.join ", " missing)
+                                        else
+                                            Err "The DM's message wasn't exported"
 
-                                            T.BytesFile _ ->
-                                                Err "The exported channel should be a text file"
+                                    Ok _ ->
+                                        Err "A DM channel was exported as some other kind of channel"
 
-                                    downloads ->
-                                        Err
-                                            ("Expected a single download, instead got "
-                                                ++ String.fromInt (List.length downloads)
-                                            )
+                                    Err error ->
+                                        Err error
                             )
                         ]
                     )
@@ -620,7 +686,7 @@ adminConnectionsShowWhatIsViewedTest config =
                                     (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
                                 ]
                             )
-                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId User.ConnectionsSection)
+                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.ConnectionsSection)
                         , E2EHelper.hasExactText
                             adminPage
                             [ "Viewing: My new guild! #general", "Viewing: Nothing" ]

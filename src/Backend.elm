@@ -18,6 +18,8 @@ import Bytes.Encode
 import Call exposing (RemoteCallData)
 import ChannelDescription
 import ChannelExport
+import ChannelImport
+import ChannelName exposing (ChannelName)
 import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
@@ -41,7 +43,7 @@ import FileStatus exposing (FileData, FileId)
 import Game
 import Go
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import ImageEditor
 import Lamdera as LamderaCore
@@ -83,7 +85,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser)
 import UserColor
@@ -6728,6 +6730,81 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Nothing ->
                     ( model, GetPublicGoMatchResponse (Err ()) |> Lamdera.sendToFrontend clientId )
 
+        ImportChannelRequest guildId file ->
+            BackendExtra.asGuildOwner
+                model
+                sessionId
+                guildId
+                (\userId _ guild ->
+                    case ChannelImport.decode file.json model of
+                        Ok imported ->
+                            let
+                                channelId : Id ChannelId
+                                channelId =
+                                    Id.nextId guild.channels
+
+                                channel : BackendChannel
+                                channel =
+                                    { createdAt = Maybe.withDefault time imported.createdAt
+                                    , createdBy = Maybe.withDefault userId imported.createdBy
+                                    , name =
+                                        case imported.name of
+                                            Just name ->
+                                                name
+
+                                            Nothing ->
+                                                importedChannelName file.fileName
+                                    , description =
+                                        Maybe.withDefault ChannelDescription.empty imported.description
+                                    , messages = imported.messages
+                                    , status = LocalState.ChannelActive
+                                    , lastTypedAt = SeqDict.empty
+                                    , threads = imported.threads
+                                    , dateDividerDrawings = imported.dateDividerDrawings
+                                    , games = imported.games
+                                    }
+
+                                model2 : BackendModel
+                                model2 =
+                                    { model
+                                        | guilds =
+                                            SeqDict.insert
+                                                guildId
+                                                { guild | channels = SeqDict.insert channelId channel guild.channels }
+                                                model.guilds
+                                    }
+                            in
+                            ( model2
+                            , Command.batch
+                                [ case
+                                    LocalState.channelToFrontend guildId channelId Nothing model2.goMatchPublicIds channel
+                                  of
+                                    Just frontendChannel ->
+                                        Broadcast.toGuild
+                                            guildId
+                                            (Server_ImportedChannel guildId channelId frontendChannel |> ServerChange)
+                                            model2
+
+                                    Nothing ->
+                                        Command.none
+                                , ImportChannelResponse guildId (Ok { encryptedMessages = imported.encryptedMessages })
+                                    |> Lamdera.sendToFrontend clientId
+                                ]
+                            )
+
+                        Err ChannelImport.DiscordChannelsCantBeImported ->
+                            ( model
+                            , ImportChannelResponse guildId (Err DiscordChannelsCantBeImported)
+                                |> Lamdera.sendToFrontend clientId
+                            )
+
+                        Err (ChannelImport.NotAChannelExport _) ->
+                            ( model
+                            , ImportChannelResponse guildId (Err NotAChannelExport)
+                                |> Lamdera.sendToFrontend clientId
+                            )
+                )
+
         ExportChannelRequest exportChannelId ->
             case exportChannelId of
                 ExportChannel_Guild guildId channelId ->
@@ -6741,7 +6818,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 Just channel ->
                                     ExportChannelResponse
                                         { fileName = ChannelExport.fileName channel.name
-                                        , json = ChannelExport.guildChannel model.users guild channel
+                                        , json = ChannelExport.guildChannel channel
                                         }
                                         |> Lamdera.sendToFrontend clientId
 
@@ -6755,11 +6832,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model
                         sessionId
                         { guildId = guildId, channelId = channelId, currentUserId = currentDiscordUserId }
-                        (\_ _ _ guild channel ->
+                        (\_ _ _ _ channel ->
                             ( model
                             , ExportChannelResponse
                                 { fileName = ChannelExport.fileName channel.name
-                                , json = ChannelExport.discordGuildChannel model.discordUsers guildId guild channel
+                                , json = ChannelExport.discordGuildChannel channel
                                 }
                                 |> Lamdera.sendToFrontend clientId
                             )
@@ -6770,11 +6847,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model
                         sessionId
                         { otherUserId = otherUserId }
-                        (\session _ otherUser _ dmChannel ->
+                        (\_ _ otherUser _ dmChannel ->
                             ( model
                             , ExportChannelResponse
                                 { fileName = ChannelExport.dmFileName (PersonName.toString otherUser.name)
-                                , json = ChannelExport.dmChannel model.users session.userId otherUserId dmChannel
+                                , json = ChannelExport.dmChannel dmChannel
                                 }
                                 |> Lamdera.sendToFrontend clientId
                             )
@@ -6791,11 +6868,25 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 { fileName =
                                     ChannelExport.discordDmName model.discordUsers currentDiscordUserId dmChannel
                                         |> ChannelExport.dmFileName
-                                , json = ChannelExport.discordDmChannel model.discordUsers currentDiscordUserId dmChannel
+                                , json = ChannelExport.discordDmChannel dmChannel
                                 }
                                 |> Lamdera.sendToFrontend clientId
                             )
                         )
+
+
+{-| A DM export carries no channel name of its own, so the name of the file it arrived in
+stands in for one.
+-}
+importedChannelName : String -> ChannelName
+importedChannelName fileName =
+    (if String.endsWith ".json" fileName then
+        String.dropRight 5 fileName
+
+     else
+        fileName
+    )
+        |> ChannelName.fromStringLossy
 
 
 handleGoMatchRequest :
@@ -8617,6 +8708,16 @@ twoFactorAuthenticationUpdateFromFrontend clientId time toBackend model session 
                     ( model, Command.none )
 
 
+{-| Admin data the frontend asked for on its way back to the client that asked. Only that
+client gets it, since another admin's page won't have the section open.
+-}
+adminDataResponse : ChangeId -> ClientId -> Pages.Admin.AdminChange -> Command BackendOnly ToFrontend BackendMsg
+adminDataResponse changeId clientId adminChange =
+    Local_Admin adminChange
+        |> LocalChangeResponse changeId
+        |> Lamdera.sendToFrontend clientId
+
+
 adminChangeUpdate :
     ClientId
     -> ChangeId
@@ -8659,28 +8760,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 Err _ ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
-        Pages.Admin.ExpandSection section ->
-            ( { model
-                | users =
-                    NonemptyDict.insert
-                        userId
-                        { user | expandedSections = SeqSet.insert section user.expandedSections }
-                        model.users
-              }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
-        Pages.Admin.CollapseSection section ->
-            ( { model
-                | users =
-                    NonemptyDict.insert
-                        userId
-                        { user | expandedSections = SeqSet.remove section user.expandedSections }
-                        model.users
-              }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
         Pages.Admin.LogPageChanged pageId _ ->
             let
                 pageIndex =
@@ -8697,6 +8776,84 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 |> Local_Admin
                 |> LocalChangeResponse changeId
                 |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.LoadUsers _ ->
+            ( model, adminDataResponse changeId clientId (Pages.Admin.LoadUsers (FilledInByBackend model.users)) )
+
+        Pages.Admin.LoadGuilds _ ->
+            ( model, adminDataResponse changeId clientId (Pages.Admin.LoadGuilds (FilledInByBackend (BackendExtra.adminGuilds model))) )
+
+        Pages.Admin.LoadDeletedGuilds _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadDeletedGuilds (FilledInByBackend (BackendExtra.adminDeletedGuilds model)))
+            )
+
+        Pages.Admin.LoadDmChannels _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadDmChannels (FilledInByBackend (BackendExtra.adminDmChannels model)))
+            )
+
+        Pages.Admin.LoadDiscordGuilds _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadDiscordGuilds (FilledInByBackend (BackendExtra.adminDiscordGuilds model)))
+            )
+
+        Pages.Admin.LoadDiscordDmChannels _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadDiscordDmChannels (FilledInByBackend (BackendExtra.adminDiscordDmChannels model)))
+            )
+
+        Pages.Admin.LoadDiscordUsers _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadDiscordUsers (FilledInByBackend (BackendExtra.adminDiscordUsers model)))
+            )
+
+        Pages.Admin.LoadSessions _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadSessions (FilledInByBackend (BackendExtra.adminSessions model)))
+            )
+
+        Pages.Admin.LoadWebsocketCloseEvents _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadWebsocketCloseEvents (FilledInByBackend model.websocketCloseEvents))
+            )
+
+        Pages.Admin.LoadToBackendLogs _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadToBackendLogs (FilledInByBackend model.toBackendLogs))
+            )
+
+        Pages.Admin.LoadBackendMsgLogs _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadBackendMsgLogs (FilledInByBackend model.backendMsgLogs))
             )
 
         Pages.Admin.HideLog logIndex ->
@@ -8965,50 +9122,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
                 _ ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-        Pages.Admin.ExpandGuild guildId ->
-            ( { model
-                | users =
-                    NonemptyDict.insert
-                        userId
-                        { user | expandedGuilds = SeqSet.insert guildId user.expandedGuilds }
-                        model.users
-              }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
-        Pages.Admin.CollapseGuild guildId ->
-            ( { model
-                | users =
-                    NonemptyDict.insert
-                        userId
-                        { user | expandedGuilds = SeqSet.remove guildId user.expandedGuilds }
-                        model.users
-              }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
-        Pages.Admin.ExpandDiscordGuild guildId ->
-            ( { model
-                | users =
-                    NonemptyDict.insert
-                        userId
-                        { user | expandedDiscordGuilds = SeqSet.insert guildId user.expandedDiscordGuilds }
-                        model.users
-              }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
-        Pages.Admin.CollapseDiscordGuild guildId ->
-            ( { model
-                | users =
-                    NonemptyDict.insert
-                        userId
-                        { user | expandedDiscordGuilds = SeqSet.remove guildId user.expandedDiscordGuilds }
-                        model.users
-              }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
 
         Pages.Admin.DisconnectClient sessionIdHash disconnectClientId ->
             case Broadcast.getSessionFromSessionIdHash sessionIdHash model of

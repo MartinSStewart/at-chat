@@ -27,6 +27,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.File as File
 import Effect.File.Download
 import Effect.File.Select
 import Effect.Http as Http
@@ -91,7 +92,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Drag(..), DragTarget(..), ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), ImportChannelStatus(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -929,6 +930,22 @@ updateLoaded msg model =
                                                 (Local_Admin adminChange |> Just)
                                                 loggedIn2
                                                 (Command.map AdminToBackend AdminPageMsg cmd)
+                                    in
+                                    ( { model | loginStatus = LoggedIn loggedIn3 }, cmd2 )
+
+                                Pages.Admin.AdminChanges adminChanges ->
+                                    let
+                                        ( loggedIn3, cmd2 ) =
+                                            List.foldl
+                                                (\adminChange ( loggedIn4, cmd3 ) ->
+                                                    FrontendExtra.handleLocalChange
+                                                        model.time
+                                                        (Local_Admin adminChange |> Just)
+                                                        loggedIn4
+                                                        cmd3
+                                                )
+                                                ( loggedIn2, Command.map AdminToBackend AdminPageMsg cmd )
+                                                adminChanges
                                     in
                                     ( { model | loginStatus = LoggedIn loggedIn3 }, cmd2 )
 
@@ -3200,6 +3217,31 @@ updateLoaded msg model =
 
         PressedExportChannel exportChannelId ->
             ( model, Lamdera.sendToBackend (ExportChannelRequest exportChannelId) )
+
+        PressedImportChannel guildId ->
+            ( model
+            , Effect.File.Select.file [ "application/json" ] (SelectedImportChannelFile guildId)
+            )
+
+        SelectedImportChannelFile guildId file ->
+            ( model
+            , File.toString file
+                |> Task.perform
+                    (\json -> GotImportChannelFile guildId { fileName = File.name file, json = json })
+            )
+
+        GotImportChannelFile guildId file ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( Pages.Guild.setImportChannelStatus
+                        guildId
+                        ImportingChannel
+                        (Local.model loggedIn.localState)
+                        loggedIn
+                    , Lamdera.sendToBackend (ImportChannelRequest guildId file)
+                    )
+                )
+                model
 
         PressedAddPrivateKeyToAccount ->
             case
@@ -8698,6 +8740,25 @@ updateLoadedFromBackend msg model =
         ExportChannelResponse { fileName, json } ->
             ( model, Effect.File.Download.string fileName "application/json" json )
 
+        ImportChannelResponse guildId result ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( Pages.Guild.setImportChannelStatus
+                        guildId
+                        (case result of
+                            Ok { encryptedMessages } ->
+                                ImportedChannel { encryptedMessages = encryptedMessages }
+
+                            Err error ->
+                                ImportChannelFailed error
+                        )
+                        (Local.model loggedIn.localState)
+                        loggedIn
+                    , Command.none
+                    )
+                )
+                model
+
 
 view : AudioData -> FrontendModel_ -> Browser.Document FrontendMsg_
 view _ model =
@@ -8871,20 +8932,14 @@ view _ model =
                                     (\loggedIn local ->
                                         case local.adminData of
                                             IsAdmin adminData ->
-                                                case NonemptyDict.get local.localUser.session.userId adminData.users of
-                                                    Just user ->
-                                                        Pages.Admin.view
-                                                            (MyUi.isMobile loaded)
-                                                            loaded.versionNumber
-                                                            loaded.time
-                                                            local
-                                                            adminData
-                                                            user
-                                                            loggedIn.admin
-                                                            |> Ui.map AdminPageMsg
-
-                                                    Nothing ->
-                                                        Ui.text "User not found"
+                                                Pages.Admin.view
+                                                    (MyUi.isMobile loaded)
+                                                    loaded.versionNumber
+                                                    loaded.time
+                                                    local
+                                                    adminData
+                                                    loggedIn.admin
+                                                    |> Ui.map AdminPageMsg
 
                                             IsAdminButDataNotLoaded ->
                                                 Ui.text "Loading admin page..."

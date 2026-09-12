@@ -2283,6 +2283,15 @@ isPressMsg msg =
         PressedDeleteGuild _ ->
             True
 
+        PressedImportChannel _ ->
+            True
+
+        SelectedImportChannelFile _ _ ->
+            False
+
+        GotImportChannelFile _ _ ->
+            False
+
         PressedLeaveGuild _ ->
             True
 
@@ -4434,6 +4443,15 @@ changeUpdate localMsg local =
                                 local.guilds
                     }
 
+                Server_ImportedChannel guildId channelId channel ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (\guild -> { guild | channels = SeqDict.insert channelId channel guild.channels })
+                                local.guilds
+                    }
+
                 Server_EditChannel guildId channelId channelName channelDescription ->
                     { local
                         | guilds =
@@ -6183,32 +6201,32 @@ discordGuildSendMessage guildId guild channelId channel threadRouteWithRepliedTo
 
 initAdminData : InitAdminData -> AdminData
 initAdminData adminData =
-    { users = adminData.users
+    { users = LocalState.AdminDataNotLoaded
     , emailNotificationsEnabled = adminData.emailNotificationsEnabled
     , twoFactorAuthentication = adminData.twoFactorAuthentication
     , privateVapidKey = adminData.privateVapidKey
     , slackClientSecret = adminData.slackClientSecret
     , openRouterKey = adminData.openRouterKey
     , postmarkKey = adminData.postmarkApiKey
-    , dmChannels = adminData.dmChannels
-    , discordDmChannels = adminData.discordDmChannels
-    , discordUsers = adminData.discordUsers
-    , discordGuilds = adminData.discordGuilds
-    , guilds = adminData.guilds
-    , deletedGuilds = adminData.deletedGuilds
+    , dmChannels = LocalState.AdminDataNotLoaded
+    , discordDmChannels = LocalState.AdminDataNotLoaded
+    , discordUsers = LocalState.AdminDataNotLoaded
+    , discordGuilds = LocalState.AdminDataNotLoaded
+    , guilds = LocalState.AdminDataNotLoaded
+    , deletedGuilds = LocalState.AdminDataNotLoaded
     , loadingDiscordChannels = adminData.loadingDiscordChannels
     , signupsEnabled = adminData.signupsEnabled
     , discordLinkingEnabled = adminData.discordLinkingEnabled
     , logs = adminData.logs
     , connections = adminData.connections
     , filesCount = adminData.filesCount
-    , toBackendLogs = adminData.toBackendLogs
-    , backendMsgLogs = adminData.backendMsgLogs
+    , toBackendLogs = LocalState.AdminDataNotLoaded
+    , backendMsgLogs = LocalState.AdminDataNotLoaded
     , vulnerabilityChecks = adminData.vulnerabilityChecks
     , serverSecretRefreshedAt = LocalState.NotBeingRegenerated adminData.serverSecretRegeneratedAt
     , lastBackup = adminData.lastBackup
-    , websocketCloseEvents = adminData.websocketCloseEvents
-    , sessions = adminData.sessions
+    , websocketCloseEvents = LocalState.AdminDataNotLoaded
+    , sessions = LocalState.AdminDataNotLoaded
     , wordSpellingGameEnglish = adminData.wordSpellingGameEnglish
     , wordSpellingGameSwedish = adminData.wordSpellingGameSwedish
     }
