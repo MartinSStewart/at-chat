@@ -3459,7 +3459,7 @@ expectPointsCloseTo expected actual =
             List.map (\( x, y ) -> ( SafeFloat.toFloat x, SafeFloat.toFloat y )) actual
     in
     if
-        (List.length expected == List.length actual)
+        (List.length expected == List.length actual2)
             && List.all
                 identity
                 (List.map2
