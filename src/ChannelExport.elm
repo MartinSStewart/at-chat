@@ -53,6 +53,7 @@ import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import OneToOne exposing (OneToOne)
 import RichText exposing (RichText)
+import SafeFloat exposing (SafeFloat)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
@@ -653,9 +654,9 @@ strokeCodec =
         |> Codec.buildObject
 
 
-pointCodec : Codec ( Float, Float )
+pointCodec : Codec ( SafeFloat, SafeFloat )
 pointCodec =
-    Codec.tuple Codec.float Codec.float
+    Codec.tuple SafeFloat.codec SafeFloat.codec
 
 
 coordCodec : Codec (Coord CssPixels)
@@ -793,8 +794,8 @@ imageMetadataCodec =
         |> Codec.field "gpsLocation" .gpsLocation (Codec.nullable locationCodec)
         |> Codec.field "cameraOwner" .cameraOwner (Codec.nullable Codec.string)
         |> Codec.field "exposureTime" .exposureTime (Codec.nullable exposureTimeCodec)
-        |> Codec.field "fNumber" .fNumber (Codec.nullable Codec.float)
-        |> Codec.field "focalLength" .focalLength (Codec.nullable Codec.float)
+        |> Codec.field "fNumber" .fNumber (Codec.nullable SafeFloat.codec)
+        |> Codec.field "focalLength" .focalLength (Codec.nullable SafeFloat.codec)
         |> Codec.field "isoSpeedRating" .isoSpeedRating (Codec.nullable Codec.int)
         |> Codec.field "make" .make (Codec.nullable Codec.string)
         |> Codec.field "model" .model (Codec.nullable Codec.string)
@@ -829,8 +830,8 @@ videoMetadataCodec =
 locationCodec : Codec FileStatus.Location
 locationCodec =
     Codec.object (\lat lon -> { lat = lat, lon = lon })
-        |> Codec.field "lat" .lat Codec.float
-        |> Codec.field "lon" .lon Codec.float
+        |> Codec.field "lat" .lat SafeFloat.codec
+        |> Codec.field "lon" .lon SafeFloat.codec
         |> Codec.buildObject
 
 
@@ -1210,7 +1211,17 @@ goSetupCodec =
 
 boardSizeCodec : Codec Go.BoardSize
 boardSizeCodec =
-    Codec.map Go.boardSizeFromInt Go.boardSizeToInt Codec.int
+    Codec.andThen
+        (\int ->
+            case Go.boardSizeFromInt int of
+                Ok ok ->
+                    Codec.succeed ok
+
+                Err _ ->
+                    Codec.fail ("Invalid board size: " ++ String.fromInt int)
+        )
+        Go.boardSizeToInt
+        Codec.int
 
 
 komiHalfPointsCodec : Codec Go.KomiHalfPoints

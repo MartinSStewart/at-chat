@@ -31,6 +31,7 @@ module RichText exposing
     , fromNonemptyString
     , hasLargeContent
     , hyperlinks
+    , mapUserId
     , maxLength
     , mentionsUser
     , messageIsEncrypted
@@ -961,6 +962,11 @@ stickers nonempty =
                     []
         )
         (List.Nonempty.toList nonempty)
+
+
+mapUserId : (userIdA -> userIdB) -> Nonempty (RichText userIdA) -> Nonempty (RichText userIdB)
+mapUserId mapUserIdFunc richText =
+    Debug.todo ""
 
 
 toStringWithGetter : Time.Zone -> (a -> String) -> Bool -> SeqDict userId a -> Nonempty (RichText userId) -> String
