@@ -4,6 +4,7 @@ module ChannelExport exposing
     , DiscordGuildChannel
     , DmChannel
     , GuildChannel
+    , Thread
     , decode
     , discordDmChannel
     , discordDmName
@@ -51,7 +52,6 @@ import Message exposing (GameType, Message, UserTextMessageDrawings)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
-import OneToOne exposing (OneToOne)
 import RichText exposing (RichText)
 import SafeFloat exposing (SafeFloat)
 import SeqDict exposing (SeqDict)
@@ -59,7 +59,6 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import SheepGame
 import String.Nonempty exposing (NonemptyString)
-import Thread exposing (BackendThread, DiscordBackendThread, LastTypedAt)
 import TimeInMinutes exposing (TimeInMinutes)
 import UserSession
 import WordSpellingGame
@@ -118,7 +117,7 @@ type alias GuildChannel =
 
 type alias Thread userId =
     { messages : IdArray ThreadMessageId (Message ThreadMessageId userId)
-    , dateDividerDrawings : SeqDict Date (Drawing.Drawing userId)
+    , dateDividerDrawings : SeqDict Date (Drawing userId)
     }
 
 
@@ -1564,13 +1563,3 @@ seqDictCodec a b =
         |> Codec.buildObject
         |> Codec.list
         |> Codec.map SeqDict.fromList SeqDict.toList
-
-
-oneToOneCodec : Codec a -> Codec b -> Codec (OneToOne a b)
-oneToOneCodec a b =
-    Codec.object Tuple.pair
-        |> Codec.field "first" Tuple.first a
-        |> Codec.field "second" Tuple.second b
-        |> Codec.buildObject
-        |> Codec.list
-        |> Codec.map OneToOne.fromList OneToOne.toList

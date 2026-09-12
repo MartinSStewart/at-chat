@@ -30,7 +30,7 @@ import Message exposing (Message(..), MessageContent, UserTextMessageDrawings)
 import NonemptySet exposing (NonemptySet)
 import RichText
 import SeqDict exposing (SeqDict)
-import Thread exposing (BackendThread, LastTypedAt)
+import Thread exposing (BackendThread)
 import Types exposing (BackendModel)
 
 
@@ -168,7 +168,7 @@ importThread :
         SeqDict
             (Id ChannelMessageId)
             { messages : IdArray ThreadMessageId (Message ThreadMessageId userIdA)
-            , dateDividerDrawings : SeqDict Date (Drawing.Drawing userIdA)
+            , dateDividerDrawings : SeqDict Date (Drawing userIdA)
             }
     -> ( SeqDict (Id ChannelMessageId) BackendThread, Int )
 importThread mapUserId threads =
