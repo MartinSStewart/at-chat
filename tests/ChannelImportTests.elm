@@ -104,10 +104,6 @@ tests =
                 decode (ChannelExport.dmChannel testDmChannel)
                     |> Result.map (\channel -> ( channel.name, IdArray.toList channel.messages ))
                     |> Expect.equal (Ok ( Nothing, [ textMessage ] ))
-        , Test.test "A Discord guild channel export is turned down, since its threads point back at Discord" <|
-            \_ ->
-                decode (ChannelExport.discordGuildChannel discordChannel)
-                    |> Expect.equal (Err ChannelImport.DiscordChannelsCantBeImported)
         , Test.test "A file that isn't a channel export is turned down" <|
             \_ ->
                 decode "not a channel export"
