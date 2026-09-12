@@ -146,7 +146,12 @@ config =
             [ ( [ "Basics" ], "Float" )
             , ( [ "Duration" ], "Duration" )
             ]
-        , unlessWrappedIn = [ ( [ "SafeFloat" ], "SafeFloat" ), ( [ "UserSession" ], "ToBeFilledInByBackend" ) ]
+        , unlessWrappedIn =
+            [ ( [ "SafeFloat" ], "SafeFloat" )
+            , ( [ "UserSession" ], "ToBeFilledInByBackend" )
+            , ( [ "FileStatus" ], "VideoMetadata" )
+            , ( [ "Go" ], "TimeControl" )
+            ]
         }
         |> Review.Rule.ignoreErrorsForDirectories [ "vendored", "src/Evergreen" ]
     , BackendOnly.rule
