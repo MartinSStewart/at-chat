@@ -66,7 +66,7 @@ type ToBackend
 """
                     |> Review.Test.run rule
                     |> Review.Test.expectErrors
-                        [ pathError "ToBackend -> Float" ]
+                        [ pathError "Types.ToBackend -> Basics.Float" ]
         , test "reports a Float nested inside another type in the same module" <|
             \() ->
                 """module Types exposing (..)
@@ -82,7 +82,7 @@ type ToBackend
 """
                     |> Review.Test.run rule
                     |> Review.Test.expectErrors
-                        [ pathError "ToBackend -> ServerChange -> Coord -> Float" ]
+                        [ pathError "Types.ToBackend -> Types.ServerChange -> Types.Coord -> Basics.Float" ]
         , test "reports a Float reached through type arguments" <|
             \() ->
                 """module Types exposing (..)
@@ -95,7 +95,7 @@ type ToBackend
 """
                     |> Review.Test.run rule
                     |> Review.Test.expectErrors
-                        [ pathError "ToBackend -> Coord -> Float" ]
+                        [ pathError "Types.ToBackend -> Types.Coord -> Basics.Float" ]
         , test "reports a Float used as a type argument directly" <|
             \() ->
                 """module Types exposing (..)
@@ -105,7 +105,7 @@ type ToBackend
 """
                     |> Review.Test.run rule
                     |> Review.Test.expectErrors
-                        [ pathError "ToBackend -> Float" ]
+                        [ pathError "Types.ToBackend -> Basics.Float" ]
         , test "reports a Float through types in other modules" <|
             \() ->
                 [ """module Geometry exposing (..)
@@ -126,7 +126,7 @@ type ToBackend
                     |> Review.Test.runOnModules rule
                     |> Review.Test.expectErrorsForModules
                         [ ( "Types"
-                          , [ pathError "ToBackend -> ServerChange -> Coord -> Float" ]
+                          , [ pathError "Types.ToBackend -> Types.ServerChange -> Geometry.Coord -> Basics.Float" ]
                           )
                         ]
         , test "does not report a disallowed type referenced by a non-ToBackend type" <|
@@ -154,7 +154,7 @@ type ToBackend
 """
                     |> Review.Test.run rule
                     |> Review.Test.expectErrors
-                        [ pathError "ToBackend -> Coord -> Float" ]
+                        [ pathError "Types.ToBackend -> Types.Coord -> Basics.Float" ]
         , test "handles recursive types without looping" <|
             \() ->
                 """module Types exposing (..)
@@ -206,7 +206,7 @@ type ToBackend
                             )
                         |> Review.Test.expectErrorsForModules
                             [ ( "Types"
-                              , [ pathError "ToBackend -> Transaction -> Money" ]
+                              , [ pathError "Types.ToBackend -> Types.Transaction -> Money.Money" ]
                               )
                             ]
             , test "does not report a type that is not in the disallowed list" <|
@@ -240,7 +240,7 @@ type ToBackend
                                 }
                             )
                         |> Review.Test.expectErrors
-                            [ pathError "ToBackend -> Float" ]
+                            [ pathError "Types.ToBackend -> Basics.Float" ]
             ]
         , describe "exemptions"
             [ test "does not report when the type holding the Float is exempt" <|
@@ -297,7 +297,7 @@ type ToBackend
                                 }
                             )
                         |> Review.Test.expectErrors
-                            [ pathError "ToBackend -> Coord -> Float" ]
+                            [ pathError "Types.ToBackend -> Types.Coord -> Basics.Float" ]
             , test "exemption is module qualified" <|
                 \() ->
                     [ """module Geometry exposing (..)
@@ -319,6 +319,68 @@ type ToBackend
                                 }
                             )
                         |> Review.Test.expectNoErrors
+            , test "does not report a disallowed type argument of an exempt type" <|
+                \() ->
+                    """module Types exposing (..)
+
+type ToBeFilledInByBackend error a
+    = EmptyPlaceholder
+    | FilledInByBackend a
+
+type ToBackend
+    = Fill (ToBeFilledInByBackend Int Float)
+"""
+                        |> Review.Test.run
+                            (NoInvalidTypesInToBackend.rule
+                                { disallowed = [ ( [ "Basics" ], "Float" ) ]
+                                , unlessWrappedIn = [ ( [ "Types" ], "ToBeFilledInByBackend" ) ]
+                                }
+                            )
+                        |> Review.Test.expectNoErrors
+            , test "does not report a type that only reaches a disallowed type through an exempt type argument" <|
+                \() ->
+                    """module Types exposing (..)
+
+type ToBeFilledInByBackend a
+    = EmptyPlaceholder
+    | FilledInByBackend a
+
+type alias Coord =
+    { x : Float }
+
+type ToBackend
+    = Fill (List (ToBeFilledInByBackend Coord))
+"""
+                        |> Review.Test.run
+                            (NoInvalidTypesInToBackend.rule
+                                { disallowed = [ ( [ "Basics" ], "Float" ) ]
+                                , unlessWrappedIn = [ ( [ "Types" ], "ToBeFilledInByBackend" ) ]
+                                }
+                            )
+                        |> Review.Test.expectNoErrors
+            , test "still reports a disallowed type that is reachable without going through the exempt type" <|
+                \() ->
+                    """module Types exposing (..)
+
+type ToBeFilledInByBackend a
+    = EmptyPlaceholder
+    | FilledInByBackend a
+
+type alias Coord =
+    { x : Float }
+
+type ToBackend
+    = Fill (ToBeFilledInByBackend Coord)
+    | Move Coord
+"""
+                        |> Review.Test.run
+                            (NoInvalidTypesInToBackend.rule
+                                { disallowed = [ ( [ "Basics" ], "Float" ) ]
+                                , unlessWrappedIn = [ ( [ "Types" ], "ToBeFilledInByBackend" ) ]
+                                }
+                            )
+                        |> Review.Test.expectErrors
+                            [ pathError "Types.ToBackend -> Types.Coord -> Basics.Float" ]
             , test "exempting the disallowed type itself silences the check" <|
                 \() ->
                     """module Types exposing (..)
