@@ -832,7 +832,7 @@ reactionEmojis message =
             gameStarted.reactions
 
 
-contentAndEmbedsCodec : Serialize.Codec e (MessageContent (Id UserId))
+contentAndEmbedsCodec : Serialize.Codec String (MessageContent (Id UserId))
 contentAndEmbedsCodec =
     Serialize.record MessageContent
         |> Serialize.field .content (nonemptyCodec (RichText.codec Id.codec))

@@ -85,7 +85,6 @@ import Toop exposing (T4(..))
 import TwoFactorAuthentication
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import Untrusted
 import User exposing (BackendUser)
 import UserColor
 import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession, Viewing)

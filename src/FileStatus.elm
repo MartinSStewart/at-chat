@@ -86,8 +86,8 @@ import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..),
 import Json.Decode
 import MyUi
 import OneToOne exposing (OneToOne)
-import SafeFloat exposing (SafeFloat)
 import Quantity exposing (Quantity)
+import SafeFloat exposing (SafeFloat)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import Serialize
@@ -433,7 +433,7 @@ unknownContentType =
     ContentType 9999
 
 
-fileDataSerializeCodec : Serialize.Codec e FileData
+fileDataSerializeCodec : Serialize.Codec String FileData
 fileDataSerializeCodec =
     Serialize.record FileData
         |> Serialize.field .fileName FileName.codec
@@ -492,7 +492,7 @@ aesPrivateKeySerializeCodec =
     Serialize.map AesPrivateKey (\(AesPrivateKey a) -> a) Serialize.bytes
 
 
-fileMetadataSerializeCodec : Serialize.Codec e FileMetadata
+fileMetadataSerializeCodec : Serialize.Codec String FileMetadata
 fileMetadataSerializeCodec =
     Serialize.customType
         (\imageEncoder videoEncoder value ->
@@ -508,7 +508,7 @@ fileMetadataSerializeCodec =
         |> Serialize.finishCustomType
 
 
-imageMetadataSerializeCodec : Serialize.Codec e ImageMetadata
+imageMetadataSerializeCodec : Serialize.Codec String ImageMetadata
 imageMetadataSerializeCodec =
     Serialize.record ImageMetadata
         |> Serialize.field .imageSize coordSerializeCodec
@@ -516,8 +516,8 @@ imageMetadataSerializeCodec =
         |> Serialize.field .gpsLocation (Serialize.maybe locationSerializeCodec)
         |> Serialize.field .cameraOwner (Serialize.maybe Serialize.string)
         |> Serialize.field .exposureTime (Serialize.maybe exposureTimeSerializeCodec)
-        |> Serialize.field .fNumber (Serialize.maybe Serialize.float)
-        |> Serialize.field .focalLength (Serialize.maybe Serialize.float)
+        |> Serialize.field .fNumber (Serialize.maybe SafeFloat.serializeCodec)
+        |> Serialize.field .focalLength (Serialize.maybe SafeFloat.serializeCodec)
         |> Serialize.field .isoSpeedRating (Serialize.maybe Serialize.int)
         |> Serialize.field .make (Serialize.maybe Serialize.string)
         |> Serialize.field .model (Serialize.maybe Serialize.string)
@@ -526,7 +526,7 @@ imageMetadataSerializeCodec =
         |> Serialize.finishRecord
 
 
-videoMetadataSerializeCodec : Serialize.Codec e VideoMetadata
+videoMetadataSerializeCodec : Serialize.Codec String VideoMetadata
 videoMetadataSerializeCodec =
     Serialize.record VideoMetadata
         |> Serialize.field .videoSize coordSerializeCodec
@@ -584,11 +584,11 @@ orientationSerializeCodec =
         |> Serialize.finishCustomType
 
 
-locationSerializeCodec : Serialize.Codec e Location
+locationSerializeCodec : Serialize.Codec String Location
 locationSerializeCodec =
     Serialize.record Location
-        |> Serialize.field .lat Serialize.float
-        |> Serialize.field .lon Serialize.float
+        |> Serialize.field .lat SafeFloat.serializeCodec
+        |> Serialize.field .lon SafeFloat.serializeCodec
         |> Serialize.finishRecord
 
 
@@ -1141,8 +1141,8 @@ imageInfoView timezone onPressClose fileData =
                                 , Maybe.map (\location -> imageLabel "Location" (locationToString location)) metadata.gpsLocation
                                 , Maybe.map (imageLabel "Camera owner") metadata.cameraOwner
                                 , Maybe.map (\exposure -> imageLabel "Exposure time" (exposureTimeToString exposure)) metadata.exposureTime
-                                , Maybe.map (\fNumber -> imageLabel "F-number" ("f/" ++ String.fromFloat fNumber)) metadata.fNumber
-                                , Maybe.map (\focal -> imageLabel "Focal length" (String.fromFloat focal ++ "mm")) metadata.focalLength
+                                , Maybe.map (\fNumber -> imageLabel "F-number" ("f/" ++ SafeFloat.toString fNumber)) metadata.fNumber
+                                , Maybe.map (\focal -> imageLabel "Focal length" (SafeFloat.toString focal ++ "mm")) metadata.focalLength
                                 , Maybe.map (\iso -> imageLabel "ISO" (String.fromInt iso)) metadata.isoSpeedRating
                                 , Maybe.map (imageLabel "Make") metadata.make
                                 , Maybe.map (imageLabel "Model") metadata.model

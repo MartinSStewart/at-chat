@@ -31,9 +31,6 @@ import Id exposing (ChannelMessageId, GamePublicId, Id, ThreadMessageId, ThreadR
 import IdArray exposing (IdArray)
 import Message exposing (Message)
 import MessageArray exposing (MessageArray)
-import Go
-import Id exposing (ChannelMessageId, GoMatchPublicId, Id, ThreadMessageId, ThreadRoute(..), UserId)
-import Message exposing (Message, MessageState(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import SecretId exposing (SecretId)
@@ -92,25 +89,6 @@ type alias FrontendDmChannel =
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
     , e2ee : E2eeStatus
     }
-
-
-{-| OpaqueVariants
--}
-type DmChannelId
-    = DmChannelId (Id UserId) (Id UserId)
-
-
-w3_validate_DmChannelId : DmChannelId -> Result String ()
-w3_validate_DmChannelId dmChannelId =
-    let
-        ( userIdA, userIdB ) =
-            userIdsFromChannelId dmChannelId
-    in
-    if channelIdFromUserIds userIdA userIdB == dmChannelId then
-        Ok ()
-
-    else
-        Err "Invalid DmChannelID"
 
 
 backendInit : BackendDmChannel
@@ -208,11 +186,6 @@ latestFrontendMessageId channel =
 latestThreadMessageId : { a | messages : IdArray ThreadMessageId b } -> Id ThreadMessageId
 latestThreadMessageId thread =
     IdArray.length thread.messages - 1 |> Id.fromInt
-channelIdFromUserIds : Id UserId -> Id UserId -> DmChannelId
-channelIdFromUserIds userIdA userIdB =
-    DmChannelId
-        (min (Id.toInt userIdA) (Id.toInt userIdB) |> Id.fromInt)
-        (max (Id.toInt userIdA) (Id.toInt userIdB) |> Id.fromInt)
 
 
 latestFrontendThreadMessageId : { a | messages : MessageArray ThreadMessageId b } -> Id ThreadMessageId

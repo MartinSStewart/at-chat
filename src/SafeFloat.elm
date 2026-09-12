@@ -1,8 +1,9 @@
-module SafeFloat exposing (SafeFloat, codec, decode, encode, fromFloat, toString)
+module SafeFloat exposing (SafeFloat, codec, decode, encode, fromFloat, serializeCodec, toString)
 
 import Codec exposing (Codec)
 import Json.Decode
 import Json.Encode
+import Serialize
 
 
 type SafeFloat
@@ -55,3 +56,8 @@ encode value =
 codec : Codec SafeFloat
 codec =
     Codec.build encode decode
+
+
+serializeCodec : Serialize.Codec String SafeFloat
+serializeCodec =
+    Serialize.mapValid fromFloat toFloat Serialize.float
