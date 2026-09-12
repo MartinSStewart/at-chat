@@ -97,7 +97,6 @@ import Svg.Attributes
 import Table
 import ToBackendLog exposing (ToBackendLogData, toBackendLogToString)
 import Toop exposing (T2(..), T3(..))
-import TypeThatIsAlwaysInvalid exposing (TypeThatIsAlwaysInvalid(..))
 import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
