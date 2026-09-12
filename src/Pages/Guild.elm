@@ -3515,9 +3515,6 @@ importChannelFailedText error =
         NotAChannelExport ->
             "That file isn't a channel export"
 
-        DiscordChannelsCantBeImported ->
-            "Discord server channels can't be imported yet"
-
 
 {-| Turns a file that the export channel button wrote into a channel in this guild. Whatever
 was encrypted in the channel it came from can't be read here, so those messages arrive as

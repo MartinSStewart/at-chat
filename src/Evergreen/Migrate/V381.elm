@@ -195,7 +195,6 @@ import Quantity
 import Result
 import SeqDict
 import SeqSet
-import SessionIdHash
 
 
 frontendModel : Evergreen.V379.Types.FrontendModel -> ModelMigration Evergreen.V381.Types.FrontendModel Evergreen.V381.Types.FrontendMsg

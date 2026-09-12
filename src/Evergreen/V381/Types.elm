@@ -107,7 +107,6 @@ type alias EditChannelForm =
 
 type ImportChannelError
     = NotAChannelExport
-    | DiscordChannelsCantBeImported
 
 
 type ImportChannelStatus

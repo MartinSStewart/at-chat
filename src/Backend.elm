@@ -6792,12 +6792,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 ]
                             )
 
-                        Err ChannelImport.DiscordChannelsCantBeImported ->
-                            ( model
-                            , ImportChannelResponse guildId (Err DiscordChannelsCantBeImported)
-                                |> Lamdera.sendToFrontend clientId
-                            )
-
                         Err (ChannelImport.NotAChannelExport _) ->
                             ( model
                             , ImportChannelResponse guildId (Err NotAChannelExport)

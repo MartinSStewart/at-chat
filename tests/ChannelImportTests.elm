@@ -21,11 +21,10 @@ import Go
 import Id exposing (Id, UserId)
 import IdArray
 import List.Nonempty
-import LocalState exposing (BackendChannel, ChannelStatus(..), DiscordBackendChannel)
+import LocalState exposing (BackendChannel, ChannelStatus(..))
 import Message exposing (Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
-import OneToOne
 import RichText
 import SafeFloat exposing (SafeFloat)
 import SeqDict
@@ -188,24 +187,6 @@ testDmChannel =
     , games = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
     , e2ee = DmChannel.E2eeDisabled Nothing
-    }
-
-
-{-| Discord channels are exported but not imported, so this one only needs to be something
-`ChannelExport` will write out.
--}
-discordChannel : DiscordBackendChannel
-discordChannel =
-    { name = Unsafe.channelName "general"
-    , description = ChannelDescription.empty
-    , isForum = False
-    , messages = IdArray.empty
-    , status = ChannelActive
-    , lastTypedAt = SeqDict.empty
-    , linkedMessageIds = OneToOne.empty
-    , threads = SeqDict.empty
-    , dateDividerDrawings = SeqDict.empty
-    , permissionOverwrites = []
     }
 
 

@@ -36,7 +36,6 @@ import Types exposing (BackendModel)
 
 type Error
     = NotAChannelExport Codec.Error
-    | DiscordChannelsCantBeImported
 
 
 {-| The name and the two `createdAt`/`createdBy` fields are missing for a DM export, which

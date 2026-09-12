@@ -771,7 +771,6 @@ type ImportChannelStatus
 -}
 type ImportChannelError
     = NotAChannelExport
-    | DiscordChannelsCantBeImported
 
 
 type alias NewGuildForm =
