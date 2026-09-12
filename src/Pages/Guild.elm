@@ -3516,7 +3516,7 @@ importChannelFailedText error =
             "That file isn't a channel export"
 
         DiscordChannelsCantBeImported ->
-            "Discord channels can't be imported yet"
+            "Discord server channels can't be imported yet"
 
 
 {-| Turns a file that the export channel button wrote into a channel in this guild. Whatever

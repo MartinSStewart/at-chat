@@ -964,9 +964,75 @@ stickers nonempty =
         (List.Nonempty.toList nonempty)
 
 
+{-| Swaps out who every mention points at, for text that is being moved from one place to
+another, such as a Discord channel being imported.
+-}
 mapUserId : (userIdA -> userIdB) -> Nonempty (RichText userIdA) -> Nonempty (RichText userIdB)
 mapUserId mapUserIdFunc richText =
-    Debug.todo ""
+    List.Nonempty.map (mapUserIdHelper mapUserIdFunc) richText
+
+
+mapUserIdHelper : (userIdA -> userIdB) -> RichText userIdA -> RichText userIdB
+mapUserIdHelper mapUserIdFunc richText =
+    case richText of
+        UserMention userId ->
+            UserMention (mapUserIdFunc userId)
+
+        NormalText char text ->
+            NormalText char text
+
+        Bold content ->
+            Bold (mapUserId mapUserIdFunc content)
+
+        Italic content ->
+            Italic (mapUserId mapUserIdFunc content)
+
+        Underline content ->
+            Underline (mapUserId mapUserIdFunc content)
+
+        Strikethrough content ->
+            Strikethrough (mapUserId mapUserIdFunc content)
+
+        Spoiler content ->
+            Spoiler (mapUserId mapUserIdFunc content)
+
+        BlockQuote hasLeadingLineBreak content ->
+            BlockQuote hasLeadingLineBreak (List.map (mapUserIdHelper mapUserIdFunc) content)
+
+        Heading level hasLeadingLineBreak content ->
+            Heading level hasLeadingLineBreak (mapUserId mapUserIdFunc content)
+
+        Hyperlink url ->
+            Hyperlink url
+
+        MarkdownLink text url ->
+            MarkdownLink text url
+
+        InlineCode char text ->
+            InlineCode char text
+
+        CodeBlock language text ->
+            CodeBlock language text
+
+        AttachedFile fileId ->
+            AttachedFile fileId
+
+        EscapedChar escapedChar ->
+            EscapedChar escapedChar
+
+        Sticker stickerId ->
+            Sticker stickerId
+
+        CustomEmoji customEmojiId ->
+            CustomEmoji customEmojiId
+
+        BulletPoint hasLeadingLineBreak points ->
+            BulletPoint
+                hasLeadingLineBreak
+                (List.Nonempty.map (List.map (mapUserIdHelper mapUserIdFunc)) points)
+
+        Timestamp time ->
+            Timestamp time
 
 
 toStringWithGetter : Time.Zone -> (a -> String) -> Bool -> SeqDict userId a -> Nonempty (RichText userId) -> String

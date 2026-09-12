@@ -6736,7 +6736,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 sessionId
                 guildId
                 (\userId _ guild ->
-                    case ChannelImport.decode file.json of
+                    case ChannelImport.decode file.json model of
                         Ok imported ->
                             let
                                 channelId : Id ChannelId

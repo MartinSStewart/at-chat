@@ -22,6 +22,7 @@ array, so the message at a given position is the same message in both exports.
 import Array exposing (Array)
 import Dict
 import Json.Decode
+import SafeFloat
 import SafeJson exposing (SafeJson(..))
 import Time
 
@@ -194,14 +195,14 @@ messageTime message =
         Just (JsonArray (first :: _)) ->
             case first of
                 JsonNumber millis ->
-                    Just (Time.millisToPosix (round millis))
+                    Just (Time.millisToPosix (round (SafeFloat.toFloat millis)))
 
                 _ ->
                     List.filterMap
                         (\key ->
                             case field key first of
                                 Just (JsonNumber millis) ->
-                                    Just (Time.millisToPosix (round millis))
+                                    Just (Time.millisToPosix (round (SafeFloat.toFloat millis)))
 
                                 _ ->
                                     Nothing

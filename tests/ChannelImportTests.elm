@@ -5,6 +5,7 @@ module ChannelImportTests exposing (tests)
 -}
 
 import Array
+import Backend
 import Bytes.Encode
 import ChannelDescription
 import ChannelExport
@@ -26,6 +27,7 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import OneToOne
 import RichText
+import SafeFloat exposing (SafeFloat)
 import SeqDict
 import SeqSet
 import SheepGame
@@ -99,16 +101,16 @@ tests =
                     |> Expect.equal (Ok 1)
         , Test.test "A DM export is imported without a name, since a DM has none to give" <|
             \_ ->
-                ChannelImport.decode (ChannelExport.dmChannel testDmChannel)
+                decode (ChannelExport.dmChannel testDmChannel)
                     |> Result.map (\channel -> ( channel.name, IdArray.toList channel.messages ))
                     |> Expect.equal (Ok ( Nothing, [ textMessage ] ))
-        , Test.test "A Discord channel export is turned down, since its messages belong to Discord accounts" <|
+        , Test.test "A Discord guild channel export is turned down, since its threads point back at Discord" <|
             \_ ->
-                ChannelImport.decode (ChannelExport.discordGuildChannel discordChannel)
+                decode (ChannelExport.discordGuildChannel discordChannel)
                     |> Expect.equal (Err ChannelImport.DiscordChannelsCantBeImported)
         , Test.test "A file that isn't a channel export is turned down" <|
             \_ ->
-                ChannelImport.decode "not a channel export"
+                decode "not a channel export"
                     |> Result.toMaybe
                     |> Expect.equal Nothing
         ]
@@ -121,7 +123,15 @@ importedChannel =
 
 decodeExportOf : BackendChannel -> Result ChannelImport.Error ChannelImport.ImportedChannel
 decodeExportOf channel =
-    ChannelImport.decode (ChannelExport.guildChannel channel)
+    decode (ChannelExport.guildChannel channel)
+
+
+{-| Nothing here is a Discord export, so the only thing the backend is consulted for, which
+Discord account a message belongs to, never comes up.
+-}
+decode : String -> Result ChannelImport.Error ChannelImport.ImportedChannel
+decode text =
+    ChannelImport.decode text (Tuple.first Backend.app_.init)
 
 
 adminId : Id UserId
@@ -323,9 +333,19 @@ drawing : Id UserId -> Drawing (Id UserId)
 drawing createdBy =
     { finished =
         [ { createdBy = createdBy
-          , points = List.Nonempty.Nonempty ( 1.5, 2.5 ) [ ( 3, 4 ) ]
+          , points = List.Nonempty.Nonempty (point 1.5 2.5) [ point 3 4 ]
           }
         ]
     , inProgress = SeqDict.empty
     , undone = SeqDict.empty
     }
+
+
+point : Float -> Float -> ( SafeFloat, SafeFloat )
+point x y =
+    ( safeFloat x, safeFloat y )
+
+
+safeFloat : Float -> SafeFloat
+safeFloat float =
+    SafeFloat.fromFloat float |> Result.withDefault SafeFloat.zero
