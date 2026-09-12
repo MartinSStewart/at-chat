@@ -43,7 +43,7 @@ import FileName exposing (FileName)
 import FileStatus exposing (FileData, FileHash, FileMetadata, IsEncrypted, Orientation)
 import Game
 import Go
-import Id exposing (ChannelMessageId, Id, UserId)
+import Id exposing (ChannelMessageId, Id, ThreadMessageId, UserId)
 import IdArray exposing (IdArray)
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (BackendChannel, ChannelStatus, DiscordBackendChannel)
@@ -110,15 +110,21 @@ type alias GuildChannel =
     , description : ChannelDescription
     , messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
     , status : ChannelStatus
-    , threads : SeqDict (Id ChannelMessageId) BackendThread
+    , threads : SeqDict (Id ChannelMessageId) (Thread (Id UserId))
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
     , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
     }
 
 
+type alias Thread userId =
+    { messages : IdArray ThreadMessageId (Message ThreadMessageId userId)
+    , dateDividerDrawings : SeqDict Date (Drawing.Drawing userId)
+    }
+
+
 type alias DmChannel =
     { messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
-    , threads : SeqDict (Id ChannelMessageId) BackendThread
+    , threads : SeqDict (Id ChannelMessageId) (Thread (Id UserId))
     , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
     , e2ee : E2eeStatus
@@ -131,7 +137,7 @@ type alias DiscordGuildChannel =
     , isForum : Bool
     , messages : IdArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
     , status : ChannelStatus
-    , threads : SeqDict (Id ChannelMessageId) DiscordBackendThread
+    , threads : SeqDict (Id ChannelMessageId) (Thread (Discord.Id Discord.UserId))
     , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
     , permissionOverwrites : List Discord.Overwrite
     }
@@ -153,7 +159,10 @@ guildChannel channel =
         , description = channel.description
         , messages = channel.messages
         , status = channel.status
-        , threads = channel.threads
+        , threads =
+            SeqDict.map
+                (\_ thread -> { messages = thread.messages, dateDividerDrawings = thread.dateDividerDrawings })
+                channel.threads
         , dateDividerDrawings = channel.dateDividerDrawings
         , games = channel.games
         }
@@ -164,7 +173,10 @@ dmChannel : DmChannel.BackendDmChannel -> String
 dmChannel channel =
     DmChannelExport
         { messages = channel.messages
-        , threads = channel.threads
+        , threads =
+            SeqDict.map
+                (\_ thread -> { messages = thread.messages, dateDividerDrawings = thread.dateDividerDrawings })
+                channel.threads
         , games = channel.games
         , dateDividerDrawings = channel.dateDividerDrawings
         , e2ee = channel.e2ee
@@ -180,7 +192,10 @@ discordGuildChannel channel =
         , isForum = channel.isForum
         , messages = channel.messages
         , status = channel.status
-        , threads = channel.threads
+        , threads =
+            SeqDict.map
+                (\_ thread -> { messages = thread.messages, dateDividerDrawings = thread.dateDividerDrawings })
+                channel.threads
         , dateDividerDrawings = channel.dateDividerDrawings
         , permissionOverwrites = channel.permissionOverwrites
         }
@@ -263,7 +278,7 @@ guildChannelCodec =
         |> Codec.field "description" .description channelDescriptionCodec
         |> Codec.field "messages" .messages (idArrayCodec (messageCodec idCodec))
         |> Codec.field "status" .status channelStatusCodec
-        |> Codec.field "threads" .threads (seqDictCodec idCodec backendThreadCodec)
+        |> Codec.field "threads" .threads (seqDictCodec idCodec (threadCodec idCodec))
         |> Codec.field "dateDividerDrawings" .dateDividerDrawings (seqDictCodec dateCodec (drawingCodec idCodec))
         |> Codec.field "games" .games (seqDictCodec idCodec backendGameDataCodec)
         |> Codec.buildObject
@@ -273,7 +288,7 @@ dmChannelCodec : Codec DmChannel
 dmChannelCodec =
     Codec.object DmChannel
         |> Codec.field "messages" .messages (idArrayCodec (messageCodec idCodec))
-        |> Codec.field "threads" .threads (seqDictCodec idCodec backendThreadCodec)
+        |> Codec.field "threads" .threads (seqDictCodec idCodec (threadCodec idCodec))
         |> Codec.field "games" .games (seqDictCodec idCodec backendGameDataCodec)
         |> Codec.field "dateDividerDrawings" .dateDividerDrawings (seqDictCodec dateCodec (drawingCodec idCodec))
         |> Codec.field "e2ee" .e2ee e2eeStatusCodec
@@ -288,7 +303,7 @@ discordGuildChannelCodec =
         |> Codec.field "isForum" .isForum Codec.bool
         |> Codec.field "messages" .messages (idArrayCodec (messageCodec discordIdCodec))
         |> Codec.field "status" .status channelStatusCodec
-        |> Codec.field "threads" .threads (seqDictCodec idCodec discordBackendThreadCodec)
+        |> Codec.field "threads" .threads (seqDictCodec idCodec (threadCodec discordIdCodec))
         |> Codec.field "dateDividerDrawings" .dateDividerDrawings (seqDictCodec dateCodec (drawingCodec discordIdCodec))
         |> Codec.field "permissionOverwrites" .permissionOverwrites (Codec.list overwriteCodec)
         |> Codec.buildObject
@@ -312,40 +327,11 @@ discordDmChannelCodec =
         |> Codec.buildObject
 
 
-backendThreadCodec : Codec BackendThread
-backendThreadCodec =
-    Codec.object
-        (\messages lastTypedAt dateDividerDrawings ->
-            { messages = messages, lastTypedAt = lastTypedAt, dateDividerDrawings = dateDividerDrawings }
-        )
-        |> Codec.field "messages" .messages (idArrayCodec (messageCodec idCodec))
-        |> Codec.field "lastTypedAt" .lastTypedAt (seqDictCodec idCodec lastTypedAtCodec)
-        |> Codec.field "dateDividerDrawings" .dateDividerDrawings (seqDictCodec dateCodec (drawingCodec idCodec))
-        |> Codec.buildObject
-
-
-discordBackendThreadCodec : Codec DiscordBackendThread
-discordBackendThreadCodec =
-    Codec.object
-        (\messages lastTypedAt linkedMessageIds dateDividerDrawings ->
-            { messages = messages
-            , lastTypedAt = lastTypedAt
-            , linkedMessageIds = linkedMessageIds
-            , dateDividerDrawings = dateDividerDrawings
-            }
-        )
-        |> Codec.field "messages" .messages (idArrayCodec (messageCodec discordIdCodec))
-        |> Codec.field "lastTypedAt" .lastTypedAt (seqDictCodec discordIdCodec lastTypedAtCodec)
-        |> Codec.field "linkedMessageIds" .linkedMessageIds (oneToOneCodec discordIdCodec idCodec)
-        |> Codec.field "dateDividerDrawings" .dateDividerDrawings (seqDictCodec dateCodec (drawingCodec discordIdCodec))
-        |> Codec.buildObject
-
-
-lastTypedAtCodec : Codec (LastTypedAt messageId)
-lastTypedAtCodec =
-    Codec.object (\time messageIndex -> { time = time, messageIndex = messageIndex })
-        |> Codec.field "time" .time CodecExtra.time
-        |> Codec.field "messageIndex" .messageIndex (Codec.nullable idCodec)
+threadCodec : Codec userId -> Codec (Thread userId)
+threadCodec userIdCodec =
+    Codec.object Thread
+        |> Codec.field "messages" .messages (idArrayCodec (messageCodec userIdCodec))
+        |> Codec.field "dateDividerDrawings" .dateDividerDrawings (seqDictCodec dateCodec (drawingCodec userIdCodec))
         |> Codec.buildObject
 
 

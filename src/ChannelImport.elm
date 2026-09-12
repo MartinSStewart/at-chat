@@ -24,13 +24,13 @@ import Drawing exposing (Drawing)
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji)
 import Game
-import Id exposing (ChannelMessageId, Id, UserId)
+import Id exposing (ChannelMessageId, Id, ThreadMessageId, UserId)
 import IdArray exposing (IdArray)
 import Message exposing (Message(..), MessageContent, UserTextMessageDrawings)
 import NonemptySet exposing (NonemptySet)
 import RichText
 import SeqDict exposing (SeqDict)
-import Thread exposing (BackendThread)
+import Thread exposing (BackendThread, LastTypedAt)
 import Types exposing (BackendModel)
 
 
@@ -61,10 +61,10 @@ decode text model =
         Ok (GuildChannelExport channel) ->
             let
                 ( messages, messagesEncrypted ) =
-                    stripEncrypted identity channel.messages
+                    importMessage identity channel.messages
 
                 ( threads, threadsEncrypted ) =
-                    stripEncryptedInThreads channel.threads
+                    importThread identity channel.threads
             in
             { createdAt = Just channel.createdAt
             , createdBy = Just channel.createdBy
@@ -81,10 +81,10 @@ decode text model =
         Ok (DmChannelExport channel) ->
             let
                 ( messages, messagesEncrypted ) =
-                    stripEncrypted identity channel.messages
+                    importMessage identity channel.messages
 
                 ( threads, threadsEncrypted ) =
-                    stripEncryptedInThreads channel.threads
+                    importThread identity channel.threads
             in
             { createdAt = Nothing
             , createdBy = Nothing
@@ -98,28 +98,31 @@ decode text model =
             }
                 |> Ok
 
-        Ok (DiscordGuildChannelExport _) ->
-            Err DiscordChannelsCantBeImported
+        Ok (DiscordGuildChannelExport channel) ->
+            let
+                ( messages, messagesEncrypted ) =
+                    importMessage (linkedUserId model) channel.messages
+
+                ( threads, threadsEncrypted ) =
+                    importThread (linkedUserId model) channel.threads
+            in
+            { createdAt = Nothing
+            , createdBy = Nothing
+            , name = Nothing
+            , description = Nothing
+            , messages = messages
+            , threads = threads
+            , dateDividerDrawings =
+                SeqDict.map (\_ drawing -> mapDrawing (linkedUserId model) drawing) channel.dateDividerDrawings
+            , games = SeqDict.empty
+            , encryptedMessages = messagesEncrypted + threadsEncrypted
+            }
+                |> Ok
 
         Ok (DiscordDmChannelExport channel) ->
             let
-                linkedUserId : Discord.Id Discord.UserId -> Id UserId
-                linkedUserId discordUserId =
-                    case SeqDict.get discordUserId model.discordUsers of
-                        Just (FullData data) ->
-                            data.linkedTo
-
-                        Just (NeedsAuthAgain data) ->
-                            data.linkedTo
-
-                        Just (BasicData _) ->
-                            dummyUserId
-
-                        Nothing ->
-                            dummyUserId
-
                 ( messages, messagesEncrypted ) =
-                    stripEncrypted linkedUserId channel.messages
+                    importMessage (linkedUserId model) channel.messages
             in
             { createdAt = Nothing
             , createdBy = Nothing
@@ -128,7 +131,7 @@ decode text model =
             , messages = messages
             , threads = SeqDict.empty
             , dateDividerDrawings =
-                SeqDict.map (\_ drawing -> mapDrawing linkedUserId drawing) channel.dateDividerDrawings
+                SeqDict.map (\_ drawing -> mapDrawing (linkedUserId model) drawing) channel.dateDividerDrawings
             , games = SeqDict.empty
             , encryptedMessages = messagesEncrypted
             }
@@ -138,41 +141,61 @@ decode text model =
             Err (NotAChannelExport error)
 
 
-{-| Stands in for a Discord account that isn't linked to an at-chat one, since a message
-still has to say who wrote it.
--}
+linkedUserId : BackendModel -> Discord.Id Discord.UserId -> Id UserId
+linkedUserId model discordUserId =
+    case SeqDict.get discordUserId model.discordUsers of
+        Just (FullData data) ->
+            data.linkedTo
+
+        Just (NeedsAuthAgain data) ->
+            data.linkedTo
+
+        Just (BasicData _) ->
+            dummyUserId
+
+        Nothing ->
+            dummyUserId
+
+
 dummyUserId : Id UserId
 dummyUserId =
     Id.fromInt -1
 
 
-{-| Threads only ever arrive from at-chat's own channels, which are already written in terms
-of at-chat users, so nothing needs moving over here.
--}
-stripEncryptedInThreads :
-    SeqDict (Id ChannelMessageId) BackendThread
+importThread :
+    (userIdA -> Id UserId)
+    ->
+        SeqDict
+            (Id ChannelMessageId)
+            { messages : IdArray ThreadMessageId (Message ThreadMessageId userIdA)
+            , dateDividerDrawings : SeqDict Date (Drawing.Drawing userIdA)
+            }
     -> ( SeqDict (Id ChannelMessageId) BackendThread, Int )
-stripEncryptedInThreads threads =
+importThread mapUserId threads =
     SeqDict.foldl
         (\threadId thread ( result, count ) ->
             let
                 ( messages, encrypted ) =
-                    stripEncrypted identity thread.messages
+                    importMessage mapUserId thread.messages
             in
-            ( SeqDict.insert threadId { thread | messages = messages } result, count + encrypted )
+            ( SeqDict.insert threadId
+                { messages = messages
+                , lastTypedAt = SeqDict.empty
+                , dateDividerDrawings = SeqDict.map (\_ drawing -> mapDrawing mapUserId drawing) thread.dateDividerDrawings
+                }
+                result
+            , count + encrypted
+            )
         )
         ( SeqDict.empty, 0 )
         threads
 
 
-{-| A message nobody here holds the key to is left as the hole it leaves behind, dated the
-same as the message that used to be there.
--}
-stripEncrypted :
+importMessage :
     (userIdA -> Id UserId)
     -> IdArray messageId (Message messageId userIdA)
     -> ( IdArray messageId (Message messageId (Id UserId)), Int )
-stripEncrypted mapUserId messages =
+importMessage mapUserId messages =
     let
         ( reversed, count ) =
             IdArray.foldl
