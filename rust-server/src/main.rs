@@ -48,7 +48,9 @@ async fn main() {
                 )
                 .route(
                     "/file/internal/upload-backup/{filename}",
-                    post(post_backup_endpoint).options(options_endpoint),
+                    post(post_backup_endpoint)
+                        .options(options_endpoint)
+                        .layer(DefaultBodyLimit::max(MAX_BACKUP_UPLOAD_BYTES)),
                 )
                 .route(
                     "/file/internal/regenerate-server-secret",
@@ -84,7 +86,7 @@ async fn main() {
                 .route("/file/{content_type}/{filename}", get(get_file_endpoint))
                 .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
                 .layer(axum::Extension(rooms))
-                .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
+                .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES))
                 .layer(axum::middleware::from_fn_with_state(
                     state.clone(),
                     require_internal_secret,
@@ -109,6 +111,16 @@ async fn main() {
 }
 
 const SERVER_SECRET_PATH: &str = "./var/lib/atchat/secret.txt";
+
+// How large a body any endpoint may have. A body over the limit is rejected outright with
+// 413 rather than being read.
+const MAX_UPLOAD_BYTES: usize = 100 * 1024 * 1024;
+
+// A backup is the entire backend model rather than a file someone picked, so it dwarfs every
+// other upload and it grows every day the server is used. It gets its own limit because
+// sharing the one above put a ceiling on how big the backend model was allowed to get, which
+// the backups were already most of the way to reaching.
+const MAX_BACKUP_UPLOAD_BYTES: usize = 1024 * 1024 * 1024;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -400,7 +412,12 @@ fn remove_old_backups(dir: String) {
                 match entry {
                     Ok(entry2) => match (entry2.metadata(), entry2.file_name().to_str()) {
                         (Ok(metadata), Some(filename)) => {
-                            match (metadata.is_file(), metadata.created()) {
+                            // created() isn't supported by every filesystem and the bucket mount is
+                            // one of the ones it isn't, so asking for it there gave back an error and
+                            // nothing was ever cleaned up. A backup is written once and never touched
+                            // again, so its modified time says the same thing the created time would.
+                            let written_at = metadata.created().or_else(|_| metadata.modified());
+                            match (metadata.is_file(), written_at) {
                                 (true, Ok(time)) => {
                                     let should_delete = match now.duration_since(time) {
                                         Ok(duration) => {
@@ -427,29 +444,46 @@ fn remove_old_backups(dir: String) {
 }
 
 async fn post_backup_endpoint(Path(filename): Path<String>, body: Bytes) -> Response<String> {
-    create_dir_if_missing(SERVER_BACKUPS_PATH.to_string());
-    create_dir_if_missing(BUCKET_BACKUPS_PATH.to_string());
+    // A backup is megabytes going to disk, and for the bucket it's megabytes going over the
+    // network. fs::write holds onto the thread it's on for all of that, so it runs on a thread
+    // set aside for blocking work rather than one of the async runtime's, which would leave the
+    // file server unable to answer anything else until the backup finished landing.
+    let writes = tokio::task::spawn_blocking(move || {
+        create_dir_if_missing(SERVER_BACKUPS_PATH.to_string());
+        create_dir_if_missing(BUCKET_BACKUPS_PATH.to_string());
 
-    remove_old_backups(SERVER_BACKUPS_PATH.to_string());
-    remove_old_backups(BUCKET_BACKUPS_PATH.to_string());
+        // The first path is on the main server and the second path is the S3 bucket. We write to both to improve the odds that we don't lose all backups
+        let write_a = fs::write(String::from(SERVER_BACKUPS_PATH) + &filename, &body);
+        let write_b = fs::write(String::from(BUCKET_BACKUPS_PATH) + &filename, &body);
+        (write_a, write_b)
+    })
+    .await;
 
-    // The first path is on the main server and the second path is the S3 bucket. We write to both to improve the odds that we don't lose all backups
-    let write_a = fs::write(String::from(SERVER_BACKUPS_PATH) + &filename, &body);
-    let write_b = fs::write(String::from(BUCKET_BACKUPS_PATH) + &filename, &body);
+    // Clearing out expired backups reads the metadata of every backup still lying around, one
+    // file at a time, and on the bucket each of those is a network round trip. The upload it was
+    // holding up has no use for the result, so it runs on its own once the backup is safe.
+    tokio::task::spawn_blocking(|| {
+        remove_old_backups(SERVER_BACKUPS_PATH.to_string());
+        remove_old_backups(BUCKET_BACKUPS_PATH.to_string());
+    });
 
-    match (write_a, write_b) {
-        (Ok(_), Ok(_)) => response_with_headers(StatusCode::OK, ""),
-        (Err(error), Ok(_)) => response_with_headers(
+    match writes {
+        Ok((Ok(_), Ok(_))) => response_with_headers(StatusCode::OK, ""),
+        Ok((Err(error), Ok(_))) => response_with_headers(
             StatusCode::BAD_REQUEST,
             format!("First write failed\n{:?}", error),
         ),
-        (Ok(_), Err(error)) => response_with_headers(
+        Ok((Ok(_), Err(error))) => response_with_headers(
             StatusCode::BAD_REQUEST,
             format!("Second write failed\n{:?}", error),
         ),
-        (Err(error_a), Err(error_b)) => response_with_headers(
+        Ok((Err(error_a), Err(error_b))) => response_with_headers(
             StatusCode::BAD_REQUEST,
             format!("Both file writes failed\n{:?}\n{:?}", error_a, error_b),
+        ),
+        Err(error) => response_with_headers(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Writing the backup didn't finish\n{:?}", error),
         ),
     }
 }
@@ -2328,6 +2362,62 @@ mod tests {
                 .and_then(|value| value.to_str().ok()),
             Some("nosniff"),
             "with no type declared, this is what stops the browser picking one"
+        );
+    }
+
+    // The backup upload is the one endpoint with a body limit of its own, sitting inside the
+    // router wide limit that every other endpoint gets. Which of the two applies is decided by
+    // axum, not by anything the compiler checks, and if it ever came out the other way round the
+    // backup upload would start being refused with 413 as soon as the backend model grew past the
+    // smaller limit, which is about where it already is. The limits here are tiny stand ins for
+    // the real ones so that no real megabytes have to move to find that out.
+    #[tokio::test]
+    async fn a_route_with_its_own_body_limit_is_not_held_to_the_router_wide_one() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind test server");
+        let base = format!("http://{}", listener.local_addr().unwrap());
+
+        let router = Router::new()
+            .route(
+                "/roomy",
+                post(|body: Bytes| async move { body.len().to_string() })
+                    .layer(DefaultBodyLimit::max(1024)),
+            )
+            .route(
+                "/cramped",
+                post(|body: Bytes| async move { body.len().to_string() }),
+            )
+            .layer(DefaultBodyLimit::max(16));
+
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, router).await;
+        });
+
+        let client = reqwest::Client::new();
+        let body = vec![0u8; 100];
+
+        assert_eq!(
+            client
+                .post(format!("{base}/roomy"))
+                .body(body.clone())
+                .send()
+                .await
+                .expect("request failed")
+                .status(),
+            StatusCode::OK,
+            "a route's own limit should be the one its bodies are measured against"
+        );
+        assert_eq!(
+            client
+                .post(format!("{base}/cramped"))
+                .body(body)
+                .send()
+                .await
+                .expect("request failed")
+                .status(),
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "a route without one of its own should still be held to the router wide limit"
         );
     }
 }

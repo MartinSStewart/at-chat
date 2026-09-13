@@ -1730,7 +1730,7 @@ updateHelper msg model =
                                         }
                               }
                             , FileStatus.uploadBackup model.serverSecret ("backend-export-" ++ timestamp ++ ".bin") bytes
-                                |> Task.attempt (ScheduledExportUploadResult time)
+                                |> Task.attempt (ScheduledExportUploadResult time (Bytes.width bytes))
                             )
 
                 Nothing ->
@@ -2096,13 +2096,13 @@ updateHelper msg model =
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToLoadDiscordStandardStickerPacks error) model
 
-        ScheduledExportUploadResult time result ->
+        ScheduledExportUploadResult time backupSize result ->
             case result of
                 Ok () ->
                     ( model, Command.none )
 
                 Err error ->
-                    BackendExtra.addLog time (Log.FailedToGenerateScheduledBackup error) model
+                    BackendExtra.addLog time (Log.FailedToGenerateScheduledBackup error backupSize) model
 
         RegeneratedServerSecret time changeId clientId result ->
             let

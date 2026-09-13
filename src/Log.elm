@@ -6,6 +6,7 @@ import Effect.Browser.Dom as Dom
 import Effect.Http as Http
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji(..))
+import FileStatus
 import Icons
 import Id exposing (ChannelMessageId, CustomEmojiId, Id, StickerId, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
@@ -48,7 +49,7 @@ type Log
     | FailedToLoadDiscordGuildStickers (Nonempty ( Id StickerId, Http.Error )) Int
     | FailedToLoadDiscordStandardStickerPacks Discord.HttpError
     | FailedToLoadDiscordGuildCustomEmojis (Nonempty ( Id CustomEmojiId, Http.Error )) Int
-    | FailedToGenerateScheduledBackup Http.Error
+    | FailedToGenerateScheduledBackup Http.Error Int
     | FailedToRegenerateServerSecret Http.Error
     | ReceivedTypeThatIsAlwaysInvalid
 
@@ -134,7 +135,7 @@ shouldNotifyAdmin log =
         FailedToLoadDiscordGuildCustomEmojis _ _ ->
             Nothing
 
-        FailedToGenerateScheduledBackup _ ->
+        FailedToGenerateScheduledBackup _ _ ->
             Nothing
 
         FailedToRegenerateServerSecret _ ->
@@ -553,11 +554,15 @@ logContent onPressCopy customEmojis log =
                         (List.Nonempty.toList nonempty)
                 )
 
-        FailedToGenerateScheduledBackup httpError ->
+        FailedToGenerateScheduledBackup httpError backupSize ->
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Scheduled backend backup generation failed"
                 , fieldRow "Error" (Ui.text (httpErrorToString httpError))
+
+                -- A timeout here says nothing about why it timed out. The size does, since
+                -- the upload takes longer the bigger the backend model gets.
+                , fieldRow "Backup size" (Ui.text (FileStatus.sizeToString backupSize))
                 ]
 
         FailedToRegenerateServerSecret error ->

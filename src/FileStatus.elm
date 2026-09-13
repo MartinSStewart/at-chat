@@ -1056,6 +1056,12 @@ uploadBytes secretKey bytes =
         }
 
 
+{-| Unlike the uploads a user starts, this pushes the entire backend model across the
+network and then waits for the server to write it to disk twice. That takes as long as it
+takes, and the backup only runs every few hours, so the timeout is here to catch a request
+that will never come back rather than to bound how long a working upload may take. A minute
+was short enough that a perfectly healthy upload got abandoned partway through.
+-}
 uploadBackup : SecretId ServerSecret -> String -> Bytes -> Task BackendOnly Http.Error ()
 uploadBackup secretKey name bytes =
     Http.task
@@ -1087,7 +1093,7 @@ uploadBackup secretKey name bytes =
                                 |> Http.BadBody
                                 |> Err
                 )
-        , timeout = Just Duration.minute
+        , timeout = Just (Duration.minutes 30)
         }
 
 

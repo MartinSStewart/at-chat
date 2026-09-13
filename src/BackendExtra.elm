@@ -2661,7 +2661,7 @@ backendMsgLog msg =
         GotDiscordStandardStickerPacks _ _ ->
             BackendMsgLog_GotDiscordStandardStickerPacks
 
-        ScheduledExportUploadResult _ _ ->
+        ScheduledExportUploadResult _ _ _ ->
             BackendMsgLog_ScheduledExportUploadResult
 
         RegeneratedServerSecret _ _ _ _ ->
