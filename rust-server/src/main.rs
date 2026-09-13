@@ -24,12 +24,14 @@ use webpage::HTML;
 mod content_types;
 mod video;
 mod websocket;
+use futures_util::StreamExt;
 use rand::RngExt;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::SystemTime;
 use subtle::ConstantTimeEq;
+use tokio::io::AsyncWriteExt;
 #[tokio::main]
 async fn main() {
     // secret.txt should match Env.secretKey
@@ -48,9 +50,7 @@ async fn main() {
                 )
                 .route(
                     "/file/internal/upload-backup/{filename}",
-                    post(post_backup_endpoint)
-                        .options(options_endpoint)
-                        .layer(DefaultBodyLimit::max(MAX_BACKUP_UPLOAD_BYTES)),
+                    post(post_backup_endpoint).options(options_endpoint),
                 )
                 .route(
                     "/file/internal/regenerate-server-secret",
@@ -112,15 +112,11 @@ async fn main() {
 
 const SERVER_SECRET_PATH: &str = "./var/lib/atchat/secret.txt";
 
-// How large a body any endpoint may have. A body over the limit is rejected outright with
-// 413 rather than being read.
+// How large a body an endpoint that collects one into memory may have. A body over the limit
+// is rejected with 413 rather than being read. The backup upload is not one of those endpoints:
+// it writes its body out as the body arrives, so there is no size it has to fit inside and
+// nothing here for a limit to apply to.
 const MAX_UPLOAD_BYTES: usize = 100 * 1024 * 1024;
-
-// A backup is the entire backend model rather than a file someone picked, so it dwarfs every
-// other upload and it grows every day the server is used. It gets its own limit because
-// sharing the one above put a ceiling on how big the backend model was allowed to get, which
-// the backups were already most of the way to reaching.
-const MAX_BACKUP_UPLOAD_BYTES: usize = 1024 * 1024 * 1024;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -392,15 +388,6 @@ fn vec_to_headermap(
 const SERVER_BACKUPS_PATH: &str = "./var/lib/atchat/backups/";
 const BUCKET_BACKUPS_PATH: &str = "./var/lib/atchat/storage/backups/";
 
-fn create_dir_if_missing(path: String) {
-    match fs::exists(&path) {
-        Ok(true) => (),
-        _ => {
-            let _ = fs::create_dir(&path);
-        }
-    }
-}
-
 const BACKUP_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 
 fn remove_old_backups(dir: String) {
@@ -443,20 +430,36 @@ fn remove_old_backups(dir: String) {
     }
 }
 
-async fn post_backup_endpoint(Path(filename): Path<String>, body: Bytes) -> Response<String> {
-    // A backup is megabytes going to disk, and for the bucket it's megabytes going over the
-    // network. fs::write holds onto the thread it's on for all of that, so it runs on a thread
-    // set aside for blocking work rather than one of the async runtime's, which would leave the
-    // file server unable to answer anything else until the backup finished landing.
-    let writes = tokio::task::spawn_blocking(move || {
-        create_dir_if_missing(SERVER_BACKUPS_PATH.to_string());
-        create_dir_if_missing(BUCKET_BACKUPS_PATH.to_string());
+// How much of a backup is held in memory on its way to disk. The body arrives in chunks of a
+// few kilobytes, and without something to gather them up each one would be a write of its own,
+// which on the bucket means a round trip each.
+const BACKUP_WRITE_BUFFER_BYTES: usize = 1024 * 1024;
 
-        // The first path is on the main server and the second path is the S3 bucket. We write to both to improve the odds that we don't lose all backups
-        let write_a = fs::write(String::from(SERVER_BACKUPS_PATH) + &filename, &body);
-        let write_b = fs::write(String::from(BUCKET_BACKUPS_PATH) + &filename, &body);
-        (write_a, write_b)
-    })
+enum BackupWrite {
+    // The body stopped partway, so neither file holds a backup and neither was kept.
+    Incomplete(axum::Error),
+    // The body arrived in full. Each destination answers for itself, so one of them being
+    // unwritable says nothing about the other.
+    Written(std::io::Result<()>, std::io::Result<()>),
+}
+
+// Taking the body rather than Bytes is what lets the backup go to disk as it arrives: Bytes,
+// and every extractor built on it, gathers the whole body up before the handler is called, and
+// a backup is far too big for the server to be holding a copy of. It also means the body limit
+// the other endpoints are under has nothing to apply to here, which it otherwise would, and a
+// backup outgrowing that limit would be refused outright.
+async fn post_backup_endpoint(Path(filename): Path<String>, body: Body) -> Response<String> {
+    // Nothing is done about the error, since a directory that already exists reports one and a
+    // directory that really can't be made reports another when the file inside it is opened.
+    let _ = tokio::fs::create_dir(SERVER_BACKUPS_PATH).await;
+    let _ = tokio::fs::create_dir(BUCKET_BACKUPS_PATH).await;
+
+    // The first path is on the main server and the second path is the S3 bucket. We write to both to improve the odds that we don't lose all backups
+    let written = write_backup(
+        body,
+        &(String::from(SERVER_BACKUPS_PATH) + &filename),
+        &(String::from(BUCKET_BACKUPS_PATH) + &filename),
+    )
     .await;
 
     // Clearing out expired backups reads the metadata of every backup still lying around, one
@@ -467,25 +470,98 @@ async fn post_backup_endpoint(Path(filename): Path<String>, body: Bytes) -> Resp
         remove_old_backups(BUCKET_BACKUPS_PATH.to_string());
     });
 
-    match writes {
-        Ok((Ok(_), Ok(_))) => response_with_headers(StatusCode::OK, ""),
-        Ok((Err(error), Ok(_))) => response_with_headers(
+    match written {
+        BackupWrite::Written(Ok(_), Ok(_)) => response_with_headers(StatusCode::OK, ""),
+        BackupWrite::Written(Err(error), Ok(_)) => response_with_headers(
             StatusCode::BAD_REQUEST,
             format!("First write failed\n{:?}", error),
         ),
-        Ok((Ok(_), Err(error))) => response_with_headers(
+        BackupWrite::Written(Ok(_), Err(error)) => response_with_headers(
             StatusCode::BAD_REQUEST,
             format!("Second write failed\n{:?}", error),
         ),
-        Ok((Err(error_a), Err(error_b))) => response_with_headers(
+        BackupWrite::Written(Err(error_a), Err(error_b)) => response_with_headers(
             StatusCode::BAD_REQUEST,
             format!("Both file writes failed\n{:?}\n{:?}", error_a, error_b),
         ),
-        Err(error) => response_with_headers(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Writing the backup didn't finish\n{:?}", error),
+        BackupWrite::Incomplete(error) => response_with_headers(
+            StatusCode::BAD_REQUEST,
+            format!("The backup didn't arrive in full\n{:?}", error),
         ),
     }
+}
+
+// Writes the body to both paths as it arrives, under a name that says the file isn't finished
+// yet, and puts each one where it belongs once all of it is there. An upload that never
+// finishes leaves its unfinished files behind if it is dropped rather than reporting an error,
+// which is what a client hanging up looks like. They keep the name that says so and are swept
+// up by remove_old_backups along with everything else too old to keep.
+async fn write_backup(body: Body, path_a: &str, path_b: &str) -> BackupWrite {
+    let partial_a = format!("{path_a}.part");
+    let partial_b = format!("{path_b}.part");
+
+    let mut file_a = tokio::fs::File::create(&partial_a)
+        .await
+        .map(|file| tokio::io::BufWriter::with_capacity(BACKUP_WRITE_BUFFER_BYTES, file));
+    let mut file_b = tokio::fs::File::create(&partial_b)
+        .await
+        .map(|file| tokio::io::BufWriter::with_capacity(BACKUP_WRITE_BUFFER_BYTES, file));
+
+    let mut chunks = body.into_data_stream();
+
+    while let Some(chunk) = chunks.next().await {
+        match chunk {
+            Ok(chunk2) => {
+                file_a = write_backup_chunk(file_a, &chunk2).await;
+                file_b = write_backup_chunk(file_b, &chunk2).await;
+            }
+            Err(error) => {
+                // The name a backup is stored under says it is a whole backup, so leaving half
+                // of one behind under that name is worse than having no backup from this run.
+                let _ = tokio::fs::remove_file(&partial_a).await;
+                let _ = tokio::fs::remove_file(&partial_b).await;
+                return BackupWrite::Incomplete(error);
+            }
+        }
+    }
+
+    BackupWrite::Written(
+        finish_backup_file(file_a, &partial_a, path_a).await,
+        finish_backup_file(file_b, &partial_b, path_b).await,
+    )
+}
+
+// A file that has already failed to be written stays failed, so the rest of the backup goes to
+// whichever destination is still taking it.
+async fn write_backup_chunk(
+    file: std::io::Result<tokio::io::BufWriter<tokio::fs::File>>,
+    chunk: &[u8],
+) -> std::io::Result<tokio::io::BufWriter<tokio::fs::File>> {
+    let mut file2 = file?;
+    file2.write_all(chunk).await?;
+    Ok(file2)
+}
+
+async fn finish_backup_file(
+    file: std::io::Result<tokio::io::BufWriter<tokio::fs::File>>,
+    partial_path: &str,
+    path: &str,
+) -> std::io::Result<()> {
+    let result = match file {
+        Ok(mut file2) => match file2.flush().await {
+            // Renaming is what publishes the backup, and it only happens once every byte of the
+            // body has been written, so a file under the name the upload asked for is a whole one.
+            Ok(()) => tokio::fs::rename(partial_path, path).await,
+            Err(error) => Err(error),
+        },
+        Err(error) => Err(error),
+    };
+
+    if result.is_err() {
+        let _ = tokio::fs::remove_file(partial_path).await;
+    }
+
+    result
 }
 
 async fn regenerate_server_secret_endpoint(state: State<Arc<Mutex<AppState>>>) -> Response<String> {
@@ -2005,6 +2081,25 @@ mod tests {
         );
     }
 
+    fn create_dir_if_missing(path: String) {
+        match fs::exists(&path) {
+            Ok(true) => (),
+            _ => {
+                let _ = fs::create_dir(&path);
+            }
+        }
+    }
+
+    // Clear out both copies of a test backup. A run that failed partway through leaves files
+    // behind, and without this the next run would be reporting on those rather than on itself.
+    fn remove_test_backup(filename: &str) {
+        for dir in [SERVER_BACKUPS_PATH, BUCKET_BACKUPS_PATH] {
+            let path = String::from(dir) + filename;
+            let _ = fs::remove_file(format!("{path}.part"));
+            let _ = fs::remove_file(path);
+        }
+    }
+
     // Where the file endpoints read from and the upload endpoints write to.
     fn create_storage_dir() {
         create_dir_if_missing(String::from("./var"));
@@ -2365,59 +2460,88 @@ mod tests {
         );
     }
 
-    // The backup upload is the one endpoint with a body limit of its own, sitting inside the
-    // router wide limit that every other endpoint gets. Which of the two applies is decided by
-    // axum, not by anything the compiler checks, and if it ever came out the other way round the
-    // backup upload would start being refused with 413 as soon as the backend model grew past the
-    // smaller limit, which is about where it already is. The limits here are tiny stand ins for
-    // the real ones so that no real megabytes have to move to find that out.
+    // A backup arrives in pieces and is written out as the pieces come in, so it can stop
+    // partway in a way a body collected up front never could. What is left behind when it does
+    // would be a file named like every other backup, holding however much of one arrived, and
+    // nothing downstream would have any way of telling.
     #[tokio::test]
-    async fn a_route_with_its_own_body_limit_is_not_held_to_the_router_wide_one() {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("failed to bind test server");
-        let base = format!("http://{}", listener.local_addr().unwrap());
+    async fn an_upload_that_stops_partway_leaves_no_backup() {
+        create_storage_dir();
+        let filename = "backend-export-test-incomplete.bin";
+        remove_test_backup(filename);
 
-        let router = Router::new()
-            .route(
-                "/roomy",
-                post(|body: Bytes| async move { body.len().to_string() })
-                    .layer(DefaultBodyLimit::max(1024)),
-            )
-            .route(
-                "/cramped",
-                post(|body: Bytes| async move { body.len().to_string() }),
-            )
-            .layer(DefaultBodyLimit::max(16));
+        let chunks: Vec<std::io::Result<Bytes>> = vec![
+            Ok(Bytes::from_static(b"the first part of a backup")),
+            Err(std::io::Error::other("the upload stopped here")),
+        ];
 
-        tokio::spawn(async move {
-            let _ = axum::serve(listener, router).await;
-        });
-
-        let client = reqwest::Client::new();
-        let body = vec![0u8; 100];
+        let response = post_backup_endpoint(
+            Path(filename.to_owned()),
+            Body::from_stream(futures_util::stream::iter(chunks)),
+        )
+        .await;
 
         assert_eq!(
-            client
-                .post(format!("{base}/roomy"))
-                .body(body.clone())
-                .send()
-                .await
-                .expect("request failed")
-                .status(),
+            response.status(),
+            StatusCode::BAD_REQUEST,
+            "an upload that stopped partway should not be answered as though it worked"
+        );
+
+        for dir in [SERVER_BACKUPS_PATH, BUCKET_BACKUPS_PATH] {
+            let path = String::from(dir) + filename;
+            assert!(
+                !fs::exists(&path).unwrap_or(false),
+                "part of a backup should not be left under the name of a whole one in {dir}"
+            );
+            assert!(
+                !fs::exists(format!("{path}.part")).unwrap_or(false),
+                "the unfinished file should have been cleared away from {dir} as well"
+            );
+        }
+    }
+
+    // The two copies are the whole point of the endpoint: one on the server and one on the
+    // bucket, so that losing either leaves a backup behind. The body here is bigger than the
+    // buffer the writes go through and arrives in several pieces, which is what the server sees
+    // from a real upload.
+    #[tokio::test]
+    async fn a_backup_is_written_to_both_places() {
+        create_storage_dir();
+        let filename = "backend-export-test-written.bin";
+        remove_test_backup(filename);
+
+        let pieces = [
+            vec![b'a'; BACKUP_WRITE_BUFFER_BYTES - 1],
+            vec![b'b'; BACKUP_WRITE_BUFFER_BYTES + 1],
+            vec![b'c'; 100],
+        ];
+        let whole: Vec<u8> = pieces.concat();
+        let chunks: Vec<std::io::Result<Bytes>> = pieces
+            .iter()
+            .map(|piece| Ok(Bytes::from(piece.clone())))
+            .collect();
+
+        let response = post_backup_endpoint(
+            Path(filename.to_owned()),
+            Body::from_stream(futures_util::stream::iter(chunks)),
+        )
+        .await;
+
+        assert_eq!(
+            response.status(),
             StatusCode::OK,
-            "a route's own limit should be the one its bodies are measured against"
+            "writing a backup to both places should report that it worked"
         );
-        assert_eq!(
-            client
-                .post(format!("{base}/cramped"))
-                .body(body)
-                .send()
-                .await
-                .expect("request failed")
-                .status(),
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "a route without one of its own should still be held to the router wide limit"
-        );
+
+        for dir in [SERVER_BACKUPS_PATH, BUCKET_BACKUPS_PATH] {
+            let path = String::from(dir) + filename;
+            assert_eq!(
+                fs::read(&path).ok().as_ref(),
+                Some(&whole),
+                "the backup in {dir} should be every byte that was uploaded"
+            );
+        }
+
+        remove_test_backup(filename);
     }
 }
