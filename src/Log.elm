@@ -559,9 +559,6 @@ logContent onPressCopy customEmojis log =
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Scheduled backend backup generation failed"
                 , fieldRow "Error" (Ui.text (httpErrorToString httpError))
-
-                -- A timeout here says nothing about why it timed out. The size does, since
-                -- the upload takes longer the bigger the backend model gets.
                 , fieldRow "Backup size" (Ui.text (FileStatus.sizeToString backupSize))
                 ]
 
