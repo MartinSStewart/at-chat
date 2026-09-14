@@ -223,7 +223,7 @@ guildIcon : { a | icon : Maybe FileHash } -> Mode -> String -> Element msg
 guildIcon guild mode name =
     case guild.icon of
         Just icon ->
-            iconView mode (FileStatus.fileUrl FileStatus.pngContent icon)
+            guildIconView mode (FileStatus.fileUrl FileStatus.pngContent icon)
 
         Nothing ->
             String.replace "-" " " name
@@ -238,22 +238,22 @@ guildIcon guild mode name =
                     , Ui.contentCenterY
                     , case mode of
                         IsSelected ->
-                            Ui.noAttr
+                            selectedRounding
 
                         _ ->
-                            Ui.rounded (round (toFloat size * 8 / 50))
+                            Ui.rounded iconRounding
                     , MyUi.notoSans
                     , Ui.Font.weight 600
                     , Ui.background MyUi.secondaryGray
                     , Ui.border 1
                     , Ui.borderColor MyUi.secondaryGrayBorder
-                    , Ui.centerX
                     , case mode of
                         IsSelected ->
-                            Ui.width (Ui.px MyUi.guildIconFullWidth)
+                            Ui.alignRight
 
                         _ ->
-                            Ui.width (Ui.px size)
+                            Ui.centerX
+                    , Ui.width (Ui.px size)
                     , Ui.height (Ui.px size)
                     , Ui.Font.size (round (toFloat size * 18 / 50))
                     , Ui.Font.color iconFontColor
@@ -268,10 +268,10 @@ userView notification maybeIcon color =
         ]
         (case maybeIcon of
             Just icon ->
-                iconView (Normal notification) (FileStatus.fileUrl FileStatus.pngContent icon)
+                iconView (FileStatus.fileUrl FileStatus.pngContent icon)
 
             Nothing ->
-                defaultUser True size (Ui.rounded (round (toFloat size * 8 / 50))) color
+                defaultUser True size (Ui.rounded iconRounding) color
         )
 
 
@@ -284,7 +284,7 @@ discordUserView notification maybeIcon userId =
         Nothing ->
             Discord.defaultUserAvatarUrl (Discord.TwoToNthPower 7) userId
     )
-        |> iconView (Normal notification)
+        |> iconView
         |> Ui.el [ discordNotificationView 0 -3 notification ]
 
 
@@ -323,33 +323,56 @@ defaultUserHtml size2 rounded color =
         [ Icons.person ]
 
 
-iconView : Mode -> String -> Element msg
-iconView mode url =
+{-| A guild's own picture. It gets a background of its own so that a picture with
+transparency in it still fills the tile, which is what the selected guild is recognised by.
+-}
+guildIconView : Mode -> String -> Element msg
+guildIconView mode url =
     Html.img
-        [ Html.Attributes.style
-            "width"
+        [ Html.Attributes.style "width" (String.fromInt size ++ "px")
+        , Html.Attributes.style "height" (String.fromInt size ++ "px")
+        , Html.Attributes.src url
+        , MyUi.lazyLoading
+        , Html.Attributes.style "display" "flex"
+        , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.secondaryGray)
+        , Html.Attributes.style
+            "align-self"
             (case mode of
                 IsSelected ->
-                    String.fromInt MyUi.guildIconFullWidth ++ "px"
+                    "flex-end"
 
                 _ ->
-                    String.fromInt size ++ "px"
+                    "center"
             )
+        , Html.Attributes.style "object-fit" "cover"
+        , Html.Attributes.style
+            "border-radius"
+            (case mode of
+                IsSelected ->
+                    String.fromInt iconRounding ++ "px 0 0 " ++ String.fromInt iconRounding ++ "px"
+
+                _ ->
+                    String.fromInt iconRounding ++ "px"
+            )
+        ]
+        []
+        |> Ui.html
+
+
+{-| A user's avatar. Unlike a guild, a user is never the selected thing in the guild column,
+so this is the same picture whatever is going on around it.
+-}
+iconView : String -> Element msg
+iconView url =
+    Html.img
+        [ Html.Attributes.style "width" (String.fromInt size ++ "px")
         , Html.Attributes.style "height" (String.fromInt size ++ "px")
         , Html.Attributes.src url
         , MyUi.lazyLoading
         , Html.Attributes.style "display" "flex"
         , Html.Attributes.style "align-self" "center"
         , Html.Attributes.style "object-fit" "cover"
-        , Html.Attributes.style
-            "border-radius"
-            (case mode of
-                IsSelected ->
-                    "0"
-
-                _ ->
-                    String.fromInt (round (toFloat size * 8 / 50)) ++ "px"
-            )
+        , Html.Attributes.style "border-radius" (String.fromInt iconRounding ++ "px")
         ]
         []
         |> Ui.html
@@ -368,6 +391,24 @@ size =
     50
 
 
+iconRounding : Int
+iconRounding =
+    round (toFloat size * 8 / 50)
+
+
+{-| The selected icon sits against the right hand edge of the column, so the corners on that
+side are square and it reads as joined to what is beside it rather than a tile of its own.
+-}
+selectedRounding : Ui.Attribute msg
+selectedRounding =
+    Ui.roundedWith
+        { topLeft = iconRounding
+        , topRight = 0
+        , bottomLeft = iconRounding
+        , bottomRight = 0
+        }
+
+
 addGuildButton : HtmlId -> Bool -> msg -> Element msg
 addGuildButton htmlId isSelected onPress =
     MyUi.elButton
@@ -375,22 +416,22 @@ addGuildButton htmlId isSelected onPress =
         onPress
         [ Ui.contentCenterX
         , Ui.contentCenterY
-        , Ui.centerX
         , if isSelected then
-            Ui.noAttr
+            Ui.alignRight
 
           else
-            Ui.rounded (round (toFloat size * 8 / 50))
+            Ui.centerX
+        , if isSelected then
+            selectedRounding
+
+          else
+            Ui.rounded iconRounding
         , MyUi.notoSans
         , Ui.Font.weight 600
         , Ui.background MyUi.secondaryGray
         , Ui.border 1
         , Ui.borderColor MyUi.secondaryGrayBorder
-        , if isSelected then
-            Ui.width (Ui.px MyUi.guildIconFullWidth)
-
-          else
-            Ui.width (Ui.px size)
+        , Ui.width (Ui.px size)
         , Ui.height (Ui.px size)
         , Ui.padding 8
         , Ui.Font.color iconFontColor
@@ -406,22 +447,22 @@ showFriendsButton isSelected onPress =
         onPress
         [ Ui.contentCenterX
         , Ui.contentCenterY
-        , Ui.centerX
         , if isSelected then
-            Ui.noAttr
+            Ui.alignRight
 
           else
-            Ui.rounded (round (toFloat size * 8 / 50))
+            Ui.centerX
+        , if isSelected then
+            selectedRounding
+
+          else
+            Ui.rounded iconRounding
         , MyUi.notoSans
         , Ui.Font.weight 600
         , Ui.background MyUi.secondaryGray
         , Ui.border 1
         , Ui.borderColor MyUi.secondaryGrayBorder
-        , if isSelected then
-            Ui.width (Ui.px MyUi.guildIconFullWidth)
-
-          else
-            Ui.width (Ui.px size)
+        , Ui.width (Ui.px size)
         , Ui.height (Ui.px size)
         , Ui.padding 8
         , Ui.Font.color iconFontColor
