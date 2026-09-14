@@ -6899,7 +6899,7 @@ handleGoMatchRequest messageId channel model =
                             User.backendToFrontendForUser user
 
                         Nothing ->
-                            { name = PersonName.fromStringLossy "<missing>"
+                            { name = PersonName.fromStringLossy User.missingName
                             , color = UserColor.default
                             , icon = Nothing
                             , publicKey = Nothing

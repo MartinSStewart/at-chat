@@ -569,7 +569,7 @@ messageNotification usersMentioned time sender id threadRoute message members mo
                                             PersonName.toString user3.name
 
                                         Nothing ->
-                                            "<missing>"
+                                            User.missingName
                                 )
                                 plainText
                                 (UserTextMessage message)
@@ -670,7 +670,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                         DiscordUserData.username user
 
                                     Nothing ->
-                                        "<missing>"
+                                        User.missingName
                                 )
                                 (Maybe.andThen DiscordUserData.icon senderData)
                                 (\userId3 ->
@@ -679,7 +679,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                             DiscordUserData.username user3
 
                                         Nothing ->
-                                            "<missing>"
+                                            User.missingName
                                 )
                                 (case message of
                                     UserTextMessage message2 ->
@@ -1218,7 +1218,7 @@ discordDmNotification time channelId senderId senderName senderIcon text message
                             DiscordUserData.username user
 
                         Nothing ->
-                            "<missing>"
+                            User.missingName
                 )
                 text
                 (UserTextMessage message)
@@ -1575,7 +1575,7 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
                                         PersonName.toString user.name
 
                                     Nothing ->
-                                        "<missing>"
+                                        User.missingName
                             )
                             (String.Nonempty.toString text)
                             (UserTextMessage message)
@@ -1670,7 +1670,7 @@ gameStartedDmNotification time senderId { otherUserId } gameType model =
                                 PersonName.toString user.name
 
                             Nothing ->
-                                "<missing>"
+                                User.missingName
                     )
                     (LocalState.gameStartedText gameType)
                     (GameStarted
@@ -1892,7 +1892,7 @@ gameStartedGuildNotification time sender id gameType members model =
                                             PersonName.toString user3.name
 
                                         Nothing ->
-                                            "<missing>"
+                                            User.missingName
                                 )
                                 plainText
                                 message
