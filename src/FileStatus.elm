@@ -1087,7 +1087,7 @@ uploadBackup secretKey name bytes =
                                 |> Http.BadBody
                                 |> Err
                 )
-        , timeout = Just Duration.minute
+        , timeout = Just (Duration.minutes 30)
         }
 
 

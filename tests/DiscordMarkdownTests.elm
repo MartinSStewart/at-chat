@@ -428,13 +428,16 @@ basicFormattingTests =
         , fromNonemptyStringTest
             "] [a](http://a.com/)"
             (Nonempty (NormalText ']' " ") [ MarkdownLink (NonemptyString 'a' "") (unsafeUrl "http://a.com/") ])
-        , fromNonemptyStringTest "*a\nb*" (Nonempty (NormalText '*' "a\nb*") [])
-        , fromNonemptyStringTest "_a\na_" (Nonempty (NormalText '_' "a\na_") [])
-        , fromNonemptyStringTest "~~a\na~~" (Nonempty (NormalText '~' "~a\na~~") [])
-        , fromNonemptyStringTest "_~~a\na~~_" (Nonempty (NormalText '_' "~~a\na~~_") [])
+        , fromNonemptyStringTest "*a\nb*" (Nonempty (Italic (Nonempty (NormalText 'a' "\nb") [])) [])
+        , fromNonemptyStringTest "_a\na_" (Nonempty (Italic (Nonempty (NormalText 'a' "\na") [])) [])
+        , fromNonemptyStringTest "**a\nb**" (Nonempty (Bold (Nonempty (NormalText 'a' "\nb") [])) [])
+        , fromNonemptyStringTest "~~a\na~~" (Nonempty (Strikethrough (Nonempty (NormalText 'a' "\na") [])) [])
+        , fromNonemptyStringTest "||a\na||" (Nonempty (Spoiler (Nonempty (NormalText 'a' "\na") [])) [])
+        , fromNonemptyStringTest "_~~a\na~~_"
+            (Nonempty (Italic (Nonempty (Strikethrough (Nonempty (NormalText 'a' "\na") [])) [])) [])
         , fromNonemptyStringTest
             "_~~a\na~~_a_"
-            (Nonempty (NormalText '_' "~~a\na~~") [ Italic (Nonempty (NormalText 'a' "") []) ])
+            (Nonempty (Italic (Nonempty (Strikethrough (Nonempty (NormalText 'a' "\na") [])) [])) [ NormalText 'a' "_" ])
         , fromNonemptyStringTest "\n> asdf" (Nonempty (BlockQuote HasLeadingLineBreak [ NormalText 'a' "sdf" ]) [])
         , fromNonemptyStringTest
             "\n> asdf\n>asdf"

@@ -2543,8 +2543,11 @@ parseLoop timezone source index users modifiers accText revNodes =
                                                     parseLoop timezone source (index + 1) users modifiers (accText ++ "\n") revNodes
 
                 else
-                    -- Line breaks should terminate any open modifiers
-                    finalizeResult modifierToSymbol accText revNodes modifiers index
+                    -- A line break doesn't close an open modifier, so `*bold\nstill bold*` stays bold
+                    -- all the way through and a code block can be spoilered. The constructs above
+                    -- that start a line are skipped while a modifier is open though, since a heading
+                    -- or bullet point nested inside bold text isn't something anyone means to write.
+                    parseLoop timezone source (index + 1) users modifiers (accText ++ "\n") revNodes
 
             "¯" ->
                 if String.slice index (index + String.length shrugEmoticon) source == shrugEmoticon then
@@ -5933,8 +5936,8 @@ discordParseLoop customEmojis2 source index modifiers accText revNodes =
                                                         revNodes
 
                 else
-                    -- Line breaks should terminate any open modifiers
-                    finalizeResult discordModifierToSymbol accText revNodes modifiers index
+                    -- Discord's modifiers span line breaks too, so keep reading with the modifier open.
+                    discordParseLoop customEmojis2 source (index + 1) modifiers (accText ++ "\n") revNodes
 
             --case
             --    if List.isEmpty modifiers then

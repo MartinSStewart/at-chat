@@ -931,7 +931,7 @@ toStringView userId allUsers2 =
                 |> Ui.el [ Ui.Font.bold, Ui.Font.color (UserColor.toColor user.color), Ui.clipWithEllipsis ]
 
         Nothing ->
-            Ui.text missingName
+            Ui.el [ Ui.clipWithEllipsis ] (Ui.text missingName)
 
 
 toStringAlt : Id UserId -> LocalUser -> String

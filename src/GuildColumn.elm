@@ -129,7 +129,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                     [ Ui.Gradient.linear
                         (Ui.radians 0)
                         [ Ui.Gradient.percent 0 (Ui.rgba 0 0 0 0)
-                        , Ui.Gradient.percent 100 MyUi.background1
+                        , Ui.Gradient.percent 100 MyUi.black
                         ]
                     ]
                 , MyUi.htmlStyle "height" ("calc(max(6px, " ++ MyUi.insetTop ++ "))")
@@ -138,12 +138,12 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
             )
         , Ui.width Ui.shrink
         , Ui.height Ui.fill
+        , Ui.move { x = 1, y = 0, z = 0 }
         ]
         (Ui.column
-            [ Ui.spacing 4
+            [ Ui.spacing 6
             , Ui.width (Ui.px MyUi.guildIconFullWidth)
             , Ui.height Ui.fill
-            , Ui.background MyUi.background1
             , MyUi.scrollable canScroll2
             , MyUi.htmlStyle "overflow-x" "hidden"
             , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
@@ -160,7 +160,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                         Ui.Lazy.lazy4 discordDmGuildIcon route localUser channelId dmChannel
                     )
                     (SeqDict.toList discordDmChannels)
-                ++ GuildIcon.showFriendsButton (isHomePageRoute route) (PressedLink (HomePageRoute Nothing))
+                ++ GuildIcon.showFriendsButton (PressedLink (HomePageRoute Nothing))
                 :: List.map
                     (\( guildId, guild ) -> Ui.Lazy.lazy4 guildIcon localUser route guildId guild)
                     (SeqDict.toList guilds)
@@ -187,16 +187,6 @@ discordGuildCurrentUserId localUser guild =
         (LinkedAndOtherDiscordUsers.linkedUsers localUser.discordUsers)
         |> SeqDict.keys
         |> List.head
-
-
-isHomePageRoute : Route -> Bool
-isHomePageRoute route =
-    case route of
-        HomePageRoute _ ->
-            True
-
-        _ ->
-            False
 
 
 discordGuildIcon : LocalUser -> Route -> Discord.Id Discord.GuildId -> DiscordFrontendGuild -> Element FrontendMsg_

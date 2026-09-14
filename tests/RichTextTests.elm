@@ -281,12 +281,36 @@ test =
             "*a*_b_"
             (Nonempty (Bold (Nonempty (NormalText 'a' "") [])) [ Italic (Nonempty (NormalText 'b' "") []) ])
         , fromNonemptyStringTest "a\nb\nc" (Nonempty (NormalText 'a' "\nb\nc") [])
-        , fromNonemptyStringTest "*a\nb*" (Nonempty (NormalText '*' "a\nb*") [])
-        , fromNonemptyStringTest "_a\na_" (Nonempty (NormalText '_' "a\na_") [])
+        , fromNonemptyStringTest "*a\nb*" (Nonempty (Bold (Nonempty (NormalText 'a' "\nb") [])) [])
+        , fromNonemptyStringTest "_a\na_" (Nonempty (Italic (Nonempty (NormalText 'a' "\na") [])) [])
         , fromNonemptyStringTest "`a\na`" (Nonempty (NormalText '`' "a\na`") [])
-        , fromNonemptyStringTest "~~a\na~~" (Nonempty (NormalText '~' "~a\na~~") [])
-        , fromNonemptyStringTest "_~~a\na~~_" (Nonempty (NormalText '_' "~~a\na~~_") [])
-        , fromNonemptyStringTest "_~~a\na~~_a_" (Nonempty (NormalText '_' "~~a\na~~") [ Italic (Nonempty (NormalText 'a' "") []) ])
+        , fromNonemptyStringTest "~~a\na~~" (Nonempty (Strikethrough (Nonempty (NormalText 'a' "\na") [])) [])
+        , fromNonemptyStringTest "||a\na||" (Nonempty (Spoiler (Nonempty (NormalText 'a' "\na") [])) [])
+        , fromNonemptyStringTest "__a\na__" (Nonempty (Underline (Nonempty (NormalText 'a' "\na") [])) [])
+        , fromNonemptyStringTest "_~~a\na~~_"
+            (Nonempty (Italic (Nonempty (Strikethrough (Nonempty (NormalText 'a' "\na") [])) [])) [])
+        , fromNonemptyStringTest "_~~a\na~~_a_"
+            (Nonempty (Italic (Nonempty (Strikethrough (Nonempty (NormalText 'a' "\na") [])) [])) [ NormalText 'a' "_" ])
+
+        -- A modifier that's never closed still ends up as plain text, even with line breaks in between.
+        , fromNonemptyStringTest "*a\nb" (Nonempty (NormalText '*' "a\nb") [])
+
+        -- Spoilering a code block is what this is for.
+        , fromNonemptyStringTest "||```elm\nx = 1\n```||"
+            (Nonempty (Spoiler (Nonempty (CodeBlock (RichText.Language (NonemptyString 'e' "lm")) "x = 1\n") [])) [])
+        , fromNonemptyStringTest "||\n```\nx = 1\n```\n||"
+            (Nonempty
+                (Spoiler
+                    (Nonempty (NormalText '\n' "")
+                        [ CodeBlock NoLanguage "\nx = 1\n", NormalText '\n' "" ]
+                    )
+                )
+                []
+            )
+
+        -- Headings, bullet points and block quotes aren't parsed while a modifier is open.
+        , fromNonemptyStringTest "*a\n# b*" (Nonempty (Bold (Nonempty (NormalText 'a' "\n# b") [])) [])
+        , fromNonemptyStringTest "*a\n> b*" (Nonempty (Bold (Nonempty (NormalText 'a' "\n> b") [])) [])
         , fromNonemptyStringTest "`*bold* _italic_`" (Nonempty (InlineCode '*' "bold* _italic_") [])
         , fromNonemptyStringTest "[!1][!2]" (Nonempty (AttachedFile (Id.fromInt 1)) [ AttachedFile (Id.fromInt 2) ])
         , fromNonemptyStringTest

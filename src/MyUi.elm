@@ -44,6 +44,8 @@ module MyUi exposing
     , font1
     , font2
     , font3
+    , guildColumnBorder
+    , guildIconBackground
     , guildIconFullWidth
     , heightAttr
     , highlightedBorder
@@ -624,6 +626,11 @@ secondaryGray =
 secondaryGrayBorder : Ui.Color
 secondaryGrayBorder =
     Ui.rgb 215 215 215
+
+
+guildIconBackground : Ui.Color
+guildIconBackground =
+    background2
 
 
 unselectedGray : Ui.Color
@@ -1540,7 +1547,7 @@ channelColumnWidth windowSize =
 
 channelAndGuildColumnWidth : Coord CssPixels -> Int
 channelAndGuildColumnWidth windowSize =
-    channelColumnWidth windowSize + 58
+    channelColumnWidth windowSize + guildIconFullWidth
 
 
 channelHeaderHeight : number
@@ -1568,7 +1575,7 @@ conversationWidthIgnoreScrollbar windowSize showMembersTab =
 
 guildIconFullWidth : number
 guildIconFullWidth =
-    58
+    56
 
 
 memberColumnWidth : number
@@ -1796,6 +1803,11 @@ font3 =
 border1 : Ui.Color
 border1 =
     Ui.rgb 34 39 56
+
+
+guildColumnBorder : Ui.Color
+guildColumnBorder =
+    Ui.rgb 37 56 76
 
 
 border2 : Ui.Color

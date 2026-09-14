@@ -929,7 +929,7 @@ tabBodyView isMobile local loggedIn model =
                                                             PersonName.toString user.name
 
                                                         Nothing ->
-                                                            "<missing>"
+                                                            User.missingName
                                                    )
 
                                         many ->
@@ -942,7 +942,7 @@ tabBodyView isMobile local loggedIn model =
                                                                     PersonName.toString user.name
 
                                                                 Nothing ->
-                                                                    "<missing>"
+                                                                    User.missingName
                                                         )
                                                         many
                                                     )

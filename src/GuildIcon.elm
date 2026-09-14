@@ -27,6 +27,8 @@ import Html.Attributes
 import Icons
 import MyUi
 import OneOrGreater exposing (OneOrGreater)
+import Svg
+import Svg.Attributes
 import Ui exposing (Element)
 import Ui.Accessibility
 import Ui.Font
@@ -111,9 +113,6 @@ notificationView xOffset yOffset borderColor notification =
             notificationHelper MyUi.alertColor MyUi.white borderColor xOffset yOffset count
 
 
-{-| The Discord logo on a blurple circle. Marks the guilds and users that come
-from Discord so they can be told apart from at-chat ones at a glance.
--}
 discordLogo : Element msg
 discordLogo =
     Ui.el
@@ -185,8 +184,8 @@ discordNotificationView xOffset yOffset notification =
 view : Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
 view mode guild =
     Ui.el
-        [ notificationView
-            0
+        (notificationView
+            -4
             -3
             MyUi.background1
             (case mode of
@@ -196,7 +195,8 @@ view mode guild =
                 Normal notification ->
                     notification
             )
-        ]
+            :: selectedEdgeCurves mode guild.icon
+        )
         (guildIcon guild mode (GuildName.toString guild.name))
 
 
@@ -205,8 +205,8 @@ view mode guild =
 discordView : Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
 discordView mode guild =
     Ui.el
-        [ discordNotificationView
-            0
+        (discordNotificationView
+            -4
             -3
             (case mode of
                 IsSelected ->
@@ -215,7 +215,8 @@ discordView mode guild =
                 Normal notification ->
                     notification
             )
-        ]
+            :: selectedEdgeCurves mode guild.icon
+        )
         (guildIcon guild mode (GuildName.toString guild.name))
 
 
@@ -223,7 +224,7 @@ guildIcon : { a | icon : Maybe FileHash } -> Mode -> String -> Element msg
 guildIcon guild mode name =
     case guild.icon of
         Just icon ->
-            iconView mode (FileStatus.fileUrl FileStatus.pngContent icon)
+            guildIconView mode (FileStatus.fileUrl FileStatus.pngContent icon)
 
         Nothing ->
             String.replace "-" " " name
@@ -238,26 +239,33 @@ guildIcon guild mode name =
                     , Ui.contentCenterY
                     , case mode of
                         IsSelected ->
-                            Ui.noAttr
+                            selectedRounding
 
-                        _ ->
-                            Ui.rounded (round (toFloat size * 8 / 50))
+                        Normal _ ->
+                            notSelectedRounding
                     , MyUi.notoSans
                     , Ui.Font.weight 600
                     , Ui.background MyUi.secondaryGray
-                    , Ui.border 1
-                    , Ui.borderColor MyUi.secondaryGrayBorder
-                    , Ui.centerX
                     , case mode of
                         IsSelected ->
-                            Ui.width (Ui.px MyUi.guildIconFullWidth)
+                            Ui.alignRight
 
-                        _ ->
-                            Ui.width (Ui.px size)
+                        Normal _ ->
+                            Ui.alignLeft
+                    , Ui.width (Ui.px size)
                     , Ui.height (Ui.px size)
                     , Ui.Font.size (round (toFloat size * 18 / 50))
                     , Ui.Font.color iconFontColor
                     , MyUi.hoverText name
+                    , MyUi.htmlStyle
+                        "outline"
+                        (case mode of
+                            IsSelected ->
+                                "1px solid " ++ MyUi.colorToStyle MyUi.guildColumnBorder
+
+                            Normal _ ->
+                                "0"
+                        )
                     ]
 
 
@@ -268,10 +276,10 @@ userView notification maybeIcon color =
         ]
         (case maybeIcon of
             Just icon ->
-                iconView (Normal notification) (FileStatus.fileUrl FileStatus.pngContent icon)
+                iconView (FileStatus.fileUrl FileStatus.pngContent icon)
 
             Nothing ->
-                defaultUser True size (Ui.rounded (round (toFloat size * 8 / 50))) color
+                defaultUser True size (Ui.rounded iconRounding) color
         )
 
 
@@ -284,7 +292,7 @@ discordUserView notification maybeIcon userId =
         Nothing ->
             Discord.defaultUserAvatarUrl (Discord.TwoToNthPower 7) userId
     )
-        |> iconView (Normal notification)
+        |> iconView
         |> Ui.el [ discordNotificationView 0 -3 notification ]
 
 
@@ -323,33 +331,65 @@ defaultUserHtml size2 rounded color =
         [ Icons.person ]
 
 
-iconView : Mode -> String -> Element msg
-iconView mode url =
+{-| A guild's own picture. It gets a background of its own so that a picture with
+transparency in it still fills the tile, which is what the selected guild is recognised by.
+-}
+guildIconView : Mode -> String -> Element msg
+guildIconView mode url =
     Html.img
-        [ Html.Attributes.style
-            "width"
+        [ Html.Attributes.style "width" (String.fromInt size ++ "px")
+        , Html.Attributes.style "height" (String.fromInt size ++ "px")
+        , Html.Attributes.src url
+        , MyUi.lazyLoading
+        , Html.Attributes.style "display" "flex"
+        , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.guildIconBackground)
+        , Html.Attributes.style
+            "align-self"
             (case mode of
                 IsSelected ->
-                    String.fromInt MyUi.guildIconFullWidth ++ "px"
+                    "flex-end"
 
-                _ ->
-                    String.fromInt size ++ "px"
+                Normal _ ->
+                    "flex-start"
             )
+        , Html.Attributes.style "object-fit" "cover"
+        , Html.Attributes.style
+            "border-radius"
+            (case mode of
+                IsSelected ->
+                    String.fromInt iconRounding ++ "px 0 0 " ++ String.fromInt iconRounding ++ "px"
+
+                Normal _ ->
+                    "0 " ++ String.fromInt iconRounding ++ "px " ++ String.fromInt iconRounding ++ "px 0"
+            )
+        , Html.Attributes.style
+            "outline"
+            (case mode of
+                IsSelected ->
+                    "1px solid " ++ MyUi.colorToStyle MyUi.guildColumnBorder
+
+                Normal _ ->
+                    "0"
+            )
+        ]
+        []
+        |> Ui.html
+
+
+{-| A user's avatar. Unlike a guild, a user is never the selected thing in the guild column,
+so this is the same picture whatever is going on around it.
+-}
+iconView : String -> Element msg
+iconView url =
+    Html.img
+        [ Html.Attributes.style "width" (String.fromInt size ++ "px")
         , Html.Attributes.style "height" (String.fromInt size ++ "px")
         , Html.Attributes.src url
         , MyUi.lazyLoading
         , Html.Attributes.style "display" "flex"
         , Html.Attributes.style "align-self" "center"
         , Html.Attributes.style "object-fit" "cover"
-        , Html.Attributes.style
-            "border-radius"
-            (case mode of
-                IsSelected ->
-                    "0"
-
-                _ ->
-                    String.fromInt (round (toFloat size * 8 / 50)) ++ "px"
-            )
+        , Html.Attributes.style "border-radius" (String.fromInt iconRounding ++ "px")
         ]
         []
         |> Ui.html
@@ -368,60 +408,317 @@ size =
     50
 
 
+iconRounding : Int
+iconRounding =
+    round (toFloat size * 10 / 50)
+
+
+selectedRounding : Ui.Attribute msg
+selectedRounding =
+    Ui.roundedWith
+        { topLeft = iconRounding
+        , topRight = 0
+        , bottomLeft = iconRounding
+        , bottomRight = 0
+        }
+
+
+notSelectedRounding : Ui.Attribute msg
+notSelectedRounding =
+    Ui.roundedWith
+        { topLeft = 0
+        , topRight = iconRounding
+        , bottomLeft = 0
+        , bottomRight = iconRounding
+        }
+
+
+{-| The curves above and below the selected icon, the way the channel header tabs have them:
+the edge the icon shares with the channel list carries on past the icon and then curves back in
+to meet it, so the icon reads as joined onto the channel list rather than sitting against it.
+
+Where the guild has a picture, the picture carries on into the curves as a reflection of
+itself, which puts the same row of it on both sides of the icon's edge.
+
+-}
+selectedEdgeCurves : Mode -> Maybe FileHash -> List (Ui.Attribute msg)
+selectedEdgeCurves mode maybeIcon =
+    case ( mode, maybeIcon ) of
+        ( Normal _, _ ) ->
+            []
+
+        ( IsSelected, Just icon ) ->
+            let
+                url : String
+                url =
+                    FileStatus.fileUrl FileStatus.pngContent icon
+            in
+            -- The same background the icon paints behind its picture, so that a picture with
+            -- transparency in it shows the icon's own colour through the curve rather than
+            -- the column behind it
+            [ curveAboveIcon [ tileColor MyUi.guildIconBackground, pictureAboveIcon url ]
+            , curveBelowIcon [ tileColor MyUi.guildIconBackground, pictureBelowIcon url ]
+            ]
+
+        ( IsSelected, Nothing ) ->
+            plainEdgeCurves
+
+
+{-| The curves for the things in the column that have no picture for them to carry on into:
+a guild showing its initials, and the button for making a new one.
+-}
+plainEdgeCurves : List (Ui.Attribute msg)
+plainEdgeCurves =
+    [ curveAboveIcon [ tileColor MyUi.secondaryGray ]
+    , curveBelowIcon [ tileColor MyUi.secondaryGray ]
+    ]
+
+
+curveAboveIcon : List (Svg.Svg msg) -> Ui.Attribute msg
+curveAboveIcon paint =
+    Ui.inFront
+        (Ui.el
+            [ Ui.alignTop
+            , Ui.alignRight
+            , Ui.move { x = 0, y = -invertedRadius, z = 0 }
+            , MyUi.noPointerEvents
+            , Ui.inFront (curveEdge edgeAboveIcon)
+            ]
+            (curve
+                (String.join " " [ arcAboveIcon, "L " ++ radius ++ "," ++ radius, "Z" ])
+                paint
+            )
+        )
+
+
+curveBelowIcon : List (Svg.Svg msg) -> Ui.Attribute msg
+curveBelowIcon paint =
+    Ui.inFront
+        (Ui.el
+            [ Ui.alignBottom
+            , Ui.alignRight
+            , Ui.move { x = 0, y = invertedRadius, z = 0 }
+            , MyUi.noPointerEvents
+            , Ui.inFront (curveEdge edgeBelowIcon)
+            ]
+            (curve
+                (String.join " " [ arcBelowIcon, "L " ++ radius ++ ",0", "Z" ])
+                paint
+            )
+        )
+
+
+{-| The curved edge of the curve above the icon, which is also the edge the icon's own outline
+carries on along. It leaves the icon's top edge level with it and comes back to the edge the
+icon shares with the channel list at a right angle to it, so neither join has a corner in it.
+-}
+arcAboveIcon : String
+arcAboveIcon =
+    "M " ++ radius ++ ",0 A " ++ radius ++ " " ++ radius ++ " 0 0 1 0," ++ radius
+
+
+{-| The same edge below the icon.
+-}
+arcBelowIcon : String
+arcBelowIcon =
+    "M " ++ radius ++ "," ++ radius ++ " A " ++ radius ++ " " ++ radius ++ " 0 0 0 0,0"
+
+
+edgeRadius : Float
+edgeRadius =
+    toFloat invertedRadius - 0.5
+
+
+edgeRadiusText : String
+edgeRadiusText =
+    String.fromFloat edgeRadius
+
+
+edgeAboveIcon : String
+edgeAboveIcon =
+    "M "
+        ++ edgeRadiusText
+        ++ ",0 A "
+        ++ edgeRadiusText
+        ++ " "
+        ++ edgeRadiusText
+        ++ " 0 0 1 0,"
+        ++ edgeRadiusText
+
+
+edgeBelowIcon : String
+edgeBelowIcon =
+    "M "
+        ++ edgeRadiusText
+        ++ ","
+        ++ radius
+        ++ " A "
+        ++ edgeRadiusText
+        ++ " "
+        ++ edgeRadiusText
+        ++ " 0 0 0 0,"
+        ++ String.fromFloat (toFloat invertedRadius - edgeRadius)
+
+
+{-| A box the size of the curve's radius holding `paint`, with everything outside `shape`
+clipped away and `edge` drawn along the part of `shape` that the column can be seen across.
+`shape` is the curve itself, a square with a circle's worth of one corner taken out of it,
+which is what bends it towards the icon instead of leaving a square on the end.
+
+Clipping is what keeps it to the curve. Painting the colour of the column over the rest of the
+box instead would only look the same while the box had nothing but column behind it, and a
+radius wider than the gap between icons puts it over the icon above or below.
+
+-}
+curve : String -> List (Svg.Svg msg) -> Element msg
+curve shape paint =
+    Svg.svg
+        [ Svg.Attributes.width radius
+        , Svg.Attributes.height radius
+        , Svg.Attributes.viewBox ("0 0 " ++ radius ++ " " ++ radius)
+        , Svg.Attributes.style ("display:block;clip-path:path('" ++ shape ++ "')")
+        ]
+        paint
+        |> Ui.html
+
+
+{-| The line along the curve's edge, over the top of the curve rather than inside it. Inside it
+would be held to the curve's shape, and where the curve meets a straight line it runs alongside
+it, thinner than a pixel for several pixels before it opens out. Clipping the line to that
+tapers it away to nothing over exactly the stretch where the two are meant to look like one
+line. Overflow leaves the half of it that falls outside the box alone as well, which lands on
+the icon's own outline and on the line beside the channel list, where it belongs.
+-}
+curveEdge : String -> Element msg
+curveEdge edge =
+    Svg.svg
+        [ Svg.Attributes.width radius
+        , Svg.Attributes.height radius
+        , Svg.Attributes.viewBox ("0 0 " ++ radius ++ " " ++ radius)
+        , Svg.Attributes.style "display:block;overflow:visible"
+        ]
+        [ Svg.path
+            [ Svg.Attributes.d edge
+            , Svg.Attributes.fill "none"
+            , Svg.Attributes.stroke (MyUi.colorToStyle MyUi.guildColumnBorder)
+            , Svg.Attributes.strokeWidth "1"
+            ]
+            []
+        ]
+        |> Ui.html
+
+
+{-| The icon's picture reflected in the icon's top edge. The curve sits directly above that
+edge, so the reflection puts the same row of the picture on both sides of it.
+-}
+pictureAboveIcon : String -> Svg.Svg msg
+pictureAboveIcon url =
+    Svg.image
+        [ Svg.Attributes.xlinkHref url
+        , Svg.Attributes.x (String.fromInt (invertedRadius - size))
+        , Svg.Attributes.y radius
+        , Svg.Attributes.width (String.fromInt size)
+        , Svg.Attributes.height (String.fromInt size)
+        , -- Matches the object-fit the icon itself is drawn with, so a picture that isn't
+          -- square is cropped the same way in both places
+          Svg.Attributes.preserveAspectRatio "xMidYMid slice"
+        , Svg.Attributes.transform
+            ("translate(0," ++ String.fromInt (invertedRadius * 2) ++ ") scale(1,-1)")
+        ]
+        []
+
+
+{-| The same reflection in the icon's bottom edge.
+-}
+pictureBelowIcon : String -> Svg.Svg msg
+pictureBelowIcon url =
+    Svg.image
+        [ Svg.Attributes.xlinkHref url
+        , Svg.Attributes.x (String.fromInt (invertedRadius - size))
+        , Svg.Attributes.y (String.fromInt -size)
+        , Svg.Attributes.width (String.fromInt size)
+        , Svg.Attributes.height (String.fromInt size)
+        , Svg.Attributes.preserveAspectRatio "xMidYMid slice"
+        , Svg.Attributes.transform "scale(1,-1)"
+        ]
+        []
+
+
+{-| What a guild with no picture has in place of one: the colour its initials are drawn on.
+-}
+tileColor : Ui.Color -> Svg.Svg msg
+tileColor color =
+    Svg.rect
+        [ Svg.Attributes.width "100%"
+        , Svg.Attributes.height "100%"
+        , Svg.Attributes.fill (MyUi.colorToStyle color)
+        ]
+        []
+
+
+radius : String
+radius =
+    String.fromInt invertedRadius
+
+
+invertedRadius : Int
+invertedRadius =
+    iconRounding + 6
+
+
 addGuildButton : HtmlId -> Bool -> msg -> Element msg
 addGuildButton htmlId isSelected onPress =
     MyUi.elButton
         htmlId
         onPress
-        [ Ui.contentCenterX
-        , Ui.contentCenterY
-        , Ui.centerX
-        , if isSelected then
-            Ui.noAttr
+        ([ Ui.contentCenterX
+         , Ui.contentCenterY
+         , if isSelected then
+            Ui.alignRight
 
-          else
-            Ui.rounded (round (toFloat size * 8 / 50))
-        , MyUi.notoSans
-        , Ui.Font.weight 600
-        , Ui.background MyUi.secondaryGray
-        , Ui.border 1
-        , Ui.borderColor MyUi.secondaryGrayBorder
-        , if isSelected then
-            Ui.width (Ui.px MyUi.guildIconFullWidth)
+           else
+            Ui.alignLeft
+         , if isSelected then
+            selectedRounding
 
-          else
-            Ui.width (Ui.px size)
-        , Ui.height (Ui.px size)
-        , Ui.padding 8
-        , Ui.Font.color iconFontColor
-        , MyUi.hoverText "Create new guild"
-        ]
+           else
+            notSelectedRounding
+         , MyUi.notoSans
+         , Ui.Font.weight 600
+         , Ui.background MyUi.secondaryGray
+         , Ui.border 1
+         , Ui.borderColor MyUi.secondaryGrayBorder
+         , Ui.width (Ui.px size)
+         , Ui.height (Ui.px size)
+         , Ui.padding 8
+         , Ui.Font.color iconFontColor
+         , MyUi.hoverText "Create new guild"
+         ]
+            ++ (if isSelected then
+                    plainEdgeCurves
+
+                else
+                    []
+               )
+        )
         (Ui.html Icons.plusIcon)
 
 
-showFriendsButton : Bool -> msg -> Element msg
-showFriendsButton isSelected onPress =
+showFriendsButton : msg -> Element msg
+showFriendsButton onPress =
     MyUi.elButton
         (Dom.id "guildIcon_showFriends")
         onPress
         [ Ui.contentCenterX
         , Ui.contentCenterY
-        , Ui.centerX
-        , if isSelected then
-            Ui.noAttr
-
-          else
-            Ui.rounded (round (toFloat size * 8 / 50))
+        , Ui.alignLeft
+        , notSelectedRounding
         , MyUi.notoSans
         , Ui.Font.weight 600
         , Ui.background MyUi.secondaryGray
         , Ui.border 1
         , Ui.borderColor MyUi.secondaryGrayBorder
-        , if isSelected then
-            Ui.width (Ui.px MyUi.guildIconFullWidth)
-
-          else
-            Ui.width (Ui.px size)
+        , Ui.width (Ui.px size)
         , Ui.height (Ui.px size)
         , Ui.padding 8
         , Ui.Font.color iconFontColor
