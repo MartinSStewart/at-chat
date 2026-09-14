@@ -6531,6 +6531,11 @@ knowing which ones matter means knowing Discord's grammar exactly, and nothing a
 see says what that grammar is. The extra backslashes don't change how a message reads in
 Discord, so they stay.
 
+`#` and `-` are here because they start a heading or a bullet point in Discord. at-chat can
+read the same characters as plain text: a heading is skipped while a modifier is open, so
+`__\n# a` is text all the way through once the underline turns out never to be closed, and
+at-chat only ever starts a bullet point with `*`, never with `-`.
+
 -}
 escapeDiscordText : String -> String
 escapeDiscordText text =
@@ -6542,6 +6547,8 @@ escapeDiscordText text =
         |> String.replace "@" "\\@"
         |> String.replace "~" "\\~"
         |> String.replace "|" "\\|"
+        |> String.replace "#" "\\#"
+        |> String.replace "-" "\\-"
 
 
 discordParseInner :

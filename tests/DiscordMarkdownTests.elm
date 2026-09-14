@@ -138,6 +138,11 @@ roundTripTests =
         , roundTripTest "a\n> quoted"
         , roundTripTest "# heading"
         , roundTripTest "* bullet\n* points"
+        , -- Discord starts a bullet point with a dash and at-chat doesn't, so a dash at the
+          -- start of a line is text at-chat has to hide on the way out
+          roundTripTest "- not a bullet point"
+        , -- An underline that never closes is text, and the heading inside it stays text too
+          roundTripTest "__\n# a"
         , roundTripTest "a link https://abc.com/a_b in the middle"
         , Test.fuzz
             sourceTextFuzzer
@@ -197,6 +202,7 @@ sourceTextFuzzer =
             , "#"
             , "["
             , "]"
+            , "-"
             , "__"
             , "**"
             , "~~"
