@@ -189,16 +189,6 @@ discordGuildCurrentUserId localUser guild =
         |> List.head
 
 
-isHomePageRoute : Route -> Bool
-isHomePageRoute route =
-    case route of
-        HomePageRoute _ ->
-            True
-
-        _ ->
-            False
-
-
 discordGuildIcon : LocalUser -> Route -> Discord.Id Discord.GuildId -> DiscordFrontendGuild -> Element FrontendMsg_
 discordGuildIcon localUser route guildId guild =
     case discordGuildCurrentUserId localUser guild of

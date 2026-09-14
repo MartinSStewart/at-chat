@@ -113,9 +113,6 @@ notificationView xOffset yOffset borderColor notification =
             notificationHelper MyUi.alertColor MyUi.white borderColor xOffset yOffset count
 
 
-{-| The Discord logo on a blurple circle. Marks the guilds and users that come
-from Discord so they can be told apart from at-chat ones at a glance.
--}
 discordLogo : Element msg
 discordLogo =
     Ui.el
@@ -209,7 +206,7 @@ discordView : Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element
 discordView mode guild =
     Ui.el
         (discordNotificationView
-            0
+            -4
             -3
             (case mode of
                 IsSelected ->
@@ -464,7 +461,7 @@ curveAboveIcon paint =
         (Ui.el
             [ Ui.alignTop
             , Ui.alignRight
-            , Ui.move { x = 0, y = -iconRounding, z = 0 }
+            , Ui.move { x = 0, y = -invertedRadius, z = 0 }
             , MyUi.noPointerEvents
             ]
             (curve
@@ -486,7 +483,7 @@ curveBelowIcon paint =
         (Ui.el
             [ Ui.alignBottom
             , Ui.alignRight
-            , Ui.move { x = 0, y = iconRounding, z = 0 }
+            , Ui.move { x = 0, y = invertedRadius, z = 0 }
             , MyUi.noPointerEvents
             ]
             (curve
@@ -532,7 +529,7 @@ pictureAboveIcon : String -> Svg.Svg msg
 pictureAboveIcon url =
     Svg.image
         [ Svg.Attributes.xlinkHref url
-        , Svg.Attributes.x (String.fromInt (iconRounding - size))
+        , Svg.Attributes.x (String.fromInt (invertedRadius - size))
         , Svg.Attributes.y radius
         , Svg.Attributes.width (String.fromInt size)
         , Svg.Attributes.height (String.fromInt size)
@@ -540,7 +537,7 @@ pictureAboveIcon url =
           -- square is cropped the same way in both places
           Svg.Attributes.preserveAspectRatio "xMidYMid slice"
         , Svg.Attributes.transform
-            ("translate(0," ++ String.fromInt (iconRounding * 2) ++ ") scale(1,-1)")
+            ("translate(0," ++ String.fromInt (invertedRadius * 2) ++ ") scale(1,-1)")
         ]
         []
 
@@ -551,7 +548,7 @@ pictureBelowIcon : String -> Svg.Svg msg
 pictureBelowIcon url =
     Svg.image
         [ Svg.Attributes.xlinkHref url
-        , Svg.Attributes.x (String.fromInt (iconRounding - size))
+        , Svg.Attributes.x (String.fromInt (invertedRadius - size))
         , Svg.Attributes.y (String.fromInt -size)
         , Svg.Attributes.width (String.fromInt size)
         , Svg.Attributes.height (String.fromInt size)
@@ -575,7 +572,12 @@ tileColor color =
 
 radius : String
 radius =
-    String.fromInt iconRounding
+    String.fromInt invertedRadius
+
+
+invertedRadius : Int
+invertedRadius =
+    iconRounding + 2
 
 
 addGuildButton : HtmlId -> Bool -> msg -> Element msg
