@@ -475,13 +475,9 @@ curveAboveIcon paint =
             , MyUi.noPointerEvents
             ]
             (curve
-                (String.join " "
-                    [ "M " ++ radius ++ ",0"
-                    , "A " ++ radius ++ " " ++ radius ++ " 0 0 1 0," ++ radius
-                    , "L " ++ radius ++ "," ++ radius
-                    , "Z"
-                    ]
-                )
+                { shape = String.join " " [ arcAboveIcon, "L " ++ radius ++ "," ++ radius, "Z" ]
+                , edge = arcAboveIcon
+                }
                 paint
             )
         )
@@ -497,36 +493,61 @@ curveBelowIcon paint =
             , MyUi.noPointerEvents
             ]
             (curve
-                (String.join " "
-                    [ "M " ++ radius ++ ",0"
-                    , "L " ++ radius ++ "," ++ radius
-                    , "A " ++ radius ++ " " ++ radius ++ " 0 0 0 0,0"
-                    , "Z"
-                    ]
-                )
+                { shape = String.join " " [ arcBelowIcon, "L " ++ radius ++ ",0", "Z" ]
+                , edge = arcBelowIcon
+                }
                 paint
             )
         )
 
 
+{-| The curved edge of the curve above the icon, which is also the edge the icon's own outline
+carries on along. It leaves the icon's top edge level with it and comes back to the edge the
+icon shares with the channel list at a right angle to it, so neither join has a corner in it.
+-}
+arcAboveIcon : String
+arcAboveIcon =
+    "M " ++ radius ++ ",0 A " ++ radius ++ " " ++ radius ++ " 0 0 1 0," ++ radius
+
+
+{-| The same edge below the icon.
+-}
+arcBelowIcon : String
+arcBelowIcon =
+    "M " ++ radius ++ "," ++ radius ++ " A " ++ radius ++ " " ++ radius ++ " 0 0 0 0,0"
+
+
 {-| A box the size of the curve's radius holding `paint`, with everything outside `shape`
-clipped away. `shape` is the curve itself, a square with a circle's worth of one corner taken
-out of it, which is what bends it towards the icon instead of leaving a square on the end.
+clipped away and `edge` drawn along the part of `shape` that the column can be seen across.
+`shape` is the curve itself, a square with a circle's worth of one corner taken out of it,
+which is what bends it towards the icon instead of leaving a square on the end.
 
 Clipping is what keeps it to the curve. Painting the colour of the column over the rest of the
 box instead would only look the same while the box had nothing but column behind it, and a
 radius wider than the gap between icons puts it over the icon above or below.
 
 -}
-curve : String -> List (Svg.Svg msg) -> Element msg
-curve shape paint =
+curve : { shape : String, edge : String } -> List (Svg.Svg msg) -> Element msg
+curve paths paint =
     Svg.svg
         [ Svg.Attributes.width radius
         , Svg.Attributes.height radius
         , Svg.Attributes.viewBox ("0 0 " ++ radius ++ " " ++ radius)
-        , Svg.Attributes.style ("display:block;clip-path:path('" ++ shape ++ "')")
+        , Svg.Attributes.style ("display:block;clip-path:path('" ++ paths.shape ++ "')")
         ]
-        paint
+        (paint
+            ++ [ Svg.path
+                    [ Svg.Attributes.d paths.edge
+                    , Svg.Attributes.fill "none"
+                    , Svg.Attributes.stroke (MyUi.colorToStyle MyUi.guildColumnBorder)
+                    , -- A line drawn along the edge sits half inside the curve and half out,
+                      -- and the clip takes the half that is out, so the width is doubled to
+                      -- leave a line the same width as the outline around the icon
+                      Svg.Attributes.strokeWidth "2"
+                    ]
+                    []
+               ]
+        )
         |> Ui.html
 
 

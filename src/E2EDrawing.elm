@@ -347,7 +347,7 @@ drawingScalesWithImages : T.Config ToBackend FrontendMsg FrontendModel ToFronten
 drawingScalesWithImages imageUploadConfig =
     let
         -- The image attachment is 800 pixels wide while the conversation area
-        -- is only 657 css pixels wide in the 1000px desktop window and 316 css
+        -- is only 659 css pixels wide in the 1000px desktop window and 316 css
         -- pixels in the 400px mobile window (window width minus the columns and
         -- padding around the conversation, see Pages.Guild.conversationWidth).
         -- The member column is closed here, which is what leaves the desktop
@@ -360,7 +360,7 @@ drawingScalesWithImages imageUploadConfig =
 
         desktopDisplayWidth : Float
         desktopDisplayWidth =
-            657
+            659
 
         mobileDisplayWidth : Float
         mobileDisplayWidth =
