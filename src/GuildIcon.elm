@@ -437,8 +437,11 @@ selectedEdgeCurves mode maybeIcon =
                 url =
                     FileStatus.fileUrl FileStatus.pngContent icon
             in
-            [ curveAboveIcon [ pictureAboveIcon url ]
-            , curveBelowIcon [ pictureBelowIcon url ]
+            -- The same background the icon paints behind its picture, so that a picture with
+            -- transparency in it shows the icon's own colour through the curve rather than
+            -- the column behind it
+            [ curveAboveIcon [ tileColor MyUi.guildIconBackground, pictureAboveIcon url ]
+            , curveBelowIcon [ tileColor MyUi.guildIconBackground, pictureBelowIcon url ]
             ]
 
         ( IsSelected, Nothing ) ->
