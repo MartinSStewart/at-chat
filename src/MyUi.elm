@@ -1813,7 +1813,7 @@ border1 =
 
 guildColumnBorder : Ui.Color
 guildColumnBorder =
-    white
+    Ui.rgb 37 56 76
 
 
 border2 : Ui.Color
