@@ -257,6 +257,15 @@ guildIcon guild mode name =
                     , Ui.Font.size (round (toFloat size * 18 / 50))
                     , Ui.Font.color iconFontColor
                     , MyUi.hoverText name
+                    , MyUi.htmlStyle
+                        "outline"
+                        (case mode of
+                            IsSelected ->
+                                "1px solid " ++ MyUi.colorToStyle MyUi.guildColumnBorder
+
+                            Normal _ ->
+                                "0"
+                        )
                     ]
 
 
@@ -515,17 +524,6 @@ arcBelowIcon =
     "M " ++ radius ++ "," ++ radius ++ " A " ++ radius ++ " " ++ radius ++ " 0 0 0 0,0"
 
 
-{-| What the line along the curve is drawn along, which is half a pixel inside the curve rather
-than the curve itself.
-
-The line is a pixel wide and belongs between the curve and a pixel inside it, which is where
-the two lines it joins are: the icon's outline is drawn outside the icon, so along the icon's
-top edge it is the pixel above that edge, and the line beside the channel list is the pixel the
-icon's own edge covers. A stroke straddles what it is drawn along, half a pixel either side, so
-drawn along the curve it would land half a pixel outside all of that and hang off the end of
-both of them.
-
--}
 edgeRadius : Float
 edgeRadius =
     toFloat invertedRadius - 0.5
@@ -665,7 +663,7 @@ radius =
 
 invertedRadius : Int
 invertedRadius =
-    iconRounding + 4
+    iconRounding + 6
 
 
 addGuildButton : HtmlId -> Bool -> msg -> Element msg
