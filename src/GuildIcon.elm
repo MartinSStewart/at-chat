@@ -353,6 +353,15 @@ guildIconView mode url =
                 Normal _ ->
                     "0 " ++ String.fromInt iconRounding ++ "px " ++ String.fromInt iconRounding ++ "px 0"
             )
+        , Html.Attributes.style
+            "outline"
+            (case mode of
+                IsSelected ->
+                    "1px solid " ++ MyUi.colorToStyle MyUi.guildColumnBorder
+
+                Normal _ ->
+                    "0"
+            )
         ]
         []
         |> Ui.html
@@ -392,7 +401,7 @@ size =
 
 iconRounding : Int
 iconRounding =
-    round (toFloat size * 12 / 50)
+    round (toFloat size * 10 / 50)
 
 
 selectedRounding : Ui.Attribute msg

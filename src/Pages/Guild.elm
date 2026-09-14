@@ -1783,17 +1783,7 @@ guildView model guildId channelRoute loggedIn local =
                                 [ Ui.height Ui.fill
                                 , Ui.width (Ui.px (MyUi.channelAndGuildColumnWidth model.windowSize))
                                 ]
-                                [ Ui.row
-                                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                    [ GuildColumn.guildColumnLazy False model local
-                                    , Ui.el
-                                        [ Ui.background MyUi.background2
-                                        , Ui.height Ui.fill
-                                        , Ui.borderWith { left = 1, right = 0, top = 0, bottom = 0 }
-                                        , Ui.borderColor MyUi.border1
-                                        ]
-                                        Ui.none
-                                    ]
+                                [ GuildColumn.guildColumnLazy False model local
                                 , Ui.Lazy.lazy loggedInAsView local.localUser
                                 ]
                             , pageMissing guildNotFoundText
@@ -1987,17 +1977,7 @@ guildErrorPage error local model =
                 [ Ui.height Ui.fill
                 , Ui.width (Ui.px (MyUi.channelAndGuildColumnWidth model.windowSize))
                 ]
-                [ Ui.row
-                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                    [ GuildColumn.guildColumnLazy False model local
-                    , Ui.el
-                        [ Ui.background MyUi.background2
-                        , Ui.height Ui.fill
-                        , Ui.borderWith { left = 1, right = 0, top = 0, bottom = 0 }
-                        , Ui.borderColor MyUi.border1
-                        ]
-                        Ui.none
-                    ]
+                [ GuildColumn.guildColumnLazy False model local
                 , Ui.Lazy.lazy loggedInAsView local.localUser
                 ]
             , pageMissing error
@@ -9506,8 +9486,10 @@ channelColumnContainer header subHeader content =
             [ Ui.height Ui.fill
             , Ui.background MyUi.background2
             , MyUi.htmlStyle "border-radius" ("calc(" ++ MyUi.insetTop ++ " * 0.5) 0 0 0")
-            , Ui.borderWith { left = 1, right = 0, bottom = 0, top = 1 }
-            , Ui.borderColor MyUi.border1
+            , MyUi.htmlStyle "border-width" ("calc(min(" ++ MyUi.insetTop ++ ",1px)) 0 0 1px")
+
+            --Ui.borderWith { left = 1, right = 0, bottom = 0, top = 1 }
+            , Ui.borderColor MyUi.guildColumnBorder
             ]
             [ Ui.row
                 [ Ui.Font.bold

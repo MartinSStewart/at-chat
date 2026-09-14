@@ -44,6 +44,7 @@ module MyUi exposing
     , font1
     , font2
     , font3
+    , guildColumnBorder
     , guildIconBackground
     , guildIconBorder
     , guildIconFullWidth
@@ -630,7 +631,7 @@ secondaryGrayBorder =
 
 guildIconBackground : Ui.Color
 guildIconBackground =
-    Ui.rgb 50 50 50
+    background2
 
 
 guildIconBorder : Ui.Color
@@ -1580,7 +1581,7 @@ conversationWidthIgnoreScrollbar windowSize showMembersTab =
 
 guildIconFullWidth : number
 guildIconFullWidth =
-    58
+    56
 
 
 memberColumnWidth : number
@@ -1808,6 +1809,11 @@ font3 =
 border1 : Ui.Color
 border1 =
     Ui.rgb 34 39 56
+
+
+guildColumnBorder : Ui.Color
+guildColumnBorder =
+    white
 
 
 border2 : Ui.Color

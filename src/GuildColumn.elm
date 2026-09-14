@@ -129,7 +129,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                     [ Ui.Gradient.linear
                         (Ui.radians 0)
                         [ Ui.Gradient.percent 0 (Ui.rgba 0 0 0 0)
-                        , Ui.Gradient.percent 100 MyUi.background1
+                        , Ui.Gradient.percent 100 MyUi.black
                         ]
                     ]
                 , MyUi.htmlStyle "height" ("calc(max(6px, " ++ MyUi.insetTop ++ "))")
@@ -143,7 +143,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
             [ Ui.spacing 6
             , Ui.width (Ui.px MyUi.guildIconFullWidth)
             , Ui.height Ui.fill
-            , Ui.background MyUi.background1
+            , Ui.background MyUi.black
             , MyUi.scrollable canScroll2
             , MyUi.htmlStyle "overflow-x" "hidden"
             , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
