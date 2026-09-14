@@ -138,12 +138,12 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
             )
         , Ui.width Ui.shrink
         , Ui.height Ui.fill
+        , Ui.move { x = 1, y = 0, z = 0 }
         ]
         (Ui.column
             [ Ui.spacing 6
             , Ui.width (Ui.px MyUi.guildIconFullWidth)
             , Ui.height Ui.fill
-            , Ui.background MyUi.black
             , MyUi.scrollable canScroll2
             , MyUi.htmlStyle "overflow-x" "hidden"
             , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
