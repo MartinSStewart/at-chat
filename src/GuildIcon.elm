@@ -467,9 +467,9 @@ curveAboveIcon paint =
             ]
             (curve
                 (String.join " "
-                    [ "M 0,0"
-                    , "L " ++ radius ++ ",0"
+                    [ "M " ++ radius ++ ",0"
                     , "A " ++ radius ++ " " ++ radius ++ " 0 0 1 0," ++ radius
+                    , "L " ++ radius ++ "," ++ radius
                     , "Z"
                     ]
                 )
@@ -489,7 +489,7 @@ curveBelowIcon paint =
             ]
             (curve
                 (String.join " "
-                    [ "M 0," ++ radius
+                    [ "M " ++ radius ++ ",0"
                     , "L " ++ radius ++ "," ++ radius
                     , "A " ++ radius ++ " " ++ radius ++ " 0 0 0 0,0"
                     , "Z"
@@ -500,26 +500,24 @@ curveBelowIcon paint =
         )
 
 
-{-| A box the size of the icon's corner radius, holding `paint` with the colour of the column
-painted back over `cutCorner`. Taking a corner back out of it is what leaves a curve that bends
-towards the icon instead of a square sitting on the end of it.
+{-| A box the size of the curve's radius holding `paint`, with everything outside `shape`
+clipped away. `shape` is the curve itself, a square with a circle's worth of one corner taken
+out of it, which is what bends it towards the icon instead of leaving a square on the end.
+
+Clipping is what keeps it to the curve. Painting the colour of the column over the rest of the
+box instead would only look the same while the box had nothing but column behind it, and a
+radius wider than the gap between icons puts it over the icon above or below.
+
 -}
 curve : String -> List (Svg.Svg msg) -> Element msg
-curve cutCorner paint =
+curve shape paint =
     Svg.svg
         [ Svg.Attributes.width radius
         , Svg.Attributes.height radius
         , Svg.Attributes.viewBox ("0 0 " ++ radius ++ " " ++ radius)
-        , Svg.Attributes.style "display:block"
+        , Svg.Attributes.style ("display:block;clip-path:path('" ++ shape ++ "')")
         ]
-        (paint
-            ++ [ Svg.path
-                    [ Svg.Attributes.d cutCorner
-                    , Svg.Attributes.fill (MyUi.colorToStyle MyUi.background1)
-                    ]
-                    []
-               ]
-        )
+        paint
         |> Ui.html
 
 
