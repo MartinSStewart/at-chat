@@ -507,14 +507,37 @@ icon shares with the channel list at a right angle to it, so neither join has a 
 -}
 arcAboveIcon : String
 arcAboveIcon =
-    "M " ++ radius ++ ",0 A " ++ radius ++ " " ++ radius ++ " 0 0 1 0," ++ radius
+    String.join " "
+        [ "M " ++ radius ++ ",0"
+        , "C " ++ radius ++ "," ++ handle
+        , handle ++ "," ++ radius
+        , "0," ++ radius
+        ]
 
 
 {-| The same edge below the icon.
 -}
 arcBelowIcon : String
 arcBelowIcon =
-    "M " ++ radius ++ "," ++ radius ++ " A " ++ radius ++ " " ++ radius ++ " 0 0 0 0,0"
+    String.join " "
+        [ "M " ++ radius ++ "," ++ radius
+        , "C " ++ radius ++ "," ++ String.fromFloat (toFloat invertedRadius - handleLength)
+        , handle ++ ",0"
+        , "0,0"
+        ]
+
+
+{-| How far the ends of a curve carry on straight before they bend, which is what leaves them
+looking like the lines they meet rather than meeting them at an angle. See `MyUi.curveSmoothing`.
+-}
+handleLength : Float
+handleLength =
+    toFloat invertedRadius * MyUi.curveSmoothing
+
+
+handle : String
+handle =
+    String.fromFloat handleLength
 
 
 {-| A box the size of the curve's radius holding `paint`, with everything outside `shape`
@@ -533,21 +556,27 @@ curve paths paint =
         [ Svg.Attributes.width radius
         , Svg.Attributes.height radius
         , Svg.Attributes.viewBox ("0 0 " ++ radius ++ " " ++ radius)
-        , Svg.Attributes.style ("display:block;clip-path:path('" ++ paths.shape ++ "')")
+        , -- Overflow so that the half of the line along `edge` which falls outside the box
+          -- isn't cut off. That half lands on the icon's own outline and on the line beside
+          -- the channel list, which is where it belongs.
+          Svg.Attributes.style "display:block;overflow:visible"
         ]
-        (paint
-            ++ [ Svg.path
-                    [ Svg.Attributes.d paths.edge
-                    , Svg.Attributes.fill "none"
-                    , Svg.Attributes.stroke (MyUi.colorToStyle MyUi.guildColumnBorder)
-                    , -- A line drawn along the edge sits half inside the curve and half out,
-                      -- and the clip takes the half that is out, so the width is doubled to
-                      -- leave a line the same width as the outline around the icon
-                      Svg.Attributes.strokeWidth "2"
-                    ]
-                    []
-               ]
-        )
+        [ -- Only the paint is held to the shape. The line along the edge is not: where the
+          -- curve meets a straight line it runs alongside it, so the curve is thinner than a
+          -- pixel for several pixels before it opens out, and clipping the line to that would
+          -- taper it away to nothing over exactly the stretch where the two are supposed to
+          -- look like one line.
+          Svg.g
+            [ Svg.Attributes.style ("clip-path:path('" ++ paths.shape ++ "')") ]
+            paint
+        , Svg.path
+            [ Svg.Attributes.d paths.edge
+            , Svg.Attributes.fill "none"
+            , Svg.Attributes.stroke (MyUi.colorToStyle MyUi.guildColumnBorder)
+            , Svg.Attributes.strokeWidth "1"
+            ]
+            []
+        ]
         |> Ui.html
 
 
