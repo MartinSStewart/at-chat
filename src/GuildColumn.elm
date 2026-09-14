@@ -140,7 +140,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
         , Ui.height Ui.fill
         ]
         (Ui.column
-            [ Ui.spacing 4
+            [ Ui.spacing 6
             , Ui.width (Ui.px MyUi.guildIconFullWidth)
             , Ui.height Ui.fill
             , Ui.background MyUi.background1
@@ -160,7 +160,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                         Ui.Lazy.lazy4 discordDmGuildIcon route localUser channelId dmChannel
                     )
                     (SeqDict.toList discordDmChannels)
-                ++ GuildIcon.showFriendsButton (isHomePageRoute route) (PressedLink (HomePageRoute Nothing))
+                ++ GuildIcon.showFriendsButton (PressedLink (HomePageRoute Nothing))
                 :: List.map
                     (\( guildId, guild ) -> Ui.Lazy.lazy4 guildIcon localUser route guildId guild)
                     (SeqDict.toList guilds)

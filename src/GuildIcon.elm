@@ -240,8 +240,8 @@ guildIcon guild mode name =
                         IsSelected ->
                             selectedRounding
 
-                        _ ->
-                            Ui.rounded iconRounding
+                        Normal _ ->
+                            notSelectedRounding
                     , MyUi.notoSans
                     , Ui.Font.weight 600
                     , Ui.background MyUi.secondaryGray
@@ -251,8 +251,8 @@ guildIcon guild mode name =
                         IsSelected ->
                             Ui.alignRight
 
-                        _ ->
-                            Ui.centerX
+                        Normal _ ->
+                            Ui.alignLeft
                     , Ui.width (Ui.px size)
                     , Ui.height (Ui.px size)
                     , Ui.Font.size (round (toFloat size * 18 / 50))
@@ -334,15 +334,15 @@ guildIconView mode url =
         , Html.Attributes.src url
         , MyUi.lazyLoading
         , Html.Attributes.style "display" "flex"
-        , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.secondaryGray)
+        , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.guildIconBackground)
         , Html.Attributes.style
             "align-self"
             (case mode of
                 IsSelected ->
                     "flex-end"
 
-                _ ->
-                    "center"
+                Normal _ ->
+                    "flex-start"
             )
         , Html.Attributes.style "object-fit" "cover"
         , Html.Attributes.style
@@ -351,8 +351,8 @@ guildIconView mode url =
                 IsSelected ->
                     String.fromInt iconRounding ++ "px 0 0 " ++ String.fromInt iconRounding ++ "px"
 
-                _ ->
-                    String.fromInt iconRounding ++ "px"
+                Normal _ ->
+                    "0 " ++ String.fromInt iconRounding ++ "px " ++ String.fromInt iconRounding ++ "px 0"
             )
         ]
         []
@@ -396,9 +396,6 @@ iconRounding =
     round (toFloat size * 8 / 50)
 
 
-{-| The selected icon sits against the right hand edge of the column, so the corners on that
-side are square and it reads as joined to what is beside it rather than a tile of its own.
--}
 selectedRounding : Ui.Attribute msg
 selectedRounding =
     Ui.roundedWith
@@ -406,6 +403,16 @@ selectedRounding =
         , topRight = 0
         , bottomLeft = iconRounding
         , bottomRight = 0
+        }
+
+
+notSelectedRounding : Ui.Attribute msg
+notSelectedRounding =
+    Ui.roundedWith
+        { topLeft = 0
+        , topRight = iconRounding
+        , bottomLeft = 0
+        , bottomRight = iconRounding
         }
 
 
@@ -420,12 +427,12 @@ addGuildButton htmlId isSelected onPress =
             Ui.alignRight
 
           else
-            Ui.centerX
+            Ui.alignLeft
         , if isSelected then
             selectedRounding
 
           else
-            Ui.rounded iconRounding
+            notSelectedRounding
         , MyUi.notoSans
         , Ui.Font.weight 600
         , Ui.background MyUi.secondaryGray
@@ -440,23 +447,15 @@ addGuildButton htmlId isSelected onPress =
         (Ui.html Icons.plusIcon)
 
 
-showFriendsButton : Bool -> msg -> Element msg
-showFriendsButton isSelected onPress =
+showFriendsButton : msg -> Element msg
+showFriendsButton onPress =
     MyUi.elButton
         (Dom.id "guildIcon_showFriends")
         onPress
         [ Ui.contentCenterX
         , Ui.contentCenterY
-        , if isSelected then
-            Ui.alignRight
-
-          else
-            Ui.centerX
-        , if isSelected then
-            selectedRounding
-
-          else
-            Ui.rounded iconRounding
+        , Ui.centerX
+        , Ui.rounded iconRounding
         , MyUi.notoSans
         , Ui.Font.weight 600
         , Ui.background MyUi.secondaryGray
