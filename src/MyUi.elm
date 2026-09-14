@@ -46,7 +46,6 @@ module MyUi exposing
     , font3
     , guildColumnBorder
     , guildIconBackground
-    , guildIconBorder
     , guildIconFullWidth
     , heightAttr
     , highlightedBorder
@@ -632,11 +631,6 @@ secondaryGrayBorder =
 guildIconBackground : Ui.Color
 guildIconBackground =
     background2
-
-
-guildIconBorder : Ui.Color
-guildIconBorder =
-    Ui.rgb 70 70 70
 
 
 unselectedGray : Ui.Color
