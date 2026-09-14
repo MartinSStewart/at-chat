@@ -473,11 +473,10 @@ curveAboveIcon paint =
             , Ui.alignRight
             , Ui.move { x = 0, y = -invertedRadius, z = 0 }
             , MyUi.noPointerEvents
+            , Ui.inFront (curveEdge arcAboveIcon)
             ]
             (curve
-                { shape = String.join " " [ arcAboveIcon, "L " ++ radius ++ "," ++ radius, "Z" ]
-                , edge = arcAboveIcon
-                }
+                (String.join " " [ arcAboveIcon, "L " ++ radius ++ "," ++ radius, "Z" ])
                 paint
             )
         )
@@ -491,11 +490,10 @@ curveBelowIcon paint =
             , Ui.alignRight
             , Ui.move { x = 0, y = invertedRadius, z = 0 }
             , MyUi.noPointerEvents
+            , Ui.inFront (curveEdge arcBelowIcon)
             ]
             (curve
-                { shape = String.join " " [ arcBelowIcon, "L " ++ radius ++ ",0", "Z" ]
-                , edge = arcBelowIcon
-                }
+                (String.join " " [ arcBelowIcon, "L " ++ radius ++ ",0", "Z" ])
                 paint
             )
         )
@@ -550,27 +548,35 @@ box instead would only look the same while the box had nothing but column behind
 radius wider than the gap between icons puts it over the icon above or below.
 
 -}
-curve : { shape : String, edge : String } -> List (Svg.Svg msg) -> Element msg
-curve paths paint =
+curve : String -> List (Svg.Svg msg) -> Element msg
+curve shape paint =
     Svg.svg
         [ Svg.Attributes.width radius
         , Svg.Attributes.height radius
         , Svg.Attributes.viewBox ("0 0 " ++ radius ++ " " ++ radius)
-        , -- Overflow so that the half of the line along `edge` which falls outside the box
-          -- isn't cut off. That half lands on the icon's own outline and on the line beside
-          -- the channel list, which is where it belongs.
-          Svg.Attributes.style "display:block;overflow:visible"
+        , Svg.Attributes.style ("display:block;clip-path:path('" ++ shape ++ "')")
         ]
-        [ -- Only the paint is held to the shape. The line along the edge is not: where the
-          -- curve meets a straight line it runs alongside it, so the curve is thinner than a
-          -- pixel for several pixels before it opens out, and clipping the line to that would
-          -- taper it away to nothing over exactly the stretch where the two are supposed to
-          -- look like one line.
-          Svg.g
-            [ Svg.Attributes.style ("clip-path:path('" ++ paths.shape ++ "')") ]
-            paint
-        , Svg.path
-            [ Svg.Attributes.d paths.edge
+        paint
+        |> Ui.html
+
+
+{-| The line along the curve's edge, over the top of the curve rather than inside it. Inside it
+would be held to the curve's shape, and where the curve meets a straight line it runs alongside
+it, thinner than a pixel for several pixels before it opens out. Clipping the line to that
+tapers it away to nothing over exactly the stretch where the two are meant to look like one
+line. Overflow leaves the half of it that falls outside the box alone as well, which lands on
+the icon's own outline and on the line beside the channel list, where it belongs.
+-}
+curveEdge : String -> Element msg
+curveEdge edge =
+    Svg.svg
+        [ Svg.Attributes.width radius
+        , Svg.Attributes.height radius
+        , Svg.Attributes.viewBox ("0 0 " ++ radius ++ " " ++ radius)
+        , Svg.Attributes.style "display:block;overflow:visible"
+        ]
+        [ Svg.path
+            [ Svg.Attributes.d edge
             , Svg.Attributes.fill "none"
             , Svg.Attributes.stroke (MyUi.colorToStyle MyUi.guildColumnBorder)
             , Svg.Attributes.strokeWidth "1"

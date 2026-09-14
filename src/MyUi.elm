@@ -1840,15 +1840,21 @@ from it, and by the time it can be, it is already `sqrt(2 / r)` radians off: bet
 degrees at the sizes used here, which is the angle it looks like it leaves at.
 
 What fixes that is bending less where the two meet and more in the middle. A curve of this
-shape bends at `2 * (r - k) / (3 * k * k)` where it leaves, for a handle `k`, so carrying on
-to 0.9 of the way leaves it about a tenth as bent there as an arc, and looking about 6 degrees
-off instead of 20. 0.55 would draw the arc of a circle, so that is the value to compare
-against, and going much past 0.9 leaves the curve hugging its corner rather than flaring.
+shape bends at `2 * (r - k) / (3 * k * k)` where it leaves, for a handle `k`, so 0.8 of the way
+along leaves it a fifth as bent there as an arc, and looking about 10 degrees off rather than
+
+1.  0.55 would draw the arc of a circle, so that is what to compare against.
+
+There is no value that wins outright. The flatter the ends, the thinner the widest part of the
+curve, and the curve has to be a couple of pixels across somewhere or there is nothing of it to
+see beyond the line along its edge: 0.9 looks about 6 degrees off and is under two pixels across
+at its widest. What buys both is a bigger curve, since how far off it looks goes as the square
+root of how much it bends and how wide it gets goes straight up with its radius.
 
 -}
 curveSmoothing : Float
 curveSmoothing =
-    0.9
+    0.8
 
 
 guildColumnBorder : Ui.Color
