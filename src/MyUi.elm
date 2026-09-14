@@ -24,7 +24,6 @@ module MyUi exposing
     , conversationWidthIgnoreScrollbar
     , copyBox
     , css
-    , curveSmoothing
     , dangerRed
     , datestamp
     , datestampDate
@@ -1124,33 +1123,19 @@ tabSideEdge radius tabHeight isLeft color =
         h =
             String.fromInt edgeHeight
 
-        -- Where each corner carries on straight to before it bends. See `curveSmoothing` for
-        -- why an arc of a circle, which meets the tab's sides at a tangent, still looks like
-        -- it meets them at an angle.
-        handle : Float
-        handle =
-            toFloat radius * curveSmoothing
-
-        beforeTop : String
-        beforeTop =
-            String.fromFloat (toFloat radius - handle)
-
-        afterBottom : String
-        afterBottom =
-            String.fromFloat (toFloat (edgeHeight - radius) + handle)
+        arc : String
+        arc =
+            "A " ++ r ++ " " ++ r ++ " 0 0 "
 
         path : String
         path =
             if isLeft then
                 String.join " "
                     [ "M " ++ w ++ ",0"
-                    , "C " ++ String.fromFloat (toFloat edgeWidth - handle) ++ ",0"
-                    , r ++ "," ++ beforeTop
-                    , r ++ "," ++ r
+                    , "L " ++ String.fromInt (radius * 2) ++ ",0"
+                    , arc ++ "0 " ++ r ++ "," ++ r
                     , "L " ++ r ++ "," ++ String.fromInt (edgeHeight - radius)
-                    , "C " ++ r ++ "," ++ afterBottom
-                    , String.fromFloat handle ++ "," ++ h
-                    , "0," ++ h
+                    , arc ++ "1 0," ++ h
                     , "L " ++ w ++ "," ++ h
                     , "Z"
                     ]
@@ -1158,13 +1143,9 @@ tabSideEdge radius tabHeight isLeft color =
             else
                 String.join " "
                     [ "M 0,0"
-                    , "C " ++ String.fromFloat handle ++ ",0"
-                    , r ++ "," ++ beforeTop
-                    , r ++ "," ++ r
-                    , "L " ++ r ++ "," ++ String.fromInt (edgeHeight - radius)
-                    , "C " ++ r ++ "," ++ afterBottom
-                    , String.fromFloat (toFloat edgeWidth - handle) ++ "," ++ h
-                    , w ++ "," ++ h
+                    , arc ++ "1 " ++ String.fromInt radius ++ "," ++ r
+                    , "L " ++ String.fromInt radius ++ "," ++ String.fromInt (edgeHeight - radius)
+                    , arc ++ "0 " ++ w ++ "," ++ h
                     , "L 0," ++ h
                     , "Z"
                     ]
@@ -1828,33 +1809,6 @@ font3 =
 border1 : Ui.Color
 border1 =
     Ui.rgb 34 39 56
-
-
-{-| How far each end of a curve carries on along the straight line it leaves before it starts
-to bend, as a fraction of the curve's radius.
-
-An arc of a circle meets that line at a tangent, which sounds like it would be enough, and on
-a screen it isn't. The curve leaves the line by `d * d / (2 * r)` after `d` pixels, so for the
-first `sqrt(2 * r)` of them it is less than a pixel clear of the line and can't be told apart
-from it, and by the time it can be, it is already `sqrt(2 / r)` radians off: better than 20
-degrees at the sizes used here, which is the angle it looks like it leaves at.
-
-What fixes that is bending less where the two meet and more in the middle. A curve of this
-shape bends at `2 * (r - k) / (3 * k * k)` where it leaves, for a handle `k`, so 0.8 of the way
-along leaves it a fifth as bent there as an arc, and looking about 10 degrees off rather than
-
-1.  0.55 would draw the arc of a circle, so that is what to compare against.
-
-There is no value that wins outright. The flatter the ends, the thinner the widest part of the
-curve, and the curve has to be a couple of pixels across somewhere or there is nothing of it to
-see beyond the line along its edge: 0.9 looks about 6 degrees off and is under two pixels across
-at its widest. What buys both is a bigger curve, since how far off it looks goes as the square
-root of how much it bends and how wide it gets goes straight up with its radius.
-
--}
-curveSmoothing : Float
-curveSmoothing =
-    0.8
 
 
 guildColumnBorder : Ui.Color

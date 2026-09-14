@@ -473,7 +473,7 @@ curveAboveIcon paint =
             , Ui.alignRight
             , Ui.move { x = 0, y = -invertedRadius, z = 0 }
             , MyUi.noPointerEvents
-            , Ui.inFront (curveEdge arcAboveIcon)
+            , Ui.inFront (curveEdge edgeAboveIcon)
             ]
             (curve
                 (String.join " " [ arcAboveIcon, "L " ++ radius ++ "," ++ radius, "Z" ])
@@ -490,7 +490,7 @@ curveBelowIcon paint =
             , Ui.alignRight
             , Ui.move { x = 0, y = invertedRadius, z = 0 }
             , MyUi.noPointerEvents
-            , Ui.inFront (curveEdge arcBelowIcon)
+            , Ui.inFront (curveEdge edgeBelowIcon)
             ]
             (curve
                 (String.join " " [ arcBelowIcon, "L " ++ radius ++ ",0", "Z" ])
@@ -505,37 +505,61 @@ icon shares with the channel list at a right angle to it, so neither join has a 
 -}
 arcAboveIcon : String
 arcAboveIcon =
-    String.join " "
-        [ "M " ++ radius ++ ",0"
-        , "C " ++ radius ++ "," ++ handle
-        , handle ++ "," ++ radius
-        , "0," ++ radius
-        ]
+    "M " ++ radius ++ ",0 A " ++ radius ++ " " ++ radius ++ " 0 0 1 0," ++ radius
 
 
 {-| The same edge below the icon.
 -}
 arcBelowIcon : String
 arcBelowIcon =
-    String.join " "
-        [ "M " ++ radius ++ "," ++ radius
-        , "C " ++ radius ++ "," ++ String.fromFloat (toFloat invertedRadius - handleLength)
-        , handle ++ ",0"
-        , "0,0"
-        ]
+    "M " ++ radius ++ "," ++ radius ++ " A " ++ radius ++ " " ++ radius ++ " 0 0 0 0,0"
 
 
-{-| How far the ends of a curve carry on straight before they bend, which is what leaves them
-looking like the lines they meet rather than meeting them at an angle. See `MyUi.curveSmoothing`.
+{-| What the line along the curve is drawn along, which is half a pixel inside the curve rather
+than the curve itself.
+
+The line is a pixel wide and belongs between the curve and a pixel inside it, which is where
+the two lines it joins are: the icon's outline is drawn outside the icon, so along the icon's
+top edge it is the pixel above that edge, and the line beside the channel list is the pixel the
+icon's own edge covers. A stroke straddles what it is drawn along, half a pixel either side, so
+drawn along the curve it would land half a pixel outside all of that and hang off the end of
+both of them.
+
 -}
-handleLength : Float
-handleLength =
-    toFloat invertedRadius * MyUi.curveSmoothing
+edgeRadius : Float
+edgeRadius =
+    toFloat invertedRadius - 0.5
 
 
-handle : String
-handle =
-    String.fromFloat handleLength
+edgeRadiusText : String
+edgeRadiusText =
+    String.fromFloat edgeRadius
+
+
+edgeAboveIcon : String
+edgeAboveIcon =
+    "M "
+        ++ edgeRadiusText
+        ++ ",0 A "
+        ++ edgeRadiusText
+        ++ " "
+        ++ edgeRadiusText
+        ++ " 0 0 1 0,"
+        ++ edgeRadiusText
+
+
+edgeBelowIcon : String
+edgeBelowIcon =
+    "M "
+        ++ edgeRadiusText
+        ++ ","
+        ++ radius
+        ++ " A "
+        ++ edgeRadiusText
+        ++ " "
+        ++ edgeRadiusText
+        ++ " 0 0 0 0,"
+        ++ String.fromFloat (toFloat invertedRadius - edgeRadius)
 
 
 {-| A box the size of the curve's radius holding `paint`, with everything outside `shape`
