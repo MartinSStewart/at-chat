@@ -185,7 +185,7 @@ view : Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
 view mode guild =
     Ui.el
         (notificationView
-            0
+            -4
             -3
             MyUi.background1
             (case mode of
@@ -246,8 +246,6 @@ guildIcon guild mode name =
                     , MyUi.notoSans
                     , Ui.Font.weight 600
                     , Ui.background MyUi.secondaryGray
-                    , Ui.border 1
-                    , Ui.borderColor MyUi.secondaryGrayBorder
                     , case mode of
                         IsSelected ->
                             Ui.alignRight
@@ -394,7 +392,7 @@ size =
 
 iconRounding : Int
 iconRounding =
-    round (toFloat size * 8 / 50)
+    round (toFloat size * 12 / 50)
 
 
 selectedRounding : Ui.Attribute msg
@@ -580,7 +578,7 @@ radius =
 
 invertedRadius : Int
 invertedRadius =
-    iconRounding + 2
+    iconRounding + 4
 
 
 addGuildButton : HtmlId -> Bool -> msg -> Element msg
@@ -628,8 +626,8 @@ showFriendsButton onPress =
         onPress
         [ Ui.contentCenterX
         , Ui.contentCenterY
-        , Ui.centerX
-        , Ui.rounded iconRounding
+        , Ui.alignLeft
+        , notSelectedRounding
         , MyUi.notoSans
         , Ui.Font.weight 600
         , Ui.background MyUi.secondaryGray

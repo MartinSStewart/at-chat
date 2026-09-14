@@ -1580,7 +1580,7 @@ conversationWidthIgnoreScrollbar windowSize showMembersTab =
 
 guildIconFullWidth : number
 guildIconFullWidth =
-    60
+    58
 
 
 memberColumnWidth : number
