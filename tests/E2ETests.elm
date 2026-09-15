@@ -2068,7 +2068,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , user.click 100 (Dom.id "guildsColumn_openDm_0")
                 , E2EHelper.writeMessage user 100 "Here's a reply!"
                 , E2EHelper.writeMessage user 100 "And another reply"
-                , user.update 100 (Audio.userMsg (Types.VisibilityChanged Hidden))
+
+                --, user.update 100 (Audio.userMsg (Types.VisibilityChanged Hidden))
+                , user.portEvent 100 "window_has_focus_from_js" (Json.Encode.bool True)
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1

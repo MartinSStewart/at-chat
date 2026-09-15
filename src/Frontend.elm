@@ -46,6 +46,7 @@ import GuildColumn
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
+import Html.Events
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DmId)
 import ImageEditor
 import ImageViewer
@@ -226,16 +227,13 @@ setEmojiData emojiData model =
     }
 
 
-checkAppVersion : Bool -> Command FrontendOnly toMsg FrontendMsg_
-checkAppVersion reloadOnNewVersion =
+checkAppVersion : Command FrontendOnly toMsg FrontendMsg_
+checkAppVersion =
     Http.get
         { url = "/_i"
         , expect =
             Http.expectJson
-                (\result ->
-                    -- The error isn't interesting and in lamdera live it's going to load the entire bundle and try printing that as an error in the console
-                    Result.mapError (\_ -> ()) result |> GotVersionNumber reloadOnNewVersion
-                )
+                (\result -> Result.mapError (\_ -> ()) result |> GotVersionNumber)
                 (Json.Decode.field "v" Json.Decode.int)
         }
 
@@ -273,8 +271,7 @@ subscriptions _ model =
 
             Loaded loaded ->
                 Subscription.batch
-                    [ Effect.Browser.Events.onVisibilityChange VisibilityChanged
-                    , case loaded.imageViewer of
+                    [ case loaded.imageViewer of
                         Just imageViewer ->
                             ImageViewer.subscriptions loaded.windowSize imageViewer |> Subscription.map ImageViewerMsg
 
@@ -491,7 +488,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
         [ cmdB
         , cmdA
         , Command.map AiChatToBackend AiChatMsg aiChatCmd
-        , checkAppVersion True
+        , checkAppVersion
         , case loginResult of
             Ok _ ->
                 Ports.registerServiceWorker
@@ -859,7 +856,7 @@ updateLoaded msg model =
               -- sleep or browser tab freezing). A new version might have been deployed in
               -- the meantime and no focus/visibility event fires in the OS sleep case.
               if model.pageHasFocus && (Duration.from model.time time |> Quantity.greaterThan (Duration.seconds 10)) then
-                checkAppVersion True
+                checkAppVersion
 
               else
                 Command.none
@@ -1729,23 +1726,6 @@ updateLoaded msg model =
                     )
                 )
                 model
-
-        VisibilityChanged visibility ->
-            case visibility of
-                Effect.Browser.Events.Visible ->
-                    ( model
-                    , Command.batch
-                        [ FrontendExtra.setFocus model Pages.Guild.channelTextInputId
-                        , Ports.setFavicon "/favicon.ico"
-                        , Ports.closeNotifications
-                        , Ports.registerServiceWorker
-                        , checkAppVersion True
-                        , Ports.loadStartupData
-                        ]
-                    )
-
-                Effect.Browser.Events.Hidden ->
-                    ( model, Command.none )
 
         CheckedNotificationPermission notificationPermission ->
             let
@@ -3189,7 +3169,7 @@ updateLoaded msg model =
             case startupData of
                 Ok startupData2 ->
                     ( setDevicePixelRatio startupData2.devicePixelRatio { model | startupData = startupData2 }
-                    , checkAppVersion False
+                    , Command.none
                     )
 
                 Err error ->
@@ -3702,23 +3682,15 @@ updateLoaded msg model =
                                 model.time
                                 (if hasFocus then
                                     Local_CurrentlyViewing
-                                        { markMessagesAsViewed = False }
+                                        { markMessagesAsViewed = True }
                                         (LocalState.routeToViewing (MyUi.isMobile model) model.route (Local.model loggedIn.localState))
                                         |> Just
 
                                  else
-                                    Local_CurrentlyViewing
-                                        { markMessagesAsViewed = False }
-                                        StopViewingChannel
-                                        |> Just
+                                    Local_CurrentlyViewing { markMessagesAsViewed = False } StopViewingChannel |> Just
                                 )
                                 { loggedIn | messageHover = NoMessageHover }
-                                (if hasFocus then
-                                    Ports.closeNotifications
-
-                                 else
-                                    Command.none
-                                )
+                                Command.none
                         )
                         { model | pageHasFocus = hasFocus }
             in
@@ -3726,7 +3698,14 @@ updateLoaded msg model =
             , Command.batch
                 [ cmd
                 , if hasFocus then
-                    checkAppVersion True
+                    Command.batch
+                        [ FrontendExtra.setFocus model Pages.Guild.channelTextInputId
+                        , Ports.setFavicon "/favicon.ico"
+                        , Ports.closeNotifications
+                        , Ports.registerServiceWorker
+                        , checkAppVersion
+                        , Ports.loadStartupData
+                        ]
 
                   else
                     Command.none
@@ -3852,19 +3831,19 @@ updateLoaded msg model =
         TypedDiscordLinkBookmarklet ->
             ( model, Command.none )
 
-        GotVersionNumber reloadOnNewVersion result ->
-            case ( result, model.versionNumber, reloadOnNewVersion ) of
-                ( Ok version, Just previousVersion, True ) ->
+        GotVersionNumber result ->
+            case ( result, model.versionNumber ) of
+                ( Ok version, Just previousVersion ) ->
                     if version == previousVersion then
                         ( model, Command.none )
 
                     else
                         ( model, BrowserNavigation.reload )
 
-                ( Ok version, _, _ ) ->
+                ( Ok version, Nothing ) ->
                     ( { model | versionNumber = Just version }, Command.none )
 
-                ( Err _, _, _ ) ->
+                ( Err _, _ ) ->
                     ( model, Command.none )
 
         PressedCloseExternalLinkWarning ->

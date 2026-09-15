@@ -603,7 +603,6 @@ type FrontendMsg_
     | MessageMenu_PressedReply ThreadRouteWithMessage
     | MessageMenu_PressedOpenThread (Id ChannelMessageId)
     | PressedCloseReplyTo ( AnyGuildOrDmId, ThreadRoute )
-    | VisibilityChanged Visibility
     | CheckedNotificationPermission NotificationPermission
     | TouchStart Duration (NonemptyDict Int Touch)
     | TouchMoved Duration (NonemptyDict Int Touch)
@@ -682,7 +681,7 @@ type FrontendMsg_
         , otherUserId : Discord.Id Discord.UserId
         }
     | TypedDiscordLinkBookmarklet
-    | GotVersionNumber Bool (Result () Int)
+    | GotVersionNumber (Result () Int)
     | PressedCloseExternalLinkWarning
     | PressedAddDomainToWhitelist Bool
     | TypedDomainWhitelist String

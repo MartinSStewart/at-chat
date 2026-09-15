@@ -2349,9 +2349,6 @@ isPressMsg msg =
         PressedCloseReplyTo _ ->
             True
 
-        VisibilityChanged _ ->
-            False
-
         CheckedNotificationPermission _ ->
             False
 
@@ -2565,7 +2562,7 @@ isPressMsg msg =
         TypedDiscordLinkBookmarklet ->
             False
 
-        GotVersionNumber _ _ ->
+        GotVersionNumber _ ->
             False
 
         PressedDiscordGuildNotificationLevel _ _ _ ->
