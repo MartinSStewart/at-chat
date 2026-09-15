@@ -465,22 +465,27 @@ setCursorPosition htmlId range =
         )
 
 
-{-| How much of the page is on screen. It's the whole window, except while something the
+{-| Which part of the page is on screen. It's the whole window, except while something the
 browser draws over the page (a virtual keyboard, most of the time) is covering part of it.
+`offsetTop` is how far down the window that part starts, which is how iOS makes room for its
+keyboard: it slides the window up behind it rather than making it any smaller.
+
 Nothing is sent for a payload that can't be read, since there's no size to fall back on that
 wouldn't be a lie about how much room there is.
+
 -}
-visualViewportResized : (Maybe { width : Float, height : Float } -> msg) -> Subscription FrontendOnly msg
+visualViewportResized : (Maybe { width : Float, height : Float, offsetTop : Float } -> msg) -> Subscription FrontendOnly msg
 visualViewportResized msg =
     Subscription.fromJs
         "visual_viewport_resized_from_js"
         visual_viewport_resized_from_js
         (\json ->
             Json.Decode.decodeValue
-                (Json.Decode.map2
-                    (\width height -> { width = width, height = height })
+                (Json.Decode.map3
+                    (\width height offsetTop -> { width = width, height = height, offsetTop = offsetTop })
                     (Json.Decode.field "width" Json.Decode.float)
                     (Json.Decode.field "height" Json.Decode.float)
+                    (Json.Decode.field "offsetTop" Json.Decode.float)
                 )
                 json
                 |> Result.toMaybe

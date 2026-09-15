@@ -463,6 +463,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , timezone = startupData.timezone
             , windowSize = loading.windowSize
             , virtualKeyboardOpen = False
+            , visualViewportOffsetTop = 0
             , loginStatus = loginStatus
             , loginType = loading.loginType
             , elmUiState = Ui.Anim.init
@@ -3720,15 +3721,19 @@ updateLoaded msg model =
                 Nothing ->
                     ( model, Command.none )
 
-        VisualViewportResized maybeSize ->
-            case ( maybeSize, model.virtualKeyboardOpen ) of
-                ( Just size, True ) ->
-                    -- The virtual keyboard doesn't make the window any smaller, it's drawn over
-                    -- the bottom of it, and the browser scrolls the page to keep the focused text
-                    -- input above it. Laying the UI out in the window's size would leave the top of
-                    -- it scrolled off the screen, so while the keyboard is up the UI is laid out in
-                    -- what's left on screen instead (see the body height in FrontendExtra.layout).
-                    ( { model | windowSize = Coord.xy (round size.width) (round size.height) }
+        VisualViewportResized maybeVisualViewport ->
+            case ( maybeVisualViewport, model.virtualKeyboardOpen ) of
+                ( Just visualViewport, True ) ->
+                    -- A virtual keyboard doesn't make the window any smaller, it's drawn over the
+                    -- bottom of it. iOS then slides the window up behind the keyboard so that the
+                    -- focused text input is above it, which is what offsetTop measures. Neither the
+                    -- size nor the position of the window changes while that happens, so this is
+                    -- the only word we get on where the UI still has room to be (see the body rule
+                    -- in FrontendExtra.layout, which is what puts it there).
+                    ( { model
+                        | windowSize = Coord.xy (round visualViewport.width) (round visualViewport.height)
+                        , visualViewportOffsetTop = round visualViewport.offsetTop
+                      }
                     , Command.none
                     )
 
@@ -6935,6 +6940,11 @@ adjustSelection selectionOld selection text =
 
 textInputFocusChanged : Maybe HtmlId -> Maybe ( Range, SelectionDirection ) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 textInputFocusChanged maybeHtmlId maybeSelection model =
+    let
+        keyboardWasOpen : Bool
+        keyboardWasOpen =
+            model.virtualKeyboardOpen
+    in
     (case model.loginStatus of
         LoggedIn loggedIn ->
             ( { model
@@ -7007,24 +7017,26 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
             , Command.none
             )
     )
-        |> Tuple.mapSecond
-            (\cmd ->
-                case ( maybeHtmlId, model.virtualKeyboardOpen ) of
+        |> (\( model2, cmd ) ->
+                case ( maybeHtmlId, keyboardWasOpen ) of
                     ( Nothing, True ) ->
                         -- The keyboard goes away along with the focus, leaving the UI the whole
-                        -- window to lay itself out in again. The window never changed size while
-                        -- the keyboard was covering it (that's what VisualViewportResized is for),
-                        -- so nothing else is going to say so.
-                        Command.batch
+                        -- window to lay itself out in again. The window never changed size or
+                        -- position while the keyboard was covering it (that's what
+                        -- VisualViewportResized is for), so nothing else is going to say so, and
+                        -- iOS doesn't always report the window sliding back down either.
+                        ( { model2 | visualViewportOffsetTop = 0 }
+                        , Command.batch
                             [ cmd
                             , Task.perform
                                 (\{ viewport } -> GotWindowSize (round viewport.width) (round viewport.height))
                                 Dom.getViewport
                             ]
+                        )
 
                     _ ->
-                        cmd
-            )
+                        ( model2, cmd )
+           )
 
 
 setShowMembers : ShowChannelSettings -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )

@@ -197,6 +197,10 @@ type alias LoadedFrontend =
     , timezone : Time.Zone
     , windowSize : Coord CssPixels
     , virtualKeyboardOpen : Bool
+    , -- How far down the window the part of it that's still on screen starts. It's 0 unless a
+      -- virtual keyboard is up, and only iOS makes it anything else: it slides the window up
+      -- behind its keyboard instead of making the window smaller.
+      visualViewportOffsetTop : Int
     , loginStatus : LoginStatus
     , loginType : LoginType
     , elmUiState : Ui.Anim.State
@@ -671,7 +675,7 @@ type FrontendMsg_
     | TypedPrivateKey (Id UserId) String
     | PageHasFocusChanged Bool
     | GotServiceWorkerMessage String
-    | VisualViewportResized (Maybe { width : Float, height : Float })
+    | VisualViewportResized (Maybe { width : Float, height : Float, offsetTop : Float })
     | TextEditorMsg TextEditor.Msg
     | PressedDiscordAcknowledgment Bool
     | PressedReloadDiscordUser (Discord.Id Discord.UserId)

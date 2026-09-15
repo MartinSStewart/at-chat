@@ -1431,14 +1431,19 @@ exports.init = async function init(app)
 
     });
 
-    window.visualViewport.addEventListener(
-        "resize",
-        () => {
-            app.ports.visual_viewport_resized_from_js.send({
-                width: window.visualViewport.width,
-                height: window.visualViewport.height
-            });
+    // iOS doesn't resize the window for its keyboard, it slides the layout viewport up behind
+    // it, which it reports as visualViewport.offsetTop. That's a scroll event rather than a
+    // resize, and it carries on arriving while the keyboard slides in, so both are listened to.
+    const sendVisualViewport = () => {
+        app.ports.visual_viewport_resized_from_js.send({
+            width: window.visualViewport.width,
+            height: window.visualViewport.height,
+            offsetTop: window.visualViewport.offsetTop
         });
+    };
+
+    window.visualViewport.addEventListener("resize", sendVisualViewport);
+    window.visualViewport.addEventListener("scroll", sendVisualViewport);
 
     app.ports.request_device_pixel_ratio_to_js.subscribe((a) => {
         app.ports.device_pixel_ratio_from_js.send(window.devicePixelRatio || 1);

@@ -396,6 +396,29 @@ pendingChangesText localChange =
             "Edited an encrypted message"
 
 
+{-| A virtual keyboard is drawn over the bottom of the window rather than making the window
+any smaller, so a body that's 100vh tall carries on behind the keyboard. The browser then has
+to move the page to reach the focused text input: Android scrolls it, and iOS slides the whole
+window up behind the keyboard, which no amount of scrolling the page back undoes.
+
+Sizing the body to the part of the window that is still on screen and putting it where that
+part is (`visualViewportOffsetTop` below the top of the window) leaves the UI on screen in one
+piece, with nothing hanging off the bottom for the browser to want to move.
+
+-}
+bodySize : LoadedFrontend -> String
+bodySize model =
+    if model.virtualKeyboardOpen then
+        "body { height:"
+            ++ String.fromInt (Coord.yRaw model.windowSize)
+            ++ "px !important; margin-top:"
+            ++ String.fromInt model.visualViewportOffsetTop
+            ++ "px !important; }"
+
+    else
+        "body { height:100vh !important; }"
+
+
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg_) -> Element FrontendMsg_ -> Html FrontendMsg_
 layout model attributes child =
     let
@@ -530,24 +553,7 @@ layout model attributes child =
                     (Html.node
                         "style"
                         []
-                        [ Html.text
-                            ("body { height:"
-                                ++ (if model.virtualKeyboardOpen then
-                                        -- A virtual keyboard is drawn over the bottom of the window
-                                        -- rather than making it any smaller, so 100vh here would put
-                                        -- the rest of the UI behind the keyboard and leave the browser
-                                        -- scrolling the top of it off the screen to reach the text
-                                        -- input. The window size follows the visual viewport while the
-                                        -- keyboard is up (see VisualViewportResized), which is the part
-                                        -- of the window that is still on screen.
-                                        String.fromInt (Coord.yRaw model.windowSize) ++ "px"
-
-                                    else
-                                        "100vh"
-                                   )
-                                ++ " !important; }"
-                            )
-                        ]
+                        [ Html.text (bodySize model) ]
                     )
                 )
             :: Ui.Font.size 16
