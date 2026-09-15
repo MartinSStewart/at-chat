@@ -5427,7 +5427,7 @@ replyToHeaderHelper onPress userId allUsers =
             Nothing ->
                 Ui.text "message"
         ]
-        |> Ui.el [ Ui.paddingWith { left = 0, right = 36, top = 0, bottom = 0 }, Ui.move { x = 0, y = 1, z = 0 } ]
+        |> Ui.el [ Ui.paddingWith MessageInput.textareaPadding, Ui.move { x = 0, y = 1, z = 0 } ]
 
 
 newMessagesId : HtmlId
