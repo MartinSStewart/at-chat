@@ -1045,10 +1045,10 @@ smallProfileImage roundLeftOnly user =
                             ]
 
                 Nothing ->
-                    GuildIcon.defaultUser False smallProfileImageSize rounding user2.color
+                    GuildIcon.defaultUser smallProfileImageSize rounding user2.color
 
         Nothing ->
-            GuildIcon.defaultUser False smallProfileImageSize rounding UserColor.default
+            GuildIcon.defaultUser smallProfileImageSize rounding UserColor.default
 
 
 profileImageHtml : Maybe { a | color : UserColor, icon : Maybe FileHash } -> Html msg
@@ -1117,10 +1117,10 @@ profileImageNoRounding user =
                         }
 
                 Nothing ->
-                    GuildIcon.defaultUser False profileImageSize Ui.noAttr user2.color
+                    GuildIcon.defaultUser profileImageSize Ui.noAttr user2.color
 
         Nothing ->
-            GuildIcon.defaultUser False profileImageSize Ui.noAttr UserColor.default
+            GuildIcon.defaultUser profileImageSize Ui.noAttr UserColor.default
 
 
 multipleProfileImages : List ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
