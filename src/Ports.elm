@@ -465,12 +465,27 @@ setCursorPosition htmlId range =
         )
 
 
-visualViewportResized : (Float -> msg) -> Subscription FrontendOnly msg
+{-| How much of the page is on screen. It's the whole window, except while something the
+browser draws over the page (a virtual keyboard, most of the time) is covering part of it.
+Nothing is sent for a payload that can't be read, since there's no size to fall back on that
+wouldn't be a lie about how much room there is.
+-}
+visualViewportResized : (Maybe { width : Float, height : Float } -> msg) -> Subscription FrontendOnly msg
 visualViewportResized msg =
     Subscription.fromJs
         "visual_viewport_resized_from_js"
         visual_viewport_resized_from_js
-        (\json -> Json.Decode.decodeValue Json.Decode.float json |> Result.withDefault 0 |> msg)
+        (\json ->
+            Json.Decode.decodeValue
+                (Json.Decode.map2
+                    (\width height -> { width = width, height = height })
+                    (Json.Decode.field "width" Json.Decode.float)
+                    (Json.Decode.field "height" Json.Decode.float)
+                )
+                json
+                |> Result.toMaybe
+                |> msg
+        )
 
 
 {-| Zooming the page changes the device pixel ratio and resizes the window at the same time,

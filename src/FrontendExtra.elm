@@ -51,6 +51,7 @@ import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelHeader
 import ChannelName
+import Coord
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordFrontendDmChannel, E2eeStatus(..), FrontendDmChannel)
@@ -529,7 +530,24 @@ layout model attributes child =
                     (Html.node
                         "style"
                         []
-                        [ Html.text "body { height:100vh !important; }" ]
+                        [ Html.text
+                            ("body { height:"
+                                ++ (if model.virtualKeyboardOpen then
+                                        -- A virtual keyboard is drawn over the bottom of the window
+                                        -- rather than making it any smaller, so 100vh here would put
+                                        -- the rest of the UI behind the keyboard and leave the browser
+                                        -- scrolling the top of it off the screen to reach the text
+                                        -- input. The window size follows the visual viewport while the
+                                        -- keyboard is up (see VisualViewportResized), which is the part
+                                        -- of the window that is still on screen.
+                                        String.fromInt (Coord.yRaw model.windowSize) ++ "px"
+
+                                    else
+                                        "100vh"
+                                   )
+                                ++ " !important; }"
+                            )
+                        ]
                     )
                 )
             :: Ui.Font.size 16

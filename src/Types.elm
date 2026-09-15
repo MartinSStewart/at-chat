@@ -671,7 +671,7 @@ type FrontendMsg_
     | TypedPrivateKey (Id UserId) String
     | PageHasFocusChanged Bool
     | GotServiceWorkerMessage String
-    | VisualViewportResized Float
+    | VisualViewportResized (Maybe { width : Float, height : Float })
     | TextEditorMsg TextEditor.Msg
     | PressedDiscordAcknowledgment Bool
     | PressedReloadDiscordUser (Discord.Id Discord.UserId)

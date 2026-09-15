@@ -3720,8 +3720,20 @@ updateLoaded msg model =
                 Nothing ->
                     ( model, Command.none )
 
-        VisualViewportResized _ ->
-            ( model, Command.none )
+        VisualViewportResized maybeSize ->
+            case ( maybeSize, model.virtualKeyboardOpen ) of
+                ( Just size, True ) ->
+                    -- The virtual keyboard doesn't make the window any smaller, it's drawn over
+                    -- the bottom of it, and the browser scrolls the page to keep the focused text
+                    -- input above it. Laying the UI out in the window's size would leave the top of
+                    -- it scrolled off the screen, so while the keyboard is up the UI is laid out in
+                    -- what's left on screen instead (see the body height in FrontendExtra.layout).
+                    ( { model | windowSize = Coord.xy (round size.width) (round size.height) }
+                    , Command.none
+                    )
+
+                _ ->
+                    ( model, Command.none )
 
         TextEditorMsg textEditorMsg ->
             case model.loginStatus of
@@ -6923,7 +6935,7 @@ adjustSelection selectionOld selection text =
 
 textInputFocusChanged : Maybe HtmlId -> Maybe ( Range, SelectionDirection ) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 textInputFocusChanged maybeHtmlId maybeSelection model =
-    case model.loginStatus of
+    (case model.loginStatus of
         LoggedIn loggedIn ->
             ( { model
                 | virtualKeyboardOpen = False
@@ -6993,6 +7005,25 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
                         }
               }
             , Command.none
+            )
+    )
+        |> Tuple.mapSecond
+            (\cmd ->
+                case ( maybeHtmlId, model.virtualKeyboardOpen ) of
+                    ( Nothing, True ) ->
+                        -- The keyboard goes away along with the focus, leaving the UI the whole
+                        -- window to lay itself out in again. The window never changed size while
+                        -- the keyboard was covering it (that's what VisualViewportResized is for),
+                        -- so nothing else is going to say so.
+                        Command.batch
+                            [ cmd
+                            , Task.perform
+                                (\{ viewport } -> GotWindowSize (round viewport.width) (round viewport.height))
+                                Dom.getViewport
+                            ]
+
+                    _ ->
+                        cmd
             )
 
 

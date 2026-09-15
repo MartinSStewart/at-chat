@@ -1434,7 +1434,10 @@ exports.init = async function init(app)
     window.visualViewport.addEventListener(
         "resize",
         () => {
-            app.ports.visual_viewport_resized_from_js.send(window.visualViewport.height);
+            app.ports.visual_viewport_resized_from_js.send({
+                width: window.visualViewport.width,
+                height: window.visualViewport.height
+            });
         });
 
     app.ports.request_device_pixel_ratio_to_js.subscribe((a) => {
