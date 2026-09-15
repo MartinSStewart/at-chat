@@ -6799,7 +6799,18 @@ selectionChanged maybeHtmlId maybeRange model =
                     , Command.batch
                         [ if showDropdown then
                             Dom.getElement htmlId
-                                |> Task.map (\{ element } -> { dropdownIndex = 0, inputElement = { element | y = element.y - 47 } })
+                                |> Task.map
+                                    (\{ element } ->
+                                        { dropdownIndex = 0
+                                        , inputElement =
+                                            -- Dom.getElement measures from the top of the viewport, which on a
+                                            -- phone is behind the safe-area inset (e.g. the notch), while the UI
+                                            -- the dropdown is drawn in starts below that inset. Without taking
+                                            -- the inset back off, the dropdown ends up that much too low and
+                                            -- covers the message input it's supposed to sit above.
+                                            { element | y = element.y - toFloat model.startupData.safeAreaInsetTop }
+                                        }
+                                    )
                                 |> Task.attempt (GotPingUserPosition htmlId)
 
                           else
