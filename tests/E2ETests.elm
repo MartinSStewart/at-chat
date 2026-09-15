@@ -21,7 +21,6 @@ import E2ESheepGame
 import E2EVoiceChat
 import E2EWordSpellingGame
 import Effect.Browser.Dom as Dom
-import Effect.Browser.Events exposing (Visibility(..))
 import Effect.Lamdera as Lamdera
 import Effect.Test as T exposing (FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..), RequestedBy(..))
 import EmailAddress
