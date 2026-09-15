@@ -1431,19 +1431,65 @@ exports.init = async function init(app)
 
     });
 
-    // iOS doesn't resize the window for its keyboard, it slides the layout viewport up behind
-    // it, which it reports as visualViewport.offsetTop. That's a scroll event rather than a
-    // resize, and it carries on arriving while the keyboard slides in, so both are listened to.
+    // A virtual keyboard is drawn over the window rather than making it any smaller, and iOS
+    // slides the window up behind the keyboard on top of that, so what's left on screen is
+    // what visualViewport reports rather than anything the window says. The page is sized to
+    // it through a custom property (see the body rule in FrontendExtra.layout) rather than
+    // through Elm: the sliding is reported frame by frame and a round trip through the
+    // Elm update and view lags behind it, which shows up as the UI jittering.
+    const syncVisibleHeight = () => {
+        const visualViewport = window.visualViewport;
+        const covered = Math.max(
+            0,
+            window.innerHeight - visualViewport.height - visualViewport.offsetTop);
+
+        if (covered > 0) {
+            document.documentElement.style.setProperty(
+                "--visible-height", visualViewport.height + "px");
+        } else {
+            // Nothing is covering the window, so the page goes back to filling it
+            document.documentElement.style.removeProperty("--visible-height");
+        }
+    };
+
+    // Elm only needs the size when it settles, which is what anything laid out in pixels is
+    // sized against. Sending it frame by frame as well would be the round trip above.
     const sendVisualViewport = () => {
         app.ports.visual_viewport_resized_from_js.send({
             width: window.visualViewport.width,
-            height: window.visualViewport.height,
-            offsetTop: window.visualViewport.offsetTop
+            height: window.visualViewport.height
         });
     };
 
-    window.visualViewport.addEventListener("resize", sendVisualViewport);
-    window.visualViewport.addEventListener("scroll", sendVisualViewport);
+    // The app can be opened with a keyboard already up, restored from the background with one,
+    // or reloaded while one is open, and no event is sent for any of those.
+    syncVisibleHeight();
+
+    window.visualViewport.addEventListener(
+        "resize",
+        () => {
+            syncVisibleHeight();
+            sendVisualViewport();
+        });
+    window.visualViewport.addEventListener("scroll", syncVisibleHeight);
+
+    // Tapping a text input is what makes iOS slide the window up behind the keyboard: it does
+    // that while handling the focus the tap gives the input. Focusing the input ourselves first,
+    // with preventScroll, leaves its own focus handling with nothing left to reveal, so the
+    // window stays where it is and there is nothing for the page to have to follow.
+    document.addEventListener(
+        "touchstart",
+        (event) => {
+            const target = event.target;
+
+            if (target
+                && target.matches
+                && target.matches("input, textarea, select")
+                && document.activeElement !== target) {
+                target.focus({ preventScroll: true });
+            }
+        },
+        { capture: true, passive: true });
 
     app.ports.request_device_pixel_ratio_to_js.subscribe((a) => {
         app.ports.device_pixel_ratio_from_js.send(window.devicePixelRatio || 1);

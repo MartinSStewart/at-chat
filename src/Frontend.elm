@@ -463,7 +463,6 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , timezone = startupData.timezone
             , windowSize = loading.windowSize
             , virtualKeyboardOpen = False
-            , visualViewportOffsetTop = 0
             , loginStatus = loginStatus
             , loginType = loading.loginType
             , elmUiState = Ui.Anim.init
@@ -3725,15 +3724,11 @@ updateLoaded msg model =
             case ( maybeVisualViewport, model.virtualKeyboardOpen ) of
                 ( Just visualViewport, True ) ->
                     -- A virtual keyboard doesn't make the window any smaller, it's drawn over the
-                    -- bottom of it. iOS then slides the window up behind the keyboard so that the
-                    -- focused text input is above it, which is what offsetTop measures. Neither the
-                    -- size nor the position of the window changes while that happens, so this is
-                    -- the only word we get on where the UI still has room to be (see the body rule
-                    -- in FrontendExtra.layout, which is what puts it there).
-                    ( { model
-                        | windowSize = Coord.xy (round visualViewport.width) (round visualViewport.height)
-                        , visualViewportOffsetTop = round visualViewport.offsetTop
-                      }
+                    -- bottom of it, so the window is no use as the size of the room the UI has
+                    -- while one is up. The page itself is sized in js, which keeps up with the
+                    -- keyboard sliding in; this is for the parts of the UI that Elm sizes in
+                    -- pixels of its own accord.
+                    ( { model | windowSize = Coord.xy (round visualViewport.width) (round visualViewport.height) }
                     , Command.none
                     )
 
@@ -7021,11 +7016,10 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
                 case ( maybeHtmlId, keyboardWasOpen ) of
                     ( Nothing, True ) ->
                         -- The keyboard goes away along with the focus, leaving the UI the whole
-                        -- window to lay itself out in again. The window never changed size or
-                        -- position while the keyboard was covering it (that's what
-                        -- VisualViewportResized is for), so nothing else is going to say so, and
-                        -- iOS doesn't always report the window sliding back down either.
-                        ( { model2 | visualViewportOffsetTop = 0 }
+                        -- window to lay itself out in again. The window never changed size while
+                        -- the keyboard was covering it (that's what VisualViewportResized is for),
+                        -- so nothing else is going to say so.
+                        ( model2
                         , Command.batch
                             [ cmd
                             , Task.perform

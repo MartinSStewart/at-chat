@@ -51,7 +51,6 @@ import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelHeader
 import ChannelName
-import Coord
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordFrontendDmChannel, E2eeStatus(..), FrontendDmChannel)
@@ -396,29 +395,6 @@ pendingChangesText localChange =
             "Edited an encrypted message"
 
 
-{-| A virtual keyboard is drawn over the bottom of the window rather than making the window
-any smaller, so a body that's 100vh tall carries on behind the keyboard. The browser then has
-to move the page to reach the focused text input: Android scrolls it, and iOS slides the whole
-window up behind the keyboard, which no amount of scrolling the page back undoes.
-
-Sizing the body to the part of the window that is still on screen and putting it where that
-part is (`visualViewportOffsetTop` below the top of the window) leaves the UI on screen in one
-piece, with nothing hanging off the bottom for the browser to want to move.
-
--}
-bodySize : LoadedFrontend -> String
-bodySize model =
-    if model.virtualKeyboardOpen then
-        "body { height:"
-            ++ String.fromInt (Coord.yRaw model.windowSize)
-            ++ "px !important; margin-top:"
-            ++ String.fromInt model.visualViewportOffsetTop
-            ++ "px !important; }"
-
-    else
-        "body { height:100vh !important; }"
-
-
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg_) -> Element FrontendMsg_ -> Html FrontendMsg_
 layout model attributes child =
     let
@@ -553,7 +529,15 @@ layout model attributes child =
                     (Html.node
                         "style"
                         []
-                        [ Html.text (bodySize model) ]
+                        [ -- A virtual keyboard is drawn over the bottom of the window rather
+                          -- than making the window any smaller, so a page that fills the window
+                          -- carries on behind the keyboard, and the browser moves the page to
+                          -- reach the focused text input. --visible-height is how much of the
+                          -- window is left on screen while that's happening, set from js so that
+                          -- it keeps up with the keyboard (see elm-pkg-js/stuff.js), and unset
+                          -- whenever nothing is covering the window.
+                          Html.text "body { height:var(--visible-height, 100vh) !important; }"
+                        ]
                     )
                 )
             :: Ui.Font.size 16
