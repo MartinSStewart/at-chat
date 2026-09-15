@@ -5243,6 +5243,47 @@ changeUpdate localMsg local =
                             }
                     }
 
+                Server_DiscordGuildLeftOrDeleted discordUserId guildId ->
+                    { local
+                        | discordGuilds =
+                            SeqDict.update
+                                guildId
+                                (\maybe ->
+                                    case maybe of
+                                        Just guild ->
+                                            case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                                                MembersAndOwner.IsOwner ->
+                                                    -- The owner of a guild can't leave it, so the
+                                                    -- guild must have been deleted.
+                                                    Nothing
+
+                                                _ ->
+                                                    let
+                                                        guild2 : DiscordFrontendGuild
+                                                        guild2 =
+                                                            { guild
+                                                                | membersAndOwner =
+                                                                    MembersAndOwner.removeMember
+                                                                        discordUserId
+                                                                        guild.membersAndOwner
+                                                            }
+                                                    in
+                                                    if
+                                                        LocalState.canViewDiscordGuild
+                                                            (LinkedAndOtherDiscordUsers.linkedUsers local.localUser.discordUsers)
+                                                            guild2.membersAndOwner
+                                                    then
+                                                        Just guild2
+
+                                                    else
+                                                        Nothing
+
+                                        Nothing ->
+                                            Nothing
+                                )
+                                local.discordGuilds
+                    }
+
                 Server_DiscordUpdateChannel guildId channelId name topic permissionOverwrites ->
                     { local
                         | discordGuilds =

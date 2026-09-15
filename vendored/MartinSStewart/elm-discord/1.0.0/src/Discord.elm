@@ -8,7 +8,7 @@ module Discord exposing
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, UserId, Permissions
     , WebhookId
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , AchievementId, ActiveThreads, ApplicationId, ArchivedThreads, AttachmentFlags, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), ContentInventoryInboxStale, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, CustomEmojiId(..), DataUri(..), Embed, EmbedType(..), EmbeddedActivityLocation, EmbeddedActivityUpdateV2, EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildEmojisUpdate, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, GuildRoleUpdate, GuildScheduledEventUserData, GuildUpdate, HttpRequest, Id(..), ImageHash(..), ImageSize(..), IntegrationId, Intents, LoginResponse, LoginSettings, MergedMember, MessageFlags, MessageReference, MessageSnapshot, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, OverwriteId, Participant, Presence, PrivateChannel, PrivateChannelId, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, Role, RoleColors, RoleIconHash, RoleOrUserId(..), RoleTags, Roles(..), ScheduledEventId(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerId, StickerItem, StickerPack, StickerPackId, StickerType(..), SubscriptionListingId, SupplementalGuild, TagId, TeamId, ThreadMember, ThreadSortType(..), TypingStart, UploadAttachment, UploadAttachmentResponse, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, decodeRole, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getStickerPacks, getStickerPacksPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, idFromString, idFromUInt64, idToString, idToUInt64, imageIsAnimated, init, joinThread, joinThreadPayload, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, memberHasChannelPermission, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, noPermissions, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stickerUrl, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, uploadAttachments, uploadAttachmentsPayload, userAvatarUrl, userToPartialUser, userToken, userUpdate, websocketGatewayUrl
+    , AchievementId, ActiveThreads, ApplicationId, ArchivedThreads, AttachmentFlags, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), ContentInventoryInboxStale, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, CustomEmojiId(..), DataUri(..), Embed, EmbedType(..), EmbeddedActivityLocation, EmbeddedActivityUpdateV2, EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildDelete, GuildEmojisUpdate, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, GuildRoleUpdate, GuildScheduledEventUserData, GuildUpdate, HttpRequest, Id(..), ImageHash(..), ImageSize(..), IntegrationId, Intents, LoginResponse, LoginSettings, MergedMember, MessageFlags, MessageReference, MessageSnapshot, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, OverwriteId, Participant, Presence, PrivateChannel, PrivateChannelId, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, Role, RoleColors, RoleIconHash, RoleOrUserId(..), RoleTags, Roles(..), ScheduledEventId(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerId, StickerItem, StickerPack, StickerPackId, StickerType(..), SubscriptionListingId, SupplementalGuild, TagId, TeamId, ThreadMember, ThreadSortType(..), TypingStart, UploadAttachment, UploadAttachmentResponse, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, decodeRole, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getStickerPacks, getStickerPacksPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, idFromString, idFromUInt64, idToString, idToUInt64, imageIsAnimated, init, joinThread, joinThreadPayload, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, memberHasChannelPermission, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, noPermissions, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stickerUrl, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, uploadAttachments, uploadAttachmentsPayload, userAvatarUrl, userToPartialUser, userToken, userUpdate, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -5398,6 +5398,9 @@ decodeDispatchUserEvent eventName =
         "GUILD_UPDATE" ->
             JD.field "d" decodeGuildUpdate |> JD.map DispatchUser_GuildUpdate
 
+        "GUILD_DELETE" ->
+            JD.field "d" decodeGuildDelete |> JD.map DispatchUser_GuildDelete
+
         "GUILD_APPLIED_BOOSTS_UPDATE" ->
             JD.succeed DispatchUser_GuildAppliedBoostsUpdate
 
@@ -5747,6 +5750,7 @@ type OpDispatchUserEvent
     | DispatchUser_QuestsUserStatusUpdate
     | DispatchUser_GuildCreate GatewayGuild
     | DispatchUser_GuildUpdate GuildUpdate
+    | DispatchUser_GuildDelete GuildDelete
     | DispatchUser_GuildAppliedBoostsUpdate
     | DispatchUser_GuildPowerupEntitlementsCreate
     | DispatchUser_ChannelUpdate Channel
@@ -6082,6 +6086,26 @@ decodeGuildUpdate =
         |> JD.andMap (JD.field "name" JD.string)
         |> JD.andMap (JD.field "icon" (JD.nullable decodeHash))
         |> JD.andMap (JD.field "roles" (JD.list decodeRole))
+
+
+{-| <https://docs.discord.food/gateway/gateway-events#guild-delete>
+
+Sent when the user leaves or is removed from a guild, or when the guild is deleted.
+It's also sent when the guild becomes unavailable due to a Discord outage, in which
+case `isUnavailable` is True and a GUILD\_CREATE follows once the outage is over.
+
+-}
+type alias GuildDelete =
+    { id : Id GuildId
+    , isUnavailable : Bool
+    }
+
+
+decodeGuildDelete : JD.Decoder GuildDelete
+decodeGuildDelete =
+    JD.succeed GuildDelete
+        |> JD.andMap (JD.field "id" decodeId)
+        |> JD.andMap (JD.oneOf [ JD.field "unavailable" JD.bool, JD.succeed False ])
 
 
 type alias ChannelPinsUpdate =
@@ -6512,6 +6536,7 @@ type UserOutMsg connection
     | UserOutMsg_JoinedOrCreatedGuild GatewayGuild
     | UserOutMsg_ChannelUpdated Channel
     | UserOutMsg_GuildUpdate GuildUpdate
+    | UserOutMsg_LeftOrDeletedGuild (Id GuildId)
     | UserOutMsg_GuildRoleUpdate GuildRoleUpdate
     | UserOutMsg_GuildEmojisUpdate GuildEmojisUpdate
     | UserOutMsg_ChannelPinsUpdate ChannelPinsUpdate
@@ -7063,6 +7088,15 @@ handleUserGateway authToken intents response model =
 
                         DispatchUser_GuildUpdate guildUpdate ->
                             ( model, [ UserOutMsg_GuildUpdate guildUpdate ] )
+
+                        DispatchUser_GuildDelete guildDelete ->
+                            if guildDelete.isUnavailable then
+                                -- The guild is only gone for the duration of a Discord outage and
+                                -- we get a GUILD_CREATE again once it's over.
+                                ( model, [] )
+
+                            else
+                                ( model, [ UserOutMsg_LeftOrDeletedGuild guildDelete.id ] )
 
                         DispatchUser_GuildAppliedBoostsUpdate ->
                             ( model, [] )

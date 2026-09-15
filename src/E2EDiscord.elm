@@ -307,6 +307,45 @@ checkDiscordGuild admin expected data =
         )
 
 
+{-| Checks which Discord guilds the admin's frontend can see and which ones the backend
+has stored, both by guild name.
+-}
+checkDiscordGuilds :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> { frontend : List String, backend : List String }
+    -> T.Data FrontendModel E2EHelper.BackendModel2
+    -> Result String ()
+checkDiscordGuilds admin expected data =
+    withAdminLocalState admin
+        data
+        (\local ->
+            let
+                actual : { frontend : List String, backend : List String }
+                actual =
+                    { frontend = SeqDict.values local.discordGuilds |> List.map (\guild -> GuildName.toString guild.name) |> List.sort
+                    , backend =
+                        SeqDict.values (E2EHelper.unwrapBackend data.backend).discordGuilds
+                            |> List.map (\guild -> GuildName.toString guild.name)
+                            |> List.sort
+                    }
+            in
+            if actual == { frontend = List.sort expected.frontend, backend = List.sort expected.backend } then
+                Ok ()
+
+            else
+                Err
+                    ("Expected the admin to see the Discord guilds "
+                        ++ String.join ", " (List.sort expected.frontend)
+                        ++ " and the backend to have stored "
+                        ++ String.join ", " (List.sort expected.backend)
+                        ++ " but the admin sees "
+                        ++ String.join ", " actual.frontend
+                        ++ " and the backend has stored "
+                        ++ String.join ", " actual.backend
+                    )
+        )
+
+
 {-| Fails if the backend logged a Discord websocket message it couldn't parse.
 -}
 checkNoDiscordParseErrors : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
@@ -3105,6 +3144,44 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                           -- to parse or every one of them ends up in the error log.
                           T.websocketSendString 100 connection """{"t":"GUILD_APPLIED_BOOSTS_UPDATE","s":13,"op":0,"d":{"guild_id":"705745250815311942","applied_guild_boosts":[{"id":"1493960145280041232","ends_at":"2026-05-01T00:00:00+00:00","pause_ends_at":null,"user_id":"161098476632014848"}]}}"""
                         , T.websocketSendString 100 connection """{"t":"GUILD_POWERUP_ENTITLEMENTS_CREATE","s":14,"op":0,"d":{"guild_id":"705745250815311942","entitlements":[{"id":"1493960145280041233","sku_id":"1493960145280041234","user_id":"161098476632014848","type":1,"deleted":false,"consumed":false}]}}"""
+                        , T.checkState 100 checkNoDiscordParseErrors
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Guild delete"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket 120
+                    (\connection _ ->
+                        [ T.checkState
+                            100
+                            (checkDiscordGuilds admin { frontend = [ "test", "Bot Test" ], backend = [ "test", "Bot Test" ] })
+                        , -- A guild that's only unavailable because of a Discord outage comes back
+                          -- with a GUILD_CREATE once the outage is over, so it stays where it is.
+                          T.websocketSendString 100 connection """{"t":"GUILD_DELETE","s":10,"op":0,"d":{"id":"213136010802888706","unavailable":true}}"""
+                        , T.checkState
+                            1000
+                            (checkDiscordGuilds admin { frontend = [ "test", "Bot Test" ], backend = [ "test", "Bot Test" ] })
+                        , -- Leaving a guild that someone else owns. Nobody is left to see it so the
+                          -- backend drops it as well.
+                          T.websocketSendString 100 connection """{"t":"GUILD_DELETE","s":11,"op":0,"d":{"id":"213136010802888706"}}"""
+                        , T.checkState
+                            1000
+                            (checkDiscordGuilds admin { frontend = [ "Bot Test" ], backend = [ "Bot Test" ] })
+                        , -- The guild we own can only disappear by being deleted.
+                          T.websocketSendString 100 connection """{"t":"GUILD_DELETE","s":12,"op":0,"d":{"id":"705745250815311942"}}"""
+                        , T.checkState 1000 (checkDiscordGuilds admin { frontend = [], backend = [] })
                         , T.checkState 100 checkNoDiscordParseErrors
                         ]
                     )

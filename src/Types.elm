@@ -1132,6 +1132,7 @@ type ServerChange
     | Server_GotDiscordGuildMessageEmbed (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage ( Url, Result () EmbedData )
     | Server_GotDiscordDmMessageEmbed (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) ( Url, Result () EmbedData )
     | Server_DiscordGuildJoinedOrCreated (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) DiscordFrontendGuild
+    | Server_DiscordGuildLeftOrDeleted (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId)
     | Server_DiscordUpdateChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (OptionalData (Maybe String)) (OptionalData (Maybe String)) (List Discord.Overwrite)
     | Server_DiscordUpdateGuild (Discord.Id Discord.GuildId) GuildName (Maybe FileHash) (SeqDict (Discord.Id Discord.RoleId) DiscordRole)
     | Server_DiscordUpdateRole (Discord.Id Discord.GuildId) (Discord.Id Discord.RoleId) DiscordRole

@@ -53,7 +53,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), DiscordRole, DiscordThreadReload, WebsocketClosedEvent(..))
 import Log
-import MembersAndOwner exposing (MembersAndOwner)
+import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
 import Message exposing (ChangeAttachments(..), Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
@@ -2532,6 +2532,13 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             in
                             ( model3, cmd2 :: cmds )
 
+                        Discord.UserOutMsg_LeftOrDeletedGuild guildId ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleLeftOrDeletedGuild discordUserId guildId model2
+                            in
+                            ( model3, cmd2 :: cmds )
+
                         Discord.UserOutMsg_GuildRoleUpdate roleUpdate ->
                             let
                                 ( model3, cmd2 ) =
@@ -2671,6 +2678,77 @@ handleChannelUpdated channel model =
                 (Server_DiscordUpdateChannel guildId channel.id channel.name channel.topic newOverwrites |> ServerChange)
                 model2
             )
+
+
+{-| One of our linked Discord accounts left a guild, was removed from it, or the guild
+itself got deleted. Discord doesn't tell us which of those happened, only that the account
+can't see the guild anymore.
+-}
+handleLeftOrDeletedGuild :
+    Discord.Id Discord.UserId
+    -> Discord.Id Discord.GuildId
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleLeftOrDeletedGuild discordUserId guildId model =
+    case SeqDict.get guildId model.discordGuilds of
+        Just guild ->
+            let
+                broadcast : Command BackendOnly ToFrontend BackendMsg
+                broadcast =
+                    -- This has to happen before the guild is removed, otherwise there's nobody
+                    -- left to send it to.
+                    Broadcast.toDiscordGuild
+                        guildId
+                        (Server_DiscordGuildLeftOrDeleted discordUserId guildId |> ServerChange)
+                        model
+            in
+            case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                IsOwner ->
+                    -- The owner of a guild can't leave it, so the guild must have been deleted
+                    -- and it's gone for everyone else too.
+                    ( { model | discordGuilds = SeqDict.remove guildId model.discordGuilds }, broadcast )
+
+                _ ->
+                    let
+                        guild2 : DiscordBackendGuild
+                        guild2 =
+                            { guild
+                                | membersAndOwner =
+                                    MembersAndOwner.removeMember discordUserId guild.membersAndOwner
+                            }
+                    in
+                    ( { model
+                        | discordGuilds =
+                            if hasLinkedDiscordUser guild2.membersAndOwner model then
+                                SeqDict.insert guildId guild2 model.discordGuilds
+
+                            else
+                                -- No account is left that could see the guild, so there's no point
+                                -- in holding onto it.
+                                SeqDict.remove guildId model.discordGuilds
+                      }
+                    , broadcast
+                    )
+
+        Nothing ->
+            ( model, Command.none )
+
+
+hasLinkedDiscordUser :
+    MembersAndOwner (Discord.Id Discord.UserId) a
+    -> BackendModel
+    -> Bool
+hasLinkedDiscordUser membersAndOwner model =
+    List.any
+        (\memberId ->
+            case SeqDict.get memberId model.discordUsers of
+                Just (FullData _) ->
+                    True
+
+                _ ->
+                    False
+        )
+        (MembersAndOwner.membersAndOwner membersAndOwner)
 
 
 {-| A GUILD\_UPDATE event describes the guild as it looks after one of its settings
