@@ -2544,4 +2544,78 @@ mod tests {
 
         remove_test_backup(filename);
     }
+
+    // A backup is the entire backend model and grows every day the server is used, so it is the
+    // one upload that has no ceiling. What lifts the ceiling is which extractor the handler
+    // takes: a body limit only applies to an endpoint that collects its body into memory, and
+    // this one writes the body out as it arrives. Nothing in the handler's signature says that
+    // out loud and nothing else checks it, so a body over the limit goes through the route as
+    // the router builds it. The limit here is a tiny stand in for the real one, and the second
+    // route is what says the limit was really in force rather than never applied at all.
+    #[tokio::test]
+    async fn a_backup_is_not_held_to_the_body_limit() {
+        create_storage_dir();
+        let backup_name = "backend-export-test-over-the-limit.bin";
+        remove_test_backup(backup_name);
+
+        const TEST_BODY_LIMIT: usize = 1024;
+        let body = vec![b'z'; TEST_BODY_LIMIT * 8];
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind test server");
+        let base = format!("http://{}", listener.local_addr().unwrap());
+
+        let router = Router::new()
+            .route(
+                "/file/internal/upload-backup/{filename}",
+                post(post_backup_endpoint),
+            )
+            .route(
+                "/collects-its-body",
+                post(|body: Bytes| async move { body.len().to_string() }),
+            )
+            .layer(DefaultBodyLimit::max(TEST_BODY_LIMIT));
+
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, router).await;
+        });
+
+        let client = reqwest::Client::new();
+
+        assert_eq!(
+            client
+                .post(format!("{base}/collects-its-body"))
+                .body(body.clone())
+                .send()
+                .await
+                .expect("request failed")
+                .status(),
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "an endpoint that collects its body should still be refused a body over the limit"
+        );
+
+        assert_eq!(
+            client
+                .post(format!("{base}/file/internal/upload-backup/{backup_name}"))
+                .body(body.clone())
+                .send()
+                .await
+                .expect("request failed")
+                .status(),
+            StatusCode::OK,
+            "a backup over the body limit should still be taken"
+        );
+
+        for dir in [SERVER_BACKUPS_PATH, BUCKET_BACKUPS_PATH] {
+            let path = String::from(dir) + backup_name;
+            assert_eq!(
+                fs::read(&path).ok().as_ref(),
+                Some(&body),
+                "the backup in {dir} should be every byte that was uploaded"
+            );
+        }
+
+        remove_test_backup(backup_name);
+    }
 }
