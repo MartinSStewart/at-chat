@@ -6934,23 +6934,29 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
                             , previousTextInputFocus = loggedIn.textInputFocus
                         }
               }
-            , case maybeHtmlId of
-                Just htmlId ->
-                    Command.batch
-                        [ if UserAgent.isDesktop model.startupData.userAgent.device || Maybe.map .htmlId loggedIn.textInputFocus == Just htmlId then
-                            Command.none
+            , Command.batch
+                [ case maybeHtmlId of
+                    Just htmlId ->
+                        Command.batch
+                            [ if UserAgent.isDesktop model.startupData.userAgent.device || Maybe.map .htmlId loggedIn.textInputFocus == Just htmlId then
+                                Command.none
 
-                          else
-                            Ports.fixCursorPosition htmlId
-                        , if htmlId == UserOptions.discordBookmarkletId then
-                            Ports.textInputSelectAll htmlId
+                              else
+                                Ports.fixCursorPosition htmlId
+                            , if htmlId == UserOptions.discordBookmarkletId then
+                                Ports.textInputSelectAll htmlId
 
-                          else
-                            Command.none
-                        ]
+                              else
+                                Command.none
+                            ]
 
-                Nothing ->
-                    Command.none
+                    Nothing ->
+                        Command.none
+                , Scroll.toBottomOfChannelIfAtBottom
+                    Pages.Guild.conversationContainerId
+                    SetScrollToBottom
+                    loggedIn.channelScrollPosition
+                ]
             )
 
         NotLoggedIn notLoggedIn ->
