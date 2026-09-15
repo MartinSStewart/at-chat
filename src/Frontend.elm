@@ -1740,6 +1740,7 @@ updateLoaded msg model =
                         , Ports.closeNotifications
                         , Ports.registerServiceWorker
                         , checkAppVersion True
+                        , Ports.loadStartupData
                         ]
                     )
 

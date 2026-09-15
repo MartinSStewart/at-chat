@@ -1159,14 +1159,6 @@ exports.init = async function init(app)
         sendStartupData();
     });
 
-    // Re-anchor timeOrigin after the tab was backgrounded or the machine slept, since the monotonic
-    // clock behind event timeStamps drifts from wall time during those periods.
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') sendStartupData();
-    });
-    window.addEventListener('focus', sendStartupData);
-    window.addEventListener('pageshow', sendStartupData);
-
     app.ports.shift_scroll_by_element_delta_to_js.subscribe((data) => {
         const element = document.getElementById(data.elementId);
         const container = document.getElementById(data.containerId);
