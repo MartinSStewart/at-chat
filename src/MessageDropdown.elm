@@ -605,6 +605,7 @@ dropdownContainer nameSoFar dropdown contentHeight content =
     Ui.column
         [ Ui.background MyUi.background2
         , MyUi.blockClickPropagation PressedPingDropdownContainer
+        , MyUi.blockTouchStartPropagation PressedPingDropdownContainer
         , Ui.borderColor MyUi.border1
         , Ui.border 1
         , Ui.Font.color MyUi.font2

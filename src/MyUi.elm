@@ -8,6 +8,7 @@ module MyUi exposing
     , background3
     , black
     , blockClickPropagation
+    , blockTouchStartPropagation
     , border1
     , border2
     , bounceScroll
@@ -1538,6 +1539,11 @@ userLabel2Html user =
 blockClickPropagation : msg -> Ui.Attribute msg
 blockClickPropagation msg =
     Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( msg, True ))
+
+
+blockTouchStartPropagation : msg -> Ui.Attribute msg
+blockTouchStartPropagation msg =
+    Ui.Events.stopPropagationOn "touchstart" (Json.Decode.succeed ( msg, True ))
 
 
 channelColumnWidth : Coord CssPixels -> Int

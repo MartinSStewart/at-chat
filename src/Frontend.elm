@@ -4468,6 +4468,9 @@ updateLoaded msg model =
                 MessageInput.IgnoredKeyPress ->
                     ( model, Command.none )
 
+                MessageInput.IgnoreTouchStart ->
+                    ( model, Command.none )
+
         PageUpGotViewport result ->
             case result of
                 Ok viewport ->
@@ -4852,6 +4855,9 @@ updateLoaded msg model =
                         model
 
                 MessageInput.IgnoredKeyPress ->
+                    ( model, Command.none )
+
+                MessageInput.IgnoreTouchStart ->
                     ( model, Command.none )
 
         GotEmojiData result ->
@@ -6803,11 +6809,6 @@ selectionChanged maybeHtmlId maybeRange model =
                                     (\{ element } ->
                                         { dropdownIndex = 0
                                         , inputElement =
-                                            -- Dom.getElement measures from the top of the viewport, which on a
-                                            -- phone is behind the safe-area inset (e.g. the notch), while the UI
-                                            -- the dropdown is drawn in starts below that inset. Without taking
-                                            -- the inset back off, the dropdown ends up that much too low and
-                                            -- covers the message input it's supposed to sit above.
                                             { element | y = element.y - toFloat model.startupData.safeAreaInsetTop }
                                         }
                                     )

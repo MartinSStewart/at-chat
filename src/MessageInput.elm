@@ -92,6 +92,7 @@ type Msg
       -- A key press that the textarea gets to handle in its normal way. It only exists because
       -- Html.Events.preventDefaultOn needs a msg to hand back.
     | IgnoredKeyPress
+    | IgnoreTouchStart
 
 
 counterThreshold : number
@@ -208,6 +209,9 @@ isPress msg =
             False
 
         IgnoredKeyPress ->
+            False
+
+        IgnoreTouchStart ->
             False
 
 
@@ -756,10 +760,12 @@ attachmentButton htmlIdPrefix =
         , Ui.contentCenterY
         , Ui.centerY
         , MyUi.hoverText "Attach file"
-        , Html.Events.preventDefaultOn
-            "touchend"
-            (Json.Decode.succeed ( PressedUploadFile, True ))
-            |> Ui.htmlAttribute
+
+        --, Html.Events.preventDefaultOn
+        --    "touchend"
+        --    (Json.Decode.succeed ( PressedUploadFile, True ))
+        --    |> Ui.htmlAttribute
+        , MyUi.blockTouchStartPropagation IgnoreTouchStart
         ]
         (Ui.html Icons.attachment)
 
@@ -778,10 +784,12 @@ showEmojiSelectorButton htmlIdPrefix =
         , Ui.centerY
         , MyUi.hoverText "Add emoji"
         , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
-        , Html.Events.preventDefaultOn
-            "touchend"
-            (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
-            |> Ui.htmlAttribute
+
+        --, Html.Events.preventDefaultOn
+        --    "touchend"
+        --    (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
+        --    |> Ui.htmlAttribute
+        , MyUi.blockTouchStartPropagation IgnoreTouchStart
         ]
         (Ui.html Icons.smile)
 
