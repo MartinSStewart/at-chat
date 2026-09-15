@@ -6799,7 +6799,7 @@ selectionChanged maybeHtmlId maybeRange model =
                     , Command.batch
                         [ if showDropdown then
                             Dom.getElement htmlId
-                                |> Task.map (\{ element } -> { dropdownIndex = 0, inputElement = element })
+                                |> Task.map (\{ element } -> { dropdownIndex = 0, inputElement = { element | y = element.y - 47 } })
                                 |> Task.attempt (GotPingUserPosition htmlId)
 
                           else
