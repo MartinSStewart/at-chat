@@ -982,8 +982,8 @@ emojiCategoryContainer title content =
         ]
 
 
-categoryColumn : Maybe SkinTone -> Maybe Category -> List ( Category, Int ) -> Element Msg
-categoryColumn skinTone selectedCategory offsets =
+categoryColumn : Int -> Maybe SkinTone -> Maybe Category -> List ( Category, Int ) -> Element Msg
+categoryColumn availableHeight skinTone selectedCategory offsets =
     List.map
         (\( category, offset ) ->
             MyUi.elButton
@@ -1000,7 +1000,13 @@ categoryColumn skinTone selectedCategory offsets =
                 (categoryToEmojiString skinTone category)
         )
         offsets
-        |> Ui.column [ Ui.width (Ui.px categoryColumnWidth), Ui.alignTop ]
+        |> Ui.column
+            [ Ui.width (Ui.px categoryColumnWidth)
+            , Ui.alignTop
+            , Ui.heightMin 0
+            , Ui.scrollable
+            , Ui.height (Ui.px (scrollViewportHeight availableHeight))
+            ]
 
 
 selector :
@@ -1244,7 +1250,7 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
                 emojiContent =
                     Ui.row
                         [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                        [ categoryColumn userData.skinTone selectedCategory offsets
+                        [ categoryColumn availableHeight userData.skinTone selectedCategory offsets
                         , Ui.column
                             [ Ui.height Ui.fill, emojiHoverPreview stickersData customEmojisData userData emojiData2 model |> Ui.inFront ]
                             [ Ui.el
