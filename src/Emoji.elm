@@ -33,6 +33,8 @@ module Emoji exposing
 
 import Array exposing (Array)
 import Codec exposing (Codec)
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
 import Dict exposing (Dict)
 import Effect.Browser.Dom as Dom
@@ -500,16 +502,16 @@ categoryColumnWidth =
     40
 
 
-selectorHeight : number
-selectorHeight =
-    500
+selectorHeight : number -> number
+selectorHeight availableHeight =
+    min availableHeight 500
 
 
 {-| How much of the emoji list is on screen at once.
 -}
-scrollViewportHeight : number
-scrollViewportHeight =
-    selectorHeight - searchInputHeight
+scrollViewportHeight : number -> number
+scrollViewportHeight availableHeight =
+    selectorHeight availableHeight - searchInputHeight
 
 
 heart : UnicodeEmoji
@@ -687,13 +689,8 @@ filterBySearch query toNames list =
             list
 
 
-{-| The stretch of the list that could be on screen, given which category is at the top of the
-viewport. That's all we know about the scroll position, since listening for every scroll event just
-to keep track of it would make scrolling lag, so the scroll position is somewhere between that
-category's offset and the next one's and this covers either extreme.
--}
-visibleRange : Int -> Maybe Category -> List ( Category, Int ) -> { from : Int, to : Int }
-visibleRange contentHeight selectedCategory offsets =
+visibleRange : Int -> Int -> Maybe Category -> List ( Category, Int ) -> { from : Int, to : Int }
+visibleRange availableHeight contentHeight selectedCategory offsets =
     case offsets of
         ( category, offset ) :: rest ->
             if Just category == selectedCategory then
@@ -706,14 +703,14 @@ visibleRange contentHeight selectedCategory offsets =
                         [] ->
                             contentHeight
                     )
-                        + scrollViewportHeight
+                        + scrollViewportHeight availableHeight
                 }
 
             else
-                visibleRange contentHeight selectedCategory rest
+                visibleRange availableHeight contentHeight selectedCategory rest
 
         [] ->
-            { from = 0, to = scrollViewportHeight }
+            { from = 0, to = scrollViewportHeight availableHeight }
 
 
 {-| The category whose section the top of the scroll container is showing.
@@ -1007,7 +1004,9 @@ categoryColumn skinTone selectedCategory offsets =
 
 
 selector :
-    Int
+    Bool
+    -> Int
+    -> Int
     -> Int
     -> Model
     -> EmojiConfig
@@ -1017,7 +1016,7 @@ selector :
     -> SeqSet (Id StickerId)
     -> SeqDict (Id StickerId) StickerData
     -> Element Msg
-selector scrollbarWidth width model userData emojiData availableCustomEmojis customEmojisData availableStickers stickersData =
+selector isMobile availableHeight scrollbarWidth width model userData emojiData availableCustomEmojis customEmojisData availableStickers stickersData =
     case emojiData of
         Just emojiData2 ->
             let
@@ -1170,13 +1169,9 @@ selector scrollbarWidth width model userData emojiData availableCustomEmojis cus
                         0
                         sections
 
-                -- Sections that can't be on screen are rendered as an empty element of the right
-                -- height instead. Which ones those are can't be worked out from the highlighted
-                -- category alone: once the categories have been filtered down they can be short
-                -- enough that several fit in the viewport at once.
                 onScreen : { from : Int, to : Int }
                 onScreen =
-                    visibleRange contentHeight selectedCategory offsets
+                    visibleRange availableHeight contentHeight selectedCategory offsets
 
                 -- Emoji buttons are numbered across every category rather than restarting at 0 in
                 -- each one, so that the id we scroll to on arrow key presses is unique.
@@ -1242,10 +1237,37 @@ selector scrollbarWidth width model userData emojiData availableCustomEmojis cus
                         sections
                         |> .sections
                         |> List.reverse
+
+                searchInput2 =
+                    searchInput model userData.skinTone (List.map Tuple.first emojis) columns
+
+                emojiContent =
+                    Ui.row
+                        [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                        [ categoryColumn userData.skinTone selectedCategory offsets
+                        , Ui.column
+                            [ Ui.height Ui.fill, emojiHoverPreview stickersData customEmojisData userData emojiData2 model |> Ui.inFront ]
+                            [ Ui.el
+                                [ Ui.background MyUi.background3
+                                , Ui.scrollable
+                                , Ui.clipX
+                                , Ui.height (Ui.px (scrollViewportHeight availableHeight))
+                                , Ui.heightMin 0
+                                , Ui.id (Dom.idToString scrollContainerId)
+                                , Ui.htmlAttribute (Html.Events.on "scroll" (decodeScroll model.category offsets))
+                                ]
+                                (Ui.column
+                                    [ Ui.width (Ui.px (columns * emojiWidth))
+                                    , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = stickerWidth }
+                                    ]
+                                    (List.map Tuple.second emojis)
+                                )
+                            ]
+                        ]
             in
             Ui.column
                 [ Ui.width (Ui.px selectorWidth)
-                , Ui.height (Ui.px selectorHeight)
+                , Ui.height (Ui.px (selectorHeight availableHeight))
                 , Ui.background MyUi.background2
                 , Ui.border 1
                 , Ui.borderColor MyUi.highlightedBorder
@@ -1255,30 +1277,12 @@ selector scrollbarWidth width model userData emojiData availableCustomEmojis cus
                 , Ui.heightMin 0
                 , Ui.clip
                 ]
-                [ searchInput model userData.skinTone (List.map Tuple.first emojis) columns
-                , Ui.row
-                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                    [ categoryColumn userData.skinTone selectedCategory offsets
-                    , Ui.column
-                        [ Ui.height Ui.fill, emojiHoverPreview stickersData customEmojisData userData emojiData2 model |> Ui.inFront ]
-                        [ Ui.el
-                            [ Ui.background MyUi.background3
-                            , Ui.scrollable
-                            , Ui.clipX
-                            , Ui.height (Ui.px scrollViewportHeight)
-                            , Ui.heightMin 0
-                            , Ui.id (Dom.idToString scrollContainerId)
-                            , Ui.htmlAttribute (Html.Events.on "scroll" (decodeScroll model.category offsets))
-                            ]
-                            (Ui.column
-                                [ Ui.width (Ui.px (columns * emojiWidth))
-                                , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = stickerWidth }
-                                ]
-                                (List.map Tuple.second emojis)
-                            )
-                        ]
-                    ]
-                ]
+                (if isMobile then
+                    [ emojiContent, searchInput2 ]
+
+                 else
+                    [ searchInput2, emojiContent ]
+                )
 
         Nothing ->
             Ui.text "Emojis didn't load for some reason"

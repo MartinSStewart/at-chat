@@ -795,11 +795,10 @@ showEmojiSelectorButton htmlIdPrefix =
         , Ui.centerY
         , MyUi.hoverText "Add emoji"
         , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
-
-        --, Html.Events.preventDefaultOn
-        --    "touchend"
-        --    (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
-        --    |> Ui.htmlAttribute
+        , Html.Events.preventDefaultOn
+            "touchend"
+            (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
+            |> Ui.htmlAttribute
         , MyUi.blockTouchStartPropagation IgnoreTouchStart
         ]
         (Ui.html Icons.smile)

@@ -5222,20 +5222,32 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
         emojiConfig : EmojiConfig
         emojiConfig =
             local.localUser.user.emojiConfig
+
+        availableHeight : Int
+        availableHeight =
+            Coord.yRaw model.windowSize
+                - (if isMobile then
+                    500
+
+                   else
+                    0
+                  )
     in
     case loggedIn.showEmojiSelector of
         EmojiSelectorHidden ->
             Ui.noAttr
 
         EmojiSelectorForReaction _ _ ->
-            emojiSelectorAtBottomOfTheConversation isMobile availableCustomEmojis availableStickers local loggedIn model
+            emojiSelectorAtBottomOfTheConversation isMobile availableHeight availableCustomEmojis availableStickers local loggedIn model
 
         EmojiSelectorForSheepGameReaction _ _ _ ->
-            emojiSelectorAtBottomOfTheConversation isMobile availableCustomEmojis availableStickers local loggedIn model
+            emojiSelectorAtBottomOfTheConversation isMobile availableHeight availableCustomEmojis availableStickers local loggedIn model
 
         EmojiSelectorForMessage _ ->
             Ui.inFront
                 (Emoji.selector
+                    isMobile
+                    availableHeight
                     model.startupData.scrollbarWidth
                     (emojiSelectorX isMobile model)
                     loggedIn.emojiSelector
@@ -5261,10 +5273,12 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
         EmojiSelectorForEditMessage position _ ->
             let
                 y =
-                    Coord.yRaw position - Emoji.selectorHeight - MyUi.channelHeaderHeight
+                    Coord.yRaw position - Emoji.selectorHeight availableHeight - MyUi.channelHeaderHeight
             in
             Ui.inFront
                 (Emoji.selector
+                    isMobile
+                    availableHeight
                     model.startupData.scrollbarWidth
                     (emojiSelectorX isMobile model)
                     loggedIn.emojiSelector
@@ -5297,11 +5311,13 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                 y =
                     Coord.yRaw position
                         - MyUi.channelHeaderHeight
-                        |> min (Coord.yRaw model.windowSize - MyUi.channelHeaderHeight - Emoji.selectorHeight)
+                        |> min (Coord.yRaw model.windowSize - MyUi.channelHeaderHeight - Emoji.selectorHeight availableHeight)
                         |> max 0
             in
             Ui.inFront
                 (Emoji.selector
+                    isMobile
+                    availableHeight
                     model.startupData.scrollbarWidth
                     (emojiSelectorX isMobile model)
                     loggedIn.emojiSelector
@@ -5322,15 +5338,18 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
 
 emojiSelectorAtBottomOfTheConversation :
     Bool
+    -> Int
     -> SeqSet (Id CustomEmojiId)
     -> SeqSet (Id StickerId)
     -> LocalState
     -> LoggedIn2
     -> LoadedFrontend
     -> Ui.Attribute FrontendMsg_
-emojiSelectorAtBottomOfTheConversation isMobile availableCustomEmojis availableStickers local loggedIn model =
+emojiSelectorAtBottomOfTheConversation isMobile availableHeight availableCustomEmojis availableStickers local loggedIn model =
     Ui.inFront
         (Emoji.selector
+            isMobile
+            availableHeight
             model.startupData.scrollbarWidth
             (emojiSelectorX isMobile model)
             loggedIn.emojiSelector
@@ -5360,34 +5379,35 @@ emojiSelectorZIndex =
 
 
 replyToHeader :
-    ( AnyGuildOrDmId, ThreadRoute )
+    Bool
+    -> ( AnyGuildOrDmId, ThreadRoute )
     -> Maybe (Id messageId)
-    -> SeqDict userId { a | name : PersonName }
+    -> SeqDict userId { a | name : PersonName, color : UserColor }
     -> { b | messages : MessageArray messageId2 userId }
     -> Element FrontendMsg_
-replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
+replyToHeader isMobile guildOrDmIdNoThread replyTo allUsers channel =
     case replyTo of
         Just messageIndex ->
             case MessageArray.get (Id.changeType messageIndex) channel.messages of
                 Just message ->
                     case message of
                         UserTextMessage data ->
-                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just data.createdBy) allUsers
+                            replyToHeaderHelper isMobile (PressedCloseReplyTo guildOrDmIdNoThread) (Just data.createdBy) allUsers
 
                         EncryptedUserTextMessage data ->
-                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just data.createdBy) allUsers
+                            replyToHeaderHelper isMobile (PressedCloseReplyTo guildOrDmIdNoThread) (Just data.createdBy) allUsers
 
                         UserJoinedMessage _ userId _ _ ->
-                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
+                            replyToHeaderHelper isMobile (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
 
                         DeletedMessage _ ->
                             Ui.none
 
                         CallStarted { startedBy } ->
-                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just startedBy) allUsers
+                            replyToHeaderHelper isMobile (PressedCloseReplyTo guildOrDmIdNoThread) (Just startedBy) allUsers
 
                         GameStarted { startedBy } ->
-                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just startedBy) allUsers
+                            replyToHeaderHelper isMobile (PressedCloseReplyTo guildOrDmIdNoThread) (Just startedBy) allUsers
 
                 _ ->
                     Ui.none
@@ -5396,33 +5416,39 @@ replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
             Ui.none
 
 
-replyToHeaderHelper : msg -> Maybe userId -> SeqDict userId { a | name : PersonName } -> Element msg
-replyToHeaderHelper onPress userId allUsers =
-    Ui.Prose.paragraph
+replyToHeaderHelper : Bool -> msg -> Maybe userId -> SeqDict userId { a | name : PersonName, color : UserColor } -> Element msg
+replyToHeaderHelper isMobile onPress userId allUsers =
+    Ui.row
         [ Ui.Font.color MyUi.font2
         , Ui.background MyUi.background2
-        , Ui.paddingXY 32 10
+        , Ui.paddingWith { left = 12, right = 32, top = 8, bottom = 8 }
         , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
         , Ui.borderWith { left = 1, right = 1, top = 1, bottom = 0 }
         , Ui.borderColor MyUi.border1
+        , Ui.spacing 5
         , Ui.inFront
             (MyUi.elButton
                 (Dom.id "guild_closeReplyToHeader")
                 onPress
                 [ Ui.width (Ui.px 32)
-                , Ui.paddingWith { left = 4, right = 4, top = 4, bottom = 0 }
+                , Ui.paddingXY 4 0
+                , Ui.height Ui.fill
+                , Ui.contentCenterY
                 , Ui.alignRight
                 , MyUi.hoverText "Cancel reply"
                 ]
                 (Ui.html Icons.x)
             )
-        , Ui.inFront
-            (Ui.el [ Ui.width (Ui.px 18), Ui.move { x = 10, y = 8, z = 0 } ] (Ui.html Icons.reply))
         ]
-        [ Ui.text "Reply to "
+        [ if isMobile then
+            Ui.none
+
+          else
+            Ui.el [ Ui.width (Ui.px 18), Ui.move { x = 0, y = 2, z = 0 } ] (Ui.html Icons.reply)
+        , Ui.text "Reply to "
         , case userId of
             Just userId2 ->
-                Ui.el [ Ui.Font.bold ] (Ui.text (User.toString userId2 allUsers))
+                User.toStringView userId2 allUsers
 
             Nothing ->
                 Ui.text "message"
@@ -5664,7 +5690,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     Ui.noAttr
             ]
             [ newMessagesView model loggedIn
-            , replyToHeader ( GuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
+            , replyToHeader isMobile ( GuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
@@ -5846,7 +5872,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                     Ui.noAttr
             ]
             [ newMessagesView model loggedIn
-            , replyToHeader ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
+            , replyToHeader isMobile ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
             , case ( LocalState.canSendDiscordMessage local guildOrDmIdNoThread, channel.isForum ) of
                 ( Ok (), False ) ->
                     MessageInput.view
@@ -6154,7 +6180,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     Ui.noAttr
             ]
             [ newMessagesView model loggedIn
-            , replyToHeader guildOrDmId replyTo allUsers channel
+            , replyToHeader isMobile guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
@@ -6334,7 +6360,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     Ui.noAttr
             ]
             [ newMessagesView model loggedIn
-            , replyToHeader guildOrDmId replyTo allUsers channel
+            , replyToHeader isMobile guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)

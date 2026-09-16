@@ -1495,9 +1495,13 @@ updateLoaded msg model =
                 Emoji.PressedSelectEmoji emojiOrSticker ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
-                            case loggedIn.showEmojiSelector of
+                            let
+                                loggedIn2 =
+                                    { loggedIn | emojiSelector = Emoji.selectorInit }
+                            in
+                            case loggedIn2.showEmojiSelector of
                                 EmojiSelectorHidden ->
-                                    ( loggedIn, Command.none )
+                                    ( loggedIn2, Command.none )
 
                                 EmojiSelectorForReaction guildOrDmId threadRoute ->
                                     case emojiOrSticker of
@@ -1505,24 +1509,24 @@ updateLoaded msg model =
                                             FrontendExtra.handleLocalChange
                                                 model.time
                                                 (Local_AddReactionEmoji guildOrDmId threadRoute (EmojiOrCustomEmoji_Emoji emoji) |> Just)
-                                                { loggedIn | showEmojiSelector = EmojiSelectorHidden }
-                                                (Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition)
+                                                { loggedIn2 | showEmojiSelector = EmojiSelectorHidden }
+                                                (Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition)
 
                                         EmojiOrSticker_Sticker _ ->
-                                            ( loggedIn, Command.none )
+                                            ( loggedIn2, Command.none )
 
                                         EmojiOrSticker_CustomEmoji customEmojiId ->
                                             FrontendExtra.handleLocalChange
                                                 model.time
                                                 (Local_AddReactionEmoji guildOrDmId threadRoute (EmojiOrCustomEmoji_CustomEmoji customEmojiId) |> Just)
-                                                { loggedIn | showEmojiSelector = EmojiSelectorHidden }
-                                                (Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition)
+                                                { loggedIn2 | showEmojiSelector = EmojiSelectorHidden }
+                                                (Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition)
 
                                 EmojiSelectorForMessage maybeSelection ->
-                                    insertEmojiOrSticker Pages.Guild.channelTextInputId maybeSelection emojiOrSticker model loggedIn
+                                    insertEmojiOrSticker Pages.Guild.channelTextInputId maybeSelection emojiOrSticker model loggedIn2
 
                                 EmojiSelectorForEditMessage _ maybeSelection ->
-                                    insertEmojiOrSticker MessageMenu.editMessageTextInputId maybeSelection emojiOrSticker model loggedIn
+                                    insertEmojiOrSticker MessageMenu.editMessageTextInputId maybeSelection emojiOrSticker model loggedIn2
 
                                 EmojiSelectorForSheepGameInput input _ maybeSelection ->
                                     insertEmojiOrSticker
@@ -1530,7 +1534,7 @@ updateLoaded msg model =
                                         maybeSelection
                                         emojiOrSticker
                                         model
-                                        loggedIn
+                                        loggedIn2
 
                                 EmojiSelectorForSheepGameReaction guildOrDmId matchId target ->
                                     case emojiOrSticker of
@@ -1541,7 +1545,7 @@ updateLoaded msg model =
                                                 target
                                                 (EmojiOrCustomEmoji_Emoji emoji)
                                                 model
-                                                loggedIn
+                                                loggedIn2
 
                                         EmojiOrSticker_CustomEmoji customEmojiId ->
                                             addSheepGameReaction
@@ -1550,10 +1554,10 @@ updateLoaded msg model =
                                                 target
                                                 (EmojiOrCustomEmoji_CustomEmoji customEmojiId)
                                                 model
-                                                loggedIn
+                                                loggedIn2
 
                                         EmojiOrSticker_Sticker _ ->
-                                            ( loggedIn, Command.none )
+                                            ( loggedIn2, Command.none )
                         )
                         model
 
@@ -6643,7 +6647,11 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
                             EmojiSelectorHidden
                 , emojiSelector = { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
               }
-            , Dom.focus Emoji.searchInputId |> Task.attempt (\_ -> SetFocus)
+            , if MyUi.isMobile model then
+                Command.none
+
+              else
+                Dom.focus Emoji.searchInputId |> Task.attempt (\_ -> SetFocus)
             )
         )
         model
