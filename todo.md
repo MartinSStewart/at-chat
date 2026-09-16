@@ -2,8 +2,6 @@
 * Login/signup button doesn't work if failed to link Discord message is visible
 * Prevent files larger than 10mb being attached to Discord messages (unless it's a nitro user)
 * Make it more clear when a message hasn't been sent yet
-* Messages disappear for one user (are still sent but vanishing locally). This is happening when backups are created.
-  Need to make backups lock up server less
 * Some Discord stickers width /= height but the current sticker view assumes width == height
 * If someone links their Discord account, when the linking finishes, show all the accounts they are a part of, not just
   all the ones that loaded (some might already be loaded)
@@ -25,8 +23,6 @@
 * User profile not appearing when camera not connected but video is enabled
 * Had 3 person call and one person joined with video and they had extremely bad RTT. Me and the other person had no
   issues (but weren't using video)
-* The app badge can get stuck at a number even when all the messages have been viewed
-* Code blocks aren't possible to spoiler
 * Double tapping send message shouldn't send twice
 * Video attachments not decoding when message is encrypted
 * Swiping quickly should move image more quickly so it can leave the screen for certain

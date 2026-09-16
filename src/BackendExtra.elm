@@ -1228,10 +1228,7 @@ discordGuildToFrontendForUser :
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     -> Maybe DiscordFrontendGuild
 discordGuildToFrontendForUser requestMessagesFor guildId guild linkedDiscordUsers =
-    if
-        SeqDict.member (MembersAndOwner.owner guild.membersAndOwner) linkedDiscordUsers
-            || not (SeqDict.isEmpty (SeqDict.intersect (MembersAndOwner.members guild.membersAndOwner) linkedDiscordUsers))
-    then
+    if LocalState.canViewDiscordGuild linkedDiscordUsers guild.membersAndOwner then
         discordGuildToFrontend requestMessagesFor linkedDiscordUsers guildId guild |> Just
 
     else

@@ -592,6 +592,9 @@ updateSetup localUser msg model =
                 MessageInput.IgnoredKeyPress ->
                     ( Setup model, NoOutMsg )
 
+                MessageInput.IgnoreTouchStart ->
+                    ( Setup model, NoOutMsg )
+
         PressedAddQuestion ->
             ( Setup
                 { model

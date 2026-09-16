@@ -54,6 +54,7 @@ module LocalState exposing
     , callStartedText
     , canSendDiscordMessage
     , canViewDiscordChannel
+    , canViewDiscordGuild
     , channelToFrontend
     , createChannel
     , createChannelFrontend
@@ -611,6 +612,18 @@ channelToFrontend guildId channelId threadRoute goMatchPublicIds channel =
 
         ChannelDeleted _ ->
             Nothing
+
+
+{-| We can only see a Discord guild for as long as one of our linked Discord accounts is
+still a member of it.
+-}
+canViewDiscordGuild :
+    SeqDict (Discord.Id Discord.UserId) a
+    -> MembersAndOwner (Discord.Id Discord.UserId) b
+    -> Bool
+canViewDiscordGuild linkedDiscordUsers membersAndOwner =
+    SeqDict.member (MembersAndOwner.owner membersAndOwner) linkedDiscordUsers
+        || not (SeqDict.isEmpty (SeqDict.intersect (MembersAndOwner.members membersAndOwner) linkedDiscordUsers))
 
 
 canViewDiscordChannel :

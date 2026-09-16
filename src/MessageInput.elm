@@ -17,6 +17,7 @@ module MessageInput exposing
     , tabText
     , textPlaceholder
     , textarea
+    , textareaPadding
     , view
     )
 
@@ -92,6 +93,7 @@ type Msg
       -- A key press that the textarea gets to handle in its normal way. It only exists because
       -- Html.Events.preventDefaultOn needs a msg to hand back.
     | IgnoredKeyPress
+    | IgnoreTouchStart
 
 
 counterThreshold : number
@@ -208,6 +210,9 @@ isPress msg =
             False
 
         IgnoredKeyPress ->
+            False
+
+        IgnoreTouchStart ->
             False
 
 
@@ -584,7 +589,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
         |> Ui.html
         |> Ui.el (Ui.height (Ui.px height) :: Ui.heightMax height :: containerAttributes roundTopCorners)
         |> Ui.el
-            [ Ui.paddingWith { left = 80, right = 36, top = 0, bottom = 0 }
+            [ Ui.paddingWith textareaPadding
             , Ui.inFront
                 (Ui.row
                     [ Ui.width Ui.shrink, Ui.move { x = 2, y = 0, z = 0 }, Ui.spacing 4, Ui.alignBottom ]
@@ -619,6 +624,16 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
                     (Ui.html Icons.sendMessage)
                 )
             ]
+
+
+{-| The text area doesn't fill the whole width of the message input. The attachment and
+emoji buttons sit in the padding on its left and the send button in the padding on its
+right, so anything drawn against the text area rather than against the message input as a
+whole (the reply header above it) pads itself by the same amount to line up with it.
+-}
+textareaPadding : { left : Int, right : Int, top : Int, bottom : Int }
+textareaPadding =
+    { left = 80, right = 36, top = 0, bottom = 0 }
 
 
 containerAttributes : Bool -> List (Ui.Attribute msg)
@@ -678,7 +693,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
         |> Ui.html
         |> Ui.el (Ui.heightMax 400 :: containerAttributes roundTopCorners)
         |> Ui.el
-            [ Ui.paddingWith { left = 80, right = 36, top = 0, bottom = 0 }
+            [ Ui.paddingWith textareaPadding
             , Ui.inFront
                 (Ui.row
                     [ Ui.width Ui.shrink, Ui.move { x = 2, y = -2, z = 0 }, Ui.spacing 4, Ui.alignBottom ]
@@ -756,10 +771,12 @@ attachmentButton htmlIdPrefix =
         , Ui.contentCenterY
         , Ui.centerY
         , MyUi.hoverText "Attach file"
-        , Html.Events.preventDefaultOn
-            "touchend"
-            (Json.Decode.succeed ( PressedUploadFile, True ))
-            |> Ui.htmlAttribute
+
+        --, Html.Events.preventDefaultOn
+        --    "touchend"
+        --    (Json.Decode.succeed ( PressedUploadFile, True ))
+        --    |> Ui.htmlAttribute
+        , MyUi.blockTouchStartPropagation IgnoreTouchStart
         ]
         (Ui.html Icons.attachment)
 
@@ -782,6 +799,7 @@ showEmojiSelectorButton htmlIdPrefix =
             "touchend"
             (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
             |> Ui.htmlAttribute
+        , MyUi.blockTouchStartPropagation IgnoreTouchStart
         ]
         (Ui.html Icons.smile)
 

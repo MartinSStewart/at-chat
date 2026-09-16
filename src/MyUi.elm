@@ -8,6 +8,7 @@ module MyUi exposing
     , background3
     , black
     , blockClickPropagation
+    , blockTouchStartPropagation
     , border1
     , border2
     , bounceScroll
@@ -1540,6 +1541,11 @@ blockClickPropagation msg =
     Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( msg, True ))
 
 
+blockTouchStartPropagation : msg -> Ui.Attribute msg
+blockTouchStartPropagation msg =
+    Ui.Events.stopPropagationOn "touchstart" (Json.Decode.succeed ( msg, True ))
+
+
 channelColumnWidth : Coord CssPixels -> Int
 channelColumnWidth windowSize =
     clamp 200 300 (toFloat (Coord.xRaw windowSize) * 0.2 |> round)
@@ -1807,7 +1813,7 @@ border1 =
 
 guildColumnBorder : Ui.Color
 guildColumnBorder =
-    Ui.rgb 37 56 76
+    Ui.rgb 59 89 120
 
 
 border2 : Ui.Color

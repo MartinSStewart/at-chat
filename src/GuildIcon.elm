@@ -272,14 +272,14 @@ guildIcon guild mode name =
 userView : ChannelNotificationType -> Maybe FileHash -> UserColor -> Element msg
 userView notification maybeIcon color =
     Ui.el
-        [ notificationView 0 -3 MyUi.background1 notification
+        [ notificationView -4 -3 MyUi.background1 notification
         ]
         (case maybeIcon of
             Just icon ->
                 iconView (FileStatus.fileUrl FileStatus.pngContent icon)
 
             Nothing ->
-                defaultUser True size (Ui.rounded iconRounding) color
+                defaultUser size notSelectedRounding color
         )
 
 
@@ -293,20 +293,15 @@ discordUserView notification maybeIcon userId =
             Discord.defaultUserAvatarUrl (Discord.TwoToNthPower 7) userId
     )
         |> iconView
-        |> Ui.el [ discordNotificationView 0 -3 notification ]
+        |> Ui.el [ discordNotificationView -4 -3 notification ]
 
 
-defaultUser : Bool -> Int -> Ui.Attribute msg -> UserColor -> Element msg
-defaultUser centerX size2 rounding color =
+defaultUser : Int -> Ui.Attribute msg -> UserColor -> Element msg
+defaultUser size2 rounding color =
     Ui.el
         [ Ui.contentCenterY
         , rounding
         , Ui.background (UserColor.toColor color)
-        , if centerX then
-            Ui.centerX
-
-          else
-            Ui.noAttr
         , Ui.width (Ui.px size2)
         , Ui.height (Ui.px size2)
         , Ui.paddingXY 4 0
@@ -377,7 +372,8 @@ guildIconView mode url =
 
 
 {-| A user's avatar. Unlike a guild, a user is never the selected thing in the guild column,
-so this is the same picture whatever is going on around it.
+so this is the same picture whatever is going on around it: the one an unselected guild
+shows, sitting against the edge of the column with its outer corners rounded.
 -}
 iconView : String -> Element msg
 iconView url =
@@ -387,9 +383,11 @@ iconView url =
         , Html.Attributes.src url
         , MyUi.lazyLoading
         , Html.Attributes.style "display" "flex"
-        , Html.Attributes.style "align-self" "center"
+        , Html.Attributes.style "align-self" "flex-start"
         , Html.Attributes.style "object-fit" "cover"
-        , Html.Attributes.style "border-radius" (String.fromInt iconRounding ++ "px")
+        , Html.Attributes.style
+            "border-radius"
+            ("0 " ++ String.fromInt iconRounding ++ "px " ++ String.fromInt iconRounding ++ "px 0")
         ]
         []
         |> Ui.html

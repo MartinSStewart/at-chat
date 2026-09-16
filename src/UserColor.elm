@@ -15,6 +15,22 @@ type UserColor
     = UserColor Int
 
 
+w3_validate_UserColor : UserColor -> Result String ()
+w3_validate_UserColor userColor =
+    let
+        parts =
+            toParts userColor
+    in
+    if parts.lightness < minLightness || parts.lightness > maxLightness then
+        Err "Invalid lightness"
+
+    else if toColor userColor |> isReadable then
+        Ok ()
+
+    else
+        Err "Contrast is too low"
+
+
 hueCount : number
 hueCount =
     32
@@ -392,10 +408,20 @@ lightnessSlider selection parts onChange =
             ]
             { label = sliderLabel.id
             , onChange = \value -> select selection (fromParts { parts | lightness = round value }) |> onChange
-            , min = 5
-            , max = toFloat (lightnessCount - 1) - 2
+            , min = minLightness
+            , max = maxLightness
             , value = toFloat parts.lightness
             , thumb = Nothing
             , step = Just 1
             }
         ]
+
+
+maxLightness : number
+maxLightness =
+    (lightnessCount - 1) - 2
+
+
+minLightness : number
+minLightness =
+    5
