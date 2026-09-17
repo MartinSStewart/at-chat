@@ -46,7 +46,6 @@ import GuildColumn
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
-import Html.Events
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DmId)
 import ImageEditor
 import ImageViewer
@@ -3703,7 +3702,7 @@ updateLoaded msg model =
                 [ cmd
                 , if hasFocus then
                     Command.batch
-                        [ FrontendExtra.setFocus model Pages.Guild.channelTextInputId
+                        [ FrontendExtra.setFocus model2 Pages.Guild.channelTextInputId
                         , Ports.setFavicon "/favicon.ico"
                         , Ports.closeNotifications
                         , Ports.registerServiceWorker

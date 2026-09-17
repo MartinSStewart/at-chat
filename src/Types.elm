@@ -82,7 +82,6 @@ import Drawing
 import Duration exposing (Duration)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Effect.Browser.Events exposing (Visibility)
 import Effect.Browser.Navigation exposing (Key)
 import Effect.File exposing (File)
 import Effect.Http as Http

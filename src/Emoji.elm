@@ -33,8 +33,6 @@ module Emoji exposing
 
 import Array exposing (Array)
 import Codec exposing (Codec)
-import Coord exposing (Coord)
-import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
 import Dict exposing (Dict)
 import Effect.Browser.Dom as Dom
