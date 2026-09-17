@@ -1,4 +1,3 @@
-* Fix ping user dropdown appearing too low on mobile
 * Login/signup button doesn't work if failed to link Discord message is visible
 * Prevent files larger than 10mb being attached to Discord messages (unless it's a nitro user)
 * Make it more clear when a message hasn't been sent yet
