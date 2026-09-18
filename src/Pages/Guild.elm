@@ -5225,13 +5225,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
 
         availableHeight : Int
         availableHeight =
-            Coord.yRaw model.windowSize
-                - (if isMobile then
-                    500
-
-                   else
-                    0
-                  )
+            model.visualViewportHeight
     in
     case loggedIn.showEmojiSelector of
         EmojiSelectorHidden ->
@@ -6009,7 +6003,7 @@ peopleAreTypingView allUsers channel currentUserId model =
                 ("0 calc(12px + "
                     ++ MyUi.insetBottom
                     ++ " * 0.5) "
-                    ++ (if model.virtualKeyboardOpen then
+                    ++ (if MyUi.virtualKeyboardOpen model then
                             "0"
 
                         else

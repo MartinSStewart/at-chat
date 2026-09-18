@@ -7001,7 +7001,7 @@ handlePressedTextInput : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnl
 handlePressedTextInput model =
     updateLoggedIn
         (\loggedIn -> ( { loggedIn | drawingMode = Drawing.NoSelectedAnchor }, Command.none ))
-        { model | virtualKeyboardOpen = True }
+        model
 
 
 drawingRedo : Drawing.SelectedAnchorData -> LoggedIn2 -> LoadedFrontend -> ( LoggedIn2, Command FrontendOnly ToBackend msg )
