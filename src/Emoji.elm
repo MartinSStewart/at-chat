@@ -1378,9 +1378,6 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
                                ]
                         )
 
-                -- Recently used emojis, most recent first. They aren't a category of their own:
-                -- nothing shows up for them in the column on the left, and they're reached by
-                -- clicking the first category, which scrolls all the way to the top.
                 recentEmojis : List EmojiOrSticker
                 recentEmojis =
                     Array.toList userData.lastUsedEmojis
@@ -1553,6 +1550,8 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
                 , Ui.htmlAttribute keepFocusOnMouseDown
                 , Ui.heightMin 0
                 , Ui.clip
+                , MyUi.blockTouchStartPropagation NoOp
+                , MyUi.blockTouchEndPropagation NoOp
                 ]
                 (if isMobile then
                     [ emojiContent, searchInput2 ]

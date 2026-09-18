@@ -8,6 +8,7 @@ module MyUi exposing
     , background3
     , black
     , blockClickPropagation
+    , blockTouchEndPropagation
     , blockTouchStartPropagation
     , border1
     , border2
@@ -1530,6 +1531,11 @@ blockClickPropagation msg =
 blockTouchStartPropagation : msg -> Ui.Attribute msg
 blockTouchStartPropagation msg =
     Ui.Events.stopPropagationOn "touchstart" (Json.Decode.succeed ( msg, True ))
+
+
+blockTouchEndPropagation : msg -> Ui.Attribute msg
+blockTouchEndPropagation msg =
+    Ui.Events.stopPropagationOn "touchend" (Json.Decode.succeed ( msg, True ))
 
 
 channelColumnWidth : Coord CssPixels -> Int

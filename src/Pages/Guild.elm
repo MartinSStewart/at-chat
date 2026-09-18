@@ -5225,7 +5225,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
 
         availableHeight : Int
         availableHeight =
-            model.visualViewportHeight
+            model.visualViewportHeight - 54 - model.startupData.safeAreaInsetTop
     in
     case loggedIn.showEmojiSelector of
         EmojiSelectorHidden ->
