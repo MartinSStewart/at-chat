@@ -37,8 +37,10 @@ import Discord
 import DmChannelId exposing (DmChannelId)
 import Effect.Time as Time
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), UserId)
+import Message
 import Pagination
 import SecretId exposing (SecretId)
+import Serialize
 import SessionIdHash exposing (SessionIdHash)
 import Slack
 import Url exposing (Url)
@@ -453,11 +455,20 @@ decode url =
 decodeChannelHeaderTab : AppUrl -> Maybe ChannelHeaderTab
 decodeChannelHeaderTab url2 =
     let
-        goMatchId : Maybe (Id ChannelMessageId)
-        goMatchId =
+        matchId : Maybe (Id ChannelMessageId)
+        matchId =
             case Dict.get goMatchParam url2.queryParameters of
-                Just [ goMatchId2 ] ->
-                    Id.fromString goMatchId2
+                Just [ matchId2 ] ->
+                    Id.fromString matchId2
+
+                _ ->
+                    Nothing
+
+        repliedTo : Maybe Message.RepliedToGame
+        repliedTo =
+            case Dict.get repliedToGameParam url2.queryParameters of
+                Just [ repliedTo2 ] ->
+                    Serialize.decodeFromString Message.repliedToGameCodec repliedTo2 |> Result.toMaybe
 
                 _ ->
                     Nothing
@@ -469,7 +480,7 @@ decodeChannelHeaderTab url2 =
                     ChannelHeaderTab_ChannelDescription |> Just
 
                 "game" ->
-                    ChannelHeaderTab_Games goMatchId |> Just
+                    ChannelHeaderTab_Games matchId repliedTo |> Just
 
                 "call" ->
                     ChannelHeaderTab_VoiceChat |> Just
@@ -908,9 +919,9 @@ sameChannelHeaderTab tabA tabB =
         ChannelHeaderTab_VoiceChat ->
             tabB == ChannelHeaderTab_VoiceChat
 
-        ChannelHeaderTab_Games _ ->
+        ChannelHeaderTab_Games _ _ ->
             case tabB of
-                ChannelHeaderTab_Games _ ->
+                ChannelHeaderTab_Games _ _ ->
                     True
 
                 _ ->
@@ -1145,17 +1156,33 @@ encodeOverlay overlay =
             []
 
 
+repliedToGameParam : String
+repliedToGameParam =
+    "replied-to-game"
+
+
 encodeChannelHeaderTab : Maybe ChannelHeaderTab -> List Url.Builder.QueryParameter
 encodeChannelHeaderTab tab =
     case tab of
         Just ChannelHeaderTab_VoiceChat ->
             [ Url.Builder.string tabParam "call" ]
 
-        Just (ChannelHeaderTab_Games maybeMatchId) ->
+        Just (ChannelHeaderTab_Games maybeMatchId repliedTo) ->
             Url.Builder.string tabParam "game"
                 :: (case maybeMatchId of
                         Just matchId ->
-                            [ Url.Builder.int goMatchParam (Id.toInt matchId) ]
+                            [ Url.Builder.int goMatchParam (Id.toInt matchId)
+                            ]
+                                ++ (case repliedTo of
+                                        Just repliedTo2 ->
+                                            [ Url.Builder.string
+                                                repliedToGameParam
+                                                (Serialize.encodeToString Message.repliedToGameCodec repliedTo2)
+                                            ]
+
+                                        Nothing ->
+                                            []
+                                   )
 
                         Nothing ->
                             []

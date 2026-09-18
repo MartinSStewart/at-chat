@@ -8,6 +8,9 @@ module Message exposing
     , Message(..)
     , MessageContent
     , MessageNoReply(..)
+    , RepliedTo(..)
+    , RepliedToGame(..)
+    , ThreadRouteWithRepliedTo(..)
     , UserTextMessageData
     , UserTextMessageDataNoReply
     , UserTextMessageDrawings
@@ -21,9 +24,13 @@ module Message exposing
     , editUserTextMessage
     , encryptedUserTextMessageFrontend
     , handleDrawingChange
+    , maybeToReply
     , noDrawings
     , reactionEmojis
     , removeReactionEmoji
+    , repliedTo
+    , repliedToGameCodec
+    , replyToMaybe
     , toDecrypted
     , toEncrypted
     , userJoined
@@ -40,7 +47,7 @@ import Embed exposing (Embed(..), EmbedData, EmbedImageFormat(..))
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
 import FileStatus exposing (FileData, FileHash, FileId)
-import Id exposing (Id, StickerId, UserId)
+import Id exposing (ChannelMessageId, Id, StickerId, ThreadMessageId, UserId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
 import Quantity exposing (Quantity)
@@ -100,16 +107,16 @@ userTextMessageNoEmbeds :
     -> userId
     -> Nonempty (RichText userId)
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
-    -> Maybe (Id messageId)
+    -> RepliedTo messageId
     -> SeqDict (Id FileId) FileData
     -> UserTextMessageData messageId userId
-userTextMessageNoEmbeds createdAt2 createdBy content reactions repliedTo attachedFiles =
+userTextMessageNoEmbeds createdAt2 createdBy content reactions repliedTo2 attachedFiles =
     { createdAt = createdAt2
     , createdBy = createdBy
     , content = { content = content, attachedFiles = attachedFiles, embeds = Array.empty }
     , reactions = reactions
     , editedAt = Nothing
-    , repliedTo = repliedTo
+    , repliedTo = repliedTo2
     , drawings = Nothing
     }
 
@@ -128,7 +135,7 @@ userTextMessageBackend :
     -> Time.Posix
     -> userId
     -> Nonempty (RichText userId)
-    -> Maybe (Id messageId)
+    -> RepliedTo messageId
     -> SeqDict (Id FileId) FileData
     -> SeqDict (Id StickerId) StickerData
     ->
@@ -136,7 +143,7 @@ userTextMessageBackend :
         , Command BackendOnly toMsg ( Url, Result Http.Error EmbedData )
         , SeqDict (Id StickerId) StickerData
         )
-userTextMessageBackend secretKey createdAt2 createdBy content repliedTo attachedFiles allStickers =
+userTextMessageBackend secretKey createdAt2 createdBy content repliedTo2 attachedFiles allStickers =
     let
         hyperlinks : List Url
         hyperlinks =
@@ -151,7 +158,7 @@ userTextMessageBackend secretKey createdAt2 createdBy content repliedTo attached
             }
       , reactions = SeqDict.empty
       , editedAt = Nothing
-      , repliedTo = repliedTo
+      , repliedTo = repliedTo2
       , drawings = Nothing
       }
     , SeqSet.fromList hyperlinks |> SeqSet.toList |> List.map (Embed.request secretKey) |> Command.batch
@@ -183,9 +190,9 @@ encryptedUserTextMessageFrontend :
     -> Id UserId
     -> SeqSet FileHash
     -> EncryptedData (MessageContent (Id UserId))
-    -> Maybe (Id messageId)
+    -> RepliedTo messageId
     -> Message messageId (Id UserId)
-encryptedUserTextMessageFrontend createdAt2 createdBy fileHashes contentAndEmbeds repliedTo =
+encryptedUserTextMessageFrontend createdAt2 createdBy fileHashes contentAndEmbeds repliedTo2 =
     EncryptedUserTextMessage
         { content = contentAndEmbeds
         , fileHashes = fileHashes
@@ -193,7 +200,7 @@ encryptedUserTextMessageFrontend createdAt2 createdBy fileHashes contentAndEmbed
         , createdBy = createdBy
         , reactions = SeqDict.empty
         , editedAt = Nothing
-        , repliedTo = repliedTo
+        , repliedTo = repliedTo2
         , drawings = Nothing
         }
 
@@ -202,10 +209,10 @@ userTextMessageFrontend :
     Time.Posix
     -> userId
     -> Nonempty (RichText userId)
-    -> Maybe (Id messageId)
+    -> RepliedTo messageId
     -> SeqDict (Id FileId) FileData
     -> Message messageId userId
-userTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
+userTextMessageFrontend createdAt2 createdBy content repliedTo2 attachedFiles =
     let
         hyperlinks : List Url
         hyperlinks =
@@ -220,7 +227,7 @@ userTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
         }
     , reactions = SeqDict.empty
     , editedAt = Nothing
-    , repliedTo = repliedTo
+    , repliedTo = repliedTo2
     , drawings = Nothing
     }
         |> UserTextMessage
@@ -376,13 +383,90 @@ type alias UserTextMessageData messageId userId =
     , content : MessageContent userId
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
-    , repliedTo : Maybe (Id messageId)
+    , repliedTo : RepliedTo messageId
     , drawings :
         {- This introduces redundancy since Nothing and Just with no drawings inside mean the same thing.
            Hopefully it also reduces how much memory this record uses for typical messages.
         -}
         Maybe (UserTextMessageDrawings userId)
     }
+
+
+type RepliedTo messageId
+    = NoReply
+    | RepliedToMessage (Id messageId)
+    | RepliedToGame (Id ChannelMessageId) RepliedToGame
+
+
+type RepliedToGame
+    = RepliedTo_WordSpellingGame Int
+    | RepliedTo_SheepGame
+
+
+type ThreadRouteWithRepliedTo
+    = NoThreadWithRepliedTo (RepliedTo ChannelMessageId)
+    | ViewThreadWithRepliedTo (Id ChannelMessageId) (Maybe (Id ThreadMessageId))
+
+
+repliedToGameCodec : Serialize.Codec e RepliedToGame
+repliedToGameCodec =
+    Serialize.customType
+        (\a b value ->
+            case value of
+                RepliedTo_WordSpellingGame argA ->
+                    a argA
+
+                RepliedTo_SheepGame ->
+                    b
+        )
+        |> Serialize.variant1 RepliedTo_WordSpellingGame Serialize.unsignedInt16
+        |> Serialize.variant0 RepliedTo_SheepGame
+        |> Serialize.finishCustomType
+
+
+maybeToReply : Maybe (Id messageId) -> RepliedTo messageId
+maybeToReply maybeRepliedTo =
+    case maybeRepliedTo of
+        Nothing ->
+            NoReply
+
+        Just messageId ->
+            RepliedToMessage messageId
+
+
+replyToMaybe : RepliedTo messageId -> Maybe (Id messageId)
+replyToMaybe repliedTo2 =
+    case repliedTo2 of
+        RepliedToMessage messageId2 ->
+            Just messageId2
+
+        NoReply ->
+            Nothing
+
+        RepliedToGame id repliedToGame ->
+            Nothing
+
+
+repliedTo : Message messageId userId -> RepliedTo messageId
+repliedTo message =
+    case message of
+        UserTextMessage data ->
+            data.repliedTo
+
+        EncryptedUserTextMessage data ->
+            data.repliedTo
+
+        UserJoinedMessage posix userId seqDict _ ->
+            NoReply
+
+        DeletedMessage posix ->
+            NoReply
+
+        CallStarted callStartedData ->
+            NoReply
+
+        GameStarted gameStartedData ->
+            NoReply
 
 
 {-| Puts the plain text of a message back in place of its ciphertext, for a conversation
@@ -469,7 +553,7 @@ type alias EncryptedUserTextMessageData messageId userId =
     , fileHashes : SeqSet FileHash
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
-    , repliedTo : Maybe (Id messageId)
+    , repliedTo : RepliedTo messageId
     , drawings : Maybe (UserTextMessageDrawings userId)
     }
 

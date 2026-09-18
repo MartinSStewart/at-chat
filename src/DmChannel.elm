@@ -151,11 +151,16 @@ gamesToFrontend guildOrDmId threadRoute goMatchPublicIds channel =
         (\matchId gameData ->
             case threadRoute of
                 Just ( _, channelHeaderTab ) ->
-                    if channelHeaderTab == Just (ChannelHeaderTab_Games (Just matchId)) then
-                        Game.initMatchData gameData (OneToOne.first ( guildOrDmId, matchId ) goMatchPublicIds)
+                    case channelHeaderTab of
+                        Just (ChannelHeaderTab_Games (Just matchIdB) _) ->
+                            if matchId == matchIdB then
+                                Game.initMatchData gameData (OneToOne.first ( guildOrDmId, matchId ) goMatchPublicIds)
 
-                    else
-                        Game.matchNotLoaded gameData
+                            else
+                                Game.matchNotLoaded gameData
+
+                        _ ->
+                            Game.matchNotLoaded gameData
 
                 Nothing ->
                     Game.matchNotLoaded gameData
