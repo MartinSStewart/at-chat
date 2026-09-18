@@ -7665,7 +7665,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                         (Route.ChannelRoute
                                             channelId
                                             (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
-                                            (Just (UserSession.ChannelHeaderTab_Games (Just matchId)))
+                                            (Just (UserSession.ChannelHeaderTab_Games (Just matchId) Nothing))
                                         )
                                         ChannelsHiddenOnMobile
                                         Nothing
@@ -7674,7 +7674,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                     Route.DmRoute
                                         { channelId = DmChannelId.fromUserIds session.userId id.otherUserId
                                         , threadRoute = Route.NoThreadWithFriends Nothing Route.HideChannelSettings
-                                        , tab = Just (UserSession.ChannelHeaderTab_Games (Just matchId))
+                                        , tab = Just (UserSession.ChannelHeaderTab_Games (Just matchId) Nothing)
                                         , channelsVisible = ChannelsHiddenOnMobile
                                         , overlay = Nothing
                                         }

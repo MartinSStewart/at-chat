@@ -54,7 +54,7 @@ import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), DiscordRole, DiscordThreadReload, WebsocketClosedEvent(..))
 import Log
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (ChangeAttachments(..), Message(..))
+import Message exposing (ChangeAttachments(..), Message(..), RepliedTo(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import Pages.Admin
@@ -841,13 +841,18 @@ messagesAndLinks existingChannelOrThread messages customEmojis discordStickers d
                 )
                 (case message.referencedMessage of
                     Discord.Referenced referenced ->
-                        OneToOne.second referenced.id linkedMessageIds
+                        case OneToOne.second referenced.id linkedMessageIds of
+                            Just messageId ->
+                                RepliedToMessage messageId
+
+                            Nothing ->
+                                NoReply
 
                     Discord.ReferenceDeleted ->
-                        Nothing
+                        NoReply
 
                     Discord.NoReference ->
-                        Nothing
+                        NoReply
                 )
                 (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
                 |> UserTextMessage
@@ -994,7 +999,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                     discordMessage.timestamp
                                     discordMessage.author.id
                                     richText
-                                    replyTo
+                                    (Message.maybeToReply replyTo)
                                     attachments2
                                     model.stickers
 
@@ -1386,7 +1391,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             discordMessage.timestamp
                                                             discordMessage.author.id
                                                             richText
-                                                            maybeReplyTo
+                                                            (Message.maybeToReply maybeReplyTo)
                                                             (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
                                                             model.stickers
                                                 in
@@ -1423,7 +1428,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             discordMessage.timestamp
                                                             discordMessage.author.id
                                                             richText
-                                                            maybeReplyTo
+                                                            (Message.maybeToReply maybeReplyTo)
                                                             (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
                                                             model.stickers
                                                 in
@@ -1679,7 +1684,7 @@ addForumPost authentication post guild channel model =
 
         message : Message ChannelMessageId (Discord.Id Discord.UserId)
         message =
-            Message.userTextMessageNoEmbeds createdAt post.ownerId richText SeqDict.empty Nothing SeqDict.empty
+            Message.userTextMessageNoEmbeds createdAt post.ownerId richText SeqDict.empty NoReply SeqDict.empty
                 |> UserTextMessage
     in
     -- A forum post's thread has the same id as the message the post hangs off of, the same

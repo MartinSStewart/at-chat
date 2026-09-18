@@ -178,7 +178,7 @@ import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (ChangeAttachments, Message(..), MessageContent, MessageNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments, Message(..), MessageContent, MessageNoReply(..), RepliedTo(..), ThreadRouteWithRepliedTo(..), UserTextMessageDataNoReply)
 import MessageArray exposing (MessageArray)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
@@ -3600,12 +3600,12 @@ guildOrDmIdToMessage :
     GuildOrDmId
     -> ThreadRouteWithMessage
     -> LocalState
-    -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithMaybeMessage )
+    -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithRepliedTo )
 guildOrDmIdToMessage guildOrDmId threadRoute local =
     let
         helper :
             { a | messages : MessageArray ChannelMessageId (Id UserId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
-            -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithMaybeMessage )
+            -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithRepliedTo )
         helper channel =
             case threadRoute of
                 ViewThreadWithMessage threadId messageId ->
@@ -3624,7 +3624,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                                       , reactions = data.reactions
                                       , editedAt = data.editedAt
                                       }
-                                    , ViewThreadWithMaybeMessage threadId data.repliedTo
+                                    , ViewThreadWithRepliedTo threadId (Message.replyToMaybe data.repliedTo)
                                     )
                                         |> Just
 
@@ -3637,7 +3637,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                                               , reactions = data.reactions
                                               , editedAt = data.editedAt
                                               }
-                                            , ViewThreadWithMaybeMessage threadId data.repliedTo
+                                            , ViewThreadWithRepliedTo threadId (Message.replyToMaybe data.repliedTo)
                                             )
                                                 |> Just
 
@@ -3670,7 +3670,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                                       , reactions = data.reactions
                                       , editedAt = data.editedAt
                                       }
-                                    , NoThreadWithMaybeMessage data.repliedTo
+                                    , NoThreadWithRepliedTo data.repliedTo
                                     )
                                         |> Just
 
@@ -3683,7 +3683,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                                               , reactions = data.reactions
                                               , editedAt = data.editedAt
                                               }
-                                            , NoThreadWithMaybeMessage data.repliedTo
+                                            , NoThreadWithRepliedTo data.repliedTo
                                             )
                                                 |> Just
 
@@ -3741,7 +3741,7 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                               , reactions = data.reactions
                               , editedAt = data.editedAt
                               }
-                            , NoThreadWithMaybeMessage data.repliedTo
+                            , NoThreadWithMaybeMessage (Message.replyToMaybe data.repliedTo)
                             )
                                 |> Just
 
@@ -3784,7 +3784,7 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                                               , reactions = data.reactions
                                               , editedAt = data.editedAt
                                               }
-                                            , ViewThreadWithMaybeMessage threadId data.repliedTo
+                                            , ViewThreadWithMaybeMessage threadId (Message.replyToMaybe data.repliedTo)
                                             )
                                                 |> Just
 

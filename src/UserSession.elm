@@ -39,7 +39,7 @@ import Effect.Time as Time
 import FileStatus exposing (FileHash, FileId, FileStatus)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, QuestionId, ThreadMessageId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_ChannelThreadId, Viewing_DiscordChannelId, Viewing_DiscordChannelThreadId, Viewing_DiscordDmId, Viewing_DmId, Viewing_DmThreadId)
 import IdArray exposing (IdArray)
-import Message exposing (Message)
+import Message exposing (Message, RepliedToGame)
 import PersonName exposing (PersonName)
 import Ports exposing (SubscribeData)
 import SeqDict exposing (SeqDict)
@@ -86,7 +86,7 @@ type alias FrontendUserSession =
 
 type ChannelHeaderTab
     = ChannelHeaderTab_VoiceChat
-    | ChannelHeaderTab_Games (Maybe (Id ChannelMessageId))
+    | ChannelHeaderTab_Games (Maybe (Id ChannelMessageId)) (Maybe RepliedToGame)
     | ChannelHeaderTab_ChannelDescription
     | ChannelHeaderTab_Draw
 
@@ -386,7 +386,7 @@ isViewingGame guildOrDmId matchId viewing =
 
         Viewing_Dm data ->
             case data.channelHeaderTab of
-                Just (ChannelHeaderTab_Games (Just viewingMatchId)) ->
+                Just (ChannelHeaderTab_Games (Just viewingMatchId) _) ->
                     isViewing (GuildOrDmId guildOrDmId) NoThread viewing && (matchId == viewingMatchId)
 
                 _ ->
@@ -400,7 +400,7 @@ isViewingGame guildOrDmId matchId viewing =
 
         Viewing_Channel data ->
             case data.channelHeaderTab of
-                Just (ChannelHeaderTab_Games (Just viewingMatchId)) ->
+                Just (ChannelHeaderTab_Games (Just viewingMatchId) _) ->
                     isViewing (GuildOrDmId guildOrDmId) NoThread viewing && (matchId == viewingMatchId)
 
                 _ ->
