@@ -123,6 +123,7 @@ import Ui.Font
 import Ui.Gradient
 import Ui.Lazy
 import Ui.Prose
+import Url
 import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
 
@@ -215,9 +216,11 @@ type WordDefinitionData
     = WordDefinition_Loading
       -- Swedish has no dictionary API wired up, so a clicked Swedish word just says so.
     | WordDefinition_SwedishUnsupported
-      -- The lookup failed or the word wasn't in the dictionary (the API answers 404 for unknown
-      -- words, which arrives here as an error).
+      -- The dictionary answered, but has nothing for this word.
     | WordDefinition_NotFound
+      -- The dictionary couldn't be reached, which is worth telling the player apart from a word
+      -- the dictionary doesn't know.
+    | WordDefinition_Failed
     | WordDefinition_Loaded (List DictEntry)
 
 
@@ -4856,6 +4859,13 @@ wordDefinitionBody word data =
                 , definitionCredits
                 ]
 
+        WordDefinition_Failed ->
+            Ui.column
+                [ Ui.Font.color MyUi.font3, Ui.height Ui.fill ]
+                [ Ui.text "Couldn't reach the dictionary. Try again in a moment."
+                , definitionCredits
+                ]
+
         WordDefinition_Loaded entries ->
             Ui.column
                 [ Ui.spacing 16, Ui.height Ui.fill ]
@@ -4873,10 +4883,14 @@ definitionCredits =
         , Ui.paddingWith { left = 0, right = 0, top = 24, bottom = 16 }
         , Ui.Font.color MyUi.font3
         ]
-        [ Ui.text "Dictionary provided by "
+        [ Ui.text "Definitions from "
         , Ui.el
-            [ Ui.linkNewTab "https://dictionaryapi.dev/", Ui.Font.noWrap ]
-            (Ui.text "https://dictionaryapi.dev/")
+            [ Ui.linkNewTab "https://en.wiktionary.org/", Ui.Font.noWrap ]
+            (Ui.text "Wiktionary")
+        , Ui.text " (CC BY-SA), served by "
+        , Ui.el
+            [ Ui.linkNewTab "https://www.datamuse.com/api/", Ui.Font.noWrap ]
+            (Ui.text "Datamuse")
         ]
 
 
@@ -6600,37 +6614,96 @@ parseWordList result =
             WordList_Error error
 
 
-{-| The Free Dictionary API endpoint for an English word. Words are placed uppercase, so this
-lowercases before building the URL. The response has no CORS restrictions, so the frontend can
-call it directly (see `Frontend.handleGameOutMsgs`).
+{-| The Datamuse API endpoint for an English word. `sp` matches that exact spelling, `md=d` asks
+for the definitions and `max=1` keeps just the one entry. Words are held uppercase, so this
+lowercases before building the URL. The response allows any origin, so the frontend can call it
+directly (see `Frontend.handleGameOutMsgs`).
 -}
 definitionApiUrl : String -> String
 definitionApiUrl word =
-    "https://api.dictionaryapi.dev/api/v2/entries/en/" ++ String.toLower word
+    "https://api.datamuse.com/words?md=d&max=1&sp=" ++ Url.percentEncode (String.toLower word)
 
 
-{-| Decode the Free Dictionary API response into a flat list of part-of-speech groupings. The API
-returns a list of entries, each with a `meanings` array; the meanings across every entry are
-concatenated so callers get one list of `DictEntry`.
+{-| Decode the Datamuse response into a flat list of part-of-speech groupings. Datamuse answers
+with a list of matching words, each carrying a `defs` array of `"adj\tExceedingly idealistic."`
+strings. A word it doesn't know gives an empty list, and a word it knows but has no definitions
+for arrives with no `defs` field at all.
 -}
 decodeDefinition : Json.Decode.Decoder (List DictEntry)
 decodeDefinition =
     Json.Decode.list
-        (Json.Decode.field "meanings" (Json.Decode.list decodeDictEntry))
-        |> Json.Decode.map List.concat
-
-
-decodeDictEntry : Json.Decode.Decoder DictEntry
-decodeDictEntry =
-    Json.Decode.map2 DictEntry
-        (Json.Decode.field "partOfSpeech" Json.Decode.string)
-        (Json.Decode.field "definitions"
-            (Json.Decode.list (Json.Decode.field "definition" Json.Decode.string))
+        (Json.Decode.maybe (Json.Decode.field "defs" (Json.Decode.list Json.Decode.string))
+            |> Json.Decode.map (Maybe.withDefault [])
         )
+        |> Json.Decode.map (\entries -> groupDefinitions (List.concat entries))
 
 
-{-| Turn a dictionary API response into popup state. Any error (including the 404 the API returns
-for a word it doesn't know), or a successful-but-empty response, becomes "not found".
+{-| Split each definition into its part of speech and its text, then gather the texts under each
+part of speech, in the order the parts of speech first appear. Wiktionary, where Datamuse's
+definitions come from, interleaves them (three adjective senses, a noun sense, then another
+adjective one), so this can't just compare against the previous definition.
+-}
+groupDefinitions : List String -> List DictEntry
+groupDefinitions definitions =
+    List.foldl
+        (\definition entries ->
+            let
+                ( partOfSpeech, text ) =
+                    case String.split "\t" definition of
+                        [ abbreviation, rest ] ->
+                            ( partOfSpeechName abbreviation, String.trim rest )
+
+                        _ ->
+                            ( "other", String.trim definition )
+            in
+            if text == "" then
+                entries
+
+            else if List.any (\entry -> entry.partOfSpeech == partOfSpeech) entries then
+                List.map
+                    (\entry ->
+                        if entry.partOfSpeech == partOfSpeech then
+                            { entry | definitions = entry.definitions ++ [ text ] }
+
+                        else
+                            entry
+                    )
+                    entries
+
+            else
+                entries ++ [ { partOfSpeech = partOfSpeech, definitions = [ text ] } ]
+        )
+        []
+        definitions
+
+
+{-| Expand the part of speech abbreviation Datamuse prefixes each definition with. It writes `u`
+for a sense it couldn't classify, and anything unrecognised is shown as it arrived.
+-}
+partOfSpeechName : String -> String
+partOfSpeechName abbreviation =
+    case abbreviation of
+        "n" ->
+            "noun"
+
+        "v" ->
+            "verb"
+
+        "adj" ->
+            "adjective"
+
+        "adv" ->
+            "adverb"
+
+        "u" ->
+            "other"
+
+        _ ->
+            abbreviation
+
+
+{-| Turn a dictionary API response into popup state. Datamuse answers a word it doesn't know with
+an empty list rather than an error, so an error here really is a failed lookup.
 -}
 definitionResultToData : Result Http.Error (List DictEntry) -> WordDefinitionData
 definitionResultToData result =
@@ -6642,4 +6715,4 @@ definitionResultToData result =
             WordDefinition_NotFound
 
         Err _ ->
-            WordDefinition_NotFound
+            WordDefinition_Failed

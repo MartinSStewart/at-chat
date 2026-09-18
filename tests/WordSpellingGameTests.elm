@@ -5,6 +5,7 @@ import Effect.Time as Time
 import Expect
 import Id
 import IdArray
+import Json.Decode
 import List.Nonempty exposing (Nonempty(..))
 import NonemptyDict
 import OneOrGreater
@@ -699,6 +700,35 @@ tests =
                             , invalidWords = SeqDict.empty
                             , bestWord = Nothing
                             }
+            ]
+        , Test.describe "decodeDefinition reads the dictionary API response"
+            [ Test.test "definitions are grouped under their part of speech" <|
+                \_ ->
+                    Json.Decode.decodeString
+                        WordSpellingGame.decodeDefinition
+                        """[{"word":"load","tags":["n","v"],"defs":["n\\tA burden. ","v\\tTo put a load on. ","n\\tThe amount of work. "]}]"""
+                        |> Expect.equal
+                            (Ok
+                                [ { partOfSpeech = "noun", definitions = [ "A burden.", "The amount of work." ] }
+                                , { partOfSpeech = "verb", definitions = [ "To put a load on." ] }
+                                ]
+                            )
+            , Test.test "a word the dictionary doesn't know decodes to no entries" <|
+                \_ ->
+                    Json.Decode.decodeString WordSpellingGame.decodeDefinition "[]"
+                        |> Expect.equal (Ok [])
+            , Test.test "a word with no definitions decodes to no entries" <|
+                \_ ->
+                    Json.Decode.decodeString
+                        WordSpellingGame.decodeDefinition
+                        """[{"word":"load","tags":["n"]}]"""
+                        |> Expect.equal (Ok [])
+            , Test.test "an unclassified part of speech is shown as other" <|
+                \_ ->
+                    Json.Decode.decodeString
+                        WordSpellingGame.decodeDefinition
+                        """[{"word":"za","defs":["u\\tPizza. "]}]"""
+                        |> Expect.equal (Ok [ { partOfSpeech = "other", definitions = [ "Pizza." ] } ])
             ]
         ]
 
