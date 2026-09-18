@@ -1693,7 +1693,7 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                                         time
                                         session.userId
                                         richText
-                                        maybeReplyTo
+                                        (Message.maybeToReply maybeReplyTo)
                                         attachedFiles
                                         model.stickers
 
@@ -1735,7 +1735,7 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                                         time
                                         session.userId
                                         richText
-                                        maybeReplyTo
+                                        (Message.maybeToReply maybeReplyTo)
                                         attachedFiles
                                         model.stickers
 
@@ -2076,13 +2076,13 @@ sendEncryptedDm time clientId changeId id fileHashes contentAndEmbeds notificati
                         ViewThreadWithMaybeMessage threadId repliedTo ->
                             LocalState.createThreadMessageBackend
                                 threadId
-                                (Message.encryptedUserTextMessageFrontend time session.userId fileHashes contentAndEmbeds repliedTo)
+                                (Message.encryptedUserTextMessageFrontend time session.userId fileHashes contentAndEmbeds (Message.maybeToReply repliedTo))
                                 dmChannel
                                 |> Tuple.mapFirst (ViewThreadWithMessage threadId)
 
                         NoThreadWithMaybeMessage repliedTo ->
                             LocalState.createChannelMessageBackend
-                                (Message.encryptedUserTextMessageFrontend time session.userId fileHashes contentAndEmbeds repliedTo)
+                                (Message.encryptedUserTextMessageFrontend time session.userId fileHashes contentAndEmbeds (Message.maybeToReply repliedTo))
                                 dmChannel
                                 |> Tuple.mapFirst NoThreadWithMessage
 
@@ -2165,7 +2165,7 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
                         time
                         session.userId
                         richText
-                        repliedTo
+                        (Message.maybeToReply repliedTo)
                         attachedFiles
                         model.stickers
 
@@ -2221,7 +2221,7 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
                         time
                         session.userId
                         richText
-                        repliedTo
+                        (Message.maybeToReply repliedTo)
                         attachedFiles
                         model.stickers
 

@@ -1008,7 +1008,7 @@ colorPreview time isMobile local allUsers color =
                 local.localUser.session.userId
                 (NonemptyString '#' "# Hello" |> RichText.fromNonemptyString local.localUser.timezone allUsers)
                 SeqDict.empty
-                Nothing
+                Message.NoReply
                 SeqDict.empty
     in
     Pages.Guild.userTextMessageContent

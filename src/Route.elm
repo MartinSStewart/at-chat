@@ -1171,9 +1171,8 @@ encodeChannelHeaderTab tab =
             Url.Builder.string tabParam "game"
                 :: (case maybeMatchId of
                         Just matchId ->
-                            [ Url.Builder.int goMatchParam (Id.toInt matchId)
-                            ]
-                                ++ (case repliedTo of
+                            Url.Builder.int goMatchParam (Id.toInt matchId)
+                                :: (case repliedTo of
                                         Just repliedTo2 ->
                                             [ Url.Builder.string
                                                 repliedToGameParam

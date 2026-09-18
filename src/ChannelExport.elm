@@ -461,7 +461,7 @@ userTextMessageDataCodec userId =
         |> Codec.field "content" .content (messageContentCodec userId)
         |> Codec.field "reactions" .reactions (reactionsCodec userId)
         |> Codec.field "editedAt" .editedAt (Codec.nullable CodecExtra.time)
-        |> Codec.field "repliedTo" .repliedTo (Codec.nullable idCodec)
+        |> Codec.field "repliedTo" .repliedTo repliedToCodec
         |> Codec.field "drawings" .drawings (Codec.nullable (userTextMessageDrawingsCodec userId))
         |> Codec.buildObject
 
@@ -475,9 +475,45 @@ encryptedUserTextMessageDataCodec userId =
         |> Codec.field "fileHashes" .fileHashes (seqSetCodec fileHashCodec)
         |> Codec.field "reactions" .reactions (reactionsCodec userId)
         |> Codec.field "editedAt" .editedAt (Codec.nullable CodecExtra.time)
-        |> Codec.field "repliedTo" .repliedTo (Codec.nullable idCodec)
+        |> Codec.field "repliedTo" .repliedTo repliedToCodec
         |> Codec.field "drawings" .drawings (Codec.nullable (userTextMessageDrawingsCodec userId))
         |> Codec.buildObject
+
+
+repliedToCodec : Codec (Message.RepliedTo messageId)
+repliedToCodec =
+    Codec.custom
+        (\noReplyEncoder repliedToMessageEncoder repliedToGameEncoder value ->
+            case value of
+                Message.NoReply ->
+                    noReplyEncoder
+
+                Message.RepliedToMessage argA ->
+                    repliedToMessageEncoder argA
+
+                Message.RepliedToGame argA argB ->
+                    repliedToGameEncoder argA argB
+        )
+        |> Codec.variant0 "NoReply" Message.NoReply
+        |> Codec.variant1 "RepliedToMessage" Message.RepliedToMessage idCodec
+        |> Codec.variant2 "RepliedToGame" Message.RepliedToGame idCodec repliedToGameCodec
+        |> Codec.buildCustom
+
+
+repliedToGameCodec : Codec Message.RepliedToGame
+repliedToGameCodec =
+    Codec.custom
+        (\wordSpellingGameEncoder sheepGameEncoder value ->
+            case value of
+                Message.RepliedTo_WordSpellingGame argA ->
+                    wordSpellingGameEncoder argA
+
+                Message.RepliedTo_SheepGame ->
+                    sheepGameEncoder
+        )
+        |> Codec.variant1 "RepliedTo_WordSpellingGame" Message.RepliedTo_WordSpellingGame Codec.int
+        |> Codec.variant0 "RepliedTo_SheepGame" Message.RepliedTo_SheepGame
+        |> Codec.buildCustom
 
 
 callStartedDataCodec : Codec userId -> Codec (Message.CallStartedData userId)

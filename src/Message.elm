@@ -443,7 +443,7 @@ replyToMaybe repliedTo2 =
         NoReply ->
             Nothing
 
-        RepliedToGame id repliedToGame ->
+        RepliedToGame _ _ ->
             Nothing
 
 
@@ -456,16 +456,16 @@ repliedTo message =
         EncryptedUserTextMessage data ->
             data.repliedTo
 
-        UserJoinedMessage posix userId seqDict _ ->
+        UserJoinedMessage _ _ _ _ ->
             NoReply
 
-        DeletedMessage posix ->
+        DeletedMessage _ ->
             NoReply
 
-        CallStarted callStartedData ->
+        CallStarted _ ->
             NoReply
 
-        GameStarted gameStartedData ->
+        GameStarted _ ->
             NoReply
 
 
