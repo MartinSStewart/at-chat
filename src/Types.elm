@@ -195,7 +195,7 @@ type alias LoadedFrontend =
     , time : Time.Posix
     , timezone : Time.Zone
     , windowSize : Coord CssPixels
-    , virtualKeyboardOpen : Bool
+    , visualViewportHeight : Int
     , loginStatus : LoginStatus
     , loginType : LoginType
     , elmUiState : Ui.Anim.State

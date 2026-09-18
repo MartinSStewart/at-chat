@@ -461,7 +461,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , time = time
             , timezone = startupData.timezone
             , windowSize = loading.windowSize
-            , virtualKeyboardOpen = False
+            , visualViewportHeight = Coord.yRaw loading.windowSize
             , loginStatus = loginStatus
             , loginType = loading.loginType
             , elmUiState = Ui.Anim.init
@@ -3723,8 +3723,8 @@ updateLoaded msg model =
                 Nothing ->
                     ( model, Command.none )
 
-        VisualViewportResized _ ->
-            ( model, Command.none )
+        VisualViewportResized height ->
+            ( { model | visualViewportHeight = round height }, Command.none )
 
         TextEditorMsg textEditorMsg ->
             case model.loginStatus of
@@ -6933,8 +6933,7 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
     case model.loginStatus of
         LoggedIn loggedIn ->
             ( { model
-                | virtualKeyboardOpen = False
-                , loginStatus =
+                | loginStatus =
                     LoggedIn
                         { loggedIn
                             | textInputFocus =
@@ -6980,8 +6979,7 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
 
         NotLoggedIn notLoggedIn ->
             ( { model
-                | virtualKeyboardOpen = False
-                , loginStatus =
+                | loginStatus =
                     NotLoggedIn
                         { notLoggedIn
                             | textInputFocus =

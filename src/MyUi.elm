@@ -105,6 +105,7 @@ module MyUi exposing
     , userLabelBackground
     , userLabelFontColor
     , userLabelHtml
+    , virtualKeyboardOpen
     , warningHeader
     , weakHoverHighlight
     , white
@@ -1589,6 +1590,16 @@ insetBottom =
 isMobile : { a | windowSize : Coord CssPixels } -> Bool
 isMobile model =
     Coord.xRaw model.windowSize < 700
+
+
+{-| A virtual keyboard covers the bottom of the window without changing the window's size, so the
+gap between the window and the visual viewport is the keyboard. The two also differ by a pixel or
+two on their own, and by more than that when the page is pinch zoomed, so only a gap too large to
+be either counts.
+-}
+virtualKeyboardOpen : { a | windowSize : Coord CssPixels, visualViewportHeight : Int } -> Bool
+virtualKeyboardOpen model =
+    Coord.yRaw model.windowSize - model.visualViewportHeight > 100
 
 
 bounceScroll : Bool -> Ui.Attribute msg
