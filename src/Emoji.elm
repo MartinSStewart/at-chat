@@ -437,6 +437,7 @@ skinToneView selectedSkinTone =
         [ Html.Attributes.id (Dom.idToString skinToneSelectorId)
         , Html.Attributes.value (skinToneToId selectedSkinTone)
         , Html.Events.onInput (\text -> skinToneFromId text |> PressedSkinTone)
+        , takeFocusOnMouseDown
         , Html.Attributes.attribute "aria-label" "Skin tone"
         , Html.Attributes.title "Skin tone"
         , Html.Attributes.style "height" "100%"
@@ -547,6 +548,24 @@ searchInputHeight =
     40
 
 
+{-| The browser moves focus to whatever was clicked as the default action of `mousedown`. That
+would take focus off the message input the user was typing in, and on mobile losing focus closes
+the virtual keyboard. Preventing it leaves focus where it was while the click itself still goes
+through.
+-}
+keepFocusOnMouseDown : Html.Attribute Msg
+keepFocusOnMouseDown =
+    Html.Events.preventDefaultOn "mousedown" (Json.Decode.succeed ( NoOp, True ))
+
+
+{-| The search input and the skin tone dropdown are the two things inside the selector that are
+supposed to take focus, so mousedown stops at them instead of reaching `keepFocusOnMouseDown`.
+-}
+takeFocusOnMouseDown : Html.Attribute Msg
+takeFocusOnMouseDown =
+    Html.Events.stopPropagationOn "mousedown" (Json.Decode.succeed ( NoOp, True ))
+
+
 searchInput : Model -> Maybe SkinTone -> List (List EmojiOrSticker) -> Int -> Element Msg
 searchInput model skinTone categories columns =
     let
@@ -586,6 +605,7 @@ searchInput model skinTone categories columns =
                 , Ui.paddingXY 8 8
                 , Ui.width Ui.fill
                 , Ui.id (Dom.idToString searchInputId)
+                , Ui.htmlAttribute takeFocusOnMouseDown
                 , Ui.htmlAttribute
                     (Html.Events.preventDefaultOn "keydown" (decodeArrowKey model categories columns))
                 ]
@@ -1278,6 +1298,7 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
                 , Ui.rounded 8
                 , Ui.Font.size 32
                 , MyUi.blockClickPropagation PressedContainer
+                , Ui.htmlAttribute keepFocusOnMouseDown
                 , Ui.heightMin 0
                 , Ui.clip
                 ]
