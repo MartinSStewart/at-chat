@@ -2626,7 +2626,7 @@ updateLoaded msg model =
                                     case LocalState.guildOrDmIdToMessage guildOrDmId2 threadRoute (Local.model loggedIn.localState) of
                                         Just ( _, maybeRepliedTo ) ->
                                             case ( guildOrDmId2, maybeRepliedTo ) of
-                                                ( GuildOrDmId_Guild { guildId, channelId }, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
+                                                ( GuildOrDmId_Guild { guildId, channelId }, Message.ViewThreadWithRepliedTo threadId (Just repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
                                                         (GuildRoute
@@ -2640,7 +2640,7 @@ updateLoaded msg model =
                                                             Nothing
                                                         )
 
-                                                ( GuildOrDmId_Guild { guildId, channelId }, NoThreadWithMaybeMessage (Just repliedTo) ) ->
+                                                ( GuildOrDmId_Guild { guildId, channelId }, Message.NoThreadWithRepliedTo (Message.RepliedToMessage repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
                                                         (GuildRoute
@@ -2654,7 +2654,7 @@ updateLoaded msg model =
                                                             Nothing
                                                         )
 
-                                                ( GuildOrDmId_Dm { otherUserId }, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
+                                                ( GuildOrDmId_Dm { otherUserId }, Message.ViewThreadWithRepliedTo threadId (Just repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
                                                         (DmRoute
@@ -2670,7 +2670,7 @@ updateLoaded msg model =
                                                             }
                                                         )
 
-                                                ( GuildOrDmId_Dm { otherUserId }, NoThreadWithMaybeMessage (Just repliedTo) ) ->
+                                                ( GuildOrDmId_Dm { otherUserId }, Message.NoThreadWithRepliedTo (Message.RepliedToMessage repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
                                                         (DmRoute
@@ -2980,7 +2980,7 @@ updateLoaded msg model =
                                 newRoute : Route
                                 newRoute =
                                     Route.setChannelHeaderTab
-                                        (Just (ChannelHeaderTab_Games (Just messageId)))
+                                        (Just (ChannelHeaderTab_Games (Just messageId) Nothing))
                                         model.route
                             in
                             if newRoute == model.route then
@@ -5773,7 +5773,7 @@ updateLoaded msg model =
                                 (ChannelRoute
                                     channelId
                                     (NoThreadWithFriends Nothing HideChannelSettings)
-                                    (Just (ChannelHeaderTab_Games (Just messageId)))
+                                    (Just (ChannelHeaderTab_Games (Just messageId) Nothing))
                                 )
                                 ChannelsHiddenOnMobile
                                 Nothing
@@ -5788,7 +5788,7 @@ updateLoaded msg model =
                                                 (Local.model loggedIn.localState).localUser.session.userId
                                                 otherUserId
                                         , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
-                                        , tab = Just (ChannelHeaderTab_Games (Just messageId))
+                                        , tab = Just (ChannelHeaderTab_Games (Just messageId) Nothing)
                                         , channelsVisible = ChannelsHiddenOnMobile
                                         , overlay = Nothing
                                         }
@@ -9201,7 +9201,7 @@ handleGameOutMsgs outMsgs model =
                         ( pushModel, pushCmd ) =
                             FrontendExtra.routePush
                                 model2
-                                (Route.setChannelHeaderTab (Just (ChannelHeaderTab_Games newSelected)) model2.route)
+                                (Route.setChannelHeaderTab (Just (ChannelHeaderTab_Games newSelected Nothing)) model2.route)
                     in
                     ( pushModel, pushCmd :: cmds )
 

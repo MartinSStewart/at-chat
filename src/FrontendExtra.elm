@@ -2016,7 +2016,7 @@ currentGamesTab local route =
     case route of
         DmRoute dmRoute ->
             case ( dmRoute.tab, DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId ) of
-                ( Just (ChannelHeaderTab_Games maybeMatchId), Just otherUserId ) ->
+                ( Just (ChannelHeaderTab_Games maybeMatchId _), Just otherUserId ) ->
                     let
                         dmChannel : FrontendDmChannel
                         dmChannel =
@@ -2032,7 +2032,7 @@ currentGamesTab local route =
                 _ ->
                     Nothing
 
-        GuildRoute guildId (ChannelRoute channelId _ (Just (ChannelHeaderTab_Games maybeMatchId))) _ _ ->
+        GuildRoute guildId (ChannelRoute channelId _ (Just (ChannelHeaderTab_Games maybeMatchId _))) _ _ ->
             case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
                 Just ( _, channel ) ->
                     Just
@@ -2082,7 +2082,7 @@ routeRequestChannelHelper :
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn model3 =
     (case ( guildOrDmId, tab ) of
-        ( GuildOrDmId guildOrDmId2, Just (ChannelHeaderTab_Games (Just messageId)) ) ->
+        ( GuildOrDmId guildOrDmId2, Just (ChannelHeaderTab_Games (Just messageId) _) ) ->
             let
                 games : SeqDict (Id ChannelMessageId) Game.MatchData
                 games =
@@ -2181,7 +2181,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                                                 scrollToBottom
                                 ]
                         , case tab of
-                            Just (ChannelHeaderTab_Games _) ->
+                            Just (ChannelHeaderTab_Games _ _) ->
                                 Dom.setViewportOf WordSpellingGame.pastWordsContainerId 0 9999999
                                     |> Task.attempt (\_ -> SetScrollToBottom)
 
@@ -2935,7 +2935,7 @@ changeUpdate localMsg local =
                                                     createdAt
                                                     localUser.session.userId
                                                     (textToRichText text [ localUser.session.userId, otherUserId ] local)
-                                                    maybeReplyTo
+                                                    (Message.maybeToReply maybeReplyTo)
                                                     attachedFiles
                                                 )
                                                 dmChannel
@@ -2946,7 +2946,7 @@ changeUpdate localMsg local =
                                                     createdAt
                                                     localUser.session.userId
                                                     (textToRichText text [ localUser.session.userId, otherUserId ] local)
-                                                    maybeReplyTo
+                                                    (Message.maybeToReply maybeReplyTo)
                                                     attachedFiles
                                                 )
                                                 dmChannel
@@ -3042,7 +3042,7 @@ changeUpdate localMsg local =
                                                                     (NonemptyDict.keys dmChannel.members |> List.Nonempty.toList)
                                                                     local
                                                                 )
-                                                                maybeReplyTo
+                                                                (Message.maybeToReply maybeReplyTo)
                                                                 attachedFiles
                                                             )
                                                             dmChannel
@@ -4201,7 +4201,7 @@ changeUpdate localMsg local =
                                         createdAt
                                         createdBy
                                         text
-                                        maybeReplyTo
+                                        (Message.maybeToReply maybeReplyTo)
                                         attachedFiles
                                 )
                                 (\maybeReplyTo ->
@@ -4209,7 +4209,7 @@ changeUpdate localMsg local =
                                         createdAt
                                         createdBy
                                         text
-                                        maybeReplyTo
+                                        (Message.maybeToReply maybeReplyTo)
                                         attachedFiles
                                 )
                                 threadRouteWithRepliedTo
@@ -4364,10 +4364,10 @@ changeUpdate localMsg local =
                                                     text
                                                     (case threadRouteWithRepliedTo of
                                                         NoThreadWithMaybeMessage maybeReplyTo ->
-                                                            maybeReplyTo
+                                                            Message.maybeToReply maybeReplyTo
 
                                                         ViewThreadWithMaybeMessage _ _ ->
-                                                            Nothing
+                                                            Message.NoReply
                                                     )
                                                     attachedFiles
                                                 )
@@ -5535,10 +5535,10 @@ changeUpdate localMsg local =
                         -- TODO, solve stickers
                         SeqDict.empty
                         (\maybeReplyTo ->
-                            Message.encryptedUserTextMessageFrontend createdAt createdBy fileHashes content maybeReplyTo
+                            Message.encryptedUserTextMessageFrontend createdAt createdBy fileHashes content (Message.maybeToReply maybeReplyTo)
                         )
                         (\maybeReplyTo ->
-                            Message.encryptedUserTextMessageFrontend createdAt createdBy fileHashes content maybeReplyTo
+                            Message.encryptedUserTextMessageFrontend createdAt createdBy fileHashes content (Message.maybeToReply maybeReplyTo)
                         )
                         threadRouteWithRepliedTo
                         local
@@ -6168,7 +6168,7 @@ guildSendMessage guildId guild channelId channel threadRouteWithRepliedTo create
                                     createdAt
                                     userId
                                     text
-                                    maybeReplyTo
+                                    (Message.maybeToReply maybeReplyTo)
                                     attachedFiles
                                 )
                                 channel
@@ -6179,7 +6179,7 @@ guildSendMessage guildId guild channelId channel threadRouteWithRepliedTo create
                                     createdAt
                                     userId
                                     text
-                                    maybeReplyTo
+                                    (Message.maybeToReply maybeReplyTo)
                                     attachedFiles
                                 )
                                 channel
@@ -6216,7 +6216,7 @@ discordGuildSendMessage guildId guild channelId channel threadRouteWithRepliedTo
                                     createdAt
                                     discordUserId
                                     text
-                                    maybeReplyTo
+                                    (Message.maybeToReply maybeReplyTo)
                                     attachedFiles
                                 )
                                 channel
@@ -6227,7 +6227,7 @@ discordGuildSendMessage guildId guild channelId channel threadRouteWithRepliedTo
                                     createdAt
                                     discordUserId
                                     text
-                                    maybeReplyTo
+                                    (Message.maybeToReply maybeReplyTo)
                                     attachedFiles
                                 )
                                 channel
@@ -7403,7 +7403,7 @@ addEncryptedDmMessage createdAt createdBy otherUserId fileHashes contentAndEmbed
                                 createdBy
                                 fileHashes
                                 contentAndEmbeds
-                                maybeReplyTo
+                                (Message.maybeToReply maybeReplyTo)
                             )
                             dmChannel
 
@@ -7414,7 +7414,7 @@ addEncryptedDmMessage createdAt createdBy otherUserId fileHashes contentAndEmbed
                                 createdBy
                                 fileHashes
                                 contentAndEmbeds
-                                maybeReplyTo
+                                (Message.maybeToReply maybeReplyTo)
                             )
                             dmChannel
                 )

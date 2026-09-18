@@ -675,7 +675,7 @@ gameButton isMobile currentTab =
     channelHeaderIconTab
         isMobile
         (Dom.id "guild_openGamesTab")
-        (ChannelHeaderTab_Games Nothing)
+        (ChannelHeaderTab_Games Nothing Nothing)
         currentTab
         False
         (Ui.el [ MyUi.hoverText "Games" ] (Ui.html Icons.go))
@@ -795,7 +795,7 @@ tabBodyView isMobile local loggedIn model =
                                 |> Ui.map VoiceChatMsg
                                 |> Just
 
-                        ChannelHeaderTab_Games maybeMatchId ->
+                        ChannelHeaderTab_Games maybeMatchId _ ->
                             case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
                                 Just ( _, channel2 ) ->
                                     gameTabBody
@@ -828,7 +828,7 @@ tabBodyView isMobile local loggedIn model =
             case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                 Just otherUserId ->
                     case dmRoute.tab of
-                        Just (ChannelHeaderTab_Games maybeMatchId) ->
+                        Just (ChannelHeaderTab_Games maybeMatchId _) ->
                             gameTabBody
                                 (GuildOrDmId_Dm { otherUserId = otherUserId })
                                 maybeMatchId
@@ -887,7 +887,7 @@ tabBodyView isMobile local loggedIn model =
                         ChannelHeaderTab_VoiceChat ->
                             Nothing
 
-                        ChannelHeaderTab_Games _ ->
+                        ChannelHeaderTab_Games _ _ ->
                             Nothing
 
                         ChannelHeaderTab_Draw ->

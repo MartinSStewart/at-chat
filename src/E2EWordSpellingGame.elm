@@ -399,7 +399,7 @@ tests normalConfig =
                             (Route.DmRoute
                                 { channelId = DmChannelId.fromUserIds (Id.fromInt 2) Broadcast.adminUserId
                                 , threadRoute = Route.NoThreadWithFriends Nothing HideChannelSettings
-                                , tab = Just (UserSession.ChannelHeaderTab_Games (Just (Id.fromInt 0)))
+                                , tab = Just (UserSession.ChannelHeaderTab_Games (Just (Id.fromInt 0)) Nothing)
                                 , channelsVisible = ChannelsHiddenOnMobile
                                 , overlay = Nothing
                                 }

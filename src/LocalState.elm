@@ -178,7 +178,7 @@ import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (ChangeAttachments, Message(..), MessageContent, MessageNoReply(..), RepliedTo(..), ThreadRouteWithRepliedTo(..), UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments, Message(..), MessageContent, MessageNoReply(..), ThreadRouteWithRepliedTo(..), UserTextMessageDataNoReply)
 import MessageArray exposing (MessageArray)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)

@@ -4133,11 +4133,11 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
 
 
 userTextMessageRepliedTo :
-    { a | repliedTo : Maybe (Id messageId) }
+    { a | repliedTo : Message.RepliedTo messageId }
     -> { b | messages : MessageArray messageId userId }
     -> Maybe ( Id messageId, Message messageId userId )
 userTextMessageRepliedTo data channel =
-    case data.repliedTo of
+    case Message.replyToMaybe data.repliedTo of
         Just repliedToIndex ->
             case MessageArray.get repliedToIndex channel.messages of
                 Just message2 ->
@@ -8152,7 +8152,7 @@ userTextMessageContent :
             , createdBy : Id UserId
             , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId))
             , editedAt : Maybe Time.Posix
-            , repliedTo : Maybe (Id messageId)
+            , repliedTo : Message.RepliedTo messageId
             , drawings : Maybe (UserTextMessageDrawings (Id UserId))
         }
     -> Element MessageViewMsg
@@ -8317,7 +8317,7 @@ discordUserTextMessageContent :
             , createdBy : Discord.Id Discord.UserId
             , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet (Discord.Id Discord.UserId))
             , editedAt : Maybe Time.Posix
-            , repliedTo : Maybe (Id messageId)
+            , repliedTo : Message.RepliedTo messageId
             , drawings : Maybe (UserTextMessageDrawings (Discord.Id Discord.UserId))
         }
     -> Element MessageViewMsg
