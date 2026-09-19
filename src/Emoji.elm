@@ -281,6 +281,24 @@ categorySpriteName emojiCategory =
             "travel-places"
 
 
+{-| Which sprite an emoji's art is actually in. A category's sprite holds the untoned
+artwork, so an emoji the chosen skin tone changes is drawn out of that tone's sprite
+instead.
+-}
+spriteHolding : Maybe SkinTone -> UnicodeEmoji -> CachedEmojiData -> String -> String
+spriteHolding maybeSkinTone emoji emojiData categorySprite =
+    case maybeSkinTone of
+        Just skinTone ->
+            if emojiWithSkinTone maybeSkinTone emoji emojiData == toString emoji then
+                categorySprite
+
+            else
+                skinToneSpriteName skinTone
+
+        Nothing ->
+            categorySprite
+
+
 {-| A skin tone's variations are one sprite covering every category, because someone picks
 a tone once and then every category they open needs it.
 -}
@@ -1354,52 +1372,46 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
                             , sections =
                                 ( section.items
                                 , (if state.top < onScreen.to && state.top + height > onScreen.from then
-                                    (case section.art of
-                                        FromSprite sprite ->
-                                            [ Twemoji.spriteSheet sprite |> Ui.html ]
+                                    List.indexedMap
+                                        (\index item ->
+                                            emojiButtonHelper
+                                                (state.itemOffset + index)
+                                                item
+                                                model
+                                                (case item of
+                                                    EmojiOrSticker_UnicodeEmoji emoji ->
+                                                        (case section.art of
+                                                            FromSprite sprite ->
+                                                                Twemoji.spriteView "1em"
+                                                                    (spriteHolding userData.skinTone emoji emojiData2 sprite)
+                                                                    (emojiWithSkinTone userData.skinTone emoji emojiData2)
 
-                                        FromFiles ->
-                                            []
-                                    )
-                                        ++ List.indexedMap
-                                            (\index item ->
-                                                emojiButtonHelper
-                                                    (state.itemOffset + index)
-                                                    item
-                                                    model
-                                                    (case item of
-                                                        EmojiOrSticker_UnicodeEmoji emoji ->
-                                                            (case section.art of
-                                                                FromSprite _ ->
-                                                                    emojiWithSkinTone userData.skinTone emoji emojiData2
-                                                                        |> Twemoji.spriteView "1em"
+                                                            FromFiles ->
+                                                                emojiWithSkinTone userData.skinTone emoji emojiData2
+                                                                    |> Twemoji.view "1em"
+                                                        )
+                                                            |> Ui.html
+                                                            |> Ui.el [ Ui.width (Ui.px emojiWidth), Ui.contentCenterX ]
 
-                                                                FromFiles ->
-                                                                    emojiWithSkinTone userData.skinTone emoji emojiData2
-                                                                        |> Twemoji.view "1em"
-                                                            )
-                                                                |> Ui.html
-                                                                |> Ui.el [ Ui.width (Ui.px emojiWidth), Ui.contentCenterX ]
+                                                    EmojiOrSticker_Sticker stickerId ->
+                                                        Sticker.view
+                                                            (String.fromInt emojiWidth ++ "px")
+                                                            stickerId
+                                                            stickersData
+                                                            Sticker.LoopForever
+                                                            |> Ui.html
 
-                                                        EmojiOrSticker_Sticker stickerId ->
-                                                            Sticker.view
-                                                                (String.fromInt emojiWidth ++ "px")
-                                                                stickerId
-                                                                stickersData
-                                                                Sticker.LoopForever
-                                                                |> Ui.html
-
-                                                        EmojiOrSticker_CustomEmoji customEmojiId ->
-                                                            CustomEmoji.view
-                                                                (String.fromInt emojiWidth ++ "px")
-                                                                "0"
-                                                                customEmojiId
-                                                                customEmojisData
-                                                                Sticker.LoopForever
-                                                                |> Ui.html
-                                                    )
-                                            )
-                                            section.items
+                                                    EmojiOrSticker_CustomEmoji customEmojiId ->
+                                                        CustomEmoji.view
+                                                            (String.fromInt emojiWidth ++ "px")
+                                                            "0"
+                                                            customEmojiId
+                                                            customEmojisData
+                                                            Sticker.LoopForever
+                                                            |> Ui.html
+                                                )
+                                        )
+                                        section.items
 
                                    else
                                     [ Ui.el [ Ui.height (Ui.px (categorySectionBodyHeight columns itemCount)) ] Ui.none ]
@@ -1422,19 +1434,7 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
                         [ Ui.height Ui.fill, Ui.heightMin 0 ]
                         [ categoryColumn availableHeight userData.skinTone selectedCategory offsets
                         , Ui.column
-                            [ Ui.height Ui.fill
-                            , emojiHoverPreview stickersData customEmojisData userData emojiData2 model |> Ui.inFront
-                            , -- Every category's sprite holds the untoned art, so the chosen tone's
-                              -- variations are loaded once here rather than per category.
-                              case userData.skinTone of
-                                Just skinTone ->
-                                    Twemoji.spriteSheet (skinToneSpriteName skinTone)
-                                        |> Ui.html
-                                        |> Ui.behindContent
-
-                                Nothing ->
-                                    Ui.noAttr
-                            ]
+                            [ Ui.height Ui.fill, emojiHoverPreview stickersData customEmojisData userData emojiData2 model |> Ui.inFront ]
                             [ Ui.el
                                 [ Ui.background MyUi.background3
                                 , Ui.scrollable

@@ -1,11 +1,11 @@
-module Twemoji exposing (fileName, spriteSheet, spriteUrl, spriteView, url, view)
+module Twemoji exposing (fileName, spriteUrl, spriteView, url, view)
 
 {-| Draws unicode emoji as the Twemoji artwork served from `public/emoji`, so that an
 emoji looks the same on every device instead of each one substituting its own set.
 
-`view` draws one emoji from its own file and `spriteView` draws one out of a sprite that
-`spriteSheet` has loaded. A few emoji in a row are cheaper as their own files; a grid of
-them is cheaper as a sprite, since a file each costs a request each.
+`view` draws one emoji from its own file and `spriteView` draws one out of a sprite holding
+a whole category. A few emoji in a row are cheaper as their own files; a grid of them is
+cheaper as a sprite, since a file each costs a request each.
 
 `scripts/fetch-twemoji.py` puts both there.
 
@@ -76,19 +76,6 @@ view size emoji =
         []
 
 
-{-| Fetches a sprite and puts its symbols in the document. Every `spriteView` of an emoji
-the sprite holds starts drawing once it lands, so the two don't have to be rendered in any
-particular order. Removing this stops those drawing, so it has to stay alongside them.
--}
-spriteSheet : String -> Html msg
-spriteSheet sprite =
-    Html.node "emoji-sprite-sheet"
-        [ Html.Attributes.attribute "src" (spriteUrl sprite)
-        , Html.Attributes.style "display" "none"
-        ]
-        []
-
-
 {-| An id can't begin with a digit and most of these would, so the names the sprites are
 built with carry a prefix.
 -}
@@ -97,15 +84,22 @@ symbolId emoji =
     "e" ++ fileName emoji
 
 
-{-| Unlike `view` there's no alt text to give: a `use` is a reference to a shape rather
-than an image of its own. Anywhere emoji are copied out of, `view` is what draws them.
+{-| The browser reads the sprite once however many of these point at it, so a grid of them
+costs one request rather than one each.
+
+Unlike `view` there's no alt text to give: a `use` is a reference to a shape rather than an
+image of its own. Anywhere emoji are copied out of, `view` is what draws them.
+
 -}
-spriteView : String -> String -> Html msg
-spriteView size emoji =
+spriteView : String -> String -> String -> Html msg
+spriteView size sprite emoji =
     Svg.svg
         [ Svg.Attributes.viewBox "0 0 36 36"
         , Html.Attributes.style "width" size
         , Html.Attributes.style "height" size
         , Html.Attributes.style "display" "inline-block"
         ]
-        [ Svg.use [ Svg.Attributes.xlinkHref ("#" ++ symbolId emoji) ] [] ]
+        [ Svg.use
+            [ Svg.Attributes.xlinkHref (spriteUrl sprite ++ "#" ++ symbolId emoji) ]
+            []
+        ]
