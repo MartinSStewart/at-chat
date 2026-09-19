@@ -702,7 +702,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                 button
                     isMobile
                     (Dom.id "messageMenu_replyTo")
-                    Icons.reply
+                    (Icons.reply 24)
                     "Reply to"
                     (MessageMenu_PressedReply threadRoute)
                     |> ButtonItem

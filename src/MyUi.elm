@@ -1352,18 +1352,6 @@ body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-/* Icons in the menu that hovering a message brings up are sized by the box they're given
-   rather than by whatever the svg says, since browsers don't agree on how to size an svg
-   that leaves one of its dimensions to them. */
-.mini-button-icon {
-  width: 24px;
-  height: 24px;
-}
-.mini-button-icon > svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
 /* A section of a sheep game's results turning up. It waits a moment before sliding into
    place, so that the room has a chance to look up before the answer appears. */
 .fade-in {
