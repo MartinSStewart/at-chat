@@ -78,7 +78,7 @@ import Encryption exposing (EncryptedData)
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Http
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DiscordDmId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DiscordDmId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import Lamdera.Wire3
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
@@ -90,7 +90,7 @@ import Log exposing (Log)
 import LoginForm
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..))
-import Message exposing (Message(..), MessageContent)
+import Message exposing (Message(..), MessageContent, ThreadRouteWithRepliedTo(..))
 import NonemptyDict exposing (NonemptyDict)
 import Pages.Admin exposing (InitAdminData, TypeThatIsAlwaysInvalid(..))
 import Pagination exposing (PageId)
@@ -1644,7 +1644,7 @@ sendGuildMessage :
     -> ClientId
     -> ChangeId
     -> Viewing_ChannelId
-    -> ThreadRouteWithMaybeMessage
+    -> ThreadRouteWithRepliedTo
     -> NonemptyString
     -> SeqDict (Id FileId) FileData
     -> List EmojiOrCustomEmoji
@@ -1677,15 +1677,15 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                 threadRouteNoReply : ThreadRoute
                 threadRouteNoReply =
                     case threadRouteWithMaybeReplyTo of
-                        ViewThreadWithMaybeMessage threadId _ ->
+                        ViewThreadWithRepliedTo threadId _ ->
                             ViewThread threadId
 
-                        NoThreadWithMaybeMessage _ ->
+                        NoThreadWithRepliedTo _ ->
                             NoThread
 
                 ( ( usersMentioned, ( sessions, notificationCmds ), channel2 ), embedCmds, stickers ) =
                     case threadRouteWithMaybeReplyTo of
-                        ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+                        ViewThreadWithRepliedTo threadId maybeReplyTo ->
                             let
                                 ( message2, cmds, stickers2 ) =
                                     Message.userTextMessageBackend
@@ -1703,7 +1703,7 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                                 usersMentioned2 : SeqSet (Id UserId)
                                 usersMentioned2 =
                                     LocalState.usersMentionedOrRepliedToBackend
-                                        threadRouteWithMaybeReplyTo
+                                        (Message.toThreadRouteWithMaybeMessage threadRouteWithMaybeReplyTo)
                                         richText
                                         (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                                         channel3
@@ -1727,7 +1727,7 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                             , stickers2
                             )
 
-                        NoThreadWithMaybeMessage maybeReplyTo ->
+                        NoThreadWithRepliedTo repliedTo ->
                             let
                                 ( message2, cmds, stickers2 ) =
                                     Message.userTextMessageBackend
@@ -1735,7 +1735,7 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                                         time
                                         session.userId
                                         richText
-                                        (Message.maybeToReply maybeReplyTo)
+                                        repliedTo
                                         attachedFiles
                                         model.stickers
 
@@ -1745,7 +1745,7 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                                 usersMentioned2 : SeqSet (Id UserId)
                                 usersMentioned2 =
                                     LocalState.usersMentionedOrRepliedToBackend
-                                        threadRouteWithMaybeReplyTo
+                                        (Message.toThreadRouteWithMaybeMessage threadRouteWithMaybeReplyTo)
                                         richText
                                         (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                                         channel3
@@ -1776,13 +1776,13 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                 newMessage : ThreadRouteWithMessage
                 newMessage =
                     case threadRouteWithMaybeReplyTo of
-                        ViewThreadWithMaybeMessage threadId _ ->
+                        ViewThreadWithRepliedTo threadId _ ->
                             SeqDict.get threadId channel2.threads
                                 |> Maybe.withDefault Thread.backendInit
                                 |> DmChannel.latestThreadMessageId
                                 |> ViewThreadWithMessage threadId
 
-                        NoThreadWithMaybeMessage _ ->
+                        NoThreadWithRepliedTo _ ->
                             DmChannel.latestMessageId channel2 |> NoThreadWithMessage
 
                 viewers : SeqSet (Id UserId)
@@ -1829,7 +1829,7 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                     NonemptyDict.insert
                         session.userId
                         ((case threadRouteWithMaybeReplyTo of
-                            ViewThreadWithMaybeMessage threadMessageIndex _ ->
+                            ViewThreadWithRepliedTo threadMessageIndex _ ->
                                 { user
                                     | lastViewedThreadMessage =
                                         SeqDict.insert
@@ -1841,7 +1841,7 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                                             user.lastViewedThreadMessage
                                 }
 
-                            NoThreadWithMaybeMessage _ ->
+                            NoThreadWithRepliedTo _ ->
                                 { user
                                     | lastViewedMessage =
                                         SeqDict.insert
@@ -2060,7 +2060,7 @@ sendEncryptedDm :
     -> SeqSet FileHash
     -> EncryptedData (MessageContent (Id UserId))
     -> EncryptedData String
-    -> ThreadRouteWithMaybeMessage
+    -> ThreadRouteWithRepliedTo
     -> UserSession
     -> BackendUser
     -> DmChannelId
@@ -2073,16 +2073,16 @@ sendEncryptedDm time clientId changeId id fileHashes contentAndEmbeds notificati
             let
                 ( threadRouteWithMessage, dmChannel2 ) =
                     case threadRouteWithReplyTo of
-                        ViewThreadWithMaybeMessage threadId repliedTo ->
+                        ViewThreadWithRepliedTo threadId repliedTo ->
                             LocalState.createThreadMessageBackend
                                 threadId
                                 (Message.encryptedUserTextMessageFrontend time session.userId fileHashes contentAndEmbeds (Message.maybeToReply repliedTo))
                                 dmChannel
                                 |> Tuple.mapFirst (ViewThreadWithMessage threadId)
 
-                        NoThreadWithMaybeMessage repliedTo ->
+                        NoThreadWithRepliedTo repliedTo ->
                             LocalState.createChannelMessageBackend
-                                (Message.encryptedUserTextMessageFrontend time session.userId fileHashes contentAndEmbeds (Message.maybeToReply repliedTo))
+                                (Message.encryptedUserTextMessageFrontend time session.userId fileHashes contentAndEmbeds repliedTo)
                                 dmChannel
                                 |> Tuple.mapFirst NoThreadWithMessage
 
@@ -2137,7 +2137,7 @@ sendDm :
     -> ClientId
     -> ChangeId
     -> Id UserId
-    -> ThreadRouteWithMaybeMessage
+    -> ThreadRouteWithRepliedTo
     -> NonemptyString
     -> SeqDict (Id FileId) FileData
     -> List EmojiOrCustomEmoji
@@ -2157,7 +2157,7 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
                 text
     in
     case ( threadRouteWithReplyTo, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of
-        ( ViewThreadWithMaybeMessage threadId repliedTo, Ok sendMessageRateLimits ) ->
+        ( ViewThreadWithRepliedTo threadId repliedTo, Ok sendMessageRateLimits ) ->
             let
                 ( message, embedCmds, stickers ) =
                     Message.userTextMessageBackend
@@ -2213,7 +2213,7 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
                 ]
             )
 
-        ( NoThreadWithMaybeMessage repliedTo, Ok sendMessageRateLimits ) ->
+        ( NoThreadWithRepliedTo repliedTo, Ok sendMessageRateLimits ) ->
             let
                 ( message, embedCmds, stickers ) =
                     Message.userTextMessageBackend
@@ -2221,7 +2221,7 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
                         time
                         session.userId
                         richText
-                        (Message.maybeToReply repliedTo)
+                        repliedTo
                         attachedFiles
                         model.stickers
 

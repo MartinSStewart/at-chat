@@ -247,7 +247,7 @@ type alias LoggedIn2 =
     , messageHover : MessageHover
     , showEmojiSelector : EmojiSelector
     , editMessage : SeqDict ( AnyGuildOrDmId, ThreadRoute ) EditMessage
-    , replyTo : SeqDict ( AnyGuildOrDmId, ThreadRoute ) (Id ChannelMessageId)
+    , replyTo : SeqDict ( AnyGuildOrDmId, ThreadRoute ) (Message.RepliedTo ChannelMessageId)
     , revealedSpoilers : SeqDict AnyGuildOrDmId RevealedSpoilers
     , sidebarMode : ChannelSidebarMode
     , userOptions : Maybe UserOptionsModel
@@ -308,7 +308,7 @@ type alias EncryptionRequests =
 
 type alias PendingEncryptedMessage =
     { otherUserId : Id UserId
-    , threadRoute : ThreadRouteWithMaybeMessage
+    , threadRoute : Message.ThreadRouteWithRepliedTo
     , contentAndEmbeds : MessageContent (Id UserId)
     }
 
@@ -317,7 +317,7 @@ type alias PendingDecryptedMessage =
     { hash : BytesHash
     , id : Viewing_DmId
     , senderId : Id UserId
-    , threadRoute : ThreadRouteWithMaybeMessage
+    , threadRoute : Message.ThreadRouteWithRepliedTo
     }
 
 
@@ -1053,7 +1053,7 @@ type LocalMsg
 type ServerChange
     = -- The user that wrote the message comes along with it because the receiver might not
       -- have them loaded yet, which is what makes names show up as "<missing>"
-      Server_SendMessage (Id UserId) FrontendUser Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
+      Server_SendMessage (Id UserId) FrontendUser Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId))) Message.ThreadRouteWithRepliedTo (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
     | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Server_ImportedChannel (Id GuildId) (Id ChannelId) FrontendChannel
@@ -1156,7 +1156,7 @@ type ServerChange
     | Server_E2eeRequestDeclined Viewing_DmId (Id UserId)
     | Server_E2eeAccepted Viewing_DmId Time.Posix
     | Server_SetPublicKey (Id UserId) X25519.PublicKey
-    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
+    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) Message.ThreadRouteWithRepliedTo
     | Server_SendEncryptedEditMessage Time.Posix (Id UserId) Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId)))
     | Server_DisableE2ee Time.Posix (Id UserId) Viewing_DmId
 
@@ -1165,7 +1165,7 @@ type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
       -- The emojis used in the message are worked out by the frontend (less work for the backend and it doesn't matter if the frontend lies)
-    | Local_SendMessage Time.Posix Time.Zone GuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (List EmojiOrCustomEmoji)
+    | Local_SendMessage Time.Posix Time.Zone GuildOrDmId NonemptyString Message.ThreadRouteWithRepliedTo (SeqDict (Id FileId) FileData) (List EmojiOrCustomEmoji)
     | Local_Discord_SendMessage Time.Posix Time.Zone DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
@@ -1227,7 +1227,7 @@ type LocalChange
     | Local_AcceptE2ee Viewing_DmId Time.Posix (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
     | -- The second ciphertext is the line the recipient's push notification shows. The
       -- server can't write one for a message it can't read, so the sender encrypts it too.
-      Local_SendEncryptedMessage Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) (EncryptedData String) ThreadRouteWithMaybeMessage
+      Local_SendEncryptedMessage Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) (EncryptedData String) Message.ThreadRouteWithRepliedTo
     | Local_SendEncryptedEditMessage Time.Posix Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId)))
 
 

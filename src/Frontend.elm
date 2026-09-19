@@ -46,7 +46,7 @@ import GuildColumn
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DmId)
 import ImageEditor
 import ImageViewer
 import Json.Decode
@@ -3561,7 +3561,7 @@ updateLoaded msg model =
                                         draft : ( AnyGuildOrDmId, ThreadRoute )
                                         draft =
                                             ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = pending.otherUserId })
-                                            , Id.threadRouteWithoutMaybeMessage pending.threadRoute
+                                            , Message.threadRouteWithoutRepliedTo pending.threadRoute
                                             )
                                     in
                                     FrontendExtra.handleLocalChange
@@ -4652,16 +4652,7 @@ updateLoaded msg model =
                                                                 model.timezone
                                                                 guildOrDmId2
                                                                 nonempty
-                                                                (case threadRoute of
-                                                                    ViewThread threadId ->
-                                                                        ViewThreadWithMaybeMessage
-                                                                            threadId
-                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
-
-                                                                    NoThread ->
-                                                                        NoThreadWithMaybeMessage
-                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
-                                                                )
+                                                                (sendMessageThreadRoute guildOrDmIdWithThread threadRoute loggedIn)
                                                                 (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
                                                                     Just dict ->
                                                                         NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
@@ -4690,11 +4681,11 @@ updateLoaded msg model =
                                                                     ViewThread threadId ->
                                                                         ViewThreadWithMaybeMessage
                                                                             threadId
-                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
+                                                                            (repliedToMessage guildOrDmIdWithThread loggedIn |> Maybe.map Id.changeType)
 
                                                                     NoThread ->
                                                                         NoThreadWithMaybeMessage
-                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
+                                                                            (repliedToMessage guildOrDmIdWithThread loggedIn)
                                                                 )
                                                                 (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
                                                                     Just dict ->
@@ -7160,6 +7151,29 @@ handleEditable editableMsg setter acceptEdit model =
         model
 
 
+{-| Which thread the message being written is going into, along with whatever it is replying to.
+-}
+sendMessageThreadRoute : ( AnyGuildOrDmId, ThreadRoute ) -> ThreadRoute -> LoggedIn2 -> Message.ThreadRouteWithRepliedTo
+sendMessageThreadRoute guildOrDmIdWithThread threadRoute loggedIn =
+    case threadRoute of
+        ViewThread threadId ->
+            Message.ViewThreadWithRepliedTo
+                threadId
+                (repliedToMessage guildOrDmIdWithThread loggedIn |> Maybe.map Id.changeType)
+
+        NoThread ->
+            SeqDict.get guildOrDmIdWithThread loggedIn.replyTo
+                |> Maybe.withDefault Message.NoReply
+                |> Message.NoThreadWithRepliedTo
+
+
+{-| The message being replied to, for the places that can only reply to another message.
+-}
+repliedToMessage : ( AnyGuildOrDmId, ThreadRoute ) -> LoggedIn2 -> Maybe (Id ChannelMessageId)
+repliedToMessage guildOrDmIdWithThread loggedIn =
+    SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.andThen Message.replyToMaybe
+
+
 pressedReply : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoggedIn2 -> LoadedFrontend -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 pressedReply guildOrDmId threadRoute loggedIn model =
     ( MessageMenu.close
@@ -7168,7 +7182,7 @@ pressedReply guildOrDmId threadRoute loggedIn model =
             | replyTo =
                 SeqDict.insert
                     ( guildOrDmId, Id.threadRouteWithoutMessage threadRoute )
-                    (Id.threadRouteToMessageId threadRoute)
+                    (Message.RepliedToMessage (Id.threadRouteToMessageId threadRoute))
                     loggedIn.replyTo
         }
     , Command.batch
@@ -7271,7 +7285,7 @@ results screen.
 -}
 addSheepGameReaction :
     GuildOrDmId
-    -> Id Id.ChannelMessageId
+    -> Id ChannelMessageId
     -> SheepGame.ReactionTarget
     -> EmojiOrCustomEmoji
     -> LoadedFrontend
@@ -9954,14 +9968,7 @@ startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
                         requests.nextEncryptManyRequestId
                         { otherUserId = id.otherUserId
                         , threadRoute =
-                            case threadRoute of
-                                ViewThread threadId ->
-                                    ViewThreadWithMaybeMessage
-                                        threadId
-                                        (SeqDict.get guildOrDmId loggedIn.replyTo |> Maybe.map Id.changeType)
-
-                                NoThread ->
-                                    NoThreadWithMaybeMessage (SeqDict.get guildOrDmId loggedIn.replyTo)
+                            sendMessageThreadRoute guildOrDmId threadRoute loggedIn
                         , contentAndEmbeds = contentAndEmbeds
                         }
                         requests.pendingEncryptedMessages
