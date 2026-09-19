@@ -49,6 +49,7 @@ import MyUi
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker exposing (StickerData)
+import Twemoji
 import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
@@ -166,22 +167,22 @@ categoryToEmojiString skinTone category =
         EmojiCategory emojiCategory ->
             case emojiCategory of
                 Activities ->
-                    Ui.text "🎉"
+                    Twemoji.view "1em" "🎉" |> Ui.html
 
                 AnimalsAndNature ->
-                    Ui.text "🐟"
+                    Twemoji.view "1em" "🐟" |> Ui.html
 
                 Components ->
                     Ui.text "C"
 
                 Flags ->
-                    Ui.text "🚩"
+                    Twemoji.view "1em" "🚩" |> Ui.html
 
                 FoodAndDrink ->
-                    Ui.text "🥦"
+                    Twemoji.view "1em" "🥦" |> Ui.html
 
                 Objects ->
-                    Ui.text "🔬"
+                    Twemoji.view "1em" "🔬" |> Ui.html
 
                 PeopleAndBody ->
                     (case skinTone of
@@ -203,16 +204,17 @@ categoryToEmojiString skinTone category =
                         Just SkinTone5 ->
                             "👍🏿"
                     )
-                        |> Ui.text
+                        |> Twemoji.view "1em"
+                        |> Ui.html
 
                 SmileysAndEmotion ->
-                    Ui.text "🙂"
+                    Twemoji.view "1em" "🙂" |> Ui.html
 
                 Symbols ->
-                    Ui.text "⬇️"
+                    Twemoji.view "1em" "⬇️" |> Ui.html
 
                 TravelAndPlaces ->
-                    Ui.text "🚆"
+                    Twemoji.view "1em" "🚆" |> Ui.html
 
         StickerCategory ->
             Ui.text "S"
@@ -229,7 +231,7 @@ categoryToEmojiString skinTone category =
                     |> Ui.inFront
                 , Ui.centerX
                 ]
-                (Ui.text "🙂")
+                (Twemoji.view "1em" "🙂" |> Ui.html)
 
 
 allEmojiCategories : List EmojiCategory
@@ -1206,8 +1208,9 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
                                                 (case item of
                                                     EmojiOrSticker_UnicodeEmoji emoji ->
                                                         emojiWithSkinTone userData.skinTone emoji emojiData2
-                                                            |> Ui.text
-                                                            |> Ui.el [ Ui.width (Ui.px emojiWidth), Ui.Font.center ]
+                                                            |> Twemoji.view "1em"
+                                                            |> Ui.html
+                                                            |> Ui.el [ Ui.width (Ui.px emojiWidth), Ui.contentCenterX ]
 
                                                     EmojiOrSticker_Sticker stickerId ->
                                                         Sticker.view
@@ -1309,7 +1312,10 @@ emojiHoverPreview stickersData customEmojisData userData emojiData2 model =
         ]
         (case Maybe.map .emoji model.emojiHovered of
             Just (EmojiOrSticker_UnicodeEmoji emoji) ->
-                Ui.text (emojiWithSkinTone userData.skinTone emoji emojiData2)
+                (emojiWithSkinTone userData.skinTone emoji emojiData2
+                    |> Twemoji.view "1em"
+                    |> Ui.html
+                )
                     :: (case SeqDict.get emoji emojiData2.emojis of
                             Just emoji2 ->
                                 List.map
