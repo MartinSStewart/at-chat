@@ -9221,15 +9221,27 @@ handleGameOutMsgs outMsgs model =
 
                 Game.OutReplyToGame matchId repliedToGame ->
                     let
-                        ( pushModel, pushCmd ) =
-                            FrontendExtra.routePush
-                                model2
-                                (Route.setChannelHeaderTab
-                                    (Just (ChannelHeaderTab_Games (Just matchId) (Just repliedToGame)))
-                                    model2.route
+                        ( replyModel, replyCmd ) =
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn ->
+                                    case Route.toGuildOrDmId (Local.model loggedIn.localState).localUser.session.userId model2.route of
+                                        Just ( guildOrDmId, _ ) ->
+                                            ( { loggedIn
+                                                | replyTo =
+                                                    SeqDict.insert
+                                                        ( guildOrDmId, NoThread )
+                                                        (Message.RepliedToGame matchId repliedToGame)
+                                                        loggedIn.replyTo
+                                              }
+                                            , FrontendExtra.setFocus model2 Pages.Guild.channelTextInputId
+                                            )
+
+                                        Nothing ->
+                                            ( loggedIn, Command.none )
                                 )
+                                model2
                     in
-                    ( pushModel, pushCmd :: cmds )
+                    ( replyModel, replyCmd :: cmds )
 
                 Game.OutLocalChange _ ->
                     ( model2, cmds )

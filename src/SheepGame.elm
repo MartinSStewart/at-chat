@@ -511,6 +511,8 @@ type OutMsg
       -- Somebody wants to react with an emoji that isn't one of the ones they reach for
       -- most, so the full selector has to be opened for them.
     | OpenReactionEmojiSelector ReactionTarget
+      -- Somebody wants to reply to one of the results in the chat the match is in.
+    | ReplyToResult ReactionTarget
       -- An image attached to a question, an answer or a note, pressed to see it full size.
       -- Where that gets shown is the frontend's business rather than the game's.
     | ShowImage RichText.PressedImageData
@@ -1234,6 +1236,9 @@ updateGame localUser setup shared msg model =
 
                 MessageView.MessageViewMsg_PressedShowReactionEmojiSelector ->
                     ( model, Nothing, OpenReactionEmojiSelector target )
+
+                MessageView.MessageViewMsg_PressedReply ->
+                    ( model, Nothing, ReplyToResult target )
 
                 -- The rest of what a message offers belongs to the conversation it's in, and
                 -- an answer isn't in one
@@ -2965,7 +2970,7 @@ reactableResult paddingX2 localUser contentWidth target hoveredResult reactions 
         , Ui.Events.onMouseEnter (ReactionMsg target MessageView.MessageView_MouseEnteredMessage)
         , Ui.Events.onMouseLeave (ReactionMsg target MessageView.MessageView_MouseExitedMessage)
         , if isHovered then
-            MessageView.reactionsMiniViewNearEdge
+            MessageView.gameMiniViewNearEdge
                 localUser.user
                 localUser.user.availableCustomEmojis
                 localUser.customEmojis

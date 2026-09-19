@@ -49,7 +49,7 @@ import Embed exposing (Embed(..), EmbedData, EmbedImageFormat(..))
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
 import FileStatus exposing (FileData, FileHash, FileId)
-import Id exposing (ChannelMessageId, Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (ChannelMessageId, Id, QuestionId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
 import Quantity exposing (Quantity)
@@ -400,9 +400,15 @@ type RepliedTo messageId
     | RepliedToGame (Id ChannelMessageId) RepliedToGame
 
 
+{-| Something inside a game that a message can reply to. `Message` can't see the games
+themselves, so it names their targets itself: a move in a word spelling game by the number the
+Moves log shows next to it, and in a sheep game one player's answer to a question or the host's
+notes on it.
+-}
 type RepliedToGame
-    = RepliedTo_WordSpellingGame Int
-    | RepliedTo_SheepGame
+    = RepliedTo_WordSpellingGameMove Int
+    | RepliedTo_SheepGameAnswer (Id UserId) (Id QuestionId)
+    | RepliedTo_SheepGameNotes (Id QuestionId)
 
 
 type ThreadRouteWithRepliedTo
@@ -413,16 +419,20 @@ type ThreadRouteWithRepliedTo
 repliedToGameCodec : Serialize.Codec e RepliedToGame
 repliedToGameCodec =
     Serialize.customType
-        (\a b value ->
+        (\a b c value ->
             case value of
-                RepliedTo_WordSpellingGame argA ->
+                RepliedTo_WordSpellingGameMove argA ->
                     a argA
 
-                RepliedTo_SheepGame ->
-                    b
+                RepliedTo_SheepGameAnswer argA argB ->
+                    b argA argB
+
+                RepliedTo_SheepGameNotes argA ->
+                    c argA
         )
-        |> Serialize.variant1 RepliedTo_WordSpellingGame Serialize.unsignedInt16
-        |> Serialize.variant0 RepliedTo_SheepGame
+        |> Serialize.variant1 RepliedTo_WordSpellingGameMove Serialize.unsignedInt16
+        |> Serialize.variant2 RepliedTo_SheepGameAnswer Id.codec Id.codec
+        |> Serialize.variant1 RepliedTo_SheepGameNotes Id.codec
         |> Serialize.finishCustomType
 
 

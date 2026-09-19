@@ -503,16 +503,20 @@ repliedToCodec =
 repliedToGameCodec : Codec Message.RepliedToGame
 repliedToGameCodec =
     Codec.custom
-        (\wordSpellingGameEncoder sheepGameEncoder value ->
+        (\wordSpellingGameMoveEncoder sheepGameAnswerEncoder sheepGameNotesEncoder value ->
             case value of
-                Message.RepliedTo_WordSpellingGame argA ->
-                    wordSpellingGameEncoder argA
+                Message.RepliedTo_WordSpellingGameMove argA ->
+                    wordSpellingGameMoveEncoder argA
 
-                Message.RepliedTo_SheepGame ->
-                    sheepGameEncoder
+                Message.RepliedTo_SheepGameAnswer argA argB ->
+                    sheepGameAnswerEncoder argA argB
+
+                Message.RepliedTo_SheepGameNotes argA ->
+                    sheepGameNotesEncoder argA
         )
-        |> Codec.variant1 "RepliedTo_WordSpellingGame" Message.RepliedTo_WordSpellingGame Codec.int
-        |> Codec.variant0 "RepliedTo_SheepGame" Message.RepliedTo_SheepGame
+        |> Codec.variant1 "RepliedTo_WordSpellingGameMove" Message.RepliedTo_WordSpellingGameMove Codec.int
+        |> Codec.variant2 "RepliedTo_SheepGameAnswer" Message.RepliedTo_SheepGameAnswer idCodec idCodec
+        |> Codec.variant1 "RepliedTo_SheepGameNotes" Message.RepliedTo_SheepGameNotes idCodec
         |> Codec.buildCustom
 
 
