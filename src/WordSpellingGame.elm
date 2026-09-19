@@ -380,6 +380,7 @@ type GameMsg
     | PressedNextWordDefinition
     | PressedCloseWordDefinition
     | GotWordDefinition String (Result Http.Error (List DictEntry))
+    | PressedReplyToAction Int
 
 
 type alias SetupModel =
@@ -2031,6 +2032,9 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
             , Nothing
             , Nothing
             )
+
+        PressedReplyToAction index ->
+            ( model, Nothing, Nothing )
 
 
 {-| Show the definition popup for one of `open`'s candidate words: show a loading popup and ask
@@ -4583,13 +4587,14 @@ recentActionsView scrollPositionAndHovered windowSize localUser setup actions sh
                                                 Ui.el
                                                     [ Ui.background MyUi.buttonBackground
                                                     , Ui.rounded 4
-                                                    , Ui.paddingXY 8 8
-                                                    , Ui.width (Ui.px 40)
-                                                    , Ui.height (Ui.px 40)
+                                                    , Ui.paddingXY 4 4
+                                                    , Ui.width (Ui.px 32)
+                                                    , Ui.height (Ui.px 32)
                                                     , Ui.contentCenterX
                                                     , Ui.contentCenterY
                                                     , Ui.Font.color MyUi.font1
                                                     , Ui.move { x = -8, y = -8, z = 0 }
+                                                    , MyUi.blockClickPropagation (PressedReplyToAction index)
                                                     ]
                                                     (Ui.html (Icons.reply 24))
                                                     |> Ui.inFront
