@@ -664,6 +664,55 @@ async function run() {
             "what the worker's octet stream index names");
     });
 
+    // Emoji art is served from the app's own origin rather than through the api domain, and
+    // an address names the emoji's code points, so a cached copy can never be the wrong
+    // picture. These check the worker answers from the cache once it has one, since that's
+    // what stops the selector waiting on a request per emoji every time a page loads.
+    await check("An emoji svg is fetched once and then served from the cache", async () => {
+        const emojiUrl = domain + "emoji/1f600.svg";
+        const svg = "<svg xmlns='http://www.w3.org/2000/svg'></svg>";
+        let asked = 0;
+
+        const emojiListeners = loadServiceWorker({
+            indexedDB: fakeIndexedDb(new Map()),
+            caches: fakeCaches(),
+            fetch: () => {
+                asked += 1;
+                return Promise.resolve(
+                    new Response(svg, {
+                        status: 200,
+                        headers: { "Content-Type": "image/svg+xml" }
+                    }));
+            }
+        });
+
+        const first = await requestFile(emojiListeners, emojiUrl);
+        expectEqual(await first.text(), svg, "the body served from the network");
+
+        const second = await requestFile(emojiListeners, emojiUrl);
+        expectEqual(await second.text(), svg, "the body served from the cache");
+        expectEqual(asked, 1, "how many times the network was asked");
+    });
+
+    await check("An emoji svg the server doesn't have isn't cached as a miss", async () => {
+        const missingUrl = domain + "emoji/1f600.svg";
+        let asked = 0;
+
+        const emojiListeners = loadServiceWorker({
+            indexedDB: fakeIndexedDb(new Map()),
+            caches: fakeCaches(),
+            fetch: () => {
+                asked += 1;
+                return Promise.resolve(new Response("", { status: 404 }));
+            }
+        });
+
+        await requestFile(emojiListeners, missingUrl);
+        await requestFile(emojiListeners, missingUrl);
+
+        expectEqual(asked, 2, "how many times the network was asked");
+    });
+
     if (failures.length > 0) {
         console.log("\n" + failures.length + " service worker test(s) failed");
         process.exit(1);

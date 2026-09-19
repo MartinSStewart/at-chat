@@ -196,6 +196,10 @@ const cacheName = 'resource_cache_v1';
 
 const frontendCacheName = 'frontend_cache_v1';
 
+// Bump this when the emoji artwork itself is replaced, since nothing else would make a
+// browser ask for a file it already has.
+const emojiCacheName = 'emoji_cache_v1';
+
 const fileKeyDbName = "at-chat-file-keys";
 const fileKeyStoreName = "file-keys";
 
@@ -380,6 +384,31 @@ self.addEventListener('fetch', (event) => {
                     return cachedFetchedResponse;
                 }
             }
+            return fetchedResponse;
+        }));
+        return;
+    }
+
+    // An emoji's address is built out of its code points (see Twemoji.fileName), so
+    // different artwork would be a different address and a cached copy is never stale.
+    // Opening the emoji selector asks for around a hundred and fifty of these at once,
+    // which is slow enough to show an empty grid, so answering them from the cache is
+    // what makes it open instantly on every visit after the first.
+    if (url.startsWith(domain + 'emoji/')) {
+        event.respondWith(caches.open(emojiCacheName).then(async (cache) => {
+            const cachedResponse = await cache.match(url);
+            if (cachedResponse) {
+                return cachedResponse;
+            }
+
+            const fetchedResponse = await fetch(event.request);
+
+            // Unlike the frontend bundle above, these are small enough that teeing the
+            // body between the cache and the page can't run past the browser's buffer.
+            if (fetchedResponse.ok) {
+                await cache.put(event.request, fetchedResponse.clone());
+            }
+
             return fetchedResponse;
         }));
         return;
