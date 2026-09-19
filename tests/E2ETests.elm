@@ -31,7 +31,7 @@ import FileStatus
 import Frontend
 import GuildName
 import Html.Attributes
-import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, UserId)
 import IdArray
 import Json.Decode
 import Json.Encode
@@ -39,6 +39,7 @@ import Local exposing (ChangeId(..))
 import LocalState
 import LoginForm
 import MembersAndOwner
+import Message
 import MessageMenu
 import MuteSettings
 import NonemptyDict
@@ -972,7 +973,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             Time.utc
                             (GuildOrDmId_Guild { guildId = Id.fromInt 1, channelId = Id.fromInt 0 })
                             (NonemptyString 'm' (String.repeat RichText.maxLength "m"))
-                            (NoThreadWithMaybeMessage Nothing)
+                            (Message.NoThreadWithRepliedTo Message.NoReply)
                             SeqDict.empty
                             []
                         )
@@ -3077,7 +3078,7 @@ sendMessageRateLimitTest config =
                                     Time.utc
                                     (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
                                     (NonemptyString 'm' ("sg " ++ String.fromInt changeIndex))
-                                    (NoThreadWithMaybeMessage Nothing)
+                                    (Message.NoThreadWithRepliedTo Message.NoReply)
                                     SeqDict.empty
                                     []
                                 )

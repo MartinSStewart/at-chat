@@ -31,8 +31,10 @@ module Message exposing
     , repliedTo
     , repliedToGameCodec
     , replyToMaybe
+    , threadRouteWithoutRepliedTo
     , toDecrypted
     , toEncrypted
+    , toThreadRouteWithMaybeMessage
     , userJoined
     , userTextMessageBackend
     , userTextMessageFrontend
@@ -47,7 +49,7 @@ import Embed exposing (Embed(..), EmbedData, EmbedImageFormat(..))
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
 import FileStatus exposing (FileData, FileHash, FileId)
-import Id exposing (ChannelMessageId, Id, StickerId, ThreadMessageId, UserId)
+import Id exposing (ChannelMessageId, Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
 import Quantity exposing (Quantity)
@@ -422,6 +424,31 @@ repliedToGameCodec =
         |> Serialize.variant1 RepliedTo_WordSpellingGame Serialize.unsignedInt16
         |> Serialize.variant0 RepliedTo_SheepGame
         |> Serialize.finishCustomType
+
+
+{-| Which thread a message is going into, with the reply dropped.
+-}
+threadRouteWithoutRepliedTo : ThreadRouteWithRepliedTo -> ThreadRoute
+threadRouteWithoutRepliedTo threadRoute =
+    case threadRoute of
+        NoThreadWithRepliedTo _ ->
+            NoThread
+
+        ViewThreadWithRepliedTo threadId _ ->
+            ViewThread threadId
+
+
+{-| For the code that only cares about a reply to another message, such as working out who to
+notify. A reply to a move in a game has no message behind it, so it comes out as no reply at all.
+-}
+toThreadRouteWithMaybeMessage : ThreadRouteWithRepliedTo -> ThreadRouteWithMaybeMessage
+toThreadRouteWithMaybeMessage threadRoute =
+    case threadRoute of
+        NoThreadWithRepliedTo repliedTo2 ->
+            NoThreadWithMaybeMessage (replyToMaybe repliedTo2)
+
+        ViewThreadWithRepliedTo threadId maybeRepliedTo ->
+            ViewThreadWithMaybeMessage threadId maybeRepliedTo
 
 
 maybeToReply : Maybe (Id messageId) -> RepliedTo messageId

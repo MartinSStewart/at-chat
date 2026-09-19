@@ -2982,6 +2982,10 @@ allAttackerLocalChanges =
         threadRouteWithMaybeMessage =
             NoThreadWithMaybeMessage (Just (Id.fromInt 0))
 
+        threadRouteWithRepliedTo : Message.ThreadRouteWithRepliedTo
+        threadRouteWithRepliedTo =
+            Message.NoThreadWithRepliedTo (Message.RepliedToMessage (Id.fromInt 0))
+
         emoji =
             EmojiOrCustomEmoji_Emoji (Emoji.UnicodeEmoji "👍")
 
@@ -3040,10 +3044,10 @@ allAttackerLocalChanges =
     , Local_RegisterPushSubscription (Time.millisToPosix 9) (SubscribeJsException "")
     , Local_RemoveReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
     , Local_SendEditMessage messageTime Time.utc (GuildOrDmId_Dm { otherUserId = normalUserId }) threadRouteWithMessage normalText SeqDict.empty
-    , Local_SendMessage messageTime Time.utc (GuildOrDmId_Guild { guildId = legitGuildId, channelId = channelId }) normalText threadRouteWithMaybeMessage SeqDict.empty []
+    , Local_SendMessage messageTime Time.utc (GuildOrDmId_Guild { guildId = legitGuildId, channelId = channelId }) normalText threadRouteWithRepliedTo SeqDict.empty []
     , Local_RemoveReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
     , Local_SendEditMessage messageTime Time.utc (GuildOrDmId_Dm { otherUserId = normalUserId }) threadRouteWithMessage normalText SeqDict.empty
-    , Local_SendMessage messageTime Time.utc (GuildOrDmId_Dm { otherUserId = normalUserId }) normalText threadRouteWithMaybeMessage SeqDict.empty [ EmojiOrCustomEmoji_Emoji Emoji.heart ]
+    , Local_SendMessage messageTime Time.utc (GuildOrDmId_Dm { otherUserId = normalUserId }) normalText threadRouteWithRepliedTo SeqDict.empty [ EmojiOrCustomEmoji_Emoji Emoji.heart ]
     , Local_SetDiscordGuildNotificationLevel discordUserId discordGuildId User.NotifyOnEveryMessage
     , Local_SetDomainWhitelist True (Domain "example.com")
     , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)
@@ -3119,7 +3123,7 @@ allAttackerLocalChanges =
         SeqSet.empty
         (EncryptedData (Bytes.Encode.encode (Bytes.Encode.sequence [])))
         (EncryptedData (Bytes.Encode.encode (Bytes.Encode.sequence [])))
-        (NoThreadWithMaybeMessage Nothing)
+        (Message.NoThreadWithRepliedTo Message.NoReply)
     , Local_SendEncryptedEditMessage
         startTime
         { otherUserId = Broadcast.adminUserId }

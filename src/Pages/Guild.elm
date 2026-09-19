@@ -90,7 +90,7 @@ import List.Nonempty exposing (Nonempty)
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (GameType(..), Message(..), MessageContent, UserTextMessageDrawings)
+import Message exposing (GameType(..), Message(..), MessageContent, RepliedTo(..), UserTextMessageDrawings)
 import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageMenu
@@ -3905,7 +3905,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
 
         replyToIndex : Maybe (Id ChannelMessageId)
         replyToIndex =
-            SeqDict.get guildOrDmId loggedIn.replyTo
+            SeqDict.get guildOrDmId loggedIn.replyTo |> Maybe.andThen Message.replyToMaybe
 
         revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =
@@ -4133,7 +4133,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
 
 
 userTextMessageRepliedTo :
-    { a | repliedTo : Message.RepliedTo messageId }
+    { a | repliedTo : RepliedTo messageId }
     -> { b | messages : MessageArray messageId userId }
     -> Maybe ( Id messageId, Message messageId userId )
 userTextMessageRepliedTo data channel =
@@ -4220,7 +4220,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
 
         replyToIndex : Maybe (Id ChannelMessageId)
         replyToIndex =
-            SeqDict.get guildOrDmId loggedIn.replyTo
+            SeqDict.get guildOrDmId loggedIn.replyTo |> Maybe.andThen Message.replyToMaybe
 
         revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =
@@ -4572,7 +4572,9 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
 
         replyToIndex : Maybe (Id ThreadMessageId)
         replyToIndex =
-            SeqDict.get guildOrDmId loggedIn.replyTo |> Maybe.map Id.changeType
+            SeqDict.get guildOrDmId loggedIn.replyTo
+                |> Maybe.andThen Message.replyToMaybe
+                |> Maybe.map Id.changeType
 
         revealedSpoilers : SeqDict (Id ThreadMessageId) (NonemptySet Int)
         revealedSpoilers =
@@ -4787,7 +4789,9 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
 
         replyToIndex : Maybe (Id ThreadMessageId)
         replyToIndex =
-            SeqDict.get guildOrDmId loggedIn.replyTo |> Maybe.map Id.changeType
+            SeqDict.get guildOrDmId loggedIn.replyTo
+                |> Maybe.andThen Message.replyToMaybe
+                |> Maybe.map Id.changeType
 
         revealedSpoilers : SeqDict (Id ThreadMessageId) (NonemptySet Int)
         revealedSpoilers =
@@ -5375,13 +5379,13 @@ emojiSelectorZIndex =
 replyToHeader :
     Bool
     -> ( AnyGuildOrDmId, ThreadRoute )
-    -> Maybe (Id messageId)
+    -> Maybe (RepliedTo messageId)
     -> SeqDict userId { a | name : PersonName, color : UserColor }
     -> { b | messages : MessageArray messageId2 userId }
     -> Element FrontendMsg_
 replyToHeader isMobile guildOrDmIdNoThread replyTo allUsers channel =
     case replyTo of
-        Just messageIndex ->
+        Just (RepliedToMessage messageIndex) ->
             case MessageArray.get (Id.changeType messageIndex) channel.messages of
                 Just message ->
                     case message of
@@ -5406,12 +5410,47 @@ replyToHeader isMobile guildOrDmIdNoThread replyTo allUsers channel =
                 _ ->
                     Ui.none
 
+        Just (RepliedToGame _ game) ->
+            replyToGameHeaderHelper isMobile (PressedCloseReplyTo guildOrDmIdNoThread) game
+
+        Just NoReply ->
+            Ui.none
+
         Nothing ->
             Ui.none
 
 
 replyToHeaderHelper : Bool -> msg -> Maybe userId -> SeqDict userId { a | name : PersonName, color : UserColor } -> Element msg
 replyToHeaderHelper isMobile onPress userId allUsers =
+    replyToHeaderRow
+        isMobile
+        onPress
+        [ Ui.text "Reply to "
+        , case userId of
+            Just userId2 ->
+                User.toStringView userId2 allUsers
+
+            Nothing ->
+                Ui.text "message"
+        ]
+
+
+replyToGameHeaderHelper : Bool -> msg -> Message.RepliedToGame -> Element msg
+replyToGameHeaderHelper isMobile onPress game =
+    replyToHeaderRow
+        isMobile
+        onPress
+        [ case game of
+            Message.RepliedTo_WordSpellingGame moveNumber ->
+                Ui.text ("Reply to move " ++ String.fromInt moveNumber)
+
+            Message.RepliedTo_SheepGame ->
+                Ui.text "Reply to game"
+        ]
+
+
+replyToHeaderRow : Bool -> msg -> List (Element msg) -> Element msg
+replyToHeaderRow isMobile onPress content =
     Ui.row
         [ Ui.Font.color MyUi.font2
         , Ui.background MyUi.background2
@@ -5434,19 +5473,14 @@ replyToHeaderHelper isMobile onPress userId allUsers =
                 (Ui.html Icons.x)
             )
         ]
-        [ if isMobile then
+        ((if isMobile then
             Ui.none
 
           else
             Ui.el [ Ui.width Ui.shrink, Ui.move { x = 0, y = 2, z = 0 } ] (Ui.html (Icons.reply 18))
-        , Ui.text "Reply to "
-        , case userId of
-            Just userId2 ->
-                User.toStringView userId2 allUsers
-
-            Nothing ->
-                Ui.text "message"
-        ]
+         )
+            :: content
+        )
         |> Ui.el [ Ui.paddingWith MessageInput.textareaPadding, Ui.move { x = 0, y = 1, z = 0 } ]
 
 
@@ -5572,7 +5606,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         allUsers =
             User.allUsers local.localUser
 
-        replyTo : Maybe (Id ChannelMessageId)
+        replyTo : Maybe (RepliedTo ChannelMessageId)
         replyTo =
             SeqDict.get ( GuildOrDmId guildOrDmIdNoThread, NoThread ) loggedIn.replyTo
 
@@ -5759,7 +5793,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
         allUsers =
             LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
 
-        replyTo : Maybe (Id ChannelMessageId)
+        replyTo : Maybe (RepliedTo ChannelMessageId)
         replyTo =
             SeqDict.get guildOrDmId loggedIn.replyTo
 
@@ -6039,7 +6073,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
         allUsers =
             User.allUsers local.localUser
 
-        replyTo : Maybe (Id ChannelMessageId)
+        replyTo : Maybe (RepliedTo ChannelMessageId)
         replyTo =
             SeqDict.get guildOrDmId loggedIn.replyTo
 
@@ -6236,7 +6270,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
         allUsers =
             LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
 
-        replyTo : Maybe (Id ChannelMessageId)
+        replyTo : Maybe (RepliedTo ChannelMessageId)
         replyTo =
             SeqDict.get guildOrDmId loggedIn.replyTo
 
@@ -8155,7 +8189,7 @@ userTextMessageContent :
             , createdBy : Id UserId
             , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId))
             , editedAt : Maybe Time.Posix
-            , repliedTo : Message.RepliedTo messageId
+            , repliedTo : RepliedTo messageId
             , drawings : Maybe (UserTextMessageDrawings (Id UserId))
         }
     -> Element MessageViewMsg
@@ -8322,7 +8356,7 @@ discordUserTextMessageContent :
             , createdBy : Discord.Id Discord.UserId
             , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet (Discord.Id Discord.UserId))
             , editedAt : Maybe Time.Posix
-            , repliedTo : Message.RepliedTo messageId
+            , repliedTo : RepliedTo messageId
             , drawings : Maybe (UserTextMessageDrawings (Discord.Id Discord.UserId))
         }
     -> Element MessageViewMsg
