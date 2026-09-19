@@ -155,12 +155,30 @@ tests normalConfig =
                         [ -- The log numbers every entry, joins included, so LOAD (the first move
                           -- made) is 1 and ROT is 3. The board LOAD left behind holds its four
                           -- tiles and the one ROT left holds the two more it added.
-                          admin.mouseEnter 100 (Dom.id "wsg_moveWord_1") ( 10, 10 ) []
+                          admin.mouseEnter 100 (moveRow 1) ( 10, 10 ) []
                         , admin.checkModel 100 (checkHoveredMoveBoardSize 4)
-                        , admin.mouseEnter 100 (Dom.id "wsg_moveWord_3") ( 10, 10 ) []
+                        , admin.mouseEnter 100 (moveRow 3) ( 10, 10 ) []
                         , admin.checkModel 100 (checkHoveredMoveBoardSize 6)
-                        , admin.custom 100 (Dom.id "wsg_moveWord_3") "mouseleave" (Json.Encode.object [])
+                        , admin.custom 100 (moveRow 3) "mouseleave" (Json.Encode.object [])
                         , admin.checkModel 100 checkNoHoveredMove
+                        ]
+                    , T.collapsableGroup
+                        "A move can be reacted to and replied to"
+                        [ admin.mouseEnter 100 (moveRow 1) ( 10, 10 ) []
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "miniView_emojiReact_0" ])
+
+                        -- The reaction is drawn under the move for everyone watching the match
+                        , admin.click 100 (Dom.id "miniView_emojiReact_0")
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_removeReactionEmoji_0" ])
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_addReactionEmoji" ])
+
+                        -- Replying to a move hands it to the message input, so whatever gets
+                        -- written next points back at it
+                        , admin.click 100 (Dom.id "miniView_reply")
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Reply to move 1" ])
+                        , admin.click 100 (Dom.id "guild_closeReplyToHeader")
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Reply to move 1" ])
+                        , admin.custom 100 (moveRow 1) "mouseleave" (Json.Encode.object [])
                         ]
                     , T.collapsableGroup
                         "Drop a tray tile one slot to the right"
@@ -1452,6 +1470,13 @@ checkHoveredMoveBoardSize expected model =
 
         Nothing ->
             Err "Expected a move in the Moves log to be hovered"
+
+
+{-| A row in the Moves log, by the number the log shows next to it.
+-}
+moveRow : Int -> Dom.HtmlId
+moveRow moveNumber =
+    WordSpellingGame.reactionTargetId (WordSpellingGame.MoveReaction moveNumber)
 
 
 checkNoHoveredMove : FrontendModel -> Result String ()

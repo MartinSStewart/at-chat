@@ -492,7 +492,18 @@ threePlayerMatchTest normalConfig =
                                     (Test.Html.Query.has [ Test.Html.Selector.id "miniView_emojiReact_0" ])
                                 , stevie.checkView
                                     100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_reply" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.id "miniView_reply" ])
+
+                                -- Replying to an answer hands it to the message input, so
+                                -- whatever gets written next points back at it
+                                , stevie.click 100 (Dom.id "miniView_reply")
+                                , stevie.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Reply to an answer" ])
+                                , stevie.click 100 (Dom.id "guild_closeReplyToHeader")
+                                , stevie.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Reply to an answer" ])
                                 , stevie.click 100 (Dom.id "miniView_emojiReact_0")
                                 , stevie.checkView
                                     100

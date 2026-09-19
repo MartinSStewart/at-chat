@@ -524,6 +524,7 @@ type OutMsg
       -- Somebody wants to react to an answer or a note with an emoji that isn't one of their
       -- most used ones, so the full selector is opened for them.
     | OpenSheepGameReactionEmojiSelector GuildOrDmId (Id ChannelMessageId) SheepGame.ReactionTarget
+    | OpenWordSpellingGameReactionEmojiSelector GuildOrDmId (Id ChannelMessageId) WordSpellingGame.ReactionTarget
       -- Ask for a file to attach to a sheep game question, then upload what comes back
       -- (see `Frontend.handleGameOutMsgs`).
     | SelectSheepGameFilesToAttach SheepGame.Input
@@ -673,8 +674,11 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                                         Just (WordSpellingGame.FetchDefinition word) ->
                                             [ FetchWordDefinition word ]
 
-                                        Just (WordSpellingGame.ReplyToMove moveNumber) ->
+                                        Just (WordSpellingGame.ReplyToResult (WordSpellingGame.MoveReaction moveNumber)) ->
                                             [ OutReplyToGame matchId (Message.RepliedTo_WordSpellingGameMove moveNumber) ]
+
+                                        Just (WordSpellingGame.OpenReactionEmojiSelector target) ->
+                                            [ OpenWordSpellingGameReactionEmojiSelector guildOrDmId matchId target ]
 
                                         Nothing ->
                                             []

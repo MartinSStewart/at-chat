@@ -2952,8 +2952,8 @@ reactionTargetId target =
             Dom.id ("sheepGame_revealedNotes_" ++ Id.toString questionId)
 
 
-{-| An answer or a note, drawn with the reactions it has and, while the pointer is over it,
-the menu for adding one. That menu is all that's on offer: editing, replying and the rest of
+{-| An answer or a note, drawn with the reactions it has and, while the pointer is over it, the
+menu for reacting to it or replying to it in the chat the match is in. Editing and the rest of
 what a message's menu does belong to the conversation a message is in.
 -}
 reactableResult : Int -> LocalUser -> Int -> ReactionTarget -> Maybe ReactionTarget -> Reactions -> Element GameMsg -> Element GameMsg

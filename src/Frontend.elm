@@ -1557,6 +1557,29 @@ updateLoaded msg model =
 
                                         EmojiOrSticker_Sticker _ ->
                                             ( loggedIn2, Command.none )
+
+                                EmojiSelectorForWordSpellingGameReaction guildOrDmId matchId target ->
+                                    case emojiOrSticker of
+                                        EmojiOrSticker_UnicodeEmoji emoji ->
+                                            addWordSpellingGameReaction
+                                                guildOrDmId
+                                                matchId
+                                                target
+                                                (EmojiOrCustomEmoji_Emoji emoji)
+                                                model
+                                                loggedIn2
+
+                                        EmojiOrSticker_CustomEmoji customEmojiId ->
+                                            addWordSpellingGameReaction
+                                                guildOrDmId
+                                                matchId
+                                                target
+                                                (EmojiOrCustomEmoji_CustomEmoji customEmojiId)
+                                                model
+                                                loggedIn2
+
+                                        EmojiOrSticker_Sticker _ ->
+                                            ( loggedIn2, Command.none )
                         )
                         model
 
@@ -7307,6 +7330,30 @@ addSheepGameReaction guildOrDmId matchId target emoji model loggedIn =
         Command.none
 
 
+addWordSpellingGameReaction :
+    GuildOrDmId
+    -> Id ChannelMessageId
+    -> WordSpellingGame.ReactionTarget
+    -> EmojiOrCustomEmoji
+    -> LoadedFrontend
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+addWordSpellingGameReaction guildOrDmId matchId target emoji model loggedIn =
+    FrontendExtra.handleLocalChange
+        model.time
+        (WordSpellingGame.Action
+            { userId = (Local.model loggedIn.localState).localUser.session.userId
+            , time = model.time
+            , change = WordSpellingGame.AddedReaction target emoji
+            }
+            |> Game.LocalChange_WordSpellingGame matchId
+            |> Local_Game guildOrDmId
+            |> Just
+        )
+        { loggedIn | showEmojiSelector = EmojiSelectorHidden }
+        Command.none
+
+
 showReactionEmojiSelector : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 showReactionEmojiSelector guildOrDmId messageIndex model =
     FrontendExtra.updateLoggedIn
@@ -7331,6 +7378,9 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
                             EmojiSelectorHidden
 
                         EmojiSelectorForSheepGameReaction _ _ _ ->
+                            EmojiSelectorHidden
+
+                        EmojiSelectorForWordSpellingGameReaction _ _ _ ->
                             EmojiSelectorHidden
 
                         EmojiSelectorForSheepGameInput _ _ _ ->
@@ -9341,6 +9391,33 @@ handleGameOutMsgs outMsgs model =
                                     ( { loggedIn
                                         | showEmojiSelector =
                                             EmojiSelectorForSheepGameReaction guildOrDmId matchId target
+                                        , emojiSelector =
+                                            { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
+                                      }
+                                    , if MyUi.isMobile model2 then
+                                        Command.none
+
+                                      else
+                                        Dom.focus Emoji.searchInputId |> Task.attempt (\_ -> SetFocus)
+                                    )
+                                )
+                                model2
+                    in
+                    ( selectorModel, selectorCmd :: cmds )
+
+                Game.OpenWordSpellingGameReactionEmojiSelector guildOrDmId matchId target ->
+                    let
+                        ( selectorModel, selectorCmd ) =
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn ->
+                                    let
+                                        emojiSelectorModel : Emoji.Model
+                                        emojiSelectorModel =
+                                            loggedIn.emojiSelector
+                                    in
+                                    ( { loggedIn
+                                        | showEmojiSelector =
+                                            EmojiSelectorForWordSpellingGameReaction guildOrDmId matchId target
                                         , emojiSelector =
                                             { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
                                       }
