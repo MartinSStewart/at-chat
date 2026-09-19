@@ -201,17 +201,9 @@ const cacheName = 'resource_cache_v1';
 
 const frontendCacheName = 'frontend_cache_v1';
 
-// Everything public/ serves. Bump this when any of it is replaced without being renamed,
-// since nothing else would make a browser ask for a file it already has.
+// Everything public/cacheable holds. Bump this when any of it is replaced without being
+// renamed, since nothing else would make a browser ask for a file it already has.
 const staticCacheName = 'static_cache_v1';
-
-// public/ is served from the root of the domain, so anything in it is a path that ends in a
-// file extension, which the app's own routes never do. file/ is the one other place that
-// answers a path like that (/file/discord-sticker/<id>.png), and those are uploads rather
-// than files a deploy replaces, so they stay with the caches that already handle them.
-function isPublicFile(pathName) {
-    return /\.[a-z0-9]+$/i.test(pathName) && !pathName.startsWith('/file/');
-}
 
 const fileKeyDbName = "at-chat-file-keys";
 const fileKeyStoreName = "file-keys";
@@ -445,10 +437,11 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Whatever public/ serves: the emoji sprites, fonts, images, the emoji data, the word
-    // lists. A deploy is the only thing that changes any of it, and staticCacheName is what
-    // says the copies are stale, so a visit after the first asks the server for none of it.
-    if (url.startsWith(domain) && isPublicFile(new URL(url).pathname)) {
+    // public/cacheable is where the files a deploy replaces live, as opposed to the uploads
+    // under file/ and the routes of the app itself: the emoji sprites, the fonts, the images,
+    // the emoji data, the word lists. staticCacheName is what says the copies are stale, so a
+    // visit after the first asks the server for none of it.
+    if (url.startsWith(domain + 'cacheable/')) {
         event.respondWith(caches.open(staticCacheName).then(async (cache) => {
             const cachedResponse = await cache.match(url);
             if (cachedResponse) {

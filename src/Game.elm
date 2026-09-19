@@ -1343,13 +1343,13 @@ gameToPreviewUrl : GameType -> String
 gameToPreviewUrl game =
     case game of
         GameType_Go ->
-            "/go-preview.webp"
+            "/cacheable/go-preview.webp"
 
         GameType_WordSpellingGame ->
-            "/word-spelling-game-preview.webp"
+            "/cacheable/word-spelling-game-preview.webp"
 
         GameType_SheepGame ->
-            "/sheep-game-preview.webp"
+            "/cacheable/sheep-game-preview.webp"
 
 
 gameSelectButton : Bool -> GameType -> Element Msg

@@ -72,7 +72,7 @@ tests normalConfig =
                         boardCell cx cy =
                             ( toFloat (273 + cx * 30), toFloat (WordSpellingGame.boardY + cy * 30) )
                     in
-                    [ -- The headless test never loads /pop.mp3, so tell each client's audio system the
+                    [ -- The headless test never loads /cacheable/pop.mp3, so tell each client's audio system the
                       -- load succeeded (requestId 0 is the pop sound, the only sound the app loads). Once
                       -- popSound is Ok, FrontendExtra.audio actually schedules the pops we assert on below.
                       admin.portEvent 0 "audioPortFromJs" popLoadedEvent
@@ -241,7 +241,7 @@ tests normalConfig =
                         boardCell cx cy =
                             ( toFloat (273 + cx * 30), toFloat (WordSpellingGame.boardY + cy * 30) )
                     in
-                    [ -- The headless test never loads /pop.mp3, so tell each client's audio system the
+                    [ -- The headless test never loads /cacheable/pop.mp3, so tell each client's audio system the
                       -- load succeeded (requestId 0 is the pop sound, the only sound the app loads). Once
                       -- popSound is Ok, FrontendExtra.audio actually schedules the pops we assert on below.
                       admin.portEvent 0 "audioPortFromJs" popLoadedEvent
@@ -1527,7 +1527,7 @@ wordSpellingGamePremove normalConfig =
                     boardCell cx cy =
                         ( toFloat (273 + cx * 30), toFloat (WordSpellingGame.boardY + cy * 30) )
                 in
-                [ -- The headless test never loads /pop.mp3, so tell each client's audio system the
+                [ -- The headless test never loads /cacheable/pop.mp3, so tell each client's audio system the
                   -- load succeeded (requestId 0 is the pop sound, the only sound the app loads). Once
                   -- popSound is Ok, FrontendExtra.audio actually schedules the pops we assert on below.
                   admin.portEvent 0 "audioPortFromJs" popLoadedEvent

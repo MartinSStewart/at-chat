@@ -10,7 +10,7 @@ const path = require("path");
 
 const repoRoot = path.join(__dirname, "..");
 
-const spriteDir = path.join(repoRoot, "public", "emoji");
+const spriteDir = path.join(repoRoot, "public", "cacheable", "emoji");
 
 const skinTones = ["1F3FB", "1F3FC", "1F3FD", "1F3FE", "1F3FF"];
 
@@ -66,7 +66,7 @@ function symbolsIn(spriteName) {
 
     if (!fs.existsSync(file)) {
         throw new Error(
-            spriteName + ".svg isn't in public/emoji, so Emoji.elm names a sprite"
+            spriteName + ".svg isn't in public/cacheable/emoji, so Emoji.elm names a sprite"
                 + " that scripts/fetch-twemoji.py doesn't write");
     }
 
@@ -92,7 +92,7 @@ async function run() {
     const categoryNames = caseBranches(emojiSource, "categorySpriteName");
     const toneNames = caseBranches(emojiSource, "skinToneSpriteName");
     const categoryTitles = caseBranches(emojiSource, "emojiCategoryToString");
-    const emojiData = JSON.parse(readRepoFile("public/compact-emoji.json"));
+    const emojiData = JSON.parse(readRepoFile("public/cacheable/compact-emoji.json"));
 
     check("Emoji.elm names a sprite for every category the data has", () => {
         const fromData = new Set(emojiData.map((entry) => entry.category));

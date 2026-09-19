@@ -1483,7 +1483,7 @@ fontFace format family weight fileName unicodeRange =
   font-weight: """ ++ String.fromInt weight ++ """;
   font-stretch: normal;
   font-display: swap;
-  src: url(/fonts/""" ++ fileName ++ """) format('""" ++ format ++ """');
+  src: url(/cacheable/fonts/""" ++ fileName ++ """) format('""" ++ format ++ """');
   unicode-range: """ ++ unicodeRange ++ """;
 }"""
 
@@ -1497,7 +1497,7 @@ monoFontFace weight fileName =
   font-weight: """ ++ String.fromInt weight ++ """;
   font-stretch: normal;
   font-display: swap;
-  src: url(/fonts/""" ++ fileName ++ """) format('woff2');
+  src: url(/cacheable/fonts/""" ++ fileName ++ """) format('woff2');
 }"""
 
 

@@ -1580,7 +1580,7 @@ emojiStartingWith emojis chars =
 requestEmojiData : (Result Http.Error CachedEmojiData -> msg) -> Command restriction toFrontend msg
 requestEmojiData gotEmojiData =
     Http.get
-        { url = "/compact-emoji.json"
+        { url = "/cacheable/compact-emoji.json"
         , expect =
             Http.expectJson
                 (\result ->

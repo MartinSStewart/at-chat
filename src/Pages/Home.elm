@@ -39,7 +39,7 @@ header isMobile route loginStatus =
                 , Ui.paddingWith { top = 4, left = 8, right = 8, bottom = 8 }
                 , Ui.Input.button (PressedLink (HomePageRoute Nothing))
                 ]
-                { source = "/at-logo-no-background.png"
+                { source = "/cacheable/at-logo-no-background.png"
                 , description = "Logo"
                 , onLoad = Nothing
                 }

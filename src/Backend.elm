@@ -5399,7 +5399,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             time
                                             "Success!"
                                             (Broadcast.UnencryptedBody "Push notifications enabled")
-                                            "https://at-chat.app/at-logo-no-background.png"
+                                            "https://at-chat.app/cacheable/at-logo-no-background.png"
                                             Nothing
                                             subscribeData
                                             model
@@ -7561,7 +7561,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                 , broadcast localMsg2 model
                 , if loadEnglishWordList then
                     Http.get
-                        { url = Env.domain ++ "/NWL2023.txt"
+                        { url = Env.domain ++ "/cacheable/NWL2023.txt"
                         , expect = Http.expectString GotEnglishWordList
                         }
 
@@ -7569,7 +7569,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                     Command.none
                 , if loadSwedishWordList then
                     Http.get
-                        { url = Env.domain ++ "/swedish-word-list.txt"
+                        { url = Env.domain ++ "/cacheable/swedish-word-list.txt"
                         , expect = Http.expectString GotSwedishWordList
                         }
 
@@ -7724,7 +7724,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                             time
                                             userId
                                             title
-                                            (Env.domain ++ "/word-spelling-game-preview.webp")
+                                            (Env.domain ++ "/cacheable/word-spelling-game-preview.webp")
                                             (Broadcast.UnencryptedBody pushNotificationText)
                                             emailText
                                             emailHtml

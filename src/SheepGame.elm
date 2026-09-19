@@ -2691,7 +2691,7 @@ revealingView isMobile time contentWidth localUser setup shared model =
             ]
             [ Ui.image
                 [ Ui.widthMax 502 ]
-                { source = "/sheep-game.webp"
+                { source = "/cacheable/sheep-game.webp"
                 , description = "A sheep with a laptop and wearing headphones"
                 , onLoad = Nothing
                 }

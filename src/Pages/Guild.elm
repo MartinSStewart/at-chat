@@ -695,7 +695,7 @@ unreadOverviewNotMobile local loggedIn model =
                                 ++ String.fromInt (Coord.yRaw art.coordinates)
                             )
                         ]
-                        { source = "/art/" ++ art.url ++ ".png"
+                        { source = "/cacheable/art/" ++ art.url ++ ".png"
                         , description = "Pleasing ascii art drawing"
                         , onLoad = Nothing
                         }
@@ -5637,7 +5637,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     )
                  , Ui.heightMin 0
                  , MyUi.bounceScroll isMobile
-                 , MyUi.htmlStyle "background-image" "url(/grid1.png)"
+                 , MyUi.htmlStyle "background-image" "url(/cacheable/grid1.png)"
                  ]
                     ++ drawingZoomAttributes model.route loggedIn.drawingMode
                 )
@@ -5818,7 +5818,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                     )
                  , Ui.heightMin 0
                  , MyUi.bounceScroll isMobile
-                 , MyUi.htmlStyle "background-image" "url(/grid1.png)"
+                 , MyUi.htmlStyle "background-image" "url(/cacheable/grid1.png)"
                  ]
                     ++ drawingZoomAttributes model.route loggedIn.drawingMode
                 )
@@ -6104,7 +6104,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     )
                  , Ui.heightMin 0
                  , MyUi.bounceScroll isMobile
-                 , MyUi.htmlStyle "background-image" "url(/grid1.png)"
+                 , MyUi.htmlStyle "background-image" "url(/cacheable/grid1.png)"
                  ]
                     ++ drawingZoomAttributes model.route loggedIn.drawingMode
                 )
@@ -6295,7 +6295,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     )
                  , Ui.heightMin 0
                  , MyUi.bounceScroll isMobile
-                 , MyUi.htmlStyle "background-image" "url(/grid1.png)"
+                 , MyUi.htmlStyle "background-image" "url(/cacheable/grid1.png)"
                  ]
                     ++ drawingZoomAttributes model.route loggedIn.drawingMode
                 )

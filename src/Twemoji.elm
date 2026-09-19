@@ -51,7 +51,7 @@ fileName emoji =
 
 spriteUrl : String -> String
 spriteUrl sprite =
-    "/emoji/" ++ sprite ++ ".svg"
+    "/cacheable/emoji/" ++ sprite ++ ".svg"
 
 
 {-| An id can't begin with a digit and most of these would, so the names the sprites are

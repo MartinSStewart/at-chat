@@ -420,7 +420,7 @@ init url key =
                 Command.none
         , Ports.loadStartupData
         ]
-    , Audio.loadAudio LoadedPopSound "/pop.mp3"
+    , Audio.loadAudio LoadedPopSound "/cacheable/pop.mp3"
     )
 
 
@@ -3703,7 +3703,7 @@ updateLoaded msg model =
                 , if hasFocus then
                     Command.batch
                         [ FrontendExtra.setFocus model2 Pages.Guild.channelTextInputId
-                        , Ports.setFavicon "/favicon.ico"
+                        , Ports.setFavicon "/cacheable/favicon.ico"
                         , Ports.closeNotifications
                         , Ports.registerServiceWorker
                         , checkAppVersion

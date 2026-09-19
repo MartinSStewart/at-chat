@@ -223,8 +223,7 @@ function loadServiceWorker(options) {
         Promise: Promise,
         Uint8Array: Uint8Array,
         atob: atob,
-        TextDecoder: TextDecoder,
-        URL: URL
+        TextDecoder: TextDecoder
     };
 
     context.clients = context.self.clients;
@@ -576,7 +575,7 @@ async function run() {
         body: encryptedFallbackText,
         encrypted_body: await encryptText(key, notificationMessageText),
         sent_by: senderUserId,
-        icon: "/at-logo-no-background.png",
+        icon: "/cacheable/at-logo-no-background.png",
         data: "https://at-chat.example/"
     });
 
@@ -626,7 +625,7 @@ async function run() {
         await deliverPush(listeners, {
             title: "Someone",
             body: "An ordinary message",
-            icon: "/at-logo-no-background.png",
+            icon: "/cacheable/at-logo-no-background.png",
             data: "https://at-chat.example/"
         });
 
@@ -672,12 +671,12 @@ async function run() {
             "what the worker's octet stream index names");
     });
 
-    // Everything in public/ is served from the app's own origin rather than through the api
-    // domain, and only a deploy changes any of it. These check the worker answers from the
-    // cache once it has one, since that's what stops a page load asking for the emoji
-    // sprites, the fonts and the images all over again.
-    await check("A file from public is fetched once and then served from the cache", async () => {
-        const spriteUrl = domain + "emoji/smileys-emotion.svg";
+    // public/cacheable is served from the app's own origin rather than through the api domain,
+    // and only a deploy changes any of it. These check the worker answers from the cache once
+    // it has one, since that's what stops a page load asking for the emoji sprites, the fonts
+    // and the images all over again.
+    await check("A cacheable file is fetched once and then served from the cache", async () => {
+        const spriteUrl = domain + "cacheable/emoji/smileys-emotion.svg";
         const svg = "<svg xmlns='http://www.w3.org/2000/svg'></svg>";
         let asked = 0;
 
@@ -702,8 +701,8 @@ async function run() {
         expectEqual(asked, 1, "how many times the network was asked");
     });
 
-    await check("A file the server doesn't have isn't cached as a miss", async () => {
-        const missingUrl = domain + "fonts/ascii.ttf";
+    await check("A cacheable file the server doesn't have isn't cached as a miss", async () => {
+        const missingUrl = domain + "cacheable/fonts/ascii.ttf";
         let asked = 0;
 
         const listeners = loadServiceWorker({
@@ -721,11 +720,9 @@ async function run() {
         expectEqual(asked, 2, "how many times the network was asked");
     });
 
-    // The rule for "this came out of public/" is that the path ends in a file extension, so
-    // these two are what it mustn't sweep up: an upload, which the caches above already
-    // handle and which would otherwise pile up in here, and a page of the app itself, which
-    // would be pinned to whatever it said on the first visit.
-    await check("An uploaded file isn't taken for one of public's", async () => {
+    // Nothing else may end up in there: an upload would pile up in a cache only a deploy
+    // empties, and a page of the app would be pinned to whatever it said on the first visit.
+    await check("Only cacheable is answered from the cache a deploy empties", async () => {
         const listeners = loadServiceWorker({
             indexedDB: fakeIndexedDb(new Map()),
             caches: fakeCaches(),
@@ -735,15 +732,7 @@ async function run() {
         expectEqual(
             askWorker(listeners, domain + "file/discord-sticker/123.png"),
             null,
-            "what the worker did with a discord sticker");
-    });
-
-    await check("A page of the app isn't taken for one of public's", async () => {
-        const listeners = loadServiceWorker({
-            indexedDB: fakeIndexedDb(new Map()),
-            caches: fakeCaches(),
-            fetch: () => Promise.reject(new Error("nothing should have been fetched"))
-        });
+            "what the worker did with an upload");
 
         expectEqual(
             askWorker(listeners, domain + "admin"),
