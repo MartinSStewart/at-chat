@@ -1,8 +1,7 @@
 module Twemoji exposing (fileName, spriteView)
 
-{-| Draws unicode emoji as the Twemoji artwork served from
-`public/emoji/sprites`, so that an emoji looks the same on every device instead of each
-one substituting its own set.
+{-| Draws unicode emoji as the Twemoji artwork served from `public/emoji`, so that an
+emoji looks the same on every device instead of each one substituting its own set.
 
 The art ships as sprites rather than a file per emoji, since a file each costs a request
 each and the selector puts around a hundred and fifty of them on screen at once.
@@ -52,7 +51,7 @@ fileName emoji =
 
 spriteUrl : String -> String
 spriteUrl sprite =
-    "/emoji/sprites/" ++ sprite ++ ".svg"
+    "/emoji/" ++ sprite ++ ".svg"
 
 
 {-| An id can't begin with a digit and most of these would, so the names the sprites are

@@ -244,7 +244,7 @@ tabsSpriteName =
     "tabs"
 
 
-{-| Must match the names `scripts/fetch-twemoji.py` writes in `public/emoji/sprites`.
+{-| Must match the names `scripts/fetch-twemoji.py` writes in `public/emoji`.
 -}
 categorySpriteName : EmojiCategory -> String
 categorySpriteName emojiCategory =

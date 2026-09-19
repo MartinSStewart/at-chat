@@ -164,6 +164,7 @@ function fakeCaches() {
     const caches = new Map();
 
     return {
+        delete: (name) => Promise.resolve(caches.delete(name)),
         open(name) {
             if (!caches.has(name)) {
                 caches.set(name, new Map());
@@ -222,7 +223,8 @@ function loadServiceWorker(options) {
         Promise: Promise,
         Uint8Array: Uint8Array,
         atob: atob,
-        TextDecoder: TextDecoder
+        TextDecoder: TextDecoder,
+        URL: URL
     };
 
     context.clients = context.self.clients;
@@ -257,13 +259,19 @@ function jpegBytes() {
 }
 
 
-function requestFile(listeners, url) {
+function askWorker(listeners, url) {
     let responded = null;
 
     listeners.fetch({
         request: { url: url },
         respondWith: (response) => { responded = response; }
     });
+
+    return responded;
+}
+
+function requestFile(listeners, url) {
+    const responded = askWorker(listeners, url);
 
     if (responded === null) {
         throw new Error("The service worker didn't answer " + url);
@@ -664,16 +672,16 @@ async function run() {
             "what the worker's octet stream index names");
     });
 
-    // Emoji art is served from the app's own origin rather than through the api domain, and
-    // an address names the emoji's code points, so a cached copy can never be the wrong
-    // picture. These check the worker answers from the cache once it has one, since that's
-    // what stops the selector waiting on a request per emoji every time a page loads.
-    await check("An emoji svg is fetched once and then served from the cache", async () => {
-        const emojiUrl = domain + "emoji/1f600.svg";
+    // Everything in public/ is served from the app's own origin rather than through the api
+    // domain, and only a deploy changes any of it. These check the worker answers from the
+    // cache once it has one, since that's what stops a page load asking for the emoji
+    // sprites, the fonts and the images all over again.
+    await check("A file from public is fetched once and then served from the cache", async () => {
+        const spriteUrl = domain + "emoji/smileys-emotion.svg";
         const svg = "<svg xmlns='http://www.w3.org/2000/svg'></svg>";
         let asked = 0;
 
-        const emojiListeners = loadServiceWorker({
+        const listeners = loadServiceWorker({
             indexedDB: fakeIndexedDb(new Map()),
             caches: fakeCaches(),
             fetch: () => {
@@ -686,19 +694,19 @@ async function run() {
             }
         });
 
-        const first = await requestFile(emojiListeners, emojiUrl);
+        const first = await requestFile(listeners, spriteUrl);
         expectEqual(await first.text(), svg, "the body served from the network");
 
-        const second = await requestFile(emojiListeners, emojiUrl);
+        const second = await requestFile(listeners, spriteUrl);
         expectEqual(await second.text(), svg, "the body served from the cache");
         expectEqual(asked, 1, "how many times the network was asked");
     });
 
-    await check("An emoji svg the server doesn't have isn't cached as a miss", async () => {
-        const missingUrl = domain + "emoji/1f600.svg";
+    await check("A file the server doesn't have isn't cached as a miss", async () => {
+        const missingUrl = domain + "fonts/ascii.ttf";
         let asked = 0;
 
-        const emojiListeners = loadServiceWorker({
+        const listeners = loadServiceWorker({
             indexedDB: fakeIndexedDb(new Map()),
             caches: fakeCaches(),
             fetch: () => {
@@ -707,10 +715,40 @@ async function run() {
             }
         });
 
-        await requestFile(emojiListeners, missingUrl);
-        await requestFile(emojiListeners, missingUrl);
+        await requestFile(listeners, missingUrl);
+        await requestFile(listeners, missingUrl);
 
         expectEqual(asked, 2, "how many times the network was asked");
+    });
+
+    // The rule for "this came out of public/" is that the path ends in a file extension, so
+    // these two are what it mustn't sweep up: an upload, which the caches above already
+    // handle and which would otherwise pile up in here, and a page of the app itself, which
+    // would be pinned to whatever it said on the first visit.
+    await check("An uploaded file isn't taken for one of public's", async () => {
+        const listeners = loadServiceWorker({
+            indexedDB: fakeIndexedDb(new Map()),
+            caches: fakeCaches(),
+            fetch: () => Promise.reject(new Error("nothing should have been fetched"))
+        });
+
+        expectEqual(
+            askWorker(listeners, domain + "file/discord-sticker/123.png"),
+            null,
+            "what the worker did with a discord sticker");
+    });
+
+    await check("A page of the app isn't taken for one of public's", async () => {
+        const listeners = loadServiceWorker({
+            indexedDB: fakeIndexedDb(new Map()),
+            caches: fakeCaches(),
+            fetch: () => Promise.reject(new Error("nothing should have been fetched"))
+        });
+
+        expectEqual(
+            askWorker(listeners, domain + "admin"),
+            null,
+            "what the worker did with a route");
     });
 
     if (failures.length > 0) {

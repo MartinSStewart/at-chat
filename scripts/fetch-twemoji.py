@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fills public/emoji/sprites/ with the artwork the emoji selector draws.
+"""Fills public/emoji/ with the artwork the emoji selector draws.
 
 The art is Twemoji, taken from the package Discord publishes so that at-chat shows the
 same emoji Discord does. Only the emoji listed in public/compact-emoji.json are copied,
@@ -8,9 +8,9 @@ after changing that file.
 
 Everything ships as sprites, one <symbol> per emoji:
 
-  public/emoji/sprites/<category>.svg   the untoned art, a file per category
-  public/emoji/sprites/tone-<n>.svg     the skin tone variations, a file per tone
-  public/emoji/sprites/tabs.svg         the emoji the strip of category tabs is drawn with
+  public/emoji/<category>.svg   the untoned art, a file per category
+  public/emoji/tone-<n>.svg     the skin tone variations, a file per tone
+  public/emoji/tabs.svg         the emoji the strip of category tabs is drawn with
 
 Asking for a file per emoji costs a request each and there are around a hundred and fifty
 on screen at once, so nothing is written one emoji at a time. The tabs get a sprite of
@@ -67,7 +67,6 @@ VARIATION_SELECTOR = 0xFE0F
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EMOJI_JSON = os.path.join(REPO_ROOT, "public", "compact-emoji.json")
 OUTPUT_DIR = os.path.join(REPO_ROOT, "public", "emoji")
-SPRITE_DIR = os.path.join(OUTPUT_DIR, "sprites")
 
 SVG_PATTERN = re.compile(r"<svg[^>]*viewBox=\"([^\"]+)\"[^>]*>(.*)</svg>\s*$", re.DOTALL)
 
@@ -168,7 +167,7 @@ def symbol(source_dir, character):
 
 def write_sprite(source_dir, sprite_name, emoji):
     symbols = "".join(symbol(source_dir, character) for character in emoji)
-    path = os.path.join(SPRITE_DIR, sprite_name + ".svg")
+    path = os.path.join(OUTPUT_DIR, sprite_name + ".svg")
 
     with open(path, "w") as handle:
         handle.write('<svg xmlns="http://www.w3.org/2000/svg">' + symbols + "</svg>")
@@ -213,12 +212,12 @@ def main():
         if os.path.isdir(OUTPUT_DIR):
             shutil.rmtree(OUTPUT_DIR)
 
-        os.makedirs(SPRITE_DIR)
+        os.makedirs(OUTPUT_DIR)
 
         sprite_count, sprite_bytes = write_sprites(source_dir, emoji_data)
 
     print(
-        "wrote %d sprites to public/emoji/sprites (%.2f MB)"
+        "wrote %d sprites to public/emoji (%.2f MB)"
         % (sprite_count, sprite_bytes / 1048576)
     )
 
