@@ -17,6 +17,7 @@ module WordSpellingGame exposing
     , LocalChange(..)
     , LogEntry
     , OpenWordDefinition
+    , OutMsg(..)
     , PlacedWord
     , PlacementResult
     , Player
@@ -380,7 +381,19 @@ type GameMsg
     | PressedNextWordDefinition
     | PressedCloseWordDefinition
     | GotWordDefinition String (Result Http.Error (List DictEntry))
+      -- The move number shown next to the row in the Moves log, counting from 1 for the game's
+      -- first move.
     | PressedReplyToAction Int
+
+
+{-| Something `updateGame` needs the frontend to do that the game itself can't (see
+`Frontend.handleGameOutMsgs`).
+-}
+type OutMsg
+    = -- Fetch the dictionary definition of an English word the player clicked in the Moves log.
+      FetchDefinition String
+      -- Start writing a chat message that replies to the move with this move number.
+    | ReplyToMove Int
 
 
 type alias SetupModel =
@@ -1783,8 +1796,7 @@ updateSetup time currentUserId msg setup =
 
 
 {-| Updates a game in response to a `GameMsg`. Alongside the new state it returns any `Action` to
-broadcast to the other players, and a `Maybe String` naming an English word whose dictionary
-definition the frontend should go fetch (see `Frontend.handleGameOutMsgs`).
+broadcast to the other players, and any `OutMsg` for the frontend to carry out.
 -}
 updateGame :
     Time.Posix
@@ -1794,7 +1806,7 @@ updateGame :
     -> Shared
     -> GameMsg
     -> GameData
-    -> ( GameData, Maybe Action, Maybe String )
+    -> ( GameData, Maybe Action, Maybe OutMsg )
 updateGame time windowSize currentUserId setup shared msg oldModel =
     let
         -- Tiles that another player's move covered belong back in the tray; work off (and store)
@@ -2033,21 +2045,21 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
             , Nothing
             )
 
-        PressedReplyToAction index ->
-            ( model, Nothing, Nothing )
+        PressedReplyToAction moveNumber ->
+            ( model, Nothing, ReplyToMove moveNumber |> Just )
 
 
 {-| Show the definition popup for one of `open`'s candidate words: show a loading popup and ask
 the frontend to fetch the definition (the third tuple element). Swedish has no dictionary API
 wired up, so there the popup just says so.
 -}
-openWordDefinition : OpenWordDefinition -> ValidatedSetup -> GameData -> ( GameData, Maybe Action, Maybe String )
+openWordDefinition : OpenWordDefinition -> ValidatedSetup -> GameData -> ( GameData, Maybe Action, Maybe OutMsg )
 openWordDefinition open setup model =
     case setup.language of
         English ->
             ( { model | wordDefinition = WordDefinition_Open open WordDefinition_Loading }
             , Nothing
-            , Just (currentDefinitionWord open)
+            , FetchDefinition (currentDefinitionWord open) |> Just
             )
 
         Swedish ->
@@ -2060,7 +2072,7 @@ openWordDefinition open setup model =
 {-| Step the open definition popup to the previous (-1) or next (1) candidate word, wrapping
 around at both ends, and kick off the lookup of the newly shown word.
 -}
-cycleWordDefinition : Int -> ValidatedSetup -> GameData -> ( GameData, Maybe Action, Maybe String )
+cycleWordDefinition : Int -> ValidatedSetup -> GameData -> ( GameData, Maybe Action, Maybe OutMsg )
 cycleWordDefinition offset setup model =
     case model.wordDefinition of
         WordDefinition_Open open _ ->
@@ -4594,7 +4606,7 @@ recentActionsView scrollPositionAndHovered windowSize localUser setup actions sh
                                                     , Ui.contentCenterY
                                                     , Ui.Font.color MyUi.font1
                                                     , Ui.move { x = -8, y = -8, z = 0 }
-                                                    , MyUi.blockClickPropagation (PressedReplyToAction index)
+                                                    , MyUi.blockClickPropagation (PressedReplyToAction moveNumber)
                                                     ]
                                                     (Ui.html (Icons.reply 24))
                                                     |> Ui.inFront

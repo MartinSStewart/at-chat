@@ -9205,6 +9205,18 @@ handleGameOutMsgs outMsgs model =
                     in
                     ( pushModel, pushCmd :: cmds )
 
+                Game.OutReplyToGame matchId repliedToGame ->
+                    let
+                        ( pushModel, pushCmd ) =
+                            FrontendExtra.routePush
+                                model2
+                                (Route.setChannelHeaderTab
+                                    (Just (ChannelHeaderTab_Games (Just matchId) (Just repliedToGame)))
+                                    model2.route
+                                )
+                    in
+                    ( pushModel, pushCmd :: cmds )
+
                 Game.OutLocalChange _ ->
                     ( model2, cmds )
 
