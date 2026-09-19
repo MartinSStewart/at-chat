@@ -389,11 +389,9 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // An emoji's address is built out of its code points (see Twemoji.fileName), so
-    // different artwork would be a different address and a cached copy is never stale.
-    // Opening the emoji selector asks for around a hundred and fifty of these at once,
-    // which is slow enough to show an empty grid, so answering them from the cache is
-    // what makes it open instantly on every visit after the first.
+    // The emoji sprites are a few megabytes between them and change only when the artwork
+    // is replaced, so a visit after the first shouldn't ask the server for them at all.
+    // emojiCacheName is what says the copies are stale.
     if (url.startsWith(domain + 'emoji/')) {
         event.respondWith(caches.open(emojiCacheName).then(async (cache) => {
             const cachedResponse = await cache.match(url);

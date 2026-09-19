@@ -1,7 +1,7 @@
 // Checks that every emoji the selector can draw has a symbol in the sprite the selector
-// would look for it in. Nothing type checks Emoji.categorySpriteName against the files
-// scripts/fetch-twemoji.py writes, and a name that drifts doesn't fail anywhere: the
-// <use> just finds nothing and that category's grid comes up blank.
+// would look for it in. Nothing type checks the sprite names in Emoji.elm against the
+// files scripts/fetch-twemoji.py writes, and a name that drifts doesn't fail anywhere:
+// the <use> just finds nothing and that part of the selector comes up blank.
 //
 // Run with: node tests/SpriteTests.js
 
@@ -25,20 +25,24 @@ function readRepoFile(relativePath) {
 // constructor it matches, so the test reads the names out of the source rather than
 // repeating them.
 function caseBranches(source, functionName) {
-    const start = source.indexOf("\n" + functionName + " ");
-
-    if (start < 0) {
-        throw new Error("Couldn't find " + functionName + " in Emoji.elm");
-    }
-
-    const body = source.slice(start, source.indexOf("\n\n\n", start));
     const branches = new Map();
+    const body = functionBody(source, functionName);
 
     for (const match of body.matchAll(/^        (\w+) ->\n\s+"([^"]+)"$/gm)) {
         branches.set(match[1], match[2]);
     }
 
     return branches;
+}
+
+function functionBody(source, functionName) {
+    const start = source.indexOf("\n" + functionName + " ");
+
+    if (start < 0) {
+        throw new Error("Couldn't find " + functionName + " in Emoji.elm");
+    }
+
+    return source.slice(start, source.indexOf("\n\n\n", start));
 }
 
 function codePointsToString(unified) {
@@ -159,6 +163,29 @@ async function run() {
                 if (!symbols.has(symbolId(variation))) {
                     throw new Error(spriteName + ".svg has no " + symbolId(variation));
                 }
+            }
+        }
+    });
+
+    // The tab strip draws from a sprite of its own rather than the category sprites, since
+    // each tab is an emoji from the category it stands for and reading them out of those
+    // would pull all ten in the moment the selector opens.
+    check("Every category tab's emoji is in the tabs sprite", () => {
+        const body = functionBody(emojiSource, "categoryToEmojiString");
+        const symbols = symbolsIn("tabs");
+
+        // The literals in there that aren't plain text, which is the "C", "S" and "+" the
+        // three categories without art of their own are labelled with.
+        const emoji = [...body.matchAll(/"([^"\x00-\x7f][^"]*)"/g)].map((match) => match[1]);
+
+        if (emoji.length === 0) {
+            throw new Error("categoryToEmojiString draws no emoji at all");
+        }
+
+        for (const character of emoji) {
+            if (!symbols.has(symbolId(character))) {
+                throw new Error(
+                    "tabs.svg has no " + symbolId(character) + ", the tab for " + character);
             }
         }
     });

@@ -18,7 +18,6 @@ module Emoji exposing
     , fromString
     , heart
     , isPressed
-    , preload
     , requestEmojiData
     , scrollContainerId
     , searchInputId
@@ -43,7 +42,6 @@ import Hex
 import Html
 import Html.Attributes
 import Html.Events
-import Html.Lazy
 import Icons
 import Id exposing (CustomEmojiId, Id, StickerId)
 import Json.Decode
@@ -169,22 +167,22 @@ categoryToEmojiString skinTone category =
         EmojiCategory emojiCategory ->
             case emojiCategory of
                 Activities ->
-                    Twemoji.view "1em" "🎉" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "🎉" |> Ui.html
 
                 AnimalsAndNature ->
-                    Twemoji.view "1em" "🐟" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "🐟" |> Ui.html
 
                 Components ->
                     Ui.text "C"
 
                 Flags ->
-                    Twemoji.view "1em" "🚩" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "🚩" |> Ui.html
 
                 FoodAndDrink ->
-                    Twemoji.view "1em" "🥦" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "🥦" |> Ui.html
 
                 Objects ->
-                    Twemoji.view "1em" "🔬" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "🔬" |> Ui.html
 
                 PeopleAndBody ->
                     (case skinTone of
@@ -206,17 +204,17 @@ categoryToEmojiString skinTone category =
                         Just SkinTone5 ->
                             "👍🏿"
                     )
-                        |> Twemoji.view "1em"
+                        |> Twemoji.spriteView "1em" tabsSpriteName
                         |> Ui.html
 
                 SmileysAndEmotion ->
-                    Twemoji.view "1em" "🙂" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "🙂" |> Ui.html
 
                 Symbols ->
-                    Twemoji.view "1em" "⬇️" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "⬇️" |> Ui.html
 
                 TravelAndPlaces ->
-                    Twemoji.view "1em" "🚆" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "🚆" |> Ui.html
 
         StickerCategory ->
             Ui.text "S"
@@ -233,16 +231,17 @@ categoryToEmojiString skinTone category =
                     |> Ui.inFront
                 , Ui.centerX
                 ]
-                (Twemoji.view "1em" "🙂" |> Ui.html)
+                (Twemoji.spriteView "1em" tabsSpriteName "🙂" |> Ui.html)
 
 
-{-| Where a section of the selector gets its artwork. A category is a fixed list of emoji
-so it ships as one sprite, while the recently used row is whatever this person picked and
-draws each emoji from its own file.
+{-| Each tab in the strip on the left is an emoji from the category it stands for, so
+drawing them out of the category sprites would read every one of those the moment the
+selector opens. They get a sprite of their own holding just those. Must match the list
+`scripts/fetch-twemoji.py` builds it from.
 -}
-type EmojiArt
-    = FromSprite String
-    | FromFiles
+tabsSpriteName : String
+tabsSpriteName =
+    "tabs"
 
 
 {-| Must match the names `scripts/fetch-twemoji.py` writes in `public/emoji/sprites`.
@@ -281,22 +280,36 @@ categorySpriteName emojiCategory =
             "travel-places"
 
 
-{-| Which sprite an emoji's art is actually in. A category's sprite holds the untoned
-artwork, so an emoji the chosen skin tone changes is drawn out of that tone's sprite
-instead.
+{-| Which sprite holds an emoji's art, and Nothing when there's no art for it. A
+category's sprite holds the untoned versions, so an emoji the chosen skin tone changes is
+drawn out of that tone's sprite instead.
 -}
-spriteHolding : Maybe SkinTone -> UnicodeEmoji -> CachedEmojiData -> String -> String
-spriteHolding maybeSkinTone emoji emojiData categorySprite =
-    case maybeSkinTone of
-        Just skinTone ->
-            if emojiWithSkinTone maybeSkinTone emoji emojiData == toString emoji then
-                categorySprite
+spriteFor : Maybe SkinTone -> UnicodeEmoji -> CachedEmojiData -> Maybe String
+spriteFor maybeSkinTone emoji emojiData =
+    case SeqDict.get emoji emojiData.emojis of
+        Just emojiData2 ->
+            case ( maybeSkinTone, emojiData2.skinVariations ) of
+                ( Just skinTone, Just _ ) ->
+                    skinToneSpriteName skinTone |> Just
 
-            else
-                skinToneSpriteName skinTone
+                _ ->
+                    categorySpriteName emojiData2.category |> Just
 
         Nothing ->
-            categorySprite
+            Nothing
+
+
+{-| Drawn out of whichever sprite holds it, so that a screen of them costs one request per
+sprite rather than one per emoji.
+-}
+unicodeEmojiView : String -> Maybe SkinTone -> UnicodeEmoji -> CachedEmojiData -> Html.Html msg
+unicodeEmojiView size maybeSkinTone emoji emojiData =
+    case spriteFor maybeSkinTone emoji emojiData of
+        Just sprite ->
+            Twemoji.spriteView size sprite (emojiWithSkinTone maybeSkinTone emoji emojiData)
+
+        Nothing ->
+            Html.text ""
 
 
 {-| A skin tone's variations are one sprite covering every category, because someone picks
@@ -408,6 +421,7 @@ type alias CachedEmojiData =
 type alias EmojiData =
     { skinVariations : Maybe String
     , shortNames : List String
+    , category : EmojiCategory
     }
 
 
@@ -587,66 +601,6 @@ categoryTitleHeight =
 categoryColumnWidth : number
 categoryColumnWidth =
     40
-
-
-{-| The selector's first screen is only asked for once it opens, which is late enough that
-the grid shows up empty first. Asking for it as soon as the emoji data arrives means the
-browser already has it by then.
-
-That's the first category's sprite, plus a file each for the recently used emojis above it,
-which are the same two things the selector itself draws.
-
--}
-preload : EmojiConfig -> Maybe CachedEmojiData -> Html.Html msg
-preload =
-    Html.Lazy.lazy2 preloadHelper
-
-
-preloadHelper : EmojiConfig -> Maybe CachedEmojiData -> Html.Html msg
-preloadHelper userData emojiData =
-    case emojiData of
-        Just emojiData2 ->
-            ((case List.head allEmojiCategories of
-                Just firstCategory ->
-                    [ Twemoji.spriteUrl (categorySpriteName firstCategory) ]
-
-                Nothing ->
-                    []
-             )
-                ++ (case userData.skinTone of
-                        Just skinTone ->
-                            [ Twemoji.spriteUrl (skinToneSpriteName skinTone) ]
-
-                        Nothing ->
-                            []
-                   )
-                ++ (Array.toList userData.lastUsedEmojis
-                        |> List.filterMap
-                            (\emoji ->
-                                case emoji of
-                                    EmojiOrCustomEmoji_Emoji unicodeEmoji ->
-                                        emojiWithSkinTone userData.skinTone unicodeEmoji emojiData2
-                                            |> Twemoji.url
-                                            |> Just
-
-                                    EmojiOrCustomEmoji_CustomEmoji _ ->
-                                        Nothing
-                            )
-                   )
-            )
-                |> List.map
-                    (\href ->
-                        Html.node "link"
-                            [ Html.Attributes.rel "preload"
-                            , Html.Attributes.attribute "as" "image"
-                            , Html.Attributes.href href
-                            ]
-                            []
-                    )
-                |> Html.div []
-
-        Nothing ->
-            Html.text ""
 
 
 maxSelectorWidth : number
@@ -1313,31 +1267,17 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
                     else
                         List.head offsets |> Maybe.map Tuple.first
 
-                sections : List { title : String, art : EmojiArt, items : List EmojiOrSticker }
+                sections : List { title : String, items : List EmojiOrSticker }
                 sections =
                     (if List.isEmpty recentEmojis then
                         []
 
                      else
-                        -- The recently used emojis are whichever ones this person reached for, so
-                        -- they come from every category at once and no one sprite holds them.
-                        [ { title = "Recently used", art = FromFiles, items = recentEmojis } ]
+                        [ { title = "Recently used", items = recentEmojis } ]
                     )
                         ++ List.map
                             (\( category, items ) ->
-                                { title = categoryToString category
-                                , art =
-                                    case category of
-                                        EmojiCategory emojiCategory ->
-                                            FromSprite (categorySpriteName emojiCategory)
-
-                                        StickerCategory ->
-                                            FromFiles
-
-                                        CustomEmojiCategory ->
-                                            FromFiles
-                                , items = items
-                                }
+                                { title = categoryToString category, items = items }
                             )
                             categories
 
@@ -1380,16 +1320,7 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
                                                 model
                                                 (case item of
                                                     EmojiOrSticker_UnicodeEmoji emoji ->
-                                                        (case section.art of
-                                                            FromSprite sprite ->
-                                                                Twemoji.spriteView "1em"
-                                                                    (spriteHolding userData.skinTone emoji emojiData2 sprite)
-                                                                    (emojiWithSkinTone userData.skinTone emoji emojiData2)
-
-                                                            FromFiles ->
-                                                                emojiWithSkinTone userData.skinTone emoji emojiData2
-                                                                    |> Twemoji.view "1em"
-                                                        )
+                                                        unicodeEmojiView "1em" userData.skinTone emoji emojiData2
                                                             |> Ui.html
                                                             |> Ui.el [ Ui.width (Ui.px emojiWidth), Ui.contentCenterX ]
 
@@ -1493,8 +1424,7 @@ emojiHoverPreview stickersData customEmojisData userData emojiData2 model =
         ]
         (case Maybe.map .emoji model.emojiHovered of
             Just (EmojiOrSticker_UnicodeEmoji emoji) ->
-                (emojiWithSkinTone userData.skinTone emoji emojiData2
-                    |> Twemoji.view "1em"
+                (unicodeEmojiView "1em" userData.skinTone emoji emojiData2
                     |> Ui.html
                 )
                     :: (case SeqDict.get emoji emojiData2.emojis of
@@ -1673,6 +1603,7 @@ requestEmojiData gotEmojiData =
 
                                                         Nothing ->
                                                             Nothing
+                                                , category = emoji.category
                                                 }
                                                 dict
                                         )
