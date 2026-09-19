@@ -301,6 +301,7 @@ pencil =
     Svg.svg
         [ Svg.Attributes.viewBox "0 0 24 24"
         , Svg.Attributes.fill "currentColor"
+        , Svg.Attributes.width "24"
         ]
         [ Svg.path [ Svg.Attributes.d "M21.731 2.269a2.625 2.625 0 0 0-3.712 0l-1.157 1.157 3.712 3.712 1.157-1.157a2.625 2.625 0 0 0 0-3.712ZM19.513 8.199l-3.712-3.712-12.15 12.15a5.25 5.25 0 0 0-1.32 2.214l-.8 2.685a.75.75 0 0 0 .933.933l2.685-.8a5.25 5.25 0 0 0 2.214-1.32L19.513 8.2Z" ] [] ]
 
@@ -322,13 +323,14 @@ paintbrush =
         ]
 
 
-reply : Html msg
-reply =
+reply : Int -> Html msg
+reply width2 =
     Svg.svg
         [ Svg.Attributes.fill "none"
         , Svg.Attributes.viewBox "0 0 24 24"
         , Svg.Attributes.strokeWidth "1.5"
         , Svg.Attributes.stroke "currentColor"
+        , Svg.Attributes.width (String.fromInt width2)
         ]
         [ Svg.path [ Svg.Attributes.strokeLinecap "round", Svg.Attributes.strokeLinejoin "round", Svg.Attributes.d "m16.49 12 3.75-3.751m0 0-3.75-3.75m3.75 3.75H3.74V19.5" ] [] ]
 

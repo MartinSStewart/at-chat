@@ -5438,7 +5438,7 @@ replyToHeaderHelper isMobile onPress userId allUsers =
             Ui.none
 
           else
-            Ui.el [ Ui.width (Ui.px 18), Ui.move { x = 0, y = 2, z = 0 } ] (Ui.html Icons.reply)
+            Ui.el [ Ui.width Ui.shrink, Ui.move { x = 0, y = 2, z = 0 } ] (Ui.html (Icons.reply 18))
         , Ui.text "Reply to "
         , case userId of
             Just userId2 ->
@@ -8694,11 +8694,7 @@ replyToHeaderAboveMessageHelper isMobile messageId content =
         , Ui.Font.color MyUi.font3
         , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
         ]
-        [ Ui.el
-            [ Ui.width (Ui.px 18)
-            , Ui.move { x = 0, y = 3, z = 0 }
-            ]
-            (Ui.html Icons.reply)
+        [ Ui.el [ Ui.width Ui.shrink, Ui.move { x = 0, y = 3, z = 0 } ] (Ui.html (Icons.reply 18))
         , content
         ]
 

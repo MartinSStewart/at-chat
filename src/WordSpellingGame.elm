@@ -79,6 +79,7 @@ module WordSpellingGame exposing
 import Array exposing (Array)
 import Array.Extra
 import Audio exposing (Audio)
+import Bitwise
 import Char
 import Color.Manipulate
 import Coord exposing (Coord)
@@ -182,12 +183,8 @@ type alias GameData =
     }
 
 
-{-| A move being hovered in the Moves log: the board cells its word covers, drawn with a
-highlight so the player can see where it was placed, and the game as it stood just after that
-move, so the board shows how it looked then rather than how it ended up.
--}
 type alias HoveredMove =
-    { cells : Dict ( Int, Int ) LetterOrWildcard, shared : Shared }
+    { index : Maybe Int, cells : Dict ( Int, Int ) LetterOrWildcard, shared : Shared }
 
 
 {-| OpaqueVariants
@@ -214,18 +211,12 @@ currentDefinitionWord open =
 -}
 type WordDefinitionData
     = WordDefinition_Loading
-      -- Swedish has no dictionary API wired up, so a clicked Swedish word just says so.
     | WordDefinition_SwedishUnsupported
-      -- The dictionary answered, but has nothing for this word.
     | WordDefinition_NotFound
-      -- The dictionary couldn't be reached, which is worth telling the player apart from a word
-      -- the dictionary doesn't know.
     | WordDefinition_Failed
     | WordDefinition_Loaded (List DictEntry)
 
 
-{-| One part-of-speech grouping from a dictionary lookup, with its definitions in order.
--}
 type alias DictEntry =
     { partOfSpeech : String
     , definitions : List String
@@ -380,7 +371,7 @@ type GameMsg
     | PressedPlayerRow (Id UserId)
     | MouseEnterPlayerRow (Id UserId)
     | MouseExitPlayerRow (Id UserId)
-    | MouseEnterWord (List ( ( Int, Int ), LetterOrWildcard )) Shared
+    | MouseEnterWord (Maybe Int) (List ( ( Int, Int ), LetterOrWildcard )) Shared
     | MouseExitWord
     | UserScrolledPastMoves ScrollPosition
     | PressedSubmitPremove PlacedWord
@@ -1988,8 +1979,8 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
             , Nothing
             )
 
-        MouseEnterWord cells sharedAtMove ->
-            ( { model | hoveredMove = Just { cells = Dict.fromList cells, shared = sharedAtMove } }
+        MouseEnterWord index cells sharedAtMove ->
+            ( { model | hoveredMove = Just { index = index, cells = Dict.fromList cells, shared = sharedAtMove } }
             , Nothing
             , Nothing
             )
@@ -4183,7 +4174,31 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
                             )
                             (List.Nonempty.toList shared.players)
                 )
-            , Ui.Lazy.lazy6 recentActionsView model.scrollPosition windowSize localUser setup actions shared
+            , Ui.Lazy.lazy6
+                recentActionsView
+                ((case model.scrollPosition of
+                    ScrolledToTop ->
+                        0
+
+                    ScrolledToMiddle ->
+                        1
+
+                    ScrolledToBottom ->
+                        2
+                 )
+                    + (case Maybe.andThen .index model.hoveredMove of
+                        Nothing ->
+                            0
+
+                        Just index ->
+                            index + 1 |> Bitwise.shiftLeftBy 2
+                      )
+                )
+                windowSize
+                localUser
+                setup
+                actions
+                shared
             ]
 
 
@@ -4403,7 +4418,7 @@ gameSummaryView windowSize localUser shared log =
                                 , Ui.width Ui.shrink
                                 , MyUi.htmlStyle "cursor" "pointer"
                                 , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
-                                , Ui.Events.onMouseEnter (MouseEnterWord bestWord.placedCells bestWord.shared)
+                                , Ui.Events.onMouseEnter (MouseEnterWord Nothing bestWord.placedCells bestWord.shared)
                                 , Ui.Events.onMouseLeave MouseExitWord
                                 ]
                                 [ Ui.Prose.paragraph
@@ -4445,9 +4460,35 @@ countsView entries =
         ]
 
 
-recentActionsView : ScrollPosition -> Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
-recentActionsView scrollPosition windowSize localUser setup actions shared =
+recentActionsView :
+    Int
+    -> Coord CssPixels
+    -> LocalUser
+    -> ValidatedSetup
+    -> Array ActionWithTime
+    -> Shared
+    -> Element GameMsg
+recentActionsView scrollPositionAndHovered windowSize localUser setup actions shared =
     let
+        scrollPosition =
+            case Bitwise.and 3 scrollPositionAndHovered of
+                0 ->
+                    ScrolledToTop
+
+                1 ->
+                    ScrolledToMiddle
+
+                _ ->
+                    ScrolledToBottom
+
+        hoveredIndex =
+            case Bitwise.shiftRightZfBy 2 scrollPositionAndHovered of
+                0 ->
+                    Nothing
+
+                value ->
+                    value - 1 |> Just
+
         log : List LogEntry
         log =
             Array.foldl
@@ -4532,7 +4573,33 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                             rowContent : List (Element GameMsg)
                             rowContent =
                                 [ Ui.Prose.paragraph
-                                    [ Ui.Font.color MyUi.font3, MyUi.noShrinking, Ui.alignTop, Ui.width Ui.shrink ]
+                                    [ Ui.Font.color MyUi.font3
+                                    , MyUi.noShrinking
+                                    , Ui.alignTop
+                                    , Ui.width Ui.shrink
+                                    , case hoveredIndex of
+                                        Just hoveredIndex2 ->
+                                            if hoveredIndex2 == index then
+                                                Ui.el
+                                                    [ Ui.background MyUi.buttonBackground
+                                                    , Ui.rounded 4
+                                                    , Ui.paddingXY 8 8
+                                                    , Ui.width (Ui.px 40)
+                                                    , Ui.height (Ui.px 40)
+                                                    , Ui.contentCenterX
+                                                    , Ui.contentCenterY
+                                                    , Ui.Font.color MyUi.font1
+                                                    , Ui.move { x = -8, y = -8, z = 0 }
+                                                    ]
+                                                    (Ui.html (Icons.reply 24))
+                                                    |> Ui.inFront
+
+                                            else
+                                                Ui.noAttr
+
+                                        Nothing ->
+                                            Ui.noAttr
+                                    ]
                                     [ Ui.text (String.fromInt moveNumber ++ ". ") ]
                                 , Ui.Prose.paragraph
                                     [ Ui.alignTop, MyUi.htmlStyle "word-wrap" "anywhere" ]
@@ -4558,7 +4625,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                     , Ui.width Ui.shrink
                                     , MyUi.htmlStyle "cursor" "pointer"
                                     , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
-                                    , Ui.Events.onMouseEnter (MouseEnterWord placedCells entry.shared)
+                                    , Ui.Events.onMouseEnter (MouseEnterWord (Just index) placedCells entry.shared)
                                     , Ui.Events.onMouseLeave MouseExitWord
                                     ]
                                     rowContent
@@ -4574,7 +4641,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                     , Ui.width Ui.shrink
                                     , MyUi.htmlStyle "cursor" "pointer"
                                     , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
-                                    , Ui.Events.onMouseEnter (MouseEnterWord placedCells entry.shared)
+                                    , Ui.Events.onMouseEnter (MouseEnterWord (Just index) placedCells entry.shared)
                                     , Ui.Events.onMouseLeave MouseExitWord
                                     ]
                                     rowContent

@@ -182,7 +182,7 @@ miniView user isThreadStarter canEdit availableCustomEmojis customEmojis =
                         (Dom.id "miniView_reply")
                         MessageViewMsg_PressedReply
                         "Reply"
-                        Icons.reply
+                        (Icons.reply 24)
                , miniButtonWithPosition
                     (Dom.id "miniView_showFullMenu")
                     (MessageViewMsg_PressedShowFullMenu isThreadStarter)
@@ -266,18 +266,6 @@ miniViewContainer xOffset buttons =
         buttons
 
 
-{-| An icon in the menu is drawn at the size of the box it's given rather than at whatever
-size the svg itself asks for (see the `mini-button-icon` rule in `MyUi.css`), since browsers
-don't agree on how to size an svg that leaves its height to them.
--}
-miniButtonIcon : Html msg -> Element msg
-miniButtonIcon svg =
-    Html.div
-        [ Html.Attributes.class "mini-button-icon" ]
-        [ svg ]
-        |> Ui.html
-
-
 miniButton : HtmlId -> msg -> String -> Html msg -> Element msg
 miniButton htmlId onPress hoverText svg =
     Ui.el
@@ -291,7 +279,7 @@ miniButton htmlId onPress hoverText svg =
         , MyUi.hoverText hoverText
         , MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
         ]
-        (miniButtonIcon svg)
+        (Ui.html svg)
 
 
 miniButtonWithPosition : HtmlId -> (Coord CssPixels -> msg) -> Html msg -> Element msg
@@ -312,7 +300,7 @@ miniButtonWithPosition htmlId onPress svg =
         , Ui.pointer
         , MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
         ]
-        (miniButtonIcon svg)
+        (Ui.html svg)
 
 
 {-| Whether the popup naming who reacted with an emoji comes up when the pointer is over
