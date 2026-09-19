@@ -1,4 +1,4 @@
-module MessageView exposing (MessageViewMsg(..), ReactionsHover(..), isPressMsg, miniView, profileImagePaddingRight, reactionEmojiButtonContent, reactionEmojiView, reactionsMiniView, reactionsMiniViewNearEdge)
+module MessageView exposing (MessageViewMsg(..), ReactionsHover(..), gameMiniViewNearEdge, isPressMsg, miniView, profileImagePaddingRight, reactionEmojiButtonContent, reactionEmojiView, reactionsMiniView)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -210,13 +210,16 @@ reactionsMiniView user availableCustomEmojis emojiData customEmojis =
         )
 
 
-reactionsMiniViewNearEdge :
+{-| The menu for something inside a game, which sits against the right edge of the tab it's in.
+Unlike a message it can't be edited or opened in a thread, so it offers reactions and a reply.
+-}
+gameMiniViewNearEdge :
     FrontendCurrentUser
     -> SeqSet (Id CustomEmojiId)
     -> Maybe CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> Element MessageViewMsg
-reactionsMiniViewNearEdge user availableCustomEmojis emojiData customEmojis =
+gameMiniViewNearEdge user availableCustomEmojis emojiData customEmojis =
     miniViewContainer
         -8
         (recentEmojiButtons user availableCustomEmojis emojiData customEmojis
@@ -225,6 +228,11 @@ reactionsMiniViewNearEdge user availableCustomEmojis emojiData customEmojis =
                     MessageViewMsg_PressedShowReactionEmojiSelector
                     "Add reaction"
                     Icons.smile
+               , miniButton
+                    (Dom.id "miniView_reply")
+                    MessageViewMsg_PressedReply
+                    "Reply"
+                    (Icons.reply 24)
                ]
         )
 

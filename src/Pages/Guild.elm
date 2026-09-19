@@ -5441,11 +5441,14 @@ replyToGameHeaderHelper isMobile onPress game =
         isMobile
         onPress
         [ case game of
-            Message.RepliedTo_WordSpellingGame moveNumber ->
+            Message.RepliedTo_WordSpellingGameMove moveNumber ->
                 Ui.text ("Reply to move " ++ String.fromInt moveNumber)
 
-            Message.RepliedTo_SheepGame ->
-                Ui.text "Reply to game"
+            Message.RepliedTo_SheepGameAnswer _ _ ->
+                Ui.text "Reply to an answer"
+
+            Message.RepliedTo_SheepGameNotes _ ->
+                Ui.text "Reply to the notes"
         ]
 
 

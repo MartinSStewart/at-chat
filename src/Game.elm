@@ -508,8 +508,7 @@ type OutMsg
       -- Fetch the dictionary definition for an English word the player clicked in a Word Spelling
       -- Game's Moves log. The frontend issues the HTTP request (see `Frontend.handleGameOutMsgs`).
     | FetchWordDefinition String
-      -- Start writing a chat message that replies to a move in the given match. The frontend puts
-      -- the reply into the route so the message being written keeps it (see
+      -- Reply to something in the given match: the frontend hands it to the message input (see
       -- `Frontend.handleGameOutMsgs`).
     | OutReplyToGame (Id ChannelMessageId) Message.RepliedToGame
       -- Hold onto the sheep game questions the host has written so far, so that a refresh
@@ -675,7 +674,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                                             [ FetchWordDefinition word ]
 
                                         Just (WordSpellingGame.ReplyToMove moveNumber) ->
-                                            [ OutReplyToGame matchId (Message.RepliedTo_WordSpellingGame moveNumber) ]
+                                            [ OutReplyToGame matchId (Message.RepliedTo_WordSpellingGameMove moveNumber) ]
 
                                         Nothing ->
                                             []
@@ -802,6 +801,9 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                                 ++ (case outMsg of
                                         SheepGame.OpenReactionEmojiSelector target ->
                                             [ OpenSheepGameReactionEmojiSelector guildOrDmId matchId target ]
+
+                                        SheepGame.ReplyToResult target ->
+                                            [ OutReplyToGame matchId (sheepGameReplyTarget target) ]
 
                                         _ ->
                                             sheepGameOutMsgs time newMatchId outMsg
@@ -967,11 +969,28 @@ sheepGameOutMsgs time newMatchId outMsg =
             -- handled where the match it belongs to is known.
             []
 
+        SheepGame.ReplyToResult _ ->
+            -- Same as reacting: the reply names the match it's pointing into, so it's handled
+            -- where that match is known.
+            []
+
         SheepGame.ShowImage pressedImageData ->
             [ ShowSheepGameImage pressedImageData ]
 
         SheepGame.SetFocusOnQuestion questionId ->
             [ SetFocus (SheepGame.inputId (SheepGame.QuestionInput questionId)) ]
+
+
+{-| What a message replying to one of a sheep game's results points at.
+-}
+sheepGameReplyTarget : SheepGame.ReactionTarget -> Message.RepliedToGame
+sheepGameReplyTarget target =
+    case target of
+        SheepGame.AnswerReaction userId questionId ->
+            Message.RepliedTo_SheepGameAnswer userId questionId
+
+        SheepGame.NotesReaction questionId ->
+            Message.RepliedTo_SheepGameNotes questionId
 
 
 {-| Files someone picked for one of the sheep game's inputs, on their way back to whichever
