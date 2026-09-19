@@ -508,6 +508,10 @@ type OutMsg
       -- Fetch the dictionary definition for an English word the player clicked in a Word Spelling
       -- Game's Moves log. The frontend issues the HTTP request (see `Frontend.handleGameOutMsgs`).
     | FetchWordDefinition String
+      -- Start writing a chat message that replies to a move in the given match. The frontend puts
+      -- the reply into the route so the message being written keeps it (see
+      -- `Frontend.handleGameOutMsgs`).
+    | OutReplyToGame (Id ChannelMessageId) Message.RepliedToGame
       -- Hold onto the sheep game questions the host has written so far, so that a refresh
       -- in the middle of setting a game up doesn't throw them away.
     | SaveSheepGameQuestions (IdArray QuestionId UserSession.SheepGameQuestion)
@@ -642,7 +646,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                     case ( matchData.data, SeqDict.get matchId model.startedGames ) of
                         ( FrontendGameData_WordSpellingGame setup _ cache, Just (WordSpellingGame_Game game) ) ->
                             let
-                                ( game2, maybeAction, maybeFetchDefinition ) =
+                                ( game2, maybeAction, maybeOutMsg ) =
                                     WordSpellingGame.updateGame
                                         time
                                         windowSize
@@ -666,9 +670,12 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                                 Nothing ->
                                     []
                               )
-                                ++ (case maybeFetchDefinition of
-                                        Just word ->
+                                ++ (case maybeOutMsg of
+                                        Just (WordSpellingGame.FetchDefinition word) ->
                                             [ FetchWordDefinition word ]
+
+                                        Just (WordSpellingGame.ReplyToMove moveNumber) ->
+                                            [ OutReplyToGame matchId (Message.RepliedTo_WordSpellingGame moveNumber) ]
 
                                         Nothing ->
                                             []
