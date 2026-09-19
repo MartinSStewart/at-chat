@@ -18,6 +18,7 @@ module Emoji exposing
     , fromString
     , heart
     , isPressed
+    , preload
     , requestEmojiData
     , scrollContainerId
     , searchInputId
@@ -42,6 +43,7 @@ import Hex
 import Html
 import Html.Attributes
 import Html.Events
+import Html.Lazy
 import Icons
 import Id exposing (CustomEmojiId, Id, StickerId)
 import Json.Decode
@@ -502,9 +504,91 @@ categoryColumnWidth =
     40
 
 
+{-| The emoji on the selector's first screen are only asked for once it opens, and fetching
+a hundred and fifty files takes long enough that the grid shows up empty first. Asking for
+them as soon as the emoji data arrives means the browser already has them by then.
+
+`as="image"` rather than an off screen `img` for each, so that the browser fetches them
+without also building a hundred and fifty elements it will never draw.
+
+-}
+preload : EmojiConfig -> Maybe CachedEmojiData -> Html.Html msg
+preload =
+    Html.Lazy.lazy2 preloadHelper
+
+
+preloadHelper : EmojiConfig -> Maybe CachedEmojiData -> Html.Html msg
+preloadHelper userData emojiData =
+    case emojiData of
+        Just emojiData2 ->
+            (Array.toList userData.lastUsedEmojis
+                |> List.filterMap
+                    (\emoji ->
+                        case emoji of
+                            EmojiOrCustomEmoji_Emoji unicodeEmoji ->
+                                Just unicodeEmoji
+
+                            EmojiOrCustomEmoji_CustomEmoji _ ->
+                                Nothing
+                    )
+            )
+                ++ (case List.head allEmojiCategories of
+                        Just firstCategory ->
+                            SeqDict.get firstCategory emojiData2.categories
+                                |> Maybe.withDefault []
+                                |> List.take firstScreenEmojiCount
+
+                        Nothing ->
+                            []
+                   )
+                |> List.map
+                    (\emoji ->
+                        Html.node "link"
+                            [ Html.Attributes.rel "preload"
+                            , Html.Attributes.attribute "as" "image"
+                            , Html.Attributes.href
+                                (emojiWithSkinTone userData.skinTone emoji emojiData2 |> Twemoji.url)
+                            ]
+                            []
+                    )
+                |> Html.div []
+
+        Nothing ->
+            Html.text ""
+
+
+{-| How many emoji fit on screen when the selector is at its largest, so that the preload
+covers the first screen on any window size.
+-}
+firstScreenEmojiCount : Int
+firstScreenEmojiCount =
+    let
+        columns : Int
+        columns =
+            (maxSelectorWidth - categoryColumnWidth) // emojiWidth
+
+        -- One more than fits, because a part of the next row shows when the rows don't
+        -- divide evenly into the height
+        rows : Int
+        rows =
+            (maxSelectorHeight - searchInputHeight) // emojiHeight + 1
+    in
+    columns * rows
+
+
+maxSelectorWidth : number
+maxSelectorWidth =
+    620
+
+
+maxSelectorHeight : number
+maxSelectorHeight =
+    500
+
+
 selectorHeight : number -> number
 selectorHeight availableHeight =
-    min availableHeight 500
+    min availableHeight maxSelectorHeight
 
 
 {-| How much of the emoji list is on screen at once.
@@ -1028,7 +1112,7 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
             let
                 selectorWidth : Int
                 selectorWidth =
-                    min 620 width
+                    min maxSelectorWidth width
 
                 columns : Int
                 columns =

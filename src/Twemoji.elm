@@ -1,4 +1,4 @@
-module Twemoji exposing (fileName, view)
+module Twemoji exposing (fileName, url, view)
 
 {-| Draws unicode emoji as the Twemoji artwork served from `public/emoji`, so that an
 emoji looks the same on every device instead of each one substituting its own set.
@@ -45,13 +45,18 @@ fileName emoji =
         |> String.join "-"
 
 
+url : String -> String
+url emoji =
+    "/emoji/" ++ fileName emoji ++ ".svg"
+
+
 {-| The alt text is the emoji itself so that copying a message out of the page still
 yields the characters rather than nothing.
 -}
 view : String -> String -> Html msg
 view size emoji =
     Html.img
-        [ Html.Attributes.src ("/emoji/" ++ fileName emoji ++ ".svg")
+        [ Html.Attributes.src (url emoji)
         , Html.Attributes.alt emoji
         , Html.Attributes.style "width" size
         , Html.Attributes.style "height" size

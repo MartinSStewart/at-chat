@@ -431,6 +431,9 @@ layout model attributes child =
                         (Json.Decode.at [ "dataTransfer", "types" ] (Json.Decode.list Json.Decode.string))
                     )
                     |> Ui.htmlAttribute
+                , Emoji.preload local.localUser.user.emojiConfig model.emojiData
+                    |> Ui.html
+                    |> Ui.behindContent
                 , Html.Events.preventDefaultOn "dragover" (Json.Decode.succeed ( FrontendNoOp, True )) |> Ui.htmlAttribute
                 , Html.Events.preventDefaultOn "dragleave" (Json.Decode.succeed ( FileDragLeave, True )) |> Ui.htmlAttribute
                 , Html.Events.preventDefaultOn "drop"
