@@ -888,6 +888,47 @@ exports.init = async function init(app)
         customElements.define('animated-image-player', AnimatedImagePlayer);
     }
 
+    // Holds one category's worth of emoji art, so that the selector's grid can draw a
+    // hundred and fifty emoji off a single file instead of asking for one file each. The
+    // grid draws each emoji as <use href="#e...">, which finds the symbol anywhere in the
+    // document and starts drawing the moment this element has fetched it.
+    class EmojiSpriteSheet extends HTMLElement {
+      static get observedAttributes() { return ['src']; }
+      connectedCallback() { this._load(); }
+      attributeChangedCallback(name, oldValue, newValue) {
+        if (name === 'src' && oldValue !== newValue && this.isConnected) {
+          this._load();
+        }
+      }
+      async _load() {
+        const src = this.getAttribute('src');
+        if (!src) return;
+
+        // The sprite is the same every time, so it's fetched once per page and handed to
+        // every element that asks for it afterwards. Without this, scrolling a category
+        // out of the selector and back would re-parse a megabyte of svg.
+        if (!EmojiSpriteSheet.sheets.has(src)) {
+            EmojiSpriteSheet.sheets.set(
+                src,
+                fetch(src).then((response) => response.ok ? response.text() : ''));
+        }
+
+        const text = await EmojiSpriteSheet.sheets.get(src);
+
+        // Elm may have taken this element back out while the fetch was in flight, and
+        // the src may have moved on to another category.
+        if (!this.isConnected || this.getAttribute('src') !== src) return;
+
+        this.innerHTML = text;
+      }
+    }
+
+    EmojiSpriteSheet.sheets = new Map();
+
+    if (!customElements.get('emoji-sprite-sheet')) {
+        customElements.define('emoji-sprite-sheet', EmojiSpriteSheet);
+    }
+
     document.addEventListener('focusout', (event) => {
         app.ports.focus_changed_from_js.send({ id : null });
     });

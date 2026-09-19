@@ -1,15 +1,21 @@
-module Twemoji exposing (fileName, url, view)
+module Twemoji exposing (fileName, spriteSheet, spriteUrl, spriteView, url, view)
 
 {-| Draws unicode emoji as the Twemoji artwork served from `public/emoji`, so that an
 emoji looks the same on every device instead of each one substituting its own set.
 
-`scripts/fetch-twemoji.py` puts the art there.
+`view` draws one emoji from its own file and `spriteView` draws one out of a sprite that
+`spriteSheet` has loaded. A few emoji in a row are cheaper as their own files; a grid of
+them is cheaper as a sprite, since a file each costs a request each.
+
+`scripts/fetch-twemoji.py` puts both there.
 
 -}
 
 import Hex
 import Html exposing (Html)
 import Html.Attributes
+import Svg
+import Svg.Attributes
 
 
 zeroWidthJoiner : Int
@@ -25,8 +31,8 @@ variationSelector =
 {-| Twemoji names a file after the emoji's code points in hex, joined by `-`, and leaves
 out the variation selector unless the sequence also contains a zero width joiner. A
 sequence that reaches here without matching art would ask for a file that isn't
-there, so `scripts/fetch-twemoji.py` checks every emoji in `public/emoji.json` against
-the art it copies.
+there, so `scripts/fetch-twemoji.py` checks every emoji in `public/compact-emoji.json`
+against the art it copies.
 -}
 fileName : String -> String
 fileName emoji =
@@ -50,6 +56,11 @@ url emoji =
     "/emoji/" ++ fileName emoji ++ ".svg"
 
 
+spriteUrl : String -> String
+spriteUrl sprite =
+    "/emoji/sprites/" ++ sprite ++ ".svg"
+
+
 {-| The alt text is the emoji itself so that copying a message out of the page still
 yields the characters rather than nothing.
 -}
@@ -63,3 +74,38 @@ view size emoji =
         , Html.Attributes.style "display" "inline-block"
         ]
         []
+
+
+{-| Fetches a sprite and puts its symbols in the document. Every `spriteView` of an emoji
+the sprite holds starts drawing once it lands, so the two don't have to be rendered in any
+particular order. Removing this stops those drawing, so it has to stay alongside them.
+-}
+spriteSheet : String -> Html msg
+spriteSheet sprite =
+    Html.node "emoji-sprite-sheet"
+        [ Html.Attributes.attribute "src" (spriteUrl sprite)
+        , Html.Attributes.style "display" "none"
+        ]
+        []
+
+
+{-| An id can't begin with a digit and most of these would, so the names the sprites are
+built with carry a prefix.
+-}
+symbolId : String -> String
+symbolId emoji =
+    "e" ++ fileName emoji
+
+
+{-| Unlike `view` there's no alt text to give: a `use` is a reference to a shape rather
+than an image of its own. Anywhere emoji are copied out of, `view` is what draws them.
+-}
+spriteView : String -> String -> Html msg
+spriteView size emoji =
+    Svg.svg
+        [ Svg.Attributes.viewBox "0 0 36 36"
+        , Html.Attributes.style "width" size
+        , Html.Attributes.style "height" size
+        , Html.Attributes.style "display" "inline-block"
+        ]
+        [ Svg.use [ Svg.Attributes.xlinkHref ("#" ++ symbolId emoji) ] [] ]

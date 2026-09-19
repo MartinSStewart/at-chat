@@ -67,6 +67,16 @@ node tests/EncryptionPortTests.js
 type checks that against Elm's codec. The same byte sequences are pinned in both, so
 changing the format on one side alone fails on the other.
 
+Run the sprite tests (also plain node) after touching the emoji selector or its artwork:
+
+```
+node tests/SpriteTests.js
+```
+
+`Emoji.categorySpriteName` has to agree with the file names `scripts/fetch-twemoji.py`
+writes. A name that drifts fails nowhere on its own: the `use` finds no symbol and that
+category's grid comes up blank.
+
 Run elm-review and fix what it reports before you're done:
 
 ```
