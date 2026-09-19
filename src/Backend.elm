@@ -7645,6 +7645,12 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
 
                                         WordSpellingGame.CancelPremove ->
                                             action.change
+
+                                        WordSpellingGame.AddedReaction _ _ ->
+                                            action.change
+
+                                        WordSpellingGame.RemovedReaction _ _ ->
+                                            action.change
                             }
 
                         localMsg2 : Game.LocalChange

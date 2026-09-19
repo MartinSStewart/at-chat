@@ -5241,6 +5241,9 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
         EmojiSelectorForSheepGameReaction _ _ _ ->
             emojiSelectorAtBottomOfTheConversation isMobile availableHeight availableCustomEmojis availableStickers local loggedIn model
 
+        EmojiSelectorForWordSpellingGameReaction _ _ _ ->
+            emojiSelectorAtBottomOfTheConversation isMobile availableHeight availableCustomEmojis availableStickers local loggedIn model
+
         EmojiSelectorForMessage _ ->
             Ui.inFront
                 (Emoji.selector

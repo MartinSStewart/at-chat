@@ -1398,7 +1398,7 @@ wordSpellingActionCodec =
 wordSpellingChangeCodec : Codec WordSpellingGame.Action
 wordSpellingChangeCodec =
     Codec.custom
-        (\placeWordEncoder replaceTrayOrPassEncoder joinGameEncoder premoveEncoder cancelPremoveEncoder value ->
+        (\placeWordEncoder replaceTrayOrPassEncoder joinGameEncoder premoveEncoder cancelPremoveEncoder addedReactionEncoder removedReactionEncoder value ->
             case value of
                 WordSpellingGame.PlaceWord argA argB ->
                     placeWordEncoder argA argB
@@ -1414,12 +1414,32 @@ wordSpellingChangeCodec =
 
                 WordSpellingGame.CancelPremove ->
                     cancelPremoveEncoder
+
+                WordSpellingGame.AddedReaction argA argB ->
+                    addedReactionEncoder argA argB
+
+                WordSpellingGame.RemovedReaction argA argB ->
+                    removedReactionEncoder argA argB
         )
         |> Codec.variant2 "PlaceWord" WordSpellingGame.PlaceWord placedWordCodec isValidCodec
         |> Codec.variant0 "ReplaceTrayOrPass" WordSpellingGame.ReplaceTrayOrPass
         |> Codec.variant0 "JoinGame" WordSpellingGame.JoinGame
         |> Codec.variant2 "Premove" WordSpellingGame.Premove placedWordCodec isValidCodec
         |> Codec.variant0 "CancelPremove" WordSpellingGame.CancelPremove
+        |> Codec.variant2 "AddedReaction" WordSpellingGame.AddedReaction wordSpellingReactionTargetCodec emojiOrCustomEmojiCodec
+        |> Codec.variant2 "RemovedReaction" WordSpellingGame.RemovedReaction wordSpellingReactionTargetCodec emojiOrCustomEmojiCodec
+        |> Codec.buildCustom
+
+
+wordSpellingReactionTargetCodec : Codec WordSpellingGame.ReactionTarget
+wordSpellingReactionTargetCodec =
+    Codec.custom
+        (\moveEncoder value ->
+            case value of
+                WordSpellingGame.MoveReaction argA ->
+                    moveEncoder argA
+        )
+        |> Codec.variant1 "MoveReaction" WordSpellingGame.MoveReaction Codec.int
         |> Codec.buildCustom
 
 

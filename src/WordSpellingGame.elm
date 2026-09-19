@@ -21,6 +21,8 @@ module WordSpellingGame exposing
     , PlacedWord
     , PlacementResult
     , Player
+    , ReactionTarget(..)
+    , Reactions
     , SetupModel
     , SetupMsg(..)
     , SetupOrGame(..)
@@ -62,6 +64,7 @@ module WordSpellingGame exposing
     , placeWord
     , placementConnects
     , pressedKey
+    , reactionTargetId
     , setupView
     , tilesPlacedText
     , topScoringWordText
@@ -92,6 +95,7 @@ import Effect.Http as Http
 import Effect.Time as Time
 import Email.Html
 import Email.Html.Attributes
+import Emoji exposing (EmojiOrCustomEmoji)
 import Env
 import Go exposing (TimeControl)
 import Html
@@ -103,9 +107,11 @@ import IdArray exposing (IdArray)
 import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
+import MessageView
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptyExtra
+import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import PersonName
 import Quantity
@@ -114,7 +120,9 @@ import Route exposing (Route)
 import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
+import SeqSet
 import Set exposing (Set)
+import Sticker
 import String.Nonempty exposing (NonemptyString(..))
 import Touch exposing (Touch)
 import Ui exposing (Element)
@@ -381,9 +389,7 @@ type GameMsg
     | PressedNextWordDefinition
     | PressedCloseWordDefinition
     | GotWordDefinition String (Result Http.Error (List DictEntry))
-      -- The move number shown next to the row in the Moves log, counting from 1 for the game's
-      -- first move.
-    | PressedReplyToAction Int
+    | ReactionMsg ReactionTarget MessageView.MessageViewMsg
 
 
 {-| Something `updateGame` needs the frontend to do that the game itself can't (see
@@ -392,8 +398,22 @@ type GameMsg
 type OutMsg
     = -- Fetch the dictionary definition of an English word the player clicked in the Moves log.
       FetchDefinition String
-      -- Start writing a chat message that replies to the move with this move number.
-    | ReplyToMove Int
+      -- Somebody wants to reply to a move in the chat the match is in.
+    | ReplyToResult ReactionTarget
+      -- Somebody wants to react with an emoji that isn't one of the ones they reach for most,
+      -- so the full selector has to be opened for them.
+    | OpenReactionEmojiSelector ReactionTarget
+
+
+{-| Something in a match that can be reacted to or replied to: a row in the Moves log, named by
+the move number shown next to it.
+-}
+type ReactionTarget
+    = MoveReaction Int
+
+
+type alias Reactions =
+    SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId))
 
 
 type alias SetupModel =
@@ -553,6 +573,8 @@ type Action
     | JoinGame
     | Premove PlacedWord (ToBeFilledInByBackend IsValid)
     | CancelPremove
+    | AddedReaction ReactionTarget EmojiOrCustomEmoji
+    | RemovedReaction ReactionTarget EmojiOrCustomEmoji
 
 
 type IsValid
@@ -578,6 +600,7 @@ type alias Shared =
     , passingStartedAt : Maybe Int
     , lastPlacement : Maybe AnimatedPlacement
     , attemptsLeft : OneOrGreater
+    , reactions : SeqDict ReactionTarget Reactions
     }
 
 
@@ -628,6 +651,7 @@ initShared setup =
     , lastPlacement = Nothing
     , passingStartedAt = Nothing
     , attemptsLeft = setup.placeWordAttempts
+    , reactions = SeqDict.empty
     }
 
 
@@ -1283,6 +1307,14 @@ updateAction setup action shared =
               }
             , []
             )
+
+        AddedReaction target emoji ->
+            -- A reaction describes nothing, so it adds no row to the Moves log and the move
+            -- numbers the rows are reacted to by don't shift.
+            ( mapReactions target (SeqDictHelper.addToSet emoji action.userId) shared, [] )
+
+        RemovedReaction target emoji ->
+            ( mapReactions target (removeFromReactions emoji action.userId) shared, [] )
 
 
 incrementTurnCount : Description -> Time.Posix -> ValidatedSetup -> Shared -> ( Shared, List Description )
@@ -2045,8 +2077,78 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
             , Nothing
             )
 
-        PressedReplyToAction moveNumber ->
-            ( model, Nothing, ReplyToMove moveNumber |> Just )
+        ReactionMsg target messageViewMsg ->
+            case messageViewMsg of
+                MessageView.MessageViewMsg_PressedReactionEmoji emoji ->
+                    ( model, toggleReaction currentUserId shared target emoji |> Just, Nothing )
+
+                MessageView.MessageView_PressedReactionEmoji_Add emoji ->
+                    ( model, AddedReaction target emoji |> Just, Nothing )
+
+                MessageView.MessageView_PressedReactionEmoji_Remove emoji ->
+                    ( model, RemovedReaction target emoji |> Just, Nothing )
+
+                MessageView.MessageViewMsg_PressedShowReactionEmojiSelector ->
+                    ( model, Nothing, OpenReactionEmojiSelector target |> Just )
+
+                MessageView.MessageViewMsg_PressedReply ->
+                    ( model, Nothing, ReplyToResult target |> Just )
+
+                -- The rest of what a message offers belongs to the conversation it's in, and a
+                -- move isn't in one
+                _ ->
+                    ( model, Nothing, Nothing )
+
+
+{-| Pressing a reaction that's already yours takes it back, which is what one press of the same
+emoji does on a message too.
+-}
+toggleReaction : Id UserId -> Shared -> ReactionTarget -> EmojiOrCustomEmoji -> Action
+toggleReaction userId shared target emoji =
+    case SeqDict.get target shared.reactions |> Maybe.andThen (SeqDict.get emoji) of
+        Just users ->
+            if NonemptySet.member userId users then
+                RemovedReaction target emoji
+
+            else
+                AddedReaction target emoji
+
+        Nothing ->
+            AddedReaction target emoji
+
+
+mapReactions : ReactionTarget -> (Reactions -> Reactions) -> Shared -> Shared
+mapReactions target mapFunc shared =
+    { shared
+        | reactions =
+            SeqDict.update
+                target
+                (\maybeReactions ->
+                    let
+                        reactions : Reactions
+                        reactions =
+                            Maybe.withDefault SeqDict.empty maybeReactions |> mapFunc
+                    in
+                    if SeqDict.isEmpty reactions then
+                        Nothing
+
+                    else
+                        Just reactions
+                )
+                shared.reactions
+    }
+
+
+{-| An emoji nobody is left reacting with is dropped, the same as it is on a message.
+-}
+removeFromReactions : EmojiOrCustomEmoji -> Id UserId -> Reactions -> Reactions
+removeFromReactions emoji userId reactions =
+    SeqDict.update
+        emoji
+        (Maybe.andThen
+            (\users -> NonemptySet.toSeqSet users |> SeqSet.remove userId |> NonemptySet.fromSeqSet)
+        )
+        reactions
 
 
 {-| Show the definition popup for one of `open`'s candidate words: show a loading popup and ask
@@ -4476,6 +4578,72 @@ countsView entries =
         ]
 
 
+logPadding : number
+logPadding =
+    16
+
+
+{-| What a row in the Moves log is called, which is what the reactions on it hang off.
+-}
+reactionTargetId : ReactionTarget -> Dom.HtmlId
+reactionTargetId target =
+    case target of
+        MoveReaction moveNumber ->
+            Dom.id ("wordSpellingGame_move_" ++ String.fromInt moveNumber)
+
+
+{-| A row in the Moves log, with the reactions it has under it and, while the pointer is over the
+row, the menu for reacting to that move or replying to it in the chat the match is in.
+-}
+reactableMove : LocalUser -> Int -> ReactionTarget -> Maybe ReactionTarget -> GameMsg -> Reactions -> Element GameMsg -> Element GameMsg
+reactableMove localUser contentWidth target hoveredTarget onMouseEnter reactions content =
+    let
+        isHovered : Bool
+        isHovered =
+            hoveredTarget == Just target
+    in
+    Ui.column
+        [ Ui.id (Dom.idToString (reactionTargetId target))
+        , Ui.spacing 4
+        , Ui.Events.onMouseEnter onMouseEnter
+        , Ui.Events.onMouseLeave MouseExitWord
+        , if isHovered then
+            MessageView.gameMiniViewNearEdge
+                localUser.user
+                localUser.user.availableCustomEmojis
+                localUser.customEmojis
+                |> Ui.map (ReactionMsg target)
+                |> Ui.inFront
+
+          else
+            Ui.noAttr
+        ]
+        (content
+            :: (case
+                    MessageView.reactionEmojiView
+                        localUser.emojiData
+                        (if isHovered then
+                            MessageView.ReactionsHovered
+
+                         else
+                            MessageView.ReactionsNotHovered
+                        )
+                        localUser.session.userId
+                        localUser.customEmojis
+                        (User.allUsers localUser)
+                        Sticker.LoopAFewTimesOnLoad
+                        contentWidth
+                        reactions
+                of
+                    Just reactionRow ->
+                        [ Ui.map (ReactionMsg target) reactionRow ]
+
+                    Nothing ->
+                        []
+               )
+        )
+
+
 recentActionsView :
     Int
     -> Coord CssPixels
@@ -4504,6 +4672,18 @@ recentActionsView scrollPositionAndHovered windowSize localUser setup actions sh
 
                 value ->
                     value - 1 |> Just
+
+        contentWidth : Int
+        contentWidth =
+            Coord.xRaw windowSize - boardWidth setup.traySize windowSize - logPadding * 2
+
+        logLength : Int
+        logLength =
+            List.length log
+
+        hoveredTarget : Maybe ReactionTarget
+        hoveredTarget =
+            Maybe.map (\index -> MoveReaction (logLength - index)) hoveredIndex
 
         log : List LogEntry
         log =
@@ -4584,7 +4764,19 @@ recentActionsView scrollPositionAndHovered windowSize localUser setup actions sh
 
                             moveNumber : Int
                             moveNumber =
-                                List.length log - index
+                                logLength - index
+
+                            hoveredCells : List ( ( Int, Int ), LetterOrWildcard )
+                            hoveredCells =
+                                case description of
+                                    Description_PlacedWord _ { placedCells } ->
+                                        placedCells
+
+                                    Description_InvalidMove _ { placedCells } ->
+                                        placedCells
+
+                                    _ ->
+                                        []
 
                             rowContent : List (Element GameMsg)
                             rowContent =
@@ -4593,29 +4785,6 @@ recentActionsView scrollPositionAndHovered windowSize localUser setup actions sh
                                     , MyUi.noShrinking
                                     , Ui.alignTop
                                     , Ui.width Ui.shrink
-                                    , case hoveredIndex of
-                                        Just hoveredIndex2 ->
-                                            if hoveredIndex2 == index then
-                                                Ui.el
-                                                    [ Ui.background MyUi.buttonBackground
-                                                    , Ui.rounded 4
-                                                    , Ui.paddingXY 4 4
-                                                    , Ui.width (Ui.px 32)
-                                                    , Ui.height (Ui.px 32)
-                                                    , Ui.contentCenterX
-                                                    , Ui.contentCenterY
-                                                    , Ui.Font.color MyUi.font1
-                                                    , Ui.move { x = -8, y = -8, z = 0 }
-                                                    , MyUi.blockClickPropagation (PressedReplyToAction moveNumber)
-                                                    ]
-                                                    (Ui.html (Icons.reply 24))
-                                                    |> Ui.inFront
-
-                                            else
-                                                Ui.noAttr
-
-                                        Nothing ->
-                                            Ui.noAttr
                                     ]
                                     [ Ui.text (String.fromInt moveNumber ++ ". ") ]
                                 , Ui.Prose.paragraph
@@ -4625,8 +4794,8 @@ recentActionsView scrollPositionAndHovered windowSize localUser setup actions sh
                                     ]
                                 ]
                         in
-                        case description of
-                            Description_PlacedWord _ { word, wildcardMatches, placedCells } ->
+                        (case description of
+                            Description_PlacedWord _ { word, wildcardMatches } ->
                                 -- A placed word is clickable: hovering highlights the row (and the
                                 -- word's cells on the board) and clicking looks up its dictionary
                                 -- definition (see `PressedWordDefinition`). Any wildcards are resolved
@@ -4642,12 +4811,10 @@ recentActionsView scrollPositionAndHovered windowSize localUser setup actions sh
                                     , Ui.width Ui.shrink
                                     , MyUi.htmlStyle "cursor" "pointer"
                                     , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
-                                    , Ui.Events.onMouseEnter (MouseEnterWord (Just index) placedCells entry.shared)
-                                    , Ui.Events.onMouseLeave MouseExitWord
                                     ]
                                     rowContent
 
-                            Description_InvalidMove _ { word, placedCells } ->
+                            Description_InvalidMove _ { word } ->
                                 MyUi.rowButton
                                     (Dom.id ("wsg_moveWord_" ++ String.fromInt moveNumber))
                                     (PressedWordDefinition (definitionWords Set.empty word))
@@ -4658,8 +4825,6 @@ recentActionsView scrollPositionAndHovered windowSize localUser setup actions sh
                                     , Ui.width Ui.shrink
                                     , MyUi.htmlStyle "cursor" "pointer"
                                     , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
-                                    , Ui.Events.onMouseEnter (MouseEnterWord (Just index) placedCells entry.shared)
-                                    , Ui.Events.onMouseLeave MouseExitWord
                                     ]
                                     rowContent
 
@@ -4667,6 +4832,16 @@ recentActionsView scrollPositionAndHovered windowSize localUser setup actions sh
                                 Ui.row
                                     [ Ui.Font.color MyUi.font3, Ui.spacing 8, Ui.paddingXY 4 6 ]
                                     rowContent
+                        )
+                            |> reactableMove
+                                localUser
+                                contentWidth
+                                (MoveReaction moveNumber)
+                                hoveredTarget
+                                (MouseEnterWord (Just index) hoveredCells entry.shared)
+                                (SeqDict.get (MoveReaction moveNumber) shared.reactions
+                                    |> Maybe.withDefault SeqDict.empty
+                                )
                     )
                     log
 
@@ -4682,7 +4857,7 @@ recentActionsView scrollPositionAndHovered windowSize localUser setup actions sh
         |> Ui.column
             [ Ui.id (Dom.idToString pastWordsContainerId)
             , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledPastMoves scrollPosition)
-            , Ui.paddingWith { left = 16, right = 16, top = 24, bottom = 16 }
+            , Ui.paddingWith { left = logPadding, right = logPadding, top = 24, bottom = 16 }
             , Ui.scrollable
             , Ui.heightMin 0
             , Ui.height Ui.fill

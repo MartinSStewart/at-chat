@@ -791,6 +791,7 @@ notifShared turnCount players =
     , passingStartedAt = Nothing
     , lastPlacement = Nothing
     , attemptsLeft = OneOrGreater.one
+    , reactions = SeqDict.empty
     }
 
 

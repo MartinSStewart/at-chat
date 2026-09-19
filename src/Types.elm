@@ -442,6 +442,7 @@ type EmojiSelector
     | EmojiSelectorForEditMessage (Coord CssPixels) (Maybe Range)
     | EmojiSelectorForSheepGameInput SheepGame.Input (Coord CssPixels) (Maybe Range)
     | EmojiSelectorForSheepGameReaction GuildOrDmId (Id ChannelMessageId) SheepGame.ReactionTarget
+    | EmojiSelectorForWordSpellingGameReaction GuildOrDmId (Id ChannelMessageId) WordSpellingGame.ReactionTarget
 
 
 type alias BackendModel =
