@@ -33,6 +33,10 @@ fileNameTests =
                     |> Expect.equal "1f468-200d-1f469-200d-1f467-200d-1f466"
         , Test.test "flag is a regional indicator pair" <|
             \_ -> Twemoji.fileName "🇸🇪" |> Expect.equal "1f1f8-1f1ea"
+        , Test.test "a gendered sequence keeps the variation selector after the gender sign" <|
+            \_ ->
+                Twemoji.fileName "🧖\u{200D}♂️"
+                    |> Expect.equal "1f9d6-200d-2642-fe0f"
         ]
 
 
@@ -52,6 +56,12 @@ emojiData =
         , { emoji = "👨", shortNames = [ "man" ], category = PeopleAndBody, skinVariations = Nothing }
         , { emoji = "👩", shortNames = [ "woman" ], category = PeopleAndBody, skinVariations = Nothing }
         , { emoji = "👧", shortNames = [ "girl" ], category = PeopleAndBody, skinVariations = Nothing }
+        , { emoji = "🧖", shortNames = [ "person_in_steamy_room" ], category = PeopleAndBody, skinVariations = Nothing }
+        , { emoji = "🧖\u{200D}♂️"
+          , shortNames = [ "man_in_steamy_room" ]
+          , category = PeopleAndBody
+          , skinVariations = Nothing
+          }
         , { emoji = "👨\u{200D}👩\u{200D}👧"
           , shortNames = [ "family" ]
           , category = PeopleAndBody
@@ -101,6 +111,13 @@ splitOnEmojiTests =
                         ]
         , Test.test "an emoji with no artwork is left as characters" <|
             \_ -> Emoji.splitOnEmoji emojiData "\u{1FAE9}" |> Expect.equal [ PlainText "\u{1FAE9}" ]
+        , Test.test "a gendered sequence the font may draw as two glyphs is one piece of artwork" <|
+            \_ ->
+                Emoji.splitOnEmoji emojiData "🧖\u{200D}♂️"
+                    |> Expect.equal
+                        [ EmojiArtwork
+                            { sequence = "🧖\u{200D}♂️", sprite = "people-body" }
+                        ]
         , Test.test "two emoji in a row don't run together" <|
             \_ ->
                 Emoji.splitOnEmoji emojiData "🎉👍"
