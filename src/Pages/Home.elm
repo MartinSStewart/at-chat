@@ -6,9 +6,13 @@ module Pages.Home exposing
     )
 
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import FrontendExtra
+import Id
+import Local
 import MyUi
+import Pages.Guild
 import Route exposing (Route(..))
-import Types exposing (FrontendMsg_(..), LoginStatus(..))
+import Types exposing (FrontendMsg_(..), LoadedFrontend, LoginStatus(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -87,8 +91,35 @@ loginButtonId =
     Dom.id "homePage_loginButton"
 
 
-view : Int -> Element FrontendMsg_
-view windowWidth =
+view : Int -> LoadedFrontend -> Element FrontendMsg_
+view windowWidth loaded =
+    let
+        fakeLoggedIn : Types.LoggedIn2
+        fakeLoggedIn =
+            FrontendExtra.loadedInitHelper
+                loaded.startupData
+                loaded.emojiData
+                { session = UserSession
+                , currentlyViewing = UserSession.Viewing
+                , adminData = AdminStatusLoginData
+                , twoFactorAuthenticationEnabled = Maybe Time.Posix
+                , guilds = SeqDict (Id GuildId) FrontendGuild
+                , dmChannels = SeqDict (Id UserId) FrontendDmChannel
+                , discordDmChannels = SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
+                , discordGuilds = SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
+                , user = FrontendCurrentUser
+                , otherUsers = SeqDict (Id UserId) FrontendUser
+                , discordUsers = LinkedAndOtherDiscordUsers
+                , otherSessions = SeqDict SessionIdHash FrontendUserSession
+                , publicVapidKey = String
+                , textEditor = TextEditor.LocalState
+                , stickers = SeqDict (Id StickerId) StickerData
+                , customEmojis = SeqDict (Id CustomEmojiId) CustomEmojiData
+                , voiceChatPeers = SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) Call.RemoteCallData)
+                }
+                loaded
+                |> Tuple.first
+    in
     Ui.column
         [ MyUi.notoSans
         , if windowWidth < 800 then
@@ -100,4 +131,10 @@ view windowWidth =
         , Ui.centerX
         ]
         [ Ui.el [ Ui.Font.size 24 ] (Ui.text "at-chat, a place to chat with friends")
+        , Pages.Guild.guildView
+            loaded
+            (Id.fromInt 0)
+            (Route.ChannelRoute (Id.fromInt 0) (Route.NoThreadWithFriends Nothing Route.HideChannelSettings) Nothing)
+            fakeLoggedIn
+            (Local.model fakeLoggedIn.localState)
         ]

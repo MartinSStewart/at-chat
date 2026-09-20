@@ -1,15 +1,20 @@
 module FrontendExtra exposing
-    ( audio
+    ( EncryptedBacklog(..)
+    , audio
     , canDropFiles
     , changeUpdate
     , channelGames
+    , channelSidebarTarget
     , currentGame
     , currentGamesTab
     , drawingRedo
     , drawingUndo
     , editMessage_gotFiles
     , editMessage_gotPastedText
+    , encryptedBacklog
     , encryptedDmOtherUser
+    , encryptedMessageData
+    , encryptedMessagesIn
     , externalLinkWarning
     , fileDecryptedMessages
     , fileDragOverlayOpacity
@@ -26,6 +31,8 @@ module FrontendExtra exposing
     , initAdminData
     , isPressMsg
     , layout
+    , loadedInitHelper
+    , loginDataToLocalState
     , logout
     , mapEncryptionRequests
     , newPrivateKeyWarning
@@ -51,6 +58,8 @@ import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelHeader
 import ChannelName
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordFrontendDmChannel, E2eeStatus(..), FrontendDmChannel)
@@ -67,7 +76,7 @@ import Effect.Process as Process
 import Effect.Task as Task
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (EmojiOrCustomEmoji)
+import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji)
 import Encryption exposing (BytesHash, EncryptedData)
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId, FileStatus(..), IsEncrypted(..))
@@ -109,7 +118,7 @@ import Ports exposing (RegisterPushSubscription(..))
 import Range exposing (Range)
 import RecoveryLogin
 import RichText exposing (Domain, RichText)
-import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -120,8 +129,8 @@ import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch exposing (Drag(..), DragTarget(..))
-import TwoFactorAuthentication
-import Types exposing (EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
+import TwoFactorAuthentication exposing (TwoFactorState(..))
+import Types exposing (AdminStatusLoginData(..), EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -7769,3 +7778,327 @@ handleServerSendDmMessage id createdBy createdByUser stickers messageForChannel 
                 , stickers = SeqDict.union stickers localUser.stickers
             }
     }
+
+
+loadedInitHelper :
+    Ports.StartupData
+    -> Maybe CachedEmojiData
+    -> LoginData
+    -> { a | windowSize : Coord CssPixels, navigationKey : BrowserNavigation.Key, route : Route }
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+loadedInitHelper startupData emojiData loginData loading =
+    let
+        backlog : List EncryptedBacklog
+        backlog =
+            encryptedBacklog (SeqSet.fromList startupData.e2eeKeys) loginData.dmChannels
+
+        local : LocalState
+        local =
+            loginDataToLocalState startupData SeqDict.empty backlog emojiData loginData
+
+        loggedIn : LoggedIn2
+        loggedIn =
+            { localState = Local.init local
+            , admin =
+                case loginData.adminData of
+                    IsAdminLoginData _ ->
+                        Pages.Admin.initForAdmin
+                            (case loading.route of
+                                AdminRoute params ->
+                                    params
+
+                                _ ->
+                                    { highlightLog = Nothing }
+                            )
+
+                    IsAdminButNoData ->
+                        Pages.Admin.initForAdmin
+                            (case loading.route of
+                                AdminRoute params ->
+                                    params
+
+                                _ ->
+                                    { highlightLog = Nothing }
+                            )
+
+                    IsNotAdminLoginData ->
+                        Pages.Admin.initForUser
+            , drafts = SeqDict.empty
+            , newChannelForm = SeqDict.empty
+            , editChannelForm = SeqDict.empty
+            , editGuildForm = SeqDict.empty
+            , newGuildForm = Nothing
+            , typingDebouncer = True
+            , textInputFocus = Nothing
+            , previousTextInputFocus = Nothing
+            , messageHover = NoMessageHover
+            , showEmojiSelector = EmojiSelectorHidden
+            , editMessage = SeqDict.empty
+            , replyTo = SeqDict.empty
+            , revealedSpoilers = SeqDict.empty
+            , sidebarMode = ChannelSidebarNotDragging { offset = channelSidebarTarget loading.route }
+            , userOptions = Nothing
+            , twoFactor =
+                case loginData.twoFactorAuthenticationEnabled of
+                    Just enabledAt ->
+                        TwoFactorAlreadyComplete enabledAt
+
+                    Nothing ->
+                        TwoFactorNotStarted
+            , filesToUpload = SeqDict.empty
+            , showFileToUploadInfo = Nothing
+            , isReloading = False
+            , channelScrollPosition = ScrolledToBottom
+            , textEditor = TextEditor.init
+            , profilePictureEditor = ImageEditor.init
+            , guildIconEditor = Nothing
+            , externalLinkWarning = Nothing
+            , emojiSelector = Emoji.selectorInit
+            , voiceChat = Call.initModel
+            , games = SeqDict.empty
+            , fileDragOverCount = NoFileDrag Nothing
+            , drawingMode = Drawing.init
+            , newMessagesWhileNotScrolledToBottom = 0
+            , showInviteLinkQrCode = Nothing
+            , friendsSearch = ""
+            , channelSearch = ""
+            , showNewPrivateKey = Nothing
+            , e2eeError = Nothing
+            , e2eePrivateKeyText = ""
+            , e2eeKeysOnThisDevice = SeqSet.fromList startupData.e2eeKeys
+            , encryptionRequests =
+                { pendingEncryptedMessages = SeqDict.empty
+                , nextEncryptionRequestId = Id.fromInt 0
+                , pendingDecryptedMessages = SeqDict.empty
+                , nextDecryptionRequestId = Id.fromInt 0
+                , pendingDecryptedManyMessages =
+                    List.indexedMap
+                        (\index backlog2 ->
+                            case backlog2 of
+                                PendingEncryption conversation ->
+                                    Just
+                                        ( Id.fromInt index
+                                        , { messageHashes = List.map Encryption.hash conversation.messages
+                                          , shiftScrollFrom = Nothing
+                                          }
+                                        )
+
+                                MissingKeys _ ->
+                                    Nothing
+                        )
+                        backlog
+                        |> List.filterMap identity
+                        |> SeqDict.fromList
+                , pendingDecryptedOldMessages = SeqDict.empty
+                , nextDecryptManyRequestId = Id.fromInt (List.length backlog)
+                , pendingEncryptedManyMessages = SeqDict.empty
+                , nextEncryptManyRequestId = Id.fromInt 0
+                , pendingEncryptedEdits = SeqDict.empty
+                , pendingEncryptedFiles = SeqDict.empty
+                , nextEncryptFileRequestId = Id.fromInt 0
+                }
+            , e2eeSectionsExpanded = SeqDict.empty
+            , typedTextCounter = 0
+            }
+    in
+    ( loggedIn
+    , Command.batch
+        [ List.indexedMap
+            (\index backlog2 ->
+                case backlog2 of
+                    PendingEncryption conversation ->
+                        Encryption.decryptManyMessages (Id.fromInt index) conversation.id conversation.messages |> Just
+
+                    MissingKeys _ ->
+                        Nothing
+            )
+            backlog
+            |> List.filterMap identity
+            |> Command.batch
+        , case loading.route of
+            AdminRoute params ->
+                case params.highlightLog of
+                    Just _ ->
+                        Dom.getElement Pages.Admin.logSectionId
+                            |> Task.andThen (\{ element } -> Dom.setViewport 0 (element.y + 40))
+                            |> Task.attempt (\_ -> ScrolledToLogSection)
+
+                    Nothing ->
+                        Command.none
+
+            _ ->
+                Command.none
+        , -- We need to check if a video preview is visible immediately since we might be on the call route
+          Call.displayModeChangeCmd
+            Call.NoVideo
+            (Call.displayMode (MyUi.isMobile loading) local.localUser.session.userId loading.route local.calls)
+            loggedIn.voiceChat
+        , GuildColumn.unreadNotificationCount local |> Ports.setAppBadge
+        ]
+    )
+
+
+loginDataToLocalState :
+    Ports.StartupData
+    -> SeqDict BytesHash (Result () (MessageContent (Id UserId)))
+    -> List EncryptedBacklog
+    -> Maybe CachedEmojiData
+    -> LoginData
+    -> LocalState
+loginDataToLocalState startupData decrypted encryptionBacklog emojiData loginData =
+    { adminData =
+        case loginData.adminData of
+            IsAdminLoginData adminData ->
+                IsAdmin (initAdminData adminData)
+
+            IsNotAdminLoginData ->
+                IsNotAdmin
+
+            IsAdminButNoData ->
+                IsAdminButDataNotLoaded
+    , guilds = loginData.guilds
+    , discordGuilds = loginData.discordGuilds
+    , dmChannels = loginData.dmChannels
+    , discordDmChannels = loginData.discordDmChannels
+    , joinGuildError = Nothing
+    , localUser =
+        { session = loginData.session
+        , currentlyViewing = loginData.currentlyViewing
+        , user = loginData.user
+        , otherUsers = loginData.otherUsers
+        , discordUsers = loginData.discordUsers
+        , timezone = startupData.timezone
+        , userAgent = startupData.userAgent
+        , devicePixelRatio = startupData.devicePixelRatio
+        , stickers = loginData.stickers
+        , customEmojis = loginData.customEmojis
+        , emojiData = emojiData
+        , decryptedMessages =
+            List.foldl
+                (\backlog decrypted2 ->
+                    case backlog of
+                        PendingEncryption _ ->
+                            decrypted2
+
+                        MissingKeys conversation ->
+                            List.foldl
+                                (\message decrypted3 -> SeqDict.insert (Encryption.hash message) (Err ()) decrypted3)
+                                decrypted2
+                                conversation.messages
+                )
+                decrypted
+                encryptionBacklog
+        }
+    , otherSessions = loginData.otherSessions
+    , publicVapidKey = loginData.publicVapidKey
+    , textEditor = loginData.textEditor
+    , calls = Call.init loginData.voiceChatPeers
+    }
+
+
+type EncryptedBacklog
+    = PendingEncryption { id : Viewing_DmId, messages : List (Encryption.EncryptedData (MessageContent (Id UserId))) }
+    | MissingKeys { id : Viewing_DmId, messages : List (Encryption.EncryptedData (MessageContent (Id UserId))) }
+
+
+encryptedBacklog : SeqSet (Id UserId) -> SeqDict (Id UserId) FrontendDmChannel -> List EncryptedBacklog
+encryptedBacklog keysOnThisDevice dmChannels =
+    List.filterMap
+        (\( otherUserId, dmChannel ) ->
+            case encryptedMessagesIn dmChannel of
+                [] ->
+                    Nothing
+
+                messages ->
+                    let
+                        id =
+                            { otherUserId = otherUserId }
+                    in
+                    (if SeqSet.member otherUserId keysOnThisDevice then
+                        PendingEncryption { id = id, messages = messages }
+
+                     else
+                        MissingKeys { id = id, messages = messages }
+                    )
+                        |> Just
+        )
+        (SeqDict.toList dmChannels)
+
+
+encryptedMessagesIn : FrontendDmChannel -> List (Encryption.EncryptedData (MessageContent (Id UserId)))
+encryptedMessagesIn dmChannel =
+    List.filterMap (\( _, message ) -> encryptedMessageData message) (MessageArray.toList dmChannel.messages)
+        ++ (SeqDict.values dmChannel.threads
+                |> List.concatMap
+                    (\thread ->
+                        MessageArray.toList thread.messages
+                            |> List.filterMap (\( _, message ) -> encryptedMessageData message)
+                    )
+           )
+
+
+encryptedMessageData : Message.Message messageId (Id UserId) -> Maybe (Encryption.EncryptedData (MessageContent (Id UserId)))
+encryptedMessageData message =
+    case message of
+        Message.EncryptedUserTextMessage data ->
+            Just data.content
+
+        _ ->
+            Nothing
+
+
+{-| Which of the three screens the mobile layout is heading for: the member column at 0,
+the conversation view at 1, or the guild's channel list at 2.
+-}
+channelSidebarTarget : Route -> Float
+channelSidebarTarget route =
+    case Route.toShowMembersTab route of
+        ( ShowChannelSettings, _ ) ->
+            0
+
+        ( HideChannelSettings, _ ) ->
+            let
+                helper channelsVisible =
+                    case channelsVisible of
+                        ChannelsVisibleOnMobile ->
+                            2
+
+                        ChannelsHiddenOnMobile ->
+                            1
+            in
+            case route of
+                GuildRoute _ _ channelsVisible _ ->
+                    helper channelsVisible
+
+                DiscordGuildRoute routeData ->
+                    helper routeData.channelsVisible
+
+                HomePageRoute _ ->
+                    2
+
+                AdminRoute _ ->
+                    2
+
+                NewGuildRoute ->
+                    2
+
+                DmRoute routeData ->
+                    helper routeData.channelsVisible
+
+                DiscordDmRoute routeData ->
+                    helper routeData.channelsVisible
+
+                AiChatRoute ->
+                    2
+
+                SlackOAuthRedirect _ ->
+                    2
+
+                TextEditorRoute ->
+                    2
+
+                LinkDiscord _ ->
+                    2
+
+                PublicGoMatchRoute _ ->
+                    2
