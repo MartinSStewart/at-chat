@@ -4611,6 +4611,7 @@ reactableMove localUser contentWidth target hoveredTarget onMouseEnter reactions
             MessageView.gameMiniViewNearEdge
                 localUser.user
                 localUser.user.availableCustomEmojis
+                localUser.emojiData
                 localUser.customEmojis
                 |> Ui.map (ReactionMsg target)
                 |> Ui.inFront
