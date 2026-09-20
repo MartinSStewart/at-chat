@@ -6710,6 +6710,7 @@ messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessa
                     time
                     maybeRepliedTo2
                     revealedSpoilers
+                    local.localUser.emojiData
                     local.localUser.customEmojis
                     decrypted
                     allUsers
@@ -6765,6 +6766,7 @@ messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessa
                         previewThreadLastMessage
                             local.localUser.timezone
                             time
+                            local.localUser.emojiData
                             local.localUser.customEmojis
                             allUsers
                             decrypted
@@ -6870,6 +6872,7 @@ threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messa
                     time
                     maybeRepliedTo2
                     revealedSpoilers
+                    local.localUser.emojiData
                     local.localUser.customEmojis
                     decrypted
                     allUsers
@@ -8180,6 +8183,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
             time
             maybeRepliedTo2
             revealedSpoilers
+            localUser.emojiData
             localUser.customEmojis
             decrypted
             allUsers
@@ -8248,6 +8252,7 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                         , attachedFiles = attachedFiles
                         , domainWhitelist = localUser.user.domainWhitelist
                         , customEmojis = localUser.customEmojis
+                        , emojiData = localUser.emojiData
                         , stickers = localUser.stickers
                         , animationMode = isHoveredToAnimationMode isHovered
                         , timezone = localUser.timezone
@@ -8341,6 +8346,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
             time
             maybeRepliedTo2
             revealedSpoilers
+            localUser.emojiData
             localUser.customEmojis
             SeqDict.empty
             allUsers
@@ -8411,6 +8417,7 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                         , attachedFiles = attachedFiles
                         , domainWhitelist = localUser.user.domainWhitelist
                         , customEmojis = localUser.customEmojis
+                        , emojiData = localUser.emojiData
                         , stickers = localUser.stickers
                         , animationMode = isHoveredToAnimationMode isHovered
                         , timezone = localUser.timezone
@@ -8530,19 +8537,21 @@ replyToHeaderAboveMessage_userTextMessage :
     -> Id messageId
     -> Time.Zone
     -> Time.Posix
+    -> Maybe CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> MessageContent userId
     -> userId
     -> Element MessageViewMsg
-replyToHeaderAboveMessage_userTextMessage isMobile repliedToIndex timezone time customEmojis allUsers revealedSpoilers contentAndEmbeds createdBy =
+replyToHeaderAboveMessage_userTextMessage isMobile repliedToIndex timezone time emojiData customEmojis allUsers revealedSpoilers contentAndEmbeds createdBy =
     replyToHeaderAboveMessageHelper
         isMobile
         repliedToIndex
         (userTextMessagePreview
             timezone
             time
+            emojiData
             customEmojis
             allUsers
             (case SeqDict.get repliedToIndex revealedSpoilers of
@@ -8563,11 +8572,12 @@ replyToHeaderAboveMessage :
     -> Time.Posix
     -> Maybe ( Id messageId, Message messageId userId )
     -> SeqDict (Id messageId) (NonemptySet Int)
+    -> Maybe CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict BytesHash (Result () (MessageContent userId))
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> Element MessageViewMsg
-replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoilers customEmojis decrypted allUsers =
+replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoilers emojiData customEmojis decrypted allUsers =
     case maybeRepliedTo2 of
         Just ( repliedToIndex, UserTextMessage repliedToData ) ->
             replyToHeaderAboveMessage_userTextMessage
@@ -8575,6 +8585,7 @@ replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoiler
                 repliedToIndex
                 timezone
                 time
+                emojiData
                 customEmojis
                 allUsers
                 revealedSpoilers
@@ -8589,6 +8600,7 @@ replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoiler
                         repliedToIndex
                         timezone
                         time
+                        emojiData
                         customEmojis
                         allUsers
                         revealedSpoilers
@@ -8626,13 +8638,14 @@ replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoiler
 userTextMessagePreview :
     Time.Zone
     -> Time.Posix
+    -> Maybe CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> SeqSet Int
     -> MessageContent userId
     -> userId
     -> Element MessageViewMsg
-userTextMessagePreview timezone time customEmojis allUsers revealedSpoilers contentAndEmbeds createdBy =
+userTextMessagePreview timezone time emojiData customEmojis allUsers revealedSpoilers contentAndEmbeds createdBy =
     Html.div
         [ Html.Attributes.style "white-space" "nowrap"
         , Html.Attributes.style "overflow" "hidden"
@@ -8649,6 +8662,7 @@ userTextMessagePreview timezone time customEmojis allUsers revealedSpoilers cont
                 , users = allUsers
                 , attachedFiles = contentAndEmbeds.attachedFiles
                 , customEmojis = customEmojis
+                , emojiData = emojiData
                 , domainWhitelist = SeqSet.empty
                 , timezone = timezone
                 , time = time
@@ -9041,7 +9055,7 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageView.miniView currentUser isThreadStarter canEdit availableCustomEmojis customEmojis |> Ui.inFront
+                        , MessageView.miniView currentUser isThreadStarter canEdit availableCustomEmojis emojiData customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->
@@ -9071,7 +9085,7 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageView.reactionsMiniView currentUser availableCustomEmojis customEmojis |> Ui.inFront
+                        , MessageView.reactionsMiniView currentUser availableCustomEmojis emojiData customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredWhileSelectingAnchor ->
@@ -9082,7 +9096,7 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
             :: Maybe.Extra.toList maybeReactions
             ++ (case maybeThread of
                     Just thread ->
-                        [ previewThreadLastMessage timezone currentTime customEmojis allUsers decrypted messageIndex thread
+                        [ previewThreadLastMessage timezone currentTime emojiData customEmojis allUsers decrypted messageIndex thread
                         ]
 
                     Nothing ->
@@ -9170,7 +9184,7 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageView.miniView currentUser False canEdit availableCustomEmojis customEmojis |> Ui.inFront
+                        , MessageView.miniView currentUser False canEdit availableCustomEmojis emojiData customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->
@@ -9200,7 +9214,7 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageView.reactionsMiniView currentUser availableCustomEmojis customEmojis |> Ui.inFront
+                        , MessageView.reactionsMiniView currentUser availableCustomEmojis emojiData customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredWhileSelectingAnchor ->
@@ -9213,12 +9227,13 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
 previewThreadLastMessage_userTextMessage :
     Time.Posix
     -> Time.Zone
+    -> Maybe CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> MessageContent userId
     -> userId
     -> List (Html MessageViewMsg)
-previewThreadLastMessage_userTextMessage time timezone customEmojis allUsers contentAndEmbeds createdBy =
+previewThreadLastMessage_userTextMessage time timezone emojiData customEmojis allUsers contentAndEmbeds createdBy =
     Html.span
         [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
         , Html.Attributes.style "padding" "0 6px 0 2px"
@@ -9230,6 +9245,7 @@ previewThreadLastMessage_userTextMessage time timezone customEmojis allUsers con
             , users = allUsers
             , attachedFiles = contentAndEmbeds.attachedFiles
             , customEmojis = customEmojis
+            , emojiData = emojiData
             , domainWhitelist = SeqSet.empty
             , timezone = timezone
             , time = time
@@ -9240,13 +9256,14 @@ previewThreadLastMessage_userTextMessage time timezone customEmojis allUsers con
 previewThreadLastMessage :
     Time.Zone
     -> Time.Posix
+    -> Maybe CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict BytesHash (Result () (MessageContent userId))
     -> Id ChannelMessageId
     -> FrontendGenericThread userId
     -> Element MessageViewMsg
-previewThreadLastMessage timezone time customEmojis allUsers decrypted messageId thread =
+previewThreadLastMessage timezone time emojiData customEmojis allUsers decrypted messageId thread =
     let
         lastMessage =
             MessageArray.last thread.messages
@@ -9296,6 +9313,7 @@ previewThreadLastMessage timezone time customEmojis allUsers decrypted messageId
                                 previewThreadLastMessage_userTextMessage
                                     time
                                     timezone
+                                    emojiData
                                     customEmojis
                                     allUsers
                                     data.content
@@ -9307,6 +9325,7 @@ previewThreadLastMessage timezone time customEmojis allUsers decrypted messageId
                                         previewThreadLastMessage_userTextMessage
                                             time
                                             timezone
+                                            emojiData
                                             customEmojis
                                             allUsers
                                             (Result.withDefault

@@ -1,5 +1,7 @@
 module TwemojiTests exposing (tests)
 
+import Dict
+import Emoji exposing (EmojiCategory(..), TextOrEmoji(..))
 import Expect
 import Test exposing (Test)
 import Twemoji
@@ -34,6 +36,81 @@ fileNameTests =
         ]
 
 
+{-| A handful of emoji in the shape the server sends them, enough to cover the cases the
+splitter has to get right: one plain emoji, one that takes a skin tone, and one zero width
+joiner sequence that begins with an emoji of its own.
+-}
+emojiData : Emoji.CachedEmojiData
+emojiData =
+    Emoji.fromResponse
+        [ { emoji = "🎉", shortNames = [ "tada" ], category = Activities, skinVariations = Nothing }
+        , { emoji = "👍"
+          , shortNames = [ "+1" ]
+          , category = PeopleAndBody
+          , skinVariations = Just (Dict.fromList [ ( "1F3FB", "👍🏻" ) ])
+          }
+        , { emoji = "👨", shortNames = [ "man" ], category = PeopleAndBody, skinVariations = Nothing }
+        , { emoji = "👩", shortNames = [ "woman" ], category = PeopleAndBody, skinVariations = Nothing }
+        , { emoji = "👧", shortNames = [ "girl" ], category = PeopleAndBody, skinVariations = Nothing }
+        , { emoji = "👨\u{200D}👩\u{200D}👧"
+          , shortNames = [ "family" ]
+          , category = PeopleAndBody
+          , skinVariations = Nothing
+          }
+        ]
+
+
+{-| Text is searched for emoji character by character, so these pin what it finds: the
+longest sequence rather than the emoji it begins with, a skin tone out of that tone's sprite
+rather than the untoned one, and nothing at all where there's no artwork.
+-}
+splitOnEmojiTests : Test
+splitOnEmojiTests =
+    Test.describe "splitOnEmoji"
+        [ Test.test "an emoji at the end of a sentence" <|
+            \_ ->
+                Emoji.splitOnEmoji emojiData "Party 🎉"
+                    |> Expect.equal
+                        [ PlainText "Party "
+                        , EmojiArtwork { sequence = "🎉", sprite = "activities" }
+                        ]
+        , Test.test "text on both sides of it" <|
+            \_ ->
+                Emoji.splitOnEmoji emojiData "a🎉b"
+                    |> Expect.equal
+                        [ PlainText "a"
+                        , EmojiArtwork { sequence = "🎉", sprite = "activities" }
+                        , PlainText "b"
+                        ]
+        , Test.test "text with no emoji in it stays one piece" <|
+            \_ -> Emoji.splitOnEmoji emojiData "nothing here" |> Expect.equal [ PlainText "nothing here" ]
+        , Test.test "a skin tone comes out of that tone's sprite" <|
+            \_ ->
+                Emoji.splitOnEmoji emojiData "👍🏽"
+                    |> Expect.equal [ EmojiArtwork { sequence = "👍🏽", sprite = "tone-3" } ]
+        , Test.test "an untoned emoji comes out of its category's sprite" <|
+            \_ ->
+                Emoji.splitOnEmoji emojiData "👍"
+                    |> Expect.equal [ EmojiArtwork { sequence = "👍", sprite = "people-body" } ]
+        , Test.test "a joined sequence isn't mistaken for the emoji it begins with" <|
+            \_ ->
+                Emoji.splitOnEmoji emojiData "👨\u{200D}👩\u{200D}👧"
+                    |> Expect.equal
+                        [ EmojiArtwork
+                            { sequence = "👨\u{200D}👩\u{200D}👧", sprite = "people-body" }
+                        ]
+        , Test.test "an emoji with no artwork is left as characters" <|
+            \_ -> Emoji.splitOnEmoji emojiData "\u{1FAE9}" |> Expect.equal [ PlainText "\u{1FAE9}" ]
+        , Test.test "two emoji in a row don't run together" <|
+            \_ ->
+                Emoji.splitOnEmoji emojiData "🎉👍"
+                    |> Expect.equal
+                        [ EmojiArtwork { sequence = "🎉", sprite = "activities" }
+                        , EmojiArtwork { sequence = "👍", sprite = "people-body" }
+                        ]
+        ]
+
+
 tests : Test
 tests =
-    Test.describe "Twemoji" [ fileNameTests ]
+    Test.describe "Twemoji" [ fileNameTests, splitOnEmojiTests ]

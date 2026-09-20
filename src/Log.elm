@@ -214,13 +214,14 @@ view :
     Bool
     -> Bool
     -> Time.Zone
+    -> Maybe Emoji.CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> MsgConfig msg
     -> Bool
     -> Bool
     -> { time : Time.Posix, log : Log }
     -> Element msg
-view isMobile2 isHidden timezone customEmojis msgConfig isCopied isHighlighted { time, log } =
+view isMobile2 isHidden timezone emojiData customEmojis msgConfig isCopied isHighlighted { time, log } =
     Ui.el
         [ Ui.attrIf isHighlighted (Ui.background MyUi.mentionColor)
         , Ui.paddingXY 8 4
@@ -281,14 +282,14 @@ view isMobile2 isHidden timezone customEmojis msgConfig isCopied isHighlighted {
             ]
             |> Ui.inFront
         ]
-        (logContent msgConfig.onPressCopy customEmojis log)
+        (logContent msgConfig.onPressCopy emojiData customEmojis log)
 
 
-emojiOrCustomEmojiView : SeqDict (Id CustomEmojiId) CustomEmojiData -> EmojiOrCustomEmoji -> Element msg
-emojiOrCustomEmojiView customEmojis emoji =
+emojiOrCustomEmojiView : Maybe Emoji.CachedEmojiData -> SeqDict (Id CustomEmojiId) CustomEmojiData -> EmojiOrCustomEmoji -> Element msg
+emojiOrCustomEmojiView emojiData customEmojis emoji =
     case emoji of
         EmojiOrCustomEmoji_Emoji emoji2 ->
-            Emoji.view emoji2
+            Emoji.view emojiData emoji2
 
         EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
             case SeqDict.get customEmojiId customEmojis of
@@ -299,8 +300,8 @@ emojiOrCustomEmojiView customEmojis emoji =
                     Id.toString customEmojiId |> Ui.text
 
 
-logContent : (String -> msg) -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Log -> Element msg
-logContent onPressCopy customEmojis log =
+logContent : (String -> msg) -> Maybe Emoji.CachedEmojiData -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Log -> Element msg
+logContent onPressCopy emojiData customEmojis log =
     case log of
         LoginEmail result emailAddress ->
             case result of
@@ -405,7 +406,7 @@ logContent onPressCopy customEmojis log =
                 , fieldRow "Guild" (Ui.text (Discord.idToString guildId))
                 , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
                 , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
-                , fieldRow "Emoji" (emojiOrCustomEmojiView customEmojis emoji)
+                , fieldRow "Emoji" (emojiOrCustomEmojiView emojiData customEmojis emoji)
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
@@ -416,7 +417,7 @@ logContent onPressCopy customEmojis log =
                 , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
                 , fieldRow "Message id" (Ui.text (Id.toString messageId))
                 , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
-                , fieldRow "Emoji" (emojiOrCustomEmojiView customEmojis emoji)
+                , fieldRow "Emoji" (emojiOrCustomEmojiView emojiData customEmojis emoji)
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
@@ -427,7 +428,7 @@ logContent onPressCopy customEmojis log =
                 , fieldRow "Guild" (Ui.text (Discord.idToString guildId))
                 , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
                 , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
-                , fieldRow "Emoji" (emojiOrCustomEmojiView customEmojis emoji)
+                , fieldRow "Emoji" (emojiOrCustomEmojiView emojiData customEmojis emoji)
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
@@ -438,7 +439,7 @@ logContent onPressCopy customEmojis log =
                 , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
                 , fieldRow "Message id" (Ui.text (Id.toString messageId))
                 , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
-                , fieldRow "Emoji" (emojiOrCustomEmojiView customEmojis emoji)
+                , fieldRow "Emoji" (emojiOrCustomEmojiView emojiData customEmojis emoji)
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 

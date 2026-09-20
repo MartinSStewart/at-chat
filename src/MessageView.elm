@@ -141,25 +141,25 @@ isPressMsg msg =
             True
 
 
-reactionEmojiButtonContent : SeqDict (Id CustomEmojiId) CustomEmojiData -> EmojiOrCustomEmoji -> Html msg
-reactionEmojiButtonContent customEmojis emoji =
+reactionEmojiButtonContent : Maybe CachedEmojiData -> SeqDict (Id CustomEmojiId) CustomEmojiData -> EmojiOrCustomEmoji -> Html msg
+reactionEmojiButtonContent emojiData customEmojis emoji =
     case emoji of
         EmojiOrCustomEmoji_Emoji emoji2 ->
             Html.div
                 [ Html.Attributes.style "font-size" "20px"
                 , Html.Attributes.style "transform" "translateY(-3px)"
                 ]
-                [ Emoji.toString emoji2 |> Html.text ]
+                [ Emoji.unicodeView "1em" "0" emojiData emoji2 ]
 
         EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
             CustomEmoji.view "1.1em" "0.2em" customEmojiId customEmojis LoopAFewTimesOnLoad
 
 
-miniView : FrontendCurrentUser -> Bool -> Bool -> SeqSet (Id CustomEmojiId) -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
-miniView user isThreadStarter canEdit availableCustomEmojis customEmojis =
+miniView : FrontendCurrentUser -> Bool -> Bool -> SeqSet (Id CustomEmojiId) -> Maybe CachedEmojiData -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
+miniView user isThreadStarter canEdit availableCustomEmojis emojiData customEmojis =
     miniViewContainer
         -48
-        (recentEmojiButtons user availableCustomEmojis customEmojis
+        (recentEmojiButtons user availableCustomEmojis emojiData customEmojis
             ++ [ miniButton
                     (Dom.id "miniView_showReactionEmojiSelector")
                     MessageViewMsg_PressedShowReactionEmojiSelector
@@ -194,12 +194,13 @@ miniView user isThreadStarter canEdit availableCustomEmojis customEmojis =
 reactionsMiniView :
     FrontendCurrentUser
     -> SeqSet (Id CustomEmojiId)
+    -> Maybe CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> Element MessageViewMsg
-reactionsMiniView user availableCustomEmojis customEmojis =
+reactionsMiniView user availableCustomEmojis emojiData customEmojis =
     miniViewContainer
         -48
-        (recentEmojiButtons user availableCustomEmojis customEmojis
+        (recentEmojiButtons user availableCustomEmojis emojiData customEmojis
             ++ [ miniButton
                     (Dom.id "miniView_showReactionEmojiSelector")
                     MessageViewMsg_PressedShowReactionEmojiSelector
@@ -212,12 +213,13 @@ reactionsMiniView user availableCustomEmojis customEmojis =
 reactionsMiniViewNearEdge :
     FrontendCurrentUser
     -> SeqSet (Id CustomEmojiId)
+    -> Maybe CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> Element MessageViewMsg
-reactionsMiniViewNearEdge user availableCustomEmojis customEmojis =
+reactionsMiniViewNearEdge user availableCustomEmojis emojiData customEmojis =
     miniViewContainer
         -8
-        (recentEmojiButtons user availableCustomEmojis customEmojis
+        (recentEmojiButtons user availableCustomEmojis emojiData customEmojis
             ++ [ miniButton
                     (Dom.id "miniView_showReactionEmojiSelector")
                     MessageViewMsg_PressedShowReactionEmojiSelector
@@ -230,8 +232,8 @@ reactionsMiniViewNearEdge user availableCustomEmojis customEmojis =
 {-| Shortcuts for the emojis this user reaches for most often, so the common reactions are
 one press away instead of a trip through the emoji selector.
 -}
-recentEmojiButtons : FrontendCurrentUser -> SeqSet (Id CustomEmojiId) -> SeqDict (Id CustomEmojiId) CustomEmojiData -> List (Element MessageViewMsg)
-recentEmojiButtons user availableCustomEmojis customEmojis =
+recentEmojiButtons : FrontendCurrentUser -> SeqSet (Id CustomEmojiId) -> Maybe CachedEmojiData -> SeqDict (Id CustomEmojiId) CustomEmojiData -> List (Element MessageViewMsg)
+recentEmojiButtons user availableCustomEmojis emojiData customEmojis =
     User.commonlyUsedEmojis availableCustomEmojis user
         |> List.take 3
         |> List.indexedMap
@@ -240,7 +242,7 @@ recentEmojiButtons user availableCustomEmojis customEmojis =
                     (Dom.id ("miniView_emojiReact_" ++ String.fromInt index))
                     (MessageViewMsg_PressedReactionEmoji emoji)
                     ""
-                    (reactionEmojiButtonContent customEmojis emoji)
+                    (reactionEmojiButtonContent emojiData customEmojis emoji)
             )
 
 
@@ -523,7 +525,7 @@ reactionEmojiView emojiData isHovered currentUserId customEmojis allUsers animat
                             ]
                             [ case emoji of
                                 EmojiOrCustomEmoji_Emoji emoji2 ->
-                                    Emoji.view emoji2
+                                    Emoji.view emojiData emoji2
 
                                 EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
                                     Ui.el
@@ -698,7 +700,9 @@ reactionPopup emojiData customEmojis allUsers placement emoji users =
         )
         [ case emoji of
             EmojiOrCustomEmoji_Emoji emoji2 ->
-                Ui.el [ Ui.Font.size 40, Ui.width Ui.shrink, MyUi.noShrinking ] (Ui.text (Emoji.toString emoji2))
+                Ui.el
+                    [ Ui.Font.size 40, Ui.width Ui.shrink, MyUi.noShrinking ]
+                    (Emoji.unicodeView "1em" "0" emojiData emoji2 |> Ui.html)
 
             EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
                 Ui.el

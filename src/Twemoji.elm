@@ -54,6 +54,13 @@ spriteUrl sprite =
     "/cacheable/emoji/" ++ sprite ++ ".svg"
 
 
+{-| What a `use` points at for one emoji.
+-}
+spriteReference : String -> String -> String
+spriteReference sprite emoji =
+    spriteUrl sprite ++ "#" ++ symbolId emoji
+
+
 {-| An id can't begin with a digit and most of these would, so the names the sprites are
 built with carry a prefix.
 -}
@@ -65,16 +72,31 @@ symbolId emoji =
 {-| The browser reads the sprite once however many of these point at it, so a grid of them
 costs one request rather than one each. A `use` pointing at a symbol the browser hasn't
 read yet starts drawing as soon as it arrives.
+
+`yOffset` is how far down to nudge it, the same as `CustomEmoji.view` takes, since an emoji
+sitting inline in a line of text wants to sit lower than the baseline puts it.
+
 -}
-spriteView : String -> String -> String -> Html msg
-spriteView size sprite emoji =
-    Svg.svg
-        [ Svg.Attributes.viewBox "0 0 36 36"
-        , Html.Attributes.style "width" size
-        , Html.Attributes.style "height" size
-        , Html.Attributes.style "display" "inline-block"
-        ]
-        [ Svg.use
-            [ Svg.Attributes.xlinkHref (spriteUrl sprite ++ "#" ++ symbolId emoji) ]
-            []
+spriteView : String -> String -> String -> String -> Html msg
+spriteView size yOffset sprite emoji =
+    Html.span
+        [ Html.Attributes.style "display" "inline-block" ]
+        [ Svg.svg
+            [ Svg.Attributes.viewBox "0 0 36 36"
+            , Html.Attributes.style "width" size
+            , Html.Attributes.style "height" size
+            , Html.Attributes.style "display" "inline-block"
+            , Html.Attributes.style "transform" ("translateY(" ++ yOffset ++ ")")
+            ]
+            [ Svg.use
+                [ Svg.Attributes.xlinkHref (spriteReference sprite emoji) ]
+                []
+            ]
+        , -- Copying a message has to give back the emoji rather than a gap where the picture
+          -- was, and a screen reader needs something to read out. A `use` carries no text of
+          -- its own the way an `img` carries its alt, so the characters ride alongside it at
+          -- no size: selected and copied, but taking up nothing and drawing nothing.
+          Html.span
+            [ Html.Attributes.style "font-size" "0" ]
+            [ Html.text emoji ]
         ]

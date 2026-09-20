@@ -1,6 +1,7 @@
 module Emoji exposing
     ( CachedEmojiData
     , Category(..)
+    , EmojiArt
     , EmojiCategory(..)
     , EmojiConfig
     , EmojiData
@@ -10,11 +11,13 @@ module Emoji exposing
     , Model
     , Msg(..)
     , SkinTone(..)
+    , TextOrEmoji(..)
     , UnicodeEmoji(..)
     , emojiButtonId
     , emojiWithSkinTone
     , emojisInText
     , firstShortName
+    , fromResponse
     , fromString
     , heart
     , isPressed
@@ -24,10 +27,14 @@ module Emoji exposing
     , selector
     , selectorHeight
     , selectorInit
+    , sequenceView
     , setSearch
     , smiley
+    , splitOnEmoji
+    , textView
     , thumbsUp
     , toString
+    , unicodeView
     , view
     )
 
@@ -90,9 +97,27 @@ firstShortName emojiData emoji =
         |> Maybe.andThen (\data -> List.head data.shortNames)
 
 
-view : UnicodeEmoji -> Element msg
-view (UnicodeEmoji emoji) =
-    Ui.el [ Ui.Font.size 20, Ui.width Ui.shrink ] (Ui.text emoji)
+{-| One emoji on its own: a reaction under a message, a row in a list, the big one in a
+popup. The emoji data only arrives once it has been fetched, so until then, and for any
+sequence there's no artwork for, the characters themselves are drawn.
+-}
+unicodeView : String -> String -> Maybe CachedEmojiData -> UnicodeEmoji -> Html.Html msg
+unicodeView size yOffset maybeEmojiData (UnicodeEmoji emoji) =
+    case maybeEmojiData of
+        Just emojiData ->
+            sequenceView size yOffset emojiData emoji
+
+        Nothing ->
+            Html.text emoji
+
+
+{-| A reaction under a message, or one in the log. 20px is what the characters were drawn at.
+-}
+view : Maybe CachedEmojiData -> UnicodeEmoji -> Element msg
+view maybeEmojiData emoji =
+    Ui.el
+        [ Ui.Font.size 20, Ui.width Ui.shrink ]
+        (unicodeView "1em" "0" maybeEmojiData emoji |> Ui.html)
 
 
 type Category
@@ -167,22 +192,22 @@ categoryToEmojiString skinTone category =
         EmojiCategory emojiCategory ->
             case emojiCategory of
                 Activities ->
-                    Twemoji.spriteView "1em" tabsSpriteName "🎉" |> Ui.html
+                    Twemoji.spriteView "1em" "0" tabsSpriteName "🎉" |> Ui.html
 
                 AnimalsAndNature ->
-                    Twemoji.spriteView "1em" tabsSpriteName "🐟" |> Ui.html
+                    Twemoji.spriteView "1em" "0" tabsSpriteName "🐟" |> Ui.html
 
                 Components ->
                     Ui.text "C"
 
                 Flags ->
-                    Twemoji.spriteView "1em" tabsSpriteName "🚩" |> Ui.html
+                    Twemoji.spriteView "1em" "0" tabsSpriteName "🚩" |> Ui.html
 
                 FoodAndDrink ->
-                    Twemoji.spriteView "1em" tabsSpriteName "🥦" |> Ui.html
+                    Twemoji.spriteView "1em" "0" tabsSpriteName "🥦" |> Ui.html
 
                 Objects ->
-                    Twemoji.spriteView "1em" tabsSpriteName "🔬" |> Ui.html
+                    Twemoji.spriteView "1em" "0" tabsSpriteName "🔬" |> Ui.html
 
                 PeopleAndBody ->
                     (case skinTone of
@@ -204,17 +229,17 @@ categoryToEmojiString skinTone category =
                         Just SkinTone5 ->
                             "👍🏿"
                     )
-                        |> Twemoji.spriteView "1em" tabsSpriteName
+                        |> Twemoji.spriteView "1em" "0" tabsSpriteName
                         |> Ui.html
 
                 SmileysAndEmotion ->
-                    Twemoji.spriteView "1em" tabsSpriteName "🙂" |> Ui.html
+                    Twemoji.spriteView "1em" "0" tabsSpriteName "🙂" |> Ui.html
 
                 Symbols ->
-                    Twemoji.spriteView "1em" tabsSpriteName "⬇️" |> Ui.html
+                    Twemoji.spriteView "1em" "0" tabsSpriteName "⬇️" |> Ui.html
 
                 TravelAndPlaces ->
-                    Twemoji.spriteView "1em" tabsSpriteName "🚆" |> Ui.html
+                    Twemoji.spriteView "1em" "0" tabsSpriteName "🚆" |> Ui.html
 
         StickerCategory ->
             Ui.text "S"
@@ -231,7 +256,7 @@ categoryToEmojiString skinTone category =
                     |> Ui.inFront
                 , Ui.centerX
                 ]
-                (Twemoji.spriteView "1em" tabsSpriteName "🙂" |> Ui.html)
+                (Twemoji.spriteView "1em" "0" tabsSpriteName "🙂" |> Ui.html)
 
 
 {-| Each tab in the strip on the left is an emoji from the category it stands for, so
@@ -280,36 +305,109 @@ categorySpriteName emojiCategory =
             "travel-places"
 
 
-{-| Which sprite holds an emoji's art, and Nothing when there's no art for it. A
-category's sprite holds the untoned versions, so an emoji the chosen skin tone changes is
-drawn out of that tone's sprite instead.
+{-| The artwork for the emoji the text starts with, if it starts with one at all. Longer
+sequences are tried first, so 👨\\u{200D}👩\\u{200D}👧 isn't mistaken for a 👨 followed by some
+junk, and 👍🏽 is drawn with the tone rather than as a 👍 with a stray modifier after it.
 -}
-spriteFor : Maybe SkinTone -> UnicodeEmoji -> CachedEmojiData -> Maybe String
-spriteFor maybeSkinTone emoji emojiData =
-    case SeqDict.get emoji emojiData.emojis of
-        Just emojiData2 ->
-            case ( maybeSkinTone, emojiData2.skinVariations ) of
-                ( Just skinTone, Just _ ) ->
-                    skinToneSpriteName skinTone |> Just
+artStartingWith : CachedEmojiData -> String -> Maybe EmojiArt
+artStartingWith emojiData text =
+    case String.uncons text of
+        Just ( firstCharacter, _ ) ->
+            case Dict.get firstCharacter emojiData.art of
+                Just candidates ->
+                    List.filter (\art -> String.startsWith art.sequence text) candidates |> List.head
 
-                _ ->
-                    categorySpriteName emojiData2.category |> Just
+                Nothing ->
+                    Nothing
 
         Nothing ->
             Nothing
 
 
+{-| Draws the emoji some characters spell as the Twemoji artwork for it. A sequence there's
+no art for is drawn as the characters themselves, which is what someone else's newer emoji
+set would arrive as.
+-}
+sequenceView : String -> String -> CachedEmojiData -> String -> Html.Html msg
+sequenceView size yOffset emojiData sequence =
+    case artStartingWith emojiData sequence of
+        Just art ->
+            Twemoji.spriteView size yOffset art.sprite art.sequence
+
+        Nothing ->
+            Html.text sequence
+
+
 {-| Drawn out of whichever sprite holds it, so that a screen of them costs one request per
 sprite rather than one per emoji.
 -}
-unicodeEmojiView : String -> Maybe SkinTone -> UnicodeEmoji -> CachedEmojiData -> Html.Html msg
-unicodeEmojiView size maybeSkinTone emoji emojiData =
-    case spriteFor maybeSkinTone emoji emojiData of
-        Just sprite ->
-            Twemoji.spriteView size sprite (emojiWithSkinTone maybeSkinTone emoji emojiData)
+unicodeEmojiView : String -> String -> Maybe SkinTone -> UnicodeEmoji -> CachedEmojiData -> Html.Html msg
+unicodeEmojiView size yOffset maybeSkinTone emoji emojiData =
+    emojiWithSkinTone maybeSkinTone emoji emojiData |> sequenceView size yOffset emojiData
+
+
+{-| A piece of text, split apart so the emoji in it can be drawn as pictures and the rest
+as the text it is.
+-}
+type TextOrEmoji
+    = PlainText String
+    | EmojiArtwork EmojiArt
+
+
+{-| Some text with its emoji drawn as pictures. Anything without artwork stays as
+characters, so nothing is ever dropped from a message on the way to the screen.
+-}
+textView : String -> String -> Maybe CachedEmojiData -> String -> List (Html.Html msg)
+textView size yOffset maybeEmojiData text =
+    case maybeEmojiData of
+        Just emojiData ->
+            List.map
+                (\piece ->
+                    case piece of
+                        PlainText text2 ->
+                            Html.text text2
+
+                        EmojiArtwork art ->
+                            Twemoji.spriteView size yOffset art.sprite art.sequence
+                )
+                (splitOnEmoji emojiData text)
 
         Nothing ->
-            Html.text ""
+            [ Html.text text ]
+
+
+splitOnEmoji : CachedEmojiData -> String -> List TextOrEmoji
+splitOnEmoji emojiData text =
+    splitOnEmojiHelper emojiData (String.toList text) [] [] |> List.reverse
+
+
+splitOnEmojiHelper : CachedEmojiData -> List Char -> List Char -> List TextOrEmoji -> List TextOrEmoji
+splitOnEmojiHelper emojiData chars revText output =
+    case chars of
+        [] ->
+            flushPlainText revText output
+
+        char :: rest ->
+            case artStartingWith emojiData (List.take maxEmojiLength chars |> String.fromList) of
+                Just art ->
+                    splitOnEmojiHelper
+                        emojiData
+                        (List.drop (String.foldl (\_ total -> total + 1) 0 art.sequence) chars)
+                        []
+                        (EmojiArtwork art :: flushPlainText revText output)
+
+                Nothing ->
+                    splitOnEmojiHelper emojiData rest (char :: revText) output
+
+
+flushPlainText : List Char -> List TextOrEmoji -> List TextOrEmoji
+flushPlainText revText output =
+    case revText of
+        [] ->
+            output
+
+        _ ->
+            PlainText (List.reverse revText |> String.fromList) :: output
 
 
 {-| A skin tone's variations are one sprite covering every category, because someone picks
@@ -415,7 +513,18 @@ type alias CachedEmojiData =
     { emojis : SeqDict UnicodeEmoji EmojiData
     , categories : SeqDict EmojiCategory (List UnicodeEmoji)
     , shortNames : Array { shortName : String, emoji : UnicodeEmoji }
+    , -- The selector looks emoji up by which one they are. Anywhere else they arrive as
+      -- characters instead, sometimes buried in a sentence, so they have to be found by
+      -- what they're written with. Grouped by first character, longest sequence first.
+      art : Dict Char (List EmojiArt)
     }
+
+
+{-| One emoji's artwork: the exact characters it's written with, skin tone and all, and the
+sprite `scripts/fetch-twemoji.py` put it in.
+-}
+type alias EmojiArt =
+    { sequence : String, sprite : String }
 
 
 type alias EmojiData =
@@ -1320,7 +1429,7 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
                                                 model
                                                 (case item of
                                                     EmojiOrSticker_UnicodeEmoji emoji ->
-                                                        unicodeEmojiView "1em" userData.skinTone emoji emojiData2
+                                                        unicodeEmojiView "1em" "0" userData.skinTone emoji emojiData2
                                                             |> Ui.html
                                                             |> Ui.el [ Ui.width (Ui.px emojiWidth), Ui.contentCenterX ]
 
@@ -1424,7 +1533,7 @@ emojiHoverPreview stickersData customEmojisData userData emojiData2 model =
         ]
         (case Maybe.map .emoji model.emojiHovered of
             Just (EmojiOrSticker_UnicodeEmoji emoji) ->
-                (unicodeEmojiView "1em" userData.skinTone emoji emojiData2
+                (unicodeEmojiView "1em" "0" userData.skinTone emoji emojiData2
                     |> Ui.html
                 )
                     :: (case SeqDict.get emoji emojiData2.emojis of
@@ -1577,72 +1686,96 @@ emojiStartingWith emojis chars =
         (List.range 1 maxEmojiLength |> List.reverse)
 
 
+insertArt : EmojiArt -> Dict Char (List EmojiArt) -> Dict Char (List EmojiArt)
+insertArt art dict =
+    case String.uncons art.sequence of
+        Just ( firstCharacter, _ ) ->
+            Dict.update firstCharacter (\maybe -> art :: Maybe.withDefault [] maybe |> Just) dict
+
+        Nothing ->
+            dict
+
+
 requestEmojiData : (Result Http.Error CachedEmojiData -> msg) -> Command restriction toFrontend msg
 requestEmojiData gotEmojiData =
     Http.get
         { url = "/cacheable/compact-emoji.json"
         , expect =
             Http.expectJson
-                (\result ->
-                    (case result of
-                        Ok ok ->
-                            let
-                                --_ =
-                                --    Debug.log "" (Codec.encodeToString 0 (Codec.list emojiResponseCodec) ok)
-                                emojiData : SeqDict UnicodeEmoji EmojiData
-                                emojiData =
-                                    List.foldl
-                                        (\emoji dict ->
-                                            SeqDict.insert
-                                                (UnicodeEmoji emoji.emoji)
-                                                { shortNames = emoji.shortNames
-                                                , skinVariations =
-                                                    case emoji.skinVariations of
-                                                        Just skinVariations ->
-                                                            Dict.get "1F3FB" skinVariations
-
-                                                        Nothing ->
-                                                            Nothing
-                                                , category = emoji.category
-                                                }
-                                                dict
-                                        )
-                                        SeqDict.empty
-                                        ok
-
-                                categories : SeqDict EmojiCategory (List UnicodeEmoji)
-                                categories =
-                                    List.foldl
-                                        (\emoji dict ->
-                                            SeqDict.update
-                                                emoji.category
-                                                (\maybe -> UnicodeEmoji emoji.emoji :: Maybe.withDefault [] maybe |> Just)
-                                                dict
-                                        )
-                                        (allEmojiCategories |> List.map (\category -> ( category, [] )) |> SeqDict.fromList)
-                                        ok
-                            in
-                            { emojis = emojiData
-                            , categories = categories
-                            , shortNames =
-                                List.concatMap
-                                    (\emoji ->
-                                        List.map
-                                            (\shortName -> { shortName = shortName, emoji = UnicodeEmoji emoji.emoji })
-                                            emoji.shortNames
-                                    )
-                                    ok
-                                    |> Array.fromList
-                            }
-                                |> Ok
-
-                        Err error ->
-                            Err error
-                    )
-                        |> gotEmojiData
-                )
+                (\result -> Result.map fromResponse result |> gotEmojiData)
                 (Codec.decoder (Codec.list emojiResponseCodec))
         }
+
+
+{-| What the frontend reads the emoji list as. Kept apart from `requestEmojiData` so a test
+can hand it a few emoji rather than fetching the whole file.
+-}
+fromResponse : List EmojiResponse -> CachedEmojiData
+fromResponse response =
+    { emojis =
+        List.foldl
+            (\emoji dict ->
+                SeqDict.insert
+                    (UnicodeEmoji emoji.emoji)
+                    { shortNames = emoji.shortNames
+                    , skinVariations = Maybe.andThen (Dict.get "1F3FB") emoji.skinVariations
+                    , category = emoji.category
+                    }
+                    dict
+            )
+            SeqDict.empty
+            response
+    , art =
+        List.foldl
+            (\emoji dict ->
+                List.foldl
+                    insertArt
+                    dict
+                    ({ sequence = emoji.emoji, sprite = categorySpriteName emoji.category }
+                        :: (case Maybe.andThen (Dict.get "1F3FB") emoji.skinVariations of
+                                Just tone1 ->
+                                    List.map
+                                        (\skinTone ->
+                                            { sequence =
+                                                String.replace
+                                                    (skinToneToString SkinTone1)
+                                                    (skinToneToString skinTone)
+                                                    tone1
+                                            , sprite = skinToneSpriteName skinTone
+                                            }
+                                        )
+                                        allSkinTones
+
+                                Nothing ->
+                                    []
+                           )
+                    )
+            )
+            Dict.empty
+            response
+            -- A sequence that begins with a shorter one always has more characters than it,
+            -- so this puts every emoji ahead of the ones it starts with.
+            |> Dict.map (\_ list -> List.sortBy (\art -> -(String.length art.sequence)) list)
+    , categories =
+        List.foldl
+            (\emoji dict ->
+                SeqDict.update
+                    emoji.category
+                    (\maybe -> UnicodeEmoji emoji.emoji :: Maybe.withDefault [] maybe |> Just)
+                    dict
+            )
+            (allEmojiCategories |> List.map (\category -> ( category, [] )) |> SeqDict.fromList)
+            response
+    , shortNames =
+        List.concatMap
+            (\emoji ->
+                List.map
+                    (\shortName -> { shortName = shortName, emoji = UnicodeEmoji emoji.emoji })
+                    emoji.shortNames
+            )
+            response
+            |> Array.fromList
+    }
 
 
 emojiResponseCodec : Codec EmojiResponse

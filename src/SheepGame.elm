@@ -1987,6 +1987,7 @@ contentView time contentWidth localUser htmlId attachedFiles content =
         , attachedFiles = attachedFiles
         , stickers = localUser.stickers
         , customEmojis = localUser.customEmojis
+        , emojiData = localUser.emojiData
         , animationMode = Sticker.LoopAFewTimesOnLoad
         , timezone = localUser.timezone
         , time = time
@@ -2968,6 +2969,7 @@ reactableResult paddingX2 localUser contentWidth target hoveredResult reactions 
             MessageView.reactionsMiniViewNearEdge
                 localUser.user
                 localUser.user.availableCustomEmojis
+                localUser.emojiData
                 localUser.customEmojis
                 |> Ui.map (ReactionMsg target)
                 |> Ui.inFront

@@ -737,6 +737,7 @@ timestampViewTest name now minutes expected =
                 , users = users
                 , attachedFiles = SeqDict.empty
                 , customEmojis = SeqDict.empty
+                , emojiData = Nothing
                 , timezone = Time.utc
                 , time = Time.millisToPosix now
                 }

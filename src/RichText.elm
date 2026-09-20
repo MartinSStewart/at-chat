@@ -3524,6 +3524,7 @@ preview onPressLink config nonempty =
         , attachedFiles = config.attachedFiles
         , stickers = SeqDict.empty
         , customEmojis = config.customEmojis
+        , emojiData = config.emojiData
         , animationMode = Sticker.LoopAFewTimesOnLoad
         , timezone = config.timezone
         , time = config.time
@@ -3548,6 +3549,9 @@ type alias Config a userId =
     , attachedFiles : SeqDict (Id FileId) FileData
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+    , -- Needed to find the emoji in a message's text, which is the only way they can be
+      -- drawn as artwork rather than left to whatever font the reader's device has.
+      emojiData : Maybe Emoji.CachedEmojiData
     , animationMode : Sticker.AnimationMode
     , timezone : Time.Zone
     , -- Timestamps say how long is left until the moment they point at, so the view needs
@@ -3568,6 +3572,7 @@ type alias PreviewConfig a userId =
     , users : SeqDict userId { a | name : PersonName }
     , attachedFiles : SeqDict (Id FileId) FileData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+    , emojiData : Maybe Emoji.CachedEmojiData
     , timezone : Time.Zone
     , time : Time.Posix
     }
@@ -3578,8 +3583,12 @@ bigEmojiFont =
     Html.Attributes.style "font-family" "\"myemoji\", sans-serif"
 
 
-normalTextView : String -> RichTextState -> List (Html msg)
-normalTextView text state =
+{-| The emoji sizes and sits the same as a custom emoji does, so that a message mixing the
+two reads as one line rather than two sizes of picture. `bigEmojiFont` still covers anything
+there's no artwork for.
+-}
+normalTextView : Maybe Emoji.CachedEmojiData -> String -> RichTextState -> List (Html msg)
+normalTextView emojiData text state =
     [ Html.span
         [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
         , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
@@ -3588,7 +3597,7 @@ normalTextView text state =
         , htmlAttrIf state.spoiler (Html.Attributes.style "opacity" "0")
         , bigEmojiFont
         ]
-        [ Html.text text ]
+        (Emoji.textView "1.4em" "0.2em" emojiData text)
     ]
 
 
@@ -3748,6 +3757,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                     , embedIndex2
                     , currentList
                         ++ normalTextView
+                            config.emojiData
                             (if dropNextLineBreak2 && char == '\n' then
                                 text
 
