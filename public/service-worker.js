@@ -198,10 +198,6 @@ const cacheName = 'resource_cache_v1';
 
 const frontendCacheName = 'frontend_cache_v1';
 
-// Everything public/cacheable holds. Bump this when any of it is replaced without being
-// renamed, since nothing else would make a browser ask for a file it already has.
-const staticCacheName = 'static_cache_v1';
-
 const fileKeyDbName = "at-chat-file-keys";
 const fileKeyStoreName = "file-keys";
 
