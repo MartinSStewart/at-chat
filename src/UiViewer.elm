@@ -596,7 +596,7 @@ embedExamples whitelistedDomains =
             (NonemptyString 'C' ("heck out this cool link! " ++ url ++ " Cool huh?"))
             [ EmbedLoaded
                 { title = Just "Title of this embed"
-                , image = Just { url = "/cacheable/android-chrome-512x512.png", imageSize = Coord.xy 512 512, format = Just Embed.Png }
+                , image = Just { url = "/android-chrome-512x512.png", imageSize = Coord.xy 512 512, format = Just Embed.Png }
                 , description = Just "Content of this embedded link"
                 , createdAt = Just (Time.millisToPosix 0)
                 }
@@ -621,7 +621,7 @@ embedExamples whitelistedDomains =
             (NonemptyString 'C' ("heck out this cool link! ||" ++ url ++ " Cool huh?||"))
             [ EmbedLoaded
                 { title = Just "Title of this embed"
-                , image = Just { url = "/cacheable/android-chrome-512x512.png", imageSize = Coord.xy 512 512, format = Just Embed.Png }
+                , image = Just { url = "/android-chrome-512x512.png", imageSize = Coord.xy 512 512, format = Just Embed.Png }
                 , description = Just "Content of this embedded link"
                 , createdAt = Just (Time.millisToPosix 0)
                 }

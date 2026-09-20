@@ -3703,7 +3703,7 @@ updateLoaded msg model =
                 , if hasFocus then
                     Command.batch
                         [ FrontendExtra.setFocus model2 Pages.Guild.channelTextInputId
-                        , Ports.setFavicon "/cacheable/favicon.ico"
+                        , Ports.setFavicon "/favicon.ico"
                         , Ports.closeNotifications
                         , Ports.registerServiceWorker
                         , checkAppVersion
