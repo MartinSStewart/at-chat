@@ -787,6 +787,7 @@ expectHighlighted : NonemptyString -> Int -> String -> Expect.Expectation
 expectHighlighted source index char =
     RichText.textInputView
         Time.utc
+        Nothing
         users
         SeqDict.empty
         SeqDict.empty

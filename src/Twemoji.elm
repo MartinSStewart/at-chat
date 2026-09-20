@@ -1,4 +1,4 @@
-module Twemoji exposing (fileName, spriteView)
+module Twemoji exposing (fileName, overlaySpriteView, spriteView)
 
 {-| Draws unicode emoji as the Twemoji artwork served from `public/emoji`, so that an
 emoji looks the same on every device instead of each one substituting its own set.
@@ -99,4 +99,36 @@ spriteView size yOffset sprite emoji =
           Html.span
             [ Html.Attributes.style "font-size" "0" ]
             [ Html.text emoji ]
+        ]
+
+
+{-| Like `spriteView`, but for text drawn on top of a textarea. There the picture has to take up
+exactly the room the font gives the characters, or the caret in the textarea below drifts away
+from the text as soon as a line contains an emoji. How much room that is differs by device, since
+a font without a glyph for a joined sequence draws its pieces side by side instead. So the
+characters stay at full size and keep doing the layout, hidden rather than taken out, and the
+artwork is drawn over the space they take, in the middle of it and at a size of its own.
+-}
+overlaySpriteView : String -> String -> String -> Html msg
+overlaySpriteView size sprite emoji =
+    Html.span
+        [ Html.Attributes.style "position" "relative"
+        , Html.Attributes.style "visibility" "hidden"
+        ]
+        [ Html.text emoji
+        , Svg.svg
+            [ Svg.Attributes.viewBox "0 0 36 36"
+            , Svg.Attributes.preserveAspectRatio "xMidYMid meet"
+            , Html.Attributes.style "visibility" "visible"
+            , Html.Attributes.style "position" "absolute"
+            , Html.Attributes.style "left" "50%"
+            , Html.Attributes.style "top" "50%"
+            , Html.Attributes.style "width" size
+            , Html.Attributes.style "height" size
+            , Html.Attributes.style "transform" "translate(-50%, -50%)"
+            ]
+            [ Svg.use
+                [ Svg.Attributes.xlinkHref (spriteReference sprite emoji) ]
+                []
+            ]
         ]

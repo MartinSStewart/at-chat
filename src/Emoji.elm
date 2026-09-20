@@ -20,6 +20,7 @@ module Emoji exposing
     , fromResponse
     , fromString
     , heart
+    , inputTextView
     , isPressed
     , requestEmojiData
     , scrollContainerId
@@ -369,6 +370,28 @@ textView size yOffset maybeEmojiData text =
 
                         EmojiArtwork art ->
                             Twemoji.spriteView size yOffset art.sprite art.sequence
+                )
+                (splitOnEmoji emojiData text)
+
+        Nothing ->
+            [ Html.text text ]
+
+
+{-| The message input draws its text on top of a textarea, so each emoji has to keep the width
+the font gave it. `Twemoji.overlaySpriteView` explains why.
+-}
+inputTextView : String -> Maybe CachedEmojiData -> String -> List (Html.Html msg)
+inputTextView size maybeEmojiData text =
+    case maybeEmojiData of
+        Just emojiData ->
+            List.map
+                (\piece ->
+                    case piece of
+                        PlainText text2 ->
+                            Html.text text2
+
+                        EmojiArtwork art ->
+                            Twemoji.overlaySpriteView size art.sprite art.sequence
                 )
                 (splitOnEmoji emojiData text)
 

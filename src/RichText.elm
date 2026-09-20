@@ -5001,6 +5001,7 @@ fileDownloadView maybeHtmlId isSpoilered fileData =
 
 textInputView :
     Time.Zone
+    -> Maybe Emoji.CachedEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) b
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
@@ -5008,9 +5009,10 @@ textInputView :
     -> Maybe Range
     -> Nonempty (RichText userId)
     -> List (Html msg)
-textInputView timezone users attachedFiles customEmojis2 stickers2 selection nonempty =
+textInputView timezone emojiData users attachedFiles customEmojis2 stickers2 selection nonempty =
     textInputViewHelper
         timezone
+        emojiData
         { underline = False, italic = False, bold = False, strikethrough = False, spoiler = False }
         users
         attachedFiles
@@ -5040,6 +5042,7 @@ type alias RichTextState =
 
 textInputViewHelper :
     Time.Zone
+    -> Maybe Emoji.CachedEmojiData
     -> RichTextState
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) b
@@ -5051,7 +5054,7 @@ textInputViewHelper :
     -> Bool
     -> Array (Html msg)
     -> ( Int, Array (Html msg) )
-textInputViewHelper timezone state allUsers attachedFiles customEmojis2 stickers2 index selection list inBlockQuote output =
+textInputViewHelper timezone emojiData state allUsers attachedFiles customEmojis2 stickers2 index selection list inBlockQuote output =
     List.foldl
         (\item ( index2, output2 ) ->
             case item of
@@ -5089,7 +5092,7 @@ textInputViewHelper timezone state allUsers attachedFiles customEmojis2 stickers
                                 , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                                 , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" spoilerBackground)
                                 ]
-                                (textWithSelection selection startIndex text4)
+                                (emojiTextWithSelection emojiData selection startIndex text4)
                     in
                     if inBlockQuote then
                         -- Each line after the first starts with "\n> " in the text the user typed but
@@ -5123,6 +5126,7 @@ textInputViewHelper timezone state allUsers attachedFiles customEmojis2 stickers
                         ( index3, output3 ) =
                             textInputViewHelper
                                 timezone
+                                emojiData
                                 { state | italic = True }
                                 allUsers
                                 attachedFiles
@@ -5141,6 +5145,7 @@ textInputViewHelper timezone state allUsers attachedFiles customEmojis2 stickers
                         ( index3, output3 ) =
                             textInputViewHelper
                                 timezone
+                                emojiData
                                 { state | underline = True }
                                 allUsers
                                 attachedFiles
@@ -5159,6 +5164,7 @@ textInputViewHelper timezone state allUsers attachedFiles customEmojis2 stickers
                         ( index3, output3 ) =
                             textInputViewHelper
                                 timezone
+                                emojiData
                                 { state | bold = True }
                                 allUsers
                                 attachedFiles
@@ -5177,6 +5183,7 @@ textInputViewHelper timezone state allUsers attachedFiles customEmojis2 stickers
                         ( index3, output3 ) =
                             textInputViewHelper
                                 timezone
+                                emojiData
                                 { state | strikethrough = True }
                                 allUsers
                                 attachedFiles
@@ -5195,6 +5202,7 @@ textInputViewHelper timezone state allUsers attachedFiles customEmojis2 stickers
                         ( index3, output3 ) =
                             textInputViewHelper
                                 timezone
+                                emojiData
                                 { state | spoiler = True }
                                 allUsers
                                 attachedFiles
@@ -5221,6 +5229,7 @@ textInputViewHelper timezone state allUsers attachedFiles customEmojis2 stickers
                     in
                     textInputViewHelper
                         timezone
+                        emojiData
                         state
                         allUsers
                         attachedFiles
@@ -5247,6 +5256,7 @@ textInputViewHelper timezone state allUsers attachedFiles customEmojis2 stickers
                     in
                     textInputViewHelper
                         timezone
+                        emojiData
                         state
                         allUsers
                         attachedFiles
@@ -5483,6 +5493,7 @@ textInputViewHelper timezone state allUsers attachedFiles customEmojis2 stickers
                             in
                             textInputViewHelper
                                 timezone
+                                emojiData
                                 state
                                 allUsers
                                 attachedFiles
@@ -5551,6 +5562,47 @@ textWithSelection selection startIndex text =
 
         Nothing ->
             [ Html.text text ]
+
+
+{-| Emoji in the input are drawn at the size `textView` uses for them in a message, so that what
+is typed and what is sent look the same.
+-}
+emojiSizeInInput : String
+emojiSizeInInput =
+    "1.4em"
+
+
+{-| The same as `textWithSelection`, for the text the user typed rather than the markdown
+around it, where an emoji is drawn as artwork instead of left to the font. A selection that
+starts or ends inside an emoji leaves that emoji as characters until the selection moves off
+it again, which costs nothing since the characters are what was laying the line out anyway.
+-}
+emojiTextWithSelection : Maybe Emoji.CachedEmojiData -> Maybe Range -> Int -> String -> List (Html msg)
+emojiTextWithSelection emojiData selection startIndex text =
+    case selection of
+        Just { start, end } ->
+            let
+                selectionStart : Int
+                selectionStart =
+                    clamp 0 (String.length text) (start - startIndex)
+
+                selectionEnd : Int
+                selectionEnd =
+                    clamp 0 (String.length text) (end - startIndex)
+            in
+            if selectionEnd <= selectionStart then
+                Emoji.inputTextView emojiSizeInInput emojiData text
+
+            else
+                Emoji.inputTextView emojiSizeInInput emojiData (String.left selectionStart text)
+                    ++ [ Html.span
+                            [ Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.selectedTextBackground) ]
+                            (Emoji.inputTextView emojiSizeInInput emojiData (String.slice selectionStart selectionEnd text))
+                       ]
+                    ++ Emoji.inputTextView emojiSizeInInput emojiData (String.dropLeft selectionEnd text)
+
+        Nothing ->
+            Emoji.inputTextView emojiSizeInInput emojiData text
 
 
 
