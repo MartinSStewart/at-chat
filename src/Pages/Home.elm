@@ -10,6 +10,7 @@ import ChannelDescription
 import ChannelName exposing (ChannelName)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
+import FileStatus
 import FrontendExtra
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, UserId)
@@ -131,7 +132,7 @@ previewChannelId =
 
 previewGuildName : GuildName
 previewGuildName =
-    Unsafe.guildName "Friends"
+    Unsafe.guildName "Friends & chat"
 
 
 previewChannelName : ChannelName
@@ -141,23 +142,23 @@ previewChannelName =
 
 previewUser : BackendUser
 previewUser =
-    User.init (Time.millisToPosix 0) (Unsafe.personName "You") (Unsafe.emailAddress "you@at-chat.app") False
+    User.init (Time.millisToPosix 0) (Unsafe.personName "Sven Svensson") (Unsafe.emailAddress "you@at-chat.app") False
 
 
 previewOtherUsers : SeqDict.SeqDict (Id UserId) FrontendUser
 previewOtherUsers =
     SeqDict.fromList
         [ ( Id.fromInt 1
-          , { name = Unsafe.personName "Ada"
+          , { name = Unsafe.personName "jobaly Joe"
             , color = UserColor.default
             , icon = Nothing
             , publicKey = Nothing
             }
           )
         , ( Id.fromInt 2
-          , { name = Unsafe.personName "Grace"
-            , color = UserColor.default
-            , icon = Nothing
+          , { name = Unsafe.personName "boog'les_the_spy_pig"
+            , color = UserColor.fromParts { hue = 0, lightness = 12, saturation = 11 }
+            , icon = Just (FileStatus.fileHash "defrqz-9TjEnuXDZnPc8zD1VoeugOLHh_7-sWw")
             , publicKey = Nothing
             }
           )
@@ -278,6 +279,7 @@ view windowWidth loaded =
             Ui.paddingWith { left = 48, right = 48, top = 120, bottom = 48 }
         , Ui.widthMax 1280
         , Ui.centerX
+        , Ui.spacing 32
         ]
         [ Ui.el [ Ui.Font.size 24 ] (Ui.text "at-chat, a place to chat with friends")
         , Pages.Guild.guildView
