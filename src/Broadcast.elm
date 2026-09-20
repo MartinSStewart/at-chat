@@ -926,7 +926,7 @@ notification time userToNotify title senderIcon userToString plainText message n
                                     FileStatus.fileUrl FileStatus.pngContent icon
 
                                 Nothing ->
-                                    Env.domain ++ "/at-logo-no-background.png"
+                                    Env.domain ++ "/cacheable/at-logo-no-background.png"
                             )
                             navigateTo
                             pushSubscription
@@ -1742,7 +1742,7 @@ encryptedDmNotification time senderId { otherUserId } notificationText model =
                             FileStatus.fileUrl FileStatus.pngContent icon
 
                         Nothing ->
-                            Env.domain ++ "/at-logo-no-background.png"
+                            Env.domain ++ "/cacheable/at-logo-no-background.png"
                     )
                     (EncryptedBody senderId notificationText)
                     encryptedDmText
@@ -1799,7 +1799,7 @@ e2eeRequestNotification time requestedBy { otherUserId } model =
                             FileStatus.fileUrl FileStatus.pngContent icon
 
                         Nothing ->
-                            Env.domain ++ "/at-logo-no-background.png"
+                            Env.domain ++ "/cacheable/at-logo-no-background.png"
                     )
                     (UnencryptedBody e2eeRequestText)
                     e2eeRequestText

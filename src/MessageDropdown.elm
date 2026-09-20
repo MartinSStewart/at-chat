@@ -518,7 +518,10 @@ view isMobile time nameSoFar guildOrDmId skinTone emojiData local dropdownButton
                                                 [ Ui.spacing 8 ]
                                                 [ Ui.el
                                                     [ Ui.Font.size 24, Ui.width Ui.shrink ]
-                                                    (Ui.text (Emoji.emojiWithSkinTone skinTone emoji emojiData2))
+                                                    (Emoji.emojiWithSkinTone skinTone emoji emojiData2
+                                                        |> Emoji.sequenceView "1em" "0" emojiData2
+                                                        |> Ui.html
+                                                    )
                                                 , case SeqDict.get emoji emojiData2.emojis of
                                                     Just emoji2 ->
                                                         Ui.row

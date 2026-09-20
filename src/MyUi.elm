@@ -1265,7 +1265,7 @@ css =
 @font-face {
     font-family: "myemoji";
     src: local('Apple Color Emoji'), local('Android Emoji'), local('Segoe UI Emoji'), local('Noto Color Emoji'), local(EmojiSymbols), local(Symbola);
-    unicode-range: U+231A-231B, U+23E9-23EC, U+23F0, U+23F3, U+25FD-25FE, U+2614-2615, U+2648-2653, U+267F, U+2693, U+26A1, U+26AA-26AB, U+26BD-26BE, U+26C4-26C5, U+26CE, U+26D4, U+26EA, U+26F2-26F3, U+26F5, U+26FA, U+26FD, U+2705, U+270A-270B, U+2728, U+274C, U+274E, U+2753-2755, U+2757, U+2795-2797, U+27B0, U+27BF, U+2B1B-2B1C, U+2B50, U+2B55, U+FE0F, U+1F004, U+1F0CF, U+1F18E, U+1F191-1F19A, U+1F1E6-1F1FF, U+1F201, U+1F21A, U+1F22F, U+1F232-1F236, U+1F238-1F23A, U+1F250-1F251, U+1F300-1F320, U+1F32D-1F335, U+1F337-1F393, U+1F3A0-1F3CA, U+1F3CF-1F3D3, U+1F3E0-1F3F0, U+1F3F4, U+1F3F8-1F43E, U+1F440, U+1F442-1F4FC, U+1F4FF-1F53D, U+1F54B-1F567, U+1F57A, U+1F595-1F596, U+1F5A4, U+1F5FB-1F64F, U+1F680-1F6CC, U+1F6D0-1F6D2, U+1F6D5-1F6D7, U+1F6DC-1F6DF, U+1F6EB-1F6EC, U+1F6F4-1F6FC, U+1F7E0-1F7EB, U+1F7F0, U+1F90C-1F93A, U+1F93C-1F945, U+1F947-1FA7C, U+1FA80-1FAC5, U+1FACE-1FADB, U+1FAE0-1FAE8, U+1FAF0-1FAF8;
+    unicode-range: U+200D, U+20E3, U+2194-2195, U+231A-231B, U+23E9-23EC, U+23F0, U+23F3, U+25FD-25FE, U+2614-2615, U+261D, U+2620, U+2640, U+2642, U+2648-2653, U+267F, U+2693, U+2695-2696, U+26A1, U+26A7, U+26AA-26AB, U+26BD-26BE, U+26C4-26C5, U+26CE, U+26D3-26D4, U+26EA, U+26F2-26F3, U+26F5, U+26F9-26FA, U+26FD, U+2705, U+2708, U+270A-270D, U+2728, U+2744, U+274C, U+274E, U+2753-2755, U+2757, U+2764, U+2795-2797, U+27A1, U+27B0, U+27BF, U+2B1B-2B1C, U+2B50, U+2B55, U+FE0F, U+1F004, U+1F0CF, U+1F18E, U+1F191-1F19A, U+1F1E6-1F1FF, U+1F201, U+1F21A, U+1F22F, U+1F232-1F236, U+1F238-1F23A, U+1F250-1F251, U+1F300-1F320, U+1F32B, U+1F32D-1F335, U+1F337-1F393, U+1F3A0-1F3CC, U+1F3CF-1F3D3, U+1F3E0-1F3F0, U+1F3F3-1F3F4, U+1F3F8-1F43E, U+1F440-1F4FC, U+1F4FF-1F53D, U+1F54B-1F567, U+1F574-1F575, U+1F57A, U+1F590, U+1F595-1F596, U+1F5A4, U+1F5E8, U+1F5FB-1F64F, U+1F680-1F6CC, U+1F6D0-1F6D2, U+1F6D5-1F6D7, U+1F6DC-1F6DF, U+1F6EB-1F6EC, U+1F6F4-1F6FC, U+1F7E0-1F7EB, U+1F7F0, U+1F90C-1F93A, U+1F93C-1F945, U+1F947-1FA7C, U+1FA80-1FAC5, U+1FACE-1FADB, U+1FAE0-1FAE8, U+1FAF0-1FAF8, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F;
     size-adjust: 130%;
 }
 textarea::selection {
@@ -1280,9 +1280,6 @@ textarea::-moz-selection {
                 ++ """;
     color: rgba(0,0,0,0);
 }
-/* The message input's textarea is drawn on top of the rich text so that the caret stays visible.
-   Only the caret should be visible though, so its text and selection highlight are transparent and
-   RichText.textWithSelection draws the highlight on the rich text instead. */
 .rich-text-input::selection {
     background-color: transparent;
     color: transparent;
@@ -1323,12 +1320,7 @@ body {
                 ++ """ transparent
 }
 /* elm-ui hides the native focus ring with `.s:focus { outline: none; }` for
-   every element it renders. This puts it back, but only for focus the browser
-   considers worth showing (keyboard navigation, not mouse clicks). The
-   .elm-ui-root prefix is there to outrank elm-ui's rule no matter which
-   stylesheet the browser sees first. The offset is negative so that the
-   outline is drawn inside the element and doesn't get clipped by scrollable
-   or clipping parents. */
+   every element it renders. This puts it back for keyboard navigation */
 .elm-ui-root .s:focus-visible {
   outline: rgb(96,165,250) solid 2px;
   outline-offset: -2px;
@@ -1341,13 +1333,6 @@ body {
   outline-color: rgb(96,165,250);
   background-color: rgba(96,165,250,0.3);
 }
-/* Hovering an .emoji-popup-container fades in the .emoji-popup inside it after a
-   short delay. Used by the reaction emoji popup and by the custom emoji tooltip.
-   The popup is display:none rather than merely transparent because an absolutely
-   positioned box still counts towards the scrollable overflow of the conversation
-   view even at opacity 0. A popup is much wider than the emoji it hangs off, so a
-   message with custom emojis in it gave the conversation a horizontal scrollbar
-   for popups nobody could see. */
 .emoji-popup,
 .custom-emoji-popup-arrow {
   display: none;
@@ -1483,7 +1468,7 @@ fontFace format family weight fileName unicodeRange =
   font-weight: """ ++ String.fromInt weight ++ """;
   font-stretch: normal;
   font-display: swap;
-  src: url(/fonts/""" ++ fileName ++ """) format('""" ++ format ++ """');
+  src: url(/cacheable/fonts/""" ++ fileName ++ """) format('""" ++ format ++ """');
   unicode-range: """ ++ unicodeRange ++ """;
 }"""
 
@@ -1497,7 +1482,7 @@ monoFontFace weight fileName =
   font-weight: """ ++ String.fromInt weight ++ """;
   font-stretch: normal;
   font-display: swap;
-  src: url(/fonts/""" ++ fileName ++ """) format('woff2');
+  src: url(/cacheable/fonts/""" ++ fileName ++ """) format('woff2');
 }"""
 
 

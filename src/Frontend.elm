@@ -420,7 +420,7 @@ init url key =
                 Command.none
         , Ports.loadStartupData
         ]
-    , Audio.loadAudio LoadedPopSound "/pop.mp3"
+    , Audio.loadAudio LoadedPopSound "/cacheable/pop.mp3"
     )
 
 

@@ -69,7 +69,7 @@ setup =
         |> T.addStringFile "/tests/data/discord-op0-ready-supplemental.json"
         |> T.addStringFile "/tests/data/discord-sticker-packs.json"
         |> T.addBytesFile "/tests/data/at-user-icon.png"
-        |> T.addStringFile "/public/compact-emoji.json"
+        |> T.addStringFile "/public/cacheable/compact-emoji.json"
 
 
 main : Program () (T.Model ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2) (T.Msg ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2)
@@ -95,10 +95,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 [ "", "_i" ] ->
                     E2EHelper.httpBasic currentRequest.url 200 E2EHelper.infoEndpointResponse
 
-                [ "", "compact-emoji.json" ] ->
+                [ "", "cacheable", "compact-emoji.json" ] ->
                     E2EHelper.httpBasic currentRequest.url 200 emojiJson
 
-                [ "http:", "", "localhost:8000", "NWL2023.txt" ] ->
+                [ "http:", "", "localhost:8000", "cacheable", "NWL2023.txt" ] ->
                     E2EHelper.httpBasic currentRequest.url 200 "AA\nAT\nDATE\nDIRT\nNOSE\nLOAD\nROT\nROTE\nROTES\n"
 
                 "https:" :: "" :: "api.dictionaryapi.dev" :: "api" :: "v2" :: "entries" :: "en" :: _ ->

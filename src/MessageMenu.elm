@@ -671,7 +671,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                                             , buttonHeight isMobile |> Ui.px |> Ui.height
                                             , Ui.Font.size 24
                                             ]
-                                            (Ui.html (MessageView.reactionEmojiButtonContent local.localUser.customEmojis emoji))
+                                            (Ui.html (MessageView.reactionEmojiButtonContent local.localUser.emojiData local.localUser.customEmojis emoji))
                                     )
                     in
                     Ui.el

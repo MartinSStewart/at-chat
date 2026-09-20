@@ -4802,6 +4802,7 @@ logSection isMobile2 localUser expandedSections adminData model =
                         isMobile2
                         log.isHidden
                         localUser.timezone
+                        localUser.emojiData
                         localUser.customEmojis
                         { onPressCopyLink = PressedCopyLogLink logId
                         , onPressCopy = PressedCopyText

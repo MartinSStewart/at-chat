@@ -737,6 +737,7 @@ timestampViewTest name now minutes expected =
                 , users = users
                 , attachedFiles = SeqDict.empty
                 , customEmojis = SeqDict.empty
+                , emojiData = Nothing
                 , timezone = Time.utc
                 , time = Time.millisToPosix now
                 }
@@ -786,6 +787,7 @@ expectHighlighted : NonemptyString -> Int -> String -> Expect.Expectation
 expectHighlighted source index char =
     RichText.textInputView
         Time.utc
+        Nothing
         users
         SeqDict.empty
         SeqDict.empty

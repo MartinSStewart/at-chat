@@ -888,6 +888,7 @@ exports.init = async function init(app)
         customElements.define('animated-image-player', AnimatedImagePlayer);
     }
 
+
     document.addEventListener('focusout', (event) => {
         app.ports.focus_changed_from_js.send({ id : null });
     });

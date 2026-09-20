@@ -25,6 +25,7 @@ import CustomEmoji exposing (CustomEmojiData)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.File as File exposing (File)
 import Effect.Time as Time
+import Emoji
 import FileStatus exposing (FileId, FileStatus)
 import Html exposing (Html)
 import Html.Attributes
@@ -262,6 +263,7 @@ textarea :
             , timezone : Time.Zone
             , stickers : SeqDict (Id StickerId) StickerData
             , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+            , emojiData : Maybe Emoji.CachedEmojiData
         }
     -> { c | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
@@ -440,6 +442,7 @@ textarea allowEnterKeyLinebreak channelTextInputId placeholder charsLeft text ri
                 Just richText2 ->
                     RichText.textInputView
                         localUser.timezone
+                        localUser.emojiData
                         users
                         attachedFiles
                         localUser.customEmojis
@@ -506,6 +509,7 @@ disabledTextarea placeholderText text attachedFiles localUser =
                     in
                     RichText.textInputView
                         localUser.timezone
+                        localUser.emojiData
                         users
                         attachedFiles
                         localUser.customEmojis
@@ -669,6 +673,7 @@ view :
             , timezone : Time.Zone
             , stickers : SeqDict (Id StickerId) StickerData
             , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+            , emojiData : Maybe Emoji.CachedEmojiData
         }
     -> { a | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }

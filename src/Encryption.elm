@@ -171,6 +171,7 @@ The following is not encrypted:
             , attachedFiles = SeqDict.empty
             , stickers = SeqDict.empty
             , customEmojis = SeqDict.empty
+            , emojiData = Nothing
             , animationMode = LoopAFewTimesOnLoad
             , timezone = Time.utc
             , time = Time.millisToPosix 0

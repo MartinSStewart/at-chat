@@ -37,7 +37,9 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-    event.waitUntil(self.clients.claim());
+    event.waitUntil((async () => {
+        await self.clients.claim();
+    })());
 });
 
 const badgeCountCacheName = 'app_badge_count';
@@ -390,6 +392,8 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
+    const isInCachable = url.startsWith(domain + 'cacheable/');
+
     if (url.startsWith(apiDomain + 'file/t/')
         || url.startsWith(apiDomain + 'file/0')
         || url.startsWith(apiDomain + 'file/1')
@@ -401,6 +405,7 @@ self.addEventListener('fetch', (event) => {
         || url.startsWith(apiDomain + 'file/7')
         || url.startsWith(apiDomain + 'file/8')
         || url.startsWith(apiDomain + 'file/9')
+        || isInCachable
         ) {
 
         event.respondWith(caches.open(cacheName).then((cache) => {
@@ -415,7 +420,7 @@ self.addEventListener('fetch', (event) => {
                 return fetch(event.request).then((fetchedResponse) => {
 
                     const size = Number(fetchedResponse.headers.get("content-length"));
-                    const isValid = size < 1000 * 1000;
+                    const isValid = isInCachable || size < 1000 * 1000;
 
                     if (fetchedResponse.ok && isValid) {
                         cache.put(event.request, fetchedResponse.clone());
@@ -425,8 +430,7 @@ self.addEventListener('fetch', (event) => {
                 });
             });
         }));
-    } else {
-    return;
+        return;
     }
     }
     catch (error)

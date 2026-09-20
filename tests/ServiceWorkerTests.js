@@ -164,6 +164,7 @@ function fakeCaches() {
     const caches = new Map();
 
     return {
+        delete: (name) => Promise.resolve(caches.delete(name)),
         open(name) {
             if (!caches.has(name)) {
                 caches.set(name, new Map());
@@ -257,13 +258,19 @@ function jpegBytes() {
 }
 
 
-function requestFile(listeners, url) {
+function askWorker(listeners, url) {
     let responded = null;
 
     listeners.fetch({
         request: { url: url },
         respondWith: (response) => { responded = response; }
     });
+
+    return responded;
+}
+
+function requestFile(listeners, url) {
+    const responded = askWorker(listeners, url);
 
     if (responded === null) {
         throw new Error("The service worker didn't answer " + url);
@@ -568,7 +575,7 @@ async function run() {
         body: encryptedFallbackText,
         encrypted_body: await encryptText(key, notificationMessageText),
         sent_by: senderUserId,
-        icon: "/at-logo-no-background.png",
+        icon: "/cacheable/at-logo-no-background.png",
         data: "https://at-chat.example/"
     });
 
@@ -618,7 +625,7 @@ async function run() {
         await deliverPush(listeners, {
             title: "Someone",
             body: "An ordinary message",
-            icon: "/at-logo-no-background.png",
+            icon: "/cacheable/at-logo-no-background.png",
             data: "https://at-chat.example/"
         });
 
@@ -662,6 +669,75 @@ async function run() {
             [elmList[index], rustList[index]],
             ["application/octet-stream", "application/octet-stream"],
             "what the worker's octet stream index names");
+    });
+
+    // public/cacheable is served from the app's own origin rather than through the api domain,
+    // and only a deploy changes any of it. These check the worker answers from the cache once
+    // it has one, since that's what stops a page load asking for the emoji sprites, the fonts
+    // and the images all over again.
+    await check("A cacheable file is fetched once and then served from the cache", async () => {
+        const spriteUrl = domain + "cacheable/emoji/smileys-emotion.svg";
+        const svg = "<svg xmlns='http://www.w3.org/2000/svg'></svg>";
+        let asked = 0;
+
+        const listeners = loadServiceWorker({
+            indexedDB: fakeIndexedDb(new Map()),
+            caches: fakeCaches(),
+            fetch: () => {
+                asked += 1;
+                return Promise.resolve(
+                    new Response(svg, {
+                        status: 200,
+                        headers: { "Content-Type": "image/svg+xml" }
+                    }));
+            }
+        });
+
+        const first = await requestFile(listeners, spriteUrl);
+        expectEqual(await first.text(), svg, "the body served from the network");
+
+        const second = await requestFile(listeners, spriteUrl);
+        expectEqual(await second.text(), svg, "the body served from the cache");
+        expectEqual(asked, 1, "how many times the network was asked");
+    });
+
+    await check("A cacheable file the server doesn't have isn't cached as a miss", async () => {
+        const missingUrl = domain + "cacheable/fonts/ascii.ttf";
+        let asked = 0;
+
+        const listeners = loadServiceWorker({
+            indexedDB: fakeIndexedDb(new Map()),
+            caches: fakeCaches(),
+            fetch: () => {
+                asked += 1;
+                return Promise.resolve(new Response("", { status: 404 }));
+            }
+        });
+
+        await requestFile(listeners, missingUrl);
+        await requestFile(listeners, missingUrl);
+
+        expectEqual(asked, 2, "how many times the network was asked");
+    });
+
+    // Nothing else may end up in there: an upload would pile up in a cache only a deploy
+    // empties, and a page of the app would be pinned to whatever it said on the first visit.
+    await check("Only cacheable is answered from the cache a deploy empties", async () => {
+        const listeners = loadServiceWorker({
+            indexedDB: fakeIndexedDb(new Map()),
+            caches: fakeCaches(),
+            fetch: () => Promise.reject(new Error("nothing should have been fetched"))
+        });
+
+        expectEqual(
+            askWorker(listeners, domain + "file/discord-sticker/123.png"),
+            null,
+            "what the worker did with an upload");
+
+        expectEqual(
+            askWorker(listeners, domain + "admin"),
+            null,
+            "what the worker did with a route");
     });
 
     if (failures.length > 0) {
