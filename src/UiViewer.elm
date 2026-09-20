@@ -223,7 +223,12 @@ stickersSection =
             (richText |> RichText.toString Time.utc False SeqDict.empty)
             (Just richText)
             SeqDict.empty
-            { userAgent = UserAgent.init, timezone = Time.utc, stickers = stickers, customEmojis = SeqDict.empty }
+            { userAgent = UserAgent.init
+            , timezone = Time.utc
+            , stickers = stickers
+            , emojiData = Nothing
+            , customEmojis = SeqDict.empty
+            }
             { typedTextCounter = 0, textInputFocus = Nothing }
             SeqDict.empty
             |> Ui.map (\_ -> ())
@@ -498,6 +503,7 @@ logExamples =
                 False
                 False
                 Time.utc
+                Nothing
                 SeqDict.empty
                 { onPressCopyLink = ()
                 , onPressCopy = \_ -> ()
