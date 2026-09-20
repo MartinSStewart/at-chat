@@ -5,19 +5,42 @@ module Pages.Home exposing
     , view
     )
 
+import Array
+import ChannelDescription
+import ChannelName exposing (ChannelName)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Time as Time
 import FrontendExtra
-import Id
+import GuildName exposing (GuildName)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, UserId)
+import IdArray
+import LinkedAndOtherDiscordUsers exposing (LinkedAndOtherDiscordUsers(..))
 import Local
+import LocalState exposing (FrontendChannel, FrontendGuild)
+import MembersAndOwner
+import Message exposing (Message(..), RepliedTo(..))
+import MessageArray exposing (MessageArray)
 import MyUi
 import Pages.Guild
+import RichText
 import Route exposing (Route(..))
-import Types exposing (FrontendMsg_(..), LoadedFrontend, LoginStatus(..))
+import SeqDict
+import SeqSet
+import SessionIdHash
+import String.Nonempty exposing (NonemptyString(..))
+import TextEditor
+import Types exposing (AdminStatusLoginData(..), FrontendMsg_(..), LoadedFrontend, LoginData, LoginStatus(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
 import Ui.Input
 import Ui.Shadow
+import Unsafe
+import User exposing (BackendUser, FrontendUser)
+import UserAgent exposing (UserAgent)
+import UserColor
+import UserSession exposing (Viewing(..))
+import VisibleMessages
 
 
 loginSignupText : String
@@ -91,32 +114,158 @@ loginButtonId =
     Dom.id "homePage_loginButton"
 
 
+previewUserId : Id UserId
+previewUserId =
+    Id.fromInt 0
+
+
+previewGuildId : Id GuildId
+previewGuildId =
+    Id.fromInt 0
+
+
+previewChannelId : Id ChannelId
+previewChannelId =
+    Id.fromInt 0
+
+
+previewGuildName : GuildName
+previewGuildName =
+    Unsafe.guildName "Friends"
+
+
+previewChannelName : ChannelName
+previewChannelName =
+    Unsafe.channelName "general"
+
+
+previewUser : BackendUser
+previewUser =
+    User.init (Time.millisToPosix 0) (Unsafe.personName "You") (Unsafe.emailAddress "you@at-chat.app") False
+
+
+previewOtherUsers : SeqDict.SeqDict (Id UserId) FrontendUser
+previewOtherUsers =
+    SeqDict.fromList
+        [ ( Id.fromInt 1
+          , { name = Unsafe.personName "Ada"
+            , color = UserColor.default
+            , icon = Nothing
+            , publicKey = Nothing
+            }
+          )
+        , ( Id.fromInt 2
+          , { name = Unsafe.personName "Grace"
+            , color = UserColor.default
+            , icon = Nothing
+            , publicKey = Nothing
+            }
+          )
+        ]
+
+
+previewMessage : Time.Posix -> Id UserId -> NonemptyString -> Message ChannelMessageId (Id UserId)
+previewMessage createdAt createdBy text =
+    UserTextMessage
+        { createdAt = createdAt
+        , createdBy = createdBy
+        , content =
+            { content = RichText.fromNonemptyString Time.utc SeqDict.empty text
+            , embeds = Array.empty
+            , attachedFiles = SeqDict.empty
+            }
+        , reactions = SeqDict.empty
+        , editedAt = Nothing
+        , repliedTo = NoReply
+        , drawings = Nothing
+        }
+
+
+previewChannel : Time.Posix -> FrontendChannel
+previewChannel time =
+    let
+        messages : MessageArray ChannelMessageId (Id UserId)
+        messages =
+            List.foldl
+                MessageArray.push
+                MessageArray.empty
+                [ previewMessage time (Id.fromInt 1) (NonemptyString 'W' "elcome to at-chat!")
+                , previewMessage time (Id.fromInt 2) (NonemptyString 'T' "his is what a channel looks like once you're logged in.")
+                , previewMessage time previewUserId (NonemptyString 'N' "ice, I'll sign up then.")
+                ]
+    in
+    { createdAt = time
+    , createdBy = Id.fromInt 1
+    , name = previewChannelName
+    , description = ChannelDescription.empty
+    , messages = messages
+    , visibleMessages = VisibleMessages.init True (MessageArray.length messages)
+    , isArchived = Nothing
+    , lastTypedAt = SeqDict.empty
+    , threads = SeqDict.empty
+    , dateDividerDrawings = SeqDict.empty
+    , games = SeqDict.empty
+    }
+
+
+previewGuild : Time.Posix -> FrontendGuild
+previewGuild time =
+    { createdAt = time
+    , createdBy = Id.fromInt 1
+    , name = previewGuildName
+    , icon = Nothing
+    , channels = SeqDict.fromList [ ( previewChannelId, previewChannel time ) ]
+    , membersAndOwner =
+        MembersAndOwner.init
+            (SeqDict.map (\_ _ -> { joinedAt = time }) previewOtherUsers
+                |> SeqDict.insert previewUserId { joinedAt = time }
+            )
+            (Id.fromInt 1)
+    , invites = SeqDict.empty
+    }
+
+
+previewLoginData : Time.Posix -> UserAgent -> LoginData
+previewLoginData time userAgent =
+    { session =
+        { userId = previewUserId
+        , notificationMode = UserSession.NoNotifications
+        , pushSubscription = UserSession.NotSubscribed
+        , userAgent = userAgent
+        , sessionIdHash = SessionIdHash.fromString ""
+        , signedInAt = time
+        , lastClientDisconnect = Nothing
+        , expandedUserOptions = SeqSet.empty
+        , savedSheepGameQuestions = IdArray.empty
+        }
+    , currentlyViewing = Viewing_None
+    , adminData = IsNotAdminLoginData
+    , twoFactorAuthenticationEnabled = Nothing
+    , guilds = SeqDict.fromList [ ( previewGuildId, previewGuild time ) ]
+    , dmChannels = SeqDict.empty
+    , discordDmChannels = SeqDict.empty
+    , discordGuilds = SeqDict.empty
+    , user = previewUser
+    , otherUsers = previewOtherUsers
+    , discordUsers = LinkedAndOtherDiscordUsers SeqDict.empty SeqDict.empty
+    , otherSessions = SeqDict.empty
+    , publicVapidKey = ""
+    , textEditor = TextEditor.initLocalState
+    , stickers = SeqDict.empty
+    , customEmojis = SeqDict.empty
+    , voiceChatPeers = SeqDict.empty
+    }
+
+
 view : Int -> LoadedFrontend -> Element FrontendMsg_
 view windowWidth loaded =
     let
-        fakeLoggedIn : Types.LoggedIn2
-        fakeLoggedIn =
+        previewLoggedIn : Types.LoggedIn2
+        previewLoggedIn =
             FrontendExtra.loadedInitHelper
                 loaded.startupData
                 loaded.emojiData
-                { session = UserSession
-                , currentlyViewing = UserSession.Viewing
-                , adminData = AdminStatusLoginData
-                , twoFactorAuthenticationEnabled = Maybe Time.Posix
-                , guilds = SeqDict (Id GuildId) FrontendGuild
-                , dmChannels = SeqDict (Id UserId) FrontendDmChannel
-                , discordDmChannels = SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-                , discordGuilds = SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-                , user = FrontendCurrentUser
-                , otherUsers = SeqDict (Id UserId) FrontendUser
-                , discordUsers = LinkedAndOtherDiscordUsers
-                , otherSessions = SeqDict SessionIdHash FrontendUserSession
-                , publicVapidKey = String
-                , textEditor = TextEditor.LocalState
-                , stickers = SeqDict (Id StickerId) StickerData
-                , customEmojis = SeqDict (Id CustomEmojiId) CustomEmojiData
-                , voiceChatPeers = SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) Call.RemoteCallData)
-                }
+                (previewLoginData loaded.time loaded.startupData.userAgent)
                 loaded
                 |> Tuple.first
     in
@@ -133,8 +282,8 @@ view windowWidth loaded =
         [ Ui.el [ Ui.Font.size 24 ] (Ui.text "at-chat, a place to chat with friends")
         , Pages.Guild.guildView
             loaded
-            (Id.fromInt 0)
-            (Route.ChannelRoute (Id.fromInt 0) (Route.NoThreadWithFriends Nothing Route.HideChannelSettings) Nothing)
-            fakeLoggedIn
-            (Local.model fakeLoggedIn.localState)
+            previewGuildId
+            (Route.ChannelRoute previewChannelId (Route.NoThreadWithFriends Nothing Route.HideChannelSettings) Nothing)
+            previewLoggedIn
+            (Local.model previewLoggedIn.localState)
         ]

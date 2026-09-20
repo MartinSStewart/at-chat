@@ -28,7 +28,6 @@ module Message exposing
     , noDrawings
     , reactionEmojis
     , removeReactionEmoji
-    , repliedTo
     , repliedToGameCodec
     , replyToMaybe
     , threadRouteWithoutRepliedTo
@@ -482,28 +481,6 @@ replyToMaybe repliedTo2 =
 
         RepliedToGame _ _ ->
             Nothing
-
-
-repliedTo : Message messageId userId -> RepliedTo messageId
-repliedTo message =
-    case message of
-        UserTextMessage data ->
-            data.repliedTo
-
-        EncryptedUserTextMessage data ->
-            data.repliedTo
-
-        UserJoinedMessage _ _ _ _ ->
-            NoReply
-
-        DeletedMessage _ ->
-            NoReply
-
-        CallStarted _ ->
-            NoReply
-
-        GameStarted _ ->
-            NoReply
 
 
 {-| Puts the plain text of a message back in place of its ciphertext, for a conversation

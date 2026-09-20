@@ -28,7 +28,6 @@ module FrontendExtra exposing
     , handleRedo
     , handleServerSendMessage
     , handleUndo
-    , initAdminData
     , isPressMsg
     , layout
     , loadedInitHelper
@@ -7997,8 +7996,8 @@ loginDataToLocalState startupData decrypted encryptionBacklog emojiData loginDat
 
 
 type EncryptedBacklog
-    = PendingEncryption { id : Viewing_DmId, messages : List (Encryption.EncryptedData (MessageContent (Id UserId))) }
-    | MissingKeys { id : Viewing_DmId, messages : List (Encryption.EncryptedData (MessageContent (Id UserId))) }
+    = PendingEncryption { id : Viewing_DmId, messages : List (EncryptedData (MessageContent (Id UserId))) }
+    | MissingKeys { id : Viewing_DmId, messages : List (EncryptedData (MessageContent (Id UserId))) }
 
 
 encryptedBacklog : SeqSet (Id UserId) -> SeqDict (Id UserId) FrontendDmChannel -> List EncryptedBacklog
@@ -8025,7 +8024,7 @@ encryptedBacklog keysOnThisDevice dmChannels =
         (SeqDict.toList dmChannels)
 
 
-encryptedMessagesIn : FrontendDmChannel -> List (Encryption.EncryptedData (MessageContent (Id UserId)))
+encryptedMessagesIn : FrontendDmChannel -> List (EncryptedData (MessageContent (Id UserId)))
 encryptedMessagesIn dmChannel =
     List.filterMap (\( _, message ) -> encryptedMessageData message) (MessageArray.toList dmChannel.messages)
         ++ (SeqDict.values dmChannel.threads
@@ -8037,7 +8036,7 @@ encryptedMessagesIn dmChannel =
            )
 
 
-encryptedMessageData : Message.Message messageId (Id UserId) -> Maybe (Encryption.EncryptedData (MessageContent (Id UserId)))
+encryptedMessageData : Message messageId (Id UserId) -> Maybe (EncryptedData (MessageContent (Id UserId)))
 encryptedMessageData message =
     case message of
         Message.EncryptedUserTextMessage data ->
