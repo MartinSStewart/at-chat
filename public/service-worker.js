@@ -38,9 +38,6 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
     event.waitUntil((async () => {
-        // The emoji svgs are in staticCacheName now, so this one is megabytes a browser
-        // would otherwise hold on to forever.
-        await caches.delete('emoji_cache_v1');
         await self.clients.claim();
     })());
 });
@@ -399,6 +396,8 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
+    const isInCachable = url.startsWith(domain + 'cacheable/');
+
     if (url.startsWith(apiDomain + 'file/t/')
         || url.startsWith(apiDomain + 'file/0')
         || url.startsWith(apiDomain + 'file/1')
@@ -410,6 +409,7 @@ self.addEventListener('fetch', (event) => {
         || url.startsWith(apiDomain + 'file/7')
         || url.startsWith(apiDomain + 'file/8')
         || url.startsWith(apiDomain + 'file/9')
+        || isInCachable
         ) {
 
         event.respondWith(caches.open(cacheName).then((cache) => {
@@ -424,7 +424,7 @@ self.addEventListener('fetch', (event) => {
                 return fetch(event.request).then((fetchedResponse) => {
 
                     const size = Number(fetchedResponse.headers.get("content-length"));
-                    const isValid = size < 1000 * 1000;
+                    const isValid = isInCachable || size < 1000 * 1000;
 
                     if (fetchedResponse.ok && isValid) {
                         cache.put(event.request, fetchedResponse.clone());
@@ -435,35 +435,6 @@ self.addEventListener('fetch', (event) => {
             });
         }));
         return;
-    }
-
-    // public/cacheable is where the files a deploy replaces live, as opposed to the uploads
-    // under file/ and the routes of the app itself: the emoji sprites, the fonts, the images,
-    // the emoji data, the word lists. staticCacheName is what says the copies are stale, so a
-    // visit after the first asks the server for none of it.
-    if (url.startsWith(domain + 'cacheable/')) {
-        event.respondWith(caches.open(staticCacheName).then(async (cache) => {
-            const cachedResponse = await cache.match(url);
-            if (cachedResponse) {
-                return cachedResponse;
-            }
-
-            const fetchedResponse = await fetch(event.request);
-
-            if (fetchedResponse.ok) {
-                await cache.put(event.request, fetchedResponse.clone());
-
-                // Serve the stored copy rather than fetchedResponse, for the same reason the
-                // frontend bundle above does: swedish-word-list.txt is ten megabytes and the
-                // branch of a teed body that's drained second stops at the tee buffer.
-                const cachedFetchedResponse = await cache.match(event.request);
-                if (cachedFetchedResponse) {
-                    return cachedFetchedResponse;
-                }
-            }
-
-            return fetchedResponse;
-        }));
     }
     }
     catch (error)

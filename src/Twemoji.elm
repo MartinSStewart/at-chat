@@ -49,34 +49,11 @@ fileName emoji =
         |> String.join "-"
 
 
-spriteUrl : String -> String
-spriteUrl sprite =
-    "/cacheable/emoji/" ++ sprite ++ ".svg"
-
-
-{-| What a `use` points at for one emoji.
--}
 spriteReference : String -> String -> String
 spriteReference sprite emoji =
-    spriteUrl sprite ++ "#" ++ symbolId emoji
+    "/cacheable/emoji/" ++ sprite ++ ".svg#e" ++ fileName emoji
 
 
-{-| An id can't begin with a digit and most of these would, so the names the sprites are
-built with carry a prefix.
--}
-symbolId : String -> String
-symbolId emoji =
-    "e" ++ fileName emoji
-
-
-{-| The browser reads the sprite once however many of these point at it, so a grid of them
-costs one request rather than one each. A `use` pointing at a symbol the browser hasn't
-read yet starts drawing as soon as it arrives.
-
-`yOffset` is how far down to nudge it, the same as `CustomEmoji.view` takes, since an emoji
-sitting inline in a line of text wants to sit lower than the baseline puts it.
-
--}
 spriteView : String -> String -> String -> String -> Html msg
 spriteView size yOffset sprite emoji =
     Html.span
@@ -102,13 +79,6 @@ spriteView size yOffset sprite emoji =
         ]
 
 
-{-| Like `spriteView`, but for text drawn on top of a textarea. There the picture has to take up
-exactly the room the font gives the characters, or the caret in the textarea below drifts away
-from the text as soon as a line contains an emoji. How much room that is differs by device, since
-a font without a glyph for a joined sequence draws its pieces side by side instead. So the
-characters stay at full size and keep doing the layout, hidden rather than taken out, and the
-artwork is drawn over the space they take, in the middle of it and at a size of its own.
--}
 overlaySpriteView : String -> String -> String -> Html msg
 overlaySpriteView size sprite emoji =
     Html.span

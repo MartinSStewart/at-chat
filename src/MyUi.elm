@@ -1262,10 +1262,6 @@ css =
             (notoSansFontFaces
                 ++ dejavuSansMonoFontFaces
                 ++ """
-/* The range has to cover the pieces emoji are joined out of and not just the emoji
-   themselves. A sequence whose code points fall in different families is shaped as one
-   run per family, so 👨\u{200D}👩\u{200D}👧 came out as three people rather than a family: the zero width
-   joiners, the gender signs and the flag tag characters were all outside the range. */
 @font-face {
     font-family: "myemoji";
     src: local('Apple Color Emoji'), local('Android Emoji'), local('Segoe UI Emoji'), local('Noto Color Emoji'), local(EmojiSymbols), local(Symbola);
@@ -1284,9 +1280,6 @@ textarea::-moz-selection {
                 ++ """;
     color: rgba(0,0,0,0);
 }
-/* The message input's textarea is drawn on top of the rich text so that the caret stays visible.
-   Only the caret should be visible though, so its text and selection highlight are transparent and
-   RichText.textWithSelection draws the highlight on the rich text instead. */
 .rich-text-input::selection {
     background-color: transparent;
     color: transparent;
@@ -1327,12 +1320,7 @@ body {
                 ++ """ transparent
 }
 /* elm-ui hides the native focus ring with `.s:focus { outline: none; }` for
-   every element it renders. This puts it back, but only for focus the browser
-   considers worth showing (keyboard navigation, not mouse clicks). The
-   .elm-ui-root prefix is there to outrank elm-ui's rule no matter which
-   stylesheet the browser sees first. The offset is negative so that the
-   outline is drawn inside the element and doesn't get clipped by scrollable
-   or clipping parents. */
+   every element it renders. This puts it back for keyboard navigation */
 .elm-ui-root .s:focus-visible {
   outline: rgb(96,165,250) solid 2px;
   outline-offset: -2px;
@@ -1345,13 +1333,6 @@ body {
   outline-color: rgb(96,165,250);
   background-color: rgba(96,165,250,0.3);
 }
-/* Hovering an .emoji-popup-container fades in the .emoji-popup inside it after a
-   short delay. Used by the reaction emoji popup and by the custom emoji tooltip.
-   The popup is display:none rather than merely transparent because an absolutely
-   positioned box still counts towards the scrollable overflow of the conversation
-   view even at opacity 0. A popup is much wider than the emoji it hangs off, so a
-   message with custom emojis in it gave the conversation a horizontal scrollbar
-   for popups nobody could see. */
 .emoji-popup,
 .custom-emoji-popup-arrow {
   display: none;

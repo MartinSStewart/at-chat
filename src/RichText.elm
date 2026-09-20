@@ -3549,14 +3549,10 @@ type alias Config a userId =
     , attachedFiles : SeqDict (Id FileId) FileData
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
-    , -- Needed to find the emoji in a message's text, which is the only way they can be
-      -- drawn as artwork rather than left to whatever font the reader's device has.
-      emojiData : Maybe Emoji.CachedEmojiData
+    , emojiData : Maybe Emoji.CachedEmojiData
     , animationMode : Sticker.AnimationMode
     , timezone : Time.Zone
-    , -- Timestamps say how long is left until the moment they point at, so the view needs
-      -- to know what the time is now
-      time : Time.Posix
+    , time : Time.Posix
     , drawings : SeqDict (Id FileId) (Drawing userId)
     , embedDrawings : SeqDict Int (Drawing userId)
     , drawingUserColor : userId -> UserColor

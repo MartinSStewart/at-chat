@@ -316,7 +316,21 @@ artStartingWith emojiData text =
         Just ( firstCharacter, _ ) ->
             case Dict.get firstCharacter emojiData.art of
                 Just candidates ->
-                    List.filter (\art -> String.startsWith art.sequence text) candidates |> List.head
+                    Array.foldl
+                        (\art value ->
+                            case value of
+                                Just _ ->
+                                    value
+
+                                Nothing ->
+                                    if String.startsWith art.sequence text then
+                                        Just art
+
+                                    else
+                                        Nothing
+                        )
+                        Nothing
+                        candidates
 
                 Nothing ->
                     Nothing
@@ -347,17 +361,11 @@ unicodeEmojiView size yOffset maybeSkinTone emoji emojiData =
     emojiWithSkinTone maybeSkinTone emoji emojiData |> sequenceView size yOffset emojiData
 
 
-{-| A piece of text, split apart so the emoji in it can be drawn as pictures and the rest
-as the text it is.
--}
 type TextOrEmoji
     = PlainText String
     | EmojiArtwork EmojiArt
 
 
-{-| Some text with its emoji drawn as pictures. Anything without artwork stays as
-characters, so nothing is ever dropped from a message on the way to the screen.
--}
 textView : String -> String -> Maybe CachedEmojiData -> String -> List (Html.Html msg)
 textView size yOffset maybeEmojiData text =
     case maybeEmojiData of
@@ -377,9 +385,6 @@ textView size yOffset maybeEmojiData text =
             [ Html.text text ]
 
 
-{-| The message input draws its text on top of a textarea, so each emoji has to keep the width
-the font gave it. `Twemoji.overlaySpriteView` explains why.
--}
 inputTextView : String -> Maybe CachedEmojiData -> String -> List (Html.Html msg)
 inputTextView size maybeEmojiData text =
     case maybeEmojiData of
@@ -539,7 +544,7 @@ type alias CachedEmojiData =
     , -- The selector looks emoji up by which one they are. Anywhere else they arrive as
       -- characters instead, sometimes buried in a sentence, so they have to be found by
       -- what they're written with. Grouped by first character, longest sequence first.
-      art : Dict Char (List EmojiArt)
+      art : Dict Char (Array EmojiArt)
     }
 
 
@@ -1730,9 +1735,6 @@ requestEmojiData gotEmojiData =
         }
 
 
-{-| What the frontend reads the emoji list as. Kept apart from `requestEmojiData` so a test
-can hand it a few emoji rather than fetching the whole file.
--}
 fromResponse : List EmojiResponse -> CachedEmojiData
 fromResponse response =
     { emojis =
@@ -1776,9 +1778,7 @@ fromResponse response =
             )
             Dict.empty
             response
-            -- A sequence that begins with a shorter one always has more characters than it,
-            -- so this puts every emoji ahead of the ones it starts with.
-            |> Dict.map (\_ list -> List.sortBy (\art -> -(String.length art.sequence)) list)
+            |> Dict.map (\_ list -> List.sortBy (\art -> -(String.length art.sequence)) list |> Array.fromList)
     , categories =
         List.foldl
             (\emoji dict ->
