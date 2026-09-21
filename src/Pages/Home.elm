@@ -272,10 +272,10 @@ previewChannel time =
                     , drawings = Nothing
                     }
                 , previewMessage time previewUserId (NonemptyString 'b' "ird!")
-                , previewMessage time (Id.fromInt 2) (NonemptyString 'O' "nce upon a midnight dreary while I pondered weak and weary")
-                , previewMessage time previewUserId (NonemptyString '*' "NO!*")
-                , previewMessage time (Id.fromInt 2) (NonemptyString 'O' "ver many a quaint and curious volume of forgotten lore")
-                , previewMessage time (Id.fromInt 2) (NonemptyString 'W' "hile I nodded, nearly napping, suddenly there came a tapping")
+                , previewMessage time (Id.fromInt 2) (NonemptyString '_' "Once upon a midnight dreary while I pondered weak and weary_")
+                , previewMessage time previewUserId (NonemptyString '#' "## *NO!*")
+                , previewMessage time (Id.fromInt 2) (NonemptyString '_' "Over many a quaint and curious volume of forgotten lore_")
+                , previewMessage time (Id.fromInt 2) (NonemptyString '_' "While I nodded, nearly napping, suddenly there came a tapping_")
                 , previewMessage time (Id.fromInt 3) (NonemptyString 't' "hat's not a raven!!")
                 ]
     in
@@ -298,7 +298,7 @@ previewGuild time =
     { createdAt = time
     , createdBy = Id.fromInt 1
     , name = previewGuildName
-    , icon = Nothing
+    , icon = Just (FileStatus.fileHash "c_fknEBFP2Tbqh4_2NcGxm7qHXm8lRZfOpXfzg")
     , channels =
         SeqDict.fromList
             [ ( previewChannelId, previewChannel time )
@@ -383,21 +383,24 @@ view loaded =
             else
                 48
 
+        isMobile =
+            MyUi.isMobile loaded
+
         previewWidth : Int
         previewWidth =
             min (Coord.xRaw loaded.windowSize) widthMax - paddingX * 2
 
         previewHeight : Int
         previewHeight =
-            if MyUi.isMobile loaded then
+            if isMobile then
                 600
 
             else
-                900
+                850
 
         previewScale : Float
         previewScale =
-            if MyUi.isMobile loaded then
+            if isMobile then
                 0.8
 
             else
@@ -411,10 +414,24 @@ view loaded =
     in
     Ui.column
         [ MyUi.notoSans
-        , Ui.paddingWith { left = paddingX, right = paddingX, top = 120, bottom = 48 }
+        , Ui.paddingWith
+            { left = paddingX
+            , right = paddingX
+            , top =
+                if isMobile then
+                    80
+
+                else
+                    120
+            , bottom = 48
+            }
         , Ui.widthMax widthMax
         , Ui.centerX
-        , Ui.spacing 32
+        , if isMobile then
+            Ui.spacing 16
+
+          else
+            Ui.spacing 32
         ]
         [ Ui.el [ Ui.Font.size 24 ] (Ui.text "at-chat, a place to chat with friends")
         , Pages.Guild.guildView

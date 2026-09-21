@@ -135,7 +135,6 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                             local.calls
                         , Ui.Lazy.lazy2 gameButton isMobile currentChannelHeaderTab
                         , drawingTab isMobile currentChannelHeaderTab False
-                        , showFilesButton
                         , channelSettingsTab isMobile model.route |> Maybe.withDefault Ui.none
                         ]
                     ]
@@ -177,7 +176,6 @@ thread isMobile name threadName guildOrDmIdNoThread local loggedIn model =
                     , Ui.row
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
                         [ drawingTab isMobile (Route.toChannelHeaderTab model.route) False
-                        , showFilesButton
                         , channelSettingsTab isMobile model.route |> Maybe.withDefault Ui.none
                         ]
                     ]
@@ -219,7 +217,6 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
                     , Ui.row
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
                         [ drawingTab isMobile currentChannelHeaderTab False
-                        , showFilesButton
                         , channelSettingsTab isMobile model.route |> Maybe.withDefault Ui.none
                         ]
                     ]
@@ -247,7 +244,6 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
                     , Ui.row
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
                         [ drawingTab isMobile (Route.toChannelHeaderTab model.route) False
-                        , showFilesButton
                         , channelSettingsTab isMobile model.route |> Maybe.withDefault Ui.none
                         ]
                     ]
@@ -281,22 +277,6 @@ drawingTab isMobile currentTab rightMostTab =
             ]
             (Ui.html Icons.paintbrush)
         )
-
-
-showFilesButton : Element FrontendMsg_
-showFilesButton =
-    MyUi.elButton
-        (Dom.id "guild_showFiles")
-        (PressedLink Route.TextEditorRoute)
-        [ Ui.alignRight
-        , Ui.width (Ui.px 48)
-        , Ui.paddingXY 12 0
-        , Ui.height Ui.fill
-        , Ui.contentCenterY
-        , Ui.Font.color MyUi.font3
-        , MyUi.hoverText "Show files"
-        ]
-        (Ui.html Icons.document)
 
 
 {-| `showMembers` is `Nothing` on the routes that have no member column to open,
