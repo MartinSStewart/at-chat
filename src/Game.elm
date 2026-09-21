@@ -1310,7 +1310,15 @@ allGames =
 
 matchNotFound : Element msg
 matchNotFound =
-    Ui.el [ Ui.centerX, Ui.centerY, Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Match not found")
+    Ui.el
+        [ Ui.contentCenterX
+        , Ui.centerY
+        , Ui.Font.bold
+        , Ui.Font.size 20
+        , Ui.background MyUi.background1
+        , Ui.paddingXY 0 16
+        ]
+        (Ui.text "Match not found")
 
 
 {-| Share controls for the match currently being viewed. Shows a "Share" button that creates a

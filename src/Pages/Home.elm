@@ -135,6 +135,11 @@ previewGuildId =
     Id.fromInt 0
 
 
+previewGameGuildId : Id GuildId
+previewGameGuildId =
+    Id.fromInt 1
+
+
 previewChannelId : Id ChannelId
 previewChannelId =
     Id.fromInt 0
@@ -143,6 +148,11 @@ previewChannelId =
 previewGuildName : GuildName
 previewGuildName =
     Unsafe.guildName "Friends & chat"
+
+
+previewGameGuildName : GuildName
+previewGameGuildName =
+    Unsafe.guildName "video game gang"
 
 
 previewChannelName : ChannelName
@@ -187,7 +197,7 @@ previewOtherUsers =
             }
           )
         , ( Id.fromInt 2
-          , { name = Unsafe.personName "boog'les_the_spy_pig"
+          , { name = Unsafe.personName "boog'les_the_spy.jpig"
             , color = UserColor.fromParts { hue = 0, lightness = 12, saturation = 11 }
             , icon = Just (FileStatus.fileHash "defrqz-9TjEnuXDZnPc8zD1VoeugOLHh_7-sWw")
             , publicKey = Nothing
@@ -332,6 +342,40 @@ previewGuild time games =
     }
 
 
+previewGameGuild : Time.Posix -> SeqDict.SeqDict (Id ChannelMessageId) Game.MatchData -> FrontendGuild
+previewGameGuild time games =
+    { createdAt = time
+    , createdBy = Id.fromInt 1
+    , name = previewGameGuildName
+    , icon = Just (FileStatus.fileHash "OW5CQBd1c1K1WO7VYOsgq8BL6Fimp-EE2e141g")
+    , channels =
+        SeqDict.fromList
+            [ ( previewChannelId, previewChannel time games )
+            , ( Id.fromInt 1
+              , { createdAt = time
+                , createdBy = Id.fromInt 1
+                , name = petPicsChannelName
+                , description = ChannelDescription.empty
+                , messages = MessageArray.empty
+                , visibleMessages = VisibleMessages.init True 0
+                , isArchived = Nothing
+                , lastTypedAt = SeqDict.fromList [ ( Id.fromInt 2, { time = time, messageIndex = Nothing } ) ]
+                , threads = SeqDict.empty
+                , dateDividerDrawings = SeqDict.empty
+                , games = SeqDict.empty
+                }
+              )
+            ]
+    , membersAndOwner =
+        MembersAndOwner.init
+            (SeqDict.map (\_ _ -> { joinedAt = time }) previewOtherUsers
+                |> SeqDict.insert previewUserId { joinedAt = time }
+            )
+            (Id.fromInt 1)
+    , invites = SeqDict.empty
+    }
+
+
 previewLoginData : Time.Posix -> UserAgent -> LoginData
 previewLoginData time userAgent =
     { session =
@@ -348,7 +392,11 @@ previewLoginData time userAgent =
     , currentlyViewing = Viewing_None
     , adminData = IsNotAdminLoginData
     , twoFactorAuthenticationEnabled = Nothing
-    , guilds = SeqDict.fromList [ ( previewGuildId, previewGuild time (previewGames time) ) ]
+    , guilds =
+        SeqDict.fromList
+            [ ( previewGuildId, previewGuild time (previewGames time) )
+            , ( previewGameGuildId, previewGameGuild time (previewGames time) )
+            ]
     , dmChannels = SeqDict.empty
     , discordDmChannels = SeqDict.empty
     , discordGuilds = SeqDict.empty
@@ -461,17 +509,19 @@ previewGameModels time =
             SeqDict.empty
 
 
-{-| The previews the carousel cycles through, as the channel route each one puts the app on.
--}
-previewChannelRoutes : List Route.ChannelRoute
+previewChannelRoutes : List ( Id GuildId, Route.ChannelRoute )
 previewChannelRoutes =
-    Route.ChannelRoute previewChannelId (Route.NoThreadWithFriends Nothing Route.HideChannelSettings) Nothing
+    ( previewGuildId
+    , Route.ChannelRoute previewChannelId (Route.NoThreadWithFriends Nothing Route.HideChannelSettings) Nothing
+    )
         :: (case previewGameSetup of
                 Ok _ ->
-                    [ Route.ChannelRoute
-                        previewChannelId
-                        (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
-                        (Just (ChannelHeaderTab_Games (Just previewGameMatchId) Nothing))
+                    [ ( previewGameGuildId
+                      , Route.ChannelRoute
+                            previewChannelId
+                            (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
+                            (Just (ChannelHeaderTab_Games (Just previewGameMatchId) Nothing))
+                      )
                     ]
 
                 Err _ ->
@@ -484,9 +534,6 @@ previewIntervalMillis =
     6000
 
 
-{-| Which preview is showing. Until the reader picks one it moves on by one every interval;
-picking one stops it there, since they're looking at what they chose.
--}
 activePreview : LoadedFrontend -> Int
 activePreview loaded =
     if loaded.homePagePreview.rotate then
@@ -529,20 +576,24 @@ previewDots activeIndex =
                 MyUi.elButton
                     (Dom.id ("homePage_preview_" ++ String.fromInt index))
                     (PressedHomePagePreview index)
-                    [ Ui.width (Ui.px 10)
-                    , Ui.height (Ui.px 10)
-                    , Ui.rounded 99
-                    , Ui.background
-                        (if index == activeIndex then
-                            MyUi.white
-
-                         else
-                            Ui.rgba 255 255 255 0.4
-                        )
+                    [ Ui.padding 8
                     ]
-                    Ui.none
+                    (Ui.el
+                        [ Ui.width (Ui.px 12)
+                        , Ui.height (Ui.px 12)
+                        , Ui.rounded 99
+                        , Ui.background
+                            (if index == activeIndex then
+                                MyUi.white
+
+                             else
+                                Ui.rgba 255 255 255 0.4
+                            )
+                        ]
+                        Ui.none
+                    )
             )
-        |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.centerX ]
+        |> Ui.row [ Ui.width Ui.shrink, Ui.centerX ]
 
 
 view : LoadedFrontend -> Element FrontendMsg_
@@ -603,12 +654,12 @@ view loaded =
         activeIndex =
             activePreview loaded
 
-        slide : Route.ChannelRoute -> Element FrontendMsg_
-        slide slideRoute =
+        slide : ( Id GuildId, Route.ChannelRoute ) -> Element FrontendMsg_
+        slide ( guildId, slideRoute ) =
             Pages.Guild.guildView
                 { loaded
                     | windowSize = innerSize
-                    , route = GuildRoute previewGuildId slideRoute ChannelsVisibleOnMobile Nothing
+                    , route = GuildRoute guildId slideRoute ChannelsVisibleOnMobile Nothing
                 }
                 previewGuildId
                 slideRoute
