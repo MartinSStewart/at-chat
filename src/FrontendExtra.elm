@@ -1687,7 +1687,7 @@ routeRequest previousRoute newRoute model =
                         LoggedIn _ ->
                             model2.loginStatus
               }
-            , Command.none
+            , Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
             )
 
         AdminRoute { highlightLog } ->

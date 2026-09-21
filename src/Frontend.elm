@@ -646,19 +646,26 @@ updateLoaded msg model =
             )
 
         GotWindowSize width height ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn | drawingMode = Drawing.resetAnchor loggedIn.drawingMode }
-                    , -- Zooming the page changes the device pixel ratio and resizes the window at
-                      -- the same time, so this is where a new ratio turns up. Ask for it so ascii
-                      -- art can pick a font size that lands on whole device pixels. Moving the
-                      -- window to a screen with a different pixel density doesn't always resize it,
-                      -- but the startup data gets re-sent whenever the window regains focus, and
-                      -- that carries the ratio too.
-                      Ports.requestDevicePixelRatio
-                    )
-                )
-                { model | windowSize = Coord.xy width height }
+            ( { model
+                | windowSize = Coord.xy width height
+                , loginStatus =
+                    case model.loginStatus of
+                        LoggedIn loggedIn ->
+                            LoggedIn { loggedIn | drawingMode = Drawing.resetAnchor loggedIn.drawingMode }
+
+                        NotLoggedIn _ ->
+                            model.loginStatus
+              }
+            , Command.batch
+                [ Ports.requestDevicePixelRatio
+                , case model.route of
+                    HomePageRoute _ ->
+                        Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+
+                    _ ->
+                        Command.none
+                ]
+            )
 
         PressedShowLogin ->
             case model.loginStatus of
@@ -8704,7 +8711,7 @@ view _ model =
                                                     |> Ui.map LoginFormMsg
 
                                             Nothing ->
-                                                Ui.Lazy.lazy2 Pages.Home.view windowWidth loaded
+                                                Ui.Lazy.lazy Pages.Home.view loaded
                                         )
                                     )
 
