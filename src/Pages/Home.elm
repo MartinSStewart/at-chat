@@ -295,7 +295,7 @@ previewDiscordGuilds time =
     SeqDict.singleton
         previewDiscordGuildId
         { name = previewDiscordGuildName
-        , icon = Just (FileStatus.fileHash "AtE6z0DDmmHqLXBJ3rUpMwyj-w8OaN2QlkXXQQ")
+        , icon = Just (FileStatus.fileHash "oZrA2YpsYOdRoJdkgHqQTNEpgNvznKNeSmwOeA")
         , channels = SeqDict.empty
         , membersAndOwner =
             MembersAndOwner.init
