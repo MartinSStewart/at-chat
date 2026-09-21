@@ -49,6 +49,7 @@ module MyUi exposing
     , guildColumnBorder
     , guildIconBackground
     , guildIconFullWidth
+    , guildIconSelectedBorder
     , heightAttr
     , highlightedBorder
     , hover
@@ -1804,6 +1805,14 @@ border1 =
 guildColumnBorder : Ui.Color
 guildColumnBorder =
     Ui.rgb 59 89 120
+
+
+{-| The outline around the selected guild's icon, which `guildColumnBorder` is too close to the
+column behind it to pick out.
+-}
+guildIconSelectedBorder : Ui.Color
+guildIconSelectedBorder =
+    Ui.rgb 90 190 255
 
 
 border2 : Ui.Color
