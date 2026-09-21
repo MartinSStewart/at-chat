@@ -10,6 +10,9 @@ import ChannelDescription
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Discord
+import DiscordUserData
+import DmChannel
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
@@ -24,11 +27,12 @@ import IdArray
 import LinkedAndOtherDiscordUsers exposing (LinkedAndOtherDiscordUsers(..))
 import List.Nonempty exposing (Nonempty(..))
 import Local
-import LocalState exposing (FrontendChannel, FrontendGuild)
+import LocalState exposing (DiscordFrontendGuild, FrontendChannel, FrontendGuild)
 import MembersAndOwner
 import Message exposing (Message(..), RepliedTo(..))
 import MessageArray exposing (MessageArray)
 import MyUi
+import NonemptyDict
 import NonemptySet
 import Pages.Guild
 import RichText
@@ -211,6 +215,99 @@ previewOtherUsers =
             }
           )
         ]
+
+
+previewDiscordUserId : Discord.Id Discord.UserId
+previewDiscordUserId =
+    Unsafe.uint64 "185574444641550336" |> Discord.idFromUInt64
+
+
+previewOtherDiscordUserId : Discord.Id Discord.UserId
+previewOtherDiscordUserId =
+    Unsafe.uint64 "705745250815311942" |> Discord.idFromUInt64
+
+
+previewDiscordDmChannelId : Discord.Id Discord.PrivateChannelId
+previewDiscordDmChannelId =
+    Unsafe.uint64 "1072828564317159465" |> Discord.idFromUInt64
+
+
+previewDiscordGuildId : Discord.Id Discord.GuildId
+previewDiscordGuildId =
+    Unsafe.uint64 "161098476632014848" |> Discord.idFromUInt64
+
+
+previewDiscordGuildName : GuildName
+previewDiscordGuildName =
+    Unsafe.guildName "speedrun club"
+
+
+previewDiscordUsers : LinkedAndOtherDiscordUsers
+previewDiscordUsers =
+    LinkedAndOtherDiscordUsers
+        (SeqDict.singleton
+            previewOtherDiscordUserId
+            { name = Unsafe.personName "hexadecimoose"
+            , icon = Nothing
+            , color = UserColor.fromParts { hue = 10, lightness = 11, saturation = 13 }
+            }
+        )
+        (SeqDict.singleton
+            previewDiscordUserId
+            { name = Unsafe.personName "Sven Svensson"
+            , color = UserColor.default
+            , icon = Nothing
+            , email = Nothing
+            , needsAuthAgain = False
+            , linkedAt = Time.millisToPosix 0
+            , isLoadingData = DiscordUserData.DiscordUserLoadedSuccessfully
+            }
+        )
+
+
+{-| A DM with each of these people that nobody has written in yet, which is all the unread
+overview preview needs: it's the list of them it shows, not what's in them.
+-}
+previewDmChannels : SeqDict.SeqDict (Id UserId) DmChannel.FrontendDmChannel
+previewDmChannels =
+    SeqDict.fromList
+        [ ( Id.fromInt 1, DmChannel.frontendInit )
+        , ( Id.fromInt 3, DmChannel.frontendInit )
+        ]
+
+
+previewDiscordDmChannels : SeqDict.SeqDict (Discord.Id Discord.PrivateChannelId) DmChannel.DiscordFrontendDmChannel
+previewDiscordDmChannels =
+    SeqDict.singleton
+        previewDiscordDmChannelId
+        { messages = MessageArray.empty
+        , visibleMessages = VisibleMessages.empty
+        , lastTypedAt = SeqDict.empty
+        , members =
+            NonemptyDict.singleton previewDiscordUserId { messagesSent = 0 }
+                |> NonemptyDict.insert previewOtherDiscordUserId { messagesSent = 0 }
+        , dateDividerDrawings = SeqDict.empty
+        }
+
+
+previewDiscordGuilds : Time.Posix -> SeqDict.SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
+previewDiscordGuilds time =
+    SeqDict.singleton
+        previewDiscordGuildId
+        { name = previewDiscordGuildName
+        , icon = Just (FileStatus.fileHash "AtE6z0DDmmHqLXBJ3rUpMwyj-w8OaN2QlkXXQQ")
+        , channels = SeqDict.empty
+        , membersAndOwner =
+            MembersAndOwner.init
+                (SeqDict.singleton
+                    previewDiscordUserId
+                    { joinedAt = Just time, roles = SeqSet.empty }
+                )
+                previewOtherDiscordUserId
+        , stickers = SeqSet.empty
+        , customEmojis = SeqSet.empty
+        , roles = SeqDict.empty
+        }
 
 
 previewMessage : Time.Posix -> Id UserId -> NonemptyString -> Message ChannelMessageId (Id UserId)
@@ -397,12 +494,12 @@ previewLoginData time userAgent =
             [ ( previewGuildId, previewGuild time )
             , ( previewGameGuildId, previewGameGuild time )
             ]
-    , dmChannels = SeqDict.empty
-    , discordDmChannels = SeqDict.empty
-    , discordGuilds = SeqDict.empty
+    , dmChannels = previewDmChannels
+    , discordDmChannels = previewDiscordDmChannels
+    , discordGuilds = previewDiscordGuilds time
     , user = previewUser
     , otherUsers = previewOtherUsers
-    , discordUsers = LinkedAndOtherDiscordUsers SeqDict.empty SeqDict.empty
+    , discordUsers = previewDiscordUsers
     , otherSessions = SeqDict.empty
     , publicVapidKey = ""
     , textEditor = TextEditor.initLocalState
