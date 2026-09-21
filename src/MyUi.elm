@@ -1292,6 +1292,13 @@ textarea::-moz-selection {
     color: transparent;
 }
 
+/* The homepage previews can't be scrolled, so their conversations are laid out from the
+   bottom rather than scrolled there. Each preview is a whole copy of the app, so several of
+   them carry the one conversation container id and only the first could be found to scroll. */
+#homePage_preview #conversationContainer {
+    justify-content: flex-end;
+}
+
 //https://stackoverflow.com/a/54410301
 .disable-scrollbars::-webkit-scrollbar {
   background: transparent;

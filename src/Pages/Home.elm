@@ -131,6 +131,15 @@ loginButtonId =
     Dom.id "homePage_loginButton"
 
 
+{-| Wraps the carousel so that `MyUi.css` can lay the conversations inside it out from the
+bottom. Each slide is a whole copy of the app, so several of them carry the one conversation
+container id and only the first could be found and scrolled.
+-}
+previewContainerId : HtmlId
+previewContainerId =
+    Dom.id "homePage_preview"
+
+
 previewUserId : Id UserId
 previewUserId =
     Id.fromInt 0
@@ -957,6 +966,10 @@ previewDots activeIndex =
         |> Ui.row [ Ui.width Ui.shrink, Ui.centerX ]
 
 
+{-| The preview is of one fixed moment rather than the current one, so that its clocks and
+date dividers don't move and the whole of it doesn't re-render every second.
+-}
+previewTime : Time.Posix
 previewTime =
     Time.millisToPosix 1790023692000
 
@@ -1070,7 +1083,7 @@ view loaded =
             FrontendExtra.loadedInitHelper
                 loaded.startupData
                 loaded.emojiData
-                (previewReadLoginData loaded.time loaded.startupData.userAgent)
+                (previewReadLoginData previewTime loaded.startupData.userAgent)
                 loaded
                 |> Tuple.first
 
@@ -1088,7 +1101,7 @@ view loaded =
                         slideRoute
                         { previewLoggedIn
                             | sidebarMode = ChannelSidebarNotDragging { offset = 1 }
-                            , games = previewGameModels loaded.time
+                            , games = previewGameModels previewTime
                         }
                         (Local.model previewLoggedIn.localState)
 
@@ -1156,7 +1169,8 @@ view loaded =
                       MyUi.htmlStyle "transition" "translate 300ms ease-out"
                     ]
                 |> Ui.el
-                    ([ Ui.width (Ui.px previewWidth)
+                    ([ Ui.id (Dom.idToString previewContainerId)
+                     , Ui.width (Ui.px previewWidth)
                      , Ui.height (Ui.px previewHeight)
                      , Ui.heightMin 0
                      , Ui.clip

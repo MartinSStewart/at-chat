@@ -657,15 +657,7 @@ updateLoaded msg model =
                         NotLoggedIn _ ->
                             model.loginStatus
               }
-            , Command.batch
-                [ Ports.requestDevicePixelRatio
-                , case model.route of
-                    HomePageRoute _ ->
-                        Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
-
-                    _ ->
-                        Command.none
-                ]
+            , Ports.requestDevicePixelRatio
             )
 
         PressedShowLogin ->
@@ -692,7 +684,7 @@ updateLoaded msg model =
 
         PressedHomePagePreview index ->
             ( { model | homePagePreview = { index = index, changedAt = model.time, rotate = False } }
-            , Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+            , Command.none
             )
 
         AdminPageMsg adminPageMsg ->
