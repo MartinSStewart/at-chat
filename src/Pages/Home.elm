@@ -51,7 +51,7 @@ import UserAgent exposing (UserAgent)
 import UserColor
 import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend(..), Viewing(..))
 import VisibleMessages
-import WordSpellingGame exposing (Action(..), ActionWithTime, IsValid(..), Letter(..), LetterOrWildcard(..))
+import WordSpellingGame exposing (Action(..), ActionWithTime, IsValid(..), Letter(..), LetterOrWildcard(..), ReactionTarget(..))
 
 
 loginSignupText : String
@@ -308,15 +308,15 @@ previewChannel time games =
     }
 
 
-previewGuild : Time.Posix -> SeqDict.SeqDict (Id ChannelMessageId) Game.MatchData -> FrontendGuild
-previewGuild time games =
+previewGuild : Time.Posix -> FrontendGuild
+previewGuild time =
     { createdAt = time
     , createdBy = Id.fromInt 1
     , name = previewGuildName
     , icon = Just (FileStatus.fileHash "c_fknEBFP2Tbqh4_2NcGxm7qHXm8lRZfOpXfzg")
     , channels =
         SeqDict.fromList
-            [ ( previewChannelId, previewChannel time games )
+            [ ( previewChannelId, previewChannel time SeqDict.empty )
             , ( Id.fromInt 1
               , { createdAt = time
                 , createdBy = Id.fromInt 1
@@ -342,15 +342,15 @@ previewGuild time games =
     }
 
 
-previewGameGuild : Time.Posix -> SeqDict.SeqDict (Id ChannelMessageId) Game.MatchData -> FrontendGuild
-previewGameGuild time games =
+previewGameGuild : Time.Posix -> FrontendGuild
+previewGameGuild time =
     { createdAt = time
     , createdBy = Id.fromInt 1
     , name = previewGameGuildName
     , icon = Just (FileStatus.fileHash "OW5CQBd1c1K1WO7VYOsgq8BL6Fimp-EE2e141g")
     , channels =
         SeqDict.fromList
-            [ ( previewChannelId, previewChannel time games )
+            [ ( previewChannelId, previewChannel time (previewGames time) )
             , ( Id.fromInt 1
               , { createdAt = time
                 , createdBy = Id.fromInt 1
@@ -394,8 +394,8 @@ previewLoginData time userAgent =
     , twoFactorAuthenticationEnabled = Nothing
     , guilds =
         SeqDict.fromList
-            [ ( previewGuildId, previewGuild time (previewGames time) )
-            , ( previewGameGuildId, previewGameGuild time (previewGames time) )
+            [ ( previewGuildId, previewGuild time )
+            , ( previewGameGuildId, previewGameGuild time )
             ]
     , dmChannels = SeqDict.empty
     , discordDmChannels = SeqDict.empty
@@ -409,6 +409,51 @@ previewLoginData time userAgent =
     , stickers = SeqDict.empty
     , customEmojis = SeqDict.empty
     , voiceChatPeers = SeqDict.empty
+    }
+
+
+{-| The unread overview preview is of an inbox with nothing in it, so this reader has caught up
+with every channel rather than stopping partway like `previewUser` does.
+-}
+previewReadLoginData : Time.Posix -> UserAgent -> LoginData
+previewReadLoginData time userAgent =
+    let
+        loginData : LoginData
+        loginData =
+            previewLoginData time userAgent
+
+        user : BackendUser
+        user =
+            loginData.user
+    in
+    { loginData
+        | user =
+            { user
+                | lastViewedMessage =
+                    SeqDict.foldl
+                        (\guildId guild acc ->
+                            SeqDict.foldl
+                                (\channelId channel acc2 ->
+                                    let
+                                        messageCount : Int
+                                        messageCount =
+                                            MessageArray.length channel.messages
+                                    in
+                                    if messageCount == 0 then
+                                        acc2
+
+                                    else
+                                        SeqDict.insert
+                                            (GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId }))
+                                            (Id.fromInt (messageCount - 1))
+                                            acc2
+                                )
+                                acc
+                                guild.channels
+                        )
+                        SeqDict.empty
+                        loginData.guilds
+            }
     }
 
 
@@ -445,15 +490,29 @@ previewGameMove time secondsAgo userId start isVertical letters =
 
 {-| The letters already on the board carry on past `start`, so each move only lists the tiles it
 adds: ZEBRA starts on the Z that QUARTZ left behind and places E, B, R and A below it.
+
+Both joins happen before the first word, because a player can only join while the turn count
+hasn't passed the number of players. The three then take turns in the order they joined, and the
+match is left on Sven's turn so the preview has a tray to show.
+
 -}
 previewGameActions : Time.Posix -> Array ActionWithTime
 previewGameActions time =
     Array.fromList
-        [ { userId = Id.fromInt 2, time = Duration.addTo time (Duration.seconds -300), change = JoinGame }
-        , previewGameMove time 240 previewUserId ( 4, 7 ) False (previewGameLetters 'Q' "UARTZ")
-        , previewGameMove time 180 (Id.fromInt 2) ( 9, 7 ) True (previewGameLetters 'E' "BRA")
-        , previewGameMove time 120 previewUserId ( 6, 7 ) True (previewGameLetters 'X' "E")
-        , previewGameMove time 60 (Id.fromInt 2) ( 9, 11 ) False (previewGameLetters 'G' "ILE")
+        [ { userId = Id.fromInt 2, time = Duration.addTo time (Duration.seconds -430), change = JoinGame }
+        , { userId = Id.fromInt 3, time = Duration.addTo time (Duration.seconds -420), change = JoinGame }
+        , previewGameMove time 360 previewUserId ( 4, 7 ) False (previewGameLetters 'Q' "UARTZ")
+        , { userId = Id.fromInt 3
+          , time = Duration.addTo time (Duration.seconds -350)
+          , change =
+                -- Move 3 is QUARTZ: the two joins take the first two rows of the Moves log.
+                AddedReaction (MoveReaction 3) (Emoji.EmojiOrCustomEmoji_Emoji (Emoji.fromString "🔥"))
+          }
+        , previewGameMove time 300 (Id.fromInt 2) ( 9, 7 ) True (previewGameLetters 'E' "BRA")
+        , previewGameMove time 240 (Id.fromInt 3) ( 9, 9 ) False (previewGameLetters 'R' "INK")
+        , previewGameMove time 180 previewUserId ( 6, 7 ) True (previewGameLetters 'X' "E")
+        , previewGameMove time 120 (Id.fromInt 2) ( 9, 11 ) False (previewGameLetters 'G' "ILE")
+        , previewGameMove time 60 (Id.fromInt 3) ( 10, 11 ) True (previewGameLetters 'U' "ST")
         ]
 
 
@@ -490,7 +549,7 @@ previewGameModels time =
                     Game.initModel
             in
             SeqDict.singleton
-                (GuildOrDmId_Guild { guildId = previewGuildId, channelId = previewChannelId })
+                (GuildOrDmId_Guild { guildId = previewGameGuildId, channelId = previewChannelId })
                 { gameModel
                     | startedGames =
                         -- The tray tiles animate in over the second after the game model is built,
@@ -509,24 +568,34 @@ previewGameModels time =
             SeqDict.empty
 
 
-previewChannelRoutes : List ( Id GuildId, Route.ChannelRoute )
-previewChannelRoutes =
-    ( previewGuildId
-    , Route.ChannelRoute previewChannelId (Route.NoThreadWithFriends Nothing Route.HideChannelSettings) Nothing
-    )
+{-| A page of the app the carousel shows.
+-}
+type PreviewPage
+    = PreviewChannel (Id GuildId) Route.ChannelRoute
+    | PreviewUnreadOverview
+
+
+previewPages : List PreviewPage
+previewPages =
+    (PreviewChannel
+        previewGuildId
+        (Route.ChannelRoute previewChannelId (Route.NoThreadWithFriends Nothing Route.HideChannelSettings) Nothing)
         :: (case previewGameSetup of
                 Ok _ ->
-                    [ ( previewGameGuildId
-                      , Route.ChannelRoute
+                    [ PreviewChannel
+                        previewGameGuildId
+                        (Route.ChannelRoute
                             previewChannelId
                             (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
                             (Just (ChannelHeaderTab_Games (Just previewGameMatchId) Nothing))
-                      )
+                        )
                     ]
 
                 Err _ ->
                     []
            )
+    )
+        ++ [ PreviewUnreadOverview ]
 
 
 previewIntervalMillis : Int
@@ -544,7 +613,7 @@ activePreview loaded =
         in
         loaded.homePagePreview.index
             + (elapsed // previewIntervalMillis)
-            |> modBy (List.length previewChannelRoutes)
+            |> modBy (List.length previewPages)
 
     else
         loaded.homePagePreview.index
@@ -554,7 +623,7 @@ previousPreviewButton : Int -> Element FrontendMsg_
 previousPreviewButton activeIndex =
     MyUi.elButton
         (Dom.id "homePage_previousPreview")
-        (PressedHomePagePreview (modBy (List.length previewChannelRoutes) (activeIndex - 1)))
+        (PressedHomePagePreview (modBy (List.length previewPages) (activeIndex - 1)))
         [ Ui.alignLeft, Ui.width (Ui.px 64), Ui.height Ui.fill ]
         Ui.none
 
@@ -563,14 +632,14 @@ nextPreviewButton : Int -> Element FrontendMsg_
 nextPreviewButton activeIndex =
     MyUi.elButton
         (Dom.id "homePage_nextPreview")
-        (PressedHomePagePreview (modBy (List.length previewChannelRoutes) (activeIndex + 1)))
+        (PressedHomePagePreview (modBy (List.length previewPages) (activeIndex + 1)))
         [ Ui.alignRight, Ui.width (Ui.px 64), Ui.height Ui.fill ]
         Ui.none
 
 
 previewDots : Int -> Element FrontendMsg_
 previewDots activeIndex =
-    List.range 0 (List.length previewChannelRoutes - 1)
+    List.range 0 (List.length previewPages - 1)
         |> List.map
             (\index ->
                 MyUi.elButton
@@ -654,20 +723,42 @@ view loaded =
         activeIndex =
             activePreview loaded
 
-        slide : ( Id GuildId, Route.ChannelRoute ) -> Element FrontendMsg_
-        slide ( guildId, slideRoute ) =
-            Pages.Guild.guildView
-                { loaded
-                    | windowSize = innerSize
-                    , route = GuildRoute guildId slideRoute ChannelsVisibleOnMobile Nothing
-                }
-                previewGuildId
-                slideRoute
-                { previewLoggedIn
-                    | sidebarMode = ChannelSidebarNotDragging { offset = 1 }
-                    , games = previewGameModels loaded.time
-                }
-                (Local.model previewLoggedIn.localState)
+        previewReadLoggedIn : Types.LoggedIn2
+        previewReadLoggedIn =
+            FrontendExtra.loadedInitHelper
+                loaded.startupData
+                loaded.emojiData
+                (previewReadLoginData loaded.time loaded.startupData.userAgent)
+                loaded
+                |> Tuple.first
+
+        slide : PreviewPage -> Element FrontendMsg_
+        slide page =
+            (case page of
+                PreviewChannel guildId slideRoute ->
+                    Pages.Guild.guildView
+                        { loaded
+                            | windowSize = innerSize
+                            , route = GuildRoute guildId slideRoute ChannelsVisibleOnMobile Nothing
+                        }
+                        guildId
+                        slideRoute
+                        { previewLoggedIn
+                            | sidebarMode = ChannelSidebarNotDragging { offset = 1 }
+                            , games = previewGameModels loaded.time
+                        }
+                        (Local.model previewLoggedIn.localState)
+
+                PreviewUnreadOverview ->
+                    Pages.Guild.homePageLoggedInView
+                        Pages.Guild.NoDmChannelSelected
+                        { loaded
+                            | windowSize = innerSize
+                            , route = HomePageRoute Nothing
+                        }
+                        { previewReadLoggedIn | sidebarMode = ChannelSidebarNotDragging { offset = 1 } }
+                        (Local.model previewReadLoggedIn.localState)
+            )
                 |> Ui.el
                     [ Ui.width (Ui.px (Coord.xRaw innerSize))
                     , Ui.height (Ui.px (Coord.yRaw innerSize))
@@ -709,9 +800,9 @@ view loaded =
         [ Ui.el [ Ui.Font.size 24 ] (Ui.text "at-chat, a place to chat with friends")
         , Ui.column
             [ Ui.spacing 12 ]
-            [ List.map slide previewChannelRoutes
+            [ List.map slide previewPages
                 |> Ui.row
-                    [ Ui.width (Ui.px (previewWidth * List.length previewChannelRoutes))
+                    [ Ui.width (Ui.px (previewWidth * List.length previewPages))
                     , Ui.height (Ui.px previewHeight)
                     , Ui.heightMin 0
                     , MyUi.noPointerEvents
@@ -727,7 +818,7 @@ view loaded =
                      , Ui.clip
                      , Ui.Shadow.shadows [ { x = 0, y = 0, blur = 10, size = 0, color = Ui.rgba 255 255 255 0.5 } ]
                      ]
-                        ++ (if List.length previewChannelRoutes > 1 then
+                        ++ (if List.length previewPages > 1 then
                                 [ Ui.inFront (previousPreviewButton activeIndex)
                                 , Ui.inFront (nextPreviewButton activeIndex)
                                 ]
@@ -736,7 +827,7 @@ view loaded =
                                 []
                            )
                     )
-            , if List.length previewChannelRoutes > 1 then
+            , if List.length previewPages > 1 then
                 previewDots activeIndex
 
               else
