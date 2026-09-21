@@ -22,7 +22,6 @@ import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, UserId)
 import IdArray
 import LinkedAndOtherDiscordUsers exposing (LinkedAndOtherDiscordUsers(..))
-import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local
 import LocalState exposing (FrontendChannel, FrontendGuild)
@@ -485,19 +484,23 @@ previewIntervalMillis =
     6000
 
 
-{-| Which preview is showing: the one the reader last picked, moved on by one for every interval
-that has passed since they picked it.
+{-| Which preview is showing. Until the reader picks one it moves on by one every interval;
+picking one stops it there, since they're looking at what they chose.
 -}
 activePreview : LoadedFrontend -> Int
 activePreview loaded =
-    let
-        elapsed : Int
-        elapsed =
-            Time.posixToMillis loaded.time - Time.posixToMillis loaded.homePagePreview.changedAt |> max 0
-    in
-    loaded.homePagePreview.index
-        + (elapsed // previewIntervalMillis)
-        |> modBy (List.length previewChannelRoutes)
+    if loaded.homePagePreview.rotate then
+        let
+            elapsed : Int
+            elapsed =
+                Time.posixToMillis loaded.time - Time.posixToMillis loaded.homePagePreview.changedAt |> max 0
+        in
+        loaded.homePagePreview.index
+            + (elapsed // previewIntervalMillis)
+            |> modBy (List.length previewChannelRoutes)
+
+    else
+        loaded.homePagePreview.index
 
 
 previousPreviewButton : Int -> Element FrontendMsg_
@@ -539,7 +542,7 @@ previewDots activeIndex =
                     ]
                     Ui.none
             )
-        |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.centerX, Ui.alignBottom, Ui.padding 12 ]
+        |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.centerX ]
 
 
 view : LoadedFrontend -> Element FrontendMsg_
@@ -566,6 +569,7 @@ view loaded =
             else
                 48
 
+        isMobile : Bool
         isMobile =
             MyUi.isMobile loaded
 
@@ -599,11 +603,36 @@ view loaded =
         activeIndex =
             activePreview loaded
 
-        channelRoute : Route.ChannelRoute
-        channelRoute =
-            List.Extra.getAt activeIndex previewChannelRoutes
-                |> Maybe.withDefault
-                    (Route.ChannelRoute previewChannelId (Route.NoThreadWithFriends Nothing Route.HideChannelSettings) Nothing)
+        slide : Route.ChannelRoute -> Element FrontendMsg_
+        slide slideRoute =
+            Pages.Guild.guildView
+                { loaded
+                    | windowSize = innerSize
+                    , route = GuildRoute previewGuildId slideRoute ChannelsVisibleOnMobile Nothing
+                }
+                previewGuildId
+                slideRoute
+                { previewLoggedIn
+                    | sidebarMode = ChannelSidebarNotDragging { offset = 1 }
+                    , games = previewGameModels loaded.time
+                }
+                (Local.model previewLoggedIn.localState)
+                |> Ui.el
+                    [ Ui.width (Ui.px (Coord.xRaw innerSize))
+                    , Ui.height (Ui.px (Coord.yRaw innerSize))
+                    , -- Without this the app inside is laid out at its natural height, since elm-ui
+                      -- leaves min-height at min-content and that wins over the height above.
+                      Ui.heightMin 0
+                    , MyUi.htmlStyle "transform" ("scale(" ++ String.fromFloat previewScale ++ ")")
+                    , MyUi.htmlStyle "transform-origin" "top left"
+                    ]
+                |> Ui.el
+                    [ Ui.width (Ui.px previewWidth)
+                    , Ui.height (Ui.px previewHeight)
+                    , Ui.heightMin 0
+                    , Ui.clip
+                    , MyUi.noShrinking
+                    ]
     in
     Ui.column
         [ MyUi.notoSans
@@ -627,43 +656,39 @@ view loaded =
             Ui.spacing 32
         ]
         [ Ui.el [ Ui.Font.size 24 ] (Ui.text "at-chat, a place to chat with friends")
-        , Pages.Guild.guildView
-            { loaded
-                | windowSize = innerSize
-                , route = GuildRoute previewGuildId channelRoute ChannelsVisibleOnMobile Nothing
-            }
-            previewGuildId
-            channelRoute
-            { previewLoggedIn
-                | sidebarMode = ChannelSidebarNotDragging { offset = 1 }
-                , games = previewGameModels loaded.time
-            }
-            (Local.model previewLoggedIn.localState)
-            |> Ui.el
-                [ Ui.width (Ui.px (Coord.xRaw innerSize))
-                , Ui.height (Ui.px (Coord.yRaw innerSize))
-                , -- Without this the app inside is laid out at its natural height, since elm-ui
-                  -- leaves min-height at min-content and that wins over the height above.
-                  Ui.heightMin 0
-                , MyUi.htmlStyle "transform" ("scale(" ++ String.fromFloat previewScale ++ ")")
-                , MyUi.htmlStyle "transform-origin" "top left"
-                , MyUi.noPointerEvents
-                ]
-            |> Ui.el
-                ([ Ui.width (Ui.px previewWidth)
-                 , Ui.height (Ui.px previewHeight)
-                 , Ui.heightMin 0
-                 , Ui.clip
-                 , Ui.Shadow.shadows [ { x = 0, y = 0, blur = 10, size = 0, color = Ui.rgba 255 255 255 0.5 } ]
-                 ]
-                    ++ (if List.length previewChannelRoutes > 1 then
-                            [ Ui.inFront (previousPreviewButton activeIndex)
-                            , Ui.inFront (nextPreviewButton activeIndex)
-                            , Ui.inFront (previewDots activeIndex)
-                            ]
+        , Ui.column
+            [ Ui.spacing 12 ]
+            [ List.map slide previewChannelRoutes
+                |> Ui.row
+                    [ Ui.width (Ui.px (previewWidth * List.length previewChannelRoutes))
+                    , Ui.height (Ui.px previewHeight)
+                    , Ui.heightMin 0
+                    , MyUi.noPointerEvents
+                    , Ui.move { x = -activeIndex * previewWidth, y = 0, z = 0 }
+                    , -- Ui.move sets the css translate property, so this animates the slide
+                      -- across rather than jumping to it.
+                      MyUi.htmlStyle "transition" "translate 300ms ease-out"
+                    ]
+                |> Ui.el
+                    ([ Ui.width (Ui.px previewWidth)
+                     , Ui.height (Ui.px previewHeight)
+                     , Ui.heightMin 0
+                     , Ui.clip
+                     , Ui.Shadow.shadows [ { x = 0, y = 0, blur = 10, size = 0, color = Ui.rgba 255 255 255 0.5 } ]
+                     ]
+                        ++ (if List.length previewChannelRoutes > 1 then
+                                [ Ui.inFront (previousPreviewButton activeIndex)
+                                , Ui.inFront (nextPreviewButton activeIndex)
+                                ]
 
-                        else
-                            []
-                       )
-                )
+                            else
+                                []
+                           )
+                    )
+            , if List.length previewChannelRoutes > 1 then
+                previewDots activeIndex
+
+              else
+                Ui.none
+            ]
         ]

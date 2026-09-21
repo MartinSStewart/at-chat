@@ -477,7 +477,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , toFrontendLogs = Nothing
             , popSound = loading.popSound
             , startupData = startupData
-            , homePagePreview = { index = 0, changedAt = time }
+            , homePagePreview = { index = 0, changedAt = time, rotate = True }
             }
 
         ( model2, cmdA ) =
@@ -691,7 +691,7 @@ updateLoaded msg model =
                     )
 
         PressedHomePagePreview index ->
-            ( { model | homePagePreview = { index = index, changedAt = model.time } }, Command.none )
+            ( { model | homePagePreview = { index = index, changedAt = model.time, rotate = False } }, Command.none )
 
         AdminPageMsg adminPageMsg ->
             case model.loginStatus of

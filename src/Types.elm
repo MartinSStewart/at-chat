@@ -212,7 +212,7 @@ type alias LoadedFrontend =
       toFrontendLogs : Maybe (Array ToFrontend)
     , popSound : Result Audio.LoadError Audio.Source
     , startupData : Ports.StartupData
-    , homePagePreview : { index : Int, changedAt : Time.Posix }
+    , homePagePreview : { index : Int, changedAt : Time.Posix, rotate : Bool }
     }
 
 
