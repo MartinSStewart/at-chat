@@ -212,6 +212,7 @@ type alias LoadedFrontend =
       toFrontendLogs : Maybe (Array ToFrontend)
     , popSound : Result Audio.LoadError Audio.Source
     , startupData : Ports.StartupData
+    , homePagePreview : { index : Int, changedAt : Time.Posix }
     }
 
 
@@ -563,6 +564,7 @@ type FrontendMsg_
     | LoginFormMsg LoginForm.Msg
     | RecoveryLoginMsg RecoveryLogin.Msg
     | PressedShowLogin
+    | PressedHomePagePreview Int
     | AdminPageMsg Pages.Admin.Msg
     | PressedLogOut SessionIdHash
     | ElmUiMsg Ui.Anim.Msg

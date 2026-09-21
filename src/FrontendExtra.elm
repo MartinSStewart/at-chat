@@ -2246,6 +2246,9 @@ isPressMsg msg =
         PressedShowLogin ->
             True
 
+        PressedHomePagePreview _ ->
+            True
+
         AdminPageMsg _ ->
             False
 
