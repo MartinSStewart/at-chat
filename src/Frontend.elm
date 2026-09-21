@@ -691,7 +691,9 @@ updateLoaded msg model =
                     )
 
         PressedHomePagePreview index ->
-            ( { model | homePagePreview = { index = index, changedAt = model.time, rotate = False } }, Command.none )
+            ( { model | homePagePreview = { index = index, changedAt = model.time, rotate = False } }
+            , Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+            )
 
         AdminPageMsg adminPageMsg ->
             case model.loginStatus of

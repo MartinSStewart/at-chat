@@ -186,6 +186,22 @@ previewUser =
                             , channelId = previewChannelId
                             }
                         )
+                  , Id.fromInt 6
+                  )
+                , ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = Id.fromInt 1 })
+                  , Id.fromInt 5
+                  )
+                ]
+        , lastViewedThreadMessage =
+            SeqDict.fromList
+                [ ( ( GuildOrDmId
+                        (GuildOrDmId_Guild
+                            { guildId = previewGuildId
+                            , channelId = previewChannelId
+                            }
+                        )
+                    , Id.fromInt 0
+                    )
                   , Id.fromInt 5
                   )
                 ]
@@ -411,7 +427,8 @@ previewChannel time =
             List.foldl
                 MessageArray.push
                 MessageArray.empty
-                [ UserTextMessage
+                [ previewMessage (previewMinutesAgo time 20000) previewUserId (NonemptyString 'I' " watched an old western yesterday, it was decent")
+                , UserTextMessage
                     { createdAt = previewMinutesAgo time 1624
                     , createdBy = Id.fromInt 3
                     , content =
@@ -477,18 +494,11 @@ previewChannel time =
     , lastTypedAt = SeqDict.fromList [ ( Id.fromInt 2, { time = time, messageIndex = Nothing } ) ]
     , threads =
         SeqDict.fromList
-            [ ( Id.fromInt 0
-              , previewThread
-                    [ previewMessage (previewMinutesAgo time 1619) (Id.fromInt 1) (NonemptyString 'i' "s the strap hand sewn too?")
-                    , previewMessage (previewMinutesAgo time 1616) (Id.fromInt 3) (NonemptyString 'e' "verything except the buckle")
-                    ]
-              )
-            , ( Id.fromInt 2
-              , previewThread
-                    [ previewMessage (previewMinutesAgo time 1540) previewUserId (NonemptyString 'w' "e have talked about this")
-                    , previewMessage (previewMinutesAgo time 1539) (Id.fromInt 2) (NonemptyString 'a' "nd yet")
-                    , previewMessage (previewMinutesAgo time 31) (Id.fromInt 1) (NonemptyString 'i' " think it's nice actually")
-                    ]
+            [ ( Id.fromInt 0, previewThread [ previewMessage (previewMinutesAgo time 1621) previewUserId (NonemptyString 'b' "") ] )
+            , ( Id.fromInt 6
+              , List.repeat 104 (previewMessage (previewMinutesAgo time 1540) previewUserId (NonemptyString 'a' ""))
+                    ++ [ previewMessage (previewMinutesAgo time 31) (Id.fromInt 1) (NonemptyString 'S' "hall be lifted—nevermore!") ]
+                    |> previewThread
               )
             ]
     , dateDividerDrawings = SeqDict.empty
@@ -774,14 +784,6 @@ previewGameMove time secondsAgo userId start isVertical letters =
     }
 
 
-{-| The letters already on the board carry on past `start`, so each move only lists the tiles it
-adds: ZEBRA starts on the Z that QUARTZ left behind and places E, B, R and A below it.
-
-Both joins happen before the first word, because a player can only join while the turn count
-hasn't passed the number of players. The three then take turns in the order they joined, and the
-match is left on Sven's turn so the preview has a tray to show.
-
--}
 previewGameActions : Time.Posix -> Array ActionWithTime
 previewGameActions time =
     Array.fromList
@@ -791,8 +793,12 @@ previewGameActions time =
         , { userId = Id.fromInt 3
           , time = Duration.addTo time (Duration.seconds -350)
           , change =
-                -- Move 3 is QUARTZ: the two joins take the first two rows of the Moves log.
                 AddedReaction (MoveReaction 3) (Emoji.EmojiOrCustomEmoji_Emoji (Emoji.fromString "🔥"))
+          }
+        , { userId = Id.fromInt 3
+          , time = Duration.addTo time (Duration.seconds -350)
+          , change =
+                AddedReaction (MoveReaction 3) (Emoji.EmojiOrCustomEmoji_Emoji (Emoji.fromString "💎"))
           }
         , previewGameMove time 300 (Id.fromInt 2) ( 9, 7 ) True (previewGameLetters 'E' "BRA")
         , previewGameMove time 240 (Id.fromInt 3) ( 9, 9 ) False (previewGameLetters 'R' "INK")
@@ -886,7 +892,7 @@ previewPages =
 
 previewIntervalMillis : Int
 previewIntervalMillis =
-    6000
+    8000
 
 
 activePreview : LoadedFrontend -> Int
@@ -951,6 +957,10 @@ previewDots activeIndex =
         |> Ui.row [ Ui.width Ui.shrink, Ui.centerX ]
 
 
+previewTime =
+    Time.millisToPosix 1790023692000
+
+
 view : LoadedFrontend -> Element FrontendMsg_
 view loaded =
     let
@@ -959,7 +969,7 @@ view loaded =
             FrontendExtra.loadedInitHelper
                 loaded.startupData
                 loaded.emojiData
-                (previewLoginData loaded.time loaded.startupData.userAgent)
+                (previewLoginData previewTime loaded.startupData.userAgent)
                 loaded
                 |> Tuple.first
 
@@ -969,7 +979,10 @@ view loaded =
 
         paddingX : Int
         paddingX =
-            if Coord.xRaw loaded.windowSize < 800 then
+            if isMobile then
+                16
+
+            else if Coord.xRaw loaded.windowSize < 800 then
                 24
 
             else
@@ -1005,12 +1018,7 @@ view loaded =
 
         headingHeight : Int
         headingHeight =
-            if isMobile then
-                -- The heading wraps onto a second line at the widths isMobile covers
-                68
-
-            else
-                34
+            30
 
         dotsSpacing : Int
         dotsSpacing =
@@ -1074,6 +1082,7 @@ view loaded =
                         { loaded
                             | windowSize = innerSize
                             , route = GuildRoute guildId slideRoute ChannelsVisibleOnMobile Nothing
+                            , time = previewTime
                         }
                         guildId
                         slideRoute
@@ -1122,7 +1131,17 @@ view loaded =
         , Ui.centerX
         , Ui.spacing headingSpacing
         ]
-        [ Ui.el [ Ui.Font.size 24 ] (Ui.text "at-chat, a place to chat with friends")
+        [ Ui.el
+            [ Ui.Font.size
+                (if isMobile then
+                    20
+
+                 else
+                    24
+                )
+            , Ui.attrIf isMobile Ui.contentCenterX
+            ]
+            (Ui.text "at-chat, a place to chat with friends")
         , Ui.column
             [ Ui.spacing dotsSpacing ]
             [ List.map slide previewPages
