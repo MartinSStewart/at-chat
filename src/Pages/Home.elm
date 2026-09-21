@@ -13,6 +13,7 @@ import CssPixels exposing (CssPixels)
 import Discord
 import DiscordUserData
 import DmChannel
+import Drawing
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
@@ -22,14 +23,14 @@ import FileStatus exposing (IsEncrypted(..))
 import FrontendExtra
 import Game
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, UserId)
 import IdArray
 import LinkedAndOtherDiscordUsers exposing (LinkedAndOtherDiscordUsers(..))
 import List.Nonempty exposing (Nonempty(..))
 import Local
 import LocalState exposing (DiscordFrontendGuild, FrontendChannel, FrontendGuild)
 import MembersAndOwner
-import Message exposing (Message(..), RepliedTo(..))
+import Message exposing (GameType(..), Message(..), RepliedTo(..))
 import MessageArray exposing (MessageArray)
 import MyUi
 import NonemptyDict
@@ -43,6 +44,7 @@ import SessionIdHash
 import Set
 import String.Nonempty exposing (NonemptyString(..))
 import TextEditor
+import Thread
 import Types exposing (AdminStatusLoginData(..), FrontendMsg_(..), LoadedFrontend, LoginData, LoginStatus(..))
 import Ui exposing (Element)
 import Ui.Anim
@@ -265,27 +267,118 @@ previewDiscordUsers =
         )
 
 
-{-| A DM with each of these people that nobody has written in yet, which is all the unread
-overview preview needs: it's the list of them it shows, not what's in them.
+{-| How long ago something in the preview happened. The offsets are counted back from the
+current time on every render, so the conversations always read the same however long the page
+has been open, and anything a day or more back falls on an earlier date and gets a divider.
 -}
-previewDmChannels : SeqDict.SeqDict (Id UserId) DmChannel.FrontendDmChannel
-previewDmChannels =
+previewMinutesAgo : Time.Posix -> Float -> Time.Posix
+previewMinutesAgo time minutes =
+    Duration.addTo time (Duration.minutes -minutes)
+
+
+previewMessage : Time.Posix -> userId -> NonemptyString -> Message messageId userId
+previewMessage createdAt createdBy text =
+    UserTextMessage
+        { createdAt = createdAt
+        , createdBy = createdBy
+        , content =
+            { content = RichText.fromNonemptyString Time.utc SeqDict.empty text
+            , embeds = Array.empty
+            , attachedFiles = SeqDict.empty
+            }
+        , reactions = SeqDict.empty
+        , editedAt = Nothing
+        , repliedTo = NoReply
+        , drawings = Nothing
+        }
+
+
+previewThread : List (Message ThreadMessageId (Id UserId)) -> Thread.FrontendThread
+previewThread messages =
+    let
+        messages2 : MessageArray ThreadMessageId (Id UserId)
+        messages2 =
+            List.foldl MessageArray.push MessageArray.empty messages
+    in
+    { messages = messages2
+    , visibleMessages = VisibleMessages.init True (MessageArray.length messages2)
+    , lastTypedAt = SeqDict.empty
+    , dateDividerDrawings = SeqDict.empty
+    }
+
+
+previewDmChannel :
+    List (Message ChannelMessageId (Id UserId))
+    -> SeqDict.SeqDict (Id ChannelMessageId) Thread.FrontendThread
+    -> DmChannel.FrontendDmChannel
+previewDmChannel messages threads =
+    let
+        messages2 : MessageArray ChannelMessageId (Id UserId)
+        messages2 =
+            List.foldl MessageArray.push MessageArray.empty messages
+
+        dmChannel : DmChannel.FrontendDmChannel
+        dmChannel =
+            DmChannel.frontendInit
+    in
+    { dmChannel
+        | messages = messages2
+        , visibleMessages = VisibleMessages.init True (MessageArray.length messages2)
+        , threads = threads
+    }
+
+
+previewDmChannels : Time.Posix -> SeqDict.SeqDict (Id UserId) DmChannel.FrontendDmChannel
+previewDmChannels time =
     SeqDict.fromList
-        [ ( Id.fromInt 1, DmChannel.frontendInit )
-        , ( Id.fromInt 3, DmChannel.frontendInit )
+        [ ( Id.fromInt 1
+          , previewDmChannel
+                [ previewMessage (previewMinutesAgo time 1612) (Id.fromInt 1) (NonemptyString 'd' "id you ever find out what bird that was")
+                , previewMessage (previewMinutesAgo time 1607) previewUserId (NonemptyString 'a' " sandpiper, she says")
+                , previewMessage (previewMinutesAgo time 1601) (Id.fromInt 1) (NonemptyString 'h' "uh. it looked bigger than that")
+                , previewMessage (previewMinutesAgo time 37) (Id.fromInt 1) (NonemptyString 'a' "nyway, are you around on saturday?")
+                ]
+                (SeqDict.singleton
+                    (Id.fromInt 0)
+                    (previewThread
+                        [ previewMessage (previewMinutesAgo time 1598) previewUserId (NonemptyString 'l' "ooked it up, they nest on gravel roofs")
+                        , previewMessage (previewMinutesAgo time 1596) (Id.fromInt 1) (NonemptyString 'o' "n roofs? that can't be comfortable")
+                        ]
+                    )
+                )
+          )
+        , ( Id.fromInt 3
+          , previewDmChannel
+                [ previewMessage (previewMinutesAgo time 412) previewUserId (NonemptyString 't' "he backpack came out really well")
+                , previewMessage (previewMinutesAgo time 396) (Id.fromInt 3) (NonemptyString 'i' " ran out of green halfway through but thank you")
+                ]
+                SeqDict.empty
+          )
         ]
 
 
-previewDiscordDmChannels : SeqDict.SeqDict (Discord.Id Discord.PrivateChannelId) DmChannel.DiscordFrontendDmChannel
-previewDiscordDmChannels =
+previewDiscordDmChannels :
+    Time.Posix
+    -> SeqDict.SeqDict (Discord.Id Discord.PrivateChannelId) DmChannel.DiscordFrontendDmChannel
+previewDiscordDmChannels time =
+    let
+        messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId)
+        messages =
+            List.foldl
+                MessageArray.push
+                MessageArray.empty
+                [ previewMessage (previewMinutesAgo time 1523) previewOtherDiscordUserId (NonemptyString 'g' "g, that last round was rough")
+                , previewMessage (previewMinutesAgo time 1519) previewDiscordUserId (NonemptyString 'r' "ematch after work tomorrow?")
+                ]
+    in
     SeqDict.singleton
         previewDiscordDmChannelId
-        { messages = MessageArray.empty
-        , visibleMessages = VisibleMessages.empty
+        { messages = messages
+        , visibleMessages = VisibleMessages.init True (MessageArray.length messages)
         , lastTypedAt = SeqDict.empty
         , members =
-            NonemptyDict.singleton previewDiscordUserId { messagesSent = 0 }
-                |> NonemptyDict.insert previewOtherDiscordUserId { messagesSent = 0 }
+            NonemptyDict.singleton previewDiscordUserId { messagesSent = 1 }
+                |> NonemptyDict.insert previewOtherDiscordUserId { messagesSent = 1 }
         , dateDividerDrawings = SeqDict.empty
         }
 
@@ -310,25 +403,8 @@ previewDiscordGuilds time =
         }
 
 
-previewMessage : Time.Posix -> Id UserId -> NonemptyString -> Message ChannelMessageId (Id UserId)
-previewMessage createdAt createdBy text =
-    UserTextMessage
-        { createdAt = createdAt
-        , createdBy = createdBy
-        , content =
-            { content = RichText.fromNonemptyString Time.utc SeqDict.empty text
-            , embeds = Array.empty
-            , attachedFiles = SeqDict.empty
-            }
-        , reactions = SeqDict.empty
-        , editedAt = Nothing
-        , repliedTo = NoReply
-        , drawings = Nothing
-        }
-
-
-previewChannel : Time.Posix -> SeqDict.SeqDict (Id ChannelMessageId) Game.MatchData -> FrontendChannel
-previewChannel time games =
+previewChannel : Time.Posix -> FrontendChannel
+previewChannel time =
     let
         messages : MessageArray ChannelMessageId (Id UserId)
         messages =
@@ -336,7 +412,7 @@ previewChannel time games =
                 MessageArray.push
                 MessageArray.empty
                 [ UserTextMessage
-                    { createdAt = time
+                    { createdAt = previewMinutesAgo time 1624
                     , createdBy = Id.fromInt 3
                     , content =
                         { content =
@@ -383,15 +459,15 @@ previewChannel time games =
                     , repliedTo = NoReply
                     , drawings = Nothing
                     }
-                , previewMessage time previewUserId (NonemptyString 'b' "ird!")
-                , previewMessage time (Id.fromInt 2) (NonemptyString '_' "Once upon a midnight dreary while I pondered weak and weary_")
-                , previewMessage time previewUserId (NonemptyString '#' "## *NO!*")
-                , previewMessage time (Id.fromInt 2) (NonemptyString '_' "Over many a quaint and curious volume of forgotten lore_")
-                , previewMessage time (Id.fromInt 2) (NonemptyString '_' "While I nodded, nearly napping, suddenly there came a tapping_")
-                , previewMessage time (Id.fromInt 3) (NonemptyString 't' "hat's not a raven!!")
+                , previewMessage (previewMinutesAgo time 1621) previewUserId (NonemptyString 'b' "ird!")
+                , previewMessage (previewMinutesAgo time 1544) (Id.fromInt 2) (NonemptyString '_' "Once upon a midnight dreary while I pondered weak and weary_")
+                , previewMessage (previewMinutesAgo time 1543) previewUserId (NonemptyString '#' "## *NO!*")
+                , previewMessage (previewMinutesAgo time 1542) (Id.fromInt 2) (NonemptyString '_' "Over many a quaint and curious volume of forgotten lore_")
+                , previewMessage (previewMinutesAgo time 1541) (Id.fromInt 2) (NonemptyString '_' "While I nodded, nearly napping, suddenly there came a tapping_")
+                , previewMessage (previewMinutesAgo time 26) (Id.fromInt 3) (NonemptyString 't' "hat's not a raven!!")
                 ]
     in
-    { createdAt = time
+    { createdAt = previewMinutesAgo time 40000
     , createdBy = Id.fromInt 1
     , name = previewChannelName
     , description = ChannelDescription.empty
@@ -399,30 +475,90 @@ previewChannel time games =
     , visibleMessages = VisibleMessages.init True (MessageArray.length messages)
     , isArchived = Nothing
     , lastTypedAt = SeqDict.fromList [ ( Id.fromInt 2, { time = time, messageIndex = Nothing } ) ]
+    , threads =
+        SeqDict.fromList
+            [ ( Id.fromInt 0
+              , previewThread
+                    [ previewMessage (previewMinutesAgo time 1619) (Id.fromInt 1) (NonemptyString 'i' "s the strap hand sewn too?")
+                    , previewMessage (previewMinutesAgo time 1616) (Id.fromInt 3) (NonemptyString 'e' "verything except the buckle")
+                    ]
+              )
+            , ( Id.fromInt 2
+              , previewThread
+                    [ previewMessage (previewMinutesAgo time 1540) previewUserId (NonemptyString 'w' "e have talked about this")
+                    , previewMessage (previewMinutesAgo time 1539) (Id.fromInt 2) (NonemptyString 'a' "nd yet")
+                    , previewMessage (previewMinutesAgo time 31) (Id.fromInt 1) (NonemptyString 'i' " think it's nice actually")
+                    ]
+              )
+            ]
+    , dateDividerDrawings = SeqDict.empty
+    , games = SeqDict.empty
+    }
+
+
+{-| The channel the word game is played in. The game card is the eighth message, which is what
+`previewGameMatchId` names, and everything before it was said the evening before, so the
+conversation carries a date divider above the card.
+-}
+previewGameChannel : Time.Posix -> FrontendChannel
+previewGameChannel time =
+    let
+        messages : MessageArray ChannelMessageId (Id UserId)
+        messages =
+            List.foldl
+                MessageArray.push
+                MessageArray.empty
+                [ previewMessage (previewMinutesAgo time 1268) (Id.fromInt 3) (NonemptyString 'a' "nyone up for a round tonight?")
+                , previewMessage (previewMinutesAgo time 1264) (Id.fromInt 2) (NonemptyString 'i' "m in, give me until after dinner")
+                , previewMessage (previewMinutesAgo time 1259) previewUserId (NonemptyString 's' "ame here")
+                , previewMessage (previewMinutesAgo time 1251) (Id.fromInt 1) (NonemptyString 'i' "ll watch. I lose every one of these")
+                , previewMessage (previewMinutesAgo time 1247) (Id.fromInt 2) (NonemptyString 'y' "ou lose because you only ever play four letter words")
+                , previewMessage (previewMinutesAgo time 1245) (Id.fromInt 1) (NonemptyString 'f' "our letter words are words")
+                , previewMessage (previewMinutesAgo time 1198) (Id.fromInt 3) (NonemptyString 'o' "k I'm falling asleep, tomorrow instead")
+                , GameStarted
+                    { startedAt = previewMinutesAgo time 8
+                    , startedBy = Id.fromInt 3
+                    , reactions = SeqDict.empty
+                    , gameType = GameType_WordSpellingGame
+                    , timestampDrawings = Drawing.emptyDrawing
+                    , cardDrawings = Drawing.emptyDrawing
+                    }
+                , previewMessage (previewMinutesAgo time 5) (Id.fromInt 2) (NonemptyString 'h' "ow do you get a Q and a Z in the same tray")
+                , previewMessage (previewMinutesAgo time 3) previewUserId (NonemptyString 'c' "lean living")
+                ]
+    in
+    { createdAt = previewMinutesAgo time 60000
+    , createdBy = Id.fromInt 1
+    , name = previewChannelName
+    , description = ChannelDescription.empty
+    , messages = messages
+    , visibleMessages = VisibleMessages.init True (MessageArray.length messages)
+    , isArchived = Nothing
+    , lastTypedAt = SeqDict.fromList [ ( Id.fromInt 3, { time = time, messageIndex = Nothing } ) ]
     , threads = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
-    , games = games
+    , games = previewGames time
     }
 
 
 previewGuild : Time.Posix -> FrontendGuild
 previewGuild time =
-    { createdAt = time
+    { createdAt = previewMinutesAgo time 40000
     , createdBy = Id.fromInt 1
     , name = previewGuildName
     , icon = Just (FileStatus.fileHash "c_fknEBFP2Tbqh4_2NcGxm7qHXm8lRZfOpXfzg")
     , channels =
         SeqDict.fromList
-            [ ( previewChannelId, previewChannel time SeqDict.empty )
+            [ ( previewChannelId, previewChannel time )
             , ( Id.fromInt 1
-              , { createdAt = time
+              , { createdAt = previewMinutesAgo time 39000
                 , createdBy = Id.fromInt 1
                 , name = petPicsChannelName
                 , description = ChannelDescription.empty
                 , messages = MessageArray.empty
                 , visibleMessages = VisibleMessages.init True 0
                 , isArchived = Nothing
-                , lastTypedAt = SeqDict.fromList [ ( Id.fromInt 2, { time = time, messageIndex = Nothing } ) ]
+                , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
                 , dateDividerDrawings = SeqDict.empty
                 , games = SeqDict.empty
@@ -431,8 +567,8 @@ previewGuild time =
             ]
     , membersAndOwner =
         MembersAndOwner.init
-            (SeqDict.map (\_ _ -> { joinedAt = time }) previewOtherUsers
-                |> SeqDict.insert previewUserId { joinedAt = time }
+            (SeqDict.map (\_ _ -> { joinedAt = previewMinutesAgo time 39500 }) previewOtherUsers
+                |> SeqDict.insert previewUserId { joinedAt = previewMinutesAgo time 39500 }
             )
             (Id.fromInt 1)
     , invites = SeqDict.empty
@@ -441,22 +577,22 @@ previewGuild time =
 
 previewGameGuild : Time.Posix -> FrontendGuild
 previewGameGuild time =
-    { createdAt = time
+    { createdAt = previewMinutesAgo time 60000
     , createdBy = Id.fromInt 1
     , name = previewGameGuildName
     , icon = Just (FileStatus.fileHash "OW5CQBd1c1K1WO7VYOsgq8BL6Fimp-EE2e141g")
     , channels =
         SeqDict.fromList
-            [ ( previewChannelId, previewChannel time (previewGames time) )
+            [ ( previewChannelId, previewGameChannel time )
             , ( Id.fromInt 1
-              , { createdAt = time
+              , { createdAt = previewMinutesAgo time 59000
                 , createdBy = Id.fromInt 1
                 , name = petPicsChannelName
                 , description = ChannelDescription.empty
                 , messages = MessageArray.empty
                 , visibleMessages = VisibleMessages.init True 0
                 , isArchived = Nothing
-                , lastTypedAt = SeqDict.fromList [ ( Id.fromInt 2, { time = time, messageIndex = Nothing } ) ]
+                , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
                 , dateDividerDrawings = SeqDict.empty
                 , games = SeqDict.empty
@@ -465,8 +601,8 @@ previewGameGuild time =
             ]
     , membersAndOwner =
         MembersAndOwner.init
-            (SeqDict.map (\_ _ -> { joinedAt = time }) previewOtherUsers
-                |> SeqDict.insert previewUserId { joinedAt = time }
+            (SeqDict.map (\_ _ -> { joinedAt = previewMinutesAgo time 59500 }) previewOtherUsers
+                |> SeqDict.insert previewUserId { joinedAt = previewMinutesAgo time 59500 }
             )
             (Id.fromInt 1)
     , invites = SeqDict.empty
@@ -481,7 +617,7 @@ previewLoginData time userAgent =
         , pushSubscription = UserSession.NotSubscribed
         , userAgent = userAgent
         , sessionIdHash = SessionIdHash.fromString ""
-        , signedInAt = time
+        , signedInAt = previewMinutesAgo time 120
         , lastClientDisconnect = Nothing
         , expandedUserOptions = SeqSet.empty
         , savedSheepGameQuestions = IdArray.empty
@@ -494,8 +630,8 @@ previewLoginData time userAgent =
             [ ( previewGuildId, previewGuild time )
             , ( previewGameGuildId, previewGameGuild time )
             ]
-    , dmChannels = previewDmChannels
-    , discordDmChannels = previewDiscordDmChannels
+    , dmChannels = previewDmChannels time
+    , discordDmChannels = previewDiscordDmChannels time
     , discordGuilds = previewDiscordGuilds time
     , user = previewUser
     , otherUsers = previewOtherUsers
@@ -510,7 +646,7 @@ previewLoginData time userAgent =
 
 
 {-| The unread overview preview is of an inbox with nothing in it, so this reader has caught up
-with every channel rather than stopping partway like `previewUser` does.
+with every channel, DM and thread rather than stopping partway like `previewUser` does.
 -}
 previewReadLoginData : Time.Posix -> UserAgent -> LoginData
 previewReadLoginData time userAgent =
@@ -522,34 +658,87 @@ previewReadLoginData time userAgent =
         user : BackendUser
         user =
             loginData.user
+
+        lastViewed : List ( key, Int ) -> SeqDict.SeqDict key (Id messageId)
+        lastViewed messageCounts =
+            List.foldl
+                (\( key, messageCount ) acc ->
+                    if messageCount == 0 then
+                        acc
+
+                    else
+                        SeqDict.insert key (Id.fromInt (messageCount - 1)) acc
+                )
+                SeqDict.empty
+                messageCounts
+
+        channelMessageCounts : List ( AnyGuildOrDmId, Int )
+        channelMessageCounts =
+            List.concatMap
+                (\( guildId, guild ) ->
+                    List.map
+                        (\( channelId, channel ) ->
+                            ( GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
+                            , MessageArray.length channel.messages
+                            )
+                        )
+                        (SeqDict.toList guild.channels)
+                )
+                (SeqDict.toList loginData.guilds)
+                ++ List.map
+                    (\( otherUserId, dmChannel ) ->
+                        ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId })
+                        , MessageArray.length dmChannel.messages
+                        )
+                    )
+                    (SeqDict.toList loginData.dmChannels)
+                ++ List.map
+                    (\( channelId, dmChannel ) ->
+                        ( DiscordGuildOrDmId
+                            (DiscordGuildOrDmId_Dm
+                                { currentUserId = previewDiscordUserId, channelId = channelId }
+                            )
+                        , MessageArray.length dmChannel.messages
+                        )
+                    )
+                    (SeqDict.toList loginData.discordDmChannels)
+
+        threadMessageCounts : List ( ( AnyGuildOrDmId, Id ChannelMessageId ), Int )
+        threadMessageCounts =
+            List.concatMap
+                (\( guildId, guild ) ->
+                    List.concatMap
+                        (\( channelId, channel ) ->
+                            List.map
+                                (\( threadId, thread ) ->
+                                    ( ( GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
+                                      , threadId
+                                      )
+                                    , MessageArray.length thread.messages
+                                    )
+                                )
+                                (SeqDict.toList channel.threads)
+                        )
+                        (SeqDict.toList guild.channels)
+                )
+                (SeqDict.toList loginData.guilds)
+                ++ List.concatMap
+                    (\( otherUserId, dmChannel ) ->
+                        List.map
+                            (\( threadId, thread ) ->
+                                ( ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = otherUserId }), threadId )
+                                , MessageArray.length thread.messages
+                                )
+                            )
+                            (SeqDict.toList dmChannel.threads)
+                    )
+                    (SeqDict.toList loginData.dmChannels)
     in
     { loginData
         | user =
             { user
-                | lastViewedMessage =
-                    SeqDict.foldl
-                        (\guildId guild acc ->
-                            SeqDict.foldl
-                                (\channelId channel acc2 ->
-                                    let
-                                        messageCount : Int
-                                        messageCount =
-                                            MessageArray.length channel.messages
-                                    in
-                                    if messageCount == 0 then
-                                        acc2
-
-                                    else
-                                        SeqDict.insert
-                                            (GuildOrDmId (GuildOrDmId_Guild { guildId = guildId, channelId = channelId }))
-                                            (Id.fromInt (messageCount - 1))
-                                            acc2
-                                )
-                                acc
-                                guild.channels
-                        )
-                        SeqDict.empty
-                        loginData.guilds
+                | lastViewedMessage = lastViewed channelMessageCounts
+                , lastViewedThreadMessage = lastViewed threadMessageCounts
             }
     }
 
