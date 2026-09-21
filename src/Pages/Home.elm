@@ -983,27 +983,75 @@ view loaded =
         previewWidth =
             min (Coord.xRaw loaded.windowSize) widthMax - paddingX * 2
 
-        previewHeight : Int
-        previewHeight =
+        topPadding : Int
+        topPadding =
             if isMobile then
-                600
+                80
+
+            else
+                120
+
+        bottomPadding : Int
+        bottomPadding =
+            48
+
+        headingSpacing : Int
+        headingSpacing =
+            if isMobile then
+                16
+
+            else
+                32
+
+        headingHeight : Int
+        headingHeight =
+            if isMobile then
+                -- The heading wraps onto a second line at the widths isMobile covers
+                68
+
+            else
+                34
+
+        dotsSpacing : Int
+        dotsSpacing =
+            12
+
+        dotsHeight : Int
+        dotsHeight =
+            28
+
+        -- How tall the app inside the preview is laid out, before it's scaled to fit the box
+        previewContentHeight : Int
+        previewContentHeight =
+            if isMobile then
+                750
 
             else
                 850
 
+        previewHeight : Int
+        previewHeight =
+            Coord.yRaw loaded.windowSize
+                - (topPadding + headingHeight + headingSpacing + dotsSpacing + dotsHeight + bottomPadding)
+                |> min
+                    (if isMobile then
+                        600
+
+                     else
+                        850
+                    )
+                |> max 200
+
+        -- The preview shows the whole of the app it's laid out as however short the window is,
+        -- by shrinking to the room left below the heading rather than running off the bottom
+        -- of the page
         previewScale : Float
         previewScale =
-            if isMobile then
-                0.8
-
-            else
-                1
+            toFloat previewHeight / toFloat previewContentHeight
 
         innerSize : Coord CssPixels
         innerSize =
-            Coord.xy
-                (round (toFloat previewWidth / previewScale))
-                (round (toFloat previewHeight / previewScale))
+            Coord.xy (round (toFloat previewWidth / previewScale)) previewContentHeight
 
         activeIndex : Int
         activeIndex =
@@ -1067,25 +1115,16 @@ view loaded =
         , Ui.paddingWith
             { left = paddingX
             , right = paddingX
-            , top =
-                if isMobile then
-                    80
-
-                else
-                    120
-            , bottom = 48
+            , top = topPadding
+            , bottom = bottomPadding
             }
         , Ui.widthMax widthMax
         , Ui.centerX
-        , if isMobile then
-            Ui.spacing 16
-
-          else
-            Ui.spacing 32
+        , Ui.spacing headingSpacing
         ]
         [ Ui.el [ Ui.Font.size 24 ] (Ui.text "at-chat, a place to chat with friends")
         , Ui.column
-            [ Ui.spacing 12 ]
+            [ Ui.spacing dotsSpacing ]
             [ List.map slide previewPages
                 |> Ui.row
                     [ Ui.width (Ui.px (previewWidth * List.length previewPages))
