@@ -8592,10 +8592,6 @@ view _ model =
 
             Loaded loaded ->
                 let
-                    windowWidth : Int
-                    windowWidth =
-                        Coord.xRaw loaded.windowSize
-
                     isMobile =
                         MyUi.isMobile loaded
 

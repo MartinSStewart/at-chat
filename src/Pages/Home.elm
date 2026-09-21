@@ -8,7 +8,8 @@ module Pages.Home exposing
 import Array
 import ChannelDescription
 import ChannelName exposing (ChannelName)
-import Coord
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Emoji
@@ -370,9 +371,11 @@ view loaded =
                 loaded
                 |> Tuple.first
 
+        widthMax : Int
         widthMax =
             1280
 
+        paddingX : Int
         paddingX =
             if Coord.xRaw loaded.windowSize < 800 then
                 24
@@ -380,8 +383,31 @@ view loaded =
             else
                 48
 
+        previewWidth : Int
         previewWidth =
             min (Coord.xRaw loaded.windowSize) widthMax - paddingX * 2
+
+        previewHeight : Int
+        previewHeight =
+            if MyUi.isMobile loaded then
+                600
+
+            else
+                900
+
+        previewScale : Float
+        previewScale =
+            if MyUi.isMobile loaded then
+                0.8
+
+            else
+                1
+
+        innerSize : Coord CssPixels
+        innerSize =
+            Coord.xy
+                (round (toFloat previewWidth / previewScale))
+                (round (toFloat previewHeight / previewScale))
     in
     Ui.column
         [ MyUi.notoSans
@@ -392,29 +418,22 @@ view loaded =
         ]
         [ Ui.el [ Ui.Font.size 24 ] (Ui.text "at-chat, a place to chat with friends")
         , Pages.Guild.guildView
-            { loaded
-                | windowSize =
-                    Coord.xy
-                        previewWidth
-                        600
-            }
+            { loaded | windowSize = innerSize }
             previewGuildId
             (Route.ChannelRoute previewChannelId (Route.NoThreadWithFriends Nothing Route.HideChannelSettings) Nothing)
             { previewLoggedIn | sidebarMode = ChannelSidebarNotDragging { offset = 1 } }
             (Local.model previewLoggedIn.localState)
             |> Ui.el
-                ([ Ui.Shadow.shadows [ { x = 0, y = 0, blur = 10, size = 0, color = Ui.rgba 255 255 255 0.5 } ]
-                 , MyUi.noPointerEvents
-                 ]
-                    ++ (if MyUi.isMobile loaded then
-                            [ Ui.move { x = -30, y = -100, z = 0 }
-                            , Ui.scale 0.8
-                            , Ui.width (Ui.px (floor (toFloat previewWidth * (1 / 0.8))))
-                            , Ui.height (Ui.px 600)
-                            ]
-
-                        else
-                            [ Ui.scale 1, Ui.height (Ui.px 900) ]
-                       )
-                )
+                [ Ui.width (Ui.px (Coord.xRaw innerSize))
+                , Ui.height (Ui.px (Coord.yRaw innerSize))
+                , MyUi.htmlStyle "transform" ("scale(" ++ String.fromFloat previewScale ++ ")")
+                , MyUi.htmlStyle "transform-origin" "top left"
+                ]
+            |> Ui.el
+                [ Ui.width (Ui.px previewWidth)
+                , Ui.height (Ui.px previewHeight)
+                , Ui.clip
+                , MyUi.noPointerEvents
+                , Ui.Shadow.shadows [ { x = 0, y = 0, blur = 10, size = 0, color = Ui.rgba 255 255 255 0.5 } ]
+                ]
         ]
