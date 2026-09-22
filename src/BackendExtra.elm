@@ -1823,7 +1823,11 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                 | guilds =
                     SeqDict.insert
                         id.guildId
-                        { guild | channels = SeqDict.insert id.channelId channel2 guild.channels }
+                        (LocalState.memberPosted
+                            session.userId
+                            time
+                            { guild | channels = SeqDict.insert id.channelId channel2 guild.channels }
+                        )
                         model.guilds
                 , users =
                     NonemptyDict.insert
@@ -2750,6 +2754,9 @@ toBackendLog toBackend =
 
                 Local_DeleteInviteLink _ _ ->
                     ToBackendLog_Local_DeleteInviteLink
+
+                Local_BanMember _ _ ->
+                    ToBackendLog_Local_BanMember
 
                 Local_NewGuild _ _ _ ->
                     ToBackendLog_Local_NewGuild

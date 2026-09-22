@@ -212,6 +212,9 @@ pendingChangesText localChange =
         Local_DeleteInviteLink _ _ ->
             "Deleted invite link"
 
+        Local_BanMember _ _ ->
+            "Banned member"
+
         Local_NewGuild _ _ _ ->
             "Created new guild"
 
@@ -2309,6 +2312,9 @@ isPressMsg msg =
         PressedCreateInviteLink _ ->
             True
 
+        PressedBanMember _ _ ->
+            True
+
         PressedDeleteInviteLink _ _ ->
             True
 
@@ -3128,6 +3134,20 @@ changeUpdate localMsg local =
                             SeqDict.updateIfExists
                                 guildId
                                 (LocalState.removeInvite inviteLinkId)
+                                local.guilds
+                    }
+
+                Local_BanMember guildId userId ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (\guild ->
+                                    { guild
+                                        | membersAndOwner =
+                                            MembersAndOwner.removeMember userId guild.membersAndOwner
+                                    }
+                                )
                                 local.guilds
                     }
 
@@ -6162,36 +6182,39 @@ guildSendMessage :
 guildSendMessage guildId guild channelId channel threadRouteWithRepliedTo createdAt userId text attachedFiles local =
     SeqDict.insert
         guildId
-        { guild
-            | channels =
-                SeqDict.insert
-                    channelId
-                    (case threadRouteWithRepliedTo of
-                        ViewThreadWithRepliedTo threadId maybeReplyTo ->
-                            LocalState.createThreadMessageFrontend
-                                threadId
-                                (Message.userTextMessageFrontend
-                                    createdAt
-                                    userId
-                                    text
-                                    (Message.maybeToReply maybeReplyTo)
-                                    attachedFiles
-                                )
-                                channel
+        (LocalState.memberPosted userId
+            createdAt
+            { guild
+                | channels =
+                    SeqDict.insert
+                        channelId
+                        (case threadRouteWithRepliedTo of
+                            ViewThreadWithRepliedTo threadId maybeReplyTo ->
+                                LocalState.createThreadMessageFrontend
+                                    threadId
+                                    (Message.userTextMessageFrontend
+                                        createdAt
+                                        userId
+                                        text
+                                        (Message.maybeToReply maybeReplyTo)
+                                        attachedFiles
+                                    )
+                                    channel
 
-                        NoThreadWithRepliedTo repliedTo ->
-                            LocalState.createChannelMessageFrontend
-                                (Message.userTextMessageFrontend
-                                    createdAt
-                                    userId
-                                    text
-                                    repliedTo
-                                    attachedFiles
-                                )
-                                channel
-                    )
-                    guild.channels
-        }
+                            NoThreadWithRepliedTo repliedTo ->
+                                LocalState.createChannelMessageFrontend
+                                    (Message.userTextMessageFrontend
+                                        createdAt
+                                        userId
+                                        text
+                                        repliedTo
+                                        attachedFiles
+                                    )
+                                    channel
+                        )
+                        guild.channels
+            }
+        )
         local.guilds
 
 

@@ -723,6 +723,9 @@ canChangeUnreadNotificationCount change =
         Local_DeleteInviteLink _ _ ->
             False
 
+        Local_BanMember _ _ ->
+            True
+
         Local_NewGuild _ _ _ ->
             True
 

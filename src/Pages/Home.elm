@@ -586,8 +586,8 @@ previewGuild time =
             ]
     , membersAndOwner =
         MembersAndOwner.init
-            (SeqDict.map (\_ _ -> { joinedAt = previewMinutesAgo time 39500 }) previewOtherUsers
-                |> SeqDict.insert previewUserId { joinedAt = previewMinutesAgo time 39500 }
+            (SeqDict.map (\_ _ -> { joinedAt = previewMinutesAgo time 39500, lastPostedAt = Nothing }) previewOtherUsers
+                |> SeqDict.insert previewUserId { joinedAt = previewMinutesAgo time 39500, lastPostedAt = Nothing }
             )
             (Id.fromInt 1)
     , invites = SeqDict.empty
@@ -620,8 +620,8 @@ previewGameGuild time =
             ]
     , membersAndOwner =
         MembersAndOwner.init
-            (SeqDict.map (\_ _ -> { joinedAt = previewMinutesAgo time 59500 }) previewOtherUsers
-                |> SeqDict.insert previewUserId { joinedAt = previewMinutesAgo time 59500 }
+            (SeqDict.map (\_ _ -> { joinedAt = previewMinutesAgo time 59500, lastPostedAt = Nothing }) previewOtherUsers
+                |> SeqDict.insert previewUserId { joinedAt = previewMinutesAgo time 59500, lastPostedAt = Nothing }
             )
             (Id.fromInt 1)
     , invites = SeqDict.empty

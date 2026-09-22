@@ -2,6 +2,7 @@ module Pages.Guild exposing
     ( DmChannelSelection(..)
     , HighlightMessage(..)
     , IsHovered(..)
+    , banMemberText
     , channelDoesNotExistText
     , channelMessageHtmlId
     , channelSearchInputId
@@ -25,6 +26,7 @@ module Pages.Guild exposing
     , enterPrivateKeyText
     , friendLabel
     , friendsSearchInputId
+    , guildMembersText
     , guildNotFoundText
     , guildView
     , homePageLoggedInView
@@ -33,6 +35,7 @@ module Pages.Guild exposing
     , importedChannelText
     , leaveGuildText
     , missingPrivateKeyText
+    , neverPostedText
     , newGuildFormInit
     , newGuildFormView
     , newMessagesBadgeText
@@ -125,6 +128,7 @@ import Ui.Input
 import Ui.Keyed
 import Ui.Lazy
 import Ui.Prose
+import Ui.Table
 import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
 import UserColor exposing (UserColor)
 import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, PreviouslyLastViewedMessage(..), Viewing(..))
@@ -2218,10 +2222,10 @@ channelSettingsForm localUser guildId channelRoute guild editChannelForm =
             Ui.none
 
 
-memberListView : Bool -> LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
+memberListView : Bool -> LocalUser -> MembersAndOwner (Id UserId) LocalState.GuildMember -> Element FrontendMsg_
 memberListView isMobile localUser membersAndOwner =
     let
-        members : SeqDict (Id UserId) { joinedAt : Time.Posix }
+        members : SeqDict (Id UserId) LocalState.GuildMember
         members =
             MembersAndOwner.members membersAndOwner
     in
@@ -3347,6 +3351,11 @@ guildSettingsView model loggedIn local guildId guild =
                 , memberLabel isMobile local.localUser owner
                 ]
             , if isOwner then
+                guildMemberTable local.localUser guildId guild
+
+              else
+                Ui.none
+            , if isOwner then
                 editGuildNameSection guildId guild editGuildForm
 
               else
@@ -3482,6 +3491,104 @@ guildSettingsView model loggedIn local guildId guild =
                 leaveGuildSection guildId editGuildForm
             ]
         )
+
+
+guildMembersText : String
+guildMembersText =
+    "Members"
+
+
+banMemberText : String
+banMemberText =
+    "Ban"
+
+
+neverPostedText : String
+neverPostedText =
+    "Never"
+
+
+{-| The owner isn't listed here. They are shown on their own further up the page and
+there's nothing on this table they could do to themselves.
+-}
+guildMemberTable : LocalUser -> Id GuildId -> FrontendGuild -> Element FrontendMsg_
+guildMemberTable localUser guildId guild =
+    Ui.column
+        [ Ui.spacing 8, Ui.paddingXY 16 0 ]
+        [ Ui.el [ Ui.Font.bold ] (Ui.text guildMembersText)
+        , Ui.Table.view
+            [ Ui.Font.size 14 ]
+            (Ui.Table.columns
+                [ Ui.Table.column
+                    { header = Ui.Table.header "Name"
+                    , view =
+                        \( userId, _ ) ->
+                            Ui.Table.cell
+                                guildMemberCellPadding
+                                (Ui.text
+                                    (case User.getUser userId localUser of
+                                        Just user ->
+                                            PersonName.toString user.name
+
+                                        Nothing ->
+                                            User.missingName
+                                    )
+                                )
+                    }
+                , Ui.Table.column
+                    { header = Ui.Table.header "Joined"
+                    , view =
+                        \( _, member ) ->
+                            Ui.Table.cell
+                                guildMemberCellPadding
+                                (Ui.text (MyUi.datestamp localUser.timezone member.joinedAt))
+                    }
+                , Ui.Table.column
+                    { header = Ui.Table.header "Last posted"
+                    , view =
+                        \( _, member ) ->
+                            Ui.Table.cell
+                                guildMemberCellPadding
+                                (Ui.text
+                                    (case member.lastPostedAt of
+                                        Just lastPostedAt ->
+                                            MyUi.datestamp localUser.timezone lastPostedAt
+
+                                        Nothing ->
+                                            neverPostedText
+                                    )
+                                )
+                    }
+                , Ui.Table.column
+                    { header = Ui.Table.header ""
+                    , view =
+                        \( userId, _ ) ->
+                            Ui.Table.cell
+                                guildMemberCellPadding
+                                (MyUi.elButton
+                                    (Dom.id ("guild_banMember_" ++ Id.toString userId))
+                                    (PressedBanMember guildId userId)
+                                    [ Ui.paddingXY 8 2
+                                    , Ui.background MyUi.deleteButtonBackground
+                                    , Ui.width Ui.shrink
+                                    , Ui.rounded 4
+                                    , Ui.Font.color MyUi.deleteButtonFont
+                                    , Ui.Font.weight 500
+                                    , Ui.borderColor MyUi.deleteButtonBorder
+                                    , Ui.border 1
+                                    ]
+                                    (Ui.text banMemberText)
+                                )
+                    }
+                ]
+            )
+            (MembersAndOwner.members guild.membersAndOwner |> SeqDict.toList)
+        ]
+
+
+guildMemberCellPadding : List (Ui.Attribute msg)
+guildMemberCellPadding =
+    [ Ui.paddingXY 8 4, Ui.contentCenterY ]
 
 
 importChannelText : String

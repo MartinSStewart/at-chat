@@ -365,6 +365,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.inviteUserAndDmChat normalConfig
     , E2EMisc.friendsSearchTest normalConfig
     , E2EMisc.channelSearchTest normalConfig
+    , E2EMisc.banMemberTest normalConfig
     , E2EMisc.colorPickerTest normalConfig
     , E2EMisc.exportChannelTest normalConfig
     , E2EMisc.importChannelTest channelImportConfig

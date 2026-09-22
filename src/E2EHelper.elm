@@ -2388,6 +2388,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_DeleteInviteLink _ _ ->
                     True
 
+                Local_BanMember _ _ ->
+                    True
+
                 Local_NewGuild _ _ _ ->
                     False
 
@@ -3102,6 +3105,7 @@ allAttackerLocalChanges =
             )
         )
     , Local_DeleteInviteLink legitGuildId (SecretId.fromString "123")
+    , Local_BanMember legitGuildId Broadcast.adminUserId
     , Local_Drawing
         guildOrDmId_guild
         (Drawing.MessageAnchor threadRouteWithMessage Drawing.UserIconAnchor)

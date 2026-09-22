@@ -1124,6 +1124,17 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedBanMember guildId userId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_BanMember guildId userId |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
         PressedToggleInviteLinkQrCode inviteLinkId ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->

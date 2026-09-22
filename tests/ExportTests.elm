@@ -167,6 +167,7 @@ guildWithChannels channelIds =
     , icon = Nothing
     , channels = List.map (\channelId -> ( Id.fromInt channelId, channel )) channelIds |> SeqDict.fromList
     , membersAndOwner = MembersAndOwner.init SeqDict.empty (Id.fromInt 0)
+    , bannedUsers = SeqSet.empty
     , invites = SeqDict.empty
     }
 

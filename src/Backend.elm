@@ -188,6 +188,7 @@ init =
             --List.range 1 40
             --    |> List.map (\index -> ( Id.fromInt index, { joinedAt = Time.millisToPosix 0 } ))
             --    |> SeqDict.fromList
+            , bannedUsers = SeqSet.empty
             , invites = SeqDict.empty
             }
     in
@@ -3519,6 +3520,36 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     model
                                 ]
                             )
+                        )
+
+                Local_BanMember guildId userId ->
+                    BackendExtra.asGuildOwner
+                        model
+                        sessionId
+                        guildId
+                        (\_ _ guild ->
+                            case MembersAndOwner.isMember userId guild.membersAndOwner of
+                                MembersAndOwner.IsMember ->
+                                    ( { model
+                                        | guilds =
+                                            SeqDict.insert guildId (LocalState.banMember userId guild) model.guilds
+                                      }
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toGuildExcludingOne
+                                            clientId
+                                            guildId
+                                            (Server_MemberLeft userId guildId |> ServerChange)
+                                            model
+                                        ]
+                                    )
+
+                                MembersAndOwner.IsOwner ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                MembersAndOwner.IsNotMember ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
                 Local_NewGuild _ guildName _ ->
@@ -8529,90 +8560,115 @@ joinGuildByInvite :
 joinGuildByInvite inviteLinkId time sessionId clientId guildId model session user =
     case SeqDict.get guildId model.guilds of
         Just guild ->
-            case ( SeqDict.get inviteLinkId guild.invites, LocalState.addMemberBackend time session.userId guild ) of
-                ( Just _, Ok guild2 ) ->
-                    let
-                        modelWithoutUser : BackendModel
-                        modelWithoutUser =
-                            model
+            if SeqSet.member session.userId guild.bannedUsers then
+                ( model
+                , Err YouAreBanned
+                    |> Server_YouJoinedGuildByInvite
+                    |> ServerChange
+                    |> ChangeBroadcast
+                    |> Lamdera.sendToFrontends sessionId
+                )
 
-                        model2 : BackendModel
-                        model2 =
-                            { model
-                                | guilds = SeqDict.insert guildId guild2 model.guilds
-                                , users =
-                                    NonemptyDict.insert
-                                        session.userId
-                                        (LocalState.markAllChannelsAndThreadsAsViewedBackend guildId guild2 user)
-                                        model.users
-                            }
-                    in
-                    ( model2
-                    , Command.batch
-                        [ Broadcast.toGuildExcludingOne
-                            clientId
-                            guildId
-                            (Server_MemberJoined
-                                time
-                                session.userId
-                                guildId
-                                (User.backendToFrontendForUser user)
-                                |> ServerChange
-                            )
-                            modelWithoutUser
-                        , case
-                            ( NonemptyDict.get (MembersAndOwner.owner guild2.membersAndOwner) model2.users
-                            , LocalState.guildToFrontendForUser
-                                guildId
-                                (Just ( LocalState.announcementChannel guild2, ( NoThread, Nothing ) ))
-                                session.userId
-                                model2.goMatchPublicIds
-                                guild2
-                            )
-                          of
-                            ( Just owner, Just frontendGuild ) ->
-                                { guildId = guildId
-                                , guild = frontendGuild
-                                , owner = User.backendToFrontendForUser owner
-                                , members =
-                                    SeqDict.filterMap
-                                        (\userId2 _ ->
-                                            NonemptyDict.get userId2 model2.users
-                                                |> Maybe.map User.backendToFrontendForUser
-                                        )
-                                        (MembersAndOwner.members guild2.membersAndOwner)
-                                }
-                                    |> Ok
-                                    |> Server_YouJoinedGuildByInvite
-                                    |> ServerChange
-                                    |> ChangeBroadcast
-                                    |> Lamdera.sendToFrontends sessionId
-
-                            _ ->
-                                Command.none
-                        ]
-                    )
-
-                ( _, Err () ) ->
-                    ( model
-                    , Err AlreadyJoined
-                        |> Server_YouJoinedGuildByInvite
-                        |> ServerChange
-                        |> ChangeBroadcast
-                        |> Lamdera.sendToFrontends sessionId
-                    )
-
-                ( Nothing, _ ) ->
-                    ( model
-                    , Err InviteIsInvalid
-                        |> Server_YouJoinedGuildByInvite
-                        |> ServerChange
-                        |> ChangeBroadcast
-                        |> Lamdera.sendToFrontends sessionId
-                    )
+            else
+                joinGuildByInviteHelper inviteLinkId time sessionId clientId guildId model session user guild
 
         Nothing ->
             ( model, Command.none )
+
+
+joinGuildByInviteHelper :
+    SecretId InviteLinkId
+    -> Time.Posix
+    -> SessionId
+    -> ClientId
+    -> Id GuildId
+    -> BackendModel
+    -> UserSession
+    -> BackendUser
+    -> BackendGuild
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+joinGuildByInviteHelper inviteLinkId time sessionId clientId guildId model session user guild =
+    case ( SeqDict.get inviteLinkId guild.invites, LocalState.addMemberBackend time session.userId guild ) of
+        ( Just _, Ok guild2 ) ->
+            let
+                modelWithoutUser : BackendModel
+                modelWithoutUser =
+                    model
+
+                model2 : BackendModel
+                model2 =
+                    { model
+                        | guilds = SeqDict.insert guildId guild2 model.guilds
+                        , users =
+                            NonemptyDict.insert
+                                session.userId
+                                (LocalState.markAllChannelsAndThreadsAsViewedBackend guildId guild2 user)
+                                model.users
+                    }
+            in
+            ( model2
+            , Command.batch
+                [ Broadcast.toGuildExcludingOne
+                    clientId
+                    guildId
+                    (Server_MemberJoined
+                        time
+                        session.userId
+                        guildId
+                        (User.backendToFrontendForUser user)
+                        |> ServerChange
+                    )
+                    modelWithoutUser
+                , case
+                    ( NonemptyDict.get (MembersAndOwner.owner guild2.membersAndOwner) model2.users
+                    , LocalState.guildToFrontendForUser
+                        guildId
+                        (Just ( LocalState.announcementChannel guild2, ( NoThread, Nothing ) ))
+                        session.userId
+                        model2.goMatchPublicIds
+                        guild2
+                    )
+                  of
+                    ( Just owner, Just frontendGuild ) ->
+                        { guildId = guildId
+                        , guild = frontendGuild
+                        , owner = User.backendToFrontendForUser owner
+                        , members =
+                            SeqDict.filterMap
+                                (\userId2 _ ->
+                                    NonemptyDict.get userId2 model2.users
+                                        |> Maybe.map User.backendToFrontendForUser
+                                )
+                                (MembersAndOwner.members guild2.membersAndOwner)
+                        }
+                            |> Ok
+                            |> Server_YouJoinedGuildByInvite
+                            |> ServerChange
+                            |> ChangeBroadcast
+                            |> Lamdera.sendToFrontends sessionId
+
+                    _ ->
+                        Command.none
+                ]
+            )
+
+        ( _, Err () ) ->
+            ( model
+            , Err AlreadyJoined
+                |> Server_YouJoinedGuildByInvite
+                |> ServerChange
+                |> ChangeBroadcast
+                |> Lamdera.sendToFrontends sessionId
+            )
+
+        ( Nothing, _ ) ->
+            ( model
+            , Err InviteIsInvalid
+                |> Server_YouJoinedGuildByInvite
+                |> ServerChange
+                |> ChangeBroadcast
+                |> Lamdera.sendToFrontends sessionId
+            )
 
 
 twoFactorAuthenticationUpdateFromFrontend :

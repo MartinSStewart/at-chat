@@ -29,6 +29,7 @@ module LocalState exposing
     , DiscordUserData_ForAdmin(..)
     , FrontendChannel
     , FrontendGuild
+    , GuildMember
     , JoinGuildError(..)
     , LastBackup
     , LastRequest(..)
@@ -50,6 +51,7 @@ module LocalState exposing
     , addReactionEmojiFrontendHelper
     , addReactionEmojiHelper
     , announcementChannel
+    , banMember
     , callEndedText
     , callStartedText
     , canSendDiscordMessage
@@ -127,6 +129,7 @@ module LocalState exposing
     , memberIsEditTypingFrontendHelperNoThread
     , memberIsTyping
     , memberIsTypingHelper
+    , memberPosted
     , messageDeleted
     , messageReactions
     , messageReactionsHelper
@@ -233,6 +236,7 @@ type alias LocalState =
 type JoinGuildError
     = AlreadyJoined
     | InviteIsInvalid
+    | YouAreBanned
 
 
 type alias BackendGuild =
@@ -241,9 +245,16 @@ type alias BackendGuild =
     , name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Id ChannelId) BackendChannel
-    , membersAndOwner : MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
+    , membersAndOwner : MembersAndOwner (Id UserId) GuildMember
+    , bannedUsers : SeqSet (Id UserId)
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     }
+
+
+{-| `lastPostedAt` is `Nothing` for a member who joined and never wrote anything.
+-}
+type alias GuildMember =
+    { joinedAt : Time.Posix, lastPostedAt : Maybe Time.Posix }
 
 
 type alias DeletedBackendGuild =
@@ -267,7 +278,7 @@ type alias FrontendGuild =
     , name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Id ChannelId) FrontendChannel
-    , membersAndOwner : MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
+    , membersAndOwner : MembersAndOwner (Id UserId) GuildMember
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     }
 
@@ -1491,6 +1502,7 @@ createGuild time userId guildName =
               )
             ]
     , membersAndOwner = MembersAndOwner.init SeqDict.empty userId
+    , bannedUsers = SeqSet.empty
     , invites = SeqDict.empty
     }
 
@@ -1937,7 +1949,7 @@ removeInvite inviteId guild =
 
 addMemberBackend : Time.Posix -> Id UserId -> BackendGuild -> Result () BackendGuild
 addMemberBackend time userId guild =
-    case MembersAndOwner.addMember userId { joinedAt = time } guild.membersAndOwner of
+    case MembersAndOwner.addMember userId { joinedAt = time, lastPostedAt = Nothing } guild.membersAndOwner of
         Ok membersAndOwner ->
             { guild
                 | membersAndOwner = membersAndOwner
@@ -1958,7 +1970,7 @@ addMemberBackend time userId guild =
 
 addMemberFrontend : Time.Posix -> Id UserId -> FrontendGuild -> Result () FrontendGuild
 addMemberFrontend time userId guild =
-    case MembersAndOwner.addMember userId { joinedAt = time } guild.membersAndOwner of
+    case MembersAndOwner.addMember userId { joinedAt = time, lastPostedAt = Nothing } guild.membersAndOwner of
         Ok membersAndOwner ->
             { guild
                 | membersAndOwner = membersAndOwner
@@ -1972,6 +1984,32 @@ addMemberFrontend time userId guild =
 
         Err () ->
             Err ()
+
+
+{-| Banning drops the member from the guild and remembers them, so the invite link they
+still have can't be used to walk straight back in.
+-}
+banMember : Id UserId -> BackendGuild -> BackendGuild
+banMember userId guild =
+    { guild
+        | membersAndOwner = MembersAndOwner.removeMember userId guild.membersAndOwner
+        , bannedUsers = SeqSet.insert userId guild.bannedUsers
+    }
+
+
+memberPosted :
+    Id UserId
+    -> Time.Posix
+    -> { a | membersAndOwner : MembersAndOwner (Id UserId) GuildMember }
+    -> { a | membersAndOwner : MembersAndOwner (Id UserId) GuildMember }
+memberPosted userId time guild =
+    { guild
+        | membersAndOwner =
+            MembersAndOwner.updateMember
+                userId
+                (\member -> { member | lastPostedAt = Just time })
+                guild.membersAndOwner
+    }
 
 
 announcementChannel : { a | channels : SeqDict (Id ChannelId) b } -> Id ChannelId

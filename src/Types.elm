@@ -587,6 +587,7 @@ type FrontendMsg_
     | PressedLeaveGuild (Id GuildId)
     | PressedCreateInviteLink (Id GuildId)
     | PressedDeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
+    | PressedBanMember (Id GuildId) (Id UserId)
     | PressedToggleInviteLinkQrCode (SecretId InviteLinkId)
     | FrontendNoOp
     | PressedCopyText String
@@ -1178,6 +1179,7 @@ type LocalChange
     | Local_LeaveGuild (Id GuildId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
     | Local_DeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
+    | Local_BanMember (Id GuildId) (Id UserId)
     | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))
     | Local_MemberTyping Time.Posix ( AnyGuildOrDmId, ThreadRoute )
     | Local_AddReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
