@@ -390,7 +390,7 @@ previewDmChannels time =
           )
         , ( Id.fromInt 3
           , previewDmChannel
-                [ previewMessage (previewMinutesAgo time 396) (Id.fromInt 3) (NonemptyString 'i' " ran out of green halfway through but thank you")
+                [ previewMessage (previewMinutesAgo time 396) (Id.fromInt 3) (NonemptyString 'i' " ran out of green!")
                 ]
                 SeqDict.empty
           )
