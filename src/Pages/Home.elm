@@ -38,6 +38,7 @@ import NonemptySet
 import Pages.Guild
 import RichText
 import Route exposing (ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), Route(..))
+import SafeFloat exposing (SafeFloat)
 import SeqDict
 import SeqSet
 import SessionIdHash
@@ -485,7 +486,19 @@ previewChannel time =
                     , repliedTo = NoReply
                     , drawings = Nothing
                     }
-                , previewMessage (previewMinutesAgo time 1621) previewUserId (NonemptyString 'b' "ird!")
+                , UserTextMessage
+                    { createdAt = previewMinutesAgo time 1621
+                    , createdBy = previewUserId
+                    , content =
+                        { content = RichText.fromNonemptyString Time.utc SeqDict.empty (NonemptyString 'b' "ird!")
+                        , embeds = Array.empty
+                        , attachedFiles = SeqDict.empty
+                        }
+                    , reactions = SeqDict.empty
+                    , editedAt = Nothing
+                    , repliedTo = NoReply
+                    , drawings = Just previewDoodles
+                    }
                 , previewMessage (previewMinutesAgo time 1544) (Id.fromInt 2) (NonemptyString '_' "Once upon a midnight dreary while I pondered weak and weary_")
                 , previewMessage (previewMinutesAgo time 1543) previewUserId (NonemptyString '#' "## *NO!*")
                 , previewMessage (previewMinutesAgo time 1542) (Id.fromInt 2) (NonemptyString '_' "Over many a quaint and curious volume of forgotten lore_")
@@ -1192,3 +1205,279 @@ view loaded =
                 Ui.none
             ]
         ]
+
+
+{-| Two faces Martin drew over the "bird!" message and exported out of the real app. The points
+are css pixels relative to the top left of the message's timestamp, which is why they're all to
+the left of it and reach down over the text.
+-}
+previewDoodles : Message.UserTextMessageDrawings (Id UserId)
+previewDoodles =
+    { timestampDrawings =
+        { finished =
+            [ previewDoodleStroke previewUserId
+                ( -36.4, 42.5 )
+                [ ( -38, 45.3 )
+                , ( -38.8, 46.1 )
+                , ( -40.8, 47.7 )
+                , ( -42.8, 48.9 )
+                , ( -47.2, 50.5 )
+                , ( -54, 52.5 )
+                , ( -60, 53.7 )
+                , ( -64.4, 54.1 )
+                , ( -69.6, 54.1 )
+                , ( -70.4, 54.1 )
+                , ( -72, 54.1 )
+                , ( -74, 53.3 )
+                , ( -76, 52.1 )
+                , ( -77.6, 50.1 )
+                , ( -79.6, 47.7 )
+                , ( -80.4, 46.1 )
+                , ( -80.8, 44.9 )
+                , ( -80.8, 44.5 )
+                , ( -81.2, 44.1 )
+                , ( -81.2, 43.7 )
+                , ( -81.2, 43.3 )
+                , ( -81.2, 42.9 )
+                ]
+            , previewDoodleStroke previewUserId
+                ( -96.4, -1.5 )
+                [ ( -95.2, -0.3 )
+                , ( -94.8, 0.5 )
+                , ( -93.6, 2.5 )
+                , ( -92, 5.7 )
+                , ( -89.6, 10.1 )
+                , ( -88.8, 11.3 )
+                , ( -87.6, 14.5 )
+                , ( -86.8, 15.7 )
+                , ( -85.6, 16.9 )
+                , ( -84.8, 18.1 )
+                , ( -84, 18.5 )
+                , ( -80.4, 19.7 )
+                , ( -79.2, 20.1 )
+                , ( -76.8, 20.5 )
+                , ( -75.6, 20.5 )
+                , ( -74.4, 20.5 )
+                , ( -71.6, 20.5 )
+                , ( -69.2, 20.5 )
+                , ( -67.6, 20.5 )
+                , ( -66.8, 20.5 )
+                , ( -64.8, 19.7 )
+                , ( -63.2, 19.7 )
+                , ( -61.6, 19.3 )
+                , ( -59.6, 18.5 )
+                , ( -58.8, 17.3 )
+                , ( -58.4, 16.1 )
+                , ( -58, 14.5 )
+                , ( -57.6, 12.9 )
+                , ( -56.8, 11.3 )
+                , ( -56.8, 10.9 )
+                , ( -56.8, 9.7 )
+                , ( -56.4, 8.1 )
+                , ( -56.4, 6.9 )
+                , ( -56, 6.5 )
+                , ( -55.6, 6.1 )
+                , ( -55.2, 5.7 )
+                , ( -54.8, 5.7 )
+                , ( -54.8, 6.1 )
+                , ( -54, 7.3 )
+                , ( -53.2, 8.5 )
+                , ( -53.2, 8.9 )
+                , ( -52.8, 10.5 )
+                , ( -52.8, 12.5 )
+                , ( -52, 14.1 )
+                , ( -50.8, 14.9 )
+                , ( -50.8, 15.7 )
+                , ( -50.4, 16.5 )
+                , ( -49.6, 16.9 )
+                , ( -48.4, 18.5 )
+                , ( -45.2, 20.5 )
+                , ( -43.6, 20.5 )
+                , ( -42.4, 20.9 )
+                , ( -41.2, 20.9 )
+                , ( -39.2, 20.9 )
+                , ( -37.2, 20.9 )
+                , ( -35.2, 20.9 )
+                , ( -33.6, 20.5 )
+                , ( -32.8, 20.5 )
+                , ( -31.6, 19.7 )
+                , ( -30.4, 19.3 )
+                , ( -29.2, 18.5 )
+                , ( -28, 17.3 )
+                , ( -28, 16.9 )
+                , ( -27.6, 15.3 )
+                , ( -27.2, 13.7 )
+                , ( -26.8, 12.5 )
+                , ( -26.4, 11.3 )
+                , ( -26.4, 10.9 )
+                , ( -26, 10.5 )
+                , ( -26, 9.7 )
+                , ( -26, 8.9 )
+                , ( -26, 8.5 )
+                , ( -25.6, 8.5 )
+                ]
+            , previewDoodleStroke previewUserId
+                ( -94.8, -1.1 )
+                [ ( -86.4, -1.1 )
+                , ( -78, -0.3 )
+                , ( -65.6, 2.1 )
+                , ( -48.8, 4.5 )
+                , ( -32.8, 5.7 )
+                , ( -21.6, 5.7 )
+                , ( -20.8, 5.7 )
+                , ( -20.4, 5.7 )
+                , ( -19.6, 5.7 )
+                , ( -19.2, 5.7 )
+                , ( -18.8, 5.7 )
+                ]
+            , previewDoodleStroke (Id.fromInt 3)
+                ( -216, 29 )
+                [ ( -216, 30 )
+                , ( -216, 32 )
+                , ( -215, 37 )
+                , ( -214, 41 )
+                , ( -212, 45 )
+                , ( -210, 47 )
+                , ( -208, 49 )
+                , ( -205, 52 )
+                , ( -203, 53 )
+                , ( -199, 54 )
+                , ( -197, 54 )
+                , ( -195, 54 )
+                , ( -192, 52 )
+                , ( -191, 52 )
+                , ( -190, 49 )
+                , ( -189, 46 )
+                , ( -187, 43 )
+                , ( -187, 42 )
+                , ( -186, 41 )
+                , ( -186, 40 )
+                , ( -185, 40 )
+                , ( -185, 41 )
+                , ( -185, 42 )
+                , ( -184, 44 )
+                , ( -183, 47 )
+                , ( -181, 50 )
+                , ( -178, 53 )
+                , ( -174, 56 )
+                , ( -171, 57 )
+                , ( -164, 59 )
+                , ( -157, 59 )
+                , ( -152, 57 )
+                , ( -148, 52 )
+                , ( -145, 47 )
+                , ( -143, 44 )
+                , ( -141, 41 )
+                , ( -139, 37 )
+                , ( -138, 35 )
+                , ( -138, 34 )
+                , ( -138, 30 )
+                ]
+            , previewDoodleStroke (Id.fromInt 3)
+                ( -204, 5 )
+                [ ( -205, 5 )
+                , ( -206, 5 )
+                , ( -207, 5 )
+                , ( -208, 6 )
+                , ( -209, 6 )
+                , ( -209, 7 )
+                , ( -209, 8 )
+                , ( -209, 9 )
+                , ( -208, 10 )
+                , ( -207, 10 )
+                , ( -206, 10 )
+                , ( -204, 9 )
+                , ( -203, 9 )
+                , ( -202, 8 )
+                , ( -201, 8 )
+                , ( -201, 7 )
+                , ( -201, 6 )
+                , ( -202, 6 )
+                , ( -203, 5 )
+                , ( -206, 5 )
+                , ( -207, 5 )
+                ]
+            , previewDoodleStroke (Id.fromInt 3)
+                ( -167, -7 )
+                [ ( -168, -5 )
+                , ( -168, -3 )
+                , ( -169, 0 )
+                , ( -170, 4 )
+                , ( -170, 8 )
+                , ( -170, 9 )
+                , ( -169, 10 )
+                , ( -168, 10 )
+                , ( -166, 8 )
+                , ( -164, 6 )
+                , ( -164, 5 )
+                , ( -163, 2 )
+                , ( -161, 0 )
+                , ( -161, -1 )
+                , ( -161, -2 )
+                , ( -162, -2 )
+                , ( -162, -3 )
+                , ( -163, -3 )
+                , ( -163, -2 )
+                ]
+            , previewDoodleStroke (Id.fromInt 3)
+                ( -185, -2 )
+                [ ( -184, -2 )
+                , ( -184, -3 )
+                , ( -182, -6 )
+                , ( -181, -7 )
+                , ( -181, -8 )
+                , ( -180, -10 )
+                , ( -179, -11 )
+                , ( -176, -12 )
+                , ( -175, -12 )
+                , ( -175, -13 )
+                , ( -174, -13 )
+                , ( -174, -14 )
+                , ( -172, -15 )
+                , ( -172, -16 )
+                , ( -171, -16 )
+                , ( -170, -16 )
+                , ( -170, -17 )
+                , ( -169, -17 )
+                , ( -169, -18 )
+                , ( -168, -19 )
+                ]
+            , previewDoodleStroke (Id.fromInt 3)
+                ( -212, -15 )
+                [ ( -212, -14 )
+                , ( -211, -14 )
+                , ( -210, -14 )
+                , ( -209, -13 )
+                , ( -205, -10 )
+                , ( -202, -8 )
+                , ( -198, -5 )
+                , ( -197, -4 )
+                , ( -193, 0 )
+                , ( -192, 0 )
+                ]
+            ]
+        , inProgress = SeqDict.empty
+        , undone = SeqDict.empty
+        }
+    , userIconDrawings = Drawing.emptyDrawing
+    , imageAttachmentDrawings = SeqDict.empty
+    , embedDrawings = SeqDict.empty
+    }
+
+
+previewDoodleStroke :
+    Id UserId
+    -> ( Float, Float )
+    -> List ( Float, Float )
+    -> { createdBy : Id UserId, points : Nonempty ( SafeFloat, SafeFloat ) }
+previewDoodleStroke createdBy firstPoint rest =
+    { createdBy = createdBy
+    , points = Nonempty (previewDoodlePoint firstPoint) (List.map previewDoodlePoint rest)
+    }
+
+
+previewDoodlePoint : ( Float, Float ) -> ( SafeFloat, SafeFloat )
+previewDoodlePoint ( x, y ) =
+    ( SafeFloat.fromFloat x |> Result.withDefault SafeFloat.zero
+    , SafeFloat.fromFloat y |> Result.withDefault SafeFloat.zero
+    )
