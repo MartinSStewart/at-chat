@@ -181,6 +181,11 @@ petPicsChannelName =
     Unsafe.channelName "pet-pics"
 
 
+newsChannelName : ChannelName
+newsChannelName =
+    Unsafe.channelName "the-news"
+
+
 previewUser : BackendUser
 previewUser =
     let
@@ -230,15 +235,22 @@ previewOtherUsers =
           )
         , ( Id.fromInt 2
           , { name = Unsafe.personName "boog'les_the_spy.jpig"
-            , color = UserColor.fromParts { hue = 0, lightness = 12, saturation = 11 }
+            , color = UserColor.fromParts { hue = 0, lightness = 12, saturation = UserColor.saturationCount - 1 }
             , icon = Just (FileStatus.fileHash "defrqz-9TjEnuXDZnPc8zD1VoeugOLHh_7-sWw")
             , publicKey = Nothing
             }
           )
         , ( Id.fromInt 3
           , { name = Unsafe.personName "antichokehards"
-            , color = UserColor.fromParts { hue = 4, lightness = 10, saturation = 15 }
+            , color = UserColor.fromParts { hue = 4, lightness = 10, saturation = 2 }
             , icon = Just (FileStatus.fileHash "7kTsE8OAyWGK_3AsOpZje0ySNF-kqCH_RnemPg")
+            , publicKey = Nothing
+            }
+          )
+        , ( doodleUserId
+          , { name = Unsafe.personName "123"
+            , color = UserColor.fromParts { hue = 10, lightness = 10, saturation = UserColor.saturationCount - 7 }
+            , icon = Nothing
             , publicKey = Nothing
             }
           )
@@ -275,7 +287,7 @@ previewDiscordUsers =
     LinkedAndOtherDiscordUsers
         (SeqDict.singleton
             previewOtherDiscordUserId
-            { name = Unsafe.personName "hexadecimoose"
+            { name = Unsafe.personName "rkyle"
             , icon = Nothing
             , color = UserColor.fromParts { hue = 10, lightness = 11, saturation = 13 }
             }
@@ -359,24 +371,19 @@ previewDmChannels time =
     SeqDict.fromList
         [ ( Id.fromInt 1
           , previewDmChannel
-                [ previewMessage (previewMinutesAgo time 1612) (Id.fromInt 1) (NonemptyString 'd' "id you ever find out what bird that was")
-                , previewMessage (previewMinutesAgo time 1607) previewUserId (NonemptyString 'a' " sandpiper, she says")
-                , previewMessage (previewMinutesAgo time 1601) (Id.fromInt 1) (NonemptyString 'h' "uh. it looked bigger than that")
-                , previewMessage (previewMinutesAgo time 37) (Id.fromInt 1) (NonemptyString 'a' "nyway, are you around on saturday?")
+                [ previewMessage (previewMinutesAgo time 1612) (Id.fromInt 1) (NonemptyString 'd' "id you ever find out what it was")
                 ]
                 (SeqDict.singleton
                     (Id.fromInt 0)
                     (previewThread
                         [ previewMessage (previewMinutesAgo time 1598) previewUserId (NonemptyString 'l' "ooked it up, they nest on gravel roofs")
-                        , previewMessage (previewMinutesAgo time 1596) (Id.fromInt 1) (NonemptyString 'o' "n roofs? that can't be comfortable")
                         ]
                     )
                 )
           )
         , ( Id.fromInt 3
           , previewDmChannel
-                [ previewMessage (previewMinutesAgo time 412) previewUserId (NonemptyString 't' "he backpack came out really well")
-                , previewMessage (previewMinutesAgo time 396) (Id.fromInt 3) (NonemptyString 'i' " ran out of green halfway through but thank you")
+                [ previewMessage (previewMinutesAgo time 396) (Id.fromInt 3) (NonemptyString 'i' " ran out of green halfway through but thank you")
                 ]
                 SeqDict.empty
           )
@@ -393,8 +400,7 @@ previewDiscordDmChannels time =
             List.foldl
                 MessageArray.push
                 MessageArray.empty
-                [ previewMessage (previewMinutesAgo time 1523) previewOtherDiscordUserId (NonemptyString 'g' "g, that last round was rough")
-                , previewMessage (previewMinutesAgo time 1519) previewDiscordUserId (NonemptyString 'r' "ematch after work tomorrow?")
+                [ previewMessage (previewMinutesAgo time 1519) previewDiscordUserId (NonemptyString 'r' "ematch?")
                 ]
     in
     SeqDict.singleton
@@ -446,7 +452,7 @@ previewChannel time =
                             RichText.fromNonemptyString
                                 Time.utc
                                 SeqDict.empty
-                                (NonemptyString 'h' "ere's that bird I drew, now on my backpack! [!1]")
+                                (NonemptyString '[' "!1] here's that bird I drew, now on my backpack!")
                         , embeds = Array.empty
                         , attachedFiles =
                             SeqDict.fromList
@@ -481,10 +487,13 @@ previewChannel time =
                             [ ( Emoji.EmojiOrCustomEmoji_Emoji Emoji.heart
                               , NonemptySet.singleton (Id.fromInt 1)
                               )
+                            , ( Emoji.EmojiOrCustomEmoji_Emoji (Emoji.fromString "🐦")
+                              , NonemptySet.fromNonemptyList (Nonempty (Id.fromInt 1) [ Id.fromInt 2 ])
+                              )
                             ]
                     , editedAt = Nothing
                     , repliedTo = NoReply
-                    , drawings = Nothing
+                    , drawings = Just previewDoodles
                     }
                 , UserTextMessage
                     { createdAt = previewMinutesAgo time 1621
@@ -497,7 +506,7 @@ previewChannel time =
                     , reactions = SeqDict.empty
                     , editedAt = Nothing
                     , repliedTo = NoReply
-                    , drawings = Just previewDoodles
+                    , drawings = Nothing
                     }
                 , previewMessage (previewMinutesAgo time 1544) (Id.fromInt 2) (NonemptyString '_' "Once upon a midnight dreary while I pondered weak and weary_")
                 , previewMessage (previewMinutesAgo time 1543) previewUserId (NonemptyString '#' "## *NO!*")
@@ -519,7 +528,7 @@ previewChannel time =
             [ ( Id.fromInt 0, previewThread [ previewMessage (previewMinutesAgo time 1621) previewUserId (NonemptyString 'b' "") ] )
             , ( Id.fromInt 6
               , List.repeat 104 (previewMessage (previewMinutesAgo time 1540) previewUserId (NonemptyString 'a' ""))
-                    ++ [ previewMessage (previewMinutesAgo time 31) (Id.fromInt 1) (NonemptyString 'S' "hall be lifted—nevermore!") ]
+                    ++ [ previewMessage (previewMinutesAgo time 31) (Id.fromInt 1) (NonemptyString '_' "Shall be lifted—nevermore!_") ]
                     |> previewThread
               )
             ]
@@ -586,6 +595,20 @@ previewGuild time =
               , { createdAt = previewMinutesAgo time 39000
                 , createdBy = Id.fromInt 1
                 , name = petPicsChannelName
+                , description = ChannelDescription.empty
+                , messages = MessageArray.empty
+                , visibleMessages = VisibleMessages.init True 0
+                , isArchived = Nothing
+                , lastTypedAt = SeqDict.empty
+                , threads = SeqDict.empty
+                , dateDividerDrawings = SeqDict.empty
+                , games = SeqDict.empty
+                }
+              )
+            , ( Id.fromInt 2
+              , { createdAt = previewMinutesAgo time 39000
+                , createdBy = Id.fromInt 1
+                , name = newsChannelName
                 , description = ChannelDescription.empty
                 , messages = MessageArray.empty
                 , visibleMessages = VisibleMessages.init True 0
@@ -1207,222 +1230,20 @@ view loaded =
         ]
 
 
-{-| A doodle Martin drew over the "bird!" message and exported out of the real app. The points
-are css pixels relative to the top left of the message's timestamp, which is why they're mostly
-to the left of it and reach down over the messages below. They're simplified from the export,
-which recorded a point every few hundredths of a pixel.
--}
+doodleUserId : Id UserId
+doodleUserId =
+    Id.fromInt 10
+
+
 previewDoodles : Message.UserTextMessageDrawings (Id UserId)
 previewDoodles =
     { timestampDrawings =
         { finished =
-            [ previewDoodleStroke previewUserId
-                ( -336.3, 131.8 )
-                [ ( -302.7, 131.8 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -389.7, 139.5 )
-                [ ( -388.7, 136.5 )
-                , ( -388.3, 127.5 )
-                , ( -388, 94.1 )
-                , ( -383.3, 83.5 )
-                , ( -379.3, 76.8 )
-                , ( -377.3, 75.5 )
-                , ( -372.3, 74.5 )
-                , ( -371, 73.5 )
-                , ( -367.3, 72.8 )
-                , ( -339.7, 72.8 )
-                , ( -336.3, 72.1 )
-                , ( -330.7, 72.8 )
-                , ( -317.7, 72.8 )
-                , ( -309.7, 74.5 )
-                , ( -299.7, 74.5 )
-                , ( -291.7, 72.8 )
-                , ( -273.3, 72.8 )
-                , ( -265.3, 78.1 )
-                , ( -262, 85.1 )
-                , ( -261.7, 113.1 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -390.3, 146.8 )
-                [ ( -390.7, 207.5 )
-                , ( -390, 216.5 )
-                , ( -387, 224.5 )
-                , ( -381, 231.8 )
-                , ( -376.3, 234.8 )
-                , ( -359.3, 238.8 )
-                , ( -306, 238.8 )
-                , ( -300, 239.1 )
-                , ( -292, 240.8 )
-                , ( -280.7, 240.8 )
-                , ( -276.3, 240.1 )
-                , ( -270, 237.8 )
-                , ( -266, 234.8 )
-                , ( -262.7, 229.8 )
-                , ( -262.7, 217.8 )
-                , ( -264, 209.1 )
-                , ( -264, 176.1 )
-                , ( -264.7, 172.1 )
-                , ( -264.3, 148.8 )
-                , ( -265.3, 143.1 )
-                , ( -265.3, 137.8 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -298.3, 211.1 )
-                [ ( -302.3, 211.8 )
-                , ( -334, 211.8 )
-                , ( -343.7, 212.8 )
-                , ( -347.7, 214.5 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -336.7, 195.1 )
-                [ ( -339.3, 199.1 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -323, 193.8 )
-                [ ( -326, 197.1 )
-                , ( -327, 199.5 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -309.7, 192.5 )
-                [ ( -313.7, 200.1 )
-                , ( -314, 200.5 )
-                , ( -314.7, 199.5 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -299, 188.5 )
-                [ ( -298.7, 194.1 )
-                , ( -299.7, 196.1 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -314, 142.1 )
-                [ ( -311.3, 145.5 )
-                , ( -306.7, 156.1 )
-                , ( -305.3, 178.1 )
-                , ( -307.3, 179.1 )
-                , ( -313, 179.1 )
-                , ( -324.3, 181.1 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -267.3, 109.8 )
-                [ ( -262, 113.1 )
-                , ( -258.3, 119.1 )
-                , ( -255.7, 126.1 )
-                , ( -256.3, 142.8 )
-                , ( -258, 148.8 )
-                , ( -258.7, 145.1 )
-                , ( -261, 140.1 )
-                , ( -267.3, 131.1 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -344.7, 108.5 )
-                [ ( -347.7, 115.1 )
-                , ( -347.7, 116.5 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -332.3, 108.5 )
-                [ ( -333.7, 110.5 )
-                , ( -337.3, 113.1 )
-                , ( -339, 115.8 )
-                , ( -339, 118.5 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -323, 112.8 )
-                [ ( -325.7, 115.8 )
-                , ( -327.3, 120.8 )
-                , ( -327.3, 127.1 )
-                , ( -326.7, 128.5 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -310.7, 110.1 )
-                [ ( -315.7, 112.1 )
-                , ( -319.7, 117.5 )
-                , ( -321.3, 122.1 )
-                , ( -322, 125.8 )
-                , ( -321.7, 127.1 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -297.7, 106.5 )
-                [ ( -305.7, 114.8 )
-                , ( -308.3, 119.1 )
-                , ( -307.7, 121.5 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -274.3, 124.5 )
-                [ ( -285.3, 124.5 )
-                , ( -294.3, 128.1 )
-                , ( -298, 131.1 )
-                , ( -299.3, 133.1 )
-                , ( -301.7, 139.5 )
-                , ( -302.3, 149.8 )
-                , ( -301.3, 152.5 )
-                , ( -299.7, 154.5 )
-                , ( -298.3, 155.5 )
-                , ( -292.7, 156.5 )
-                , ( -282, 156.5 )
-                , ( -274.7, 152.1 )
-                , ( -269.3, 144.5 )
-                , ( -267.7, 139.5 )
-                , ( -267.7, 133.8 )
-                , ( -271, 127.8 )
-                , ( -275.7, 125.1 )
-                , ( -277, 125.1 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -364.7, 123.5 )
-                [ ( -374, 126.1 )
-                , ( -383.7, 134.1 )
-                , ( -386.7, 135.8 )
-                , ( -394.3, 150.8 )
-                , ( -394.3, 156.1 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -348.3, 125.1 )
-                [ ( -345, 126.1 )
-                , ( -337, 131.8 )
-                , ( -335, 135.5 )
-                , ( -334.3, 140.1 )
-                , ( -335.7, 146.1 )
-                , ( -340, 153.1 )
-                , ( -341, 154.5 )
-                , ( -346, 157.5 )
-                , ( -353.7, 157.8 )
-                , ( -362.3, 156.8 )
-                , ( -365.3, 155.5 )
-                , ( -368, 149.5 )
-                , ( -369.7, 142.8 )
-                , ( -370, 132.1 )
-                , ( -367.3, 127.1 )
-                , ( -365.3, 125.1 )
-                , ( -362.3, 123.5 )
-                , ( -355.7, 122.5 )
-                , ( -348, 122.5 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -15, 231.5 )
-                [ ( -23.7, 225.8 )
-                , ( -25.7, 223.8 )
-                , ( -26.7, 221.5 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -25, 241.5 )
-                [ ( -17.7, 234.5 )
-                , ( -15.3, 231.1 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( 7.7, 235.5 )
-                [ ( 5.3, 231.5 )
-                , ( -4.3, 219.5 )
-                , ( -28.3, 199.5 )
-                ]
-            , previewDoodleStroke previewUserId
-                ( -12, 256.1 )
-                [ ( -5.3, 246.8 )
-                , ( -1.7, 243.5 )
-                , ( 5, 239.5 )
-                , ( 6, 237.1 )
-                ]
-            , previewDoodleStroke previewUserId
+            [ previewDoodleStroke doodleUserId ( -15, 231.5 ) [ ( -23.7, 225.8 ), ( -25.7, 223.8 ), ( -26.7, 221.5 ) ]
+            , previewDoodleStroke doodleUserId ( -25, 241.5 ) [ ( -17.7, 234.5 ), ( -15.3, 231.1 ) ]
+            , previewDoodleStroke doodleUserId ( 7.7, 235.5 ) [ ( 5.3, 231.5 ), ( -4.3, 219.5 ), ( -28.3, 199.5 ) ]
+            , previewDoodleStroke doodleUserId ( -12, 256.1 ) [ ( -5.3, 246.8 ), ( -1.7, 243.5 ), ( 5, 239.5 ), ( 6, 237.1 ) ]
+            , previewDoodleStroke doodleUserId
                 ( -23.7, 245.1 )
                 [ ( -28.3, 245.1 )
                 , ( -33.7, 247.5 )
@@ -1438,7 +1259,7 @@ previewDoodles =
                 , ( -12, 261.5 )
                 , ( -12, 257.5 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -37.3, 192.5 )
                 [ ( -35, 196.1 )
                 , ( -33, 202.5 )
@@ -1446,7 +1267,7 @@ previewDoodles =
                 , ( -29.7, 226.1 )
                 , ( -33.3, 251.8 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -118, 212.1 )
                 [ ( -121.3, 222.1 )
                 , ( -122, 230.1 )
@@ -1454,7 +1275,7 @@ previewDoodles =
                 , ( -116.7, 254.5 )
                 , ( -116.3, 260.5 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -172.3, 228.8 )
                 [ ( -177.7, 230.8 )
                 , ( -191.3, 233.1 )
@@ -1468,7 +1289,7 @@ previewDoodles =
                 , ( -159, 238.5 )
                 , ( -158, 236.8 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -175, 216.5 )
                 [ ( -191.3, 217.8 )
                 , ( -194.3, 219.1 )
@@ -1478,7 +1299,7 @@ previewDoodles =
                 , ( -180, 228.5 )
                 , ( -174, 230.1 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -172, 199.8 )
                 [ ( -190.7, 198.1 )
                 , ( -195.3, 198.8 )
@@ -1488,21 +1309,21 @@ previewDoodles =
                 , ( -189.7, 214.5 )
                 , ( -182.7, 214.5 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -193.7, 159.1 )
                 [ ( -193.7, 182.5 )
                 , ( -191.3, 194.1 )
                 , ( -189.3, 196.5 )
                 , ( -189, 197.8 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -177, 159.5 )
                 [ ( -178.3, 156.8 )
                 , ( -180.7, 154.5 )
                 , ( -187.3, 154.8 )
                 , ( -193.7, 158.1 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -162.3, 187.1 )
                 [ ( -166, 184.1 )
                 , ( -168.7, 180.8 )
@@ -1510,17 +1331,17 @@ previewDoodles =
                 , ( -174.3, 168.5 )
                 , ( -176.3, 158.5 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -117.3, 210.8 )
                 [ ( -143.3, 228.5 )
                 , ( -158.3, 236.1 )
                 , ( -161, 236.8 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -116.3, 196.5 )
                 [ ( -162.7, 187.1 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -82.7, 190.1 )
                 [ ( -81, 193.8 )
                 , ( -78.3, 195.8 )
@@ -1528,14 +1349,14 @@ previewDoodles =
                 , ( -62, 196.8 )
                 , ( -60, 190.1 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -133.7, 180.5 )
                 [ ( -133.3, 180.8 )
                 , ( -131.3, 178.1 )
                 , ( -125, 172.8 )
                 , ( -123.7, 172.8 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -133.3, 132.8 )
                 [ ( -137, 139.8 )
                 , ( -139.3, 151.1 )
@@ -1544,13 +1365,13 @@ previewDoodles =
                 , ( -136.7, 175.5 )
                 , ( -135.3, 177.5 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -142, 133.1 )
                 [ ( -136, 130.1 )
                 , ( -131, 129.1 )
                 , ( -123.3, 129.1 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -92, 105.8 )
                 [ ( -100.3, 106.5 )
                 , ( -119.3, 111.5 )
@@ -1560,12 +1381,12 @@ previewDoodles =
                 , ( -142, 126.8 )
                 , ( -142.7, 130.8 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -91.3, 104.8 )
                 [ ( -86, 97.1 )
                 , ( -85.3, 92.1 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -12.3, 121.8 )
                 [ ( -14.3, 118.1 )
                 , ( -17.3, 115.1 )
@@ -1577,14 +1398,14 @@ previewDoodles =
                 , ( -85.7, 105.1 )
                 , ( -90.7, 105.1 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -38, 120.8 )
                 [ ( -35.3, 122.5 )
                 , ( -31.3, 123.8 )
                 , ( -23, 123.8 )
                 , ( -13, 122.1 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( 10.7, 195.1 )
                 [ ( 3.3, 184.1 )
                 , ( -3, 176.1 )
@@ -1592,7 +1413,7 @@ previewDoodles =
                 , ( -19.3, 146.5 )
                 , ( -27, 124.1 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -22.7, 185.1 )
                 [ ( -15.3, 189.8 )
                 , ( -10.3, 191.8 )
@@ -1600,23 +1421,23 @@ previewDoodles =
                 , ( 8, 197.1 )
                 , ( 10.3, 196.5 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -22, 198.1 )
                 [ ( -23, 185.5 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -33, 184.5 )
                 [ ( -27.7, 191.5 )
                 , ( -25, 196.5 )
                 , ( -23.7, 197.5 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -45.7, 192.1 )
                 [ ( -38.7, 190.5 )
                 , ( -35, 186.5 )
                 , ( -33.7, 183.5 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -41.7, 148.8 )
                 [ ( -38, 167.5 )
                 , ( -37.7, 176.5 )
@@ -1625,7 +1446,7 @@ previewDoodles =
                 , ( -43.3, 189.1 )
                 , ( -44.7, 189.5 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -52.7, 149.8 )
                 [ ( -55, 151.8 )
                 , ( -62.3, 155.5 )
@@ -1633,7 +1454,7 @@ previewDoodles =
                 , ( -57, 161.5 )
                 , ( -49, 163.5 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -53.3, 146.8 )
                 [ ( -63, 154.5 )
                 , ( -68.7, 160.1 )
@@ -1642,24 +1463,24 @@ previewDoodles =
                 , ( -47.3, 165.8 )
                 , ( -44.3, 166.8 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -94, 167.1 )
                 [ ( -97.3, 173.1 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -95, 158.1 )
                 [ ( -100.3, 167.1 )
                 , ( -100.7, 169.1 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -99, 155.8 )
                 [ ( -103.3, 163.1 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -99.3, 151.5 )
                 [ ( -105.3, 157.1 )
                 ]
-            , previewDoodleStroke previewUserId
+            , previewDoodleStroke doodleUserId
                 ( -109.7, 180.5 )
                 [ ( -112.3, 172.5 )
                 , ( -112.3, 161.8 )
@@ -1740,5 +1561,5 @@ previewDoodleStroke createdBy firstPoint rest =
 previewDoodlePoint : ( Float, Float ) -> ( SafeFloat, SafeFloat )
 previewDoodlePoint ( x, y ) =
     ( SafeFloat.fromFloat x |> Result.withDefault SafeFloat.zero
-    , SafeFloat.fromFloat y |> Result.withDefault SafeFloat.zero
+    , SafeFloat.fromFloat (y + 120) |> Result.withDefault SafeFloat.zero
     )
