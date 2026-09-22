@@ -149,7 +149,7 @@ reactionEmojiButtonContent emojiData customEmojis emoji =
                 [ Html.Attributes.style "font-size" "20px"
                 , Html.Attributes.style "transform" "translateY(-3px)"
                 ]
-                [ Emoji.unicodeView "1em" "0" emojiData emoji2 ]
+                [ Emoji.unicodeView "1em" emojiData emoji2 ]
 
         EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
             CustomEmoji.view "1.1em" "0.2em" customEmojiId customEmojis LoopAFewTimesOnLoad
@@ -698,7 +698,7 @@ reactionPopup emojiData customEmojis allUsers placement emoji users =
             EmojiOrCustomEmoji_Emoji emoji2 ->
                 Ui.el
                     [ Ui.Font.size 40, Ui.width Ui.shrink, MyUi.noShrinking ]
-                    (Emoji.unicodeView "1em" "0" emojiData emoji2 |> Ui.html)
+                    (Emoji.unicodeView "1em" emojiData emoji2 |> Ui.html)
 
             EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
                 Ui.el
