@@ -63,7 +63,7 @@ spriteView size yOffset sprite emoji =
             , Html.Attributes.style "width" size
             , Html.Attributes.style "height" size
             , Html.Attributes.style "display" "inline-block"
-            , Html.Attributes.style "transform" ("translateY(" ++ yOffset ++ ")")
+            , Html.Attributes.style "transform" "translateY(yOffset)"
             ]
             [ Svg.use
                 [ Svg.Attributes.xlinkHref (spriteReference sprite emoji) ]

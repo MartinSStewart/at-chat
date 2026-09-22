@@ -247,6 +247,13 @@ previewOtherUsers =
             , publicKey = Nothing
             }
           )
+        , ( Id.fromInt 4
+          , { name = Unsafe.personName "ABC*123"
+            , color = UserColor.fromParts { hue = 8, lightness = 8, saturation = 4 }
+            , icon = Nothing
+            , publicKey = Nothing
+            }
+          )
         , ( doodleUserId
           , { name = Unsafe.personName "123"
             , color = UserColor.fromParts { hue = 10, lightness = 10, saturation = UserColor.saturationCount - 7 }
@@ -549,13 +556,9 @@ previewGameChannel time =
             List.foldl
                 MessageArray.push
                 MessageArray.empty
-                [ previewMessage (previewMinutesAgo time 1268) (Id.fromInt 3) (NonemptyString 'a' "nyone up for a round tonight?")
-                , previewMessage (previewMinutesAgo time 1264) (Id.fromInt 2) (NonemptyString 'i' "m in, give me until after dinner")
-                , previewMessage (previewMinutesAgo time 1259) previewUserId (NonemptyString 's' "ame here")
-                , previewMessage (previewMinutesAgo time 1251) (Id.fromInt 1) (NonemptyString 'i' "ll watch. I lose every one of these")
-                , previewMessage (previewMinutesAgo time 1247) (Id.fromInt 2) (NonemptyString 'y' "ou lose because you only ever play four letter words")
-                , previewMessage (previewMinutesAgo time 1245) (Id.fromInt 1) (NonemptyString 'f' "our letter words are words")
-                , previewMessage (previewMinutesAgo time 1198) (Id.fromInt 3) (NonemptyString 'o' "k I'm falling asleep, tomorrow instead")
+                [ previewMessage (previewMinutesAgo time 1198) (Id.fromInt 3) (NonemptyString 'g' "g")
+                , previewMessage (previewMinutesAgo time 1198) (Id.fromInt 4) (NonemptyString 'g' "g!")
+                , previewMessage (previewMinutesAgo time 1198) (Id.fromInt 0) (NonemptyString 'R' "ematch whenever")
                 , GameStarted
                     { startedAt = previewMinutesAgo time 8
                     , startedBy = Id.fromInt 3
@@ -564,8 +567,6 @@ previewGameChannel time =
                     , timestampDrawings = Drawing.emptyDrawing
                     , cardDrawings = Drawing.emptyDrawing
                     }
-                , previewMessage (previewMinutesAgo time 5) (Id.fromInt 2) (NonemptyString 'h' "ow do you get a Q and a Z in the same tray")
-                , previewMessage (previewMinutesAgo time 3) previewUserId (NonemptyString 'c' "lean living")
                 ]
     in
     { createdAt = previewMinutesAgo time 60000
@@ -832,7 +833,7 @@ previewGameMove time secondsAgo userId start isVertical letters =
 previewGameActions : Time.Posix -> Array ActionWithTime
 previewGameActions time =
     Array.fromList
-        [ { userId = Id.fromInt 2, time = Duration.addTo time (Duration.seconds -430), change = JoinGame }
+        [ { userId = Id.fromInt 4, time = Duration.addTo time (Duration.seconds -430), change = JoinGame }
         , { userId = Id.fromInt 3, time = Duration.addTo time (Duration.seconds -420), change = JoinGame }
         , previewGameMove time 360 previewUserId ( 4, 7 ) False (previewGameLetters 'Q' "UARTZ")
         , { userId = Id.fromInt 3
@@ -845,10 +846,10 @@ previewGameActions time =
           , change =
                 AddedReaction (MoveReaction 3) (Emoji.EmojiOrCustomEmoji_Emoji (Emoji.fromString "💎"))
           }
-        , previewGameMove time 300 (Id.fromInt 2) ( 9, 7 ) True (previewGameLetters 'E' "BRA")
+        , previewGameMove time 300 (Id.fromInt 4) ( 9, 7 ) True (previewGameLetters 'E' "BRA")
         , previewGameMove time 240 (Id.fromInt 3) ( 9, 9 ) False (previewGameLetters 'R' "INK")
         , previewGameMove time 180 previewUserId ( 6, 7 ) True (previewGameLetters 'X' "E")
-        , previewGameMove time 120 (Id.fromInt 2) ( 9, 11 ) False (previewGameLetters 'G' "ILE")
+        , previewGameMove time 120 (Id.fromInt 4) ( 9, 11 ) False (previewGameLetters 'G' "ILE")
         , previewGameMove time 60 (Id.fromInt 3) ( 10, 11 ) True (previewGameLetters 'U' "ST")
         ]
 
