@@ -512,6 +512,18 @@ threePlayerMatchTest normalConfig =
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.id "guild_addReactionEmoji" ])
 
+                                -- A message sent as a reply to the answer says so above it
+                                , stevie.mouseEnter
+                                    100
+                                    (SheepGame.reactionTargetId (SheepGame.AnswerReaction (Id.fromInt 2) (Id.fromInt 0)))
+                                    ( 10, 10 )
+                                    []
+                                , stevie.click 100 (Dom.id "miniView_reply")
+                                , E2EHelper.writeMessage stevie 100 "same as mine"
+                                , joe.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "An answer in the Sheep Game" ])
+
                                 -- The notes the host wrote about the question take reactions too
                                 , stevie.mouseEnter
                                     100

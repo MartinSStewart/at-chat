@@ -2509,6 +2509,14 @@ updateLoaded msg model =
                                                             }
                                                         )
 
+                                                ( _, Message.NoThreadWithRepliedTo (Message.RepliedToGame matchId repliedToGame) ) ->
+                                                    FrontendExtra.routePush
+                                                        model
+                                                        (Route.setChannelHeaderTab
+                                                            (Just (ChannelHeaderTab_Games (Just matchId) (Just repliedToGame)))
+                                                            model.route
+                                                        )
+
                                                 _ ->
                                                     ( model, Command.none )
 

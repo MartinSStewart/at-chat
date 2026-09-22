@@ -181,6 +181,17 @@ tests normalConfig =
                         , admin.custom 100 (moveRow 1) "mouseleave" (Json.Encode.object [])
                         ]
                     , T.collapsableGroup
+                        "A reply to a move is drawn above the message and opens the move"
+                        [ admin.mouseEnter 100 (moveRow 1) ( 10, 10 ) []
+                        , admin.click 100 (Dom.id "miniView_reply")
+                        , admin.custom 100 (moveRow 1) "mouseleave" (Json.Encode.object [])
+                        , E2EHelper.writeMessage admin 100 "what a word"
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Move 1 in the Word Spelling game" ])
+                        , user.snapshotView 100 { name = "Reply to a move" }
+                        , user.click 100 (Dom.id "guild_gameReplyLink_0")
+                        , user.checkModel 100 (checkViewingRepliedTo (Message.RepliedTo_WordSpellingGameMove 1))
+                        ]
+                    , T.collapsableGroup
                         "Drop a tray tile one slot to the right"
                         -- Regression test for a tray-drop off-by-one: the dragged tile is drawn centred
                         -- on the cursor, so dropping the first tile centred just right of the next slot
@@ -1477,6 +1488,20 @@ checkHoveredMoveBoardSize expected model =
 moveRow : Int -> Dom.HtmlId
 moveRow moveNumber =
     WordSpellingGame.reactionTargetId (WordSpellingGame.MoveReaction moveNumber)
+
+
+checkViewingRepliedTo : Message.RepliedToGame -> FrontendModel -> Result String ()
+checkViewingRepliedTo repliedTo model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            if Route.toChannelHeaderTab loaded.route == Just (UserSession.ChannelHeaderTab_Games (Just (Id.fromInt 0)) (Just repliedTo)) then
+                Ok ()
+
+            else
+                Err "Expected pressing the line above a reply to open the move it replied to"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
 
 
 checkNoHoveredMove : FrontendModel -> Result String ()
