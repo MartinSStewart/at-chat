@@ -196,6 +196,7 @@ import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import SetViewing exposing (SetViewing(..))
 import Slack
 import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
@@ -204,7 +205,7 @@ import UInt64
 import Unsafe
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendCurrentUser, LocalUser)
-import UserSession exposing (ChannelHeaderTab, FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (ChannelHeaderTab, FrontendUserSession, PreviouslyLastViewedMessage(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -596,12 +597,16 @@ channelToFrontend guildId channelId threadRoute goMatchPublicIds channel =
             let
                 preloadMessages =
                     Just NoThread == Maybe.map Tuple.first threadRoute
+
+                messages : MessageArray ChannelMessageId (Id UserId)
+                messages =
+                    DmChannel.toFrontendHelper preloadMessages channel
             in
             { createdAt = channel.createdAt
             , createdBy = channel.createdBy
             , name = channel.name
             , description = channel.description
-            , messages = DmChannel.toFrontendHelper preloadMessages channel
+            , messages = messages
             , visibleMessages = VisibleMessages.init preloadMessages (IdArray.length channel.messages)
             , isArchived = Nothing
             , lastTypedAt = channel.lastTypedAt
@@ -617,6 +622,7 @@ channelToFrontend guildId channelId threadRoute goMatchPublicIds channel =
                     (GuildOrFullDmId_Guild guildId channelId)
                     threadRoute
                     goMatchPublicIds
+                    messages
                     channel
             }
                 |> Just

@@ -44,6 +44,7 @@ module Broadcast exposing
 import Codec exposing (Codec)
 import Discord
 import DiscordUserData exposing (DiscordUserData(..))
+import DmChannel
 import DmChannelId
 import Drawing
 import Duration
@@ -59,7 +60,8 @@ import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
-import Id exposing (GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_DmId)
+import Game
+import Id exposing (ChannelMessageId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
@@ -1541,6 +1543,23 @@ broadcastDm :
     -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
 broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserId text message threadRouteWithReplyTo attachedFiles emojis stickers model =
     let
+        dmChannelId : DmChannelId.DmChannelId
+        dmChannelId =
+            DmChannelId.fromUserIds userId otherUserId
+
+        repliedToMatches : SeqDict (Id ChannelMessageId) Game.LoadedMatch
+        repliedToMatches =
+            case SeqDict.get dmChannelId model.dmChannels of
+                Just dmChannel ->
+                    Message.threadRouteRepliedToMatches threadRouteWithReplyTo
+                        |> DmChannel.loadRepliedToMatches
+                            (DmChannelId.GuildOrFullDmId_Dm dmChannelId)
+                            model.goMatchPublicIds
+                            dmChannel
+
+                Nothing ->
+                    SeqDict.empty
+
         isViewing : Bool
         isViewing =
             List.any
@@ -1620,6 +1639,7 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
                     threadRouteWithReplyTo
                     attachedFiles
                     stickers
+                    repliedToMatches
             )
             model
         , Command.batch cmds

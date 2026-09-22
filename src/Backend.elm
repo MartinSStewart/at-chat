@@ -75,6 +75,7 @@ import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
+import SetViewing exposing (SetViewing(..))
 import Sha256
 import SheepGame
 import Slack
@@ -89,7 +90,7 @@ import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, Expo
 import Unsafe
 import User exposing (BackendUser)
 import UserColor
-import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession, Viewing)
+import UserSession exposing (DiscordFrontendUser, PushSubscription(..), ToBeFilledInByBackend(..), UserSession, Viewing)
 import VisibleMessages
 import WireHelper
 import WordSpellingGame exposing (Language(..), WordList(..))
@@ -4723,7 +4724,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     let
                         currentlyViewing : Viewing
                         currentlyViewing =
-                            UserSession.setViewingToCurrentlyViewing viewing
+                            SetViewing.setViewingToCurrentlyViewing viewing
 
                         broadcastCmd : UserSession -> Command BackendOnly ToFrontend msg
                         broadcastCmd session =
@@ -4791,7 +4792,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = data.id.otherUserId }
-                                (\session user _ _ dmChannel ->
+                                (\session user _ dmChannelId dmChannel ->
                                     ( { model
                                         | users =
                                             NonemptyDict.insert
@@ -4814,7 +4815,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , Command.batch
                                         [ ViewDm
                                             data
-                                            (loadMessagesHelper dmChannel |> FilledInByBackend)
+                                            (loadMessagesHelper dmChannel
+                                                |> DmChannel.loadedMessages
+                                                    (GuildOrFullDmId_Dm dmChannelId)
+                                                    model.goMatchPublicIds
+                                                    dmChannel
+                                                |> FilledInByBackend
+                                            )
                                             |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
@@ -4934,7 +4941,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             , Command.batch
                                                 [ ViewChannel
                                                     data
-                                                    (loadMessagesHelper channel |> FilledInByBackend)
+                                                    (loadMessagesHelper channel
+                                                        |> DmChannel.loadedMessages
+                                                            (GuildOrFullDmId_Guild data.id.guildId data.id.channelId)
+                                                            model.goMatchPublicIds
+                                                            channel
+                                                        |> FilledInByBackend
+                                                    )
                                                     |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                                     |> LocalChangeResponse changeId
                                                     |> Lamdera.sendToFrontend clientId
@@ -5157,6 +5170,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , case SeqDict.get channelId guild.channels of
                                         Just channel ->
                                             handleMessagesRequest oldestVisibleMessage channel
+                                                |> DmChannel.loadedMessages
+                                                    (GuildOrFullDmId_Guild guildId channelId)
+                                                    model.goMatchPublicIds
+                                                    channel
+                                                |> FilledInByBackend
                                                 |> Local_LoadChannelMessages guildOrDmId oldestVisibleMessage
                                                 |> LocalChangeResponse changeId
                                                 |> Lamdera.sendToFrontend clientId
@@ -5171,9 +5189,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 id
-                                (\_ _ _ _ dmChannel ->
+                                (\_ _ _ dmChannelId dmChannel ->
                                     ( model
                                     , handleMessagesRequest oldestVisibleMessage dmChannel
+                                        |> DmChannel.loadedMessages
+                                            (GuildOrFullDmId_Dm dmChannelId)
+                                            model.goMatchPublicIds
+                                            dmChannel
+                                        |> FilledInByBackend
                                         |> Local_LoadChannelMessages guildOrDmId oldestVisibleMessage
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
@@ -5194,6 +5217,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             SeqDict.get threadId channel.threads
                                                 |> Maybe.withDefault Thread.backendInit
                                                 |> handleMessagesRequest oldestVisibleMessage
+                                                |> FilledInByBackend
                                                 |> Local_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage
                                                 |> LocalChangeResponse changeId
                                                 |> Lamdera.sendToFrontend clientId
@@ -5213,6 +5237,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , SeqDict.get threadId dmChannel.threads
                                         |> Maybe.withDefault Thread.backendInit
                                         |> handleMessagesRequest oldestVisibleMessage
+                                        |> FilledInByBackend
                                         |> Local_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
@@ -5230,6 +5255,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 (\_ _ _ _ _ channel ->
                                     ( model
                                     , handleMessagesRequest oldestVisibleMessage channel
+                                        |> FilledInByBackend
                                         |> Local_Discord_LoadChannelMessages guildOrDmId oldestVisibleMessage
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
@@ -5244,6 +5270,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 (\_ _ _ channel ->
                                     ( model
                                     , handleMessagesRequest oldestVisibleMessage channel
+                                        |> FilledInByBackend
                                         |> Local_Discord_LoadChannelMessages guildOrDmId oldestVisibleMessage
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
@@ -5262,6 +5289,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , SeqDict.get threadId channel.threads
                                         |> Maybe.withDefault Thread.discordBackendInit
                                         |> handleMessagesRequest oldestVisibleMessage
+                                        |> FilledInByBackend
                                         |> Local_Discord_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
@@ -8397,7 +8425,7 @@ loadMessagesHelper channel =
 handleMessagesRequest :
     Id messageId
     -> { b | messages : IdArray messageId (Message messageId userId) }
-    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
+    -> SeqDict (Id messageId) (Message messageId userId)
 handleMessagesRequest oldestVisibleMessage channel =
     let
         oldestVisibleMessage2 =
@@ -8410,7 +8438,6 @@ handleMessagesRequest oldestVisibleMessage channel =
         |> IdArray.toList
         |> List.indexedMap (\index message -> ( Id.fromInt (index + nextOldestVisible), message ))
         |> SeqDict.fromList
-        |> FilledInByBackend
 
 
 sendEditMessage :

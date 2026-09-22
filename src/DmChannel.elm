@@ -5,6 +5,8 @@ module DmChannel exposing
     , E2eeEnabledData
     , E2eeStatus(..)
     , FrontendDmChannel
+    , LoadedMessages
+    , addRepliedToMatches
     , backendInit
     , frontendInit
     , gamesToFrontend
@@ -12,9 +14,13 @@ module DmChannel exposing
     , latestFrontendThreadMessageId
     , latestMessageId
     , latestThreadMessageId
+    , loadChannelMessages
     , loadMessages
+    , loadOlderChannelMessages
     , loadOlderMessages
+    , loadRepliedToMatches
     , loadUnreadMessages
+    , loadedMessages
     , toDiscordFrontendHelper
     , toFrontend
     , toFrontendHelper
@@ -35,6 +41,7 @@ import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
 import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend(..))
@@ -124,8 +131,12 @@ toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
     let
         preloadMessages =
             Just NoThread == Maybe.map Tuple.first threadRoute
+
+        messages : MessageArray ChannelMessageId (Id UserId)
+        messages =
+            toFrontendHelper preloadMessages dmChannel
     in
-    { messages = toFrontendHelper preloadMessages dmChannel
+    { messages = messages
     , visibleMessages = VisibleMessages.init preloadMessages (IdArray.length dmChannel.messages)
     , lastTypedAt = dmChannel.lastTypedAt
     , threads =
@@ -134,38 +145,98 @@ toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
                 Thread.toFrontend (Just (ViewThread threadId) == Maybe.map Tuple.first threadRoute) thread
             )
             dmChannel.threads
-    , games = gamesToFrontend (GuildOrFullDmId_Dm dmChannelId) threadRoute goMatchPublicIds dmChannel
+    , games = gamesToFrontend (GuildOrFullDmId_Dm dmChannelId) threadRoute goMatchPublicIds messages dmChannel
     , dateDividerDrawings = dmChannel.dateDividerDrawings
     , e2ee = dmChannel.e2ee
     }
 
 
+{-| Only the match the route has open and any match a preloaded message replies to are sent
+in full. The rest wait until the games tab opens them.
+-}
 gamesToFrontend :
     GuildOrFullDmId
     -> Maybe ( a, Maybe ChannelHeaderTab )
     -> OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
+    -> MessageArray ChannelMessageId userId
     -> { b | games : SeqDict (Id ChannelMessageId) BackendGameData }
     -> SeqDict (Id ChannelMessageId) Game.MatchData
-gamesToFrontend guildOrDmId threadRoute goMatchPublicIds channel =
+gamesToFrontend guildOrDmId threadRoute goMatchPublicIds messages channel =
+    let
+        repliedToMatches : SeqSet (Id ChannelMessageId)
+        repliedToMatches =
+            MessageArray.toList messages
+                |> List.filterMap (\( _, message ) -> Message.repliedToMatch message)
+                |> SeqSet.fromList
+
+        openMatch : Maybe (Id ChannelMessageId)
+        openMatch =
+            case threadRoute of
+                Just ( _, Just (ChannelHeaderTab_Games (Just matchId) _) ) ->
+                    Just matchId
+
+                _ ->
+                    Nothing
+    in
     SeqDict.map
         (\matchId gameData ->
-            case threadRoute of
-                Just ( _, channelHeaderTab ) ->
-                    case channelHeaderTab of
-                        Just (ChannelHeaderTab_Games (Just matchIdB) _) ->
-                            if matchId == matchIdB then
-                                Game.initMatchData gameData (OneToOne.first ( guildOrDmId, matchId ) goMatchPublicIds)
+            if Just matchId == openMatch || SeqSet.member matchId repliedToMatches then
+                Game.initMatchData gameData (OneToOne.first ( guildOrDmId, matchId ) goMatchPublicIds)
 
-                            else
-                                Game.matchNotLoaded gameData
-
-                        _ ->
-                            Game.matchNotLoaded gameData
-
-                Nothing ->
-                    Game.matchNotLoaded gameData
+            else
+                Game.matchNotLoaded gameData
         )
         channel.games
+
+
+{-| A page of a channel's messages, sent along with every match one of them replies to
+something inside of. The line drawn above those replies needs the match to say what they
+replied to.
+-}
+type alias LoadedMessages =
+    { messages : SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))
+    , repliedToMatches : SeqDict (Id ChannelMessageId) Game.LoadedMatch
+    }
+
+
+loadedMessages :
+    GuildOrFullDmId
+    -> OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
+    -> { a | games : SeqDict (Id ChannelMessageId) BackendGameData }
+    -> SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))
+    -> LoadedMessages
+loadedMessages guildOrDmId goMatchPublicIds channel messages =
+    { messages = messages
+    , repliedToMatches =
+        SeqDict.values messages
+            |> List.filterMap Message.repliedToMatch
+            |> loadRepliedToMatches guildOrDmId goMatchPublicIds channel
+    }
+
+
+loadRepliedToMatches :
+    GuildOrFullDmId
+    -> OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
+    -> { a | games : SeqDict (Id ChannelMessageId) BackendGameData }
+    -> List (Id ChannelMessageId)
+    -> SeqDict (Id ChannelMessageId) Game.LoadedMatch
+loadRepliedToMatches guildOrDmId goMatchPublicIds channel matchIds =
+    List.filterMap
+        (\matchId ->
+            case SeqDict.get matchId channel.games of
+                Just gameData ->
+                    Just
+                        ( matchId
+                        , { gameData = gameData
+                          , publicLink = OneToOne.first ( guildOrDmId, matchId ) goMatchPublicIds
+                          }
+                        )
+
+                Nothing ->
+                    Nothing
+        )
+        matchIds
+        |> SeqDict.fromList
 
 
 updateArray : Id messageId -> (a -> a) -> IdArray messageId a -> IdArray messageId a
@@ -255,6 +326,36 @@ loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
             { channel | visibleMessages = VisibleMessages.isLoading channel.visibleMessages }
 
 
+loadOlderChannelMessages :
+    Id ChannelMessageId
+    -> ToBeFilledInByBackend LoadedMessages
+    -> { a | messages : MessageArray ChannelMessageId (Id UserId), visibleMessages : VisibleMessages ChannelMessageId, games : SeqDict (Id ChannelMessageId) Game.MatchData }
+    -> { a | messages : MessageArray ChannelMessageId (Id UserId), visibleMessages : VisibleMessages ChannelMessageId, games : SeqDict (Id ChannelMessageId) Game.MatchData }
+loadOlderChannelMessages previousOldestVisibleMessage messagesLoaded channel =
+    case messagesLoaded of
+        FilledInByBackend messagesLoaded2 ->
+            loadOlderMessages
+                previousOldestVisibleMessage
+                (FilledInByBackend messagesLoaded2.messages)
+                { channel | games = addRepliedToMatches messagesLoaded2.repliedToMatches channel.games }
+
+        EmptyPlaceholder ->
+            loadOlderMessages previousOldestVisibleMessage EmptyPlaceholder channel
+
+
+addRepliedToMatches :
+    SeqDict (Id ChannelMessageId) Game.LoadedMatch
+    -> SeqDict (Id ChannelMessageId) Game.MatchData
+    -> SeqDict (Id ChannelMessageId) Game.MatchData
+addRepliedToMatches repliedToMatches games =
+    SeqDict.foldl
+        (\matchId loaded games2 ->
+            SeqDict.updateIfExists matchId (\_ -> Game.initMatchData loaded.gameData loaded.publicLink) games2
+        )
+        games
+        repliedToMatches
+
+
 {-| Loads the messages the unread overview shows. Unlike `loadMessages` this leaves
 `visibleMessages` alone: these are messages of channels the user hasn't opened, so they
 aren't the page of messages the channel view would scroll through.
@@ -286,3 +387,18 @@ loadMessages messagesLoaded channel =
 
         EmptyPlaceholder ->
             { channel | visibleMessages = VisibleMessages.isLoading channel.visibleMessages }
+
+
+loadChannelMessages :
+    ToBeFilledInByBackend LoadedMessages
+    -> { a | messages : MessageArray ChannelMessageId (Id UserId), visibleMessages : VisibleMessages ChannelMessageId, games : SeqDict (Id ChannelMessageId) Game.MatchData }
+    -> { a | messages : MessageArray ChannelMessageId (Id UserId), visibleMessages : VisibleMessages ChannelMessageId, games : SeqDict (Id ChannelMessageId) Game.MatchData }
+loadChannelMessages messagesLoaded channel =
+    case messagesLoaded of
+        FilledInByBackend messagesLoaded2 ->
+            loadMessages
+                (FilledInByBackend messagesLoaded2.messages)
+                { channel | games = addRepliedToMatches messagesLoaded2.repliedToMatches channel.games }
+
+        EmptyPlaceholder ->
+            loadMessages EmptyPlaceholder channel

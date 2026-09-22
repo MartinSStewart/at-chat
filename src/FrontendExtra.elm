@@ -122,6 +122,7 @@ import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
+import SetViewing exposing (SetViewing(..))
 import SheepGame
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
@@ -140,7 +141,7 @@ import Ui.Prose
 import Url exposing (Url)
 import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
 import UserOptions
-import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 import WordSpellingGame
 import X25519
@@ -1582,7 +1583,7 @@ routeViewingLocalChange isMobile markMessagesAsViewed local route =
         localChange =
             LocalState.routeToViewing isMobile route local
     in
-    if UserSession.setViewingToCurrentlyViewing localChange == local.localUser.currentlyViewing then
+    if SetViewing.setViewingToCurrentlyViewing localChange == local.localUser.currentlyViewing then
         Nothing
 
     else
@@ -3305,12 +3306,12 @@ changeUpdate localMsg local =
                                                     )
                                                 )
                                                 localUser.user
-                                        , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
+                                        , currentlyViewing = SetViewing.setViewingToCurrentlyViewing viewing
                                     }
                                 , dmChannels =
                                     SeqDict.updateIfExists
                                         data.id.otherUserId
-                                        (DmChannel.loadMessages messagesLoaded)
+                                        (DmChannel.loadChannelMessages messagesLoaded)
                                         local.dmChannels
                             }
 
@@ -3334,7 +3335,7 @@ changeUpdate localMsg local =
                                                     )
                                                 )
                                                 localUser.user
-                                        , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
+                                        , currentlyViewing = SetViewing.setViewingToCurrentlyViewing viewing
                                     }
                                 , dmChannels =
                                     SeqDict.updateIfExists
@@ -3367,7 +3368,7 @@ changeUpdate localMsg local =
                                                     Nothing
                                                 )
                                                 localUser.user
-                                        , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
+                                        , currentlyViewing = SetViewing.setViewingToCurrentlyViewing viewing
                                     }
                                 , discordDmChannels =
                                     SeqDict.updateIfExists
@@ -3393,12 +3394,12 @@ changeUpdate localMsg local =
                                                     )
                                                 )
                                                 localUser.user
-                                        , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
+                                        , currentlyViewing = SetViewing.setViewingToCurrentlyViewing viewing
                                     }
                                 , guilds =
                                     SeqDict.updateIfExists
                                         data.id.guildId
-                                        (LocalState.updateChannel (DmChannel.loadMessages messagesLoaded) data.id.channelId)
+                                        (LocalState.updateChannel (DmChannel.loadChannelMessages messagesLoaded) data.id.channelId)
                                         local.guilds
                             }
 
@@ -3422,7 +3423,7 @@ changeUpdate localMsg local =
                                                     )
                                                 )
                                                 localUser.user
-                                        , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
+                                        , currentlyViewing = SetViewing.setViewingToCurrentlyViewing viewing
                                     }
                                 , guilds =
                                     SeqDict.updateIfExists
@@ -3443,7 +3444,7 @@ changeUpdate localMsg local =
                             }
 
                         StopViewingChannel ->
-                            { local | localUser = { localUser | currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing } }
+                            { local | localUser = { localUser | currentlyViewing = SetViewing.setViewingToCurrentlyViewing viewing } }
 
                         ViewDiscordChannel data backendData ->
                             { local
@@ -3462,7 +3463,7 @@ changeUpdate localMsg local =
                                                     )
                                                 )
                                                 localUser.user
-                                        , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
+                                        , currentlyViewing = SetViewing.setViewingToCurrentlyViewing viewing
                                         , discordUsers =
                                             case backendData of
                                                 FilledInByBackend backendData2 ->
@@ -3504,7 +3505,7 @@ changeUpdate localMsg local =
                                                     )
                                                 )
                                                 localUser.user
-                                        , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
+                                        , currentlyViewing = SetViewing.setViewingToCurrentlyViewing viewing
                                         , discordUsers =
                                             case backendData of
                                                 FilledInByBackend backendData2 ->
@@ -3538,7 +3539,7 @@ changeUpdate localMsg local =
                             let
                                 localUser2 : LocalUser
                                 localUser2 =
-                                    { localUser | currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing }
+                                    { localUser | currentlyViewing = SetViewing.setViewingToCurrentlyViewing viewing }
                             in
                             case overviewData of
                                 FilledInByBackend overviewData2 ->
@@ -3678,7 +3679,7 @@ changeUpdate localMsg local =
                                     SeqDict.updateIfExists
                                         guildId
                                         (LocalState.updateChannel
-                                            (DmChannel.loadOlderMessages previousOldestVisibleMessage messagesLoaded)
+                                            (DmChannel.loadOlderChannelMessages previousOldestVisibleMessage messagesLoaded)
                                             channelId
                                         )
                                         local.guilds
@@ -3689,7 +3690,7 @@ changeUpdate localMsg local =
                                 | dmChannels =
                                     SeqDict.updateIfExists
                                         otherUserId
-                                        (DmChannel.loadOlderMessages previousOldestVisibleMessage messagesLoaded)
+                                        (DmChannel.loadOlderChannelMessages previousOldestVisibleMessage messagesLoaded)
                                         local.dmChannels
                             }
 
@@ -4136,7 +4137,7 @@ changeUpdate localMsg local =
 
         ServerChange serverChange ->
             case serverChange of
-                Server_SendMessage createdBy createdByUser createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles stickers ->
+                Server_SendMessage createdBy createdByUser createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles stickers repliedToMatches ->
                     case guildOrDmId of
                         GuildOrDmId_Guild id ->
                             case LocalState.getGuildAndChannel id local of
@@ -4197,7 +4198,7 @@ changeUpdate localMsg local =
                                                 id.guildId
                                                 guild
                                                 id.channelId
-                                                channel
+                                                { channel | games = DmChannel.addRepliedToMatches repliedToMatches channel.games }
                                                 threadRouteWithRepliedTo
                                                 createdAt
                                                 createdBy
@@ -4239,6 +4240,7 @@ changeUpdate localMsg local =
                                         attachedFiles
                                 )
                                 threadRouteWithRepliedTo
+                                repliedToMatches
                                 local
 
                 Server_Discord_SendMessage createdAt guildOrDmId createdByUser text threadRouteWithRepliedTo attachedFiles stickers ->
@@ -5553,7 +5555,7 @@ changeUpdate localMsg local =
                         )
                         local
 
-                Server_SendEncryptedMessage createdBy createdByUser createdAt id fileHashes content threadRouteWithRepliedTo ->
+                Server_SendEncryptedMessage createdBy createdByUser createdAt id fileHashes content threadRouteWithRepliedTo repliedToMatches ->
                     handleServerSendDmMessage
                         id
                         createdBy
@@ -5567,6 +5569,7 @@ changeUpdate localMsg local =
                             Message.encryptedUserTextMessageFrontend createdAt createdBy fileHashes content (Message.maybeToReply maybeReplyTo)
                         )
                         threadRouteWithRepliedTo
+                        repliedToMatches
                         local
 
                 Server_SendEncryptedEditMessage editedAt editedBy id threadRoute fileHashes content ->
@@ -7745,9 +7748,10 @@ handleServerSendDmMessage :
     -> (Message.RepliedTo ChannelMessageId -> Message ChannelMessageId (Id UserId))
     -> (Maybe (Id ThreadMessageId) -> Message ThreadMessageId (Id UserId))
     -> ThreadRouteWithRepliedTo
+    -> SeqDict (Id ChannelMessageId) Game.LoadedMatch
     -> LocalState
     -> LocalState
-handleServerSendDmMessage id createdBy createdByUser stickers messageForChannel messageForThread threadRouteWithRepliedTo local =
+handleServerSendDmMessage id createdBy createdByUser stickers messageForChannel messageForThread threadRouteWithRepliedTo repliedToMatches local =
     let
         localUser : LocalUser
         localUser =
@@ -7768,7 +7772,9 @@ handleServerSendDmMessage id createdBy createdByUser stickers messageForChannel 
                     LocalState.createThreadMessageFrontend threadId (messageForThread maybeReplyTo) dmChannel
 
                 NoThreadWithRepliedTo repliedTo ->
-                    LocalState.createChannelMessageFrontend (messageForChannel repliedTo) dmChannel
+                    LocalState.createChannelMessageFrontend
+                        (messageForChannel repliedTo)
+                        { dmChannel | games = DmChannel.addRepliedToMatches repliedToMatches dmChannel.games }
 
         threadRouteNoReply : ThreadRoute
         threadRouteNoReply =

@@ -29,7 +29,9 @@ module Message exposing
     , reactionEmojis
     , removeReactionEmoji
     , repliedToGameCodec
+    , repliedToMatch
     , replyToMaybe
+    , threadRouteRepliedToMatches
     , threadRouteWithoutRepliedTo
     , toDecrypted
     , toEncrypted
@@ -468,6 +470,59 @@ maybeToReply maybeRepliedTo =
 
         Just messageId ->
             RepliedToMessage messageId
+
+
+{-| The match a message replies to something inside of.
+-}
+repliedToMatch : Message messageId userId -> Maybe (Id ChannelMessageId)
+repliedToMatch message =
+    case message of
+        UserTextMessage data ->
+            repliedToMatchHelper data.repliedTo
+
+        EncryptedUserTextMessage data ->
+            repliedToMatchHelper data.repliedTo
+
+        UserJoinedMessage _ _ _ _ ->
+            Nothing
+
+        DeletedMessage _ ->
+            Nothing
+
+        CallStarted _ ->
+            Nothing
+
+        GameStarted _ ->
+            Nothing
+
+
+repliedToMatchHelper : RepliedTo messageId -> Maybe (Id ChannelMessageId)
+repliedToMatchHelper repliedTo =
+    case repliedTo of
+        RepliedToGame matchId _ ->
+            Just matchId
+
+        RepliedToMessage _ ->
+            Nothing
+
+        NoReply ->
+            Nothing
+
+
+threadRouteRepliedToMatches : ThreadRouteWithRepliedTo -> List (Id ChannelMessageId)
+threadRouteRepliedToMatches threadRoute =
+    case threadRoute of
+        NoThreadWithRepliedTo (RepliedToGame matchId _) ->
+            [ matchId ]
+
+        NoThreadWithRepliedTo (RepliedToMessage _) ->
+            []
+
+        NoThreadWithRepliedTo NoReply ->
+            []
+
+        ViewThreadWithRepliedTo _ _ ->
+            []
 
 
 replyToMaybe : RepliedTo messageId -> Maybe (Id messageId)

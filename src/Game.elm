@@ -27,6 +27,7 @@ module Game exposing
     , loadingMatchText
     , matchNotLoaded
     , pressedKey
+    , replyPreview
     , routeRequest
     , sheepGameFileUploaded
     , sheepGameFilesToAttach
@@ -983,6 +984,30 @@ sheepGameOutMsgs time newMatchId outMsg =
 
         SheepGame.SetFocusOnQuestion questionId ->
             [ SetFocus (SheepGame.inputId (SheepGame.QuestionInput questionId)) ]
+
+
+{-| What the line above a reply into this match says about the move or answer it replied to.
+Nothing until the match has been loaded.
+-}
+replyPreview : Message.RepliedToGame -> MatchData -> Maybe { by : Id UserId, text : String }
+replyPreview repliedTo matchData =
+    case matchData of
+        MatchData { data } ->
+            case ( repliedTo, data ) of
+                ( Message.RepliedTo_WordSpellingGameMove moveNumber, FrontendGameData_WordSpellingGame setup actions _ ) ->
+                    WordSpellingGame.moveReplyPreview setup actions moveNumber
+
+                ( Message.RepliedTo_SheepGameAnswer userId questionId, FrontendGameData_SheepGame setup _ shared ) ->
+                    SheepGame.replyPreview setup shared (SheepGame.AnswerReaction userId questionId)
+
+                ( Message.RepliedTo_SheepGameNotes questionId, FrontendGameData_SheepGame setup _ shared ) ->
+                    SheepGame.replyPreview setup shared (SheepGame.NotesReaction questionId)
+
+                _ ->
+                    Nothing
+
+        MatchNotLoaded _ ->
+            Nothing
 
 
 {-| What a message replying to one of a sheep game's results points at.

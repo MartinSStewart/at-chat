@@ -43,6 +43,7 @@ module SheepGame exposing
     , rankUpArrow
     , reactionTargetId
     , removeAttachedFileFromText
+    , replyPreview
     , resultsData
     , revealedQuestionId
     , saveInputAction
@@ -1458,6 +1459,29 @@ updateAction setup action shared =
 
                 _ ->
                     shared
+
+
+{-| What a reply to an answer or to the host's notes repeats of it. Mentions come out without
+names, the same as in `answerKey`, since only the text is kept.
+-}
+replyPreview : ValidatedSetup -> Shared -> ReactionTarget -> Maybe { by : Id UserId, text : String }
+replyPreview setup shared target =
+    case target of
+        AnswerReaction userId questionId ->
+            SeqDict.get userId shared.answers
+                |> Maybe.andThen (IdArray.get questionId)
+                |> Maybe.andThen identity
+                |> Maybe.map (\answer -> { by = userId, text = " answered \"" ++ replyPreviewText answer ++ "\"" })
+
+        NotesReaction questionId ->
+            SeqDict.get questionId shared.notes
+                |> Maybe.andThen identity
+                |> Maybe.map (\notes -> { by = setup.createdBy, text = " wrote \"" ++ replyPreviewText notes ++ "\"" })
+
+
+replyPreviewText : ValidatedInput -> String
+replyPreviewText input =
+    RichText.toString Time.utc False SeqDict.empty input.text |> String.trim
 
 
 {-| What two answers have to share to count as the same answer. Rendering the text with

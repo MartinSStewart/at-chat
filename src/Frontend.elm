@@ -83,6 +83,7 @@ import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
+import SetViewing exposing (SetViewing(..))
 import SheepGame
 import Sticker
 import String.Extra
@@ -102,7 +103,7 @@ import User exposing (FrontendUser)
 import UserAgent
 import UserColor
 import UserOptions
-import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
+import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), ToBeFilledInByBackend(..))
 import Vector2d
 import WordSpellingGame
 import X25519
@@ -8075,7 +8076,7 @@ updateLoadedFromBackend msg model =
                                         Command.none
 
                             Local_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
-                                if SeqDict.isEmpty messagesLoaded then
+                                if SeqDict.isEmpty messagesLoaded.messages then
                                     Command.none
 
                                 else
@@ -8173,10 +8174,10 @@ updateLoadedFromBackend msg model =
                                                     Command.none
                                             )
 
-                                        Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ ->
+                                        Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ _ ->
                                             FrontendExtra.handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local loggedIn2 model
 
-                                        Server_SendEncryptedMessage senderId _ _ id _ content maybeRepliedTo ->
+                                        Server_SendEncryptedMessage senderId _ _ id _ content maybeRepliedTo _ ->
                                             ( FrontendExtra.mapEncryptionRequests
                                                 (\requests ->
                                                     { requests
@@ -9628,7 +9629,7 @@ encryptedMessagesJustLoaded localChange =
             encryptedMessagesLoadedInto
                 guildOrDmId
                 (Just (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage))
-                (SeqDict.values messagesLoaded)
+                (SeqDict.values messagesLoaded.messages)
 
         Local_LoadThreadMessages guildOrDmId _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
             encryptedMessagesLoadedInto
@@ -9637,7 +9638,7 @@ encryptedMessagesJustLoaded localChange =
                 (SeqDict.values messagesLoaded)
 
         Local_CurrentlyViewing _ (ViewDm data (FilledInByBackend messagesLoaded)) ->
-            encryptedMessagesInConversation data.id Nothing (SeqDict.values messagesLoaded)
+            encryptedMessagesInConversation data.id Nothing (SeqDict.values messagesLoaded.messages)
 
         Local_CurrentlyViewing _ (ViewDmThread data (FilledInByBackend messagesLoaded)) ->
             encryptedMessagesInConversation

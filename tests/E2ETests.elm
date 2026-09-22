@@ -52,6 +52,7 @@ import RichText
 import Route
 import SecretId
 import SeqDict
+import SetViewing exposing (SetViewing(..))
 import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
@@ -59,7 +60,7 @@ import Time
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
 import User exposing (NotificationLevel(..))
 import UserOptions
-import UserSession exposing (SetViewing(..))
+import UserSession
 import VisibleMessages
 
 

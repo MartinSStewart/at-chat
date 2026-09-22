@@ -63,7 +63,7 @@ import Call exposing (CallId(..))
 import Discord
 import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
 import DmChannel exposing (BackendDmChannel, DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
-import DmChannelId exposing (DmChannelId)
+import DmChannelId exposing (DmChannelId, GuildOrFullDmId(..))
 import Drawing
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
@@ -1877,6 +1877,12 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                         threadRouteWithMaybeReplyTo
                         attachedFiles
                         stickers
+                        (Message.threadRouteRepliedToMatches threadRouteWithMaybeReplyTo
+                            |> DmChannel.loadRepliedToMatches
+                                (GuildOrFullDmId_Guild id.guildId id.channelId)
+                                model.goMatchPublicIds
+                                channel2
+                        )
                         |> ServerChange
                     )
                     model
@@ -2124,6 +2130,12 @@ sendEncryptedDm time clientId changeId id fileHashes contentAndEmbeds notificati
                             fileHashes
                             contentAndEmbeds
                             threadRouteWithReplyTo
+                            (Message.threadRouteRepliedToMatches threadRouteWithReplyTo
+                                |> DmChannel.loadRepliedToMatches
+                                    (GuildOrFullDmId_Dm dmChannelId)
+                                    model.goMatchPublicIds
+                                    dmChannel2
+                            )
                     )
                     model
                 , notificationCmd

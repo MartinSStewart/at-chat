@@ -169,6 +169,7 @@ import SecretId exposing (SecretId(..))
 import SeqDict
 import SeqSet
 import SessionIdHash exposing (SessionIdHash(..))
+import SetViewing exposing (SetViewing(..))
 import Slack
 import String.Nonempty exposing (NonemptyString(..))
 import Svg.Attributes
@@ -183,7 +184,7 @@ import Url exposing (Protocol(..), Url)
 import User
 import UserAgent
 import UserColor
-import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
+import UserSession exposing (NotificationMode(..), ToBeFilledInByBackend(..))
 import WordSpellingGame
 import X25519
 
@@ -2585,7 +2586,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
 
                 Types.ServerChange serverChange ->
                     case serverChange of
-                        Types.Server_SendMessage _ _ _ _ _ _ _ _ ->
+                        Types.Server_SendMessage _ _ _ _ _ _ _ _ _ ->
                             True
 
                         --RichText.toString SeqDict.empty message |> String.contains "sensitive"
@@ -2843,7 +2844,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetPublicKey _ _ ->
                             True
 
-                        Types.Server_SendEncryptedMessage _ _ _ _ _ _ _ ->
+                        Types.Server_SendEncryptedMessage _ _ _ _ _ _ _ _ ->
                             True
 
                         Types.Server_SendEncryptedEditMessage _ _ _ _ _ _ ->

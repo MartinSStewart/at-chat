@@ -78,6 +78,7 @@ import Emoji exposing (CachedEmojiData, EmojiConfig, EmojiOrCustomEmoji)
 import Encryption exposing (BytesHash)
 import Env
 import FileStatus exposing (FileHash, FileId, FileStatus)
+import Game
 import GuildColumn
 import GuildIcon exposing (ChannelNotificationType(..))
 import GuildName exposing (GuildName)
@@ -3982,6 +3983,7 @@ conversationViewHelper :
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
             , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
+            , games : SeqDict (Id ChannelMessageId) Game.MatchData
         }
     -> LoggedIn2
     -> LocalState
@@ -4082,7 +4084,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
 
                         maybeRepliedTo2 : Maybe (RepliedToView ChannelMessageId (Id UserId))
                         maybeRepliedTo2 =
-                            maybeRepliedTo message channel
+                            channelMessageRepliedTo channel.games message channel
 
                         date : Date
                         date =
@@ -4255,18 +4257,39 @@ userTextMessageRepliedTo data channel =
                     Nothing
 
         RepliedToGame matchId game ->
-            RepliedToView_Game matchId game |> Just
+            RepliedToView_Game matchId game Nothing |> Just
 
         NoReply ->
             Nothing
 
 
 {-| What a message replied to, for drawing the line above it. A reply to something inside a
-game has no message behind it, only the game's card and what in the game it points at.
+game has no message behind it, only the game's card, what in the game it points at and, once
+the match has been loaded, what that move or answer was.
 -}
 type RepliedToView messageId userId
     = RepliedToView_Message (Id messageId) (Message messageId userId)
-    | RepliedToView_Game (Id ChannelMessageId) Message.RepliedToGame
+    | RepliedToView_Game (Id ChannelMessageId) Message.RepliedToGame (Maybe { by : userId, text : String })
+
+
+{-| `maybeRepliedTo` for a channel's own messages. Only those can reply into one of the
+channel's matches, so only they can say what the move or answer they replied to was.
+-}
+channelMessageRepliedTo :
+    SeqDict (Id ChannelMessageId) Game.MatchData
+    -> Message ChannelMessageId (Id UserId)
+    -> { a | messages : MessageArray ChannelMessageId (Id UserId) }
+    -> Maybe (RepliedToView ChannelMessageId (Id UserId))
+channelMessageRepliedTo games message channel =
+    case maybeRepliedTo message channel of
+        Just (RepliedToView_Game matchId game _) ->
+            SeqDict.get matchId games
+                |> Maybe.andThen (Game.replyPreview game)
+                |> RepliedToView_Game matchId game
+                |> Just
+
+        maybeRepliedTo2 ->
+            maybeRepliedTo2
 
 
 maybeRepliedTo : Message messageId userId -> { a | messages : MessageArray messageId userId } -> Maybe (RepliedToView messageId userId)
@@ -5723,6 +5746,7 @@ conversationView :
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
             , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
+            , games : SeqDict (Id ChannelMessageId) Game.MatchData
         }
     -> Element FrontendMsg_
 conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local missingPrivateKey name channel =
@@ -8784,7 +8808,7 @@ replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoiler
         Just (RepliedToView_Message repliedToIndex (GameStarted { startedBy })) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted startedBy allUsers)
 
-        Just (RepliedToView_Game matchId game) ->
+        Just (RepliedToView_Game matchId game maybePreview) ->
             MyUi.rowButton
                 (Dom.id ("guild_gameReplyLink_" ++ Id.toString matchId))
                 MessageView_PressedReplyLink
@@ -8792,15 +8816,22 @@ replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoiler
                 [ replyToHeaderAboveMessageIcon
                 , Ui.Prose.paragraph
                     [ Ui.paddingXY 0 4 ]
-                    (case game of
-                        Message.RepliedTo_WordSpellingGameMove moveNumber ->
-                            [ Ui.text ("Move " ++ String.fromInt moveNumber ++ " in the Word Spelling game") ]
+                    (case maybePreview of
+                        Just preview ->
+                            [ User.toString preview.by allUsers |> Ui.text |> Ui.el [ Ui.Font.bold ]
+                            , Ui.text preview.text
+                            ]
 
-                        Message.RepliedTo_SheepGameAnswer _ _ ->
-                            [ Ui.text "An answer in the Sheep Game" ]
+                        Nothing ->
+                            case game of
+                                Message.RepliedTo_WordSpellingGameMove moveNumber ->
+                                    [ Ui.text ("Move " ++ String.fromInt moveNumber ++ " in the Word Spelling game") ]
 
-                        Message.RepliedTo_SheepGameNotes _ ->
-                            [ Ui.text "The host's notes in the Sheep Game" ]
+                                Message.RepliedTo_SheepGameAnswer _ _ ->
+                                    [ Ui.text "An answer in the Sheep Game" ]
+
+                                Message.RepliedTo_SheepGameNotes _ ->
+                                    [ Ui.text "The host's notes in the Sheep Game" ]
                     )
                 ]
 

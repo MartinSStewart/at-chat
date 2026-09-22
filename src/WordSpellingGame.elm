@@ -57,6 +57,7 @@ module WordSpellingGame exposing
     , invalidWordsText
     , isAnimating
     , isZoomAnimating
+    , moveReplyPreview
     , movesText
     , nextTurnNotifications
     , parseWordList
@@ -4318,6 +4319,28 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
                 actions
                 shared
             ]
+
+
+{-| The line the Moves log shows for one move, for a reply to that move to repeat. Moves are
+numbered the way the log numbers them: from 1 for the oldest entry, joins included.
+-}
+moveReplyPreview : ValidatedSetup -> Array ActionWithTime -> Int -> Maybe { by : Id UserId, text : String }
+moveReplyPreview setup actions moveNumber =
+    Array.foldl
+        (\action ( shared, descriptions ) ->
+            let
+                ( shared2, newDescriptions ) =
+                    updateAction setup action shared
+            in
+            ( shared2, List.reverse newDescriptions ++ descriptions )
+        )
+        ( initShared setup, [] )
+        actions
+        |> Tuple.second
+        |> List.reverse
+        |> List.drop (moveNumber - 1)
+        |> List.head
+        |> Maybe.map (\description -> { by = descriptionUserId description, text = descriptionToString description })
 
 
 descriptionToString : Description -> String

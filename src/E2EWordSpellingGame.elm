@@ -186,10 +186,24 @@ tests normalConfig =
                         , admin.click 100 (Dom.id "miniView_reply")
                         , admin.custom 100 (moveRow 1) "mouseleave" (Json.Encode.object [])
                         , E2EHelper.writeMessage admin 100 "what a word"
-                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Move 1 in the Word Spelling game" ])
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text " played LOAD (+10)" ])
                         , user.snapshotView 100 { name = "Reply to a move" }
                         , user.click 100 (Dom.id "guild_gameReplyLink_0")
                         , user.checkModel 100 (checkViewingRepliedTo (Message.RepliedTo_WordSpellingGameMove 1))
+
+                        -- A tab that has never opened the match gets it along with the messages
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId1
+                            ("/d/" ++ DmChannelId.toString (DmChannelId.fromUserIds (Id.fromInt 0) (Id.fromInt 2)))
+                            E2EHelper.tallDesktopWindow
+                            (\userB ->
+                                [ T.andThen
+                                    10
+                                    (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                                , userB.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text " played LOAD (+10)" ])
+                                ]
+                            )
                         ]
                     , T.collapsableGroup
                         "Drop a tray tile one slot to the right"

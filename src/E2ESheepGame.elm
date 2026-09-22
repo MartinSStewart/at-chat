@@ -522,7 +522,7 @@ threePlayerMatchTest normalConfig =
                                 , E2EHelper.writeMessage stevie 100 "same as mine"
                                 , joe.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "An answer in the Sheep Game" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text " answered \"Blue\"" ])
 
                                 -- The notes the host wrote about the question take reactions too
                                 , stevie.mouseEnter

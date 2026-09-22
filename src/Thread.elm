@@ -163,7 +163,6 @@ loadMessages preloadMessages messages =
                                     list
 
                                 RepliedToGame _ _ ->
-                                    -- TODO: Needs to load match data so the preview can be shown
                                     list
 
                         _ ->
