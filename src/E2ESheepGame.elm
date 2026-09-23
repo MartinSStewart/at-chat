@@ -546,6 +546,29 @@ threePlayerMatchTest normalConfig =
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.id "miniView_showReactionEmojiSelector" ])
 
+                                -- and replies, which repeat the notes above the message input and
+                                -- then above the message the same way a reply to an answer does
+                                , stevie.click 100 (Dom.id "miniView_reply")
+                                , stevie.checkView
+                                    100
+                                    (\view ->
+                                        Test.Html.Query.find
+                                            [ Test.Html.Selector.id "guild_replyToHeader" ]
+                                            view
+                                            |> Test.Html.Query.has [ Test.Html.Selector.text "Nobody said **green**" ]
+                                    )
+                                , E2EHelper.writeMessage stevie 100 "green is a colour too"
+                                , joe.checkView
+                                    100
+                                    (\view ->
+                                        Test.Html.Query.findAll
+                                            [ Test.Html.Selector.id ("guild_gameReplyLink_" ++ Id.toString messageId) ]
+                                            view
+                                            |> Test.Html.Query.index 1
+                                            |> Test.Html.Query.has [ Test.Html.Selector.text "Nobody said **green**" ]
+                                    )
+                                , joe.snapshotView 100 { name = "Replies to a sheep game answer and notes" }
+
                                 -- Joe reads back over the first question instead of waiting at the
                                 -- bottom, so the next one to turn up is announced to him rather than
                                 -- scrolled onto, which would move what he's reading out from under him.
