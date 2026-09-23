@@ -8931,7 +8931,7 @@ replyToHeaderAboveMessageAttributes isMobile =
 
 replyToHeaderAboveMessageIcon : Element msg
 replyToHeaderAboveMessageIcon =
-    Ui.el [ Ui.width Ui.shrink, Ui.move { x = 0, y = 3, z = 0 } ] (Ui.html (Icons.reply 18))
+    Ui.el [ Ui.width Ui.shrink, Ui.move { x = 0, y = 3, z = 0 }, MyUi.noShrinking ] (Ui.html (Icons.reply 18))
 
 
 userJoinedContent : userId -> SeqDict userId { a | name : PersonName } -> Element msg
