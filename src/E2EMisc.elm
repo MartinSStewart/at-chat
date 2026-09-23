@@ -33,6 +33,7 @@ module E2EMisc exposing
 import Audio
 import Broadcast
 import ChannelExport
+import Color
 import DmChannel
 import DmChannelId
 import Drawing
@@ -58,6 +59,7 @@ import LocalState exposing (LocalState)
 import MembersAndOwner
 import Message
 import MessageDropdown
+import MyUi
 import NonemptyDict
 import Pages.Admin
 import Pages.Guild
@@ -2462,14 +2464,20 @@ richTextMessage isMobile normalConfig =
                     (Test.Html.Query.has [ Test.Html.Selector.id "guild_replyLink_2" ])
                 , E2EHelper.tallSnapshot admin 1000 { name = "Rich text message previewed in reply" }
 
-                -- Following the reply back to the message it points at marks that message. The
-                -- mark fades away by itself, so it's a class rather than a background of its own.
+                -- Following the reply back to the message it points at marks that message. The mark
+                -- is a layer inside the message rather than the message's own background, since its
+                -- opacity fades.
                 , admin.click 100 (Dom.id "guild_replyLink_2")
                 , admin.checkView
                     100
                     (\html ->
                         Test.Html.Query.find [ Test.Html.Selector.id "guild_message_2" ] html
-                            |> Test.Html.Query.has [ Test.Html.Selector.class "highlight-fade-out" ]
+                            |> Test.Html.Query.findAll
+                                [ Test.Html.Selector.style
+                                    "background-color"
+                                    (Color.toCssString MyUi.replyToColor)
+                                ]
+                            |> Test.Html.Query.count (Expect.equal 1)
                     )
                 ]
             )

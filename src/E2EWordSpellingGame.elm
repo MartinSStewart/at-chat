@@ -2,6 +2,7 @@ module E2EWordSpellingGame exposing (tests)
 
 import Audio
 import Broadcast
+import Color
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import DmChannelId
@@ -9,6 +10,7 @@ import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Time as Time
+import Expect
 import FrontendExtra
 import Game
 import Id exposing (ChannelMessageId, Id)
@@ -16,6 +18,7 @@ import IdArray
 import Json.Encode
 import List.Nonempty
 import Message
+import MyUi
 import OneOrGreater
 import Route exposing (ChannelsVisibleOnMobile(..), ShowChannelSettings(..))
 import SeqDict
@@ -197,13 +200,14 @@ tests normalConfig =
                         , user.click 100 (Dom.id "guild_gameReplyLink_0")
                         , user.checkModel 100 (checkViewingRepliedTo (Message.RepliedTo_WordSpellingGameMove 1))
 
-                        -- The move that was replied to marks itself, and the mark fades away
-                        -- once the reader has had a moment to see which row it is
+                        -- The move that was replied to marks itself. The mark holds at full
+                        -- strength and then settles on the half strength it keeps.
                         , user.checkView
                             100
                             (\view ->
                                 Test.Html.Query.find [ Test.Html.Selector.id (Dom.idToString (moveRow 1)) ] view
-                                    |> Test.Html.Query.has [ Test.Html.Selector.class "highlight-fade-out" ]
+                                    |> Test.Html.Query.findAll [ highlightMark ]
+                                    |> Test.Html.Query.count (Expect.equal 1)
                             )
 
                         -- A tab that has never opened the match gets it along with the messages
@@ -1510,6 +1514,14 @@ checkHoveredMoveBoardSize expected model =
 
         Nothing ->
             Err "Expected a move in the Moves log to be hovered"
+
+
+{-| The mark drawn over a row a reply has taken the reader to. It's a layer inside the row rather
+than the row's own background, since its opacity fades.
+-}
+highlightMark : Test.Html.Selector.Selector
+highlightMark =
+    Test.Html.Selector.style "background-color" (Color.toCssString MyUi.replyToColor)
 
 
 {-| A row in the Moves log, by the number the log shows next to it.

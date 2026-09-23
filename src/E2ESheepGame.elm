@@ -505,7 +505,7 @@ threePlayerMatchTest normalConfig =
                                             [ Test.Html.Selector.id "guild_replyToHeader" ]
                                             view
                                             |> Test.Html.Query.has
-                                                [ Test.Html.Selector.text " answered \"Blue\"" ]
+                                                [ Test.Html.Selector.text "Blue" ]
                                     )
                                 , stevie.click 100 (Dom.id "guild_closeReplyToHeader")
                                 , stevie.checkView
@@ -529,7 +529,12 @@ threePlayerMatchTest normalConfig =
                                 , E2EHelper.writeMessage stevie 100 "same as mine"
                                 , joe.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text " answered \"Blue\"" ])
+                                    (\view ->
+                                        Test.Html.Query.find
+                                            [ Test.Html.Selector.id ("guild_gameReplyLink_" ++ Id.toString messageId) ]
+                                            view
+                                            |> Test.Html.Query.has [ Test.Html.Selector.text "Blue" ]
+                                    )
 
                                 -- The notes the host wrote about the question take reactions too
                                 , stevie.mouseEnter

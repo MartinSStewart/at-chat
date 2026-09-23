@@ -4627,11 +4627,6 @@ reactableMove localUser contentWidth target hoveredTarget highlightedTarget onMo
         , Ui.spacing 4
         , Ui.Events.onMouseEnter onMouseEnter
         , Ui.Events.onMouseLeave MouseExitWord
-        , if highlightedTarget == Just target then
-            MyUi.highlightFadeOut
-
-          else
-            Ui.noAttr
         , if isHovered then
             MessageView.gameMiniViewNearEdge
                 localUser.user
@@ -4643,6 +4638,7 @@ reactableMove localUser contentWidth target hoveredTarget highlightedTarget onMo
 
           else
             Ui.noAttr
+        , Ui.attrIf (highlightedTarget == Just target) (MyUi.highlightFadeOut MyUi.replyToColor)
         ]
         (content
             :: (case

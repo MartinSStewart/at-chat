@@ -7337,6 +7337,22 @@ discordThreadMessageViewLazy data revealedSpoilers currentDiscordUserId localUse
         message
 
 
+highlightLayer : HighlightMessage -> Ui.Attribute msg
+highlightLayer highlight =
+    case highlight of
+        NoHighlight ->
+            Ui.noAttr
+
+        ReplyToHighlight ->
+            MyUi.highlightFadeOut MyUi.replyToColor
+
+        MentionHighlight ->
+            MyUi.highlightFadeOut MyUi.mentionColor
+
+        UrlHighlight ->
+            MyUi.highlightFadeOut MyUi.replyToColor
+
+
 type HighlightMessage
     = NoHighlight
     | ReplyToHighlight
@@ -7531,7 +7547,6 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
                 (deletedMessageContent
                     messageId
                     (isHovered == IsHoveredWhileSelectingAnchor)
-                    highlight
                     createdAt
                     localUser.timezone
                 )
@@ -7769,7 +7784,6 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
                 (deletedMessageContent
                     messageId
                     (isHovered == IsHoveredWhileSelectingAnchor)
-                    highlight
                     createdAt
                     localUser.timezone
                 )
@@ -8004,7 +8018,6 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
                 (deletedMessageContent
                     messageId
                     (isHovered == IsHoveredWhileSelectingAnchor)
-                    highlight
                     createdAt
                     localUser.timezone
                 )
@@ -8207,7 +8220,6 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
                 (deletedMessageContent
                     messageId
                     (isHovered == IsHoveredWhileSelectingAnchor)
-                    highlight
                     createdAt
                     localUser.timezone
                 )
@@ -8677,26 +8689,14 @@ messageIdView _ =
 --    Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink, Ui.paddingLeft 4 ] (Ui.text (Id.toString messageId))
 
 
-deletedMessageContent : Id messageId -> Bool -> HighlightMessage -> Time.Posix -> Time.Zone -> Element MessageViewMsg
-deletedMessageContent messageId isSelectingAnchor highlight createdAt timezone =
+deletedMessageContent : Id messageId -> Bool -> Time.Posix -> Time.Zone -> Element MessageViewMsg
+deletedMessageContent messageId isSelectingAnchor createdAt timezone =
     Ui.row
         [ Ui.paddingWith { left = 4, right = 0, top = 4, bottom = 0 } ]
         [ Ui.el
             [ Ui.Font.color MyUi.font3
             , Ui.Font.italic
             , Ui.Font.size 14
-            , case highlight of
-                NoHighlight ->
-                    Ui.noAttr
-
-                ReplyToHighlight ->
-                    Ui.noAttr
-
-                MentionHighlight ->
-                    Ui.noAttr
-
-                UrlHighlight ->
-                    MyUi.highlightFadeOut
             ]
             (Ui.text LocalState.messageDeleted)
         , messageTimestamp (\_ -> UserColor.default) Drawing.emptyDrawing isSelectingAnchor messageId createdAt timezone
@@ -9237,83 +9237,28 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
             }
          , Ui.spacing 4
          , channelMessageHtmlId messageIndex |> Dom.idToString |> Ui.id
-         , case highlight of
-            NoHighlight ->
-                Ui.noAttr
-
-            ReplyToHighlight ->
-                Ui.noAttr
-
-            MentionHighlight ->
-                Ui.noAttr
-
-            UrlHighlight ->
-                MyUi.highlightFadeOut
          ]
             ++ (case isHovered of
                     IsNotHovered ->
-                        case highlight of
-                            NoHighlight ->
-                                []
-
-                            ReplyToHighlight ->
-                                [ Ui.background MyUi.replyToColor ]
-
-                            MentionHighlight ->
-                                [ Ui.background MyUi.mentionColor ]
-
-                            UrlHighlight ->
-                                []
+                        []
 
                     IsHovered ->
-                        [ case highlight of
-                            NoHighlight ->
-                                Ui.background MyUi.hoverHighlight
-
-                            ReplyToHighlight ->
-                                Ui.background MyUi.hoverAndReplyToColor
-
-                            MentionHighlight ->
-                                Ui.background MyUi.hoverAndMentionColor
-
-                            UrlHighlight ->
-                                Ui.background MyUi.hoverHighlight
+                        [ MyUi.hoverHighlightLayer
                         , MessageView.miniView currentUser isThreadStarter canEdit availableCustomEmojis emojiData customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->
-                        case highlight of
-                            NoHighlight ->
-                                [ Ui.background MyUi.hoverHighlight ]
-
-                            ReplyToHighlight ->
-                                [ Ui.background MyUi.hoverAndReplyToColor ]
-
-                            MentionHighlight ->
-                                [ Ui.background MyUi.hoverAndMentionColor ]
-
-                            UrlHighlight ->
-                                [ Ui.background MyUi.hoverHighlight ]
+                        [ MyUi.hoverHighlightLayer ]
 
                     IsHoveredReactionsOnly ->
-                        [ case highlight of
-                            NoHighlight ->
-                                Ui.background MyUi.hoverHighlight
-
-                            ReplyToHighlight ->
-                                Ui.background MyUi.hoverAndReplyToColor
-
-                            MentionHighlight ->
-                                Ui.background MyUi.hoverAndMentionColor
-
-                            UrlHighlight ->
-                                Ui.background MyUi.hoverHighlight
+                        [ MyUi.hoverHighlightLayer
                         , MessageView.reactionsMiniView currentUser availableCustomEmojis emojiData customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredWhileSelectingAnchor ->
                         []
                )
+            ++ [ highlightLayer highlight ]
         )
         (messageContent
             :: Maybe.Extra.toList maybeReactions
@@ -9378,83 +9323,28 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
             }
          , Ui.spacing 4
          , threadMessageHtmlId messageIndex |> Dom.idToString |> Ui.id
-         , case highlight of
-            NoHighlight ->
-                Ui.noAttr
-
-            ReplyToHighlight ->
-                Ui.noAttr
-
-            MentionHighlight ->
-                Ui.noAttr
-
-            UrlHighlight ->
-                MyUi.highlightFadeOut
          ]
             ++ (case isHovered of
                     IsNotHovered ->
-                        case highlight of
-                            NoHighlight ->
-                                []
-
-                            ReplyToHighlight ->
-                                [ Ui.background MyUi.replyToColor ]
-
-                            MentionHighlight ->
-                                [ Ui.background MyUi.mentionColor ]
-
-                            UrlHighlight ->
-                                []
+                        []
 
                     IsHovered ->
-                        [ case highlight of
-                            NoHighlight ->
-                                Ui.background MyUi.hoverHighlight
-
-                            ReplyToHighlight ->
-                                Ui.background MyUi.hoverAndReplyToColor
-
-                            MentionHighlight ->
-                                Ui.background MyUi.hoverAndMentionColor
-
-                            UrlHighlight ->
-                                Ui.background MyUi.hoverHighlight
+                        [ MyUi.hoverHighlightLayer
                         , MessageView.miniView currentUser False canEdit availableCustomEmojis emojiData customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->
-                        case highlight of
-                            NoHighlight ->
-                                [ Ui.background MyUi.hoverHighlight ]
-
-                            ReplyToHighlight ->
-                                [ Ui.background MyUi.hoverAndReplyToColor ]
-
-                            MentionHighlight ->
-                                [ Ui.background MyUi.hoverAndMentionColor ]
-
-                            UrlHighlight ->
-                                [ Ui.background MyUi.hoverHighlight ]
+                        [ MyUi.hoverHighlightLayer ]
 
                     IsHoveredReactionsOnly ->
-                        [ case highlight of
-                            NoHighlight ->
-                                Ui.background MyUi.hoverHighlight
-
-                            ReplyToHighlight ->
-                                Ui.background MyUi.hoverAndReplyToColor
-
-                            MentionHighlight ->
-                                Ui.background MyUi.hoverAndMentionColor
-
-                            UrlHighlight ->
-                                Ui.background MyUi.hoverHighlight
+                        [ MyUi.hoverHighlightLayer
                         , MessageView.reactionsMiniView currentUser availableCustomEmojis emojiData customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredWhileSelectingAnchor ->
                         []
                )
+            ++ [ highlightLayer highlight ]
         )
         (messageContent :: Maybe.Extra.toList maybeReactions)
 

@@ -54,9 +54,8 @@ module MyUi exposing
     , highlightFadeOut
     , highlightedBorder
     , hover
-    , hoverAndMentionColor
-    , hoverAndReplyToColor
     , hoverHighlight
+    , hoverHighlightLayer
     , hoverText
     , htmlStyle
     , id
@@ -834,14 +833,54 @@ fadeIn =
     Ui.htmlAttribute (Html.Attributes.class "fade-in")
 
 
-{-| Marks something the reader has just been taken to, a message opened from a link or a reply
-or the move a reply points at, and then fades away over a second. The colour lives in the
-animation rather than in a background of its own, so once the second is up the element goes back
-to whatever background it would otherwise have, hover included.
+{-| Marks something the reader has just been taken to: a message opened from a link or a reply, or
+the move a reply points at. The mark holds at full strength long enough for the eye to find it and
+then settles at half strength, which the animation keeps once it has run.
+
+It's a layer rather than the element's own background so that `hoverHighlightLayer` can show on top
+of it, a background being only ever one colour. Both are drawn behind the content, and elm-ui puts
+the later of two `Ui.behindContent` layers underneath the earlier one, so a caller wanting the
+pointer to read over the mark lists `hoverHighlightLayer` first.
+
+What fades is the layer's opacity and not its colour, because a colour animated over three or more
+keyframe steps comes out of elm-animator scrambled, ending back on the first step's value.
+
 -}
-highlightFadeOut : Ui.Attribute msg
-highlightFadeOut =
-    Ui.htmlAttribute (Html.Attributes.class "highlight-fade-out")
+highlightFadeOut : Ui.Color -> Ui.Attribute msg
+highlightFadeOut color =
+    Ui.behindContent
+        (Ui.el
+            [ Ui.height Ui.fill
+            , Ui.background color
+            , Ui.Anim.keyframes
+                [ Ui.Anim.loopFor 1
+                    [ Ui.Anim.step (Ui.Anim.ms 2800) [ Ui.Anim.opacity 1 ]
+                    , Ui.Anim.step (Ui.Anim.ms 1200) [ Ui.Anim.opacity highlightSettledOpacity ]
+                    ]
+                ]
+            ]
+            Ui.none
+        )
+
+
+{-| How much of the mark is left once it has settled.
+-}
+highlightSettledOpacity : Float
+highlightSettledOpacity =
+    0.5
+
+
+{-| The hover highlight as a layer over the element's own background rather than as that background,
+so that it shows on top of a mark the element is already carrying. It's drawn behind the content, so
+the text over it is untouched.
+-}
+hoverHighlightLayer : Ui.Attribute msg
+hoverHighlightLayer =
+    Ui.behindContent
+        (Ui.el
+            [ Ui.height Ui.fill, Ui.background hoverHighlight ]
+            Ui.none
+        )
 
 
 noPointerEvents : Ui.Attribute msg
@@ -1381,21 +1420,6 @@ body {
   50% { opacity: 0; transform: translate(0px, -20px); }
   100% { opacity: 1; }
 }
-/* Something the reader has just been taken to: a message opened from a link or a reply, or the
-   move or answer a reply points at. The animation holds no end state, so once it has run the
-   element is back to the background it would have had anyway. */
-.highlight-fade-out {
-  animation: highlight-fade-out 4s;
-}
-@keyframes highlight-fade-out {
-  0% { background-color: """
-                ++ colorToStyle replyToColor
-                ++ """; }
-  70% { background-color: """
-                ++ colorToStyle replyToColor
-                ++ """; }
-  100% { background-color: rgba(0,0,0,0); }
-}
 /* The custom emoji tooltip hangs above its emoji, centred on it. The arrow is a
    sibling of the tooltip rather than a child of it so that it keeps pointing at
    the emoji when the tooltip below slides sideways. */
@@ -1915,16 +1939,6 @@ replyToColor =
 mentionColor : Ui.Color
 mentionColor =
     Ui.rgb 112 90 78
-
-
-hoverAndReplyToColor : Ui.Color
-hoverAndReplyToColor =
-    Ui.rgb 66 66 139
-
-
-hoverAndMentionColor : Ui.Color
-hoverAndMentionColor =
-    Ui.rgb 138 112 108
 
 
 alertColor : Ui.Color
