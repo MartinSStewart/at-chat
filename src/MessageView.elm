@@ -220,8 +220,20 @@ gameMiniViewNearEdge :
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> Element MessageViewMsg
 gameMiniViewNearEdge user availableCustomEmojis emojiData customEmojis =
-    miniViewContainer
-        -8
+    Ui.row
+        [ Ui.alignRight
+        , Ui.background MyUi.background1
+        , Ui.rounded 4
+        , Ui.borderColor MyUi.border1
+        , Ui.border 1
+        , Ui.move { x = -8, y = -16, z = 0 }
+        , Ui.height (Ui.px miniButtonSize)
+        , Ui.clip
+
+        -- elm-ui gives Ui.inFront no z-index of its own, so without this the gradients drawn in
+        -- front of a game tab's scrolling content cover this menu when it's near an edge.
+        , MyUi.htmlStyle "z-index" "1"
+        ]
         (recentEmojiButtons user availableCustomEmojis emojiData customEmojis
             ++ [ miniButton
                     (Dom.id "miniView_showReactionEmojiSelector")
