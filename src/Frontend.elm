@@ -2618,6 +2618,9 @@ updateLoaded msg model =
                                                     MessageMenu.mobileMenuOpeningOffset
                                                         guildOrDmId
                                                         threadRoute
+                                                        isThreadStarter
+                                                        Nothing
+                                                        Nothing
                                                         local
                                                         model
                                                 }
@@ -7277,6 +7280,9 @@ handleAltPressedMessage guildOrDmId threadRoute isThreadStarter maybeImageUrl ma
                             MessageMenu.mobileMenuOpeningOffset
                                 guildOrDmId
                                 threadRoute
+                                isThreadStarter
+                                maybeImageUrl
+                                maybeLinkUrl
                                 local
                                 model
                         }

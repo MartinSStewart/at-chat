@@ -122,23 +122,30 @@ mobileMenuMaxHeightHelper { items, height } =
     toFloat (height + List.length items) - 1 + mobileCloseButton + topPadding + bottomPadding
 
 
+{-| How far the menu slides up when it first opens. It stops half way through the fourth button so
+that the cut off button shows there is more to see if you drag it up further. Delete message is
+always further down the list than that, so it can't be hit by accident on the way past.
+-}
 mobileMenuOpeningOffset :
     AnyGuildOrDmId
     -> ThreadRouteWithMessage
+    -> Bool
+    -> Maybe String
+    -> Maybe String
     -> LocalState
     -> LoadedFrontend
     -> Quantity Float CssPixels
-mobileMenuOpeningOffset guildOrDmId threadRoute local model =
+mobileMenuOpeningOffset guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl local model =
     let
-        itemCount : Float
-        itemCount =
-            menuItems True guildOrDmId threadRoute False Nothing Nothing Coord.origin local model
-                |> .items
-                |> List.length
-                |> toFloat
-                |> min 3.4
+        menuItemsData : { items : List (Element FrontendMsg_), height : Int }
+        menuItemsData =
+            menuItems True guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl Coord.origin local model
     in
-    itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding |> CssPixels.cssPixels
+    if List.length menuItemsData.items <= 4 then
+        mobileMenuMaxHeightHelper menuItemsData |> CssPixels.cssPixels
+
+    else
+        3 * (buttonHeight True + 1) + buttonHeight True / 2 + mobileCloseButton + topPadding |> CssPixels.cssPixels
 
 
 messageMenuSpeed : Quantity Float (Rate CssPixels Seconds)
@@ -993,7 +1000,7 @@ messageCustomEmojiIds message =
 buttonHeight : Bool -> number
 buttonHeight isMobile =
     if isMobile then
-        10 + 34
+        22 + 34
 
     else
         6 + 30
