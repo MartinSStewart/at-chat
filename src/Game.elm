@@ -59,6 +59,7 @@ import List.Nonempty exposing (Nonempty)
 import Message exposing (GameType(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import PersonName exposing (PersonName)
 import Ports exposing (StartupData)
 import RichText
 import Scroll
@@ -71,6 +72,7 @@ import Ui.Font
 import Ui.Lazy
 import Ui.Shadow
 import User exposing (LocalUser)
+import UserColor exposing (UserColor)
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame
 
@@ -987,28 +989,37 @@ sheepGameOutMsgs time newMatchId outMsg =
             [ SetFocus (SheepGame.inputId (SheepGame.QuestionInput questionId)) ]
 
 
-{-| What the line above a reply into this match says about the move or answer it replied to.
-Nothing until the match has been loaded.
--}
-replyPreview : Message.RepliedToGame -> MatchData -> Maybe { by : Id UserId, text : String }
-replyPreview repliedTo matchData =
+replyPreview : SeqDict (Id UserId) { a | name : PersonName, color : UserColor } -> Message.RepliedToGame -> MatchData -> Element msg
+replyPreview allUsers repliedTo matchData =
     case matchData of
         MatchData { data } ->
-            case ( repliedTo, data ) of
-                ( Message.RepliedTo_WordSpellingGameMove moveNumber, FrontendGameData_WordSpellingGame setup actions _ ) ->
-                    WordSpellingGame.moveReplyPreview setup actions moveNumber
+            case repliedTo of
+                Message.RepliedTo_WordSpellingGameMove moveNumber ->
+                    case data of
+                        FrontendGameData_WordSpellingGame setup actions _ ->
+                            WordSpellingGame.moveReplyPreview allUsers setup actions moveNumber
 
-                ( Message.RepliedTo_SheepGameAnswer userId questionId, FrontendGameData_SheepGame setup _ shared ) ->
-                    SheepGame.replyPreview setup shared (SheepGame.AnswerReaction userId questionId)
+                        _ ->
+                            Ui.none
 
-                ( Message.RepliedTo_SheepGameNotes questionId, FrontendGameData_SheepGame setup _ shared ) ->
-                    SheepGame.replyPreview setup shared (SheepGame.NotesReaction questionId)
+                Message.RepliedTo_SheepGameAnswer userId questionId ->
+                    case data of
+                        FrontendGameData_SheepGame setup _ shared ->
+                            SheepGame.replyPreview shared (SheepGame.AnswerReaction userId questionId)
 
-                _ ->
-                    Nothing
+                        _ ->
+                            Ui.none
+
+                Message.RepliedTo_SheepGameNotes questionId ->
+                    case data of
+                        FrontendGameData_SheepGame setup _ shared ->
+                            SheepGame.replyPreview shared (SheepGame.NotesReaction questionId)
+
+                        _ ->
+                            Ui.none
 
         MatchNotLoaded _ ->
-            Nothing
+            Ui.none
 
 
 {-| Where in the games tab the move or answer a reply points at is drawn, so that following the

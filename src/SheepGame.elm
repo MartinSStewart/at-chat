@@ -78,7 +78,7 @@ import FileName
 import FileStatus exposing (FileData, FileId, FileMetadata(..), FileStatus, IsEncrypted(..))
 import Go
 import GuildIcon
-import Html
+import Html exposing (Html)
 import Html.Attributes
 import Icons
 import Id exposing (Id, QuestionId, UserId)
@@ -98,6 +98,7 @@ import SeqSet
 import Sticker
 import String.Nonempty
 import Touch exposing (Drag)
+import Twemoji
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -1461,22 +1462,42 @@ updateAction setup action shared =
                     shared
 
 
-{-| What a reply to an answer or to the host's notes repeats of it. Mentions come out without
-names, the same as in `answerKey`, since only the text is kept.
--}
-replyPreview : ValidatedSetup -> Shared -> ReactionTarget -> Maybe { by : Id UserId, text : String }
-replyPreview setup shared target =
+replyPreview : Shared -> ReactionTarget -> Element msg
+replyPreview shared target =
     case target of
         AnswerReaction userId questionId ->
-            SeqDict.get userId shared.answers
-                |> Maybe.andThen (IdArray.get questionId)
-                |> Maybe.andThen identity
-                |> Maybe.map (\answer -> { by = userId, text = " answered \"" ++ replyPreviewText answer ++ "\"" })
+            case SeqDict.get userId shared.answers of
+                Just answers ->
+                    case IdArray.get questionId answers of
+                        Just (Just answer) ->
+                            Ui.row
+                                [ Ui.spacing 4 ]
+                                [ Ui.el [ Ui.Font.size 20, Ui.width Ui.shrink ] (Ui.html sheepEmoji)
+                                , Ui.el [ Ui.clipWithEllipsis ] (Ui.text (replyPreviewText answer))
+                                ]
+
+                        _ ->
+                            Ui.none
+
+                Nothing ->
+                    Ui.none
 
         NotesReaction questionId ->
-            SeqDict.get questionId shared.notes
-                |> Maybe.andThen identity
-                |> Maybe.map (\notes -> { by = setup.createdBy, text = " wrote \"" ++ replyPreviewText notes ++ "\"" })
+            case SeqDict.get questionId shared.notes of
+                Just (Just notes) ->
+                    Ui.row
+                        [ Ui.spacing 4 ]
+                        [ Ui.el [ Ui.Font.size 20, Ui.width Ui.shrink ] (Ui.html sheepEmoji)
+                        , Ui.el [ Ui.clipWithEllipsis ] (Ui.text (replyPreviewText notes))
+                        ]
+
+                _ ->
+                    Ui.none
+
+
+sheepEmoji : Html msg
+sheepEmoji =
+    Twemoji.spriteView "1em" Emoji.animalsNatureSpriteName "🐑"
 
 
 replyPreviewText : ValidatedInput -> String
@@ -2982,10 +3003,6 @@ reactionTargetId target =
             Dom.id ("sheepGame_revealedNotes_" ++ Id.toString questionId)
 
 
-{-| An answer or a note, drawn with the reactions it has and, while the pointer is over it, the
-menu for reacting to it or replying to it in the chat the match is in. Editing and the rest of
-what a message's menu does belong to the conversation a message is in.
--}
 reactableResult : Int -> LocalUser -> Int -> ReactionTarget -> Maybe ReactionTarget -> Maybe ReactionTarget -> Reactions -> Element GameMsg -> Element GameMsg
 reactableResult paddingX2 localUser contentWidth target hoveredResult highlightedResult reactions content =
     let
@@ -3120,7 +3137,8 @@ finalResultsView localUser winners =
         [ Ui.spacing 48, Ui.Font.size 24 ]
         [ Ui.Prose.paragraph
             [ Ui.Font.center ]
-            (Ui.text "🐑 And the winner is "
+            (Ui.html sheepEmoji
+                :: Ui.text " And the winner is "
                 :: (case winners of
                         [] ->
                             [ Ui.text "...no one?" ]
@@ -3138,7 +3156,7 @@ finalResultsView localUser winners =
                                 winners
                                 |> List.intersperse (Ui.text ", ")
                    )
-                ++ [ Ui.text " 🐑" ]
+                ++ [ Ui.text " ", Ui.html sheepEmoji ]
             )
         , Ui.Prose.paragraph [ Ui.Font.center ] [ Ui.text "Thanks for playing!" ]
         ]
@@ -3227,7 +3245,10 @@ resultsGridView isMobile localUser setup shared gridHovered =
                         , if count == highestMatchCount && count > 0 then
                             Ui.Prose.paragraph
                                 []
-                                [ Ui.text "🐑 This is the highest number of matching answers! 🐑" ]
+                                [ Ui.html sheepEmoji
+                                , Ui.text " This is the highest number of matching answers! "
+                                , Ui.html sheepEmoji
+                                ]
 
                           else
                             Ui.none

@@ -13,6 +13,7 @@ module Emoji exposing
     , SkinTone(..)
     , TextOrEmoji(..)
     , UnicodeEmoji(..)
+    , animalsNatureSpriteName
     , emojiButtonId
     , emojiWithSkinTone
     , emojisInText
@@ -30,6 +31,7 @@ module Emoji exposing
     , selectorInit
     , sequenceView
     , setSearch
+    , sheep
     , smiley
     , splitOnEmoji
     , textView
@@ -270,6 +272,11 @@ tabsSpriteName =
     "tabs"
 
 
+animalsNatureSpriteName : String
+animalsNatureSpriteName =
+    "animals-nature"
+
+
 {-| Must match the names `scripts/fetch-twemoji.py` writes in `public/emoji`.
 -}
 categorySpriteName : EmojiCategory -> String
@@ -279,7 +286,7 @@ categorySpriteName emojiCategory =
             "activities"
 
         AnimalsAndNature ->
-            "animals-nature"
+            animalsNatureSpriteName
 
         Components ->
             "component"
@@ -775,6 +782,11 @@ thumbsUp =
 smiley : UnicodeEmoji
 smiley =
     UnicodeEmoji "😃"
+
+
+sheep : UnicodeEmoji
+sheep =
+    UnicodeEmoji "🐑"
 
 
 searchInputId : Dom.HtmlId

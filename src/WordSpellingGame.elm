@@ -113,7 +113,7 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptyExtra
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
-import PersonName
+import PersonName exposing (PersonName)
 import Quantity
 import Random
 import Route exposing (Route)
@@ -135,6 +135,7 @@ import Ui.Lazy
 import Ui.Prose
 import Url
 import User exposing (LocalUser)
+import UserColor exposing (UserColor)
 import UserSession exposing (ToBeFilledInByBackend(..))
 
 
@@ -4307,8 +4308,13 @@ statusView windowSize isPersonalDm localUser highlightedMove setup actions share
 {-| The line the Moves log shows for one move, for a reply to that move to repeat. Moves are
 numbered the way the log numbers them: from 1 for the oldest entry, joins included.
 -}
-moveReplyPreview : ValidatedSetup -> Array ActionWithTime -> Int -> Maybe { by : Id UserId, text : String }
-moveReplyPreview setup actions moveNumber =
+moveReplyPreview :
+    SeqDict (Id UserId) { a | name : PersonName, color : UserColor }
+    -> ValidatedSetup
+    -> Array ActionWithTime
+    -> Int
+    -> Element msg
+moveReplyPreview allUsers setup actions moveNumber =
     Array.foldl
         (\action ( shared, descriptions ) ->
             let
@@ -4321,9 +4327,17 @@ moveReplyPreview setup actions moveNumber =
         actions
         |> Tuple.second
         |> List.reverse
-        |> List.drop (moveNumber - 1)
-        |> List.head
-        |> Maybe.map (\description -> { by = descriptionUserId description, text = descriptionToString description })
+        |> List.Extra.getAt (moveNumber - 1)
+        |> Maybe.map
+            (\description ->
+                Ui.row
+                    [ Ui.spacing 4, Ui.paddingXY 4 0 ]
+                    [ boardTileInFront "4" False 20 (Coord.xy 0 0) (Letter (LetterChar 'W'))
+                    , Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text (User.toString (descriptionUserId description) allUsers))
+                    , Ui.text (descriptionToString description)
+                    ]
+            )
+        |> Maybe.withDefault Ui.none
 
 
 descriptionToString : Description -> String
@@ -5437,7 +5451,19 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                         p =
                             project boardTranslate zoomedCellSize x y
                     in
-                    boardTileInFront setup True p.size p.pos letter
+                    boardTileInFront
+                        (case letter of
+                            Letter letter2 ->
+                                String.fromInt (letterValue setup letter2)
+
+                            Wildcard ->
+                                ""
+                        )
+                        True
+                        p.size
+                        p.pos
+                        letter
+                        |> Ui.inFront
                 )
                 (Dict.toList highlightedCells)
                 ++ SeqDict.foldl
@@ -5452,7 +5478,21 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                                 p =
                                     project boardTranslate zoomedCellSize x y
                             in
-                            boardTileInFront setup False p.size p.pos letter :: list
+                            Ui.inFront
+                                (boardTileInFront
+                                    (case letter of
+                                        Letter letter2 ->
+                                            String.fromInt (letterValue setup letter2)
+
+                                        Wildcard ->
+                                            ""
+                                    )
+                                    False
+                                    p.size
+                                    p.pos
+                                    letter
+                                )
+                                :: list
                     )
                     []
                     (case model.hoveredMove of
@@ -6133,54 +6173,53 @@ tileInFront setup currentTime createdAt premove cellSize2 offset letterOrWildcar
                 )
             , Ui.opacity fade.opacity
             , MyUi.noPointerEvents
-            , tileScoreView setup cellSize2 letterOrWildcard
+            , tileScoreView
+                (case letterOrWildcard of
+                    Letter letter2 ->
+                        String.fromInt (letterValue setup letter2)
+
+                    Wildcard ->
+                        ""
+                )
+                cellSize2
             ]
             (Ui.text (letterOrWildcardText letterOrWildcard))
         )
 
 
-boardTileInFront : ValidatedSetup -> Bool -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
-boardTileInFront setup highlight cellSize2 offset letterOrWildcard =
-    Ui.inFront
-        (Ui.el
-            [ Ui.background
-                (if highlight then
-                    MyUi.replyToColor
+boardTileInFront : String -> Bool -> Int -> Coord CssPixels -> LetterOrWildcard -> Element msg
+boardTileInFront value highlight cellSize2 offset letterOrWildcard =
+    Ui.el
+        [ Ui.background
+            (if highlight then
+                MyUi.replyToColor
 
-                 else
-                    committedTileColor
-                )
-            , Ui.width (Ui.px (cellSize2 - 1))
-            , Ui.height (Ui.px (cellSize2 - 1))
-            , Ui.contentCenterX
-            , Ui.contentCenterY
-            , toFloat cellSize2 * 0.7 |> ceiling |> Ui.Font.size
-            , Ui.Font.bold
-            , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
-            , Ui.Font.color
-                (if highlight then
-                    MyUi.white
+             else
+                committedTileColor
+            )
+        , Ui.width (Ui.px (cellSize2 - 1))
+        , Ui.height (Ui.px (cellSize2 - 1))
+        , Ui.contentCenterX
+        , Ui.contentCenterY
+        , toFloat cellSize2 * 0.7 |> ceiling |> Ui.Font.size
+        , Ui.Font.bold
+        , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
+        , Ui.Font.color
+            (if highlight then
+                MyUi.white
 
-                 else
-                    MyUi.black
-                )
-            , MyUi.noPointerEvents
-            , tileScoreView setup cellSize2 letterOrWildcard
-            ]
-            (Ui.text (letterOrWildcardText letterOrWildcard))
-        )
+             else
+                MyUi.black
+            )
+        , MyUi.noPointerEvents
+        , tileScoreView value cellSize2
+        ]
+        (Ui.text (letterOrWildcardText letterOrWildcard))
 
 
-tileScoreView : ValidatedSetup -> Int -> LetterOrWildcard -> Ui.Attribute msg
-tileScoreView setup cellSize2 letterOrWildcard =
-    Ui.text
-        (case letterOrWildcard of
-            Letter letter ->
-                letterValue setup letter |> String.fromInt
-
-            Wildcard ->
-                ""
-        )
+tileScoreView : String -> Int -> Ui.Attribute msg
+tileScoreView value cellSize2 =
+    Ui.text value
         |> Ui.el
             [ toFloat cellSize2 * 0.3 |> ceiling |> Ui.Font.size
             , Ui.alignBottom
@@ -6219,7 +6258,15 @@ animatedTileInFront setup cellSize2 offset red letterOrWildcard =
                     MyUi.black
                 )
             , MyUi.noPointerEvents
-            , tileScoreView setup cellSize2 letterOrWildcard
+            , tileScoreView
+                (case letterOrWildcard of
+                    Letter letter2 ->
+                        String.fromInt (letterValue setup letter2)
+
+                    Wildcard ->
+                        ""
+                )
+                cellSize2
             ]
             (Ui.text (letterOrWildcardText letterOrWildcard))
         )

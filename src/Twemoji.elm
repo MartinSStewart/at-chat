@@ -54,11 +54,6 @@ spriteReference sprite emoji =
     "/cacheable/emoji/" ++ sprite ++ ".svg#e" ++ fileName emoji
 
 
-{-| Left to itself the art would sit on the baseline like a letter with no descender, so its
-middle would be well above the text's. Instead its middle goes 0.375em above the baseline,
-which is where Noto Sans centres its own lines and where `overlaySpriteView` ends up in the
-textarea.
--}
 spriteView : String -> String -> String -> Html msg
 spriteView size sprite emoji =
     Html.span

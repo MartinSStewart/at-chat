@@ -4082,9 +4082,9 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                             else
                                 NoHighlight
 
-                        maybeRepliedTo2 : Maybe (RepliedToView ChannelMessageId (Id UserId))
+                        maybeRepliedTo2 : Maybe (RepliedToView ChannelMessageId (Id UserId) msg)
                         maybeRepliedTo2 =
-                            channelMessageRepliedTo channel.games message channel
+                            channelMessageRepliedTo (User.allUsers local.localUser) channel.games message channel
 
                         date : Date
                         date =
@@ -4245,7 +4245,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
 userTextMessageRepliedTo :
     { a | repliedTo : RepliedTo messageId }
     -> { b | messages : MessageArray messageId userId }
-    -> Maybe (RepliedToView messageId userId)
+    -> Maybe (RepliedToView messageId userId msg)
 userTextMessageRepliedTo data channel =
     case data.repliedTo of
         RepliedToMessage repliedToIndex ->
@@ -4257,7 +4257,7 @@ userTextMessageRepliedTo data channel =
                     Nothing
 
         RepliedToGame matchId game ->
-            RepliedToView_Game matchId game Nothing |> Just
+            RepliedToView_Game matchId game Ui.none |> Just
 
         NoReply ->
             Nothing
@@ -4267,32 +4267,34 @@ userTextMessageRepliedTo data channel =
 game has no message behind it, only the game's card, what in the game it points at and, once
 the match has been loaded, what that move or answer was.
 -}
-type RepliedToView messageId userId
+type RepliedToView messageId userId msg
     = RepliedToView_Message (Id messageId) (Message messageId userId)
-    | RepliedToView_Game (Id ChannelMessageId) Message.RepliedToGame (Maybe { by : userId, text : String })
+    | RepliedToView_Game (Id ChannelMessageId) Message.RepliedToGame (Ui.Element msg)
 
 
-{-| `maybeRepliedTo` for a channel's own messages. Only those can reply into one of the
-channel's matches, so only they can say what the move or answer they replied to was.
--}
 channelMessageRepliedTo :
-    SeqDict (Id ChannelMessageId) Game.MatchData
+    SeqDict (Id UserId) { a | name : PersonName, color : UserColor }
+    -> SeqDict (Id ChannelMessageId) Game.MatchData
     -> Message ChannelMessageId (Id UserId)
-    -> { a | messages : MessageArray ChannelMessageId (Id UserId) }
-    -> Maybe (RepliedToView ChannelMessageId (Id UserId))
-channelMessageRepliedTo games message channel =
+    -> { b | messages : MessageArray ChannelMessageId (Id UserId) }
+    -> Maybe (RepliedToView ChannelMessageId (Id UserId) msg)
+channelMessageRepliedTo allUsers games message channel =
     case maybeRepliedTo message channel of
-        Just (RepliedToView_Game matchId game _) ->
-            SeqDict.get matchId games
-                |> Maybe.andThen (Game.replyPreview game)
-                |> RepliedToView_Game matchId game
-                |> Just
+        Just (RepliedToView_Game matchId game a) ->
+            case SeqDict.get matchId games of
+                Just matchData ->
+                    Game.replyPreview allUsers game matchData
+                        |> RepliedToView_Game matchId game
+                        |> Just
+
+                Nothing ->
+                    Just (RepliedToView_Game matchId game a)
 
         maybeRepliedTo2 ->
             maybeRepliedTo2
 
 
-maybeRepliedTo : Message messageId userId -> { a | messages : MessageArray messageId userId } -> Maybe (RepliedToView messageId userId)
+maybeRepliedTo : Message messageId userId -> { a | messages : MessageArray messageId userId } -> Maybe (RepliedToView messageId userId msg)
 maybeRepliedTo message channel =
     case message of
         UserTextMessage data ->
@@ -4778,7 +4780,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                             else
                                 NoHighlight
 
-                        maybeRepliedTo2 : Maybe (RepliedToView ThreadMessageId (Id UserId))
+                        maybeRepliedTo2 : Maybe (RepliedToView ThreadMessageId (Id UserId) msg)
                         maybeRepliedTo2 =
                             maybeRepliedTo message thread
 
@@ -4995,7 +4997,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                             else
                                 NoHighlight
 
-                        maybeRepliedTo2 : Maybe (RepliedToView ThreadMessageId (Discord.Id Discord.UserId))
+                        maybeRepliedTo2 : Maybe (RepliedToView ThreadMessageId (Discord.Id Discord.UserId) msg)
                         maybeRepliedTo2 =
                             maybeRepliedTo message thread
 
@@ -5536,12 +5538,16 @@ channelReplyToHeader :
 channelReplyToHeader isMobile guildOrDmIdNoThread replyTo allUsers games channel =
     case replyTo of
         Just (RepliedToGame matchId game) ->
-            replyToGameHeaderHelper
+            replyToHeaderRow
                 isMobile
                 (PressedCloseReplyTo guildOrDmIdNoThread)
-                game
-                (SeqDict.get matchId games |> Maybe.andThen (Game.replyPreview game))
-                allUsers
+                (case SeqDict.get matchId games of
+                    Just matchData ->
+                        [ Game.replyPreview allUsers game matchData ]
+
+                    Nothing ->
+                        []
+                )
 
         _ ->
             replyToHeader isMobile guildOrDmIdNoThread replyTo allUsers channel
@@ -5582,7 +5588,7 @@ replyToHeader isMobile guildOrDmIdNoThread replyTo allUsers channel =
                     Ui.none
 
         Just (RepliedToGame _ game) ->
-            replyToGameHeaderFallback isMobile (PressedCloseReplyTo guildOrDmIdNoThread) game
+            Ui.none
 
         Just NoReply ->
             Ui.none
@@ -5603,50 +5609,6 @@ replyToHeaderHelper isMobile onPress userId allUsers =
 
             Nothing ->
                 Ui.text "message"
-        ]
-
-
-{-| The move or answer being replied to, written the same way as the line drawn above a reply
-that has already been sent, so that what gets written next is pointed at something the user can
-recognise.
--}
-replyToGameHeaderHelper :
-    Bool
-    -> msg
-    -> Message.RepliedToGame
-    -> Maybe { by : Id UserId, text : String }
-    -> SeqDict (Id UserId) { a | name : PersonName, color : UserColor }
-    -> Element msg
-replyToGameHeaderHelper isMobile onPress game maybePreview allUsers =
-    case maybePreview of
-        Just preview ->
-            replyToHeaderRow
-                isMobile
-                onPress
-                [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text (User.toString preview.by allUsers))
-                , Ui.text preview.text
-                ]
-
-        Nothing ->
-            replyToGameHeaderFallback isMobile onPress game
-
-
-{-| What the header says while the match the reply points into hasn't been loaded yet.
--}
-replyToGameHeaderFallback : Bool -> msg -> Message.RepliedToGame -> Element msg
-replyToGameHeaderFallback isMobile onPress game =
-    replyToHeaderRow
-        isMobile
-        onPress
-        [ case game of
-            Message.RepliedTo_WordSpellingGameMove moveNumber ->
-                Ui.text ("Reply to move " ++ String.fromInt moveNumber)
-
-            Message.RepliedTo_SheepGameAnswer _ _ ->
-                Ui.text "Reply to an answer"
-
-            Message.RepliedTo_SheepGameNotes _ ->
-                Ui.text "Reply to the notes"
         ]
 
 
@@ -6873,7 +6835,7 @@ messageEditingView :
     -> ( AnyGuildOrDmId, ThreadRoute )
     -> ThreadRouteWithMessage
     -> Message ChannelMessageId userId
-    -> Maybe (RepliedToView ChannelMessageId userId)
+    -> Maybe (RepliedToView ChannelMessageId userId MessageViewMsg)
     -> Maybe (FrontendGenericThread userId)
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> Int
@@ -7043,7 +7005,7 @@ threadMessageEditingView :
     -> Id ChannelMessageId
     -> Id ThreadMessageId
     -> Message ThreadMessageId userId
-    -> Maybe (RepliedToView ThreadMessageId userId)
+    -> Maybe (RepliedToView ThreadMessageId userId MessageViewMsg)
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
     -> Int
     -> EditMessage
@@ -7410,7 +7372,7 @@ messageView :
     -> Id UserId
     -> SeqDict (Id UserId) FrontendUser
     -> LocalUser
-    -> Maybe (RepliedToView ChannelMessageId (Id UserId))
+    -> Maybe (RepliedToView ChannelMessageId (Id UserId) MessageViewMsg)
     -> Maybe (FrontendGenericThread (Id UserId))
     -> Id ChannelMessageId
     -> Message ChannelMessageId (Id UserId)
@@ -7667,7 +7629,7 @@ discordMessageView :
     -> Discord.Id Discord.UserId
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> LocalUser
-    -> Maybe (RepliedToView ChannelMessageId (Discord.Id Discord.UserId))
+    -> Maybe (RepliedToView ChannelMessageId (Discord.Id Discord.UserId) MessageViewMsg)
     -> Maybe (FrontendGenericThread (Discord.Id Discord.UserId))
     -> Id ChannelMessageId
     -> Message ChannelMessageId (Discord.Id Discord.UserId)
@@ -7905,7 +7867,7 @@ threadMessageView :
     -> SeqDict (Id UserId) FrontendUser
     -> Id UserId
     -> LocalUser
-    -> Maybe (RepliedToView ThreadMessageId (Id UserId))
+    -> Maybe (RepliedToView ThreadMessageId (Id UserId) MessageViewMsg)
     -> Id ThreadMessageId
     -> Message ThreadMessageId (Id UserId)
     -> Element MessageViewMsg
@@ -8127,7 +8089,7 @@ discordThreadMessageView :
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> Discord.Id Discord.UserId
     -> LocalUser
-    -> Maybe (RepliedToView ThreadMessageId (Discord.Id Discord.UserId))
+    -> Maybe (RepliedToView ThreadMessageId (Discord.Id Discord.UserId) MessageViewMsg)
     -> Id ThreadMessageId
     -> Message ThreadMessageId (Discord.Id Discord.UserId)
     -> Element MessageViewMsg
@@ -8382,7 +8344,7 @@ userTextMessageContent :
     -> Int
     -> Bool
     -> Bool
-    -> Maybe (RepliedToView messageId (Id UserId))
+    -> Maybe (RepliedToView messageId (Id UserId) MessageViewMsg)
     -> LocalUser
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id UserId) FrontendUser
@@ -8551,7 +8513,7 @@ discordUserTextMessageContent :
     -> HtmlId
     -> Int
     -> Bool
-    -> Maybe (RepliedToView messageId (Discord.Id Discord.UserId))
+    -> Maybe (RepliedToView messageId (Discord.Id Discord.UserId) MessageViewMsg)
     -> LocalUser
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
@@ -8806,7 +8768,7 @@ replyToHeaderAboveMessage :
     Bool
     -> Time.Zone
     -> Time.Posix
-    -> Maybe (RepliedToView messageId userId)
+    -> Maybe (RepliedToView messageId userId MessageViewMsg)
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> Maybe CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
@@ -8867,32 +8829,12 @@ replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoiler
         Just (RepliedToView_Message repliedToIndex (GameStarted { startedBy })) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted startedBy allUsers)
 
-        Just (RepliedToView_Game matchId game maybePreview) ->
+        Just (RepliedToView_Game matchId game preview) ->
             MyUi.rowButton
                 (Dom.id ("guild_gameReplyLink_" ++ Id.toString matchId))
                 MessageView_PressedReplyLink
                 (replyToHeaderAboveMessageAttributes isMobile)
-                [ replyToHeaderAboveMessageIcon
-                , Ui.Prose.paragraph
-                    [ Ui.paddingXY 0 4 ]
-                    (case maybePreview of
-                        Just preview ->
-                            [ User.toString preview.by allUsers |> Ui.text |> Ui.el [ Ui.Font.bold ]
-                            , Ui.text preview.text
-                            ]
-
-                        Nothing ->
-                            case game of
-                                Message.RepliedTo_WordSpellingGameMove moveNumber ->
-                                    [ Ui.text ("Move " ++ String.fromInt moveNumber ++ " in the Word Spelling game") ]
-
-                                Message.RepliedTo_SheepGameAnswer _ _ ->
-                                    [ Ui.text "An answer in the Sheep Game" ]
-
-                                Message.RepliedTo_SheepGameNotes _ ->
-                                    [ Ui.text "The host's notes in the Sheep Game" ]
-                    )
-                ]
+                [ replyToHeaderAboveMessageIcon, Ui.el [ Ui.width (Ui.px 4) ] Ui.none, preview ]
 
         Nothing ->
             Ui.none

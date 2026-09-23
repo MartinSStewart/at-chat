@@ -379,6 +379,7 @@ previewDmChannels time =
         [ ( Id.fromInt 1
           , previewDmChannel
                 [ previewMessage (previewMinutesAgo time 1612) (Id.fromInt 1) (NonemptyString 'd' "id you ever find out what it was")
+                , previewMessage (previewMinutesAgo time 1612) (Id.fromInt 1) (NonemptyString 'N' "ot today no")
                 ]
                 (SeqDict.singleton
                     (Id.fromInt 0)
@@ -535,7 +536,7 @@ previewChannel time =
             [ ( Id.fromInt 0, previewThread [ previewMessage (previewMinutesAgo time 1621) previewUserId (NonemptyString 'b' "") ] )
             , ( Id.fromInt 6
               , List.repeat 104 (previewMessage (previewMinutesAgo time 1540) previewUserId (NonemptyString 'a' ""))
-                    ++ [ previewMessage (previewMinutesAgo time 31) (Id.fromInt 1) (NonemptyString '_' "Shall be lifted—nevermore!_") ]
+                    ++ [ previewMessage (previewMinutesAgo time 31) (Id.fromInt 2) (NonemptyString '_' "Shall be lifted—nevermore!_") ]
                     |> previewThread
               )
             ]
