@@ -31,7 +31,6 @@ module Emoji exposing
     , selectorInit
     , sequenceView
     , setSearch
-    , sheep
     , smiley
     , splitOnEmoji
     , textView
@@ -782,11 +781,6 @@ thumbsUp =
 smiley : UnicodeEmoji
 smiley =
     UnicodeEmoji "😃"
-
-
-sheep : UnicodeEmoji
-sheep =
-    UnicodeEmoji "🐑"
 
 
 searchInputId : Dom.HtmlId

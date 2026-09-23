@@ -1004,7 +1004,7 @@ replyPreview allUsers repliedTo matchData =
 
                 Message.RepliedTo_SheepGameAnswer userId questionId ->
                     case data of
-                        FrontendGameData_SheepGame setup _ shared ->
+                        FrontendGameData_SheepGame _ _ shared ->
                             SheepGame.replyPreview shared (SheepGame.AnswerReaction userId questionId)
 
                         _ ->
@@ -1012,7 +1012,7 @@ replyPreview allUsers repliedTo matchData =
 
                 Message.RepliedTo_SheepGameNotes questionId ->
                     case data of
-                        FrontendGameData_SheepGame setup _ shared ->
+                        FrontendGameData_SheepGame _ _ shared ->
                             SheepGame.replyPreview shared (SheepGame.NotesReaction questionId)
 
                         _ ->

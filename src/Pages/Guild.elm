@@ -4269,7 +4269,7 @@ the match has been loaded, what that move or answer was.
 -}
 type RepliedToView messageId userId msg
     = RepliedToView_Message (Id messageId) (Message messageId userId)
-    | RepliedToView_Game (Id ChannelMessageId) Message.RepliedToGame (Ui.Element msg)
+    | RepliedToView_Game (Id ChannelMessageId) Message.RepliedToGame (Element msg)
 
 
 channelMessageRepliedTo :
@@ -5587,7 +5587,7 @@ replyToHeader isMobile guildOrDmIdNoThread replyTo allUsers channel =
                 _ ->
                     Ui.none
 
-        Just (RepliedToGame _ game) ->
+        Just (RepliedToGame _ _) ->
             Ui.none
 
         Just NoReply ->
@@ -8829,7 +8829,7 @@ replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoiler
         Just (RepliedToView_Message repliedToIndex (GameStarted { startedBy })) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted startedBy allUsers)
 
-        Just (RepliedToView_Game matchId game preview) ->
+        Just (RepliedToView_Game matchId _ preview) ->
             MyUi.rowButton
                 (Dom.id ("guild_gameReplyLink_" ++ Id.toString matchId))
                 MessageView_PressedReplyLink
