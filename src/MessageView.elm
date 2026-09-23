@@ -145,11 +145,7 @@ reactionEmojiButtonContent : Maybe CachedEmojiData -> SeqDict (Id CustomEmojiId)
 reactionEmojiButtonContent emojiData customEmojis emoji =
     case emoji of
         EmojiOrCustomEmoji_Emoji emoji2 ->
-            Html.div
-                [ Html.Attributes.style "font-size" "20px"
-                , Html.Attributes.style "transform" "translateY(-3px)"
-                ]
-                [ Emoji.unicodeView "1em" emojiData emoji2 ]
+            Emoji.unicodeView "20px" emojiData emoji2
 
         EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
             CustomEmoji.view "1.1em" "0.2em" customEmojiId customEmojis LoopAFewTimesOnLoad
