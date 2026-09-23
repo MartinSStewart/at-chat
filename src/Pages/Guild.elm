@@ -5521,6 +5521,32 @@ emojiSelectorZIndex =
     MyUi.htmlStyle "z-index" "30"
 
 
+{-| The channel's own reply header. Only a message written straight into a channel can reply
+into one of the channel's matches, so only this one can say what the move or answer it points
+at was.
+-}
+channelReplyToHeader :
+    Bool
+    -> ( AnyGuildOrDmId, ThreadRoute )
+    -> Maybe (RepliedTo messageId)
+    -> SeqDict (Id UserId) { a | name : PersonName, color : UserColor }
+    -> SeqDict (Id ChannelMessageId) Game.MatchData
+    -> { b | messages : MessageArray messageId2 (Id UserId) }
+    -> Element FrontendMsg_
+channelReplyToHeader isMobile guildOrDmIdNoThread replyTo allUsers games channel =
+    case replyTo of
+        Just (RepliedToGame matchId game) ->
+            replyToGameHeaderHelper
+                isMobile
+                (PressedCloseReplyTo guildOrDmIdNoThread)
+                game
+                (SeqDict.get matchId games |> Maybe.andThen (Game.replyPreview game))
+                allUsers
+
+        _ ->
+            replyToHeader isMobile guildOrDmIdNoThread replyTo allUsers channel
+
+
 replyToHeader :
     Bool
     -> ( AnyGuildOrDmId, ThreadRoute )
@@ -5556,7 +5582,7 @@ replyToHeader isMobile guildOrDmIdNoThread replyTo allUsers channel =
                     Ui.none
 
         Just (RepliedToGame _ game) ->
-            replyToGameHeaderHelper isMobile (PressedCloseReplyTo guildOrDmIdNoThread) game
+            replyToGameHeaderFallback isMobile (PressedCloseReplyTo guildOrDmIdNoThread) game
 
         Just NoReply ->
             Ui.none
@@ -5580,8 +5606,35 @@ replyToHeaderHelper isMobile onPress userId allUsers =
         ]
 
 
-replyToGameHeaderHelper : Bool -> msg -> Message.RepliedToGame -> Element msg
-replyToGameHeaderHelper isMobile onPress game =
+{-| The move or answer being replied to, written the same way as the line drawn above a reply
+that has already been sent, so that what gets written next is pointed at something the user can
+recognise.
+-}
+replyToGameHeaderHelper :
+    Bool
+    -> msg
+    -> Message.RepliedToGame
+    -> Maybe { by : Id UserId, text : String }
+    -> SeqDict (Id UserId) { a | name : PersonName, color : UserColor }
+    -> Element msg
+replyToGameHeaderHelper isMobile onPress game maybePreview allUsers =
+    case maybePreview of
+        Just preview ->
+            replyToHeaderRow
+                isMobile
+                onPress
+                [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text (User.toString preview.by allUsers))
+                , Ui.text preview.text
+                ]
+
+        Nothing ->
+            replyToGameHeaderFallback isMobile onPress game
+
+
+{-| What the header says while the match the reply points into hasn't been loaded yet.
+-}
+replyToGameHeaderFallback : Bool -> msg -> Message.RepliedToGame -> Element msg
+replyToGameHeaderFallback isMobile onPress game =
     replyToHeaderRow
         isMobile
         onPress
@@ -5600,7 +5653,8 @@ replyToGameHeaderHelper isMobile onPress game =
 replyToHeaderRow : Bool -> msg -> List (Element msg) -> Element msg
 replyToHeaderRow isMobile onPress content =
     Ui.row
-        [ Ui.Font.color MyUi.font2
+        [ Ui.id (Dom.idToString replyToHeaderId)
+        , Ui.Font.color MyUi.font2
         , Ui.background MyUi.background2
         , Ui.paddingWith { left = 12, right = 32, top = 8, bottom = 8 }
         , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
@@ -5630,6 +5684,11 @@ replyToHeaderRow isMobile onPress content =
             :: content
         )
         |> Ui.el [ Ui.paddingWith MessageInput.textareaPadding, Ui.move { x = 0, y = 1, z = 0 } ]
+
+
+replyToHeaderId : HtmlId
+replyToHeaderId =
+    Dom.id "guild_replyToHeader"
 
 
 newMessagesId : HtmlId
@@ -5867,7 +5926,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     Ui.noAttr
             ]
             [ newMessagesView model loggedIn
-            , replyToHeader isMobile ( GuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
+            , channelReplyToHeader isMobile ( GuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel.games channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)

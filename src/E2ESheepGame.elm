@@ -494,16 +494,23 @@ threePlayerMatchTest normalConfig =
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.id "miniView_reply" ])
 
-                                -- Replying to an answer hands it to the message input, so
-                                -- whatever gets written next points back at it
+                                -- Replying to an answer hands it to the message input, which
+                                -- repeats the answer itself so whatever gets written next points
+                                -- at something the writer can recognise
                                 , stevie.click 100 (Dom.id "miniView_reply")
                                 , stevie.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Reply to an answer" ])
+                                    (\view ->
+                                        Test.Html.Query.find
+                                            [ Test.Html.Selector.id "guild_replyToHeader" ]
+                                            view
+                                            |> Test.Html.Query.has
+                                                [ Test.Html.Selector.text " answered \"Blue\"" ]
+                                    )
                                 , stevie.click 100 (Dom.id "guild_closeReplyToHeader")
                                 , stevie.checkView
                                     100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Reply to an answer" ])
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_replyToHeader" ])
                                 , stevie.click 100 (Dom.id "miniView_emojiReact_0")
                                 , stevie.checkView
                                     100

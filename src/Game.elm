@@ -28,6 +28,7 @@ module Game exposing
     , matchNotLoaded
     , pressedKey
     , replyPreview
+    , replyScrollTo
     , routeRequest
     , sheepGameFileUploaded
     , sheepGameFilesToAttach
@@ -1010,6 +1011,28 @@ replyPreview repliedTo matchData =
             Nothing
 
 
+{-| Where in the games tab the move or answer a reply points at is drawn, so that following the
+reply can bring it into view.
+-}
+replyScrollTo : Message.RepliedToGame -> ScrollTo
+replyScrollTo repliedTo =
+    case repliedTo of
+        Message.RepliedTo_WordSpellingGameMove moveNumber ->
+            { container = WordSpellingGame.pastWordsContainerId
+            , target = WordSpellingGame.reactionTargetId (WordSpellingGame.MoveReaction moveNumber)
+            }
+
+        Message.RepliedTo_SheepGameAnswer userId questionId ->
+            { container = SheepGame.gameViewId
+            , target = SheepGame.reactionTargetId (SheepGame.AnswerReaction userId questionId)
+            }
+
+        Message.RepliedTo_SheepGameNotes questionId ->
+            { container = SheepGame.gameViewId
+            , target = SheepGame.reactionTargetId (SheepGame.NotesReaction questionId)
+            }
+
+
 {-| What a message replying to one of a sheep game's results points at.
 -}
 sheepGameReplyTarget : SheepGame.ReactionTarget -> Message.RepliedToGame
@@ -1191,10 +1214,11 @@ view :
     -> SheepGame.LoggedIn a
     -> GuildOrDmId
     -> Maybe (Id ChannelMessageId)
+    -> Maybe Message.RepliedToGame
     -> SeqDict (Id ChannelMessageId) MatchData
     -> Model
     -> Element Msg
-view currentTime windowSize showMemberTab drag startupData lastCopied localUser loggedIn guildOrDmId maybeMatchId matches model =
+view currentTime windowSize showMemberTab drag startupData lastCopied localUser loggedIn guildOrDmId maybeMatchId repliedTo matches model =
     let
         isMobile : Bool
         isMobile =
@@ -1203,6 +1227,27 @@ view currentTime windowSize showMemberTab drag startupData lastCopied localUser 
         isPersonalDm : Bool
         isPersonalDm =
             guildOrDmId == GuildOrDmId_Dm { otherUserId = localUser.session.userId }
+
+        highlightedMove : Maybe Int
+        highlightedMove =
+            case repliedTo of
+                Just (Message.RepliedTo_WordSpellingGameMove moveNumber) ->
+                    Just moveNumber
+
+                _ ->
+                    Nothing
+
+        highlightedResult : Maybe SheepGame.ReactionTarget
+        highlightedResult =
+            case repliedTo of
+                Just (Message.RepliedTo_SheepGameAnswer userId questionId) ->
+                    Just (SheepGame.AnswerReaction userId questionId)
+
+                Just (Message.RepliedTo_SheepGameNotes questionId) ->
+                    Just (SheepGame.NotesReaction questionId)
+
+                _ ->
+                    Nothing
     in
     case maybeMatchId of
         Just matchId ->
@@ -1259,6 +1304,7 @@ view currentTime windowSize showMemberTab drag startupData lastCopied localUser 
                                         )
                                         isPersonalDm
                                         localUser
+                                        highlightedMove
                                         setup
                                         actions
                                         cache
@@ -1278,6 +1324,7 @@ view currentTime windowSize showMemberTab drag startupData lastCopied localUser 
                                         localUser
                                         drag
                                         loggedIn
+                                        highlightedResult
                                         setup
                                         cache
                                         game2

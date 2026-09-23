@@ -1859,11 +1859,12 @@ gameView :
     -> LocalUser
     -> Drag
     -> LoggedIn a
+    -> Maybe ReactionTarget
     -> ValidatedSetup
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView time windowSize showMemberTab localUser drag loggedIn setup shared model =
+gameView time windowSize showMemberTab localUser drag loggedIn highlightedResult setup shared model =
     let
         isMobile : Bool
         isMobile =
@@ -1982,7 +1983,7 @@ gameView time windowSize showMemberTab localUser drag loggedIn setup shared mode
                         , Ui.widthMax maxWidth
                         , Ui.spacing 16
                         ]
-                        (revealingView isMobile time contentWidth localUser setup shared model)
+                        (revealingView isMobile time contentWidth localUser highlightedResult setup shared model)
             )
         )
 
@@ -2343,7 +2344,7 @@ groupingQuestionView isMobile time contentWidth localUser loggedIn setup shared 
                 (Ui.text "Preview")
             , Ui.column
                 [ Ui.spacing 16 ]
-                [ answerGroupsView isMobile time localUser contentWidth Nothing questionId result.answers
+                [ answerGroupsView isMobile time localUser contentWidth Nothing Nothing questionId result.answers
                 , case validatedDraft localUser questionId model.noteDrafts of
                     Just notes ->
                         messageWithProfile
@@ -2362,6 +2363,7 @@ groupingQuestionView isMobile time contentWidth localUser loggedIn setup shared 
                                 localUser
                                 contentWidth
                                 (NotesReaction questionId)
+                                Nothing
                                 Nothing
                                 notes.reactions
 
@@ -2688,8 +2690,8 @@ placeIn userId scores =
         |> List.length
 
 
-revealingView : Bool -> Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Shared -> GameData -> List (Element GameMsg)
-revealingView isMobile time contentWidth localUser setup shared model =
+revealingView : Bool -> Time.Posix -> Int -> LocalUser -> Maybe ReactionTarget -> ValidatedSetup -> Shared -> GameData -> List (Element GameMsg)
+revealingView isMobile time contentWidth localUser highlightedResult setup shared model =
     let
         questionCount : Int
         questionCount =
@@ -2741,7 +2743,7 @@ revealingView isMobile time contentWidth localUser setup shared model =
                     ]
                 ]
                 :: List.indexedMap
-                    (resultsQuestionView isMobile time contentWidth localUser setup model.hoveredResult results.maxPoints)
+                    (resultsQuestionView isMobile time contentWidth localUser setup model.hoveredResult highlightedResult results.maxPoints)
                     (List.take (shared.questionsRevealed - 1) results.questions)
             )
     , if shared.questionsRevealed > questionCount then
@@ -2787,11 +2789,12 @@ resultsQuestionView :
     -> LocalUser
     -> ValidatedSetup
     -> Maybe ReactionTarget
+    -> Maybe ReactionTarget
     -> Int
     -> Int
     -> QuestionResult
     -> Element GameMsg
-resultsQuestionView isMobile time contentWidth localUser setup hoveredResult maxPoints index result =
+resultsQuestionView isMobile time contentWidth localUser setup hoveredResult highlightedResult maxPoints index result =
     let
         numberWidth : number
         numberWidth =
@@ -2825,7 +2828,7 @@ resultsQuestionView isMobile time contentWidth localUser setup hoveredResult max
             ]
         , Ui.column
             [ Ui.spacing 16 ]
-            [ answerGroupsView isMobile time localUser contentWidth hoveredResult (Id.fromInt index) result.answers
+            [ answerGroupsView isMobile time localUser contentWidth hoveredResult highlightedResult (Id.fromInt index) result.answers
             , scoreTableView isMobile localUser maxPoints result.answers
             , case result.notes of
                 Nothing ->
@@ -2849,6 +2852,7 @@ resultsQuestionView isMobile time contentWidth localUser setup hoveredResult max
                             contentWidth
                             (NotesReaction (Id.fromInt index))
                             hoveredResult
+                            highlightedResult
                             notes.reactions
             ]
         ]
@@ -2875,10 +2879,11 @@ answerGroupsView :
     -> LocalUser
     -> Int
     -> Maybe ReactionTarget
+    -> Maybe ReactionTarget
     -> Id QuestionId
     -> List AnswerResult
     -> Element GameMsg
-answerGroupsView isMobile time localUser contentWidth hoveredResult questionId answers =
+answerGroupsView isMobile time localUser contentWidth hoveredResult highlightedResult questionId answers =
     List.filterMap
         (\answerResult ->
             Maybe.map (\answer -> ( answerResult.userId, answerResult.group, answer )) answerResult.answer
@@ -2921,6 +2926,7 @@ answerGroupsView isMobile time localUser contentWidth hoveredResult questionId a
                                 contentWidth
                                 (AnswerReaction userId questionId)
                                 hoveredResult
+                                highlightedResult
                                 answer.reactions
                     )
                     (first :: rest)
@@ -2980,8 +2986,8 @@ reactionTargetId target =
 menu for reacting to it or replying to it in the chat the match is in. Editing and the rest of
 what a message's menu does belong to the conversation a message is in.
 -}
-reactableResult : Int -> LocalUser -> Int -> ReactionTarget -> Maybe ReactionTarget -> Reactions -> Element GameMsg -> Element GameMsg
-reactableResult paddingX2 localUser contentWidth target hoveredResult reactions content =
+reactableResult : Int -> LocalUser -> Int -> ReactionTarget -> Maybe ReactionTarget -> Maybe ReactionTarget -> Reactions -> Element GameMsg -> Element GameMsg
+reactableResult paddingX2 localUser contentWidth target hoveredResult highlightedResult reactions content =
     let
         isHovered : Bool
         isHovered =
@@ -2991,7 +2997,17 @@ reactableResult paddingX2 localUser contentWidth target hoveredResult reactions 
         [ Ui.id (Dom.idToString (reactionTargetId target))
         , Ui.paddingXY paddingX2 4
         , Ui.spacing 4
-        , Ui.attrIf isHovered (Ui.background MyUi.hoverHighlight)
+        , if highlightedResult == Just target then
+            Ui.background
+                (if isHovered then
+                    MyUi.hoverAndReplyToColor
+
+                 else
+                    MyUi.replyToColor
+                )
+
+          else
+            Ui.attrIf isHovered (Ui.background MyUi.hoverHighlight)
         , Ui.Events.onMouseEnter (ReactionMsg target MessageView.MessageView_MouseEnteredMessage)
         , Ui.Events.onMouseLeave (ReactionMsg target MessageView.MessageView_MouseExitedMessage)
         , if isHovered then

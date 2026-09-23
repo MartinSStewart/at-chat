@@ -775,12 +775,13 @@ tabBodyView isMobile local loggedIn model =
                                 |> Ui.map VoiceChatMsg
                                 |> Just
 
-                        ChannelHeaderTab_Games maybeMatchId _ ->
+                        ChannelHeaderTab_Games maybeMatchId repliedTo ->
                             case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
                                 Just ( _, channel2 ) ->
                                     gameTabBody
                                         (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
                                         maybeMatchId
+                                        repliedTo
                                         local
                                         loggedIn
                                         channel2.games
@@ -808,10 +809,11 @@ tabBodyView isMobile local loggedIn model =
             case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                 Just otherUserId ->
                     case dmRoute.tab of
-                        Just (ChannelHeaderTab_Games maybeMatchId _) ->
+                        Just (ChannelHeaderTab_Games maybeMatchId repliedTo) ->
                             gameTabBody
                                 (GuildOrDmId_Dm { otherUserId = otherUserId })
                                 maybeMatchId
+                                repliedTo
                                 local
                                 loggedIn
                                 (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .games)
@@ -958,12 +960,13 @@ tabBodyView isMobile local loggedIn model =
 gameTabBody :
     GuildOrDmId
     -> Maybe (Id ChannelMessageId)
+    -> Maybe Message.RepliedToGame
     -> LocalState
     -> LoggedIn2
     -> SeqDict (Id ChannelMessageId) Game.MatchData
     -> LoadedFrontend
     -> Maybe (Element FrontendMsg_)
-gameTabBody guildOrDmId maybeMatchId local loggedIn matchData model =
+gameTabBody guildOrDmId maybeMatchId repliedTo local loggedIn matchData model =
     Game.view
         model.time
         model.windowSize
@@ -981,6 +984,7 @@ gameTabBody guildOrDmId maybeMatchId local loggedIn matchData model =
         loggedIn
         guildOrDmId
         maybeMatchId
+        repliedTo
         matchData
         (SeqDict.get guildOrDmId loggedIn.games |> Maybe.withDefault Game.initModel)
         |> Ui.map GameMsg

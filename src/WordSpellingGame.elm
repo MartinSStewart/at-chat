@@ -84,7 +84,6 @@ module WordSpellingGame exposing
 import Array exposing (Array)
 import Array.Extra
 import Audio exposing (Audio)
-import Bitwise
 import Char
 import Color.Manipulate
 import Coord exposing (Coord)
@@ -3858,12 +3857,13 @@ gameView :
     -> Maybe (NonemptyDict Int Touch)
     -> Bool
     -> LocalUser
+    -> Maybe Int
     -> ValidatedSetup
     -> Array ActionWithTime
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView currentTime windowSize showMemberTab maybeDragging isPersonalDm localUser setup actions shared oldModel =
+gameView currentTime windowSize showMemberTab maybeDragging isPersonalDm localUser highlightedMove setup actions shared oldModel =
     let
         -- Tiles that another player's move covered belong back in the tray; render that
         -- corrected state instead of the raw stored tiles.
@@ -3992,7 +3992,7 @@ gameView currentTime windowSize showMemberTab maybeDragging isPersonalDm localUs
                 shared
                 (Dict.union highlightedCells hoveredWordCells)
                 model
-             , statusView windowSize isPersonalDm localUser setup actions shared model
+             , statusView windowSize isPersonalDm localUser highlightedMove setup actions shared model
              ]
                 ++ (case ( wideEnough, model.wordDefinition ) of
                         ( True, WordDefinition_Open open data ) ->
@@ -4174,8 +4174,8 @@ joinWarning isPersonalDm playerCount localUser shared =
         Nothing
 
 
-statusView : Coord CssPixels -> Bool -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> GameData -> Element GameMsg
-statusView windowSize isPersonalDm localUser setup actions shared model =
+statusView : Coord CssPixels -> Bool -> LocalUser -> Maybe Int -> ValidatedSetup -> Array ActionWithTime -> Shared -> GameData -> Element GameMsg
+statusView windowSize isPersonalDm localUser highlightedMove setup actions shared model =
     let
         currentPlayer : Player
         currentPlayer =
@@ -4295,24 +4295,7 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
                 )
             , Ui.Lazy.lazy6
                 recentActionsView
-                ((case model.scrollPosition of
-                    ScrolledToTop ->
-                        0
-
-                    ScrolledToMiddle ->
-                        1
-
-                    ScrolledToBottom ->
-                        2
-                 )
-                    + (case Maybe.andThen .index model.hoveredMove of
-                        Nothing ->
-                            0
-
-                        Just index ->
-                            index + 1 |> Bitwise.shiftLeftBy 2
-                      )
-                )
+                (encodeLogState model.scrollPosition (Maybe.andThen .index model.hoveredMove) highlightedMove)
                 windowSize
                 localUser
                 setup
@@ -4618,8 +4601,8 @@ reactionTargetId target =
 {-| A row in the Moves log, with the reactions it has under it and, while the pointer is over the
 row, the menu for reacting to that move or replying to it in the chat the match is in.
 -}
-reactableMove : LocalUser -> Int -> ReactionTarget -> Maybe ReactionTarget -> GameMsg -> Reactions -> Element GameMsg -> Element GameMsg
-reactableMove localUser contentWidth target hoveredTarget onMouseEnter reactions content =
+reactableMove : LocalUser -> Int -> ReactionTarget -> Maybe ReactionTarget -> Maybe ReactionTarget -> GameMsg -> Reactions -> Element GameMsg -> Element GameMsg
+reactableMove localUser contentWidth target hoveredTarget highlightedTarget onMouseEnter reactions content =
     let
         isHovered : Bool
         isHovered =
@@ -4630,6 +4613,17 @@ reactableMove localUser contentWidth target hoveredTarget onMouseEnter reactions
         , Ui.spacing 4
         , Ui.Events.onMouseEnter onMouseEnter
         , Ui.Events.onMouseLeave MouseExitWord
+        , if highlightedTarget == Just target then
+            Ui.background
+                (if isHovered then
+                    MyUi.hoverAndReplyToColor
+
+                 else
+                    MyUi.replyToColor
+                )
+
+          else
+            Ui.noAttr
         , if isHovered then
             MessageView.gameMiniViewNearEdge
                 localUser.user
@@ -4668,6 +4662,80 @@ reactableMove localUser contentWidth target hoveredTarget onMouseEnter reactions
         )
 
 
+{-| The Moves log is drawn behind `Ui.Lazy.lazy6`, which is as many arguments as elm-ui's lazy
+takes, and laziness only holds for arguments the virtual DOM can compare by value. The scroll
+position, the hovered move and the move a reply is pointing at therefore travel as one Int.
+-}
+encodeLogState : ScrollPosition -> Maybe Int -> Maybe Int -> Int
+encodeLogState scrollPosition hoveredIndex highlightedMove =
+    (case scrollPosition of
+        ScrolledToTop ->
+            0
+
+        ScrolledToMiddle ->
+            1
+
+        ScrolledToBottom ->
+            2
+    )
+        + (case hoveredIndex of
+            Just index ->
+                (index + 1) * 4
+
+            Nothing ->
+                0
+          )
+        + (case highlightedMove of
+            Just moveNumber ->
+                moveNumber * highlightedMovePackingOffset
+
+            Nothing ->
+                0
+          )
+
+
+decodeLogState : Int -> { scrollPosition : ScrollPosition, hoveredIndex : Maybe Int, highlightedMove : Maybe Int }
+decodeLogState packed =
+    let
+        value : Int
+        value =
+            modBy highlightedMovePackingOffset packed
+    in
+    { scrollPosition =
+        case modBy 4 value of
+            0 ->
+                ScrolledToTop
+
+            1 ->
+                ScrolledToMiddle
+
+            _ ->
+                ScrolledToBottom
+    , hoveredIndex =
+        case value // 4 of
+            0 ->
+                Nothing
+
+            hovered ->
+                Just (hovered - 1)
+    , highlightedMove =
+        case packed // highlightedMovePackingOffset of
+            0 ->
+                Nothing
+
+            moveNumber ->
+                Just moveNumber
+    }
+
+
+{-| Where the highlighted move starts in the Int `encodeLogState` packs. The scroll position and
+the hovered move sit below it, which leaves room for a log a quarter of a million entries long.
+-}
+highlightedMovePackingOffset : number
+highlightedMovePackingOffset =
+    2 ^ 20
+
+
 recentActionsView :
     Int
     -> Coord CssPixels
@@ -4676,26 +4744,11 @@ recentActionsView :
     -> Array ActionWithTime
     -> Shared
     -> Element GameMsg
-recentActionsView scrollPositionAndHovered windowSize localUser setup actions shared =
+recentActionsView packedLogState windowSize localUser setup actions shared =
     let
-        scrollPosition =
-            case Bitwise.and 3 scrollPositionAndHovered of
-                0 ->
-                    ScrolledToTop
-
-                1 ->
-                    ScrolledToMiddle
-
-                _ ->
-                    ScrolledToBottom
-
-        hoveredIndex =
-            case Bitwise.shiftRightZfBy 2 scrollPositionAndHovered of
-                0 ->
-                    Nothing
-
-                value ->
-                    value - 1 |> Just
+        logState : { scrollPosition : ScrollPosition, hoveredIndex : Maybe Int, highlightedMove : Maybe Int }
+        logState =
+            decodeLogState packedLogState
 
         contentWidth : Int
         contentWidth =
@@ -4707,7 +4760,11 @@ recentActionsView scrollPositionAndHovered windowSize localUser setup actions sh
 
         hoveredTarget : Maybe ReactionTarget
         hoveredTarget =
-            Maybe.map (\index -> MoveReaction (logLength - index)) hoveredIndex
+            Maybe.map (\index -> MoveReaction (logLength - index)) logState.hoveredIndex
+
+        highlightedTarget : Maybe ReactionTarget
+        highlightedTarget =
+            Maybe.map MoveReaction logState.highlightedMove
 
         log : List LogEntry
         log =
@@ -4862,6 +4919,7 @@ recentActionsView scrollPositionAndHovered windowSize localUser setup actions sh
                                 contentWidth
                                 (MoveReaction moveNumber)
                                 hoveredTarget
+                                highlightedTarget
                                 (MouseEnterWord (Just index) hoveredCells entry.shared)
                                 (SeqDict.get (MoveReaction moveNumber) shared.reactions
                                     |> Maybe.withDefault SeqDict.empty
@@ -4880,7 +4938,7 @@ recentActionsView scrollPositionAndHovered windowSize localUser setup actions sh
     )
         |> Ui.column
             [ Ui.id (Dom.idToString pastWordsContainerId)
-            , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledPastMoves scrollPosition)
+            , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledPastMoves logState.scrollPosition)
             , Ui.paddingWith { left = logPadding, right = logPadding, top = 24, bottom = 16 }
             , Ui.scrollable
             , Ui.heightMin 0
@@ -4917,7 +4975,7 @@ recentActionsView scrollPositionAndHovered windowSize localUser setup actions sh
                         (Ui.text movesText)
                     )
                 )
-            , case scrollPosition of
+            , case logState.scrollPosition of
                 ScrolledToBottom ->
                     Ui.noAttr
 

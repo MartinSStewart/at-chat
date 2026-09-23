@@ -2,6 +2,7 @@ module E2EWordSpellingGame exposing (tests)
 
 import Audio
 import Broadcast
+import Color
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import DmChannelId
@@ -16,6 +17,7 @@ import IdArray
 import Json.Encode
 import List.Nonempty
 import Message
+import MyUi
 import OneOrGreater
 import Route exposing (ChannelsVisibleOnMobile(..), ShowChannelSettings(..))
 import SeqDict
@@ -172,12 +174,18 @@ tests normalConfig =
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_removeReactionEmoji_0" ])
                         , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_addReactionEmoji" ])
 
-                        -- Replying to a move hands it to the message input, so whatever gets
-                        -- written next points back at it
+                        -- Replying to a move hands it to the message input, which repeats the
+                        -- move itself so whatever gets written next points at something the
+                        -- writer can recognise
                         , admin.click 100 (Dom.id "miniView_reply")
-                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Reply to move 1" ])
+                        , admin.checkView
+                            100
+                            (\view ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "guild_replyToHeader" ] view
+                                    |> Test.Html.Query.has [ Test.Html.Selector.text " played LOAD (+10)" ]
+                            )
                         , admin.click 100 (Dom.id "guild_closeReplyToHeader")
-                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Reply to move 1" ])
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_replyToHeader" ])
                         , admin.custom 100 (moveRow 1) "mouseleave" (Json.Encode.object [])
                         ]
                     , T.collapsableGroup
@@ -190,6 +198,19 @@ tests normalConfig =
                         , user.snapshotView 100 { name = "Reply to a move" }
                         , user.click 100 (Dom.id "guild_gameReplyLink_0")
                         , user.checkModel 100 (checkViewingRepliedTo (Message.RepliedTo_WordSpellingGameMove 1))
+
+                        -- The move that was replied to is picked out of the Moves log so that
+                        -- it can be told apart from the moves around it
+                        , user.checkView
+                            100
+                            (\view ->
+                                Test.Html.Query.find [ Test.Html.Selector.id (Dom.idToString (moveRow 1)) ] view
+                                    |> Test.Html.Query.has
+                                        [ Test.Html.Selector.style
+                                            "background-color"
+                                            (Color.toCssString MyUi.replyToColor)
+                                        ]
+                            )
 
                         -- A tab that has never opened the match gets it along with the messages
                         , T.connectFrontend

@@ -2193,7 +2193,22 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                                                 scrollToBottom
                                 ]
                         , case tab of
-                            Just (ChannelHeaderTab_Games _ _) ->
+                            Just (ChannelHeaderTab_Games _ (Just repliedTo)) ->
+                                -- The tab has only just opened, so the move or answer being
+                                -- pointed at isn't in the page until the next render.
+                                Process.sleep Duration.millisecond
+                                    |> Task.andThen
+                                        (\() ->
+                                            let
+                                                scrollTo : Game.ScrollTo
+                                                scrollTo =
+                                                    Game.replyScrollTo repliedTo
+                                            in
+                                            Scroll.smoothScrollToTopOf scrollTo.container scrollTo.target
+                                        )
+                                    |> Task.attempt (\_ -> SetScrollToBottom)
+
+                            Just (ChannelHeaderTab_Games _ Nothing) ->
                                 Dom.setViewportOf WordSpellingGame.pastWordsContainerId 0 9999999
                                     |> Task.attempt (\_ -> SetScrollToBottom)
 
