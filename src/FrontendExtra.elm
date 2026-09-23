@@ -2204,7 +2204,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                                                 scrollTo =
                                                     Game.replyScrollTo repliedTo
                                             in
-                                            Scroll.smoothScrollToTopOf scrollTo.container scrollTo.target
+                                            Scroll.smoothScrollToCenterOf scrollTo.container scrollTo.target
                                         )
                                     |> Task.attempt (\_ -> SetScrollToBottom)
 

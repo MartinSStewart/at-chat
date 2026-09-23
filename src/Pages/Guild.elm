@@ -8734,7 +8734,7 @@ deletedMessageContent messageId isSelectingAnchor highlight createdAt timezone =
                     Ui.noAttr
 
                 UrlHighlight ->
-                    Ui.background MyUi.hoverAndReplyToColor
+                    MyUi.highlightFadeOut
             ]
             (Ui.text LocalState.messageDeleted)
         , messageTimestamp (\_ -> UserColor.default) Drawing.emptyDrawing isSelectingAnchor messageId createdAt timezone
@@ -9295,6 +9295,18 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
             }
          , Ui.spacing 4
          , channelMessageHtmlId messageIndex |> Dom.idToString |> Ui.id
+         , case highlight of
+            NoHighlight ->
+                Ui.noAttr
+
+            ReplyToHighlight ->
+                Ui.noAttr
+
+            MentionHighlight ->
+                Ui.noAttr
+
+            UrlHighlight ->
+                MyUi.highlightFadeOut
          ]
             ++ (case isHovered of
                     IsNotHovered ->
@@ -9309,7 +9321,7 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
                                 [ Ui.background MyUi.mentionColor ]
 
                             UrlHighlight ->
-                                [ Ui.background MyUi.replyToColor ]
+                                []
 
                     IsHovered ->
                         [ case highlight of
@@ -9323,7 +9335,7 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
                                 Ui.background MyUi.hoverAndMentionColor
 
                             UrlHighlight ->
-                                Ui.background MyUi.hoverAndReplyToColor
+                                Ui.background MyUi.hoverHighlight
                         , MessageView.miniView currentUser isThreadStarter canEdit availableCustomEmojis emojiData customEmojis |> Ui.inFront
                         ]
 
@@ -9339,7 +9351,7 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
                                 [ Ui.background MyUi.hoverAndMentionColor ]
 
                             UrlHighlight ->
-                                [ Ui.background MyUi.hoverAndReplyToColor ]
+                                [ Ui.background MyUi.hoverHighlight ]
 
                     IsHoveredReactionsOnly ->
                         [ case highlight of
@@ -9353,7 +9365,7 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
                                 Ui.background MyUi.hoverAndMentionColor
 
                             UrlHighlight ->
-                                Ui.background MyUi.hoverAndReplyToColor
+                                Ui.background MyUi.hoverHighlight
                         , MessageView.reactionsMiniView currentUser availableCustomEmojis emojiData customEmojis |> Ui.inFront
                         ]
 
@@ -9424,6 +9436,18 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
             }
          , Ui.spacing 4
          , threadMessageHtmlId messageIndex |> Dom.idToString |> Ui.id
+         , case highlight of
+            NoHighlight ->
+                Ui.noAttr
+
+            ReplyToHighlight ->
+                Ui.noAttr
+
+            MentionHighlight ->
+                Ui.noAttr
+
+            UrlHighlight ->
+                MyUi.highlightFadeOut
          ]
             ++ (case isHovered of
                     IsNotHovered ->
@@ -9438,7 +9462,7 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
                                 [ Ui.background MyUi.mentionColor ]
 
                             UrlHighlight ->
-                                [ Ui.background MyUi.replyToColor ]
+                                []
 
                     IsHovered ->
                         [ case highlight of
@@ -9452,7 +9476,7 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
                                 Ui.background MyUi.hoverAndMentionColor
 
                             UrlHighlight ->
-                                Ui.background MyUi.hoverAndReplyToColor
+                                Ui.background MyUi.hoverHighlight
                         , MessageView.miniView currentUser False canEdit availableCustomEmojis emojiData customEmojis |> Ui.inFront
                         ]
 
@@ -9468,7 +9492,7 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
                                 [ Ui.background MyUi.hoverAndMentionColor ]
 
                             UrlHighlight ->
-                                [ Ui.background MyUi.hoverAndReplyToColor ]
+                                [ Ui.background MyUi.hoverHighlight ]
 
                     IsHoveredReactionsOnly ->
                         [ case highlight of
@@ -9482,7 +9506,7 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
                                 Ui.background MyUi.hoverAndMentionColor
 
                             UrlHighlight ->
-                                Ui.background MyUi.hoverAndReplyToColor
+                                Ui.background MyUi.hoverHighlight
                         , MessageView.reactionsMiniView currentUser availableCustomEmojis emojiData customEmojis |> Ui.inFront
                         ]
 

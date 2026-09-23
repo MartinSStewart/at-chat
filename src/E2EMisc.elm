@@ -2461,6 +2461,16 @@ richTextMessage isMobile normalConfig =
                     1000
                     (Test.Html.Query.has [ Test.Html.Selector.id "guild_replyLink_2" ])
                 , E2EHelper.tallSnapshot admin 1000 { name = "Rich text message previewed in reply" }
+
+                -- Following the reply back to the message it points at marks that message. The
+                -- mark fades away by itself, so it's a class rather than a background of its own.
+                , admin.click 100 (Dom.id "guild_replyLink_2")
+                , admin.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id "guild_message_2" ] html
+                            |> Test.Html.Query.has [ Test.Html.Selector.class "highlight-fade-out" ]
+                    )
                 ]
             )
         ]

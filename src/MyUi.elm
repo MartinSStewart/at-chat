@@ -51,6 +51,7 @@ module MyUi exposing
     , guildIconFullWidth
     , guildIconSelectedBorder
     , heightAttr
+    , highlightFadeOut
     , highlightedBorder
     , hover
     , hoverAndMentionColor
@@ -833,6 +834,16 @@ fadeIn =
     Ui.htmlAttribute (Html.Attributes.class "fade-in")
 
 
+{-| Marks something the reader has just been taken to, a message opened from a link or a reply
+or the move a reply points at, and then fades away over a second. The colour lives in the
+animation rather than in a background of its own, so once the second is up the element goes back
+to whatever background it would otherwise have, hover included.
+-}
+highlightFadeOut : Ui.Attribute msg
+highlightFadeOut =
+    Ui.htmlAttribute (Html.Attributes.class "highlight-fade-out")
+
+
 noPointerEvents : Ui.Attribute msg
 noPointerEvents =
     htmlStyle "pointer-events" "none"
@@ -1369,6 +1380,18 @@ body {
   0% { opacity: 0; transform: translate(0px, -20px); }
   50% { opacity: 0; transform: translate(0px, -20px); }
   100% { opacity: 1; }
+}
+/* Something the reader has just been taken to: a message opened from a link or a reply, or the
+   move or answer a reply points at. The animation holds no end state, so once it has run the
+   element is back to the background it would have had anyway. */
+.highlight-fade-out {
+  animation: highlight-fade-out 1s;
+}
+@keyframes highlight-fade-out {
+  0% { background-color: """
+                ++ colorToStyle replyToColor
+                ++ """; }
+  100% { background-color: rgba(0,0,0,0); }
 }
 /* The custom emoji tooltip hangs above its emoji, centred on it. The arrow is a
    sibling of the tooltip rather than a child of it so that it keeps pointing at

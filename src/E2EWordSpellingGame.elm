@@ -2,7 +2,6 @@ module E2EWordSpellingGame exposing (tests)
 
 import Audio
 import Broadcast
-import Color
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import DmChannelId
@@ -17,7 +16,6 @@ import IdArray
 import Json.Encode
 import List.Nonempty
 import Message
-import MyUi
 import OneOrGreater
 import Route exposing (ChannelsVisibleOnMobile(..), ShowChannelSettings(..))
 import SeqDict
@@ -199,17 +197,13 @@ tests normalConfig =
                         , user.click 100 (Dom.id "guild_gameReplyLink_0")
                         , user.checkModel 100 (checkViewingRepliedTo (Message.RepliedTo_WordSpellingGameMove 1))
 
-                        -- The move that was replied to is picked out of the Moves log so that
-                        -- it can be told apart from the moves around it
+                        -- The move that was replied to marks itself, and the mark fades away
+                        -- once the reader has had a moment to see which row it is
                         , user.checkView
                             100
                             (\view ->
                                 Test.Html.Query.find [ Test.Html.Selector.id (Dom.idToString (moveRow 1)) ] view
-                                    |> Test.Html.Query.has
-                                        [ Test.Html.Selector.style
-                                            "background-color"
-                                            (Color.toCssString MyUi.replyToColor)
-                                        ]
+                                    |> Test.Html.Query.has [ Test.Html.Selector.class "highlight-fade-out" ]
                             )
 
                         -- A tab that has never opened the match gets it along with the messages

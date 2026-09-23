@@ -4614,13 +4614,7 @@ reactableMove localUser contentWidth target hoveredTarget highlightedTarget onMo
         , Ui.Events.onMouseEnter onMouseEnter
         , Ui.Events.onMouseLeave MouseExitWord
         , if highlightedTarget == Just target then
-            Ui.background
-                (if isHovered then
-                    MyUi.hoverAndReplyToColor
-
-                 else
-                    MyUi.replyToColor
-                )
+            MyUi.highlightFadeOut
 
           else
             Ui.noAttr

@@ -2997,17 +2997,12 @@ reactableResult paddingX2 localUser contentWidth target hoveredResult highlighte
         [ Ui.id (Dom.idToString (reactionTargetId target))
         , Ui.paddingXY paddingX2 4
         , Ui.spacing 4
+        , Ui.attrIf isHovered (Ui.background MyUi.hoverHighlight)
         , if highlightedResult == Just target then
-            Ui.background
-                (if isHovered then
-                    MyUi.hoverAndReplyToColor
-
-                 else
-                    MyUi.replyToColor
-                )
+            MyUi.highlightFadeOut
 
           else
-            Ui.attrIf isHovered (Ui.background MyUi.hoverHighlight)
+            Ui.noAttr
         , Ui.Events.onMouseEnter (ReactionMsg target MessageView.MessageView_MouseEnteredMessage)
         , Ui.Events.onMouseLeave (ReactionMsg target MessageView.MessageView_MouseExitedMessage)
         , if isHovered then
