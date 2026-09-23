@@ -5232,7 +5232,7 @@ definitionCredits =
         , Ui.el
             [ Ui.linkNewTab "https://en.wiktionary.org/", Ui.Font.noWrap ]
             (Ui.text "Wiktionary")
-        , Ui.text " (CC BY-SA), served by "
+        , Ui.text ", via "
         , Ui.el
             [ Ui.linkNewTab "https://www.datamuse.com/api/", Ui.Font.noWrap ]
             (Ui.text "Datamuse")

@@ -568,6 +568,19 @@ previewGameChannel time =
                     , timestampDrawings = Drawing.emptyDrawing
                     , cardDrawings = Drawing.emptyDrawing
                     }
+                , UserTextMessage
+                    { createdAt = previewMinutesAgo time 1
+                    , createdBy = Id.fromInt 4
+                    , content =
+                        { content = RichText.fromNonemptyString Time.utc SeqDict.empty (NonemptyString 'C' "ould have gotten a triple with that 😛")
+                        , embeds = Array.empty
+                        , attachedFiles = SeqDict.empty
+                        }
+                    , reactions = SeqDict.empty
+                    , editedAt = Nothing
+                    , repliedTo = RepliedToGame previewGameMatchId (Message.RepliedTo_WordSpellingGameMove 8)
+                    , drawings = Nothing
+                    }
                 ]
     in
     { createdAt = previewMinutesAgo time 60000
