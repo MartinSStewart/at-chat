@@ -1385,10 +1385,13 @@ body {
    move or answer a reply points at. The animation holds no end state, so once it has run the
    element is back to the background it would have had anyway. */
 .highlight-fade-out {
-  animation: highlight-fade-out 1s;
+  animation: highlight-fade-out 4s;
 }
 @keyframes highlight-fade-out {
   0% { background-color: """
+                ++ colorToStyle replyToColor
+                ++ """; }
+  70% { background-color: """
                 ++ colorToStyle replyToColor
                 ++ """; }
   100% { background-color: rgba(0,0,0,0); }
