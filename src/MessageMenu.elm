@@ -242,6 +242,12 @@ viewMobile offset extraOptions loggedIn local model =
     in
     Ui.column
         [ Ui.move { x = 0, y = negate offset |> round |> (+) height, z = 0 }
+
+        -- Ui.below wraps the menu in a height:0 element. Chrome stretches that wrapper to fit the
+        -- menu, Firefox leaves it collapsed, and there the whole menu ended up below the window.
+        -- Its bottom edge sits at the bottom of the window either way, so anchor to that.
+        , MyUi.htmlStyle "position" "absolute"
+        , MyUi.htmlStyle "bottom" "0"
         , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
         , Ui.background MyUi.black
         , MyUi.htmlStyle
