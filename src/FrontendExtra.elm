@@ -541,7 +541,7 @@ layout model attributes child =
                     (Html.node
                         "style"
                         []
-                        [ Html.text "body { height:100vh !important; }" ]
+                        [ Html.text "body { height:100vh !important; height:100dvh !important; }" ]
                     )
                 )
             :: Ui.Font.size 16
