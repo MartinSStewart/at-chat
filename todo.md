@@ -25,6 +25,7 @@
 * Double tapping send message shouldn't send twice
 * Video attachments not decoding when message is encrypted
 * Swiping quickly should move image more quickly so it can leave the screen for certain
+* Trying to join a guild and failing should tell the user what the error was
 
 Won't do:
 
