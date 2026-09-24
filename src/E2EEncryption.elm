@@ -33,7 +33,6 @@ import Id exposing (Id, UserId)
 import IdArray
 import Message exposing (MessageContent)
 import NonemptyDict
-import Pages.Guild
 import RichText
 import SeqDict
 import Serialize
@@ -65,35 +64,35 @@ tests config =
                 , admin.click 100 (Dom.id "guild_showMembers")
                 , admin.checkView
                     100
-                    (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.e2eeSectionTitle ])
+                    (Test.Html.Query.has [ Test.Html.Selector.text Encryption.e2eeSectionTitle ])
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text warning ])
                 , admin.click 100 (Dom.id "guild_e2eeSection")
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text warning ])
                 , admin.checkView
                     100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ])
                 , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
 
                 -- Encrypting anything needs a key pair on the account first, so that
                 -- stands in front of enabling it.
                 , admin.checkView
                     100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ])
                 , addPrivateKeyToAccount admin
                     (\adminPrivateKey ->
                         [ admin.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ])
                         , admin.click 100 (Dom.id "guild_enableE2ee")
                         , admin.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ])
                         , admin.checkView
                             100
                             (Test.Html.Query.has
-                                [ Test.Html.Selector.text Pages.Guild.waitingForE2eeText
+                                [ Test.Html.Selector.text Encryption.waitingForE2eeText
                                 , Test.Html.Selector.text E2EHelper.userName
-                                , Test.Html.Selector.text Pages.Guild.toAcceptE2eeText
+                                , Test.Html.Selector.text Encryption.toAcceptE2eeText
                                 , Test.Html.Selector.id "guild_cancelE2ee"
                                 ]
                             )
@@ -119,25 +118,25 @@ tests config =
                         , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
                         , user.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.enterPrivateKeyText ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Encryption.enterPrivateKeyText ])
                         , addPrivateKeyToAccount user
                             (\_ ->
                                 [ user.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text Pages.Guild.enterPrivateKeyText ]
+                                        [ Test.Html.Selector.text Encryption.enterPrivateKeyText ]
                                     )
                                 , T.checkBackend 100 checkBothKeysStoredAndDifferent
                                 , admin.click 100 (Dom.id "guild_cancelE2ee")
                                 , user.checkView
                                     100
                                     (Test.Html.Query.hasNot
-                                        [ Test.Html.Selector.text Pages.Guild.enterPrivateKeyText ]
+                                        [ Test.Html.Selector.text Encryption.enterPrivateKeyText ]
                                     )
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ]
+                                        [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ]
                                     )
 
                                 -- Accepting the risks is answered once for the account rather than once
@@ -155,7 +154,7 @@ tests config =
                                     100
                                     (Test.Html.Query.has
                                         [ Test.Html.Selector.text warning
-                                        , Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing)
+                                        , Test.Html.Selector.text (Encryption.enableE2eeText Nothing)
                                         ]
                                     )
 
@@ -204,7 +203,7 @@ tests config =
                         , user.click 100 (Dom.id "guild_showMembers")
                         , user.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.declineE2eeText ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text Encryption.declineE2eeText ])
                         , user.click 100 (Dom.id "guild_declineE2ee")
                         , T.checkBackend 100 (checkDmE2eeDeclinedBy (Id.fromInt 2))
 
@@ -214,7 +213,7 @@ tests config =
                             100
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.text
-                                    (E2EHelper.userName ++ " " ++ Pages.Guild.e2eeDeclinedText)
+                                    (E2EHelper.userName ++ " " ++ Encryption.e2eeDeclinedText)
                                 ]
                             )
                         , admin.checkView
@@ -225,24 +224,24 @@ tests config =
                             (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_enableE2ee" ])
                         , admin.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ])
                         , E2EHelper.tallSnapshot admin 100 { name = "Encryption request was declined" }
 
                         -- The person who declined has nothing left waiting on them, so
                         -- their section closes again and has to be opened to go on.
                         , user.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.declineE2eeText ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Encryption.declineE2eeText ])
                         , user.click 100 (Dom.id "guild_e2eeSection")
                         , user.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.youDeclinedE2eeText ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text Encryption.youDeclinedE2eeText ])
 
                         -- Saying no isn't saying no forever. Asking is theirs to do now,
                         -- and it still costs them the same steps anybody pays.
                         , user.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ])
                         , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
                         , addPrivateKeyToAccount user
                             (\_ ->
@@ -257,13 +256,13 @@ tests config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text Pages.Guild.declineE2eeText ]
+                                        [ Test.Html.Selector.text Encryption.declineE2eeText ]
                                     )
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.hasNot
                                         [ Test.Html.Selector.text
-                                            (E2EHelper.userName ++ " " ++ Pages.Guild.e2eeDeclinedText)
+                                            (E2EHelper.userName ++ " " ++ Encryption.e2eeDeclinedText)
                                         ]
                                     )
                                 ]
@@ -311,7 +310,7 @@ tests config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text (E2EHelper.userName ++ " " ++ Pages.Guild.requestAcceptedText) ]
+                                        [ Test.Html.Selector.text (E2EHelper.userName ++ " " ++ Encryption.requestAcceptedText) ]
                                     )
                                 , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
                                 , respondToSharedSecretStored admin (Id.fromInt 2)
@@ -492,7 +491,7 @@ tests config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text (E2EHelper.userName ++ " " ++ Pages.Guild.requestAcceptedText) ]
+                                        [ Test.Html.Selector.text (E2EHelper.userName ++ " " ++ Encryption.requestAcceptedText) ]
                                     )
 
                                 -- The second of the others asks the admin to encrypt,
@@ -526,7 +525,7 @@ tests config =
                                         , admin.checkView
                                             100
                                             (Test.Html.Query.hasNot
-                                                [ Test.Html.Selector.text Pages.Guild.missingPrivateKeyText ]
+                                                [ Test.Html.Selector.text Encryption.missingPrivateKeyText ]
                                             )
 
                                         -- and so does the one that wasn't, where messages
@@ -537,7 +536,7 @@ tests config =
                                         , admin.checkView
                                             100
                                             (Test.Html.Query.hasNot
-                                                [ Test.Html.Selector.text Pages.Guild.missingPrivateKeyText ]
+                                                [ Test.Html.Selector.text Encryption.missingPrivateKeyText ]
                                             )
                                         , admin.click 100 (Dom.id "guild_hideMembers")
                                         , E2EHelper.writeMessage admin 100 "Hello in secret"
@@ -577,11 +576,11 @@ tests config =
                     (\adminPrivateKey ->
                         [ admin.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ])
                         , admin.click 100 (Dom.id "guild_enableE2ee")
                         , admin.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.toAcceptE2eeText ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Encryption.toAcceptE2eeText ])
                         , admin.checkView
                             100
                             (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_cancelE2ee" ])
@@ -597,7 +596,7 @@ tests config =
                         , admin.checkView
                             100
                             (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.text Pages.Guild.missingPrivateKeyText ]
+                                [ Test.Html.Selector.text Encryption.missingPrivateKeyText ]
                             )
                         , admin.click 100 (Dom.id "guild_hideMembers")
                         , T.connectFrontend
@@ -678,7 +677,7 @@ tests config =
                                 , adminC.checkView
                                     100
                                     (Test.Html.Query.hasNot
-                                        [ Test.Html.Selector.text Pages.Guild.disableE2eeText ]
+                                        [ Test.Html.Selector.text Encryption.disableE2eeText ]
                                     )
                                 , adminC.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
                                 , respondToSharedSecretStored adminC Broadcast.adminUserId
@@ -686,7 +685,7 @@ tests config =
                                 , adminC.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text Pages.Guild.disableE2eeText ]
+                                        [ Test.Html.Selector.text Encryption.disableE2eeText ]
                                     )
                                 , respondToManyMessagesDecrypted adminC
                                 , writeEncryptedMessage adminC 100 "Note to self from adminB should be encrypted"
@@ -1057,7 +1056,7 @@ tests config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text Pages.Guild.disableE2eeText ]
+                                        [ Test.Html.Selector.text Encryption.disableE2eeText ]
                                     )
                                 , admin.click 100 (Dom.id "guild_disableE2ee")
 
@@ -1071,7 +1070,7 @@ tests config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text (Pages.Guild.enableE2eeText (Just ( E2EHelper.defaultAdminId, Time.millisToPosix 0 ))) ]
+                                        [ Test.Html.Selector.text (Encryption.enableE2eeText (Just ( E2EHelper.defaultAdminId, Time.millisToPosix 0 ))) ]
                                     )
                                 , admin.checkView
                                     100
@@ -1085,7 +1084,7 @@ tests config =
                                 , adminB.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text (Pages.Guild.enableE2eeText (Just ( E2EHelper.defaultAdminId, Time.millisToPosix 0 ))) ]
+                                        [ Test.Html.Selector.text (Encryption.enableE2eeText (Just ( E2EHelper.defaultAdminId, Time.millisToPosix 0 ))) ]
                                     )
                                 , adminB.snapshotView 100 { name = "E2EE disabled" }
                                 ]

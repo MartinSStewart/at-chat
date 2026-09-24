@@ -3,6 +3,7 @@ module Pages.Privacy exposing (repoUrl, view)
 import Array
 import Effect.Browser.Dom as Dom
 import Effect.Time as Time
+import Env
 import Html
 import Html.Attributes
 import RichText
@@ -40,6 +41,7 @@ at-chat stores or has access to the following sensitive data:
 Sensitive data is stored in order to provide you features. It is not used for marketing, advertising, AI training, or sold to 3rd parties.
 
 Sensitive data may be used by an administrator for the sole purpose of fixing software issues within at-chat. If this is a concern, you can [enable end-to-end encryption]("""
+            ++ Env.domain
             ++ Route.encode (Route.HomePageRoute (Just E2eeInfoOverlay))
             ++ """) on direct messages to restrict what is visible to an admin.
 
