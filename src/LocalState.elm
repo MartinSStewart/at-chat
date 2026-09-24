@@ -57,6 +57,7 @@ module LocalState exposing
     , canSendDiscordMessage
     , canViewDiscordChannel
     , canViewDiscordGuild
+    , channelMentions
     , channelToFrontend
     , createChannel
     , createChannelFrontend
@@ -84,6 +85,8 @@ module LocalState exposing
     , discordChannelToFrontend
     , discordDmChannelWithUser
     , discordGuildAvailableStickersAndCustomEmojis
+    , discordGuildChannelMentions
+    , discordGuildChannelNames
     , discordGuildOrDmIdToLatestMessages
     , discordGuildOrDmIdToMessage
     , discordTopicToDescription
@@ -103,6 +106,8 @@ module LocalState exposing
     , getAdminData
     , getDiscordGuildAndChannel
     , getGuildAndChannel
+    , guildChannelMentions
+    , guildChannelNames
     , guildOrDmIdToLatestMessages
     , guildOrDmIdToMessage
     , guildOrDmIdToMessagesCount
@@ -189,8 +194,8 @@ import OneToOne exposing (OneToOne)
 import Pagination exposing (Pagination)
 import PersonName exposing (PersonName)
 import Postmark
-import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
+import RichText exposing (MentionedChannel(..), RichText)
+import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -518,23 +523,121 @@ messageReactionsNoThread messageId channel =
             SeqDict.empty
 
 
+{-| The channels a #channel reference in a message can point to. Channel ids are only unique
+within a guild, so this is only ever the channels of the guild the message is in.
+-}
+channelMentions : AnyGuildOrDmId -> LocalState -> SeqDict MentionedChannel { name : ChannelName, url : String }
+channelMentions guildOrDmId local =
+    case guildOrDmId of
+        GuildOrDmId (GuildOrDmId_Guild { guildId }) ->
+            case SeqDict.get guildId local.guilds of
+                Just guild ->
+                    guildChannelMentions guildId guild
+
+                Nothing ->
+                    SeqDict.empty
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild { guildId, currentUserId }) ->
+            case SeqDict.get guildId local.discordGuilds of
+                Just guild ->
+                    discordGuildChannelMentions currentUserId guildId guild
+
+                Nothing ->
+                    SeqDict.empty
+
+        GuildOrDmId (GuildOrDmId_Dm _) ->
+            SeqDict.empty
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _) ->
+            SeqDict.empty
+
+
+guildChannelMentions : Id GuildId -> FrontendGuild -> SeqDict MentionedChannel { name : ChannelName, url : String }
+guildChannelMentions guildId guild =
+    SeqDict.foldl
+        (\channelId channel dict ->
+            SeqDict.insert
+                (MentionedGuildChannel channelId)
+                { name = channel.name
+                , url =
+                    GuildRoute
+                        guildId
+                        (ChannelRoute channelId (NoThreadWithFriends Nothing HideChannelSettings) Nothing)
+                        ChannelsHiddenOnMobile
+                        Nothing
+                        |> Route.encode
+                }
+                dict
+        )
+        SeqDict.empty
+        guild.channels
+
+
+discordGuildChannelMentions :
+    Discord.Id Discord.UserId
+    -> Discord.Id Discord.GuildId
+    -> DiscordFrontendGuild
+    -> SeqDict MentionedChannel { name : ChannelName, url : String }
+discordGuildChannelMentions currentUserId guildId guild =
+    SeqDict.foldl
+        (\channelId channel dict ->
+            SeqDict.insert
+                (MentionedDiscordChannel channelId)
+                { name = channel.name
+                , url =
+                    DiscordGuildRoute
+                        { currentDiscordUserId = currentUserId
+                        , guildId = guildId
+                        , channelRoute =
+                            DiscordChannel_ChannelRoute
+                                channelId
+                                (NoThreadWithFriends Nothing HideChannelSettings)
+                                Nothing
+                        , channelsVisible = ChannelsHiddenOnMobile
+                        , overlay = Nothing
+                        }
+                        |> Route.encode
+                }
+                dict
+        )
+        SeqDict.empty
+        guild.channels
+
+
+guildChannelNames : SeqDict (Id ChannelId) { a | name : ChannelName } -> SeqDict MentionedChannel { name : ChannelName }
+guildChannelNames channels =
+    SeqDict.foldl
+        (\channelId channel dict -> SeqDict.insert (MentionedGuildChannel channelId) { name = channel.name } dict)
+        SeqDict.empty
+        channels
+
+
+discordGuildChannelNames : SeqDict (Discord.Id Discord.ChannelId) { a | name : ChannelName } -> SeqDict MentionedChannel { name : ChannelName }
+discordGuildChannelNames channels =
+    SeqDict.foldl
+        (\channelId channel dict -> SeqDict.insert (MentionedDiscordChannel channelId) { name = channel.name } dict)
+        SeqDict.empty
+        channels
+
+
 messageToString :
     Time.Zone
     -> SeqDict userId { a | name : PersonName }
+    -> SeqDict MentionedChannel { b | name : ChannelName }
     -> SeqDict BytesHash (Result () (MessageContent userId))
     -> Message messageId userId
     -> String
-messageToString timezone allUsers3 decrypted message =
+messageToString timezone allUsers3 channels decrypted message =
     case message of
         UserTextMessage a ->
-            RichText.toString timezone False allUsers3 a.content.content
+            RichText.toString timezone False allUsers3 channels a.content.content
 
         EncryptedUserTextMessage a ->
             case SeqDict.get (Encryption.hash a.content) decrypted of
                 Just result ->
                     case result of
                         Ok ok ->
-                            RichText.toString timezone False allUsers3 ok.content
+                            RichText.toString timezone False allUsers3 channels ok.content
 
                         Err () ->
                             RichText.failedToDecryptMessageText

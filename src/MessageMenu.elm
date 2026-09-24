@@ -9,6 +9,7 @@ module MessageMenu exposing
     , view
     )
 
+import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
@@ -33,7 +34,7 @@ import NonemptySet exposing (NonemptySet)
 import OneToOne
 import PersonName exposing (PersonName)
 import Quantity exposing (Quantity, Rate)
-import RichText exposing (RichText)
+import RichText exposing (MentionedChannel, RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty
@@ -300,6 +301,11 @@ viewMobile offset extraOptions loggedIn local model =
                                     local.localUser
                                     loggedIn
                                     allUsers
+                                    channels
+
+                            channels : SeqDict MentionedChannel { name : ChannelName, url : String }
+                            channels =
+                                LocalState.channelMentions extraOptions.guildOrDmId local
                         in
                         [ (case extraOptions.guildOrDmId of
                             GuildOrDmId _ ->
@@ -311,7 +317,7 @@ viewMobile offset extraOptions loggedIn local model =
                                     richText =
                                         case String.Nonempty.fromString edit.text of
                                             Just nonempty ->
-                                                RichText.fromNonemptyString local.localUser.timezone allUsers nonempty |> Just
+                                                RichText.fromNonemptyString local.localUser.timezone allUsers channels nonempty |> Just
 
                                             Nothing ->
                                                 Nothing
@@ -327,7 +333,7 @@ viewMobile offset extraOptions loggedIn local model =
                                     richText =
                                         case String.Nonempty.fromString edit.text of
                                             Just nonempty ->
-                                                RichText.fromNonemptyString local.localUser.timezone allUsers nonempty |> Just
+                                                RichText.fromNonemptyString local.localUser.timezone allUsers channels nonempty |> Just
 
                                             Nothing ->
                                                 Nothing
@@ -478,6 +484,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         LocalState.messageToString
                             local.localUser.timezone
                             (User.allUsers local.localUser)
+                            (LocalState.channelMentions guildOrDmId local)
                             local.localUser.decryptedMessages
                             message
                     , messageCustomEmojiIdsList = messageCustomEmojiIds message
@@ -547,6 +554,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         LocalState.messageToString
                             local.localUser.timezone
                             (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                            (LocalState.channelMentions guildOrDmId local)
                             SeqDict.empty
                             message
                     , messageCustomEmojiIdsList = messageCustomEmojiIds message

@@ -234,7 +234,7 @@ The following is not encrypted:
 * Voice chats (E2EE voice chats might be added in the future)
 """
         )
-        |> RichText.fromNonemptyString Time.utc SeqDict.empty
+        |> RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty
         |> RichText.view
             (Dom.id "e2ee-info")
             1000
@@ -244,6 +244,7 @@ The following is not encrypted:
             { domainWhitelist = SeqSet.empty
             , revealedSpoilers = SeqSet.empty
             , users = SeqDict.empty
+            , channels = SeqDict.empty
             , attachedFiles = SeqDict.empty
             , stickers = SeqDict.empty
             , customEmojis = SeqDict.empty

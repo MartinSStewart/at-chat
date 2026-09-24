@@ -13,7 +13,7 @@ import Browser.Navigation
 import Bytes exposing (Bytes)
 import Call exposing (MediaDevicesStatus(..))
 import ChannelDescription
-import ChannelName
+import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji
@@ -77,7 +77,7 @@ import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RecoveryLogin
-import RichText exposing (RichText)
+import RichText exposing (MentionedChannel, RichText)
 import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SafeFloat exposing (SafeFloat)
 import Scroll exposing (ScrollPosition(..))
@@ -2227,6 +2227,9 @@ updateLoaded msg model =
 
                         allUsers =
                             User.allUsers local.localUser
+
+                        channels =
+                            LocalState.channelMentions (Tuple.first guildOrDmId) local
                     in
                     ( { loggedIn
                         | filesToUpload =
@@ -2250,11 +2253,11 @@ updateLoaded msg model =
                                     case maybe of
                                         Just draft ->
                                             case
-                                                RichText.fromNonemptyString local.localUser.timezone allUsers draft
+                                                RichText.fromNonemptyString local.localUser.timezone allUsers channels draft
                                                     |> RichText.removeAttachedFile (\a -> a == fileId)
                                             of
                                                 Just richText ->
-                                                    RichText.toString local.localUser.timezone False allUsers richText
+                                                    RichText.toString local.localUser.timezone False allUsers channels richText
                                                         |> String.Nonempty.fromString
 
                                                 Nothing ->
@@ -2279,6 +2282,9 @@ updateLoaded msg model =
 
                         allUsers =
                             User.allUsers local.localUser
+
+                        channels =
+                            LocalState.channelMentions (Tuple.first guildOrDmId) local
                     in
                     ( case SeqDict.get guildOrDmId loggedIn.editMessage of
                         Just edit ->
@@ -2291,11 +2297,11 @@ updateLoaded msg model =
                                                 case String.Nonempty.fromString edit.text of
                                                     Just nonempty ->
                                                         case
-                                                            RichText.fromNonemptyString local.localUser.timezone allUsers nonempty
+                                                            RichText.fromNonemptyString local.localUser.timezone allUsers channels nonempty
                                                                 |> RichText.removeAttachedFile (\a -> a == fileId)
                                                         of
                                                             Just richText ->
-                                                                RichText.toString local.localUser.timezone False allUsers richText
+                                                                RichText.toString local.localUser.timezone False allUsers channels richText
 
                                                             Nothing ->
                                                                 edit.text
@@ -4004,6 +4010,7 @@ updateLoaded msg model =
                                                                 RichText.fromNonemptyString
                                                                     local.localUser.timezone
                                                                     (User.allUsers local.localUser)
+                                                                    SeqDict.empty
                                                                     nonempty
                                                         in
                                                         if message.content.content == richText then
@@ -4081,6 +4088,7 @@ updateLoaded msg model =
                                                                             RichText.fromNonemptyString
                                                                                 local.localUser.timezone
                                                                                 (User.allUsers local.localUser)
+                                                                                (LocalState.channelMentions (GuildOrDmId guildOrDmId2) local)
                                                                                 nonempty
                                                                     in
                                                                     if message.content.content == richText then
@@ -4121,6 +4129,7 @@ updateLoaded msg model =
                                                                             RichText.fromNonemptyString
                                                                                 local.localUser.timezone
                                                                                 (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                                                                                (LocalState.channelMentions (DiscordGuildOrDmId guildOrDmId2) local)
                                                                                 nonempty
                                                                     in
                                                                     if message.content.content == richText then
@@ -4473,6 +4482,7 @@ updateLoaded msg model =
                                                         RichText.fromNonemptyString
                                                             local.localUser.timezone
                                                             (User.allUsers local.localUser)
+                                                            SeqDict.empty
                                                             nonempty
                                                     , embeds = Array.empty
                                                     , attachedFiles =
@@ -4505,7 +4515,7 @@ updateLoaded msg model =
                                                                 )
                                                                 (case model.emojiData of
                                                                     Just emojiData2 ->
-                                                                        RichText.fromNonemptyString Time.utc SeqDict.empty nonempty
+                                                                        RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty nonempty
                                                                             |> RichText.emojisAndCustomEmojis emojiData2
                                                                             |> SeqSet.fromList
                                                                             |> SeqSet.toList
@@ -4808,16 +4818,20 @@ updateLoaded msg model =
                                         timezone : Time.Zone
                                         timezone =
                                             Local.model loggedIn.localState |> .localUser |> .timezone
+
+                                        channels : SeqDict MentionedChannel { name : ChannelName, url : String }
+                                        channels =
+                                            LocalState.channelMentions (Tuple.first guildOrDmId) (Local.model loggedIn.localState)
                                     in
                                     (if removeSpoiler then
-                                        RichText.fromNonemptyString timezone allUsers text
+                                        RichText.fromNonemptyString timezone allUsers channels text
                                             |> RichText.unspoilerAttachedFile fileId
 
                                      else
-                                        RichText.fromNonemptyString timezone allUsers text
+                                        RichText.fromNonemptyString timezone allUsers channels text
                                             |> RichText.spoilerAttachedFile fileId
                                     )
-                                        |> RichText.toString timezone False allUsers
+                                        |> RichText.toString timezone False allUsers channels
                                         |> String.Nonempty.fromString
                                         |> Maybe.withDefault text
                                 )
@@ -4846,18 +4860,22 @@ updateLoaded msg model =
                                                 timezone2 : Time.Zone
                                                 timezone2 =
                                                     Local.model loggedIn.localState |> .localUser |> .timezone
+
+                                                channels : SeqDict MentionedChannel { name : ChannelName, url : String }
+                                                channels =
+                                                    LocalState.channelMentions (Tuple.first guildOrDmId) (Local.model loggedIn.localState)
                                             in
                                             { edit
                                                 | text =
                                                     (if removeSpoiler then
-                                                        RichText.fromNonemptyString timezone2 allUsers nonempty
+                                                        RichText.fromNonemptyString timezone2 allUsers channels nonempty
                                                             |> RichText.unspoilerAttachedFile fileId
 
                                                      else
-                                                        RichText.fromNonemptyString timezone2 allUsers nonempty
+                                                        RichText.fromNonemptyString timezone2 allUsers channels nonempty
                                                             |> RichText.spoilerAttachedFile fileId
                                                     )
-                                                        |> RichText.toString timezone2 False allUsers
+                                                        |> RichText.toString timezone2 False allUsers channels
                                             }
 
                                         Nothing ->
@@ -7056,7 +7074,12 @@ pressedEditMessage guildOrDmId threadRoute model =
                         GuildOrDmId guildOrDmId2 ->
                             case LocalState.guildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
-                                    ( RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.content.content
+                                    ( RichText.toString
+                                        local.localUser.timezone
+                                        False
+                                        (User.allUsers local.localUser)
+                                        (LocalState.channelMentions (GuildOrDmId guildOrDmId2) local)
+                                        message.content.content
                                     , message.content.attachedFiles
                                     )
                                         |> Just
@@ -7071,6 +7094,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                                         local.localUser.timezone
                                         False
                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                                        (LocalState.channelMentions (DiscordGuildOrDmId guildOrDmId2) local)
                                         message.content.content
                                     , message.content.attachedFiles
                                     )
@@ -9831,6 +9855,7 @@ startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
             localUser.timezone
             True
             (User.allUsers localUser)
+            SeqDict.empty
             contentAndEmbeds.content
         )
     )

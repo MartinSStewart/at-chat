@@ -56,7 +56,7 @@ Sensitive data is not accessible to any 3rd parties with 3 exceptions:
 <WIP>
 """
         )
-        |> RichText.fromNonemptyString Time.utc SeqDict.empty
+        |> RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty
         |> RichText.view
             (Dom.id "privacy-page")
             1000
@@ -66,6 +66,7 @@ Sensitive data is not accessible to any 3rd parties with 3 exceptions:
             { domainWhitelist = SeqSet.empty
             , revealedSpoilers = SeqSet.empty
             , users = SeqDict.empty
+            , channels = SeqDict.empty
             , attachedFiles = SeqDict.empty
             , stickers = SeqDict.empty
             , customEmojis = SeqDict.empty

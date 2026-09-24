@@ -208,6 +208,7 @@ textMessage =
                 RichText.fromNonemptyString
                     Time.utc
                     (NonemptyDict.toSeqDict users)
+                    SeqDict.empty
                     (String.Nonempty.NonemptyString 'H' "ello @Sven, welcome!")
             , attachedFiles = SeqDict.empty
             , embeds = Array.empty
@@ -300,6 +301,7 @@ sheepInput first rest =
         RichText.fromNonemptyString
             Time.utc
             (NonemptyDict.toSeqDict users)
+            SeqDict.empty
             (String.Nonempty.NonemptyString first rest)
     , attachedFiles = SeqDict.empty
     , reactions = SeqDict.empty

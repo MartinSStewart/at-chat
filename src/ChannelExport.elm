@@ -891,7 +891,7 @@ durationCodec =
 richTextCodec : Codec userId -> Codec (RichText userId)
 richTextCodec userId =
     Codec.custom
-        (\userMentionEncoder normalTextEncoder boldEncoder italicEncoder underlineEncoder strikethroughEncoder spoilerEncoder blockQuoteEncoder headingEncoder hyperlinkEncoder markdownLinkEncoder inlineCodeEncoder codeBlockEncoder attachedFileEncoder escapedCharEncoder stickerEncoder customEmojiEncoder bulletPointEncoder timestampEncoder value ->
+        (\userMentionEncoder normalTextEncoder boldEncoder italicEncoder underlineEncoder strikethroughEncoder spoilerEncoder blockQuoteEncoder headingEncoder hyperlinkEncoder markdownLinkEncoder inlineCodeEncoder codeBlockEncoder attachedFileEncoder escapedCharEncoder stickerEncoder customEmojiEncoder bulletPointEncoder timestampEncoder channelMentionEncoder value ->
             case value of
                 RichText.UserMention argA ->
                     userMentionEncoder argA
@@ -949,6 +949,9 @@ richTextCodec userId =
 
                 RichText.Timestamp argA ->
                     timestampEncoder argA
+
+                RichText.ChannelMention argA ->
+                    channelMentionEncoder argA
         )
         |> Codec.variant1 "UserMention" RichText.UserMention userId
         |> Codec.variant2 "NormalText" RichText.NormalText Codec.char Codec.string
@@ -982,6 +985,23 @@ richTextCodec userId =
             hasLeadingLineBreakCodec
             (nonemptyCodec (Codec.list (lazyRichText userId)))
         |> Codec.variant1 "Timestamp" RichText.Timestamp timeInMinutesCodec
+        |> Codec.variant1 "ChannelMention" RichText.ChannelMention mentionedChannelCodec
+        |> Codec.buildCustom
+
+
+mentionedChannelCodec : Codec RichText.MentionedChannel
+mentionedChannelCodec =
+    Codec.custom
+        (\guildChannelEncoder discordChannelEncoder value ->
+            case value of
+                RichText.MentionedGuildChannel argA ->
+                    guildChannelEncoder argA
+
+                RichText.MentionedDiscordChannel argA ->
+                    discordChannelEncoder argA
+        )
+        |> Codec.variant1 "MentionedGuildChannel" RichText.MentionedGuildChannel idCodec
+        |> Codec.variant1 "MentionedDiscordChannel" RichText.MentionedDiscordChannel discordIdCodec
         |> Codec.buildCustom
 
 

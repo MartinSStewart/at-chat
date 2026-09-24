@@ -56,7 +56,7 @@ import Bytes.Encode
 import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelHeader
-import ChannelName
+import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
@@ -116,7 +116,7 @@ import PersonName
 import Ports exposing (PwaStatus(..), RegisterPushSubscription(..))
 import Range exposing (Range)
 import RecoveryLogin
-import RichText exposing (Domain, RichText)
+import RichText exposing (Domain, MentionedChannel, RichText)
 import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
@@ -1463,7 +1463,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                                 users =
                                     User.allUsers local.localUser
                             in
-                            Ports.showNotification (User.toString senderId users) (RichText.toString local.localUser.timezone True users content)
+                            Ports.showNotification (User.toString senderId users) (RichText.toString local.localUser.timezone True users (LocalState.channelMentions (GuildOrDmId guildOrDmId) local) content)
 
                         _ ->
                             Command.none
@@ -1525,7 +1525,7 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                         Ports.Granted ->
                             Ports.showNotification
                                 (User.toString senderId allUsers)
-                                (RichText.toString local.localUser.timezone True allUsers content)
+                                (RichText.toString local.localUser.timezone True allUsers (LocalState.channelMentions (DiscordGuildOrDmId guildOrDmId) local) content)
 
                         _ ->
                             Command.none
@@ -2811,9 +2811,10 @@ setFocus model htmlId =
 textToRichText :
     NonemptyString
     -> List (Id UserId)
+    -> SeqDict MentionedChannel { a | name : ChannelName }
     -> LocalState
     -> Nonempty (RichText (Id UserId))
-textToRichText text memberIds local =
+textToRichText text memberIds channels local =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
@@ -2833,15 +2834,17 @@ textToRichText text memberIds local =
             SeqDict.empty
             memberIds
         )
+        channels
         text
 
 
 textToDiscordRichText :
     NonemptyString
     -> List (Discord.Id Discord.UserId)
+    -> SeqDict MentionedChannel { a | name : ChannelName }
     -> LocalState
     -> Nonempty (RichText (Discord.Id Discord.UserId))
-textToDiscordRichText text memberIds local =
+textToDiscordRichText text memberIds channels local =
     let
         allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allUsers =
@@ -2861,6 +2864,7 @@ textToDiscordRichText text memberIds local =
             SeqDict.empty
             memberIds
         )
+        channels
         text
 
 
@@ -2947,7 +2951,7 @@ changeUpdate localMsg local =
                                                 threadRouteWithRepliedTo
                                                 createdAt
                                                 localUser.session.userId
-                                                (textToRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) local)
+                                                (textToRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) (LocalState.guildChannelNames guild.channels) local)
                                                 attachedFiles
                                                 local
                                         , localUser =
@@ -2983,7 +2987,7 @@ changeUpdate localMsg local =
                                                 (Message.userTextMessageFrontend
                                                     createdAt
                                                     localUser.session.userId
-                                                    (textToRichText text [ localUser.session.userId, otherUserId ] local)
+                                                    (textToRichText text [ localUser.session.userId, otherUserId ] SeqDict.empty local)
                                                     (Message.maybeToReply maybeReplyTo)
                                                     attachedFiles
                                                 )
@@ -2994,7 +2998,7 @@ changeUpdate localMsg local =
                                                 (Message.userTextMessageFrontend
                                                     createdAt
                                                     localUser.session.userId
-                                                    (textToRichText text [ localUser.session.userId, otherUserId ] local)
+                                                    (textToRichText text [ localUser.session.userId, otherUserId ] SeqDict.empty local)
                                                     repliedTo
                                                     attachedFiles
                                                 )
@@ -3043,7 +3047,7 @@ changeUpdate localMsg local =
                                                 threadRouteWithRepliedTo
                                                 createdAt
                                                 currentUserId
-                                                (textToDiscordRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) local)
+                                                (textToDiscordRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) (LocalState.discordGuildChannelNames guild.channels) local)
                                                 attachedFiles
                                                 local
                                         , localUser =
@@ -3089,6 +3093,7 @@ changeUpdate localMsg local =
                                                                 (textToDiscordRichText
                                                                     text
                                                                     (NonemptyDict.keys dmChannel.members |> List.Nonempty.toList)
+                                                                    SeqDict.empty
                                                                     local
                                                                 )
                                                                 (Message.maybeToReply maybeReplyTo)
@@ -3242,6 +3247,7 @@ changeUpdate localMsg local =
                                                 (textToDiscordRichText
                                                     newContent
                                                     (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                                    (LocalState.discordGuildChannelNames guild.channels)
                                                     local
                                                 )
                                                 DoNotChangeAttachments
@@ -3267,6 +3273,7 @@ changeUpdate localMsg local =
                                         (textToDiscordRichText
                                             newContent
                                             (NonemptyDict.keys dmChannel.members |> List.Nonempty.toList)
+                                            SeqDict.empty
                                             local
                                         )
                                         DoNotChangeAttachments
@@ -6672,6 +6679,7 @@ editMessage time userId guildOrDmId newContent attachedFiles threadRoute local =
                                         (textToRichText
                                             newContent
                                             (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                            (LocalState.guildChannelNames guild.channels)
                                             local
                                         )
                                         (ChangeAttachments attachedFiles)
@@ -6694,7 +6702,7 @@ editMessage time userId guildOrDmId newContent attachedFiles threadRoute local =
                             LocalState.editMessageFrontendHelper
                                 time
                                 userId
-                                (textToRichText newContent [ local.localUser.session.userId, otherUserId ] local)
+                                (textToRichText newContent [ local.localUser.session.userId, otherUserId ] SeqDict.empty local)
                                 (ChangeAttachments attachedFiles)
                                 threadRoute
                                 dmChannel
@@ -7316,7 +7324,12 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                 ( GuildOrDmId guildOrDmId2, threadRoute )
                                                 { messageIndex = index
                                                 , text =
-                                                    RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.content.content
+                                                    RichText.toString
+                                                        local.localUser.timezone
+                                                        False
+                                                        (User.allUsers local.localUser)
+                                                        (LocalState.channelMentions (GuildOrDmId guildOrDmId2) local)
+                                                        message.content.content
                                                 , attachedFiles =
                                                     SeqDict.map (\_ a -> FileUploaded a) message.content.attachedFiles
                                                 }
@@ -7394,6 +7407,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                         local.localUser.timezone
                                                         False
                                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                                                        (LocalState.channelMentions (DiscordGuildOrDmId guildOrDmId2) local)
                                                         message.content.content
                                                 , attachedFiles =
                                                     SeqDict.map (\_ a -> FileUploaded a) message.content.attachedFiles

@@ -68,7 +68,7 @@ import Ports exposing (RegisterPushSubscription(..))
 import Postmark
 import Quantity
 import RateLimit
-import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
+import RichText exposing (DiscordCustomEmojiIdAndName, MentionedChannel, RichText)
 import Route exposing (ChannelsVisibleOnMobile(..), Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
@@ -2623,6 +2623,7 @@ discordStartThread timezone discordUser channel channelId threadId messageId mod
                                 DiscordUserData.username
                                 True
                                 model.discordUsers
+                                SeqDict.empty
                                 a.content.content
 
                         EncryptedUserTextMessage _ ->
@@ -3122,6 +3123,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         timezone
                                                         text
                                                         (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                                        (LocalState.discordGuildChannelNames guild.channels)
                                                         model
                                             in
                                             case ( RichText.toDiscord model.discordCustomEmojis richText, threadRouteWithMaybeReplyTo ) of
@@ -3263,6 +3265,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         timezone
                                                         text
                                                         (NonemptyDict.keys dmChannel.members |> List.Nonempty.toList)
+                                                        SeqDict.empty
                                                         model
                                             in
                                             case
@@ -4164,6 +4167,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         , ( id.otherUserId, otherUser )
                                                         ]
                                                     )
+                                                    SeqDict.empty
                                                     newContent
                                         in
                                         case
@@ -4225,6 +4229,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         timezone
                                         newContent
                                         (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                        (LocalState.discordGuildChannelNames guild.channels)
                                         model
                             in
                             case
@@ -4311,6 +4316,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         timezone
                                         newContent
                                         (NonemptyDict.keys channel.members |> List.Nonempty.toList)
+                                        SeqDict.empty
                                         model
                             in
                             case
@@ -7834,9 +7840,10 @@ textToDiscordRichText :
     Time.Zone
     -> NonemptyString
     -> List (Discord.Id Discord.UserId)
+    -> SeqDict MentionedChannel { name : ChannelName }
     -> BackendModel
     -> Nonempty (RichText (Discord.Id Discord.UserId))
-textToDiscordRichText timezone text memberIds model =
+textToDiscordRichText timezone text memberIds channels model =
     RichText.fromNonemptyString
         timezone
         (List.foldl
@@ -7857,6 +7864,7 @@ textToDiscordRichText timezone text memberIds model =
             SeqDict.empty
             memberIds
         )
+        channels
         text
 
 
@@ -8480,6 +8488,7 @@ sendEditMessage clientId changeId time timezone newContent attachedFiles2 id thr
                             SeqDict.empty
                             (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                         )
+                        (LocalState.guildChannelNames guild.channels)
                         newContent
             in
             case

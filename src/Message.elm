@@ -25,6 +25,7 @@ module Message exposing
     , encryptedUserTextMessageFrontend
     , handleDrawingChange
     , maybeToReply
+    , mentionsChannel
     , noDrawings
     , reactionEmojis
     , removeReactionEmoji
@@ -891,6 +892,30 @@ createdAt message =
 
         GameStarted gameStarted ->
             gameStarted.startedAt
+
+
+{-| Encrypted messages are only ever in DMs, which have no channels to mention.
+-}
+mentionsChannel : Message messageId userId -> Bool
+mentionsChannel message =
+    case message of
+        UserTextMessage data ->
+            RichText.mentionsChannel data.content.content
+
+        EncryptedUserTextMessage _ ->
+            False
+
+        UserJoinedMessage _ _ _ _ ->
+            False
+
+        DeletedMessage _ ->
+            False
+
+        CallStarted _ ->
+            False
+
+        GameStarted _ ->
+            False
 
 
 addReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId

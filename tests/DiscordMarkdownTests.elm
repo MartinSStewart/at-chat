@@ -1,5 +1,6 @@
 module DiscordMarkdownTests exposing (test)
 
+import ChannelName exposing (ChannelName)
 import CustomEmoji exposing (EmojiName)
 import Discord
 import Effect.Time as Time
@@ -8,7 +9,7 @@ import Fuzz
 import Id exposing (CustomEmojiId, Id)
 import List.Nonempty exposing (Nonempty(..))
 import OneToOne exposing (OneToOne)
-import RichText exposing (DiscordCustomEmojiIdAndName, HasLeadingLineBreak(..), RichText(..))
+import RichText exposing (DiscordCustomEmojiIdAndName, HasLeadingLineBreak(..), MentionedChannel(..), RichText(..))
 import RichTextTests
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
@@ -65,7 +66,7 @@ toDiscordTest source expected =
         (\_ ->
             case String.Nonempty.fromString source of
                 Just nonempty ->
-                    RichText.fromNonemptyString Time.utc SeqDict.empty nonempty
+                    RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty nonempty
                         |> RichText.toDiscord customEmojis
                         |> Expect.equal (Ok expected)
 
@@ -162,7 +163,7 @@ roundTripTests =
                 let
                     written : Nonempty (RichText (Discord.Id Discord.UserId))
                     written =
-                        RichText.fromNonemptyString Time.utc SeqDict.empty source
+                        RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty source
                 in
                 if List.Nonempty.all isPlainText written then
                     expectSurvivesDiscord source
@@ -264,7 +265,7 @@ expectSurvivesDiscord source =
     let
         written : Nonempty (RichText (Discord.Id Discord.UserId))
         written =
-            RichText.fromNonemptyString Time.utc SeqDict.empty source
+            RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty source
     in
     case RichText.toDiscord customEmojis written of
         Ok sent ->
@@ -606,6 +607,16 @@ userId =
     Unsafe.uint64 "137748026084163580" |> Discord.idFromUInt64
 
 
+channelId : Discord.Id Discord.ChannelId
+channelId =
+    Unsafe.uint64 "137748026084163581" |> Discord.idFromUInt64
+
+
+generalChannelName : ChannelName
+generalChannelName =
+    Unsafe.channelName "general"
+
+
 discordSpecificTests : Test
 discordSpecificTests =
     Test.describe
@@ -622,6 +633,32 @@ discordSpecificTests =
                         , UserMention userId
                         , NormalText ' ' "how are you?"
                         ]
+        , Test.test "channel mention" <|
+            \_ ->
+                fromDiscordHelper "Go to <#137748026084163581>!"
+                    |> Expect.equal
+                        [ NormalText 'G' "o to "
+                        , ChannelMention (MentionedDiscordChannel channelId)
+                        , NormalText '!' ""
+                        ]
+        , Test.test "channel mention is sent back to Discord unchanged" <|
+            \_ ->
+                fromDiscordHelper "<#137748026084163581>"
+                    |> List.Nonempty.fromList
+                    |> Maybe.map (RichText.toDiscord customEmojis)
+                    |> Expect.equal (Just (Ok "<#137748026084163581>"))
+        , Test.test "channel mention typed in at-chat is sent to Discord by id" <|
+            \_ ->
+                RichText.fromNonemptyString
+                    Time.utc
+                    SeqDict.empty
+                    (SeqDict.singleton
+                        (MentionedDiscordChannel channelId)
+                        { name = generalChannelName }
+                    )
+                    (NonemptyString 'h' "i #general")
+                    |> RichText.toDiscord customEmojis
+                    |> Expect.equal (Ok "hi <#137748026084163581>")
         , Test.test "timestamp with a format hint" <|
             \_ ->
                 fromDiscordHelper "<t:1786013400:s>"

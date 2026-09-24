@@ -1672,6 +1672,7 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
                             SeqDict.empty
                             (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                         )
+                        (LocalState.guildChannelNames guild.channels)
                         text
 
                 threadRouteNoReply : ThreadRoute
@@ -2170,6 +2171,7 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
             RichText.fromNonemptyString
                 timezone
                 (SeqDict.fromList [ ( session.userId, user ), ( otherUserId, otherUser ) ])
+                SeqDict.empty
                 text
     in
     case ( threadRouteWithReplyTo, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of

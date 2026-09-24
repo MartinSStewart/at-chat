@@ -1029,7 +1029,7 @@ colorPreview time isMobile local allUsers color =
             Message.userTextMessageNoEmbeds
                 time
                 local.localUser.session.userId
-                (NonemptyString '#' "# Hello" |> RichText.fromNonemptyString local.localUser.timezone allUsers)
+                (NonemptyString '#' "# Hello" |> RichText.fromNonemptyString local.localUser.timezone allUsers SeqDict.empty)
                 SeqDict.empty
                 Message.NoReply
                 SeqDict.empty
@@ -1049,6 +1049,7 @@ colorPreview time isMobile local allUsers color =
               )
             ]
         )
+        SeqDict.empty
         (\_ -> color)
         IsNotHovered
         (Id.fromInt 0)

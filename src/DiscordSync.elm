@@ -1023,7 +1023,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                 Nothing ->
                                                     Nothing
                                             )
-                                            (RichText.toStringWithGetter Time.utc DiscordUserData.username True model.discordUsers richText)
+                                            (RichText.toStringWithGetter Time.utc DiscordUserData.username True model.discordUsers SeqDict.empty richText)
                                             message
                                             model
 
@@ -1078,6 +1078,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                             DiscordUserData.username
                                                             False
                                                             model2.discordUsers
+                                                            SeqDict.empty
                                                             richText
                                                             |> String.Nonempty.fromString
                                                             |> Maybe.withDefault (NonemptyString ' ' "")
@@ -1559,6 +1560,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                     DiscordUserData.username
                                                                     False
                                                                     model2.discordUsers
+                                                                    (LocalState.discordGuildChannelNames guild.channels)
                                                                     richText
                                                                     |> String.Nonempty.fromString
                                                                     |> Maybe.withDefault (NonemptyString ' ' "")

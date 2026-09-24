@@ -107,6 +107,7 @@ module MyUi exposing
     , userLabelBackground
     , userLabelFontColor
     , userLabelHtml
+    , userLabelHtmlAttributes
     , virtualKeyboardOpen
     , warningHeader
     , weakHoverHighlight

@@ -21,6 +21,7 @@ module MessageInput exposing
     , view
     )
 
+import ChannelName exposing (ChannelName)
 import CustomEmoji exposing (CustomEmojiData)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.File as File exposing (File)
@@ -38,7 +39,7 @@ import List.Nonempty exposing (Nonempty)
 import MyUi
 import PersonName exposing (PersonName)
 import Range exposing (Range, SelectionDirection)
-import RichText exposing (RichText)
+import RichText exposing (MentionedChannel, RichText)
 import SeqDict exposing (SeqDict)
 import Sticker exposing (StickerData)
 import String.Nonempty
@@ -267,8 +268,9 @@ textarea :
         }
     -> { c | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
+    -> SeqDict MentionedChannel { d | name : ChannelName }
     -> Html Msg
-textarea allowEnterKeyLinebreak channelTextInputId placeholder charsLeft text richText attachedFiles localUser loggedIn users =
+textarea allowEnterKeyLinebreak channelTextInputId placeholder charsLeft text richText attachedFiles localUser loggedIn users channels =
     let
         keyDownNoDropdown : Html.Attribute Msg
         keyDownNoDropdown =
@@ -444,6 +446,7 @@ textarea allowEnterKeyLinebreak channelTextInputId placeholder charsLeft text ri
                         localUser.timezone
                         localUser.emojiData
                         users
+                        channels
                         attachedFiles
                         localUser.customEmojis
                         localUser.stickers
@@ -511,11 +514,12 @@ disabledTextarea placeholderText text attachedFiles localUser =
                         localUser.timezone
                         localUser.emojiData
                         users
+                        SeqDict.empty
                         attachedFiles
                         localUser.customEmojis
                         localUser.stickers
                         Nothing
-                        (RichText.fromNonemptyString localUser.timezone users nonempty)
+                        (RichText.fromNonemptyString localUser.timezone users SeqDict.empty nonempty)
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
@@ -572,8 +576,9 @@ editView :
     -> LocalUser
     -> { c | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
+    -> SeqDict MentionedChannel { d | name : ChannelName }
     -> Element Msg
-editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachmentsUploading attachedFiles localUser loggedIn users =
+editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachmentsUploading attachedFiles localUser loggedIn users channels =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
@@ -590,6 +595,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
         localUser
         loggedIn
         users
+        channels
         |> Ui.html
         |> Ui.el (Ui.height (Ui.px height) :: Ui.heightMax height :: containerAttributes roundTopCorners)
         |> Ui.el
@@ -677,8 +683,9 @@ view :
         }
     -> { a | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
+    -> SeqDict MentionedChannel { d | name : ChannelName }
     -> Element Msg
-view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles localUser loggedIn users =
+view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles localUser loggedIn users channels =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
@@ -695,6 +702,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
         localUser
         loggedIn
         users
+        channels
         |> Ui.html
         |> Ui.el (Ui.heightMax 400 :: containerAttributes roundTopCorners)
         |> Ui.el

@@ -409,7 +409,7 @@ the box it came from.
 -}
 toSourceText : LocalUser -> Nonempty (RichText (Id UserId)) -> String
 toSourceText localUser content =
-    RichText.toString localUser.timezone False (User.allUsers localUser) content
+    RichText.toString localUser.timezone False (User.allUsers localUser) SeqDict.empty content
 
 
 initShared : Shared
@@ -461,7 +461,7 @@ validateInput timezone users question =
         ( Just content, False ) ->
             -- Lazy so we can show error messages without having to parse everything
             (\() ->
-                { text = RichText.fromNonemptyString timezone users content
+                { text = RichText.fromNonemptyString timezone users SeqDict.empty content
                 , attachedFiles = FileStatus.onlyUploadedFiles question.attachedFiles
                 , reactions = SeqDict.empty
                 }
@@ -863,9 +863,9 @@ mapQuestionRichText :
 mapQuestionRichText timezone users change text =
     case String.Nonempty.fromString text of
         Just nonempty ->
-            RichText.fromNonemptyString timezone users nonempty
+            RichText.fromNonemptyString timezone users SeqDict.empty nonempty
                 |> change
-                |> RichText.toString timezone False users
+                |> RichText.toString timezone False users SeqDict.empty
 
         Nothing ->
             text
@@ -879,11 +879,11 @@ removeAttachedFileFromText timezone users fileId text =
     case String.Nonempty.fromString text of
         Just nonempty ->
             case
-                RichText.fromNonemptyString timezone users nonempty
+                RichText.fromNonemptyString timezone users SeqDict.empty nonempty
                     |> RichText.removeAttachedFile (\a -> a == fileId)
             of
                 Just richText ->
-                    RichText.toString timezone False users richText
+                    RichText.toString timezone False users SeqDict.empty richText
 
                 -- The file was all the question had in it.
                 Nothing ->
@@ -1502,7 +1502,7 @@ sheepEmoji =
 
 replyPreviewText : ValidatedInput -> String
 replyPreviewText input =
-    RichText.toString Time.utc False SeqDict.empty input.text |> String.trim
+    RichText.toString Time.utc False SeqDict.empty SeqDict.empty input.text |> String.trim
 
 
 {-| What two answers have to share to count as the same answer. Rendering the text with
@@ -1511,7 +1511,7 @@ what matters when the backend and every client have to reach the same grouping.
 -}
 answerKey : ValidatedInput -> String
 answerKey answer =
-    RichText.toString Time.utc False SeqDict.empty answer.text
+    RichText.toString Time.utc False SeqDict.empty SeqDict.empty answer.text
         |> String.trim
         |> String.toLower
 
@@ -1757,7 +1757,7 @@ questionInput localUser loggedIn users index question =
         richText : Maybe (Nonempty (RichText (Id UserId)))
         richText =
             String.Nonempty.fromString question.text
-                |> Maybe.map (RichText.fromNonemptyString localUser.timezone users)
+                |> Maybe.map (RichText.fromNonemptyString localUser.timezone users SeqDict.empty)
     in
     Ui.column
         [ Ui.spacing 4 ]
@@ -1796,6 +1796,7 @@ questionInput localUser loggedIn users index question =
                 localUser
                 loggedIn
                 users
+                SeqDict.empty
                 |> Ui.html
                 |> Ui.map (TypedQuestion questionId)
                 |> Ui.el
@@ -2035,6 +2036,7 @@ contentView time contentWidth localUser htmlId attachedFiles content =
         { domainWhitelist = localUser.user.domainWhitelist
         , revealedSpoilers = SeqSet.empty
         , users = User.allUsers localUser
+        , channels = SeqDict.empty
         , attachedFiles = attachedFiles
         , stickers = localUser.stickers
         , customEmojis = localUser.customEmojis
@@ -2202,7 +2204,7 @@ answerInput localUser loggedIn questionId answer =
         richText : Maybe (Nonempty (RichText (Id UserId)))
         richText =
             String.Nonempty.fromString answer.text
-                |> Maybe.map (RichText.fromNonemptyString localUser.timezone users)
+                |> Maybe.map (RichText.fromNonemptyString localUser.timezone users SeqDict.empty)
     in
     Ui.column
         [ Ui.spacing 4 ]
@@ -2241,6 +2243,7 @@ answerInput localUser loggedIn questionId answer =
                 localUser
                 loggedIn
                 users
+                SeqDict.empty
                 |> Ui.html
                 |> Ui.map (TypedAnswer questionId)
                 |> Ui.el
@@ -2412,7 +2415,7 @@ notesInput localUser loggedIn questionId notes =
         richText : Maybe (Nonempty (RichText (Id UserId)))
         richText =
             String.Nonempty.fromString notes.text
-                |> Maybe.map (RichText.fromNonemptyString localUser.timezone users)
+                |> Maybe.map (RichText.fromNonemptyString localUser.timezone users SeqDict.empty)
     in
     Ui.column
         [ Ui.spacing 4 ]
@@ -2448,6 +2451,7 @@ notesInput localUser loggedIn questionId notes =
                 localUser
                 loggedIn
                 users
+                SeqDict.empty
                 |> Ui.html
                 |> Ui.map (TypedNotes questionId)
                 |> Ui.el

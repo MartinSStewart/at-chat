@@ -1,5 +1,6 @@
 module RichTextTests exposing (simpleTest, test)
 
+import ChannelName exposing (ChannelName)
 import Effect.Time as Time
 import Expect
 import Fuzz exposing (Fuzzer)
@@ -8,7 +9,7 @@ import Id exposing (Id)
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import PersonName exposing (PersonName)
-import RichText exposing (EscapedChar(..), HasLeadingLineBreak(..), HeadingLevel(..), Language(..), RichText(..))
+import RichText exposing (EscapedChar(..), HasLeadingLineBreak(..), HeadingLevel(..), Language(..), MentionedChannel(..), RichText(..))
 import SeqDict
 import SeqSet
 import String.Nonempty exposing (NonemptyString(..))
@@ -26,6 +27,14 @@ users =
         [ ( Id.fromInt 1234, { name = Unsafe.personName "a1" } )
         , ( Id.fromInt 123, { name = Unsafe.personName "a" } )
         , ( Id.fromInt 12345, { name = Unsafe.personName "aa" } )
+        ]
+
+
+channels : SeqDict.SeqDict MentionedChannel { name : ChannelName }
+channels =
+    SeqDict.fromList
+        [ ( MentionedGuildChannel (Id.fromInt 1), { name = Unsafe.channelName "general" } )
+        , ( MentionedGuildChannel (Id.fromInt 2), { name = Unsafe.channelName "general-chat" } )
         ]
 
 
@@ -465,6 +474,12 @@ test =
             (Nonempty (Heading H1 NoLeadingLineBreak (Nonempty (Bold (Nonempty (NormalText 'b' "old heading") [])) [])) [])
         , fromNonemptyStringTest "## " (Nonempty (NormalText '#' "# ") [])
         , fromNonemptyStringTest "#hello" (Nonempty (NormalText '#' "hello") [])
+        , fromNonemptyStringTest "#general hi" (Nonempty (ChannelMention (MentionedGuildChannel (Id.fromInt 1))) [ NormalText ' ' "hi" ])
+        , fromNonemptyStringTest "#general-chat" (Nonempty (ChannelMention (MentionedGuildChannel (Id.fromInt 2))) [])
+        , fromNonemptyStringTest "see #general" (Nonempty (NormalText 's' "ee ") [ ChannelMention (MentionedGuildChannel (Id.fromInt 1)) ])
+        , fromNonemptyStringTest "*#general*" (Nonempty (Bold (Nonempty (ChannelMention (MentionedGuildChannel (Id.fromInt 1))) [])) [])
+        , fromNonemptyStringTest "# general" (Nonempty (Heading H1 NoLeadingLineBreak (Nonempty (NormalText 'g' "eneral") [])) [])
+        , toStringTest (Nonempty (ChannelMention (MentionedGuildChannel (Id.fromInt 2))) [ NormalText ' ' "hi" ]) "#general-chat hi"
         , fromNonemptyStringTest "-#nope" (Nonempty (NormalText '-' "#nope") [])
         , fromNonemptyStringTest "# one\n## two\n### three\n-# small"
             (Nonempty
@@ -487,8 +502,8 @@ test =
                     text =
                         NonemptyString '#' " hello\n## world"
                 in
-                RichText.fromNonemptyString Time.utc users text
-                    |> RichText.toString Time.utc False users
+                RichText.fromNonemptyString Time.utc users channels text
+                    |> RichText.toString Time.utc False users channels
                     |> Expect.equal (String.Nonempty.toString text)
             )
         , fromNonemptyStringTest "\n>no space" (Nonempty (NormalText '\n' ">no space") [])
@@ -510,8 +525,8 @@ test =
                     text =
                         NonemptyString '>' " asdf\n> f"
                 in
-                RichText.fromNonemptyString Time.utc users text
-                    |> RichText.toString Time.utc False users
+                RichText.fromNonemptyString Time.utc users channels text
+                    |> RichText.toString Time.utc False users channels
                     |> Expect.equal (String.Nonempty.toString text)
             )
 
@@ -522,8 +537,8 @@ test =
             fuzzer
             "Round trip"
             (\text ->
-                RichText.fromNonemptyString Time.utc users text
-                    |> RichText.toString Time.utc False users
+                RichText.fromNonemptyString Time.utc users channels text
+                    |> RichText.toString Time.utc False users channels
                     |> Expect.equal (String.Nonempty.toString text)
             )
         , simpleTest
@@ -735,6 +750,7 @@ timestampViewTest name now minutes expected =
                 { domainWhitelist = SeqSet.empty
                 , revealedSpoilers = SeqSet.empty
                 , users = users
+                , channels = SeqDict.empty
                 , attachedFiles = SeqDict.empty
                 , customEmojis = SeqDict.empty
                 , emojiData = Nothing
@@ -789,11 +805,12 @@ expectHighlighted source index char =
         Time.utc
         Nothing
         users
+        channels
         SeqDict.empty
         SeqDict.empty
         SeqDict.empty
         (Just { start = index, end = index + 1 })
-        (RichText.fromNonemptyString Time.utc users source)
+        (RichText.fromNonemptyString Time.utc users channels source)
         |> Html.div []
         |> Test.Html.Query.fromHtml
         |> Test.Html.Query.findAll
@@ -820,7 +837,7 @@ fromNonemptyStringTest : String -> Nonempty (RichText (Id userId)) -> Test
 fromNonemptyStringTest input expected =
     case String.Nonempty.fromString input of
         Just nonempty ->
-            Test.test (Debug.toString input) (\_ -> RichText.fromNonemptyString Time.utc users nonempty |> Expect.equal expected)
+            Test.test (Debug.toString input) (\_ -> RichText.fromNonemptyString Time.utc users channels nonempty |> Expect.equal expected)
 
         Nothing ->
             Debug.todo "Can't run a RichText parser on empty text"
@@ -835,7 +852,7 @@ fromNonemptyStringInZoneTest name timezone input expected =
         Just nonempty ->
             Test.test
                 (Debug.toString input ++ " read " ++ name)
-                (\_ -> RichText.fromNonemptyString timezone users nonempty |> Expect.equal expected)
+                (\_ -> RichText.fromNonemptyString timezone users channels nonempty |> Expect.equal expected)
 
         Nothing ->
             Debug.todo "Can't run a RichText parser on empty text"
@@ -868,9 +885,9 @@ roundTripTest name timezone =
                                 , NormalText ',' " be there"
                                 ]
                     in
-                    ( RichText.toString timezone False users original
+                    ( RichText.toString timezone False users channels original
                         |> String.Nonempty.fromString
-                        |> Maybe.map (RichText.fromNonemptyString timezone users)
+                        |> Maybe.map (RichText.fromNonemptyString timezone users channels)
                     , Just original
                     )
                 )
@@ -886,4 +903,4 @@ toStringTest : Nonempty (RichText (Id userId)) -> String -> Test
 toStringTest input expected =
     Test.test
         (Debug.toString ("RichText.toString: " ++ expected))
-        (\_ -> RichText.toString Time.utc False users input |> Expect.equal expected)
+        (\_ -> RichText.toString Time.utc False users channels input |> Expect.equal expected)

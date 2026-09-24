@@ -356,7 +356,7 @@ previewMessage createdAt createdBy text =
         { createdAt = createdAt
         , createdBy = createdBy
         , content =
-            { content = RichText.fromNonemptyString Time.utc SeqDict.empty text
+            { content = RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty text
             , embeds = Array.empty
             , attachedFiles = SeqDict.empty
             }
@@ -489,6 +489,7 @@ previewChannel time =
                             RichText.fromNonemptyString
                                 Time.utc
                                 SeqDict.empty
+                                SeqDict.empty
                                 (NonemptyString '[' "!1] here's that bird I drew, now on my backpack!")
                         , embeds = Array.empty
                         , attachedFiles =
@@ -536,7 +537,7 @@ previewChannel time =
                     { createdAt = previewMinutesAgo time 1621
                     , createdBy = previewUserId
                     , content =
-                        { content = RichText.fromNonemptyString Time.utc SeqDict.empty (NonemptyString 'b' "ird!")
+                        { content = RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty (NonemptyString 'b' "ird!")
                         , embeds = Array.empty
                         , attachedFiles = SeqDict.empty
                         }
@@ -601,7 +602,7 @@ previewGameChannel time =
                     { createdAt = previewMinutesAgo time 1
                     , createdBy = Id.fromInt 4
                     , content =
-                        { content = RichText.fromNonemptyString Time.utc SeqDict.empty (NonemptyString 'C' "ould have gotten a triple with that 😛")
+                        { content = RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty (NonemptyString 'C' "ould have gotten a triple with that 😛")
                         , embeds = Array.empty
                         , attachedFiles = SeqDict.empty
                         }

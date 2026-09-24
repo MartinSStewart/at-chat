@@ -1551,7 +1551,7 @@ checkPrivateKeyNeverReachedTheServer privateKeyText backend =
                     (\message ->
                         case message of
                             Message.UserTextMessage data ->
-                                RichText.toString Time.utc False SeqDict.empty data.content.content |> Just
+                                RichText.toString Time.utc False SeqDict.empty SeqDict.empty data.content.content |> Just
 
                             _ ->
                                 Nothing
@@ -1603,7 +1603,7 @@ plainTextMessages dmChannel =
             (\message ->
                 case message of
                     Message.UserTextMessage data ->
-                        RichText.toString Time.utc False SeqDict.empty data.content.content |> Just
+                        RichText.toString Time.utc False SeqDict.empty SeqDict.empty data.content.content |> Just
 
                     _ ->
                         Nothing
@@ -1618,7 +1618,7 @@ encryptedMessageText message =
                 Just bytes ->
                     case stubPlainText bytes of
                         Ok contentAndEmbeds ->
-                            RichText.toString Time.utc False SeqDict.empty contentAndEmbeds.content |> Just
+                            RichText.toString Time.utc False SeqDict.empty SeqDict.empty contentAndEmbeds.content |> Just
 
                         Err _ ->
                             Just "<not a message the test could read>"

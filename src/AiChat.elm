@@ -454,7 +454,7 @@ chatToMessage : String -> List Message
 chatToMessage text =
     case String.Nonempty.fromString text of
         Just text2 ->
-            RichText.fromNonemptyString Time.utc SeqDict.empty text2
+            RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty text2
                 |> richTextToMessage "" []
                 |> (\( currentText, list ) -> TextMessage currentText :: list |> List.reverse)
 
@@ -471,6 +471,9 @@ richTextToMessage previousText previousList nonempty =
                     ( currentText ++ String.fromChar char ++ rest, list )
 
                 RichText.UserMention _ ->
+                    ( currentText, list )
+
+                RichText.ChannelMention _ ->
                     ( currentText, list )
 
                 RichText.Bold nonempty2 ->
