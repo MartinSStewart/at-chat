@@ -271,7 +271,7 @@ init =
       , scheduledExportState = Nothing
       , lastScheduledExportTime = Nothing
       , sendMessageRateLimits = SeqDict.empty
-      , sessionRateLimits = SeqDict.empty
+      , sessionRateLimits = RateLimit.sessionRateLimitsInit
       , toBackendLogs = Array.empty
       , backendMsgLogs = Array.empty
       , stickers = SeqDict.empty
@@ -459,7 +459,7 @@ updateHelper msg model =
             disconnectClient time sessionId clientId model
 
         BackendGotTime sessionId clientId toBackend time ->
-            case RateLimit.checkAndUpdateRateLimit RateLimit.sessionRequestLimits time sessionId model.sessionRateLimits of
+            case RateLimit.checkAndUpdateSessionRateLimit time sessionId model.sessionRateLimits of
                 Err () ->
                     ( model, Command.none )
 
@@ -2050,8 +2050,6 @@ updateHelper msg model =
                             model.deletedGuilds
                     , connections = List.foldl SeqDict.remove model.connections expiredSessions
                     , sessions = List.foldl SeqDict.remove model.sessions expiredSessions
-                    , sessionRateLimits =
-                        RateLimit.dropExpired RateLimit.sessionRequestLimits time model.sessionRateLimits
                 }
             , Discord.getStickerPacksPayload
                 |> DiscordSync.http model.serverSecret
@@ -3111,7 +3109,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 id
                                 (\_ discordUser _ guild channel ->
-                                    case RateLimit.checkAndUpdateRateLimit RateLimit.sendMessageLimits time discordUser.linkedTo model.sendMessageRateLimits of
+                                    case RateLimit.checkAndUpdateRateLimit time discordUser.linkedTo model.sendMessageRateLimits of
                                         Ok sendMessageRateLimits ->
                                             let
                                                 attachedFiles2 : SeqDict (Id FileId) FileData
@@ -3254,7 +3252,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     in
                                     case
                                         ( threadRouteWithMaybeReplyTo
-                                        , RateLimit.checkAndUpdateRateLimit RateLimit.sendMessageLimits time discordUser.linkedTo model.sendMessageRateLimits
+                                        , RateLimit.checkAndUpdateRateLimit time discordUser.linkedTo model.sendMessageRateLimits
                                         )
                                     of
                                         ( NoThreadWithMaybeMessage maybeReplyTo, Ok sendMessageRateLimits ) ->

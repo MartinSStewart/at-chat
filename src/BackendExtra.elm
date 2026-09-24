@@ -1653,7 +1653,7 @@ sendGuildMessage :
     -> BackendGuild
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeReplyTo text attachedFiles emojis session user guild =
-    case ( SeqDict.get id.channelId guild.channels, RateLimit.checkAndUpdateRateLimit RateLimit.sendMessageLimits time session.userId model.sendMessageRateLimits ) of
+    case ( SeqDict.get id.channelId guild.channels, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of
         ( Just channel, Ok sendMessageRateLimits ) ->
             let
                 richText : Nonempty (RichText (Id UserId))
@@ -2078,7 +2078,7 @@ sendEncryptedDm :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 sendEncryptedDm time clientId changeId id fileHashes contentAndEmbeds notification threadRouteWithReplyTo session user dmChannelId dmChannel model =
-    case RateLimit.checkAndUpdateRateLimit RateLimit.sendMessageLimits time session.userId model.sendMessageRateLimits of
+    case RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits of
         Ok sendMessageRateLimits ->
             let
                 ( threadRouteWithMessage, dmChannel2 ) =
@@ -2172,7 +2172,7 @@ sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo 
                 (SeqDict.fromList [ ( session.userId, user ), ( otherUserId, otherUser ) ])
                 text
     in
-    case ( threadRouteWithReplyTo, RateLimit.checkAndUpdateRateLimit RateLimit.sendMessageLimits time session.userId model.sendMessageRateLimits ) of
+    case ( threadRouteWithReplyTo, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of
         ( ViewThreadWithRepliedTo threadId repliedTo, Ok sendMessageRateLimits ) ->
             let
                 ( message, embedCmds, stickers ) =

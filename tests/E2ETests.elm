@@ -3126,7 +3126,7 @@ sessionRateLimitTest config =
                             initialCount =
                                 getMessageCount dataBefore.backend
                         in
-                        [ List.range 0 RateLimit.sessionRequestLimits.shortWindowMax
+                        [ List.range 0 RateLimit.sessionShortWindowMaxRequests
                             |> List.map
                                 (\_ ->
                                     admin.sendToBackend
@@ -3142,9 +3142,23 @@ sessionRateLimitTest config =
                         , checkMessageCount "User2 not rate limited" (initialCount + 1)
                         , sendMessage
                             admin
-                            (Duration.inMilliseconds RateLimit.sessionRequestLimits.shortWindow + 1)
+                            (Duration.inMilliseconds RateLimit.sessionShortWindowDuration + 1)
                             2
                         , checkMessageCount "After window reset" (initialCount + 2)
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                let
+                                    actual : Int
+                                    actual =
+                                        SeqDict.size (E2EHelper.unwrapBackend backend).sessionRateLimits.shortWindowCounts
+                                in
+                                if actual == 1 then
+                                    Ok ()
+
+                                else
+                                    Err ("Short window wasn't emptied. Expected 1 session but got " ++ String.fromInt actual)
+                            )
                         ]
                     )
                 ]
@@ -3229,27 +3243,27 @@ sendMessageRateLimitTest config =
                             initialCount =
                                 getMessageCount dataBefore.backend
                         in
-                        [ List.range 0 (RateLimit.sendMessageLimits.shortWindowMax - 1)
+                        [ List.range 0 (RateLimit.shortWindowMaxMessages - 1)
                             |> List.map (sendMessage admin 0)
                             |> T.collapsableGroup "Send messages up to rate limit"
-                        , List.range RateLimit.sendMessageLimits.shortWindowMax (RateLimit.sendMessageLimits.shortWindowMax + 4)
+                        , List.range RateLimit.shortWindowMaxMessages (RateLimit.shortWindowMaxMessages + 4)
                             |> List.map (sendMessage admin 0)
                             |> T.collapsableGroup "Send messages exceeding rate limit"
-                        , checkMessageCount "After rate limit" (initialCount + RateLimit.sendMessageLimits.shortWindowMax)
+                        , checkMessageCount "After rate limit" (initialCount + RateLimit.shortWindowMaxMessages)
                         , T.collapsableGroup
                             "User2 can still send while admin is rate limited"
                             [ sendMessage user 0 200 ]
-                        , checkMessageCount "User2 not rate limited" (initialCount + RateLimit.sendMessageLimits.shortWindowMax + 1)
+                        , checkMessageCount "User2 not rate limited" (initialCount + RateLimit.shortWindowMaxMessages + 1)
                         , T.collapsableGroup
                             "After rate limit window, sending works again"
-                            [ sendMessage admin (Duration.inMilliseconds RateLimit.sendMessageLimits.shortWindow + 1) 100 ]
-                        , checkMessageCount "After window reset" (initialCount + RateLimit.sendMessageLimits.shortWindowMax + 2)
-                        , List.range 101 (RateLimit.sendMessageLimits.longWindowMax + 101)
+                            [ sendMessage admin (Duration.inMilliseconds RateLimit.shortWindowDuration + 1) 100 ]
+                        , checkMessageCount "After window reset" (initialCount + RateLimit.shortWindowMaxMessages + 2)
+                        , List.range 101 (RateLimit.longWindowMaxMessages + 101)
                             |> List.map (sendMessage admin 2000)
                             |> T.collapsableGroup "Send messages exceeding rate limit"
-                        , checkMessageCount "After long rate limit" (initialCount + RateLimit.sendMessageLimits.longWindowMax + 1)
-                        , sendMessage admin (Duration.inMilliseconds RateLimit.sendMessageLimits.longWindow) 1000
-                        , checkMessageCount "After long rate limit has expired" (initialCount + RateLimit.sendMessageLimits.longWindowMax + 2)
+                        , checkMessageCount "After long rate limit" (initialCount + RateLimit.longWindowMaxMessages + 1)
+                        , sendMessage admin (Duration.inMilliseconds RateLimit.longWindowDuration) 1000
+                        , checkMessageCount "After long rate limit has expired" (initialCount + RateLimit.longWindowMaxMessages + 2)
                         , T.checkBackend
                             100
                             (\backend ->

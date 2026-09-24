@@ -124,6 +124,7 @@ import Ports exposing (NotificationPermission, RegisterPushSubscription, Subscri
 import Postmark
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
+import RateLimit
 import RecoveryLogin
 import RichText exposing (DiscordCustomEmojiIdAndName, Domain, RichText)
 import Route exposing (ChannelSidebarMode, Route)
@@ -491,7 +492,7 @@ type alias BackendModel =
     , scheduledExportState : Maybe ExportStateProgress
     , lastScheduledExportTime : Maybe Time.Posix
     , sendMessageRateLimits : SeqDict (Id UserId) (Array Time.Posix)
-    , sessionRateLimits : SeqDict SessionId (Array Time.Posix)
+    , sessionRateLimits : RateLimit.SessionRateLimits
     , toBackendLogs : Array ToBackendLogData
     , backendMsgLogs : Array BackendMsgLogData
     , stickers : SeqDict (Id StickerId) StickerData
