@@ -801,7 +801,11 @@ updateLoaded msg model =
                                 FrontendExtra.routePush model2 (HomePageRoute Nothing)
 
                             else
-                                ( model2, Command.none )
+                                ( model2
+                                , FrontendExtra.routeReplace
+                                    model2
+                                    (HomePageRoute Nothing)
+                                )
 
         RecoveryLoginMsg recoveryLoginMsg ->
             case model.loginStatus of

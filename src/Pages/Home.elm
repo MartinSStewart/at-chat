@@ -96,7 +96,7 @@ header isMobile route loginStatus =
                     [ Ui.width Ui.shrink
                     , Ui.height Ui.fill
                     , Ui.contentCenterY
-                    , Ui.paddingWith { left = 8, right = 8, top = 4, bottom = 8 }
+                    , Ui.paddingWith { left = 16, right = 16, top = 4, bottom = 8 }
                     , Ui.linkNewTab Pages.Privacy.repoUrl
                     , MyUi.hoverText "Source code on GitHub"
                     , Ui.opacity 0.7

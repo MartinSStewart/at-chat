@@ -280,6 +280,7 @@ miniViewContainer xOffset buttons =
         , Ui.move { x = xOffset, y = -16, z = 0 }
         , Ui.height (Ui.px miniButtonSize)
         , Ui.clip
+        , MyUi.noShrinking
         ]
         buttons
 
