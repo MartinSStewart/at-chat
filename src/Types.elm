@@ -491,6 +491,7 @@ type alias BackendModel =
     , scheduledExportState : Maybe ExportStateProgress
     , lastScheduledExportTime : Maybe Time.Posix
     , sendMessageRateLimits : SeqDict (Id UserId) (Array Time.Posix)
+    , sessionRateLimits : SeqDict SessionId (Array Time.Posix)
     , toBackendLogs : Array ToBackendLogData
     , backendMsgLogs : Array BackendMsgLogData
     , stickers : SeqDict (Id StickerId) StickerData

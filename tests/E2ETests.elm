@@ -2530,6 +2530,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , sendMessageRateLimitTest normalConfig
+    , sessionRateLimitTest normalConfig
     , E2EHelper.startTest
         "Scheduled backend export uploads bytes"
         E2EHelper.startTime
@@ -3046,6 +3047,111 @@ backupRequests data =
         data.httpRequests
 
 
+sessionRateLimitTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+sessionRateLimitTest config =
+    E2EHelper.startTest
+        "Session rate limiting"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                let
+                    guildId : Id GuildId
+                    guildId =
+                        Id.fromInt 1
+
+                    channelId : Id ChannelId
+                    channelId =
+                        Id.fromInt 0
+
+                    sendMessage :
+                        T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                        -> Float
+                        -> Int
+                        -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                    sendMessage client delayInMs changeIndex =
+                        client.sendToBackend
+                            delayInMs
+                            (LocalModelChangeRequest (ChangeId changeIndex)
+                                (Local_SendMessage
+                                    (Time.millisToPosix 0)
+                                    Time.utc
+                                    (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
+                                    (NonemptyString 'm' ("sg " ++ String.fromInt changeIndex))
+                                    (Message.NoThreadWithRepliedTo Message.NoReply)
+                                    SeqDict.empty
+                                    []
+                                )
+                            )
+
+                    getMessageCount : E2EHelper.BackendModel2 -> Int
+                    getMessageCount backend =
+                        case SeqDict.get guildId (E2EHelper.unwrapBackend backend).guilds of
+                            Just guild ->
+                                case SeqDict.get channelId guild.channels of
+                                    Just channel ->
+                                        IdArray.length channel.messages
+
+                                    Nothing ->
+                                        -1
+
+                            Nothing ->
+                                -1
+
+                    checkMessageCount : String -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                    checkMessageCount label expected =
+                        T.checkBackend
+                            100
+                            (\backend ->
+                                let
+                                    actual : Int
+                                    actual =
+                                        getMessageCount backend
+                                in
+                                if actual == expected then
+                                    Ok ()
+
+                                else
+                                    Err (label ++ ": Expected " ++ String.fromInt expected ++ " messages but got " ++ String.fromInt actual)
+                            )
+                in
+                [ T.andThen
+                    100
+                    (\dataBefore ->
+                        let
+                            initialCount : Int
+                            initialCount =
+                                getMessageCount dataBefore.backend
+                        in
+                        [ List.range 0 RateLimit.sessionRequestLimits.shortWindowMax
+                            |> List.map
+                                (\_ ->
+                                    admin.sendToBackend
+                                        0
+                                        (GetPublicGoMatchRequest (SecretId.fromString "not-a-real-match"))
+                                )
+                            |> T.collapsableGroup "Use up the session's request budget"
+                        , sendMessage admin 0 0
+                        , checkMessageCount "While rate limited" initialCount
+                        , T.collapsableGroup
+                            "User2 can still send while admin's session is rate limited"
+                            [ sendMessage user 0 1 ]
+                        , checkMessageCount "User2 not rate limited" (initialCount + 1)
+                        , sendMessage
+                            admin
+                            (Duration.inMilliseconds RateLimit.sessionRequestLimits.shortWindow + 1)
+                            2
+                        , checkMessageCount "After window reset" (initialCount + 2)
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
 sendMessageRateLimitTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
@@ -3123,27 +3229,27 @@ sendMessageRateLimitTest config =
                             initialCount =
                                 getMessageCount dataBefore.backend
                         in
-                        [ List.range 0 (RateLimit.shortWindowMaxMessages - 1)
+                        [ List.range 0 (RateLimit.sendMessageLimits.shortWindowMax - 1)
                             |> List.map (sendMessage admin 0)
                             |> T.collapsableGroup "Send messages up to rate limit"
-                        , List.range RateLimit.shortWindowMaxMessages (RateLimit.shortWindowMaxMessages + 4)
+                        , List.range RateLimit.sendMessageLimits.shortWindowMax (RateLimit.sendMessageLimits.shortWindowMax + 4)
                             |> List.map (sendMessage admin 0)
                             |> T.collapsableGroup "Send messages exceeding rate limit"
-                        , checkMessageCount "After rate limit" (initialCount + RateLimit.shortWindowMaxMessages)
+                        , checkMessageCount "After rate limit" (initialCount + RateLimit.sendMessageLimits.shortWindowMax)
                         , T.collapsableGroup
                             "User2 can still send while admin is rate limited"
                             [ sendMessage user 0 200 ]
-                        , checkMessageCount "User2 not rate limited" (initialCount + RateLimit.shortWindowMaxMessages + 1)
+                        , checkMessageCount "User2 not rate limited" (initialCount + RateLimit.sendMessageLimits.shortWindowMax + 1)
                         , T.collapsableGroup
                             "After rate limit window, sending works again"
-                            [ sendMessage admin (Duration.inMilliseconds RateLimit.shortWindowDuration + 1) 100 ]
-                        , checkMessageCount "After window reset" (initialCount + RateLimit.shortWindowMaxMessages + 2)
-                        , List.range 101 (RateLimit.longWindowMaxMessages + 101)
+                            [ sendMessage admin (Duration.inMilliseconds RateLimit.sendMessageLimits.shortWindow + 1) 100 ]
+                        , checkMessageCount "After window reset" (initialCount + RateLimit.sendMessageLimits.shortWindowMax + 2)
+                        , List.range 101 (RateLimit.sendMessageLimits.longWindowMax + 101)
                             |> List.map (sendMessage admin 2000)
                             |> T.collapsableGroup "Send messages exceeding rate limit"
-                        , checkMessageCount "After long rate limit" (initialCount + RateLimit.longWindowMaxMessages + 1)
-                        , sendMessage admin (Duration.inMilliseconds RateLimit.longWindowDuration) 1000
-                        , checkMessageCount "After long rate limit has expired" (initialCount + RateLimit.longWindowMaxMessages + 2)
+                        , checkMessageCount "After long rate limit" (initialCount + RateLimit.sendMessageLimits.longWindowMax + 1)
+                        , sendMessage admin (Duration.inMilliseconds RateLimit.sendMessageLimits.longWindow) 1000
+                        , checkMessageCount "After long rate limit has expired" (initialCount + RateLimit.sendMessageLimits.longWindowMax + 2)
                         , T.checkBackend
                             100
                             (\backend ->

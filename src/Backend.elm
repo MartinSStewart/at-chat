@@ -271,6 +271,7 @@ init =
       , scheduledExportState = Nothing
       , lastScheduledExportTime = Nothing
       , sendMessageRateLimits = SeqDict.empty
+      , sessionRateLimits = SeqDict.empty
       , toBackendLogs = Array.empty
       , backendMsgLogs = Array.empty
       , stickers = SeqDict.empty
@@ -458,51 +459,57 @@ updateHelper msg model =
             disconnectClient time sessionId clientId model
 
         BackendGotTime sessionId clientId toBackend time ->
-            let
-                oldModel : BackendModel
-                oldModel =
-                    model
-            in
-            updateFromFrontendWithTime
-                time
-                sessionId
-                clientId
-                toBackend
-                { model
-                    | connections =
-                        SeqDict.updateIfExists
-                            sessionId
-                            (NonemptyDict.updateIfExists
-                                clientId
-                                (\data ->
-                                    { lastRequest = LastRequest time
-                                    , call = data.call
-                                    , remoteCallData = data.remoteCallData
-                                    , currentlyViewing = data.currentlyViewing
-                                    }
-                                )
-                            )
-                            model.connections
-                }
-                |> (\( model2, cmds ) ->
-                        ( model2
-                        , if Env.isProduction then
-                            Command.batch
-                                [ Task.perform
-                                    (\endTime ->
-                                        ToBackendCompleted
-                                            (BackendExtra.toBackendLog toBackend)
-                                            (SeqDict.get sessionId oldModel.sessions |> Maybe.map .userId)
-                                            { startTime = time, endTime = endTime }
-                                    )
-                                    Time.now
-                                , cmds
-                                ]
+            case RateLimit.checkAndUpdateRateLimit RateLimit.sessionRequestLimits time sessionId model.sessionRateLimits of
+                Err () ->
+                    ( model, Command.none )
 
-                          else
-                            cmds
-                        )
-                   )
+                Ok sessionRateLimits ->
+                    let
+                        oldModel : BackendModel
+                        oldModel =
+                            model
+                    in
+                    updateFromFrontendWithTime
+                        time
+                        sessionId
+                        clientId
+                        toBackend
+                        { model
+                            | connections =
+                                SeqDict.updateIfExists
+                                    sessionId
+                                    (NonemptyDict.updateIfExists
+                                        clientId
+                                        (\data ->
+                                            { lastRequest = LastRequest time
+                                            , call = data.call
+                                            , remoteCallData = data.remoteCallData
+                                            , currentlyViewing = data.currentlyViewing
+                                            }
+                                        )
+                                    )
+                                    model.connections
+                            , sessionRateLimits = sessionRateLimits
+                        }
+                        |> (\( model2, cmds ) ->
+                                ( model2
+                                , if Env.isProduction then
+                                    Command.batch
+                                        [ Task.perform
+                                            (\endTime ->
+                                                ToBackendCompleted
+                                                    (BackendExtra.toBackendLog toBackend)
+                                                    (SeqDict.get sessionId oldModel.sessions |> Maybe.map .userId)
+                                                    { startTime = time, endTime = endTime }
+                                            )
+                                            Time.now
+                                        , cmds
+                                        ]
+
+                                  else
+                                    cmds
+                                )
+                           )
 
         SentLoginEmail time emailAddress result ->
             BackendExtra.addLog time (Log.LoginEmail result emailAddress) model
@@ -2043,6 +2050,8 @@ updateHelper msg model =
                             model.deletedGuilds
                     , connections = List.foldl SeqDict.remove model.connections expiredSessions
                     , sessions = List.foldl SeqDict.remove model.sessions expiredSessions
+                    , sessionRateLimits =
+                        RateLimit.dropExpired RateLimit.sessionRequestLimits time model.sessionRateLimits
                 }
             , Discord.getStickerPacksPayload
                 |> DiscordSync.http model.serverSecret
@@ -3102,7 +3111,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 id
                                 (\_ discordUser _ guild channel ->
-                                    case RateLimit.checkAndUpdateRateLimit time discordUser.linkedTo model.sendMessageRateLimits of
+                                    case RateLimit.checkAndUpdateRateLimit RateLimit.sendMessageLimits time discordUser.linkedTo model.sendMessageRateLimits of
                                         Ok sendMessageRateLimits ->
                                             let
                                                 attachedFiles2 : SeqDict (Id FileId) FileData
@@ -3245,7 +3254,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     in
                                     case
                                         ( threadRouteWithMaybeReplyTo
-                                        , RateLimit.checkAndUpdateRateLimit time discordUser.linkedTo model.sendMessageRateLimits
+                                        , RateLimit.checkAndUpdateRateLimit RateLimit.sendMessageLimits time discordUser.linkedTo model.sendMessageRateLimits
                                         )
                                     of
                                         ( NoThreadWithMaybeMessage maybeReplyTo, Ok sendMessageRateLimits ) ->
