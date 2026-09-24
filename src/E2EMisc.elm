@@ -2,6 +2,7 @@ module E2EMisc exposing
     ( adminConnectionsShowWhatIsViewedTest
     , banMemberTest
     , channelSearchTest
+    , channelSuggestionTest
     , codeBlockInputTest
     , colorPickerTest
     , dmThreadsTest
@@ -1734,6 +1735,41 @@ emojiSuggestionTest config =
                 , admin.input 100 Pages.Guild.channelTextInputId "Party 🎉"
                 , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "🎉" ])
+                ]
+            )
+        ]
+
+
+{-| Writing a # suggests the guild's channels, and the one that's picked links to that channel
+once sent.
+-}
+channelSuggestionTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+channelSuggestionTest config =
+    E2EHelper.startTest
+        "Writing a # suggests channels"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
+                , admin.click 100 Pages.Guild.channelTextInputId
+                , admin.input 100 Pages.Guild.channelTextInputId "See #gen"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 8, end = 8 }
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.mentionChannelText ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "#general" ])
+                , admin.input 100 Pages.Guild.channelTextInputId "See #zz"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 7, end = 7 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionChannelText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "See #gen"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 8, end = 8 }
+                , admin.click 100 (Pages.Guild.dropdownButtonId 0)
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionChannelText ])
+                , admin.input 100 Pages.Guild.channelTextInputId "See #general"
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.tag "a", Test.Html.Selector.exactText "#general" ])
                 ]
             )
         ]

@@ -63,6 +63,7 @@ type alias TextInputFocus =
 type NameSoFar
     = NameSoFar NameSoFarData
     | EmojiSoFar NameSoFarData
+    | ChannelSoFar NameSoFarData
     | TimestampSoFar Range TimestampData
 
 

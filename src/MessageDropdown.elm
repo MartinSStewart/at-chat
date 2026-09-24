@@ -1,8 +1,10 @@
 module MessageDropdown exposing
     ( addStickerOrEmojiText
     , addTimestampText
+    , channelDropdownList
     , discordUserDropdownList
     , emojiDropdownList
+    , mentionChannelText
     , mentionUserText
     , pressedArrowInDropdown
     , pressedDropdownItem
@@ -11,6 +13,7 @@ module MessageDropdown exposing
     )
 
 import Array
+import ChannelName exposing (ChannelName)
 import CustomEmoji
 import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -33,7 +36,7 @@ import NonemptyDict
 import PersonName
 import Ports
 import Range exposing (Range)
-import RichText
+import RichText exposing (MentionedChannel)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker
@@ -50,6 +53,11 @@ import UserSession exposing (DiscordFrontendUser)
 mentionUserText : String
 mentionUserText =
     "Mention a user"
+
+
+mentionChannelText : String
+mentionChannelText =
+    "Mention a channel"
 
 
 addStickerOrEmojiText : String
@@ -121,6 +129,9 @@ pressedArrowInDropdown isMobile timezone time nameSoFar guildOrDmId index maybeP
                         Nothing ->
                             Nothing
 
+                ChannelSoFar nameSoFarData ->
+                    channelDropdownList isMobile nameSoFarData guildOrDmId local |> List.length |> helper
+
                 TimestampSoFar _ timestampData ->
                     timestampDropdownList timezone time timestampData |> List.length |> helper
 
@@ -165,6 +176,22 @@ userDropdownList isMobile nameSoFar guildOrDmId local =
                         Nothing
             )
         |> List.sortBy (\( _, user ) -> PersonName.toString user.name)
+        |> List.take (maxDropdownUsers isMobile)
+
+
+channelDropdownList : Bool -> NameSoFarData -> AnyGuildOrDmId -> LocalState -> List ( MentionedChannel, ChannelName )
+channelDropdownList isMobile nameSoFar guildOrDmId local =
+    LocalState.channelMentions guildOrDmId local
+        |> SeqDict.toList
+        |> List.filterMap
+            (\( channel, { name } ) ->
+                if String.startsWith nameSoFar.nameSoFar (ChannelName.toString name) then
+                    Just ( channel, name )
+
+                else
+                    Nothing
+            )
+        |> List.sortBy (\( _, name ) -> ChannelName.toString name)
         |> List.take (maxDropdownUsers isMobile)
 
 
@@ -412,6 +439,19 @@ pressedDropdownItem setFocusMsg isMobile time nameSoFar guildOrDmId channelTextI
                         Nothing ->
                             Nothing
 
+                ChannelSoFar nameSoFarData ->
+                    case channelDropdownList isMobile nameSoFarData guildOrDmId local |> List.Extra.getAt dropdownIndex of
+                        Just ( _, name ) ->
+                            ( { start = nameSoFarData.index
+                              , end = nameSoFarData.index + String.length nameSoFarData.nameSoFar
+                              }
+                            , ChannelName.toString name
+                            )
+                                |> Just
+
+                        Nothing ->
+                            Nothing
+
                 TimestampSoFar range timestampData ->
                     case timestampDropdownList local.localUser.timezone time timestampData |> List.Extra.getAt dropdownIndex of
                         Just timestamp ->
@@ -575,6 +615,28 @@ view isMobile time nameSoFar guildOrDmId skinTone emojiData local dropdownButton
                 Nothing ->
                     dropdownContainer nameSoFar dropdown 40 [ Ui.el [ Ui.height (Ui.px 40) ] (Ui.text "Loading emojis...") ]
 
+        ChannelSoFar nameSoFarData ->
+            let
+                rows : List (Element Msg)
+                rows =
+                    List.indexedMap
+                        (\index ( _, name ) ->
+                            dropdownButton
+                                isMobile
+                                False
+                                dropdown
+                                dropdownButtonId
+                                index
+                                (Ui.text ("#" ++ ChannelName.toString name))
+                        )
+                        (channelDropdownList isMobile nameSoFarData guildOrDmId local)
+
+                dropdownViewHeight : Int
+                dropdownViewHeight =
+                    List.length rows * dropdownButtonHeight isMobile False
+            in
+            dropdownContainer nameSoFar dropdown dropdownViewHeight rows
+
         TimestampSoFar _ timestamp ->
             let
                 rows : List (Element Msg)
@@ -633,6 +695,9 @@ dropdownContainer nameSoFar dropdown contentHeight content =
 
                     EmojiSoFar _ ->
                         addStickerOrEmojiText
+
+                    ChannelSoFar _ ->
+                        mentionChannelText
 
                     TimestampSoFar _ _ ->
                         addTimestampText

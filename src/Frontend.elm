@@ -6616,6 +6616,15 @@ selectionChanged maybeHtmlId maybeRange model =
                                                         Nothing ->
                                                             False
 
+                                                Just (ChannelSoFar channelSoFar) ->
+                                                    MessageDropdown.channelDropdownList
+                                                        (MyUi.isMobile model)
+                                                        channelSoFar
+                                                        guildOrDmId
+                                                        local
+                                                        |> List.isEmpty
+                                                        |> not
+
                                                 Just (TimestampSoFar _ _) ->
                                                     True
 

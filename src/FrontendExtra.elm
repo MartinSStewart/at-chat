@@ -6808,6 +6808,17 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
                         else
                             Nothing
 
+                    "#" ->
+                        if isValidStart (index - 1) text then
+                            { nameSoFar = String.slice index selection.start text
+                            , index = index
+                            }
+                                |> ChannelSoFar
+                                |> Just
+
+                        else
+                            Nothing
+
                     _ ->
                         helper (index - 1) text
 
