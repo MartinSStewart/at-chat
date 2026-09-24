@@ -6150,6 +6150,11 @@ discordParseLoop customEmojis2 source index modifiers accText revNodes =
                     if List.head modifiers == Just DiscordIsBold then
                         closeModifier afterSymbol accText revNodes Bold (discordModifierToSymbol DiscordIsBold)
 
+                    else if List.head modifiers == Just DiscordIsItalic && String.slice index (index + 3) source == "***" then
+                        -- Three asterisks in a row end the italic first and leave the last two
+                        -- to end the bold around it
+                        closeModifier (index + 1) accText revNodes Italic (discordModifierToSymbol DiscordIsItalic)
+
                     else if List.member DiscordIsBold modifiers then
                         finalizeResult discordModifierToSymbol accText revNodes modifiers index
 
@@ -6471,7 +6476,20 @@ toDiscordHelper customEmojis2 content =
                     "**" ++ toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty) ++ "**"
 
                 Italic nonempty ->
-                    "*" ++ toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty) ++ "*"
+                    let
+                        inner : String
+                        inner =
+                            toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty)
+                    in
+                    if String.startsWith "*" inner || String.endsWith "*" inner then
+                        -- Italic written with asterisks around bold runs the two markers
+                        -- together into "***", which Discord reads as bold around italic
+                        -- instead. Underscores are Discord's other way of writing italic and
+                        -- don't run together with the bold markers.
+                        "_" ++ inner ++ "_"
+
+                    else
+                        "*" ++ inner ++ "*"
 
                 Underline nonempty ->
                     "__" ++ toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty) ++ "__"

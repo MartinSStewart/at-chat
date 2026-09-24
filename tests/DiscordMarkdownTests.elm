@@ -96,6 +96,11 @@ escapingTests =
         , toDiscordTest "_italic_" "*italic*"
         , toDiscordTest "`code`" "`code`"
         , toDiscordTest "__underline__" "__underline__"
+        , -- Italic around bold written with asterisks would run the markers together into
+          -- "***", which Discord reads as bold around italic instead
+          toDiscordTest "_*bold*_" "_**bold**_"
+        , toDiscordTest "_*bold* and more_" "_**bold** and more_"
+        , toDiscordTest "*_italic_*" "***italic***"
         ]
 
 
@@ -143,6 +148,12 @@ roundTripTests =
           roundTripTest "- not a bullet point"
         , -- An underline that never closes is text, and the heading inside it stays text too
           roundTripTest "__\n# a"
+        , roundTripTest "_*bold inside italic*_"
+        , roundTripTest "*_italic inside bold_*"
+        , roundTripTest "_*bold* then text_"
+        , roundTripTest "*_italic_ then text*"
+        , roundTripTest "_text then *bold*_"
+        , roundTripTest "_a *b* c_"
         , roundTripTest "a link https://abc.com/a_b in the middle"
         , Test.fuzz
             sourceTextFuzzer
@@ -376,6 +387,10 @@ basicFormattingTests =
                         , Bold (Nonempty (NormalText 'w' "orld") [])
                         , NormalText ' ' "test"
                         ]
+        , Test.test "three asterisks are bold around italic" <|
+            \_ ->
+                fromDiscordHelper "***abc***"
+                    |> Expect.equal [ Bold (Nonempty (Italic (Nonempty (NormalText 'a' "bc") [])) []) ]
         , Test.test "italic text" <|
             \_ ->
                 fromDiscordHelper "_italic_"
