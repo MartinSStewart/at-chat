@@ -11,20 +11,14 @@ module Pages.Guild exposing
     , chatWithText
     , confirmLeaveGuildText
     , conversationContainerId
-    , declineE2eeText
     , decodeMessageView
     , deleteGuildText
     , directMessagesText
-    , disableE2eeText
     , discordGuildView
     , dropdownButtonId
-    , e2eeDeclinedText
     , e2eeSectionIsExpanded
-    , e2eeSectionTitle
     , editingText
-    , enableE2eeText
     , encodeMessageView
-    , enterPrivateKeyText
     , friendLabel
     , friendsSearchInputId
     , guildMembersText
@@ -35,7 +29,6 @@ module Pages.Guild exposing
     , importChannelText
     , importedChannelText
     , leaveGuildText
-    , missingPrivateKeyText
     , neverPostedText
     , newGuildFormInit
     , newGuildFormView
@@ -45,17 +38,13 @@ module Pages.Guild exposing
     , noUnreadMessagesText
     , olderUnreadMessagesText
     , profileImageButtonId
-    , requestAcceptedText
     , setImportChannelStatus
     , startOfThreadText
     , startedACallText
     , threadMessageHtmlId
-    , toAcceptE2eeText
     , typingDebouncerDelay
     , typingText
     , userTextMessageContent
-    , waitingForE2eeText
-    , youDeclinedE2eeText
     )
 
 import Array
@@ -160,66 +149,6 @@ typingText =
 editingText : String
 editingText =
     "Editing..."
-
-
-e2eeSectionTitle : String
-e2eeSectionTitle =
-    "End-to-end encryption (E2EE)"
-
-
-enableE2eeText : Maybe ( Id UserId, Time.Posix ) -> String
-enableE2eeText disabledBy =
-    case disabledBy of
-        Just _ ->
-            "Re-enable E2EE"
-
-        Nothing ->
-            "Enable E2EE"
-
-
-declineE2eeText : String
-declineE2eeText =
-    "Decline request"
-
-
-disableE2eeText : String
-disableE2eeText =
-    "Disable E2EE"
-
-
-e2eeDeclinedText : String
-e2eeDeclinedText =
-    "declined your E2EE request"
-
-
-youDeclinedE2eeText : String
-youDeclinedE2eeText =
-    "You declined the request to to enable E2EE."
-
-
-enterPrivateKeyText : String
-enterPrivateKeyText =
-    "2. Enter your private key to enable E2EE"
-
-
-waitingForE2eeText : String
-waitingForE2eeText =
-    "2. Waiting for "
-
-
-toAcceptE2eeText : String
-toAcceptE2eeText =
-    " to accept message encryption."
-
-
-requestAcceptedText : String
-requestAcceptedText =
-    "accepted and E2EE is now enabled. Enter your private key here to decrypted messages"
-
-
-missingPrivateKeyText : String
-missingPrivateKeyText =
-    "3. Your private key is needed for this device. Without it you can't decrypt existing messages or send encrypted messages. Enter your private key here."
 
 
 chatWithText : String
@@ -2518,7 +2447,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
         (PressedExpandE2eeSection otherUserId)
         MyUi.background2
         True
-        e2eeSectionTitle
+        Encryption.e2eeSectionTitle
         [ Ui.column
             [ Ui.paddingWith { left = 8, right = 8, top = 8, bottom = 0 }, Ui.spacing 16 ]
             [ case e2ee of
@@ -2537,7 +2466,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                             , MyUi.simpleButton
                                 (Dom.id "guild_declineE2ee")
                                 (PressedDeclineE2eeRequest otherUserId)
-                                (Ui.text declineE2eeText)
+                                (Ui.text Encryption.declineE2eeText)
                             , Ui.text "Or follow the instructions below to set it up."
                             , Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.font1 ] Ui.none
                             ]
@@ -2618,7 +2547,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                     MyUi.simpleButton
                                         (Dom.id "guild_enableE2ee")
                                         (PressedEnableE2ee otherUserId)
-                                        (Ui.text (enableE2eeText disabledBy))
+                                        (Ui.text (Encryption.enableE2eeText disabledBy))
                         ]
 
                 DmChannel.E2eeRequestedBy ( requestedBy, _ ) ->
@@ -2636,14 +2565,14 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                     Just _ ->
                                         privateKeyInput
                                             otherUserId
-                                            (Ui.text enterPrivateKeyText)
+                                            (Ui.text Encryption.enterPrivateKeyText)
                                             keyInput
                             ]
 
                     else if otherUserId == localUser.session.userId then
                         privateKeyInput
                             otherUserId
-                            (Ui.text enterPrivateKeyText)
+                            (Ui.text Encryption.enterPrivateKeyText)
                             keyInput
 
                     else
@@ -2651,9 +2580,9 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                             [ Ui.spacing 16 ]
                             [ Ui.Prose.paragraph
                                 [ MyUi.htmlStyle "word-wrap" "anywhere", Ui.paddingXY 0 4 ]
-                                [ Ui.text waitingForE2eeText
+                                [ Ui.text Encryption.waitingForE2eeText
                                 , Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt otherUserId localUser))
-                                , Ui.text toAcceptE2eeText
+                                , Ui.text Encryption.toAcceptE2eeText
                                 ]
                             , MyUi.simpleButton
                                 (Dom.id "guild_cancelE2ee")
@@ -2665,7 +2594,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                     if declinedBy == localUser.session.userId then
                         Ui.column
                             [ Ui.spacing 16 ]
-                            [ Ui.Prose.paragraph [] [ Ui.text youDeclinedE2eeText ]
+                            [ Ui.Prose.paragraph [] [ Ui.text Encryption.youDeclinedE2eeText ]
                             , if not risksAccepted then
                                 Ui.none
 
@@ -2678,13 +2607,13 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                         MyUi.simpleButton
                                             (Dom.id "guild_enableE2ee")
                                             (PressedEnableE2ee otherUserId)
-                                            (Ui.text (enableE2eeText Nothing))
+                                            (Ui.text (Encryption.enableE2eeText Nothing))
                             ]
 
                     else
                         Ui.Prose.paragraph
                             []
-                            [ Ui.text (User.toStringAlt otherUserId localUser ++ " " ++ e2eeDeclinedText) ]
+                            [ Ui.text (User.toStringAlt otherUserId localUser ++ " " ++ Encryption.e2eeDeclinedText) ]
 
                 DmChannel.E2eeEnabled data ->
                     Ui.column
@@ -2694,7 +2623,7 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                             MyUi.simpleButton
                                 (Dom.id "guild_disableE2ee")
                                 (PressedDisableE2ee otherUserId)
-                                (Ui.text disableE2eeText)
+                                (Ui.text Encryption.disableE2eeText)
 
                           else
                             privateKeyInput
@@ -2703,11 +2632,11 @@ e2eeSectionView localUser otherUserId e2ee isExpanded keyInput =
                                     "3. "
                                         ++ User.toStringAlt otherUserId localUser
                                         ++ " "
-                                        ++ requestAcceptedText
+                                        ++ Encryption.requestAcceptedText
                                         |> Ui.text
 
                                  else
-                                    Ui.text missingPrivateKeyText
+                                    Ui.text Encryption.missingPrivateKeyText
                                 )
                                 keyInput
                         ]

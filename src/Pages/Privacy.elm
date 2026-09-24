@@ -6,6 +6,7 @@ import Effect.Time as Time
 import Html
 import Html.Attributes
 import RichText
+import Route exposing (Overlay(..))
 import SeqDict
 import SeqSet
 import Sticker exposing (AnimationMode(..))
@@ -23,7 +24,9 @@ view : msg -> Ui.Element msg
 view noOp =
     NonemptyString
         '#'
-        """ Privacy
+        (""" Privacy
+
+## What is stored
 
 at-chat stores or has access to the following sensitive data:
 * Your email address
@@ -32,14 +35,25 @@ at-chat stores or has access to the following sensitive data:
 * Any files you upload that contain sensitive data
 * A session token with full access to your Discord account should you choose to use the Discord integration (a comprehensive warning is shown before a user can link a Discord account so they understand the implications)
 
-## Purposes
+## What it is for
 
-Sensitive data is stored in order to provide you features. It is not used for marketing, advertising, AI training, or sold to 3rd parties. Sensitive data may be used by an administrator for the sole purpose of debugging bugs or other software issues within at-chat.
+Sensitive data is stored in order to provide you features. It is not used for marketing, advertising, AI training, or sold to 3rd parties.
 
-Sensitive data is not accessible to any 3rd parties with two exceptions:
+Sensitive data may be used by an administrator for the sole purpose of fixing software issues within at-chat. If this is a concern, you can [enable end-to-end encryption]("""
+            ++ Route.encode (Route.HomePageRoute (Just E2eeInfoOverlay))
+            ++ """) on direct messages to restrict what is visible to an admin.
+
+
+Sensitive data is not accessible to any 3rd parties with 3 exceptions:
 * [Hetzner](https://www.hetzner.com/) which owns the hardware at-chat runs on. The server being rented is located in Finland.
 * If you use the Discord integration, then messages and files sent to a Discord guild or Discord user will of course be available to Discord.
+* If someone you are writing to has enabled email notifications then your messages, profile image, and name will be sent to their email provider.
+
+## When is it deleted
+
+<WIP>
 """
+        )
         |> RichText.fromNonemptyString Time.utc SeqDict.empty
         |> RichText.view
             (Dom.id "privacy-page")

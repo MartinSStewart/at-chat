@@ -8,22 +8,33 @@ port module Encryption exposing
     , EncryptedData(..)
     , FromJs(..)
     , ToJs(..)
+    , declineE2eeText
     , decryptManyMessages
     , decryptMessage
+    , disableE2eeText
+    , e2eeDeclinedText
+    , e2eeSectionTitle
+    , enableE2eeText
     , encryptFile
     , encryptManyMessages
     , encryptMessage
     , encryptMessageAndNotification
     , encryptedData
+    , enterPrivateKeyText
     , fromJs
     , fromJsCodec
     , hash
     , info
+    , missingPrivateKeyText
     , notificationText
+    , requestAcceptedText
     , storeFileKeys
     , storeSharedSecret
+    , toAcceptE2eeText
     , toBase64
     , toJsCodec
+    , waitingForE2eeText
+    , youDeclinedE2eeText
     )
 
 {-| The symmetric half of end-to-end encrypted DMs, which lives in the browser rather
@@ -120,16 +131,80 @@ encryptedData =
     EncryptedData
 
 
+e2eeSectionTitle : String
+e2eeSectionTitle =
+    "End-to-end encryption (E2EE)"
+
+
+enableE2eeText : Maybe ( Id UserId, Time.Posix ) -> String
+enableE2eeText disabledBy =
+    case disabledBy of
+        Just _ ->
+            "Re-enable E2EE"
+
+        Nothing ->
+            "Enable E2EE"
+
+
+declineE2eeText : String
+declineE2eeText =
+    "Decline request"
+
+
+disableE2eeText : String
+disableE2eeText =
+    "Disable E2EE"
+
+
+e2eeDeclinedText : String
+e2eeDeclinedText =
+    "declined your E2EE request"
+
+
+youDeclinedE2eeText : String
+youDeclinedE2eeText =
+    "You declined the request to to enable E2EE."
+
+
+enterPrivateKeyText : String
+enterPrivateKeyText =
+    "2. Enter your private key to enable E2EE"
+
+
+waitingForE2eeText : String
+waitingForE2eeText =
+    "2. Waiting for "
+
+
+toAcceptE2eeText : String
+toAcceptE2eeText =
+    " to accept message encryption."
+
+
+requestAcceptedText : String
+requestAcceptedText =
+    "accepted and E2EE is now enabled. Enter your private key here to decrypted messages"
+
+
+missingPrivateKeyText : String
+missingPrivateKeyText =
+    "3. Your private key is needed for this device. Without it you can't decrypt existing messages or send encrypted messages. Enter your private key here."
+
+
 info : msg -> Ui.Element msg
 info noOp =
     NonemptyString
         '#'
-        """ End-to-end encryption (E2EE) in at-chat
+        (""" End-to-end encryption (E2EE) in at-chat
 
 
 ## Quick summary of E2EE
 With E2EE enabled your messages are encrypted when stored on the server. This means, even if a hacker gets access to the at-chat server data, they won't be able to read your conversation.
 
+## How to enable E2EE
+Go to a direct message channel (not a Discord direct message channel) and then click the gear icon in the top right. You should see a section titled """
+            ++ e2eeSectionTitle
+            ++ """. Open it and follow the instructions.
 
 ## Limitations
 * One of the web's best features is that it's very easy to distribute new versions of a website/webapp. Unfortunately for E2EE this is a disadvantage. Anyone with the power to change what JS code the server sends to a client (either a hacker or malicious admin) can modify the webapp to covertly spy on you since messages are not encrypted once loaded on your webapp.
@@ -158,6 +233,7 @@ The following is not encrypted:
 * Games
 * Voice chats (E2EE voice chats might be added in the future)
 """
+        )
         |> RichText.fromNonemptyString Time.utc SeqDict.empty
         |> RichText.view
             (Dom.id "e2ee-info")
