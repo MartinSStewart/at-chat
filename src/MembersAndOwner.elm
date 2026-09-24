@@ -9,6 +9,7 @@ module MembersAndOwner exposing
     , membersAndOwner
     , owner
     , removeMember
+    , updateMember
     )
 
 import SeqDict exposing (SeqDict)
@@ -55,6 +56,11 @@ isMember userId (MembersAndOwner members2 ownerId) =
 removeMember : userId -> MembersAndOwner userId a -> MembersAndOwner userId a
 removeMember userId (MembersAndOwner members2 ownerId) =
     MembersAndOwner (SeqDict.remove userId members2) ownerId
+
+
+updateMember : userId -> (a -> a) -> MembersAndOwner userId a -> MembersAndOwner userId a
+updateMember userId updateFunc (MembersAndOwner members2 ownerId) =
+    MembersAndOwner (SeqDict.updateIfExists userId updateFunc members2) ownerId
 
 
 owner : MembersAndOwner userId a -> userId

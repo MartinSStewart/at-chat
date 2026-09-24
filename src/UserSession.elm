@@ -5,7 +5,6 @@ module UserSession exposing
     , NotificationMode(..)
     , PreviouslyLastViewedMessage(..)
     , PushSubscription(..)
-    , SetViewing(..)
     , SheepGameQuestion
     , ToBeFilledInByBackend(..)
     , UnreadOverviewData
@@ -28,7 +27,6 @@ module UserSession exposing
     , setPreviouslyLastViewedChannelMessage
     , setPreviouslyLastViewedThreadMessage
     , setSheepGameQuestions
-    , setViewingToCurrentlyViewing
     , unreadOverviewMessageLimit
     )
 
@@ -39,7 +37,7 @@ import Effect.Time as Time
 import FileStatus exposing (FileHash, FileId, FileStatus)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, QuestionId, ThreadMessageId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_ChannelThreadId, Viewing_DiscordChannelId, Viewing_DiscordChannelThreadId, Viewing_DiscordDmId, Viewing_DmId, Viewing_DmThreadId)
 import IdArray exposing (IdArray)
-import Message exposing (Message)
+import Message exposing (Message, RepliedToGame)
 import PersonName exposing (PersonName)
 import Ports exposing (SubscribeData)
 import SeqDict exposing (SeqDict)
@@ -86,7 +84,7 @@ type alias FrontendUserSession =
 
 type ChannelHeaderTab
     = ChannelHeaderTab_VoiceChat
-    | ChannelHeaderTab_Games (Maybe (Id ChannelMessageId))
+    | ChannelHeaderTab_Games (Maybe (Id ChannelMessageId)) (Maybe RepliedToGame)
     | ChannelHeaderTab_ChannelDescription
     | ChannelHeaderTab_Draw
 
@@ -102,18 +100,6 @@ type NotificationMode
     = NoNotifications
     | NotifyWhenRunning
     | PushNotifications
-
-
-type SetViewing
-    = ViewDm Viewing_DmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
-    | ViewDmThread Viewing_DmThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
-    | ViewDiscordDm Viewing_DiscordDmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
-    | ViewChannel Viewing_ChannelData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
-    | ViewChannelThread Viewing_ChannelThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
-    | ViewDiscordChannel Viewing_DiscordChannelData (ToBeFilledInByBackend (ViewDiscordGuildData ChannelMessageId))
-    | ViewDiscordChannelThread Viewing_DiscordChannelThreadData (ToBeFilledInByBackend (ViewDiscordGuildData ThreadMessageId))
-    | StopViewingChannel
-    | ViewOverview (ToBeFilledInByBackend UnreadOverviewData)
 
 
 type Viewing
@@ -243,37 +229,6 @@ type alias DiscordFrontendUser =
     }
 
 
-setViewingToCurrentlyViewing : SetViewing -> Viewing
-setViewingToCurrentlyViewing viewing =
-    case viewing of
-        ViewDm data _ ->
-            Viewing_Dm data
-
-        ViewDmThread data _ ->
-            Viewing_DmThread data
-
-        ViewDiscordDm data _ ->
-            Viewing_DiscordDm data
-
-        ViewChannel data _ ->
-            Viewing_Channel data
-
-        ViewChannelThread data _ ->
-            Viewing_ChannelThread data
-
-        ViewDiscordChannel data _ ->
-            Viewing_DiscordChannel data
-
-        ViewDiscordChannelThread data _ ->
-            Viewing_DiscordChannelThread data
-
-        StopViewingChannel ->
-            Viewing_None
-
-        ViewOverview _ ->
-            Viewing_Overview
-
-
 isViewing : AnyGuildOrDmId -> ThreadRoute -> Viewing -> Bool
 isViewing guildOrDmId threadRoute viewing =
     case ( viewing, threadRoute ) of
@@ -386,7 +341,7 @@ isViewingGame guildOrDmId matchId viewing =
 
         Viewing_Dm data ->
             case data.channelHeaderTab of
-                Just (ChannelHeaderTab_Games (Just viewingMatchId)) ->
+                Just (ChannelHeaderTab_Games (Just viewingMatchId) _) ->
                     isViewing (GuildOrDmId guildOrDmId) NoThread viewing && (matchId == viewingMatchId)
 
                 _ ->
@@ -400,7 +355,7 @@ isViewingGame guildOrDmId matchId viewing =
 
         Viewing_Channel data ->
             case data.channelHeaderTab of
-                Just (ChannelHeaderTab_Games (Just viewingMatchId)) ->
+                Just (ChannelHeaderTab_Games (Just viewingMatchId) _) ->
                     isViewing (GuildOrDmId guildOrDmId) NoThread viewing && (matchId == viewingMatchId)
 
                 _ ->

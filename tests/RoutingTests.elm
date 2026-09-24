@@ -4,6 +4,7 @@ import DmChannelId
 import Expect
 import Fuzz exposing (Fuzzer)
 import Id exposing (Id)
+import Message exposing (RepliedToGame(..))
 import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), Overlay(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import Test exposing (Test)
@@ -80,8 +81,11 @@ tabFuzzer : Fuzzer ChannelHeaderTab
 tabFuzzer =
     Fuzz.oneOfValues
         [ ChannelHeaderTab_VoiceChat
-        , ChannelHeaderTab_Games Nothing
-        , ChannelHeaderTab_Games (Just (Id.fromInt 123))
+        , ChannelHeaderTab_Games Nothing Nothing
+        , ChannelHeaderTab_Games (Just (Id.fromInt 123)) Nothing
+        , ChannelHeaderTab_Games (Just (Id.fromInt 123)) (Just (RepliedTo_SheepGameAnswer (Id.fromInt 5) (Id.fromInt 2)))
+        , ChannelHeaderTab_Games (Just (Id.fromInt 123)) (Just (RepliedTo_SheepGameNotes (Id.fromInt 2)))
+        , ChannelHeaderTab_Games (Just (Id.fromInt 123)) (Just (RepliedTo_WordSpellingGameMove 3))
         , ChannelHeaderTab_Draw
         ]
 

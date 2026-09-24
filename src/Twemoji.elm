@@ -54,8 +54,8 @@ spriteReference sprite emoji =
     "/cacheable/emoji/" ++ sprite ++ ".svg#e" ++ fileName emoji
 
 
-spriteView : String -> String -> String -> String -> Html msg
-spriteView size yOffset sprite emoji =
+spriteView : String -> String -> String -> Html msg
+spriteView size sprite emoji =
     Html.span
         [ Html.Attributes.style "display" "inline-block" ]
         [ Svg.svg
@@ -63,7 +63,7 @@ spriteView size yOffset sprite emoji =
             , Html.Attributes.style "width" size
             , Html.Attributes.style "height" size
             , Html.Attributes.style "display" "inline-block"
-            , Html.Attributes.style "transform" ("translateY(" ++ yOffset ++ ")")
+            , Html.Attributes.style "vertical-align" ("calc(0.375em - " ++ size ++ " / 2)")
             ]
             [ Svg.use
                 [ Svg.Attributes.xlinkHref (spriteReference sprite emoji) ]

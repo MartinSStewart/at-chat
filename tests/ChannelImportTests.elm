@@ -217,7 +217,7 @@ textMessage =
                 (EmojiOrCustomEmoji_Emoji (Emoji.fromString "😀"))
                 (NonemptySet.singleton otherUserId)
         , editedAt = Just (time 3)
-        , repliedTo = Nothing
+        , repliedTo = Message.NoReply
         , drawings =
             Just
                 { timestampDrawings = Drawing.emptyDrawing
@@ -237,7 +237,7 @@ encryptedMessage =
         , fileHashes = SeqSet.empty
         , reactions = SeqDict.empty
         , editedAt = Nothing
-        , repliedTo = Nothing
+        , repliedTo = Message.NoReply
         , drawings = Nothing
         }
 

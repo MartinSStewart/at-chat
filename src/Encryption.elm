@@ -135,7 +135,7 @@ With E2EE enabled your messages are encrypted when stored on the server. This me
 * One of the web's best features is that it's very easy to distribute new versions of a website/webapp. Unfortunately for E2EE this is a disadvantage. Anyone with the power to change what JS code the server sends to a client (either a hacker or malicious admin) can modify the webapp to covertly spy on you since messages are not encrypted once loaded on your webapp.
 * Because Browsers can't be relied upon to store data indefinitely, some compromises have been made to user experience. [Forward secrecy](https://en.wikipedia.org/wiki/Forward_secrecy) is not supported and you have to manually store your private key outside of at-chat.
 * Browser extensions can also potentially spy on your conversation
-* Video streaming is not available and file uploading might take longer
+* File uploading and downloading might take longer
 
 For these reasons, consider at-chat's E2EE "best effort". It will protect you from a lazy malicious admin (who can't be bothered of going through the trouble of deploying spyware to the client) and from a hacker who gets read-only access to the server.
 

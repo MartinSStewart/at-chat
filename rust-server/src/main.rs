@@ -194,7 +194,6 @@ fn thumbnail_filepath(hash: &str) -> String {
     format!("./var/lib/atchat/storage/{hash}_thumbnail")
 }
 
-
 enum FetchedContent {
     Image(Vec<u8>),
     Html(String),
@@ -202,6 +201,13 @@ enum FetchedContent {
 
 async fn fetch_content(client: &reqwest::Client, url: &str) -> Option<FetchedContent> {
     let response: reqwest::Response = client.get(url).send().await.ok()?;
+
+    // Not every error page says so in its body: a missing YouTube thumbnail comes
+    // back as a 404 carrying a real grey placeholder JPEG, which would otherwise
+    // be embedded as if it were the video's own frame.
+    if !response.status().is_success() {
+        return None;
+    }
 
     let is_image = response
         .headers()
@@ -222,9 +228,22 @@ async fn fetch_content(client: &reqwest::Client, url: &str) -> Option<FetchedCon
         Some(FetchedContent::Html(
             String::from_utf8_lossy(&buf).into_owned(),
         ))
-    }
-    else {
+    } else {
         None
+    }
+}
+
+async fn fetch_text(client: &reqwest::Client, url: &str) -> Option<String> {
+    match fetch_content(client, url).await? {
+        FetchedContent::Html(body) => Some(body),
+        FetchedContent::Image(_) => None,
+    }
+}
+
+async fn fetch_image(client: &reqwest::Client, url: &str) -> Option<ImageData> {
+    match fetch_content(client, url).await? {
+        FetchedContent::Image(bytes) => image_data_from_bytes(url, &bytes),
+        FetchedContent::Html(_) => None,
     }
 }
 
@@ -286,7 +305,187 @@ fn parse_html_safe(body: String, url: String) -> Option<HTML> {
         .flatten()
 }
 
+// Sites that only hand their Opengraph tags to a crawler they recognise. The
+// token at the end is what klipy matches on; without it the page is a 403, and
+// YouTube answers a bare request with a Google rate limit page instead.
+const EMBED_USER_AGENT: &str =
+    "Mozilla/5.0 (compatible; at-chat/1.0; +https://at-chat.app) Discordbot/2.0";
+
+fn embed_client() -> Option<reqwest::Client> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .user_agent(EMBED_USER_AGENT)
+        .build()
+        .ok()
+}
+
+/// The video id in a `youtube.com` or `youtu.be` link, in any of the forms the
+/// site's own share menu produces.
+fn youtube_video_id(url: &str) -> Option<String> {
+    let url = reqwest::Url::parse(url).ok()?;
+
+    let video_id = match url.host_str()?.trim_start_matches("www.") {
+        "youtu.be" => url.path_segments()?.next()?.to_owned(),
+        "youtube.com" | "m.youtube.com" | "music.youtube.com" | "youtube-nocookie.com" => {
+            let mut segments = url.path_segments()?;
+
+            match segments.next()? {
+                "watch" => url
+                    .query_pairs()
+                    .find(|(key, _)| key == "v")
+                    .map(|(_, value)| value.into_owned())?,
+                "shorts" | "live" | "embed" | "v" => segments.next()?.to_owned(),
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+
+    if video_id.is_empty()
+        || !video_id
+            .chars()
+            .all(|char| char.is_ascii_alphanumeric() || char == '-' || char == '_')
+    {
+        None
+    } else {
+        Some(video_id)
+    }
+}
+
+/// The `<user>/status/<id>` part of a link to one of vxTwitter's mirror domains.
+fn vx_twitter_status_path(url: &str) -> Option<String> {
+    let url = reqwest::Url::parse(url).ok()?;
+
+    match url.host_str()?.trim_start_matches("www.") {
+        "fixvx.com" | "vxtwitter.com" | "fixupx.com" | "twittpr.com" => (),
+        _ => return None,
+    }
+
+    let mut segments = url.path_segments()?;
+    let screen_name = segments.next()?;
+
+    if segments.next()? != "status" {
+        return None;
+    }
+
+    let status_id = segments.next()?;
+
+    if screen_name.is_empty()
+        || status_id.is_empty()
+        || !status_id.chars().all(|char| char.is_ascii_digit())
+    {
+        None
+    } else {
+        Some(format!("{screen_name}/status/{status_id}"))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct YoutubeOembed {
+    title: Option<String>,
+    author_name: Option<String>,
+    thumbnail_url: Option<String>,
+}
+
+async fn youtube_embed(client: &reqwest::Client, video_id: &str) -> Option<EmbedResponse> {
+    // youtube_video_id has already checked that the id is made of url safe
+    // characters, so the watch link inside this query string needs no escaping.
+    let oembed_url = format!(
+        "https://www.youtube.com/oembed?format=json&url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D{video_id}"
+    );
+    let oembed: YoutubeOembed =
+        serde_json::from_str(&fetch_text(client, &oembed_url).await?).ok()?;
+
+    // oEmbed names hqdefault.jpg, which pads a widescreen frame out to 4:3 with
+    // black bars. maxresdefault.jpg is the frame itself but only exists for
+    // videos uploaded above 720p.
+    let image = match fetch_image(
+        client,
+        &format!("https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"),
+    )
+    .await
+    {
+        Some(image) => Some(image),
+        None => match oembed.thumbnail_url {
+            Some(thumbnail_url) => fetch_image(client, &thumbnail_url).await,
+            None => None,
+        },
+    };
+
+    Some(EmbedResponse {
+        title: oembed.title,
+        description: oembed.author_name,
+        image,
+        created_at: None,
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct VxTweet {
+    text: Option<String>,
+    date_epoch: Option<i64>,
+    user_name: Option<String>,
+    user_screen_name: Option<String>,
+    user_profile_image_url: Option<String>,
+    media_extended: Option<Vec<VxMedia>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct VxMedia {
+    url: Option<String>,
+    thumbnail_url: Option<String>,
+}
+
+async fn vx_twitter_embed(client: &reqwest::Client, status_path: &str) -> Option<EmbedResponse> {
+    let api_url = format!("https://api.vxtwitter.com/{status_path}");
+    let tweet: VxTweet = serde_json::from_str(&fetch_text(client, &api_url).await?).ok()?;
+
+    // A video's own url is an mp4 the image decoder can make nothing of, so take
+    // the thumbnail. The author's avatar stands in for a tweet with no media at
+    // all, which is what vxTwitter puts in its own preview. The avatar it names
+    // is the 48 pixel one every twimg url has a larger sibling of.
+    let image_url = tweet
+        .media_extended
+        .unwrap_or_default()
+        .into_iter()
+        .find_map(|media| media.thumbnail_url.or(media.url))
+        .or_else(|| {
+            tweet
+                .user_profile_image_url
+                .map(|avatar_url| avatar_url.replace("_normal.", "_400x400."))
+        });
+
+    let image = match image_url {
+        Some(image_url) => fetch_image(client, &image_url).await,
+        None => None,
+    };
+
+    Some(EmbedResponse {
+        title: match (tweet.user_name, tweet.user_screen_name) {
+            (Some(user_name), Some(screen_name)) => Some(format!("{user_name} (@{screen_name})")),
+            (user_name, screen_name) => user_name.or(screen_name),
+        },
+        description: tweet.text,
+        image,
+        created_at: tweet.date_epoch.map(|seconds| seconds * 1000),
+    })
+}
+
 async fn build_embed(client: &reqwest::Client, url: &str) -> Option<EmbedResponse> {
+    // The watch page is a two megabyte document, most of it a script inside the
+    // head, that Google only serves to crawlers it recognises. oEmbed answers
+    // with a few hundred bytes and no gatekeeping.
+    if let Some(video_id) = youtube_video_id(url) {
+        return youtube_embed(client, &video_id).await;
+    }
+
+    // vxTwitter matches the user agent against a fixed list of crawlers and sends
+    // everyone else a stub page that meta refreshes to x.com, so its own API is
+    // the only thing that answers with the tweet.
+    if let Some(status_path) = vx_twitter_status_path(url) {
+        return vx_twitter_embed(client, &status_path).await;
+    }
+
     let html = match fetch_content(client, url).await? {
         // The link points straight at an image: skip HTML parsing entirely and
         // build the embed from the image itself.
@@ -315,23 +514,35 @@ async fn build_embed(client: &reqwest::Client, url: &str) -> Option<EmbedRespons
         _ => html,
     };
 
-    let image = match html.meta.get("og:image") {
-        Some(image_url) => match fetch_content(client, image_url).await {
-            Some(FetchedContent::Image(bytes)) => image_data_from_bytes(image_url, &bytes),
-            _ => None,
-        },
+    // vxTwitter writes an empty og:image for a tweet without media, and plenty of
+    // sites fill in only the twitter: half of the pair.
+    let image_url = [html.meta.get("og:image"), html.meta.get("twitter:image")]
+        .into_iter()
+        .flatten()
+        .find(|image_url| !image_url.is_empty());
+
+    let image = match image_url {
+        Some(image_url) => fetch_image(client, image_url).await,
         None => None,
     };
 
     Some(EmbedResponse {
-        title: html.meta.get("og:title").cloned(),
-        description: html.meta.get("og:description").cloned(),
+        title: html
+            .meta
+            .get("og:title")
+            .or_else(|| html.meta.get("twitter:title"))
+            .cloned(),
+        description: html
+            .meta
+            .get("og:description")
+            .or_else(|| html.meta.get("twitter:description"))
+            .cloned(),
         image,
         created_at: html
             .meta
             .get("article:published_time")
             .and_then(|text| chrono::DateTime::parse_from_rfc3339(text).ok())
-            .map(|date| date.timestamp()),
+            .map(|date| date.timestamp_millis()),
     })
 }
 
@@ -343,12 +554,9 @@ async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<
         created_at: None,
     };
 
-    let response = match reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
-        .build()
-    {
-        Ok(client) => build_embed(&client, &url).await.unwrap_or(empty),
-        Err(_) => empty,
+    let response = match embed_client() {
+        Some(client) => build_embed(&client, &url).await.unwrap_or(empty),
+        None => empty,
     };
 
     response_with_headers(
@@ -1642,7 +1850,7 @@ pub struct PushNotification {
     pub icon: String,
     pub navigate: String,
     pub data: Option<String>,
-    pub mutable : bool,
+    pub mutable: bool,
     pub is_declarative: bool,
 }
 
@@ -1656,6 +1864,7 @@ pub struct EmbedResponse {
     pub title: Option<String>,
     pub description: Option<String>,
     pub image: Option<ImageData>,
+    /// Milliseconds since the unix epoch, which is the unit Embed.elm decodes.
     pub created_at: Option<i64>,
 }
 
@@ -1796,8 +2005,8 @@ mod tests {
         );
         assert_eq!(
             embed.created_at,
-            Some(1_577_934_245),
-            "article:published_time should be parsed to a unix timestamp"
+            Some(1_577_934_245_000),
+            "article:published_time should be parsed to a unix timestamp in milliseconds"
         );
         assert!(
             embed.image.is_none(),
@@ -1896,6 +2105,249 @@ mod tests {
         assert!(
             embed.created_at.is_none(),
             "no article:published_time -> no created_at"
+        );
+    }
+
+    // A tweet without media leaves og:image empty rather than leaving it out, and
+    // an empty image url would otherwise be fetched and come back as nothing.
+    #[tokio::test]
+    async fn falls_back_to_twitter_image_when_og_image_is_empty() {
+        let png = make_png(5, 2);
+        let base = spawn_test_server(move |base| {
+            let html = format!(
+                r#"<html><head>
+                    <meta property="og:image" content="">
+                    <meta name="twitter:title" content="Only Twitter Tags">
+                    <meta name="twitter:description" content="A summary">
+                    <meta name="twitter:image" content="{base}/twitter.png">
+                    </head><body></body></html>"#
+            )
+            .into_bytes();
+            vec![
+                ("/", "text/html; charset=utf-8", html),
+                ("/twitter.png", "image/png", png),
+            ]
+        })
+        .await;
+
+        let client = reqwest::Client::new();
+        let embed = build_embed(&client, &format!("{base}/"))
+            .await
+            .expect("expected an embed response");
+
+        assert_eq!(
+            embed.title.as_deref(),
+            Some("Only Twitter Tags"),
+            "twitter:title should stand in for a missing og:title"
+        );
+        assert_eq!(
+            embed.description.as_deref(),
+            Some("A summary"),
+            "twitter:description should stand in for a missing og:description"
+        );
+        let image = embed.image.expect("expected twitter:image to be resolved");
+        assert_eq!(
+            (image.width, image.height),
+            (5, 2),
+            "the image should come from twitter:image"
+        );
+    }
+
+    #[tokio::test]
+    async fn error_pages_produce_no_embed() {
+        let base = spawn_test_server(|_base| {
+            vec![("/", "text/html; charset=utf-8", b"<html></html>".to_vec())]
+        })
+        .await;
+
+        let client = reqwest::Client::new();
+        assert!(
+            build_embed(&client, &format!("{base}/nothing-here"))
+                .await
+                .is_none(),
+            "a 404 should not be read as page content"
+        );
+    }
+
+    // --- picking the site specific path out of a url ---
+
+    #[test]
+    fn finds_the_video_id_in_every_youtube_link_shape() {
+        for (url, expected) in [
+            ("https://www.youtube.com/watch?v=zjPRAM0WDgw", "zjPRAM0WDgw"),
+            (
+                "https://youtube.com/watch?v=zjPRAM0WDgw&t=90s",
+                "zjPRAM0WDgw",
+            ),
+            (
+                "https://m.youtube.com/watch?app=desktop&v=zjPRAM0WDgw",
+                "zjPRAM0WDgw",
+            ),
+            (
+                "https://music.youtube.com/watch?v=zjPRAM0WDgw",
+                "zjPRAM0WDgw",
+            ),
+            (
+                "https://youtu.be/XPHrx7HnEnU?is=WHUdottGe4ZEeXkb",
+                "XPHrx7HnEnU",
+            ),
+            ("https://www.youtube.com/shorts/XPHrx7HnEnU", "XPHrx7HnEnU"),
+            (
+                "https://www.youtube.com/live/XPHrx7HnEnU?feature=share",
+                "XPHrx7HnEnU",
+            ),
+            ("https://www.youtube.com/embed/XPHrx7HnEnU", "XPHrx7HnEnU"),
+        ] {
+            assert_eq!(
+                youtube_video_id(url).as_deref(),
+                Some(expected),
+                "{url} should resolve to a video id"
+            );
+        }
+    }
+
+    #[test]
+    fn leaves_links_that_name_no_youtube_video_alone() {
+        for url in [
+            "https://www.youtube.com/watch?list=PL123",
+            "https://www.youtube.com/@LindsayEllisVids",
+            "https://www.youtube.com/results?search_query=crab+rave",
+            "https://youtu.be/",
+            "https://notyoutube.com/watch?v=zjPRAM0WDgw",
+            "https://klipy.com/gifs/crab-rave-11",
+        ] {
+            assert_eq!(
+                youtube_video_id(url),
+                None,
+                "{url} names no video, so it should fall through to the generic path"
+            );
+        }
+    }
+
+    #[test]
+    fn finds_the_status_path_in_a_vx_twitter_link() {
+        for (url, expected) in [
+            (
+                "https://fixvx.com/coltyn_x/status/2101599413332500500?s=46&t=V_pjU4n",
+                "coltyn_x/status/2101599413332500500",
+            ),
+            (
+                "https://vxtwitter.com/Coltyn_x/status/2101599413332500500",
+                "Coltyn_x/status/2101599413332500500",
+            ),
+            (
+                "https://www.fixupx.com/Coltyn_x/status/2101599413332500500/photo/1",
+                "Coltyn_x/status/2101599413332500500",
+            ),
+        ] {
+            assert_eq!(
+                vx_twitter_status_path(url).as_deref(),
+                Some(expected),
+                "{url} should resolve to a status path"
+            );
+        }
+    }
+
+    // x.com links are deliberately not rerouted through someone else's server.
+    #[test]
+    fn leaves_links_that_are_not_a_vx_twitter_status_alone() {
+        for url in [
+            "https://x.com/Coltyn_x/status/2101599413332500500",
+            "https://twitter.com/Coltyn_x/status/2101599413332500500",
+            "https://fixvx.com/Coltyn_x",
+            "https://fixvx.com/Coltyn_x/status/not-a-number",
+        ] {
+            assert_eq!(
+                vx_twitter_status_path(url),
+                None,
+                "{url} should fall through to the generic path"
+            );
+        }
+    }
+
+    // The two APIs are read by field name, and nothing else would notice if one of
+    // them were spelled wrong.
+    #[test]
+    fn reads_the_fields_youtube_oembed_answers_with() {
+        let oembed: YoutubeOembed = serde_json::from_str(
+            r#"{"title":"I Tested Every Cruise Line to Find the Least Evil",
+                "author_name":"Lindsay Ellis",
+                "type":"video",
+                "thumbnail_url":"https://i.ytimg.com/vi/zjPRAM0WDgw/hqdefault.jpg"}"#,
+        )
+        .expect("the sample oEmbed response should parse");
+
+        assert_eq!(
+            oembed.title.as_deref(),
+            Some("I Tested Every Cruise Line to Find the Least Evil"),
+            "title should be read"
+        );
+        assert_eq!(
+            oembed.author_name.as_deref(),
+            Some("Lindsay Ellis"),
+            "author_name becomes the embed description"
+        );
+        assert_eq!(
+            oembed.thumbnail_url.as_deref(),
+            Some("https://i.ytimg.com/vi/zjPRAM0WDgw/hqdefault.jpg"),
+            "thumbnail_url should be read"
+        );
+    }
+
+    #[test]
+    fn reads_the_fields_the_vx_twitter_api_answers_with() {
+        let tweet: VxTweet = serde_json::from_str(
+            r#"{"date":"Sun Sep 20 09:08:40 +0000 2026",
+                "date_epoch":1789895320,
+                "hasMedia":false,
+                "likes":1660,
+                "text":"This is SO inspiring",
+                "user_name":"What Flavour is it this Month",
+                "user_screen_name":"Coltyn_x",
+                "user_profile_image_url":"https://pbs.twimg.com/profile_images/1/H8XdbB5N_normal.jpg",
+                "media_extended":[{"type":"video",
+                    "url":"https://video.twimg.com/a.mp4",
+                    "thumbnail_url":"https://pbs.twimg.com/b.jpg"}]}"#,
+        )
+        .expect("the sample tweet response should parse");
+
+        assert_eq!(
+            tweet.date_epoch,
+            Some(1_789_895_320),
+            "date_epoch is in seconds and gets scaled to milliseconds"
+        );
+        assert_eq!(
+            tweet.user_name.as_deref(),
+            Some("What Flavour is it this Month"),
+            "user_name should be read"
+        );
+        assert_eq!(
+            tweet.user_screen_name.as_deref(),
+            Some("Coltyn_x"),
+            "user_screen_name should be read"
+        );
+        assert_eq!(
+            tweet.text.as_deref(),
+            Some("This is SO inspiring"),
+            "text becomes the embed description"
+        );
+        assert_eq!(
+            tweet
+                .media_extended
+                .unwrap_or_default()
+                .into_iter()
+                .find_map(|media| media.thumbnail_url.or(media.url))
+                .as_deref(),
+            Some("https://pbs.twimg.com/b.jpg"),
+            "a video's thumbnail should win over its mp4"
+        );
+        assert_eq!(
+            tweet
+                .user_profile_image_url
+                .map(|avatar_url| avatar_url.replace("_normal.", "_400x400."))
+                .as_deref(),
+            Some("https://pbs.twimg.com/profile_images/1/H8XdbB5N_400x400.jpg"),
+            "the 48 pixel avatar should be swapped for the large one"
         );
     }
 

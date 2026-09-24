@@ -21,7 +21,7 @@ import Drawing
 import Effect.Time as Time
 import Id exposing (Id, ThreadMessageId, UserId)
 import IdArray exposing (IdArray)
-import Message exposing (Message)
+import Message exposing (Message, RepliedTo(..))
 import MessageArray exposing (MessageArray)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
@@ -151,7 +151,7 @@ loadMessages preloadMessages messages =
                     case message of
                         Message.UserTextMessage message2 ->
                             case message2.repliedTo of
-                                Just repliedToId ->
+                                RepliedToMessage repliedToId ->
                                     case IdArray.get repliedToId messages of
                                         Just repliedTo ->
                                             ( repliedToId, repliedTo ) :: list
@@ -159,7 +159,10 @@ loadMessages preloadMessages messages =
                                         Nothing ->
                                             list
 
-                                Nothing ->
+                                NoReply ->
+                                    list
+
+                                RepliedToGame _ _ ->
                                     list
 
                         _ ->

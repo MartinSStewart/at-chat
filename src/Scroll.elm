@@ -5,6 +5,7 @@ module Scroll exposing
     , smoothScroll
     , smoothScrollBy
     , smoothScrollTo
+    , smoothScrollToCenterOf
     , smoothScrollToTopOf
     , toBottomOfChannel
     , toBottomOfChannelIfAtBottom
@@ -118,6 +119,37 @@ smoothScrollToTopOf containerId targetId =
                 viewport.x
                 viewport.y
                 (viewport.y + target.element.y - container.element.y)
+        )
+        (Dom.getElement targetId)
+        (Dom.getElement containerId)
+        (Dom.getViewportOf containerId)
+        |> Task.andThen identity
+
+
+{-| Smooth scroll a container so the target sits in the middle of it, or as close to the middle as
+the container's ends allow. `smoothScrollToTopOf` is for when what follows the target is what the
+reader came for; this is for pointing at one thing, which reads better with what surrounds it still
+on screen.
+-}
+smoothScrollToCenterOf : HtmlId -> HtmlId -> Task FrontendOnly Dom.Error ()
+smoothScrollToCenterOf containerId targetId =
+    Task.map3
+        (\target container { viewport, scene } ->
+            let
+                topOfTarget : Float
+                topOfTarget =
+                    viewport.y + target.element.y - container.element.y
+
+                spaceToSpare : Float
+                spaceToSpare =
+                    (viewport.height - target.element.height) / 2
+            in
+            smoothScrollY
+                containerId
+                0
+                viewport.x
+                viewport.y
+                (clamp 0 (max 0 (scene.height - viewport.height)) (topOfTarget - spaceToSpare))
         )
         (Dom.getElement targetId)
         (Dom.getElement containerId)

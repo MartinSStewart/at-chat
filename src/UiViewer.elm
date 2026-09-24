@@ -455,7 +455,7 @@ wordSpellingGameEmail =
                             (Route.ChannelRoute
                                 (Id.fromInt 0)
                                 (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
-                                (Just (UserSession.ChannelHeaderTab_Games (Just (Id.fromInt 0))))
+                                (Just (UserSession.ChannelHeaderTab_Games (Just (Id.fromInt 0)) Nothing))
                             )
                             ChannelsVisibleOnMobile
                             Nothing

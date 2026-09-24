@@ -27,6 +27,8 @@ module Game exposing
     , loadingMatchText
     , matchNotLoaded
     , pressedKey
+    , replyPreview
+    , replyScrollTo
     , routeRequest
     , sheepGameFileUploaded
     , sheepGameFilesToAttach
@@ -57,6 +59,7 @@ import List.Nonempty exposing (Nonempty)
 import Message exposing (GameType(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import PersonName exposing (PersonName)
 import Ports exposing (StartupData)
 import RichText
 import Scroll
@@ -69,6 +72,7 @@ import Ui.Font
 import Ui.Lazy
 import Ui.Shadow
 import User exposing (LocalUser)
+import UserColor exposing (UserColor)
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame
 
@@ -508,6 +512,9 @@ type OutMsg
       -- Fetch the dictionary definition for an English word the player clicked in a Word Spelling
       -- Game's Moves log. The frontend issues the HTTP request (see `Frontend.handleGameOutMsgs`).
     | FetchWordDefinition String
+      -- Reply to something in the given match: the frontend hands it to the message input (see
+      -- `Frontend.handleGameOutMsgs`).
+    | OutReplyToGame (Id ChannelMessageId) Message.RepliedToGame
       -- Hold onto the sheep game questions the host has written so far, so that a refresh
       -- in the middle of setting a game up doesn't throw them away.
     | SaveSheepGameQuestions (IdArray QuestionId UserSession.SheepGameQuestion)
@@ -521,6 +528,7 @@ type OutMsg
       -- Somebody wants to react to an answer or a note with an emoji that isn't one of their
       -- most used ones, so the full selector is opened for them.
     | OpenSheepGameReactionEmojiSelector GuildOrDmId (Id ChannelMessageId) SheepGame.ReactionTarget
+    | OpenWordSpellingGameReactionEmojiSelector GuildOrDmId (Id ChannelMessageId) WordSpellingGame.ReactionTarget
       -- Ask for a file to attach to a sheep game question, then upload what comes back
       -- (see `Frontend.handleGameOutMsgs`).
     | SelectSheepGameFilesToAttach SheepGame.Input
@@ -642,7 +650,7 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                     case ( matchData.data, SeqDict.get matchId model.startedGames ) of
                         ( FrontendGameData_WordSpellingGame setup _ cache, Just (WordSpellingGame_Game game) ) ->
                             let
-                                ( game2, maybeAction, maybeFetchDefinition ) =
+                                ( game2, maybeAction, maybeOutMsg ) =
                                     WordSpellingGame.updateGame
                                         time
                                         windowSize
@@ -666,9 +674,15 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                                 Nothing ->
                                     []
                               )
-                                ++ (case maybeFetchDefinition of
-                                        Just word ->
+                                ++ (case maybeOutMsg of
+                                        Just (WordSpellingGame.FetchDefinition word) ->
                                             [ FetchWordDefinition word ]
+
+                                        Just (WordSpellingGame.ReplyToResult (WordSpellingGame.MoveReaction moveNumber)) ->
+                                            [ OutReplyToGame matchId (Message.RepliedTo_WordSpellingGameMove moveNumber) ]
+
+                                        Just (WordSpellingGame.OpenReactionEmojiSelector target) ->
+                                            [ OpenWordSpellingGameReactionEmojiSelector guildOrDmId matchId target ]
 
                                         Nothing ->
                                             []
@@ -795,6 +809,9 @@ update time windowSize localUser guildOrDmId msg newMatchId maybeMatch model =
                                 ++ (case outMsg of
                                         SheepGame.OpenReactionEmojiSelector target ->
                                             [ OpenSheepGameReactionEmojiSelector guildOrDmId matchId target ]
+
+                                        SheepGame.ReplyToResult target ->
+                                            [ OutReplyToGame matchId (sheepGameReplyTarget target) ]
 
                                         _ ->
                                             sheepGameOutMsgs time newMatchId outMsg
@@ -960,11 +977,83 @@ sheepGameOutMsgs time newMatchId outMsg =
             -- handled where the match it belongs to is known.
             []
 
+        SheepGame.ReplyToResult _ ->
+            -- Same as reacting: the reply names the match it's pointing into, so it's handled
+            -- where that match is known.
+            []
+
         SheepGame.ShowImage pressedImageData ->
             [ ShowSheepGameImage pressedImageData ]
 
         SheepGame.SetFocusOnQuestion questionId ->
             [ SetFocus (SheepGame.inputId (SheepGame.QuestionInput questionId)) ]
+
+
+replyPreview : SeqDict (Id UserId) { a | name : PersonName, color : UserColor } -> Message.RepliedToGame -> MatchData -> Element msg
+replyPreview allUsers repliedTo matchData =
+    case matchData of
+        MatchData { data } ->
+            case repliedTo of
+                Message.RepliedTo_WordSpellingGameMove moveNumber ->
+                    case data of
+                        FrontendGameData_WordSpellingGame setup actions _ ->
+                            WordSpellingGame.moveReplyPreview allUsers setup actions moveNumber
+
+                        _ ->
+                            Ui.none
+
+                Message.RepliedTo_SheepGameAnswer userId questionId ->
+                    case data of
+                        FrontendGameData_SheepGame _ _ shared ->
+                            SheepGame.replyPreview shared (SheepGame.AnswerReaction userId questionId)
+
+                        _ ->
+                            Ui.none
+
+                Message.RepliedTo_SheepGameNotes questionId ->
+                    case data of
+                        FrontendGameData_SheepGame _ _ shared ->
+                            SheepGame.replyPreview shared (SheepGame.NotesReaction questionId)
+
+                        _ ->
+                            Ui.none
+
+        MatchNotLoaded _ ->
+            Ui.none
+
+
+{-| Where in the games tab the move or answer a reply points at is drawn, so that following the
+reply can bring it into view.
+-}
+replyScrollTo : Message.RepliedToGame -> ScrollTo
+replyScrollTo repliedTo =
+    case repliedTo of
+        Message.RepliedTo_WordSpellingGameMove moveNumber ->
+            { container = WordSpellingGame.pastWordsContainerId
+            , target = WordSpellingGame.reactionTargetId (WordSpellingGame.MoveReaction moveNumber)
+            }
+
+        Message.RepliedTo_SheepGameAnswer userId questionId ->
+            { container = SheepGame.gameViewId
+            , target = SheepGame.reactionTargetId (SheepGame.AnswerReaction userId questionId)
+            }
+
+        Message.RepliedTo_SheepGameNotes questionId ->
+            { container = SheepGame.gameViewId
+            , target = SheepGame.reactionTargetId (SheepGame.NotesReaction questionId)
+            }
+
+
+{-| What a message replying to one of a sheep game's results points at.
+-}
+sheepGameReplyTarget : SheepGame.ReactionTarget -> Message.RepliedToGame
+sheepGameReplyTarget target =
+    case target of
+        SheepGame.AnswerReaction userId questionId ->
+            Message.RepliedTo_SheepGameAnswer userId questionId
+
+        SheepGame.NotesReaction questionId ->
+            Message.RepliedTo_SheepGameNotes questionId
 
 
 {-| Files someone picked for one of the sheep game's inputs, on their way back to whichever
@@ -1136,10 +1225,11 @@ view :
     -> SheepGame.LoggedIn a
     -> GuildOrDmId
     -> Maybe (Id ChannelMessageId)
+    -> Maybe Message.RepliedToGame
     -> SeqDict (Id ChannelMessageId) MatchData
     -> Model
     -> Element Msg
-view currentTime windowSize showMemberTab drag startupData lastCopied localUser loggedIn guildOrDmId maybeMatchId matches model =
+view currentTime windowSize showMemberTab drag startupData lastCopied localUser loggedIn guildOrDmId maybeMatchId repliedTo matches model =
     let
         isMobile : Bool
         isMobile =
@@ -1148,6 +1238,27 @@ view currentTime windowSize showMemberTab drag startupData lastCopied localUser 
         isPersonalDm : Bool
         isPersonalDm =
             guildOrDmId == GuildOrDmId_Dm { otherUserId = localUser.session.userId }
+
+        highlightedMove : Maybe Int
+        highlightedMove =
+            case repliedTo of
+                Just (Message.RepliedTo_WordSpellingGameMove moveNumber) ->
+                    Just moveNumber
+
+                _ ->
+                    Nothing
+
+        highlightedResult : Maybe SheepGame.ReactionTarget
+        highlightedResult =
+            case repliedTo of
+                Just (Message.RepliedTo_SheepGameAnswer userId questionId) ->
+                    Just (SheepGame.AnswerReaction userId questionId)
+
+                Just (Message.RepliedTo_SheepGameNotes questionId) ->
+                    Just (SheepGame.NotesReaction questionId)
+
+                _ ->
+                    Nothing
     in
     case maybeMatchId of
         Just matchId ->
@@ -1204,6 +1315,7 @@ view currentTime windowSize showMemberTab drag startupData lastCopied localUser 
                                         )
                                         isPersonalDm
                                         localUser
+                                        highlightedMove
                                         setup
                                         actions
                                         cache
@@ -1223,6 +1335,7 @@ view currentTime windowSize showMemberTab drag startupData lastCopied localUser 
                                         localUser
                                         drag
                                         loggedIn
+                                        highlightedResult
                                         setup
                                         cache
                                         game2
@@ -1280,7 +1393,15 @@ allGames =
 
 matchNotFound : Element msg
 matchNotFound =
-    Ui.el [ Ui.centerX, Ui.centerY, Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Match not found")
+    Ui.el
+        [ Ui.contentCenterX
+        , Ui.centerY
+        , Ui.Font.bold
+        , Ui.Font.size 20
+        , Ui.background MyUi.background1
+        , Ui.paddingXY 0 16
+        ]
+        (Ui.text "Match not found")
 
 
 {-| Share controls for the match currently being viewed. Shows a "Share" button that creates a

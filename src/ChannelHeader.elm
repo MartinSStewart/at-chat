@@ -135,7 +135,6 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                             local.calls
                         , Ui.Lazy.lazy2 gameButton isMobile currentChannelHeaderTab
                         , drawingTab isMobile currentChannelHeaderTab False
-                        , showFilesButton
                         , channelSettingsTab isMobile model.route |> Maybe.withDefault Ui.none
                         ]
                     ]
@@ -177,7 +176,6 @@ thread isMobile name threadName guildOrDmIdNoThread local loggedIn model =
                     , Ui.row
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
                         [ drawingTab isMobile (Route.toChannelHeaderTab model.route) False
-                        , showFilesButton
                         , channelSettingsTab isMobile model.route |> Maybe.withDefault Ui.none
                         ]
                     ]
@@ -219,7 +217,6 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
                     , Ui.row
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
                         [ drawingTab isMobile currentChannelHeaderTab False
-                        , showFilesButton
                         , channelSettingsTab isMobile model.route |> Maybe.withDefault Ui.none
                         ]
                     ]
@@ -247,7 +244,6 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
                     , Ui.row
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
                         [ drawingTab isMobile (Route.toChannelHeaderTab model.route) False
-                        , showFilesButton
                         , channelSettingsTab isMobile model.route |> Maybe.withDefault Ui.none
                         ]
                     ]
@@ -281,22 +277,6 @@ drawingTab isMobile currentTab rightMostTab =
             ]
             (Ui.html Icons.paintbrush)
         )
-
-
-showFilesButton : Element FrontendMsg_
-showFilesButton =
-    MyUi.elButton
-        (Dom.id "guild_showFiles")
-        (PressedLink Route.TextEditorRoute)
-        [ Ui.alignRight
-        , Ui.width (Ui.px 48)
-        , Ui.paddingXY 12 0
-        , Ui.height Ui.fill
-        , Ui.contentCenterY
-        , Ui.Font.color MyUi.font3
-        , MyUi.hoverText "Show files"
-        ]
-        (Ui.html Icons.document)
 
 
 {-| `showMembers` is `Nothing` on the routes that have no member column to open,
@@ -675,7 +655,7 @@ gameButton isMobile currentTab =
     channelHeaderIconTab
         isMobile
         (Dom.id "guild_openGamesTab")
-        (ChannelHeaderTab_Games Nothing)
+        (ChannelHeaderTab_Games Nothing Nothing)
         currentTab
         False
         (Ui.el [ MyUi.hoverText "Games" ] (Ui.html Icons.go))
@@ -795,12 +775,13 @@ tabBodyView isMobile local loggedIn model =
                                 |> Ui.map VoiceChatMsg
                                 |> Just
 
-                        ChannelHeaderTab_Games maybeMatchId ->
+                        ChannelHeaderTab_Games maybeMatchId repliedTo ->
                             case LocalState.getGuildAndChannel { guildId = guildId, channelId = channelId } local of
                                 Just ( _, channel2 ) ->
                                     gameTabBody
                                         (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
                                         maybeMatchId
+                                        repliedTo
                                         local
                                         loggedIn
                                         channel2.games
@@ -828,10 +809,11 @@ tabBodyView isMobile local loggedIn model =
             case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                 Just otherUserId ->
                     case dmRoute.tab of
-                        Just (ChannelHeaderTab_Games maybeMatchId) ->
+                        Just (ChannelHeaderTab_Games maybeMatchId repliedTo) ->
                             gameTabBody
                                 (GuildOrDmId_Dm { otherUserId = otherUserId })
                                 maybeMatchId
+                                repliedTo
                                 local
                                 loggedIn
                                 (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .games)
@@ -887,7 +869,7 @@ tabBodyView isMobile local loggedIn model =
                         ChannelHeaderTab_VoiceChat ->
                             Nothing
 
-                        ChannelHeaderTab_Games _ ->
+                        ChannelHeaderTab_Games _ _ ->
                             Nothing
 
                         ChannelHeaderTab_Draw ->
@@ -978,12 +960,13 @@ tabBodyView isMobile local loggedIn model =
 gameTabBody :
     GuildOrDmId
     -> Maybe (Id ChannelMessageId)
+    -> Maybe Message.RepliedToGame
     -> LocalState
     -> LoggedIn2
     -> SeqDict (Id ChannelMessageId) Game.MatchData
     -> LoadedFrontend
     -> Maybe (Element FrontendMsg_)
-gameTabBody guildOrDmId maybeMatchId local loggedIn matchData model =
+gameTabBody guildOrDmId maybeMatchId repliedTo local loggedIn matchData model =
     Game.view
         model.time
         model.windowSize
@@ -1001,6 +984,7 @@ gameTabBody guildOrDmId maybeMatchId local loggedIn matchData model =
         loggedIn
         guildOrDmId
         maybeMatchId
+        repliedTo
         matchData
         (SeqDict.get guildOrDmId loggedIn.games |> Maybe.withDefault Game.initModel)
         |> Ui.map GameMsg

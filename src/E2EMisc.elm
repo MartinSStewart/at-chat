@@ -1,5 +1,6 @@
 module E2EMisc exposing
     ( adminConnectionsShowWhatIsViewedTest
+    , banMemberTest
     , channelSearchTest
     , codeBlockInputTest
     , colorPickerTest
@@ -32,6 +33,7 @@ module E2EMisc exposing
 import Audio
 import Broadcast
 import ChannelExport
+import Color
 import DmChannel
 import DmChannelId
 import Drawing
@@ -42,6 +44,7 @@ import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Time as Time
 import Emoji
+import Env
 import Expect
 import FileStatus
 import FrontendExtra
@@ -56,6 +59,7 @@ import LocalState exposing (LocalState)
 import MembersAndOwner
 import Message
 import MessageDropdown
+import MyUi
 import NonemptyDict
 import Pages.Admin
 import Pages.Guild
@@ -63,6 +67,7 @@ import Range exposing (Range)
 import RichText
 import Route exposing (ChannelsVisibleOnMobile(..))
 import SeqDict
+import SeqSet
 import String.Nonempty
 import Test.Html.Query
 import Test.Html.Selector
@@ -1955,6 +1960,113 @@ leaveGuildTest config =
         ]
 
 
+banMemberTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+banMemberTest config =
+    E2EHelper.startTest
+        "The guild owner bans a member from the member table in the guild settings"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                let
+                    guildId : Id.Id Id.GuildId
+                    guildId =
+                        Id.fromInt 1
+
+                    userId : Id.Id Id.UserId
+                    userId =
+                        Id.fromInt 2
+                in
+                [ -- The member hasn't written anything yet, so the table says so
+                  admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+                , E2EHelper.hasExactText
+                    admin
+                    [ Pages.Guild.guildMembersText
+                    , E2EHelper.userName
+                    , Pages.Guild.neverPostedText
+                    , Pages.Guild.banMemberText
+                    ]
+
+                -- Once they write something the last posted column fills in
+                , E2EHelper.writeMessage user 100 "Hello everyone"
+                , E2EHelper.hasNotExactText admin [ Pages.Guild.neverPostedText ]
+                , admin.snapshotView 100 { name = "Guild settings member table" }
+
+                -- A member who isn't the owner doesn't get the table at all
+                , user.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+                , E2EHelper.hasNotExactText user [ Pages.Guild.guildMembersText, Pages.Guild.banMemberText ]
+
+                -- Banning drops them from the guild and remembers them
+                , admin.click 100 (Dom.id ("guild_banMember_" ++ Id.toString userId))
+                , T.checkBackend 100 (checkGuildMemberCount guildId 0)
+                , T.checkBackend 100 (checkUserIsBanned guildId userId)
+                , E2EHelper.hasNotExactText admin [ E2EHelper.userName, Pages.Guild.banMemberText ]
+                , user.checkModel
+                    100
+                    (\model ->
+                        withLocalState
+                            model
+                            (\local ->
+                                if SeqDict.member guildId local.guilds then
+                                    Err "The guild should be gone from the banned member's frontend"
+
+                                else
+                                    Ok ()
+                            )
+                    )
+
+                -- And the invite link they still have won't let them back in
+                , admin.click 100 (Dom.id "guild_inviteLinkCopy_copy")
+                , T.andThen
+                    100
+                    (\data ->
+                        case E2EHelper.copiedText admin.clientId data of
+                            Just inviteLink ->
+                                [ T.connectFrontend
+                                    100
+                                    E2EHelper.sessionId1
+                                    (String.replace Env.domain "" inviteLink)
+                                    E2EHelper.desktopWindow
+                                    (\bannedUser ->
+                                        [ T.andThen
+                                            10
+                                            (\data2 ->
+                                                [ bannedUser.portEvent
+                                                    10
+                                                    "load_startup_data_from_js"
+                                                    (E2EHelper.startupDataJson data2.time E2EHelper.firefoxDesktop)
+                                                ]
+                                            )
+                                        , T.checkBackend 100 (checkGuildMemberCount guildId 0)
+                                        ]
+                                    )
+                                ]
+
+                            Nothing ->
+                                [ T.checkState 0 (\_ -> Err "Clipboard text not found") ]
+                    )
+                ]
+            )
+        ]
+
+
+checkUserIsBanned : Id.Id Id.GuildId -> Id.Id Id.UserId -> E2EHelper.BackendModel2 -> Result String ()
+checkUserIsBanned guildId userId backend =
+    case SeqDict.get guildId (E2EHelper.unwrapBackend backend).guilds of
+        Just guild ->
+            if SeqSet.member userId guild.bannedUsers then
+                Ok ()
+
+            else
+                Err "Expected the banned member to be on the guild's ban list"
+
+        Nothing ->
+            Err "The guild should still exist after a member is banned"
+
+
 checkGuildMemberCount : Id.Id Id.GuildId -> Int -> E2EHelper.BackendModel2 -> Result String ()
 checkGuildMemberCount guildId expected backend =
     case SeqDict.get guildId (E2EHelper.unwrapBackend backend).guilds of
@@ -2351,6 +2463,22 @@ richTextMessage isMobile normalConfig =
                     1000
                     (Test.Html.Query.has [ Test.Html.Selector.id "guild_replyLink_2" ])
                 , E2EHelper.tallSnapshot admin 1000 { name = "Rich text message previewed in reply" }
+
+                -- Following the reply back to the message it points at marks that message. The mark
+                -- is a layer inside the message rather than the message's own background, since its
+                -- opacity fades.
+                , admin.click 100 (Dom.id "guild_replyLink_2")
+                , admin.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id "guild_message_2" ] html
+                            |> Test.Html.Query.findAll
+                                [ Test.Html.Selector.style
+                                    "background-color"
+                                    (Color.toCssString MyUi.replyToColor)
+                                ]
+                            |> Test.Html.Query.count (Expect.equal 1)
+                    )
                 ]
             )
         ]

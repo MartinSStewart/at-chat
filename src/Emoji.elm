@@ -13,6 +13,7 @@ module Emoji exposing
     , SkinTone(..)
     , TextOrEmoji(..)
     , UnicodeEmoji(..)
+    , animalsNatureSpriteName
     , emojiButtonId
     , emojiWithSkinTone
     , emojisInText
@@ -102,11 +103,11 @@ firstShortName emojiData emoji =
 popup. The emoji data only arrives once it has been fetched, so until then, and for any
 sequence there's no artwork for, the characters themselves are drawn.
 -}
-unicodeView : String -> String -> Maybe CachedEmojiData -> UnicodeEmoji -> Html.Html msg
-unicodeView size yOffset maybeEmojiData (UnicodeEmoji emoji) =
+unicodeView : String -> Maybe CachedEmojiData -> UnicodeEmoji -> Html.Html msg
+unicodeView size maybeEmojiData (UnicodeEmoji emoji) =
     case maybeEmojiData of
         Just emojiData ->
-            sequenceView size yOffset emojiData emoji
+            sequenceView size emojiData emoji
 
         Nothing ->
             Html.text emoji
@@ -118,7 +119,7 @@ view : Maybe CachedEmojiData -> UnicodeEmoji -> Element msg
 view maybeEmojiData emoji =
     Ui.el
         [ Ui.Font.size 20, Ui.width Ui.shrink ]
-        (unicodeView "1em" "0" maybeEmojiData emoji |> Ui.html)
+        (unicodeView "1em" maybeEmojiData emoji |> Ui.html)
 
 
 type Category
@@ -193,22 +194,22 @@ categoryToEmojiString skinTone category =
         EmojiCategory emojiCategory ->
             case emojiCategory of
                 Activities ->
-                    Twemoji.spriteView "1em" "0" tabsSpriteName "🎉" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "🎉" |> Ui.html
 
                 AnimalsAndNature ->
-                    Twemoji.spriteView "1em" "0" tabsSpriteName "🐟" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "🐟" |> Ui.html
 
                 Components ->
                     Ui.text "C"
 
                 Flags ->
-                    Twemoji.spriteView "1em" "0" tabsSpriteName "🚩" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "🚩" |> Ui.html
 
                 FoodAndDrink ->
-                    Twemoji.spriteView "1em" "0" tabsSpriteName "🥦" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "🥦" |> Ui.html
 
                 Objects ->
-                    Twemoji.spriteView "1em" "0" tabsSpriteName "🔬" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "🔬" |> Ui.html
 
                 PeopleAndBody ->
                     (case skinTone of
@@ -230,17 +231,17 @@ categoryToEmojiString skinTone category =
                         Just SkinTone5 ->
                             "👍🏿"
                     )
-                        |> Twemoji.spriteView "1em" "0" tabsSpriteName
+                        |> Twemoji.spriteView "1em" tabsSpriteName
                         |> Ui.html
 
                 SmileysAndEmotion ->
-                    Twemoji.spriteView "1em" "0" tabsSpriteName "🙂" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "🙂" |> Ui.html
 
                 Symbols ->
-                    Twemoji.spriteView "1em" "0" tabsSpriteName "⬇️" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "⬇️" |> Ui.html
 
                 TravelAndPlaces ->
-                    Twemoji.spriteView "1em" "0" tabsSpriteName "🚆" |> Ui.html
+                    Twemoji.spriteView "1em" tabsSpriteName "🚆" |> Ui.html
 
         StickerCategory ->
             Ui.text "S"
@@ -257,7 +258,7 @@ categoryToEmojiString skinTone category =
                     |> Ui.inFront
                 , Ui.centerX
                 ]
-                (Twemoji.spriteView "1em" "0" tabsSpriteName "🙂" |> Ui.html)
+                (Twemoji.spriteView "1em" tabsSpriteName "🙂" |> Ui.html)
 
 
 {-| Each tab in the strip on the left is an emoji from the category it stands for, so
@@ -270,6 +271,11 @@ tabsSpriteName =
     "tabs"
 
 
+animalsNatureSpriteName : String
+animalsNatureSpriteName =
+    "animals-nature"
+
+
 {-| Must match the names `scripts/fetch-twemoji.py` writes in `public/emoji`.
 -}
 categorySpriteName : EmojiCategory -> String
@@ -279,7 +285,7 @@ categorySpriteName emojiCategory =
             "activities"
 
         AnimalsAndNature ->
-            "animals-nature"
+            animalsNatureSpriteName
 
         Components ->
             "component"
@@ -343,11 +349,11 @@ artStartingWith emojiData text =
 no art for is drawn as the characters themselves, which is what someone else's newer emoji
 set would arrive as.
 -}
-sequenceView : String -> String -> CachedEmojiData -> String -> Html.Html msg
-sequenceView size yOffset emojiData sequence =
+sequenceView : String -> CachedEmojiData -> String -> Html.Html msg
+sequenceView size emojiData sequence =
     case artStartingWith emojiData sequence of
         Just art ->
-            Twemoji.spriteView size yOffset art.sprite art.sequence
+            Twemoji.spriteView size art.sprite art.sequence
 
         Nothing ->
             Html.text sequence
@@ -356,9 +362,9 @@ sequenceView size yOffset emojiData sequence =
 {-| Drawn out of whichever sprite holds it, so that a screen of them costs one request per
 sprite rather than one per emoji.
 -}
-unicodeEmojiView : String -> String -> Maybe SkinTone -> UnicodeEmoji -> CachedEmojiData -> Html.Html msg
-unicodeEmojiView size yOffset maybeSkinTone emoji emojiData =
-    emojiWithSkinTone maybeSkinTone emoji emojiData |> sequenceView size yOffset emojiData
+unicodeEmojiView : String -> Maybe SkinTone -> UnicodeEmoji -> CachedEmojiData -> Html.Html msg
+unicodeEmojiView size maybeSkinTone emoji emojiData =
+    emojiWithSkinTone maybeSkinTone emoji emojiData |> sequenceView size emojiData
 
 
 type TextOrEmoji
@@ -366,8 +372,8 @@ type TextOrEmoji
     | EmojiArtwork EmojiArt
 
 
-textView : String -> String -> Maybe CachedEmojiData -> String -> List (Html.Html msg)
-textView size yOffset maybeEmojiData text =
+textView : String -> Maybe CachedEmojiData -> String -> List (Html.Html msg)
+textView size maybeEmojiData text =
     case maybeEmojiData of
         Just emojiData ->
             List.map
@@ -377,7 +383,7 @@ textView size yOffset maybeEmojiData text =
                             Html.text text2
 
                         EmojiArtwork art ->
-                            Twemoji.spriteView size yOffset art.sprite art.sequence
+                            Twemoji.spriteView size art.sprite art.sequence
                 )
                 (splitOnEmoji emojiData text)
 
@@ -795,6 +801,34 @@ emojiButtonId index =
 searchInputHeight : number
 searchInputHeight =
     40
+
+
+{-| The browser moves focus to whatever was clicked as the default action of `mousedown`. That
+would take focus off the message input the user was typing in, and on mobile losing focus closes
+the virtual keyboard. Preventing it leaves focus where it was while the click itself still goes
+through.
+
+The search input and the skin tone dropdown are the two things in here that are supposed to take
+focus, so their mousedowns are left alone. They're skipped by failing the decoder rather than by
+handing back a message, because Firefox reports a click on an open dropdown as a mousedown on the
+`option`, and any message at that point re-renders the `select`, which writes its old value back
+over the one being picked.
+
+-}
+keepFocusOnMouseDown : Html.Attribute Msg
+keepFocusOnMouseDown =
+    Html.Events.preventDefaultOn
+        "mousedown"
+        (Json.Decode.at [ "target", "tagName" ] Json.Decode.string
+            |> Json.Decode.andThen
+                (\tagName ->
+                    if tagName == "INPUT" || tagName == "SELECT" || tagName == "OPTION" then
+                        Json.Decode.fail "Let this take focus"
+
+                    else
+                        Json.Decode.succeed ( NoOp, True )
+                )
+        )
 
 
 searchInput : Model -> Maybe SkinTone -> List (List EmojiOrSticker) -> Int -> Element Msg
@@ -1358,9 +1392,6 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
                                ]
                         )
 
-                -- Recently used emojis, most recent first. They aren't a category of their own:
-                -- nothing shows up for them in the column on the left, and they're reached by
-                -- clicking the first category, which scrolls all the way to the top.
                 recentEmojis : List EmojiOrSticker
                 recentEmojis =
                     Array.toList userData.lastUsedEmojis
@@ -1457,7 +1488,7 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
                                                 model
                                                 (case item of
                                                     EmojiOrSticker_UnicodeEmoji emoji ->
-                                                        unicodeEmojiView "1em" "0" userData.skinTone emoji emojiData2
+                                                        unicodeEmojiView "1em" userData.skinTone emoji emojiData2
                                                             |> Ui.html
                                                             |> Ui.el [ Ui.width (Ui.px emojiWidth), Ui.contentCenterX ]
 
@@ -1530,8 +1561,11 @@ selector isMobile availableHeight scrollbarWidth width model userData emojiData 
                 , Ui.rounded 8
                 , Ui.Font.size 32
                 , MyUi.blockClickPropagation PressedContainer
+                , Ui.htmlAttribute keepFocusOnMouseDown
                 , Ui.heightMin 0
                 , Ui.clip
+                , MyUi.blockTouchStartPropagation NoOp
+                , MyUi.blockTouchEndPropagation NoOp
                 ]
                 (if isMobile then
                     [ emojiContent, searchInput2 ]
@@ -1561,7 +1595,7 @@ emojiHoverPreview stickersData customEmojisData userData emojiData2 model =
         ]
         (case Maybe.map .emoji model.emojiHovered of
             Just (EmojiOrSticker_UnicodeEmoji emoji) ->
-                (unicodeEmojiView "1em" "0" userData.skinTone emoji emojiData2
+                (unicodeEmojiView "1em" userData.skinTone emoji emojiData2
                     |> Ui.html
                 )
                     :: (case SeqDict.get emoji emojiData2.emojis of

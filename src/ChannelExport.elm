@@ -461,7 +461,7 @@ userTextMessageDataCodec userId =
         |> Codec.field "content" .content (messageContentCodec userId)
         |> Codec.field "reactions" .reactions (reactionsCodec userId)
         |> Codec.field "editedAt" .editedAt (Codec.nullable CodecExtra.time)
-        |> Codec.field "repliedTo" .repliedTo (Codec.nullable idCodec)
+        |> Codec.field "repliedTo" .repliedTo repliedToCodec
         |> Codec.field "drawings" .drawings (Codec.nullable (userTextMessageDrawingsCodec userId))
         |> Codec.buildObject
 
@@ -475,9 +475,49 @@ encryptedUserTextMessageDataCodec userId =
         |> Codec.field "fileHashes" .fileHashes (seqSetCodec fileHashCodec)
         |> Codec.field "reactions" .reactions (reactionsCodec userId)
         |> Codec.field "editedAt" .editedAt (Codec.nullable CodecExtra.time)
-        |> Codec.field "repliedTo" .repliedTo (Codec.nullable idCodec)
+        |> Codec.field "repliedTo" .repliedTo repliedToCodec
         |> Codec.field "drawings" .drawings (Codec.nullable (userTextMessageDrawingsCodec userId))
         |> Codec.buildObject
+
+
+repliedToCodec : Codec (Message.RepliedTo messageId)
+repliedToCodec =
+    Codec.custom
+        (\noReplyEncoder repliedToMessageEncoder repliedToGameEncoder value ->
+            case value of
+                Message.NoReply ->
+                    noReplyEncoder
+
+                Message.RepliedToMessage argA ->
+                    repliedToMessageEncoder argA
+
+                Message.RepliedToGame argA argB ->
+                    repliedToGameEncoder argA argB
+        )
+        |> Codec.variant0 "NoReply" Message.NoReply
+        |> Codec.variant1 "RepliedToMessage" Message.RepliedToMessage idCodec
+        |> Codec.variant2 "RepliedToGame" Message.RepliedToGame idCodec repliedToGameCodec
+        |> Codec.buildCustom
+
+
+repliedToGameCodec : Codec Message.RepliedToGame
+repliedToGameCodec =
+    Codec.custom
+        (\wordSpellingGameMoveEncoder sheepGameAnswerEncoder sheepGameNotesEncoder value ->
+            case value of
+                Message.RepliedTo_WordSpellingGameMove argA ->
+                    wordSpellingGameMoveEncoder argA
+
+                Message.RepliedTo_SheepGameAnswer argA argB ->
+                    sheepGameAnswerEncoder argA argB
+
+                Message.RepliedTo_SheepGameNotes argA ->
+                    sheepGameNotesEncoder argA
+        )
+        |> Codec.variant1 "RepliedTo_WordSpellingGameMove" Message.RepliedTo_WordSpellingGameMove Codec.int
+        |> Codec.variant2 "RepliedTo_SheepGameAnswer" Message.RepliedTo_SheepGameAnswer idCodec idCodec
+        |> Codec.variant1 "RepliedTo_SheepGameNotes" Message.RepliedTo_SheepGameNotes idCodec
+        |> Codec.buildCustom
 
 
 callStartedDataCodec : Codec userId -> Codec (Message.CallStartedData userId)
@@ -1358,7 +1398,7 @@ wordSpellingActionCodec =
 wordSpellingChangeCodec : Codec WordSpellingGame.Action
 wordSpellingChangeCodec =
     Codec.custom
-        (\placeWordEncoder replaceTrayOrPassEncoder joinGameEncoder premoveEncoder cancelPremoveEncoder value ->
+        (\placeWordEncoder replaceTrayOrPassEncoder joinGameEncoder premoveEncoder cancelPremoveEncoder addedReactionEncoder removedReactionEncoder value ->
             case value of
                 WordSpellingGame.PlaceWord argA argB ->
                     placeWordEncoder argA argB
@@ -1374,12 +1414,32 @@ wordSpellingChangeCodec =
 
                 WordSpellingGame.CancelPremove ->
                     cancelPremoveEncoder
+
+                WordSpellingGame.AddedReaction argA argB ->
+                    addedReactionEncoder argA argB
+
+                WordSpellingGame.RemovedReaction argA argB ->
+                    removedReactionEncoder argA argB
         )
         |> Codec.variant2 "PlaceWord" WordSpellingGame.PlaceWord placedWordCodec isValidCodec
         |> Codec.variant0 "ReplaceTrayOrPass" WordSpellingGame.ReplaceTrayOrPass
         |> Codec.variant0 "JoinGame" WordSpellingGame.JoinGame
         |> Codec.variant2 "Premove" WordSpellingGame.Premove placedWordCodec isValidCodec
         |> Codec.variant0 "CancelPremove" WordSpellingGame.CancelPremove
+        |> Codec.variant2 "AddedReaction" WordSpellingGame.AddedReaction wordSpellingReactionTargetCodec emojiOrCustomEmojiCodec
+        |> Codec.variant2 "RemovedReaction" WordSpellingGame.RemovedReaction wordSpellingReactionTargetCodec emojiOrCustomEmojiCodec
+        |> Codec.buildCustom
+
+
+wordSpellingReactionTargetCodec : Codec WordSpellingGame.ReactionTarget
+wordSpellingReactionTargetCodec =
+    Codec.custom
+        (\moveEncoder value ->
+            case value of
+                WordSpellingGame.MoveReaction argA ->
+                    moveEncoder argA
+        )
+        |> Codec.variant1 "MoveReaction" WordSpellingGame.MoveReaction Codec.int
         |> Codec.buildCustom
 
 

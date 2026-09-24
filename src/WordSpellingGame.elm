@@ -17,9 +17,12 @@ module WordSpellingGame exposing
     , LocalChange(..)
     , LogEntry
     , OpenWordDefinition
+    , OutMsg(..)
     , PlacedWord
     , PlacementResult
     , Player
+    , ReactionTarget(..)
+    , Reactions
     , SetupModel
     , SetupMsg(..)
     , SetupOrGame(..)
@@ -54,6 +57,7 @@ module WordSpellingGame exposing
     , invalidWordsText
     , isAnimating
     , isZoomAnimating
+    , moveReplyPreview
     , movesText
     , nextTurnNotifications
     , parseWordList
@@ -61,6 +65,7 @@ module WordSpellingGame exposing
     , placeWord
     , placementConnects
     , pressedKey
+    , reactionTargetId
     , setupView
     , tilesPlacedText
     , topScoringWordText
@@ -90,6 +95,7 @@ import Effect.Http as Http
 import Effect.Time as Time
 import Email.Html
 import Email.Html.Attributes
+import Emoji exposing (EmojiOrCustomEmoji)
 import Env
 import Go exposing (TimeControl)
 import Html
@@ -101,18 +107,22 @@ import IdArray exposing (IdArray)
 import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
+import MessageView
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptyExtra
+import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
-import PersonName
+import PersonName exposing (PersonName)
 import Quantity
 import Random
 import Route exposing (Route)
 import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
+import SeqSet
 import Set exposing (Set)
+import Sticker
 import String.Nonempty exposing (NonemptyString(..))
 import Touch exposing (Touch)
 import Ui exposing (Element)
@@ -123,7 +133,9 @@ import Ui.Font
 import Ui.Gradient
 import Ui.Lazy
 import Ui.Prose
+import Url
 import User exposing (LocalUser)
+import UserColor exposing (UserColor)
 import UserSession exposing (ToBeFilledInByBackend(..))
 
 
@@ -181,12 +193,8 @@ type alias GameData =
     }
 
 
-{-| A move being hovered in the Moves log: the board cells its word covers, drawn with a
-highlight so the player can see where it was placed, and the game as it stood just after that
-move, so the board shows how it looked then rather than how it ended up.
--}
 type alias HoveredMove =
-    { cells : Dict ( Int, Int ) LetterOrWildcard, shared : Shared }
+    { index : Maybe Int, cells : Dict ( Int, Int ) LetterOrWildcard, shared : Shared }
 
 
 {-| OpaqueVariants
@@ -213,16 +221,12 @@ currentDefinitionWord open =
 -}
 type WordDefinitionData
     = WordDefinition_Loading
-      -- Swedish has no dictionary API wired up, so a clicked Swedish word just says so.
     | WordDefinition_SwedishUnsupported
-      -- The lookup failed or the word wasn't in the dictionary (the API answers 404 for unknown
-      -- words, which arrives here as an error).
     | WordDefinition_NotFound
+    | WordDefinition_Failed
     | WordDefinition_Loaded (List DictEntry)
 
 
-{-| One part-of-speech grouping from a dictionary lookup, with its definitions in order.
--}
 type alias DictEntry =
     { partOfSpeech : String
     , definitions : List String
@@ -377,7 +381,7 @@ type GameMsg
     | PressedPlayerRow (Id UserId)
     | MouseEnterPlayerRow (Id UserId)
     | MouseExitPlayerRow (Id UserId)
-    | MouseEnterWord (List ( ( Int, Int ), LetterOrWildcard )) Shared
+    | MouseEnterWord (Maybe Int) (List ( ( Int, Int ), LetterOrWildcard )) Shared
     | MouseExitWord
     | UserScrolledPastMoves ScrollPosition
     | PressedSubmitPremove PlacedWord
@@ -386,6 +390,31 @@ type GameMsg
     | PressedNextWordDefinition
     | PressedCloseWordDefinition
     | GotWordDefinition String (Result Http.Error (List DictEntry))
+    | ReactionMsg ReactionTarget MessageView.MessageViewMsg
+
+
+{-| Something `updateGame` needs the frontend to do that the game itself can't (see
+`Frontend.handleGameOutMsgs`).
+-}
+type OutMsg
+    = -- Fetch the dictionary definition of an English word the player clicked in the Moves log.
+      FetchDefinition String
+      -- Somebody wants to reply to a move in the chat the match is in.
+    | ReplyToResult ReactionTarget
+      -- Somebody wants to react with an emoji that isn't one of the ones they reach for most,
+      -- so the full selector has to be opened for them.
+    | OpenReactionEmojiSelector ReactionTarget
+
+
+{-| Something in a match that can be reacted to or replied to: a row in the Moves log, named by
+the move number shown next to it.
+-}
+type ReactionTarget
+    = MoveReaction Int
+
+
+type alias Reactions =
+    SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId))
 
 
 type alias SetupModel =
@@ -545,6 +574,8 @@ type Action
     | JoinGame
     | Premove PlacedWord (ToBeFilledInByBackend IsValid)
     | CancelPremove
+    | AddedReaction ReactionTarget EmojiOrCustomEmoji
+    | RemovedReaction ReactionTarget EmojiOrCustomEmoji
 
 
 type IsValid
@@ -570,6 +601,7 @@ type alias Shared =
     , passingStartedAt : Maybe Int
     , lastPlacement : Maybe AnimatedPlacement
     , attemptsLeft : OneOrGreater
+    , reactions : SeqDict ReactionTarget Reactions
     }
 
 
@@ -620,6 +652,7 @@ initShared setup =
     , lastPlacement = Nothing
     , passingStartedAt = Nothing
     , attemptsLeft = setup.placeWordAttempts
+    , reactions = SeqDict.empty
     }
 
 
@@ -1276,6 +1309,14 @@ updateAction setup action shared =
             , []
             )
 
+        AddedReaction target emoji ->
+            -- A reaction describes nothing, so it adds no row to the Moves log and the move
+            -- numbers the rows are reacted to by don't shift.
+            ( mapReactions target (SeqDictHelper.addToSet emoji action.userId) shared, [] )
+
+        RemovedReaction target emoji ->
+            ( mapReactions target (removeFromReactions emoji action.userId) shared, [] )
+
 
 incrementTurnCount : Description -> Time.Posix -> ValidatedSetup -> Shared -> ( Shared, List Description )
 incrementTurnCount description time setup shared =
@@ -1788,8 +1829,7 @@ updateSetup time currentUserId msg setup =
 
 
 {-| Updates a game in response to a `GameMsg`. Alongside the new state it returns any `Action` to
-broadcast to the other players, and a `Maybe String` naming an English word whose dictionary
-definition the frontend should go fetch (see `Frontend.handleGameOutMsgs`).
+broadcast to the other players, and any `OutMsg` for the frontend to carry out.
 -}
 updateGame :
     Time.Posix
@@ -1799,7 +1839,7 @@ updateGame :
     -> Shared
     -> GameMsg
     -> GameData
-    -> ( GameData, Maybe Action, Maybe String )
+    -> ( GameData, Maybe Action, Maybe OutMsg )
 updateGame time windowSize currentUserId setup shared msg oldModel =
     let
         -- Tiles that another player's move covered belong back in the tray; work off (and store)
@@ -1985,8 +2025,8 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
             , Nothing
             )
 
-        MouseEnterWord cells sharedAtMove ->
-            ( { model | hoveredMove = Just { cells = Dict.fromList cells, shared = sharedAtMove } }
+        MouseEnterWord index cells sharedAtMove ->
+            ( { model | hoveredMove = Just { index = index, cells = Dict.fromList cells, shared = sharedAtMove } }
             , Nothing
             , Nothing
             )
@@ -2038,18 +2078,91 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
             , Nothing
             )
 
+        ReactionMsg target messageViewMsg ->
+            case messageViewMsg of
+                MessageView.MessageViewMsg_PressedReactionEmoji emoji ->
+                    ( model, toggleReaction currentUserId shared target emoji |> Just, Nothing )
+
+                MessageView.MessageView_PressedReactionEmoji_Add emoji ->
+                    ( model, AddedReaction target emoji |> Just, Nothing )
+
+                MessageView.MessageView_PressedReactionEmoji_Remove emoji ->
+                    ( model, RemovedReaction target emoji |> Just, Nothing )
+
+                MessageView.MessageViewMsg_PressedShowReactionEmojiSelector ->
+                    ( model, Nothing, OpenReactionEmojiSelector target |> Just )
+
+                MessageView.MessageViewMsg_PressedReply ->
+                    ( model, Nothing, ReplyToResult target |> Just )
+
+                -- The rest of what a message offers belongs to the conversation it's in, and a
+                -- move isn't in one
+                _ ->
+                    ( model, Nothing, Nothing )
+
+
+{-| Pressing a reaction that's already yours takes it back, which is what one press of the same
+emoji does on a message too.
+-}
+toggleReaction : Id UserId -> Shared -> ReactionTarget -> EmojiOrCustomEmoji -> Action
+toggleReaction userId shared target emoji =
+    case SeqDict.get target shared.reactions |> Maybe.andThen (SeqDict.get emoji) of
+        Just users ->
+            if NonemptySet.member userId users then
+                RemovedReaction target emoji
+
+            else
+                AddedReaction target emoji
+
+        Nothing ->
+            AddedReaction target emoji
+
+
+mapReactions : ReactionTarget -> (Reactions -> Reactions) -> Shared -> Shared
+mapReactions target mapFunc shared =
+    { shared
+        | reactions =
+            SeqDict.update
+                target
+                (\maybeReactions ->
+                    let
+                        reactions : Reactions
+                        reactions =
+                            Maybe.withDefault SeqDict.empty maybeReactions |> mapFunc
+                    in
+                    if SeqDict.isEmpty reactions then
+                        Nothing
+
+                    else
+                        Just reactions
+                )
+                shared.reactions
+    }
+
+
+{-| An emoji nobody is left reacting with is dropped, the same as it is on a message.
+-}
+removeFromReactions : EmojiOrCustomEmoji -> Id UserId -> Reactions -> Reactions
+removeFromReactions emoji userId reactions =
+    SeqDict.update
+        emoji
+        (Maybe.andThen
+            (\users -> NonemptySet.toSeqSet users |> SeqSet.remove userId |> NonemptySet.fromSeqSet)
+        )
+        reactions
+
 
 {-| Show the definition popup for one of `open`'s candidate words: show a loading popup and ask
 the frontend to fetch the definition (the third tuple element). Swedish has no dictionary API
 wired up, so there the popup just says so.
 -}
-openWordDefinition : OpenWordDefinition -> ValidatedSetup -> GameData -> ( GameData, Maybe Action, Maybe String )
+openWordDefinition : OpenWordDefinition -> ValidatedSetup -> GameData -> ( GameData, Maybe Action, Maybe OutMsg )
 openWordDefinition open setup model =
     case setup.language of
         English ->
             ( { model | wordDefinition = WordDefinition_Open open WordDefinition_Loading }
             , Nothing
-            , Just (currentDefinitionWord open)
+            , FetchDefinition (currentDefinitionWord open) |> Just
             )
 
         Swedish ->
@@ -2062,7 +2175,7 @@ openWordDefinition open setup model =
 {-| Step the open definition popup to the previous (-1) or next (1) candidate word, wrapping
 around at both ends, and kick off the lookup of the newly shown word.
 -}
-cycleWordDefinition : Int -> ValidatedSetup -> GameData -> ( GameData, Maybe Action, Maybe String )
+cycleWordDefinition : Int -> ValidatedSetup -> GameData -> ( GameData, Maybe Action, Maybe OutMsg )
 cycleWordDefinition offset setup model =
     case model.wordDefinition of
         WordDefinition_Open open _ ->
@@ -3745,12 +3858,13 @@ gameView :
     -> Maybe (NonemptyDict Int Touch)
     -> Bool
     -> LocalUser
+    -> Maybe Int
     -> ValidatedSetup
     -> Array ActionWithTime
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView currentTime windowSize showMemberTab maybeDragging isPersonalDm localUser setup actions shared oldModel =
+gameView currentTime windowSize showMemberTab maybeDragging isPersonalDm localUser highlightedMove setup actions shared oldModel =
     let
         -- Tiles that another player's move covered belong back in the tray; render that
         -- corrected state instead of the raw stored tiles.
@@ -3879,7 +3993,7 @@ gameView currentTime windowSize showMemberTab maybeDragging isPersonalDm localUs
                 shared
                 (Dict.union highlightedCells hoveredWordCells)
                 model
-             , statusView windowSize isPersonalDm localUser setup actions shared model
+             , statusView windowSize isPersonalDm localUser highlightedMove setup actions shared model
              ]
                 ++ (case ( wideEnough, model.wordDefinition ) of
                         ( True, WordDefinition_Open open data ) ->
@@ -4061,8 +4175,8 @@ joinWarning isPersonalDm playerCount localUser shared =
         Nothing
 
 
-statusView : Coord CssPixels -> Bool -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> GameData -> Element GameMsg
-statusView windowSize isPersonalDm localUser setup actions shared model =
+statusView : Coord CssPixels -> Bool -> LocalUser -> Maybe Int -> ValidatedSetup -> Array ActionWithTime -> Shared -> GameData -> Element GameMsg
+statusView windowSize isPersonalDm localUser highlightedMove setup actions shared model =
     let
         currentPlayer : Player
         currentPlayer =
@@ -4180,8 +4294,50 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
                             )
                             (List.Nonempty.toList shared.players)
                 )
-            , Ui.Lazy.lazy6 recentActionsView model.scrollPosition windowSize localUser setup actions shared
+            , Ui.Lazy.lazy6
+                recentActionsView
+                (encodeLogState model.scrollPosition (Maybe.andThen .index model.hoveredMove) highlightedMove)
+                windowSize
+                localUser
+                setup
+                actions
+                shared
             ]
+
+
+{-| The line the Moves log shows for one move, for a reply to that move to repeat. Moves are
+numbered the way the log numbers them: from 1 for the oldest entry, joins included.
+-}
+moveReplyPreview :
+    SeqDict (Id UserId) { a | name : PersonName, color : UserColor }
+    -> ValidatedSetup
+    -> Array ActionWithTime
+    -> Int
+    -> Element msg
+moveReplyPreview allUsers setup actions moveNumber =
+    Array.foldl
+        (\action ( shared, descriptions ) ->
+            let
+                ( shared2, newDescriptions ) =
+                    updateAction setup action shared
+            in
+            ( shared2, List.reverse newDescriptions ++ descriptions )
+        )
+        ( initShared setup, [] )
+        actions
+        |> Tuple.second
+        |> List.reverse
+        |> List.Extra.getAt (moveNumber - 1)
+        |> Maybe.map
+            (\description ->
+                Ui.row
+                    [ Ui.spacing 4, Ui.paddingXY 4 0 ]
+                    [ boardTileInFront "4" False 20 (Coord.xy 0 0) (Letter (LetterChar 'W'))
+                    , Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text (User.toString (descriptionUserId description) allUsers))
+                    , Ui.text (descriptionToString description)
+                    ]
+            )
+        |> Maybe.withDefault Ui.none
 
 
 descriptionToString : Description -> String
@@ -4400,7 +4556,7 @@ gameSummaryView windowSize localUser shared log =
                                 , Ui.width Ui.shrink
                                 , MyUi.htmlStyle "cursor" "pointer"
                                 , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
-                                , Ui.Events.onMouseEnter (MouseEnterWord bestWord.placedCells bestWord.shared)
+                                , Ui.Events.onMouseEnter (MouseEnterWord Nothing bestWord.placedCells bestWord.shared)
                                 , Ui.Events.onMouseLeave MouseExitWord
                                 ]
                                 [ Ui.Prose.paragraph
@@ -4442,9 +4598,178 @@ countsView entries =
         ]
 
 
-recentActionsView : ScrollPosition -> Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
-recentActionsView scrollPosition windowSize localUser setup actions shared =
+logPadding : number
+logPadding =
+    16
+
+
+{-| What a row in the Moves log is called, which is what the reactions on it hang off.
+-}
+reactionTargetId : ReactionTarget -> Dom.HtmlId
+reactionTargetId target =
+    case target of
+        MoveReaction moveNumber ->
+            Dom.id ("wordSpellingGame_move_" ++ String.fromInt moveNumber)
+
+
+{-| A row in the Moves log, with the reactions it has under it and, while the pointer is over the
+row, the menu for reacting to that move or replying to it in the chat the match is in.
+-}
+reactableMove : LocalUser -> Int -> ReactionTarget -> Maybe ReactionTarget -> Maybe ReactionTarget -> GameMsg -> Reactions -> Element GameMsg -> Element GameMsg
+reactableMove localUser contentWidth target hoveredTarget highlightedTarget onMouseEnter reactions content =
     let
+        isHovered : Bool
+        isHovered =
+            hoveredTarget == Just target
+    in
+    Ui.column
+        [ Ui.id (Dom.idToString (reactionTargetId target))
+        , Ui.spacing 4
+        , Ui.Events.onMouseEnter onMouseEnter
+        , Ui.Events.onMouseLeave MouseExitWord
+        , if isHovered then
+            MessageView.gameMiniViewNearEdge
+                localUser.user
+                localUser.user.availableCustomEmojis
+                localUser.emojiData
+                localUser.customEmojis
+                |> Ui.map (ReactionMsg target)
+                |> Ui.inFront
+
+          else
+            Ui.noAttr
+        , Ui.attrIf (highlightedTarget == Just target) (MyUi.highlightFadeOut MyUi.replyToColor)
+        ]
+        (content
+            :: (case
+                    MessageView.reactionEmojiView
+                        localUser.emojiData
+                        (if isHovered then
+                            MessageView.ReactionsHovered
+
+                         else
+                            MessageView.ReactionsNotHovered
+                        )
+                        localUser.session.userId
+                        localUser.customEmojis
+                        (User.allUsers localUser)
+                        Sticker.LoopAFewTimesOnLoad
+                        contentWidth
+                        reactions
+                of
+                    Just reactionRow ->
+                        [ Ui.map (ReactionMsg target) reactionRow ]
+
+                    Nothing ->
+                        []
+               )
+        )
+
+
+{-| The Moves log is drawn behind `Ui.Lazy.lazy6`, which is as many arguments as elm-ui's lazy
+takes, and laziness only holds for arguments the virtual DOM can compare by value. The scroll
+position, the hovered move and the move a reply is pointing at therefore travel as one Int.
+-}
+encodeLogState : ScrollPosition -> Maybe Int -> Maybe Int -> Int
+encodeLogState scrollPosition hoveredIndex highlightedMove =
+    (case scrollPosition of
+        ScrolledToTop ->
+            0
+
+        ScrolledToMiddle ->
+            1
+
+        ScrolledToBottom ->
+            2
+    )
+        + (case hoveredIndex of
+            Just index ->
+                (index + 1) * 4
+
+            Nothing ->
+                0
+          )
+        + (case highlightedMove of
+            Just moveNumber ->
+                moveNumber * highlightedMovePackingOffset
+
+            Nothing ->
+                0
+          )
+
+
+decodeLogState : Int -> { scrollPosition : ScrollPosition, hoveredIndex : Maybe Int, highlightedMove : Maybe Int }
+decodeLogState packed =
+    let
+        value : Int
+        value =
+            modBy highlightedMovePackingOffset packed
+    in
+    { scrollPosition =
+        case modBy 4 value of
+            0 ->
+                ScrolledToTop
+
+            1 ->
+                ScrolledToMiddle
+
+            _ ->
+                ScrolledToBottom
+    , hoveredIndex =
+        case value // 4 of
+            0 ->
+                Nothing
+
+            hovered ->
+                Just (hovered - 1)
+    , highlightedMove =
+        case packed // highlightedMovePackingOffset of
+            0 ->
+                Nothing
+
+            moveNumber ->
+                Just moveNumber
+    }
+
+
+{-| Where the highlighted move starts in the Int `encodeLogState` packs. The scroll position and
+the hovered move sit below it, which leaves room for a log a quarter of a million entries long.
+-}
+highlightedMovePackingOffset : number
+highlightedMovePackingOffset =
+    2 ^ 20
+
+
+recentActionsView :
+    Int
+    -> Coord CssPixels
+    -> LocalUser
+    -> ValidatedSetup
+    -> Array ActionWithTime
+    -> Shared
+    -> Element GameMsg
+recentActionsView packedLogState windowSize localUser setup actions shared =
+    let
+        logState : { scrollPosition : ScrollPosition, hoveredIndex : Maybe Int, highlightedMove : Maybe Int }
+        logState =
+            decodeLogState packedLogState
+
+        contentWidth : Int
+        contentWidth =
+            Coord.xRaw windowSize - boardWidth setup.traySize windowSize - logPadding * 2
+
+        logLength : Int
+        logLength =
+            List.length log
+
+        hoveredTarget : Maybe ReactionTarget
+        hoveredTarget =
+            Maybe.map (\index -> MoveReaction (logLength - index)) logState.hoveredIndex
+
+        highlightedTarget : Maybe ReactionTarget
+        highlightedTarget =
+            Maybe.map MoveReaction logState.highlightedMove
+
         log : List LogEntry
         log =
             Array.foldl
@@ -4524,12 +4849,28 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
 
                             moveNumber : Int
                             moveNumber =
-                                List.length log - index
+                                logLength - index
+
+                            hoveredCells : List ( ( Int, Int ), LetterOrWildcard )
+                            hoveredCells =
+                                case description of
+                                    Description_PlacedWord _ { placedCells } ->
+                                        placedCells
+
+                                    Description_InvalidMove _ { placedCells } ->
+                                        placedCells
+
+                                    _ ->
+                                        []
 
                             rowContent : List (Element GameMsg)
                             rowContent =
                                 [ Ui.Prose.paragraph
-                                    [ Ui.Font.color MyUi.font3, MyUi.noShrinking, Ui.alignTop, Ui.width Ui.shrink ]
+                                    [ Ui.Font.color MyUi.font3
+                                    , MyUi.noShrinking
+                                    , Ui.alignTop
+                                    , Ui.width Ui.shrink
+                                    ]
                                     [ Ui.text (String.fromInt moveNumber ++ ". ") ]
                                 , Ui.Prose.paragraph
                                     [ Ui.alignTop, MyUi.htmlStyle "word-wrap" "anywhere" ]
@@ -4538,8 +4879,8 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                     ]
                                 ]
                         in
-                        case description of
-                            Description_PlacedWord _ { word, wildcardMatches, placedCells } ->
+                        (case description of
+                            Description_PlacedWord _ { word, wildcardMatches } ->
                                 -- A placed word is clickable: hovering highlights the row (and the
                                 -- word's cells on the board) and clicking looks up its dictionary
                                 -- definition (see `PressedWordDefinition`). Any wildcards are resolved
@@ -4555,12 +4896,10 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                     , Ui.width Ui.shrink
                                     , MyUi.htmlStyle "cursor" "pointer"
                                     , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
-                                    , Ui.Events.onMouseEnter (MouseEnterWord placedCells entry.shared)
-                                    , Ui.Events.onMouseLeave MouseExitWord
                                     ]
                                     rowContent
 
-                            Description_InvalidMove _ { word, placedCells } ->
+                            Description_InvalidMove _ { word } ->
                                 MyUi.rowButton
                                     (Dom.id ("wsg_moveWord_" ++ String.fromInt moveNumber))
                                     (PressedWordDefinition (definitionWords Set.empty word))
@@ -4571,8 +4910,6 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                     , Ui.width Ui.shrink
                                     , MyUi.htmlStyle "cursor" "pointer"
                                     , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
-                                    , Ui.Events.onMouseEnter (MouseEnterWord placedCells entry.shared)
-                                    , Ui.Events.onMouseLeave MouseExitWord
                                     ]
                                     rowContent
 
@@ -4580,6 +4917,17 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                 Ui.row
                                     [ Ui.Font.color MyUi.font3, Ui.spacing 8, Ui.paddingXY 4 6 ]
                                     rowContent
+                        )
+                            |> reactableMove
+                                localUser
+                                contentWidth
+                                (MoveReaction moveNumber)
+                                hoveredTarget
+                                highlightedTarget
+                                (MouseEnterWord (Just index) hoveredCells entry.shared)
+                                (SeqDict.get (MoveReaction moveNumber) shared.reactions
+                                    |> Maybe.withDefault SeqDict.empty
+                                )
                     )
                     log
 
@@ -4594,8 +4942,8 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
     )
         |> Ui.column
             [ Ui.id (Dom.idToString pastWordsContainerId)
-            , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledPastMoves scrollPosition)
-            , Ui.paddingWith { left = 16, right = 16, top = 24, bottom = 16 }
+            , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledPastMoves logState.scrollPosition)
+            , Ui.paddingWith { left = logPadding, right = logPadding, top = 24, bottom = 16 }
             , Ui.scrollable
             , Ui.heightMin 0
             , Ui.height Ui.fill
@@ -4631,7 +4979,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                         (Ui.text movesText)
                     )
                 )
-            , case scrollPosition of
+            , case logState.scrollPosition of
                 ScrolledToBottom ->
                     Ui.noAttr
 
@@ -4856,6 +5204,13 @@ wordDefinitionBody word data =
                 , definitionCredits
                 ]
 
+        WordDefinition_Failed ->
+            Ui.column
+                [ Ui.Font.color MyUi.font3, Ui.height Ui.fill ]
+                [ Ui.text "Couldn't reach the dictionary. Try again in a moment."
+                , definitionCredits
+                ]
+
         WordDefinition_Loaded entries ->
             Ui.column
                 [ Ui.spacing 16, Ui.height Ui.fill ]
@@ -4873,10 +5228,14 @@ definitionCredits =
         , Ui.paddingWith { left = 0, right = 0, top = 24, bottom = 16 }
         , Ui.Font.color MyUi.font3
         ]
-        [ Ui.text "Dictionary provided by "
+        [ Ui.text "Definitions from "
         , Ui.el
-            [ Ui.linkNewTab "https://dictionaryapi.dev/", Ui.Font.noWrap ]
-            (Ui.text "https://dictionaryapi.dev/")
+            [ Ui.linkNewTab "https://en.wiktionary.org/", Ui.Font.noWrap ]
+            (Ui.text "Wiktionary")
+        , Ui.text ", via "
+        , Ui.el
+            [ Ui.linkNewTab "https://www.datamuse.com/api/", Ui.Font.noWrap ]
+            (Ui.text "Datamuse")
         ]
 
 
@@ -5088,7 +5447,19 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                         p =
                             project boardTranslate zoomedCellSize x y
                     in
-                    boardTileInFront setup True p.size p.pos letter
+                    boardTileInFront
+                        (case letter of
+                            Letter letter2 ->
+                                String.fromInt (letterValue setup letter2)
+
+                            Wildcard ->
+                                ""
+                        )
+                        True
+                        p.size
+                        p.pos
+                        letter
+                        |> Ui.inFront
                 )
                 (Dict.toList highlightedCells)
                 ++ SeqDict.foldl
@@ -5103,7 +5474,21 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                                 p =
                                     project boardTranslate zoomedCellSize x y
                             in
-                            boardTileInFront setup False p.size p.pos letter :: list
+                            Ui.inFront
+                                (boardTileInFront
+                                    (case letter of
+                                        Letter letter2 ->
+                                            String.fromInt (letterValue setup letter2)
+
+                                        Wildcard ->
+                                            ""
+                                    )
+                                    False
+                                    p.size
+                                    p.pos
+                                    letter
+                                )
+                                :: list
                     )
                     []
                     (case model.hoveredMove of
@@ -5784,54 +6169,53 @@ tileInFront setup currentTime createdAt premove cellSize2 offset letterOrWildcar
                 )
             , Ui.opacity fade.opacity
             , MyUi.noPointerEvents
-            , tileScoreView setup cellSize2 letterOrWildcard
+            , tileScoreView
+                (case letterOrWildcard of
+                    Letter letter2 ->
+                        String.fromInt (letterValue setup letter2)
+
+                    Wildcard ->
+                        ""
+                )
+                cellSize2
             ]
             (Ui.text (letterOrWildcardText letterOrWildcard))
         )
 
 
-boardTileInFront : ValidatedSetup -> Bool -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
-boardTileInFront setup highlight cellSize2 offset letterOrWildcard =
-    Ui.inFront
-        (Ui.el
-            [ Ui.background
-                (if highlight then
-                    MyUi.replyToColor
+boardTileInFront : String -> Bool -> Int -> Coord CssPixels -> LetterOrWildcard -> Element msg
+boardTileInFront value highlight cellSize2 offset letterOrWildcard =
+    Ui.el
+        [ Ui.background
+            (if highlight then
+                MyUi.replyToColor
 
-                 else
-                    committedTileColor
-                )
-            , Ui.width (Ui.px (cellSize2 - 1))
-            , Ui.height (Ui.px (cellSize2 - 1))
-            , Ui.contentCenterX
-            , Ui.contentCenterY
-            , toFloat cellSize2 * 0.7 |> ceiling |> Ui.Font.size
-            , Ui.Font.bold
-            , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
-            , Ui.Font.color
-                (if highlight then
-                    MyUi.white
+             else
+                committedTileColor
+            )
+        , Ui.width (Ui.px (cellSize2 - 1))
+        , Ui.height (Ui.px (cellSize2 - 1))
+        , Ui.contentCenterX
+        , Ui.contentCenterY
+        , toFloat cellSize2 * 0.7 |> ceiling |> Ui.Font.size
+        , Ui.Font.bold
+        , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
+        , Ui.Font.color
+            (if highlight then
+                MyUi.white
 
-                 else
-                    MyUi.black
-                )
-            , MyUi.noPointerEvents
-            , tileScoreView setup cellSize2 letterOrWildcard
-            ]
-            (Ui.text (letterOrWildcardText letterOrWildcard))
-        )
+             else
+                MyUi.black
+            )
+        , MyUi.noPointerEvents
+        , tileScoreView value cellSize2
+        ]
+        (Ui.text (letterOrWildcardText letterOrWildcard))
 
 
-tileScoreView : ValidatedSetup -> Int -> LetterOrWildcard -> Ui.Attribute msg
-tileScoreView setup cellSize2 letterOrWildcard =
-    Ui.text
-        (case letterOrWildcard of
-            Letter letter ->
-                letterValue setup letter |> String.fromInt
-
-            Wildcard ->
-                ""
-        )
+tileScoreView : String -> Int -> Ui.Attribute msg
+tileScoreView value cellSize2 =
+    Ui.text value
         |> Ui.el
             [ toFloat cellSize2 * 0.3 |> ceiling |> Ui.Font.size
             , Ui.alignBottom
@@ -5870,7 +6254,15 @@ animatedTileInFront setup cellSize2 offset red letterOrWildcard =
                     MyUi.black
                 )
             , MyUi.noPointerEvents
-            , tileScoreView setup cellSize2 letterOrWildcard
+            , tileScoreView
+                (case letterOrWildcard of
+                    Letter letter2 ->
+                        String.fromInt (letterValue setup letter2)
+
+                    Wildcard ->
+                        ""
+                )
+                cellSize2
             ]
             (Ui.text (letterOrWildcardText letterOrWildcard))
         )
@@ -6600,37 +6992,96 @@ parseWordList result =
             WordList_Error error
 
 
-{-| The Free Dictionary API endpoint for an English word. Words are placed uppercase, so this
-lowercases before building the URL. The response has no CORS restrictions, so the frontend can
-call it directly (see `Frontend.handleGameOutMsgs`).
+{-| The Datamuse API endpoint for an English word. `sp` matches that exact spelling, `md=d` asks
+for the definitions and `max=1` keeps just the one entry. Words are held uppercase, so this
+lowercases before building the URL. The response allows any origin, so the frontend can call it
+directly (see `Frontend.handleGameOutMsgs`).
 -}
 definitionApiUrl : String -> String
 definitionApiUrl word =
-    "https://api.dictionaryapi.dev/api/v2/entries/en/" ++ String.toLower word
+    "https://api.datamuse.com/words?md=d&max=1&sp=" ++ Url.percentEncode (String.toLower word)
 
 
-{-| Decode the Free Dictionary API response into a flat list of part-of-speech groupings. The API
-returns a list of entries, each with a `meanings` array; the meanings across every entry are
-concatenated so callers get one list of `DictEntry`.
+{-| Decode the Datamuse response into a flat list of part-of-speech groupings. Datamuse answers
+with a list of matching words, each carrying a `defs` array of `"adj\tExceedingly idealistic."`
+strings. A word it doesn't know gives an empty list, and a word it knows but has no definitions
+for arrives with no `defs` field at all.
 -}
 decodeDefinition : Json.Decode.Decoder (List DictEntry)
 decodeDefinition =
     Json.Decode.list
-        (Json.Decode.field "meanings" (Json.Decode.list decodeDictEntry))
-        |> Json.Decode.map List.concat
-
-
-decodeDictEntry : Json.Decode.Decoder DictEntry
-decodeDictEntry =
-    Json.Decode.map2 DictEntry
-        (Json.Decode.field "partOfSpeech" Json.Decode.string)
-        (Json.Decode.field "definitions"
-            (Json.Decode.list (Json.Decode.field "definition" Json.Decode.string))
+        (Json.Decode.maybe (Json.Decode.field "defs" (Json.Decode.list Json.Decode.string))
+            |> Json.Decode.map (Maybe.withDefault [])
         )
+        |> Json.Decode.map (\entries -> groupDefinitions (List.concat entries))
 
 
-{-| Turn a dictionary API response into popup state. Any error (including the 404 the API returns
-for a word it doesn't know), or a successful-but-empty response, becomes "not found".
+{-| Split each definition into its part of speech and its text, then gather the texts under each
+part of speech, in the order the parts of speech first appear. Wiktionary, where Datamuse's
+definitions come from, interleaves them (three adjective senses, a noun sense, then another
+adjective one), so this can't just compare against the previous definition.
+-}
+groupDefinitions : List String -> List DictEntry
+groupDefinitions definitions =
+    List.foldl
+        (\definition entries ->
+            let
+                ( partOfSpeech, text ) =
+                    case String.split "\t" definition of
+                        [ abbreviation, rest ] ->
+                            ( partOfSpeechName abbreviation, String.trim rest )
+
+                        _ ->
+                            ( "other", String.trim definition )
+            in
+            if text == "" then
+                entries
+
+            else if List.any (\entry -> entry.partOfSpeech == partOfSpeech) entries then
+                List.map
+                    (\entry ->
+                        if entry.partOfSpeech == partOfSpeech then
+                            { entry | definitions = entry.definitions ++ [ text ] }
+
+                        else
+                            entry
+                    )
+                    entries
+
+            else
+                entries ++ [ { partOfSpeech = partOfSpeech, definitions = [ text ] } ]
+        )
+        []
+        definitions
+
+
+{-| Expand the part of speech abbreviation Datamuse prefixes each definition with. It writes `u`
+for a sense it couldn't classify, and anything unrecognised is shown as it arrived.
+-}
+partOfSpeechName : String -> String
+partOfSpeechName abbreviation =
+    case abbreviation of
+        "n" ->
+            "noun"
+
+        "v" ->
+            "verb"
+
+        "adj" ->
+            "adjective"
+
+        "adv" ->
+            "adverb"
+
+        "u" ->
+            "other"
+
+        _ ->
+            abbreviation
+
+
+{-| Turn a dictionary API response into popup state. Datamuse answers a word it doesn't know with
+an empty list rather than an error, so an error here really is a failed lookup.
 -}
 definitionResultToData : Result Http.Error (List DictEntry) -> WordDefinitionData
 definitionResultToData result =
@@ -6642,4 +7093,4 @@ definitionResultToData result =
             WordDefinition_NotFound
 
         Err _ ->
-            WordDefinition_NotFound
+            WordDefinition_Failed

@@ -29,6 +29,7 @@ module LocalState exposing
     , DiscordUserData_ForAdmin(..)
     , FrontendChannel
     , FrontendGuild
+    , GuildMember
     , JoinGuildError(..)
     , LastBackup
     , LastRequest(..)
@@ -50,6 +51,7 @@ module LocalState exposing
     , addReactionEmojiFrontendHelper
     , addReactionEmojiHelper
     , announcementChannel
+    , banMember
     , callEndedText
     , callStartedText
     , canSendDiscordMessage
@@ -127,6 +129,7 @@ module LocalState exposing
     , memberIsEditTypingFrontendHelperNoThread
     , memberIsTyping
     , memberIsTypingHelper
+    , memberPosted
     , messageDeleted
     , messageReactions
     , messageReactionsHelper
@@ -178,7 +181,7 @@ import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (ChangeAttachments, Message(..), MessageContent, MessageNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments, Message(..), MessageContent, MessageNoReply(..), ThreadRouteWithRepliedTo(..), UserTextMessageDataNoReply)
 import MessageArray exposing (MessageArray)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
@@ -193,6 +196,7 @@ import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import SetViewing exposing (SetViewing(..))
 import Slack
 import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
@@ -201,7 +205,7 @@ import UInt64
 import Unsafe
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendCurrentUser, LocalUser)
-import UserSession exposing (ChannelHeaderTab, FrontendUserSession, PreviouslyLastViewedMessage(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (ChannelHeaderTab, FrontendUserSession, PreviouslyLastViewedMessage(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -233,6 +237,7 @@ type alias LocalState =
 type JoinGuildError
     = AlreadyJoined
     | InviteIsInvalid
+    | YouAreBanned
 
 
 type alias BackendGuild =
@@ -241,9 +246,16 @@ type alias BackendGuild =
     , name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Id ChannelId) BackendChannel
-    , membersAndOwner : MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
+    , membersAndOwner : MembersAndOwner (Id UserId) GuildMember
+    , bannedUsers : SeqSet (Id UserId)
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     }
+
+
+{-| `lastPostedAt` is `Nothing` for a member who joined and never wrote anything.
+-}
+type alias GuildMember =
+    { joinedAt : Time.Posix, lastPostedAt : Maybe Time.Posix }
 
 
 type alias DeletedBackendGuild =
@@ -267,7 +279,7 @@ type alias FrontendGuild =
     , name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Id ChannelId) FrontendChannel
-    , membersAndOwner : MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
+    , membersAndOwner : MembersAndOwner (Id UserId) GuildMember
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     }
 
@@ -585,12 +597,16 @@ channelToFrontend guildId channelId threadRoute goMatchPublicIds channel =
             let
                 preloadMessages =
                     Just NoThread == Maybe.map Tuple.first threadRoute
+
+                messages : MessageArray ChannelMessageId (Id UserId)
+                messages =
+                    DmChannel.toFrontendHelper preloadMessages channel
             in
             { createdAt = channel.createdAt
             , createdBy = channel.createdBy
             , name = channel.name
             , description = channel.description
-            , messages = DmChannel.toFrontendHelper preloadMessages channel
+            , messages = messages
             , visibleMessages = VisibleMessages.init preloadMessages (IdArray.length channel.messages)
             , isArchived = Nothing
             , lastTypedAt = channel.lastTypedAt
@@ -606,6 +622,7 @@ channelToFrontend guildId channelId threadRoute goMatchPublicIds channel =
                     (GuildOrFullDmId_Guild guildId channelId)
                     threadRoute
                     goMatchPublicIds
+                    messages
                     channel
             }
                 |> Just
@@ -1491,6 +1508,7 @@ createGuild time userId guildName =
               )
             ]
     , membersAndOwner = MembersAndOwner.init SeqDict.empty userId
+    , bannedUsers = SeqSet.empty
     , invites = SeqDict.empty
     }
 
@@ -1937,7 +1955,7 @@ removeInvite inviteId guild =
 
 addMemberBackend : Time.Posix -> Id UserId -> BackendGuild -> Result () BackendGuild
 addMemberBackend time userId guild =
-    case MembersAndOwner.addMember userId { joinedAt = time } guild.membersAndOwner of
+    case MembersAndOwner.addMember userId { joinedAt = time, lastPostedAt = Nothing } guild.membersAndOwner of
         Ok membersAndOwner ->
             { guild
                 | membersAndOwner = membersAndOwner
@@ -1958,7 +1976,7 @@ addMemberBackend time userId guild =
 
 addMemberFrontend : Time.Posix -> Id UserId -> FrontendGuild -> Result () FrontendGuild
 addMemberFrontend time userId guild =
-    case MembersAndOwner.addMember userId { joinedAt = time } guild.membersAndOwner of
+    case MembersAndOwner.addMember userId { joinedAt = time, lastPostedAt = Nothing } guild.membersAndOwner of
         Ok membersAndOwner ->
             { guild
                 | membersAndOwner = membersAndOwner
@@ -1972,6 +1990,32 @@ addMemberFrontend time userId guild =
 
         Err () ->
             Err ()
+
+
+{-| Banning drops the member from the guild and remembers them, so the invite link they
+still have can't be used to walk straight back in.
+-}
+banMember : Id UserId -> BackendGuild -> BackendGuild
+banMember userId guild =
+    { guild
+        | membersAndOwner = MembersAndOwner.removeMember userId guild.membersAndOwner
+        , bannedUsers = SeqSet.insert userId guild.bannedUsers
+    }
+
+
+memberPosted :
+    Id UserId
+    -> Time.Posix
+    -> { a | membersAndOwner : MembersAndOwner (Id UserId) GuildMember }
+    -> { a | membersAndOwner : MembersAndOwner (Id UserId) GuildMember }
+memberPosted userId time guild =
+    { guild
+        | membersAndOwner =
+            MembersAndOwner.updateMember
+                userId
+                (\member -> { member | lastPostedAt = Just time })
+                guild.membersAndOwner
+    }
 
 
 announcementChannel : { a | channels : SeqDict (Id ChannelId) b } -> Id ChannelId
@@ -3600,12 +3644,12 @@ guildOrDmIdToMessage :
     GuildOrDmId
     -> ThreadRouteWithMessage
     -> LocalState
-    -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithMaybeMessage )
+    -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithRepliedTo )
 guildOrDmIdToMessage guildOrDmId threadRoute local =
     let
         helper :
             { a | messages : MessageArray ChannelMessageId (Id UserId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
-            -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithMaybeMessage )
+            -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithRepliedTo )
         helper channel =
             case threadRoute of
                 ViewThreadWithMessage threadId messageId ->
@@ -3624,7 +3668,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                                       , reactions = data.reactions
                                       , editedAt = data.editedAt
                                       }
-                                    , ViewThreadWithMaybeMessage threadId data.repliedTo
+                                    , ViewThreadWithRepliedTo threadId (Message.replyToMaybe data.repliedTo)
                                     )
                                         |> Just
 
@@ -3637,7 +3681,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                                               , reactions = data.reactions
                                               , editedAt = data.editedAt
                                               }
-                                            , ViewThreadWithMaybeMessage threadId data.repliedTo
+                                            , ViewThreadWithRepliedTo threadId (Message.replyToMaybe data.repliedTo)
                                             )
                                                 |> Just
 
@@ -3670,7 +3714,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                                       , reactions = data.reactions
                                       , editedAt = data.editedAt
                                       }
-                                    , NoThreadWithMaybeMessage data.repliedTo
+                                    , NoThreadWithRepliedTo data.repliedTo
                                     )
                                         |> Just
 
@@ -3683,7 +3727,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                                               , reactions = data.reactions
                                               , editedAt = data.editedAt
                                               }
-                                            , NoThreadWithMaybeMessage data.repliedTo
+                                            , NoThreadWithRepliedTo data.repliedTo
                                             )
                                                 |> Just
 
@@ -3741,7 +3785,7 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                               , reactions = data.reactions
                               , editedAt = data.editedAt
                               }
-                            , NoThreadWithMaybeMessage data.repliedTo
+                            , NoThreadWithMaybeMessage (Message.replyToMaybe data.repliedTo)
                             )
                                 |> Just
 
@@ -3784,7 +3828,7 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                                               , reactions = data.reactions
                                               , editedAt = data.editedAt
                                               }
-                                            , ViewThreadWithMaybeMessage threadId data.repliedTo
+                                            , ViewThreadWithMaybeMessage threadId (Message.replyToMaybe data.repliedTo)
                                             )
                                                 |> Just
 

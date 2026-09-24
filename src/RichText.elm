@@ -3593,7 +3593,7 @@ normalTextView emojiData text state =
         , htmlAttrIf state.spoiler (Html.Attributes.style "opacity" "0")
         , bigEmojiFont
         ]
-        (Emoji.textView "1.4em" "0.2em" emojiData text)
+        (Emoji.textView "1.4em" emojiData text)
     ]
 
 

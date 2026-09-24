@@ -43,6 +43,7 @@ import RichText
 import Route exposing (ShowChannelSettings(..))
 import SeqDict
 import SeqSet
+import SetViewing exposing (SetViewing(..))
 import Sticker
 import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
@@ -52,7 +53,7 @@ import Types exposing (BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), 
 import Unsafe
 import User
 import UserOptions
-import UserSession exposing (SetViewing(..))
+import UserSession
 
 
 {-| Runs the given function against the admin frontend's LocalState, surfacing a

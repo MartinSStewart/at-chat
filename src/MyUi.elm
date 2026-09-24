@@ -8,6 +8,7 @@ module MyUi exposing
     , background3
     , black
     , blockClickPropagation
+    , blockTouchEndPropagation
     , blockTouchStartPropagation
     , border1
     , border2
@@ -48,12 +49,13 @@ module MyUi exposing
     , guildColumnBorder
     , guildIconBackground
     , guildIconFullWidth
+    , guildIconSelectedBorder
     , heightAttr
+    , highlightFadeOut
     , highlightedBorder
     , hover
-    , hoverAndMentionColor
-    , hoverAndReplyToColor
     , hoverHighlight
+    , hoverHighlightLayer
     , hoverText
     , htmlStyle
     , id
@@ -105,6 +107,7 @@ module MyUi exposing
     , userLabelBackground
     , userLabelFontColor
     , userLabelHtml
+    , virtualKeyboardOpen
     , warningHeader
     , weakHoverHighlight
     , white
@@ -830,6 +833,56 @@ fadeIn =
     Ui.htmlAttribute (Html.Attributes.class "fade-in")
 
 
+{-| Marks something the reader has just been taken to: a message opened from a link or a reply, or
+the move a reply points at. The mark holds at full strength long enough for the eye to find it and
+then settles at half strength, which the animation keeps once it has run.
+
+It's a layer rather than the element's own background so that `hoverHighlightLayer` can show on top
+of it, a background being only ever one colour. Both are drawn behind the content, and elm-ui puts
+the later of two `Ui.behindContent` layers underneath the earlier one, so a caller wanting the
+pointer to read over the mark lists `hoverHighlightLayer` first.
+
+What fades is the layer's opacity and not its colour, because a colour animated over three or more
+keyframe steps comes out of elm-animator scrambled, ending back on the first step's value.
+
+-}
+highlightFadeOut : Ui.Color -> Ui.Attribute msg
+highlightFadeOut color =
+    Ui.behindContent
+        (Ui.el
+            [ Ui.height Ui.fill
+            , Ui.background color
+            , Ui.Anim.keyframes
+                [ Ui.Anim.loopFor 1
+                    [ Ui.Anim.step (Ui.Anim.ms 2800) [ Ui.Anim.opacity 1 ]
+                    , Ui.Anim.step (Ui.Anim.ms 1200) [ Ui.Anim.opacity highlightSettledOpacity ]
+                    ]
+                ]
+            ]
+            Ui.none
+        )
+
+
+{-| How much of the mark is left once it has settled.
+-}
+highlightSettledOpacity : Float
+highlightSettledOpacity =
+    0.5
+
+
+{-| The hover highlight as a layer over the element's own background rather than as that background,
+so that it shows on top of a mark the element is already carrying. It's drawn behind the content, so
+the text over it is untouched.
+-}
+hoverHighlightLayer : Ui.Attribute msg
+hoverHighlightLayer =
+    Ui.behindContent
+        (Ui.el
+            [ Ui.height Ui.fill, Ui.background hoverHighlight ]
+            Ui.none
+        )
+
+
 noPointerEvents : Ui.Attribute msg
 noPointerEvents =
     htmlStyle "pointer-events" "none"
@@ -1289,6 +1342,13 @@ textarea::-moz-selection {
     color: transparent;
 }
 
+/* The homepage previews can't be scrolled, so their conversations are laid out from the
+   bottom rather than scrolled there. Each preview is a whole copy of the app, so several of
+   them carry the one conversation container id and only the first could be found to scroll. */
+#homePage_preview #conversationContainer {
+    justify-content: flex-end;
+}
+
 //https://stackoverflow.com/a/54410301
 .disable-scrollbars::-webkit-scrollbar {
   background: transparent;
@@ -1349,18 +1409,6 @@ body {
 @keyframes emoji-popup-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
-}
-/* Icons in the menu that hovering a message brings up are sized by the box they're given
-   rather than by whatever the svg says, since browsers don't agree on how to size an svg
-   that leaves one of its dimensions to them. */
-.mini-button-icon {
-  width: 24px;
-  height: 24px;
-}
-.mini-button-icon > svg {
-  width: 100%;
-  height: 100%;
-  display: block;
 }
 /* A section of a sheep game's results turning up. It waits a moment before sliding into
    place, so that the room has a chance to look up before the answer appears. */
@@ -1531,6 +1579,11 @@ blockTouchStartPropagation msg =
     Ui.Events.stopPropagationOn "touchstart" (Json.Decode.succeed ( msg, True ))
 
 
+blockTouchEndPropagation : msg -> Ui.Attribute msg
+blockTouchEndPropagation msg =
+    Ui.Events.stopPropagationOn "touchend" (Json.Decode.succeed ( msg, True ))
+
+
 channelColumnWidth : Coord CssPixels -> Int
 channelColumnWidth windowSize =
     clamp 200 300 (toFloat (Coord.xRaw windowSize) * 0.2 |> round)
@@ -1589,6 +1642,16 @@ insetBottom =
 isMobile : { a | windowSize : Coord CssPixels } -> Bool
 isMobile model =
     Coord.xRaw model.windowSize < 700
+
+
+{-| A virtual keyboard covers the bottom of the window without changing the window's size, so the
+gap between the window and the visual viewport is the keyboard. The two also differ by a pixel or
+two on their own, and by more than that when the page is pinch zoomed, so only a gap too large to
+be either counts.
+-}
+virtualKeyboardOpen : { a | windowSize : Coord CssPixels, visualViewportHeight : Int } -> Bool
+virtualKeyboardOpen model =
+    Coord.yRaw model.windowSize - model.visualViewportHeight > 100
 
 
 bounceScroll : Bool -> Ui.Attribute msg
@@ -1801,6 +1864,14 @@ guildColumnBorder =
     Ui.rgb 59 89 120
 
 
+{-| The outline around the selected guild's icon, which `guildColumnBorder` is too close to the
+column behind it to pick out.
+-}
+guildIconSelectedBorder : Ui.Color
+guildIconSelectedBorder =
+    Ui.rgb 90 190 255
+
+
 border2 : Ui.Color
 border2 =
     Ui.rgb 17 20 28
@@ -1868,16 +1939,6 @@ replyToColor =
 mentionColor : Ui.Color
 mentionColor =
     Ui.rgb 112 90 78
-
-
-hoverAndReplyToColor : Ui.Color
-hoverAndReplyToColor =
-    Ui.rgb 66 66 139
-
-
-hoverAndMentionColor : Ui.Color
-hoverAndMentionColor =
-    Ui.rgb 138 112 108
 
 
 alertColor : Ui.Color

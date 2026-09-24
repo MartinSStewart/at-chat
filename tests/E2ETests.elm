@@ -31,7 +31,7 @@ import FileStatus
 import Frontend
 import GuildName
 import Html.Attributes
-import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, UserId)
 import IdArray
 import Json.Decode
 import Json.Encode
@@ -39,6 +39,7 @@ import Local exposing (ChangeId(..))
 import LocalState
 import LoginForm
 import MembersAndOwner
+import Message
 import MessageMenu
 import MuteSettings
 import NonemptyDict
@@ -51,6 +52,7 @@ import RichText
 import Route
 import SecretId
 import SeqDict
+import SetViewing exposing (SetViewing(..))
 import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
@@ -58,7 +60,7 @@ import Time
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
 import User exposing (NotificationLevel(..))
 import UserOptions
-import UserSession exposing (SetViewing(..))
+import UserSession
 import VisibleMessages
 
 
@@ -101,13 +103,13 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 [ "http:", "", "localhost:8000", "cacheable", "NWL2023.txt" ] ->
                     E2EHelper.httpBasic currentRequest.url 200 "AA\nAT\nDATE\nDIRT\nNOSE\nLOAD\nROT\nROTE\nROTES\n"
 
-                "https:" :: "" :: "api.dictionaryapi.dev" :: "api" :: "v2" :: "entries" :: "en" :: _ ->
+                "https:" :: "" :: "api.datamuse.com" :: _ ->
                     -- The Word Spelling Game looks up dictionary definitions for played words. Return
                     -- a canned response (the real API answers with this shape) for any English word.
                     E2EHelper.httpBasic
                         currentRequest.url
                         200
-                        """[{"word":"load","phonetic":"/ləʊd/","meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"A burden; a weight to be carried."},{"definition":"The amount of work to be done by a person or machine."}]},{"partOfSpeech":"verb","definitions":[{"definition":"To put a load on or in a means of conveyance."}]}]}]"""
+                        """[{"word":"load","score":1234,"tags":["n","v"],"defs":["n\\tA burden; a weight to be carried. ","n\\tThe amount of work to be done by a person or machine. ","v\\tTo put a load on or in a means of conveyance. "]}]"""
 
                 "https:" :: "" :: "rtc.live.cloudflare.com" :: "v1" :: "apps" :: _ :: rest ->
                     E2EHelper.mockCloudflareSfu rest httpRequests
@@ -364,6 +366,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.inviteUserAndDmChat normalConfig
     , E2EMisc.friendsSearchTest normalConfig
     , E2EMisc.channelSearchTest normalConfig
+    , E2EMisc.banMemberTest normalConfig
     , E2EMisc.colorPickerTest normalConfig
     , E2EMisc.exportChannelTest normalConfig
     , E2EMisc.importChannelTest channelImportConfig
@@ -972,7 +975,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             Time.utc
                             (GuildOrDmId_Guild { guildId = Id.fromInt 1, channelId = Id.fromInt 0 })
                             (NonemptyString 'm' (String.repeat RichText.maxLength "m"))
-                            (NoThreadWithMaybeMessage Nothing)
+                            (Message.NoThreadWithRepliedTo Message.NoReply)
                             SeqDict.empty
                             []
                         )
@@ -2527,6 +2530,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , sendMessageRateLimitTest normalConfig
+    , sessionRateLimitTest normalConfig
     , E2EHelper.startTest
         "Scheduled backend export uploads bytes"
         E2EHelper.startTime
@@ -3043,6 +3047,125 @@ backupRequests data =
         data.httpRequests
 
 
+sessionRateLimitTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+sessionRateLimitTest config =
+    E2EHelper.startTest
+        "Session rate limiting"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                let
+                    guildId : Id GuildId
+                    guildId =
+                        Id.fromInt 1
+
+                    channelId : Id ChannelId
+                    channelId =
+                        Id.fromInt 0
+
+                    sendMessage :
+                        T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                        -> Float
+                        -> Int
+                        -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                    sendMessage client delayInMs changeIndex =
+                        client.sendToBackend
+                            delayInMs
+                            (LocalModelChangeRequest (ChangeId changeIndex)
+                                (Local_SendMessage
+                                    (Time.millisToPosix 0)
+                                    Time.utc
+                                    (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
+                                    (NonemptyString 'm' ("sg " ++ String.fromInt changeIndex))
+                                    (Message.NoThreadWithRepliedTo Message.NoReply)
+                                    SeqDict.empty
+                                    []
+                                )
+                            )
+
+                    getMessageCount : E2EHelper.BackendModel2 -> Int
+                    getMessageCount backend =
+                        case SeqDict.get guildId (E2EHelper.unwrapBackend backend).guilds of
+                            Just guild ->
+                                case SeqDict.get channelId guild.channels of
+                                    Just channel ->
+                                        IdArray.length channel.messages
+
+                                    Nothing ->
+                                        -1
+
+                            Nothing ->
+                                -1
+
+                    checkMessageCount : String -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+                    checkMessageCount label expected =
+                        T.checkBackend
+                            100
+                            (\backend ->
+                                let
+                                    actual : Int
+                                    actual =
+                                        getMessageCount backend
+                                in
+                                if actual == expected then
+                                    Ok ()
+
+                                else
+                                    Err (label ++ ": Expected " ++ String.fromInt expected ++ " messages but got " ++ String.fromInt actual)
+                            )
+                in
+                [ T.andThen
+                    100
+                    (\dataBefore ->
+                        let
+                            initialCount : Int
+                            initialCount =
+                                getMessageCount dataBefore.backend
+                        in
+                        [ List.range 0 RateLimit.sessionShortWindowMaxRequests
+                            |> List.map
+                                (\_ ->
+                                    admin.sendToBackend
+                                        0
+                                        (GetPublicGoMatchRequest (SecretId.fromString "not-a-real-match"))
+                                )
+                            |> T.collapsableGroup "Use up the session's request budget"
+                        , sendMessage admin 0 0
+                        , checkMessageCount "While rate limited" initialCount
+                        , T.collapsableGroup
+                            "User2 can still send while admin's session is rate limited"
+                            [ sendMessage user 0 1 ]
+                        , checkMessageCount "User2 not rate limited" (initialCount + 1)
+                        , sendMessage
+                            admin
+                            (Duration.inMilliseconds RateLimit.sessionShortWindowDuration + 1)
+                            2
+                        , checkMessageCount "After window reset" (initialCount + 2)
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                let
+                                    actual : Int
+                                    actual =
+                                        SeqDict.size (E2EHelper.unwrapBackend backend).sessionRateLimits.shortWindowCounts
+                                in
+                                if actual == 1 then
+                                    Ok ()
+
+                                else
+                                    Err ("Short window wasn't emptied. Expected 1 session but got " ++ String.fromInt actual)
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
 sendMessageRateLimitTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
@@ -3077,7 +3200,7 @@ sendMessageRateLimitTest config =
                                     Time.utc
                                     (GuildOrDmId_Guild { guildId = guildId, channelId = channelId })
                                     (NonemptyString 'm' ("sg " ++ String.fromInt changeIndex))
-                                    (NoThreadWithMaybeMessage Nothing)
+                                    (Message.NoThreadWithRepliedTo Message.NoReply)
                                     SeqDict.empty
                                     []
                                 )

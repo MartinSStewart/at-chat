@@ -75,6 +75,7 @@ import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
+import SetViewing exposing (SetViewing(..))
 import Sha256
 import SheepGame
 import Slack
@@ -89,7 +90,7 @@ import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, Expo
 import Unsafe
 import User exposing (BackendUser)
 import UserColor
-import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession, Viewing)
+import UserSession exposing (DiscordFrontendUser, PushSubscription(..), ToBeFilledInByBackend(..), UserSession, Viewing)
 import VisibleMessages
 import WireHelper
 import WordSpellingGame exposing (Language(..), WordList(..))
@@ -188,6 +189,7 @@ init =
             --List.range 1 40
             --    |> List.map (\index -> ( Id.fromInt index, { joinedAt = Time.millisToPosix 0 } ))
             --    |> SeqDict.fromList
+            , bannedUsers = SeqSet.empty
             , invites = SeqDict.empty
             }
     in
@@ -269,6 +271,7 @@ init =
       , scheduledExportState = Nothing
       , lastScheduledExportTime = Nothing
       , sendMessageRateLimits = SeqDict.empty
+      , sessionRateLimits = RateLimit.sessionRateLimitsInit
       , toBackendLogs = Array.empty
       , backendMsgLogs = Array.empty
       , stickers = SeqDict.empty
@@ -456,51 +459,57 @@ updateHelper msg model =
             disconnectClient time sessionId clientId model
 
         BackendGotTime sessionId clientId toBackend time ->
-            let
-                oldModel : BackendModel
-                oldModel =
-                    model
-            in
-            updateFromFrontendWithTime
-                time
-                sessionId
-                clientId
-                toBackend
-                { model
-                    | connections =
-                        SeqDict.updateIfExists
-                            sessionId
-                            (NonemptyDict.updateIfExists
-                                clientId
-                                (\data ->
-                                    { lastRequest = LastRequest time
-                                    , call = data.call
-                                    , remoteCallData = data.remoteCallData
-                                    , currentlyViewing = data.currentlyViewing
-                                    }
-                                )
-                            )
-                            model.connections
-                }
-                |> (\( model2, cmds ) ->
-                        ( model2
-                        , if Env.isProduction then
-                            Command.batch
-                                [ Task.perform
-                                    (\endTime ->
-                                        ToBackendCompleted
-                                            (BackendExtra.toBackendLog toBackend)
-                                            (SeqDict.get sessionId oldModel.sessions |> Maybe.map .userId)
-                                            { startTime = time, endTime = endTime }
-                                    )
-                                    Time.now
-                                , cmds
-                                ]
+            case RateLimit.checkAndUpdateSessionRateLimit time sessionId model.sessionRateLimits of
+                Err () ->
+                    ( model, Command.none )
 
-                          else
-                            cmds
-                        )
-                   )
+                Ok sessionRateLimits ->
+                    let
+                        oldModel : BackendModel
+                        oldModel =
+                            model
+                    in
+                    updateFromFrontendWithTime
+                        time
+                        sessionId
+                        clientId
+                        toBackend
+                        { model
+                            | connections =
+                                SeqDict.updateIfExists
+                                    sessionId
+                                    (NonemptyDict.updateIfExists
+                                        clientId
+                                        (\data ->
+                                            { lastRequest = LastRequest time
+                                            , call = data.call
+                                            , remoteCallData = data.remoteCallData
+                                            , currentlyViewing = data.currentlyViewing
+                                            }
+                                        )
+                                    )
+                                    model.connections
+                            , sessionRateLimits = sessionRateLimits
+                        }
+                        |> (\( model2, cmds ) ->
+                                ( model2
+                                , if Env.isProduction then
+                                    Command.batch
+                                        [ Task.perform
+                                            (\endTime ->
+                                                ToBackendCompleted
+                                                    (BackendExtra.toBackendLog toBackend)
+                                                    (SeqDict.get sessionId oldModel.sessions |> Maybe.map .userId)
+                                                    { startTime = time, endTime = endTime }
+                                            )
+                                            Time.now
+                                        , cmds
+                                        ]
+
+                                  else
+                                    cmds
+                                )
+                           )
 
         SentLoginEmail time emailAddress result ->
             BackendExtra.addLog time (Log.LoginEmail result emailAddress) model
@@ -3521,6 +3530,36 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_BanMember guildId userId ->
+                    BackendExtra.asGuildOwner
+                        model
+                        sessionId
+                        guildId
+                        (\_ _ guild ->
+                            case MembersAndOwner.isMember userId guild.membersAndOwner of
+                                MembersAndOwner.IsMember ->
+                                    ( { model
+                                        | guilds =
+                                            SeqDict.insert guildId (LocalState.banMember userId guild) model.guilds
+                                      }
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toGuildExcludingOne
+                                            clientId
+                                            guildId
+                                            (Server_MemberLeft userId guildId |> ServerChange)
+                                            model
+                                        ]
+                                    )
+
+                                MembersAndOwner.IsOwner ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                MembersAndOwner.IsNotMember ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
+
                 Local_NewGuild _ guildName _ ->
                     BackendExtra.asUser
                         model
@@ -4692,7 +4731,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     let
                         currentlyViewing : Viewing
                         currentlyViewing =
-                            UserSession.setViewingToCurrentlyViewing viewing
+                            SetViewing.setViewingToCurrentlyViewing viewing
 
                         broadcastCmd : UserSession -> Command BackendOnly ToFrontend msg
                         broadcastCmd session =
@@ -4760,7 +4799,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = data.id.otherUserId }
-                                (\session user _ _ dmChannel ->
+                                (\session user _ dmChannelId dmChannel ->
                                     ( { model
                                         | users =
                                             NonemptyDict.insert
@@ -4783,7 +4822,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , Command.batch
                                         [ ViewDm
                                             data
-                                            (loadMessagesHelper dmChannel |> FilledInByBackend)
+                                            (loadMessagesHelper dmChannel
+                                                |> DmChannel.loadedMessages
+                                                    (GuildOrFullDmId_Dm dmChannelId)
+                                                    model.goMatchPublicIds
+                                                    dmChannel
+                                                |> FilledInByBackend
+                                            )
                                             |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
@@ -4903,7 +4948,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             , Command.batch
                                                 [ ViewChannel
                                                     data
-                                                    (loadMessagesHelper channel |> FilledInByBackend)
+                                                    (loadMessagesHelper channel
+                                                        |> DmChannel.loadedMessages
+                                                            (GuildOrFullDmId_Guild data.id.guildId data.id.channelId)
+                                                            model.goMatchPublicIds
+                                                            channel
+                                                        |> FilledInByBackend
+                                                    )
                                                     |> Local_CurrentlyViewing { markMessagesAsViewed = markMessagesAsViewed }
                                                     |> LocalChangeResponse changeId
                                                     |> Lamdera.sendToFrontend clientId
@@ -5126,6 +5177,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , case SeqDict.get channelId guild.channels of
                                         Just channel ->
                                             handleMessagesRequest oldestVisibleMessage channel
+                                                |> DmChannel.loadedMessages
+                                                    (GuildOrFullDmId_Guild guildId channelId)
+                                                    model.goMatchPublicIds
+                                                    channel
+                                                |> FilledInByBackend
                                                 |> Local_LoadChannelMessages guildOrDmId oldestVisibleMessage
                                                 |> LocalChangeResponse changeId
                                                 |> Lamdera.sendToFrontend clientId
@@ -5140,9 +5196,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 id
-                                (\_ _ _ _ dmChannel ->
+                                (\_ _ _ dmChannelId dmChannel ->
                                     ( model
                                     , handleMessagesRequest oldestVisibleMessage dmChannel
+                                        |> DmChannel.loadedMessages
+                                            (GuildOrFullDmId_Dm dmChannelId)
+                                            model.goMatchPublicIds
+                                            dmChannel
+                                        |> FilledInByBackend
                                         |> Local_LoadChannelMessages guildOrDmId oldestVisibleMessage
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
@@ -5163,6 +5224,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             SeqDict.get threadId channel.threads
                                                 |> Maybe.withDefault Thread.backendInit
                                                 |> handleMessagesRequest oldestVisibleMessage
+                                                |> FilledInByBackend
                                                 |> Local_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage
                                                 |> LocalChangeResponse changeId
                                                 |> Lamdera.sendToFrontend clientId
@@ -5182,6 +5244,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , SeqDict.get threadId dmChannel.threads
                                         |> Maybe.withDefault Thread.backendInit
                                         |> handleMessagesRequest oldestVisibleMessage
+                                        |> FilledInByBackend
                                         |> Local_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
@@ -5199,6 +5262,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 (\_ _ _ _ _ channel ->
                                     ( model
                                     , handleMessagesRequest oldestVisibleMessage channel
+                                        |> FilledInByBackend
                                         |> Local_Discord_LoadChannelMessages guildOrDmId oldestVisibleMessage
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
@@ -5213,6 +5277,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 (\_ _ _ channel ->
                                     ( model
                                     , handleMessagesRequest oldestVisibleMessage channel
+                                        |> FilledInByBackend
                                         |> Local_Discord_LoadChannelMessages guildOrDmId oldestVisibleMessage
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
@@ -5231,6 +5296,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , SeqDict.get threadId channel.threads
                                         |> Maybe.withDefault Thread.discordBackendInit
                                         |> handleMessagesRequest oldestVisibleMessage
+                                        |> FilledInByBackend
                                         |> Local_Discord_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
@@ -7645,6 +7711,12 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
 
                                         WordSpellingGame.CancelPremove ->
                                             action.change
+
+                                        WordSpellingGame.AddedReaction _ _ ->
+                                            action.change
+
+                                        WordSpellingGame.RemovedReaction _ _ ->
+                                            action.change
                             }
 
                         localMsg2 : Game.LocalChange
@@ -7665,7 +7737,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                         (Route.ChannelRoute
                                             channelId
                                             (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
-                                            (Just (UserSession.ChannelHeaderTab_Games (Just matchId)))
+                                            (Just (UserSession.ChannelHeaderTab_Games (Just matchId) Nothing))
                                         )
                                         ChannelsHiddenOnMobile
                                         Nothing
@@ -7674,7 +7746,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                     Route.DmRoute
                                         { channelId = DmChannelId.fromUserIds session.userId id.otherUserId
                                         , threadRoute = Route.NoThreadWithFriends Nothing Route.HideChannelSettings
-                                        , tab = Just (UserSession.ChannelHeaderTab_Games (Just matchId))
+                                        , tab = Just (UserSession.ChannelHeaderTab_Games (Just matchId) Nothing)
                                         , channelsVisible = ChannelsHiddenOnMobile
                                         , overlay = Nothing
                                         }
@@ -8360,7 +8432,7 @@ loadMessagesHelper channel =
 handleMessagesRequest :
     Id messageId
     -> { b | messages : IdArray messageId (Message messageId userId) }
-    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
+    -> SeqDict (Id messageId) (Message messageId userId)
 handleMessagesRequest oldestVisibleMessage channel =
     let
         oldestVisibleMessage2 =
@@ -8373,7 +8445,6 @@ handleMessagesRequest oldestVisibleMessage channel =
         |> IdArray.toList
         |> List.indexedMap (\index message -> ( Id.fromInt (index + nextOldestVisible), message ))
         |> SeqDict.fromList
-        |> FilledInByBackend
 
 
 sendEditMessage :
@@ -8523,90 +8594,115 @@ joinGuildByInvite :
 joinGuildByInvite inviteLinkId time sessionId clientId guildId model session user =
     case SeqDict.get guildId model.guilds of
         Just guild ->
-            case ( SeqDict.get inviteLinkId guild.invites, LocalState.addMemberBackend time session.userId guild ) of
-                ( Just _, Ok guild2 ) ->
-                    let
-                        modelWithoutUser : BackendModel
-                        modelWithoutUser =
-                            model
+            if SeqSet.member session.userId guild.bannedUsers then
+                ( model
+                , Err YouAreBanned
+                    |> Server_YouJoinedGuildByInvite
+                    |> ServerChange
+                    |> ChangeBroadcast
+                    |> Lamdera.sendToFrontends sessionId
+                )
 
-                        model2 : BackendModel
-                        model2 =
-                            { model
-                                | guilds = SeqDict.insert guildId guild2 model.guilds
-                                , users =
-                                    NonemptyDict.insert
-                                        session.userId
-                                        (LocalState.markAllChannelsAndThreadsAsViewedBackend guildId guild2 user)
-                                        model.users
-                            }
-                    in
-                    ( model2
-                    , Command.batch
-                        [ Broadcast.toGuildExcludingOne
-                            clientId
-                            guildId
-                            (Server_MemberJoined
-                                time
-                                session.userId
-                                guildId
-                                (User.backendToFrontendForUser user)
-                                |> ServerChange
-                            )
-                            modelWithoutUser
-                        , case
-                            ( NonemptyDict.get (MembersAndOwner.owner guild2.membersAndOwner) model2.users
-                            , LocalState.guildToFrontendForUser
-                                guildId
-                                (Just ( LocalState.announcementChannel guild2, ( NoThread, Nothing ) ))
-                                session.userId
-                                model2.goMatchPublicIds
-                                guild2
-                            )
-                          of
-                            ( Just owner, Just frontendGuild ) ->
-                                { guildId = guildId
-                                , guild = frontendGuild
-                                , owner = User.backendToFrontendForUser owner
-                                , members =
-                                    SeqDict.filterMap
-                                        (\userId2 _ ->
-                                            NonemptyDict.get userId2 model2.users
-                                                |> Maybe.map User.backendToFrontendForUser
-                                        )
-                                        (MembersAndOwner.members guild2.membersAndOwner)
-                                }
-                                    |> Ok
-                                    |> Server_YouJoinedGuildByInvite
-                                    |> ServerChange
-                                    |> ChangeBroadcast
-                                    |> Lamdera.sendToFrontends sessionId
-
-                            _ ->
-                                Command.none
-                        ]
-                    )
-
-                ( _, Err () ) ->
-                    ( model
-                    , Err AlreadyJoined
-                        |> Server_YouJoinedGuildByInvite
-                        |> ServerChange
-                        |> ChangeBroadcast
-                        |> Lamdera.sendToFrontends sessionId
-                    )
-
-                ( Nothing, _ ) ->
-                    ( model
-                    , Err InviteIsInvalid
-                        |> Server_YouJoinedGuildByInvite
-                        |> ServerChange
-                        |> ChangeBroadcast
-                        |> Lamdera.sendToFrontends sessionId
-                    )
+            else
+                joinGuildByInviteHelper inviteLinkId time sessionId clientId guildId model session user guild
 
         Nothing ->
             ( model, Command.none )
+
+
+joinGuildByInviteHelper :
+    SecretId InviteLinkId
+    -> Time.Posix
+    -> SessionId
+    -> ClientId
+    -> Id GuildId
+    -> BackendModel
+    -> UserSession
+    -> BackendUser
+    -> BackendGuild
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+joinGuildByInviteHelper inviteLinkId time sessionId clientId guildId model session user guild =
+    case ( SeqDict.get inviteLinkId guild.invites, LocalState.addMemberBackend time session.userId guild ) of
+        ( Just _, Ok guild2 ) ->
+            let
+                modelWithoutUser : BackendModel
+                modelWithoutUser =
+                    model
+
+                model2 : BackendModel
+                model2 =
+                    { model
+                        | guilds = SeqDict.insert guildId guild2 model.guilds
+                        , users =
+                            NonemptyDict.insert
+                                session.userId
+                                (LocalState.markAllChannelsAndThreadsAsViewedBackend guildId guild2 user)
+                                model.users
+                    }
+            in
+            ( model2
+            , Command.batch
+                [ Broadcast.toGuildExcludingOne
+                    clientId
+                    guildId
+                    (Server_MemberJoined
+                        time
+                        session.userId
+                        guildId
+                        (User.backendToFrontendForUser user)
+                        |> ServerChange
+                    )
+                    modelWithoutUser
+                , case
+                    ( NonemptyDict.get (MembersAndOwner.owner guild2.membersAndOwner) model2.users
+                    , LocalState.guildToFrontendForUser
+                        guildId
+                        (Just ( LocalState.announcementChannel guild2, ( NoThread, Nothing ) ))
+                        session.userId
+                        model2.goMatchPublicIds
+                        guild2
+                    )
+                  of
+                    ( Just owner, Just frontendGuild ) ->
+                        { guildId = guildId
+                        , guild = frontendGuild
+                        , owner = User.backendToFrontendForUser owner
+                        , members =
+                            SeqDict.filterMap
+                                (\userId2 _ ->
+                                    NonemptyDict.get userId2 model2.users
+                                        |> Maybe.map User.backendToFrontendForUser
+                                )
+                                (MembersAndOwner.members guild2.membersAndOwner)
+                        }
+                            |> Ok
+                            |> Server_YouJoinedGuildByInvite
+                            |> ServerChange
+                            |> ChangeBroadcast
+                            |> Lamdera.sendToFrontends sessionId
+
+                    _ ->
+                        Command.none
+                ]
+            )
+
+        ( _, Err () ) ->
+            ( model
+            , Err AlreadyJoined
+                |> Server_YouJoinedGuildByInvite
+                |> ServerChange
+                |> ChangeBroadcast
+                |> Lamdera.sendToFrontends sessionId
+            )
+
+        ( Nothing, _ ) ->
+            ( model
+            , Err InviteIsInvalid
+                |> Server_YouJoinedGuildByInvite
+                |> ServerChange
+                |> ChangeBroadcast
+                |> Lamdera.sendToFrontends sessionId
+            )
 
 
 twoFactorAuthenticationUpdateFromFrontend :

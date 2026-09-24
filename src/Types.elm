@@ -124,6 +124,7 @@ import Ports exposing (NotificationPermission, RegisterPushSubscription, Subscri
 import Postmark
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
+import RateLimit
 import RecoveryLogin
 import RichText exposing (DiscordCustomEmojiIdAndName, Domain, RichText)
 import Route exposing (ChannelSidebarMode, Route)
@@ -132,6 +133,7 @@ import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import SetViewing exposing (SetViewing)
 import SheepGame
 import Slack
 import Sticker exposing (StickerData)
@@ -145,7 +147,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserColor exposing (UserColor)
-import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, FrontendUserSession, NotificationMode, SetViewing, ToBeFilledInByBackend, UserOptionSection, UserSession)
+import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, FrontendUserSession, NotificationMode, ToBeFilledInByBackend, UserOptionSection, UserSession)
 import WordSpellingGame exposing (WordList)
 import X25519
 
@@ -195,7 +197,7 @@ type alias LoadedFrontend =
     , time : Time.Posix
     , timezone : Time.Zone
     , windowSize : Coord CssPixels
-    , virtualKeyboardOpen : Bool
+    , visualViewportHeight : Int
     , loginStatus : LoginStatus
     , loginType : LoginType
     , elmUiState : Ui.Anim.State
@@ -212,6 +214,7 @@ type alias LoadedFrontend =
       toFrontendLogs : Maybe (Array ToFrontend)
     , popSound : Result Audio.LoadError Audio.Source
     , startupData : Ports.StartupData
+    , homePagePreview : { index : Int, changedAt : Time.Posix, rotate : Bool }
     }
 
 
@@ -247,7 +250,7 @@ type alias LoggedIn2 =
     , messageHover : MessageHover
     , showEmojiSelector : EmojiSelector
     , editMessage : SeqDict ( AnyGuildOrDmId, ThreadRoute ) EditMessage
-    , replyTo : SeqDict ( AnyGuildOrDmId, ThreadRoute ) (Id ChannelMessageId)
+    , replyTo : SeqDict ( AnyGuildOrDmId, ThreadRoute ) (Message.RepliedTo ChannelMessageId)
     , revealedSpoilers : SeqDict AnyGuildOrDmId RevealedSpoilers
     , sidebarMode : ChannelSidebarMode
     , userOptions : Maybe UserOptionsModel
@@ -308,7 +311,7 @@ type alias EncryptionRequests =
 
 type alias PendingEncryptedMessage =
     { otherUserId : Id UserId
-    , threadRoute : ThreadRouteWithMaybeMessage
+    , threadRoute : Message.ThreadRouteWithRepliedTo
     , contentAndEmbeds : MessageContent (Id UserId)
     }
 
@@ -317,7 +320,7 @@ type alias PendingDecryptedMessage =
     { hash : BytesHash
     , id : Viewing_DmId
     , senderId : Id UserId
-    , threadRoute : ThreadRouteWithMaybeMessage
+    , threadRoute : Message.ThreadRouteWithRepliedTo
     }
 
 
@@ -442,6 +445,7 @@ type EmojiSelector
     | EmojiSelectorForEditMessage (Coord CssPixels) (Maybe Range)
     | EmojiSelectorForSheepGameInput SheepGame.Input (Coord CssPixels) (Maybe Range)
     | EmojiSelectorForSheepGameReaction GuildOrDmId (Id ChannelMessageId) SheepGame.ReactionTarget
+    | EmojiSelectorForWordSpellingGameReaction GuildOrDmId (Id ChannelMessageId) WordSpellingGame.ReactionTarget
 
 
 type alias BackendModel =
@@ -488,6 +492,7 @@ type alias BackendModel =
     , scheduledExportState : Maybe ExportStateProgress
     , lastScheduledExportTime : Maybe Time.Posix
     , sendMessageRateLimits : SeqDict (Id UserId) (Array Time.Posix)
+    , sessionRateLimits : RateLimit.SessionRateLimits
     , toBackendLogs : Array ToBackendLogData
     , backendMsgLogs : Array BackendMsgLogData
     , stickers : SeqDict (Id StickerId) StickerData
@@ -562,6 +567,7 @@ type FrontendMsg_
     | LoginFormMsg LoginForm.Msg
     | RecoveryLoginMsg RecoveryLogin.Msg
     | PressedShowLogin
+    | PressedHomePagePreview Int
     | AdminPageMsg Pages.Admin.Msg
     | PressedLogOut SessionIdHash
     | ElmUiMsg Ui.Anim.Msg
@@ -584,6 +590,7 @@ type FrontendMsg_
     | PressedLeaveGuild (Id GuildId)
     | PressedCreateInviteLink (Id GuildId)
     | PressedDeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
+    | PressedBanMember (Id GuildId) (Id UserId)
     | PressedToggleInviteLinkQrCode (SecretId InviteLinkId)
     | FrontendNoOp
     | PressedCopyText String
@@ -1053,7 +1060,7 @@ type LocalMsg
 type ServerChange
     = -- The user that wrote the message comes along with it because the receiver might not
       -- have them loaded yet, which is what makes names show up as "<missing>"
-      Server_SendMessage (Id UserId) FrontendUser Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
+      Server_SendMessage (Id UserId) FrontendUser Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId))) Message.ThreadRouteWithRepliedTo (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData) (SeqDict (Id ChannelMessageId) Game.LoadedMatch)
     | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Server_ImportedChannel (Id GuildId) (Id ChannelId) FrontendChannel
@@ -1156,7 +1163,7 @@ type ServerChange
     | Server_E2eeRequestDeclined Viewing_DmId (Id UserId)
     | Server_E2eeAccepted Viewing_DmId Time.Posix
     | Server_SetPublicKey (Id UserId) X25519.PublicKey
-    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) ThreadRouteWithMaybeMessage
+    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) Message.ThreadRouteWithRepliedTo (SeqDict (Id ChannelMessageId) Game.LoadedMatch)
     | Server_SendEncryptedEditMessage Time.Posix (Id UserId) Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId)))
     | Server_DisableE2ee Time.Posix (Id UserId) Viewing_DmId
 
@@ -1165,7 +1172,7 @@ type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
       -- The emojis used in the message are worked out by the frontend (less work for the backend and it doesn't matter if the frontend lies)
-    | Local_SendMessage Time.Posix Time.Zone GuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (List EmojiOrCustomEmoji)
+    | Local_SendMessage Time.Posix Time.Zone GuildOrDmId NonemptyString Message.ThreadRouteWithRepliedTo (SeqDict (Id FileId) FileData) (List EmojiOrCustomEmoji)
     | Local_Discord_SendMessage Time.Posix Time.Zone DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
@@ -1175,6 +1182,7 @@ type LocalChange
     | Local_LeaveGuild (Id GuildId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
     | Local_DeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
+    | Local_BanMember (Id GuildId) (Id UserId)
     | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))
     | Local_MemberTyping Time.Posix ( AnyGuildOrDmId, ThreadRoute )
     | Local_AddReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
@@ -1187,7 +1195,7 @@ type LocalChange
     | Local_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
     | Local_CurrentlyViewing { markMessagesAsViewed : Bool } SetViewing
     | Local_SetName PersonName
-    | Local_LoadChannelMessages GuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
+    | Local_LoadChannelMessages GuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend DmChannel.LoadedMessages)
     | Local_LoadThreadMessages GuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
     | Local_Discord_LoadChannelMessages DiscordGuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
     | Local_Discord_LoadThreadMessages DiscordGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId))))
@@ -1227,7 +1235,7 @@ type LocalChange
     | Local_AcceptE2ee Viewing_DmId Time.Posix (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
     | -- The second ciphertext is the line the recipient's push notification shows. The
       -- server can't write one for a message it can't read, so the sender encrypts it too.
-      Local_SendEncryptedMessage Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) (EncryptedData String) ThreadRouteWithMaybeMessage
+      Local_SendEncryptedMessage Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) (EncryptedData String) Message.ThreadRouteWithRepliedTo
     | Local_SendEncryptedEditMessage Time.Posix Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId)))
 
 

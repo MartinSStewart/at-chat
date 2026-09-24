@@ -2,6 +2,7 @@ module E2EWordSpellingGame exposing (tests)
 
 import Audio
 import Broadcast
+import Color
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import DmChannelId
@@ -9,6 +10,7 @@ import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Time as Time
+import Expect
 import FrontendExtra
 import Game
 import Id exposing (ChannelMessageId, Id)
@@ -16,6 +18,7 @@ import IdArray
 import Json.Encode
 import List.Nonempty
 import Message
+import MyUi
 import OneOrGreater
 import Route exposing (ChannelsVisibleOnMobile(..), ShowChannelSettings(..))
 import SeqDict
@@ -155,12 +158,71 @@ tests normalConfig =
                         [ -- The log numbers every entry, joins included, so LOAD (the first move
                           -- made) is 1 and ROT is 3. The board LOAD left behind holds its four
                           -- tiles and the one ROT left holds the two more it added.
-                          admin.mouseEnter 100 (Dom.id "wsg_moveWord_1") ( 10, 10 ) []
+                          admin.mouseEnter 100 (moveRow 1) ( 10, 10 ) []
                         , admin.checkModel 100 (checkHoveredMoveBoardSize 4)
-                        , admin.mouseEnter 100 (Dom.id "wsg_moveWord_3") ( 10, 10 ) []
+                        , admin.mouseEnter 100 (moveRow 3) ( 10, 10 ) []
                         , admin.checkModel 100 (checkHoveredMoveBoardSize 6)
-                        , admin.custom 100 (Dom.id "wsg_moveWord_3") "mouseleave" (Json.Encode.object [])
+                        , admin.custom 100 (moveRow 3) "mouseleave" (Json.Encode.object [])
                         , admin.checkModel 100 checkNoHoveredMove
+                        ]
+                    , T.collapsableGroup
+                        "A move can be reacted to and replied to"
+                        [ admin.mouseEnter 100 (moveRow 1) ( 10, 10 ) []
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "miniView_emojiReact_0" ])
+
+                        -- The reaction is drawn under the move for everyone watching the match
+                        , admin.click 100 (Dom.id "miniView_emojiReact_0")
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_removeReactionEmoji_0" ])
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_addReactionEmoji" ])
+
+                        -- Replying to a move hands it to the message input, which repeats the
+                        -- move itself so whatever gets written next points at something the
+                        -- writer can recognise
+                        , admin.click 100 (Dom.id "miniView_reply")
+                        , admin.checkView
+                            100
+                            (\view ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "guild_replyToHeader" ] view
+                                    |> Test.Html.Query.has [ Test.Html.Selector.text " played LOAD (+10)" ]
+                            )
+                        , admin.click 100 (Dom.id "guild_closeReplyToHeader")
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_replyToHeader" ])
+                        , admin.custom 100 (moveRow 1) "mouseleave" (Json.Encode.object [])
+                        ]
+                    , T.collapsableGroup
+                        "A reply to a move is drawn above the message and opens the move"
+                        [ admin.mouseEnter 100 (moveRow 1) ( 10, 10 ) []
+                        , admin.click 100 (Dom.id "miniView_reply")
+                        , admin.custom 100 (moveRow 1) "mouseleave" (Json.Encode.object [])
+                        , E2EHelper.writeMessage admin 100 "what a word"
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text " played LOAD (+10)" ])
+                        , user.snapshotView 100 { name = "Reply to a move" }
+                        , user.click 100 (Dom.id "guild_gameReplyLink_0")
+                        , user.checkModel 100 (checkViewingRepliedTo (Message.RepliedTo_WordSpellingGameMove 1))
+
+                        -- The move that was replied to marks itself. The mark holds at full
+                        -- strength and then settles on the half strength it keeps.
+                        , user.checkView
+                            100
+                            (\view ->
+                                Test.Html.Query.find [ Test.Html.Selector.id (Dom.idToString (moveRow 1)) ] view
+                                    |> Test.Html.Query.findAll [ highlightMark ]
+                                    |> Test.Html.Query.count (Expect.equal 1)
+                            )
+
+                        -- A tab that has never opened the match gets it along with the messages
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId1
+                            ("/d/" ++ DmChannelId.toString (DmChannelId.fromUserIds (Id.fromInt 0) (Id.fromInt 2)))
+                            E2EHelper.tallDesktopWindow
+                            (\userB ->
+                                [ T.andThen
+                                    10
+                                    (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                                , userB.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text " played LOAD (+10)" ])
+                                ]
+                            )
                         ]
                     , T.collapsableGroup
                         "Drop a tray tile one slot to the right"
@@ -399,7 +461,7 @@ tests normalConfig =
                             (Route.DmRoute
                                 { channelId = DmChannelId.fromUserIds (Id.fromInt 2) Broadcast.adminUserId
                                 , threadRoute = Route.NoThreadWithFriends Nothing HideChannelSettings
-                                , tab = Just (UserSession.ChannelHeaderTab_Games (Just (Id.fromInt 0)))
+                                , tab = Just (UserSession.ChannelHeaderTab_Games (Just (Id.fromInt 0)) Nothing)
                                 , channelsVisible = ChannelsHiddenOnMobile
                                 , overlay = Nothing
                                 }
@@ -1452,6 +1514,35 @@ checkHoveredMoveBoardSize expected model =
 
         Nothing ->
             Err "Expected a move in the Moves log to be hovered"
+
+
+{-| The mark drawn over a row a reply has taken the reader to. It's a layer inside the row rather
+than the row's own background, since its opacity fades.
+-}
+highlightMark : Test.Html.Selector.Selector
+highlightMark =
+    Test.Html.Selector.style "background-color" (Color.toCssString MyUi.replyToColor)
+
+
+{-| A row in the Moves log, by the number the log shows next to it.
+-}
+moveRow : Int -> Dom.HtmlId
+moveRow moveNumber =
+    WordSpellingGame.reactionTargetId (WordSpellingGame.MoveReaction moveNumber)
+
+
+checkViewingRepliedTo : Message.RepliedToGame -> FrontendModel -> Result String ()
+checkViewingRepliedTo repliedTo model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            if Route.toChannelHeaderTab loaded.route == Just (UserSession.ChannelHeaderTab_Games (Just (Id.fromInt 0)) (Just repliedTo)) then
+                Ok ()
+
+            else
+                Err "Expected pressing the line above a reply to open the move it replied to"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
 
 
 checkNoHoveredMove : FrontendModel -> Result String ()

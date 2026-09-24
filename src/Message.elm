@@ -8,6 +8,9 @@ module Message exposing
     , Message(..)
     , MessageContent
     , MessageNoReply(..)
+    , RepliedTo(..)
+    , RepliedToGame(..)
+    , ThreadRouteWithRepliedTo(..)
     , UserTextMessageData
     , UserTextMessageDataNoReply
     , UserTextMessageDrawings
@@ -21,11 +24,18 @@ module Message exposing
     , editUserTextMessage
     , encryptedUserTextMessageFrontend
     , handleDrawingChange
+    , maybeToReply
     , noDrawings
     , reactionEmojis
     , removeReactionEmoji
+    , repliedToGameCodec
+    , repliedToMatch
+    , replyToMaybe
+    , threadRouteRepliedToMatches
+    , threadRouteWithoutRepliedTo
     , toDecrypted
     , toEncrypted
+    , toThreadRouteWithMaybeMessage
     , userJoined
     , userTextMessageBackend
     , userTextMessageFrontend
@@ -40,7 +50,7 @@ import Embed exposing (Embed(..), EmbedData, EmbedImageFormat(..))
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
 import FileStatus exposing (FileData, FileHash, FileId)
-import Id exposing (Id, StickerId, UserId)
+import Id exposing (ChannelMessageId, Id, QuestionId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
 import Quantity exposing (Quantity)
@@ -100,16 +110,16 @@ userTextMessageNoEmbeds :
     -> userId
     -> Nonempty (RichText userId)
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
-    -> Maybe (Id messageId)
+    -> RepliedTo messageId
     -> SeqDict (Id FileId) FileData
     -> UserTextMessageData messageId userId
-userTextMessageNoEmbeds createdAt2 createdBy content reactions repliedTo attachedFiles =
+userTextMessageNoEmbeds createdAt2 createdBy content reactions repliedTo2 attachedFiles =
     { createdAt = createdAt2
     , createdBy = createdBy
     , content = { content = content, attachedFiles = attachedFiles, embeds = Array.empty }
     , reactions = reactions
     , editedAt = Nothing
-    , repliedTo = repliedTo
+    , repliedTo = repliedTo2
     , drawings = Nothing
     }
 
@@ -128,7 +138,7 @@ userTextMessageBackend :
     -> Time.Posix
     -> userId
     -> Nonempty (RichText userId)
-    -> Maybe (Id messageId)
+    -> RepliedTo messageId
     -> SeqDict (Id FileId) FileData
     -> SeqDict (Id StickerId) StickerData
     ->
@@ -136,7 +146,7 @@ userTextMessageBackend :
         , Command BackendOnly toMsg ( Url, Result Http.Error EmbedData )
         , SeqDict (Id StickerId) StickerData
         )
-userTextMessageBackend secretKey createdAt2 createdBy content repliedTo attachedFiles allStickers =
+userTextMessageBackend secretKey createdAt2 createdBy content repliedTo2 attachedFiles allStickers =
     let
         hyperlinks : List Url
         hyperlinks =
@@ -151,7 +161,7 @@ userTextMessageBackend secretKey createdAt2 createdBy content repliedTo attached
             }
       , reactions = SeqDict.empty
       , editedAt = Nothing
-      , repliedTo = repliedTo
+      , repliedTo = repliedTo2
       , drawings = Nothing
       }
     , SeqSet.fromList hyperlinks |> SeqSet.toList |> List.map (Embed.request secretKey) |> Command.batch
@@ -183,9 +193,9 @@ encryptedUserTextMessageFrontend :
     -> Id UserId
     -> SeqSet FileHash
     -> EncryptedData (MessageContent (Id UserId))
-    -> Maybe (Id messageId)
+    -> RepliedTo messageId
     -> Message messageId (Id UserId)
-encryptedUserTextMessageFrontend createdAt2 createdBy fileHashes contentAndEmbeds repliedTo =
+encryptedUserTextMessageFrontend createdAt2 createdBy fileHashes contentAndEmbeds repliedTo2 =
     EncryptedUserTextMessage
         { content = contentAndEmbeds
         , fileHashes = fileHashes
@@ -193,7 +203,7 @@ encryptedUserTextMessageFrontend createdAt2 createdBy fileHashes contentAndEmbed
         , createdBy = createdBy
         , reactions = SeqDict.empty
         , editedAt = Nothing
-        , repliedTo = repliedTo
+        , repliedTo = repliedTo2
         , drawings = Nothing
         }
 
@@ -202,10 +212,10 @@ userTextMessageFrontend :
     Time.Posix
     -> userId
     -> Nonempty (RichText userId)
-    -> Maybe (Id messageId)
+    -> RepliedTo messageId
     -> SeqDict (Id FileId) FileData
     -> Message messageId userId
-userTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
+userTextMessageFrontend createdAt2 createdBy content repliedTo2 attachedFiles =
     let
         hyperlinks : List Url
         hyperlinks =
@@ -220,7 +230,7 @@ userTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
         }
     , reactions = SeqDict.empty
     , editedAt = Nothing
-    , repliedTo = repliedTo
+    , repliedTo = repliedTo2
     , drawings = Nothing
     }
         |> UserTextMessage
@@ -376,13 +386,156 @@ type alias UserTextMessageData messageId userId =
     , content : MessageContent userId
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
-    , repliedTo : Maybe (Id messageId)
+    , repliedTo : RepliedTo messageId
     , drawings :
         {- This introduces redundancy since Nothing and Just with no drawings inside mean the same thing.
            Hopefully it also reduces how much memory this record uses for typical messages.
         -}
         Maybe (UserTextMessageDrawings userId)
     }
+
+
+type RepliedTo messageId
+    = NoReply
+    | RepliedToMessage (Id messageId)
+    | RepliedToGame (Id ChannelMessageId) RepliedToGame
+
+
+{-| Something inside a game that a message can reply to. `Message` can't see the games
+themselves, so it names their targets itself: a move in a word spelling game by the number the
+Moves log shows next to it, and in a sheep game one player's answer to a question or the host's
+notes on it.
+-}
+type RepliedToGame
+    = RepliedTo_WordSpellingGameMove Int
+    | RepliedTo_SheepGameAnswer (Id UserId) (Id QuestionId)
+    | RepliedTo_SheepGameNotes (Id QuestionId)
+
+
+type ThreadRouteWithRepliedTo
+    = NoThreadWithRepliedTo (RepliedTo ChannelMessageId)
+    | ViewThreadWithRepliedTo (Id ChannelMessageId) (Maybe (Id ThreadMessageId))
+
+
+repliedToGameCodec : Serialize.Codec e RepliedToGame
+repliedToGameCodec =
+    Serialize.customType
+        (\a b c value ->
+            case value of
+                RepliedTo_WordSpellingGameMove argA ->
+                    a argA
+
+                RepliedTo_SheepGameAnswer argA argB ->
+                    b argA argB
+
+                RepliedTo_SheepGameNotes argA ->
+                    c argA
+        )
+        |> Serialize.variant1 RepliedTo_WordSpellingGameMove Serialize.unsignedInt16
+        |> Serialize.variant2 RepliedTo_SheepGameAnswer Id.codec Id.codec
+        |> Serialize.variant1 RepliedTo_SheepGameNotes Id.codec
+        |> Serialize.finishCustomType
+
+
+{-| Which thread a message is going into, with the reply dropped.
+-}
+threadRouteWithoutRepliedTo : ThreadRouteWithRepliedTo -> ThreadRoute
+threadRouteWithoutRepliedTo threadRoute =
+    case threadRoute of
+        NoThreadWithRepliedTo _ ->
+            NoThread
+
+        ViewThreadWithRepliedTo threadId _ ->
+            ViewThread threadId
+
+
+{-| For the code that only cares about a reply to another message, such as working out who to
+notify. A reply to a move in a game has no message behind it, so it comes out as no reply at all.
+-}
+toThreadRouteWithMaybeMessage : ThreadRouteWithRepliedTo -> ThreadRouteWithMaybeMessage
+toThreadRouteWithMaybeMessage threadRoute =
+    case threadRoute of
+        NoThreadWithRepliedTo repliedTo2 ->
+            NoThreadWithMaybeMessage (replyToMaybe repliedTo2)
+
+        ViewThreadWithRepliedTo threadId maybeRepliedTo ->
+            ViewThreadWithMaybeMessage threadId maybeRepliedTo
+
+
+maybeToReply : Maybe (Id messageId) -> RepliedTo messageId
+maybeToReply maybeRepliedTo =
+    case maybeRepliedTo of
+        Nothing ->
+            NoReply
+
+        Just messageId ->
+            RepliedToMessage messageId
+
+
+{-| The match a message replies to something inside of.
+-}
+repliedToMatch : Message messageId userId -> Maybe (Id ChannelMessageId)
+repliedToMatch message =
+    case message of
+        UserTextMessage data ->
+            repliedToMatchHelper data.repliedTo
+
+        EncryptedUserTextMessage data ->
+            repliedToMatchHelper data.repliedTo
+
+        UserJoinedMessage _ _ _ _ ->
+            Nothing
+
+        DeletedMessage _ ->
+            Nothing
+
+        CallStarted _ ->
+            Nothing
+
+        GameStarted _ ->
+            Nothing
+
+
+repliedToMatchHelper : RepliedTo messageId -> Maybe (Id ChannelMessageId)
+repliedToMatchHelper repliedTo =
+    case repliedTo of
+        RepliedToGame matchId _ ->
+            Just matchId
+
+        RepliedToMessage _ ->
+            Nothing
+
+        NoReply ->
+            Nothing
+
+
+threadRouteRepliedToMatches : ThreadRouteWithRepliedTo -> List (Id ChannelMessageId)
+threadRouteRepliedToMatches threadRoute =
+    case threadRoute of
+        NoThreadWithRepliedTo (RepliedToGame matchId _) ->
+            [ matchId ]
+
+        NoThreadWithRepliedTo (RepliedToMessage _) ->
+            []
+
+        NoThreadWithRepliedTo NoReply ->
+            []
+
+        ViewThreadWithRepliedTo _ _ ->
+            []
+
+
+replyToMaybe : RepliedTo messageId -> Maybe (Id messageId)
+replyToMaybe repliedTo2 =
+    case repliedTo2 of
+        RepliedToMessage messageId2 ->
+            Just messageId2
+
+        NoReply ->
+            Nothing
+
+        RepliedToGame _ _ ->
+            Nothing
 
 
 {-| Puts the plain text of a message back in place of its ciphertext, for a conversation
@@ -469,7 +622,7 @@ type alias EncryptedUserTextMessageData messageId userId =
     , fileHashes : SeqSet FileHash
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
-    , repliedTo : Maybe (Id messageId)
+    , repliedTo : RepliedTo messageId
     , drawings : Maybe (UserTextMessageDrawings userId)
     }
 

@@ -44,6 +44,7 @@ module Broadcast exposing
 import Codec exposing (Codec)
 import Discord
 import DiscordUserData exposing (DiscordUserData(..))
+import DmChannel
 import DmChannelId
 import Drawing
 import Duration
@@ -59,12 +60,13 @@ import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
-import Id exposing (GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
+import Game
+import Id exposing (ChannelMessageId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
 import MembersAndOwner exposing (IsMember(..))
-import Message exposing (Message(..), UserTextMessageData)
+import Message exposing (Message(..), ThreadRouteWithRepliedTo(..), UserTextMessageData)
 import MyUi
 import NonemptyDict
 import PersonName
@@ -1533,7 +1535,7 @@ broadcastDm :
     -> Id UserId
     -> NonemptyString
     -> UserTextMessageData messageId (Id UserId)
-    -> ThreadRouteWithMaybeMessage
+    -> ThreadRouteWithRepliedTo
     -> SeqDict (Id FileId) FileData
     -> List EmojiOrCustomEmoji
     -> SeqDict (Id StickerId) StickerData
@@ -1541,15 +1543,32 @@ broadcastDm :
     -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
 broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserId text message threadRouteWithReplyTo attachedFiles emojis stickers model =
     let
+        dmChannelId : DmChannelId.DmChannelId
+        dmChannelId =
+            DmChannelId.fromUserIds userId otherUserId
+
+        repliedToMatches : SeqDict (Id ChannelMessageId) Game.LoadedMatch
+        repliedToMatches =
+            case SeqDict.get dmChannelId model.dmChannels of
+                Just dmChannel ->
+                    Message.threadRouteRepliedToMatches threadRouteWithReplyTo
+                        |> DmChannel.loadRepliedToMatches
+                            (DmChannelId.GuildOrFullDmId_Dm dmChannelId)
+                            model.goMatchPublicIds
+                            dmChannel
+
+                Nothing ->
+                    SeqDict.empty
+
         isViewing : Bool
         isViewing =
             List.any
                 (\connection ->
                     case ( connection.currentlyViewing, threadRouteWithReplyTo ) of
-                        ( UserSession.Viewing_Dm data, NoThreadWithMaybeMessage _ ) ->
+                        ( UserSession.Viewing_Dm data, NoThreadWithRepliedTo _ ) ->
                             data.id.otherUserId == userId
 
-                        ( UserSession.Viewing_DmThread data, ViewThreadWithMaybeMessage threadIdB _ ) ->
+                        ( UserSession.Viewing_DmThread data, ViewThreadWithRepliedTo threadIdB _ ) ->
                             data.id.otherUserId == userId && data.id.threadId == threadIdB
 
                         _ ->
@@ -1583,10 +1602,10 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
                                 { channelId = DmChannelId.fromUserIds userId otherUserId
                                 , threadRoute =
                                     case threadRouteWithReplyTo of
-                                        NoThreadWithMaybeMessage _ ->
+                                        NoThreadWithRepliedTo _ ->
                                             NoThreadWithFriends Nothing HideChannelSettings
 
-                                        ViewThreadWithMaybeMessage threadId _ ->
+                                        ViewThreadWithRepliedTo threadId _ ->
                                             ViewThreadWithFriends threadId Nothing HideChannelSettings
                                 , tab = Nothing
                                 , channelsVisible = ChannelsHiddenOnMobile
@@ -1620,6 +1639,7 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
                     threadRouteWithReplyTo
                     attachedFiles
                     stickers
+                    repliedToMatches
             )
             model
         , Command.batch cmds

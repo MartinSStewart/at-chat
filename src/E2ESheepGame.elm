@@ -492,7 +492,25 @@ threePlayerMatchTest normalConfig =
                                     (Test.Html.Query.has [ Test.Html.Selector.id "miniView_emojiReact_0" ])
                                 , stevie.checkView
                                     100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "miniView_reply" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.id "miniView_reply" ])
+
+                                -- Replying to an answer hands it to the message input, which
+                                -- repeats the answer itself so whatever gets written next points
+                                -- at something the writer can recognise
+                                , stevie.click 100 (Dom.id "miniView_reply")
+                                , stevie.checkView
+                                    100
+                                    (\view ->
+                                        Test.Html.Query.find
+                                            [ Test.Html.Selector.id "guild_replyToHeader" ]
+                                            view
+                                            |> Test.Html.Query.has
+                                                [ Test.Html.Selector.text "Blue" ]
+                                    )
+                                , stevie.click 100 (Dom.id "guild_closeReplyToHeader")
+                                , stevie.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_replyToHeader" ])
                                 , stevie.click 100 (Dom.id "miniView_emojiReact_0")
                                 , stevie.checkView
                                     100
@@ -500,6 +518,23 @@ threePlayerMatchTest normalConfig =
                                 , joe.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.id "guild_addReactionEmoji" ])
+
+                                -- A message sent as a reply to the answer says so above it
+                                , stevie.mouseEnter
+                                    100
+                                    (SheepGame.reactionTargetId (SheepGame.AnswerReaction (Id.fromInt 2) (Id.fromInt 0)))
+                                    ( 10, 10 )
+                                    []
+                                , stevie.click 100 (Dom.id "miniView_reply")
+                                , E2EHelper.writeMessage stevie 100 "same as mine"
+                                , joe.checkView
+                                    100
+                                    (\view ->
+                                        Test.Html.Query.find
+                                            [ Test.Html.Selector.id ("guild_gameReplyLink_" ++ Id.toString messageId) ]
+                                            view
+                                            |> Test.Html.Query.has [ Test.Html.Selector.text "Blue" ]
+                                    )
 
                                 -- The notes the host wrote about the question take reactions too
                                 , stevie.mouseEnter
@@ -510,6 +545,29 @@ threePlayerMatchTest normalConfig =
                                 , stevie.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.id "miniView_showReactionEmojiSelector" ])
+
+                                -- and replies, which repeat the notes above the message input and
+                                -- then above the message the same way a reply to an answer does
+                                , stevie.click 100 (Dom.id "miniView_reply")
+                                , stevie.checkView
+                                    100
+                                    (\view ->
+                                        Test.Html.Query.find
+                                            [ Test.Html.Selector.id "guild_replyToHeader" ]
+                                            view
+                                            |> Test.Html.Query.has [ Test.Html.Selector.text "Nobody said **green**" ]
+                                    )
+                                , E2EHelper.writeMessage stevie 100 "green is a colour too"
+                                , joe.checkView
+                                    100
+                                    (\view ->
+                                        Test.Html.Query.findAll
+                                            [ Test.Html.Selector.id ("guild_gameReplyLink_" ++ Id.toString messageId) ]
+                                            view
+                                            |> Test.Html.Query.index 1
+                                            |> Test.Html.Query.has [ Test.Html.Selector.text "Nobody said **green**" ]
+                                    )
+                                , E2EHelper.tallSnapshot joe 100 { name = "Replies to a sheep game answer and notes" }
 
                                 -- Joe reads back over the first question instead of waiting at the
                                 -- bottom, so the next one to turn up is announced to him rather than

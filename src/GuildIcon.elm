@@ -261,7 +261,7 @@ guildIcon guild mode name =
                         "outline"
                         (case mode of
                             IsSelected ->
-                                "1px solid " ++ MyUi.colorToStyle MyUi.guildColumnBorder
+                                "1px solid " ++ MyUi.colorToStyle MyUi.guildIconSelectedBorder
 
                             Normal _ ->
                                 "0"
@@ -361,7 +361,7 @@ guildIconView mode url =
             "outline"
             (case mode of
                 IsSelected ->
-                    "1px solid " ++ MyUi.colorToStyle MyUi.guildColumnBorder
+                    "1px solid " ++ MyUi.colorToStyle MyUi.guildIconSelectedBorder
 
                 Normal _ ->
                     "0"
@@ -480,7 +480,7 @@ curveAboveIcon paint =
             , Ui.alignRight
             , Ui.move { x = 0, y = -invertedRadius, z = 0 }
             , MyUi.noPointerEvents
-            , Ui.inFront (curveEdge edgeAboveIcon)
+            , Ui.inFront curveEdgeAboveIcon
             ]
             (curve
                 (String.join " " [ arcAboveIcon, "L " ++ radius ++ "," ++ radius, "Z" ])
@@ -497,7 +497,7 @@ curveBelowIcon paint =
             , Ui.alignRight
             , Ui.move { x = 0, y = invertedRadius, z = 0 }
             , MyUi.noPointerEvents
-            , Ui.inFront (curveEdge edgeBelowIcon)
+            , Ui.inFront curveEdgeBelowIcon
             ]
             (curve
                 (String.join " " [ arcBelowIcon, "L " ++ radius ++ ",0", "Z" ])
@@ -580,25 +580,67 @@ curve shape paint =
         |> Ui.html
 
 
+{-| The curve above the icon starts on the line beside the channel list, at the top right of its
+box, and ends on the icon's own outline, at the bottom left.
+-}
+curveEdgeAboveIcon : Element msg
+curveEdgeAboveIcon =
+    curveEdge "guildIconCurveEdgeAbove" edgeAboveIcon { x1 = "1", y1 = "0", x2 = "0", y2 = "1" }
+
+
+{-| The curve below the icon runs the same way, from the bottom right of its box to the top left.
+-}
+curveEdgeBelowIcon : Element msg
+curveEdgeBelowIcon =
+    curveEdge "guildIconCurveEdgeBelow" edgeBelowIcon { x1 = "1", y1 = "1", x2 = "0", y2 = "0" }
+
+
 {-| The line along the curve's edge, over the top of the curve rather than inside it. Inside it
 would be held to the curve's shape, and where the curve meets a straight line it runs alongside
 it, thinner than a pixel for several pixels before it opens out. Clipping the line to that
 tapers it away to nothing over exactly the stretch where the two are meant to look like one
 line. Overflow leaves the half of it that falls outside the box alone as well, which lands on
 the icon's own outline and on the line beside the channel list, where it belongs.
+
+The line is a gradient rather than one colour because its two ends belong to two different
+lines: the bright outline the icon is picked out by, and the ordinary border beside the channel
+list that the curve carries on into. `line` runs from the second end to the first, as a fraction
+of the curve's box.
+
 -}
-curveEdge : String -> Element msg
-curveEdge edge =
+curveEdge : String -> String -> { x1 : String, y1 : String, x2 : String, y2 : String } -> Element msg
+curveEdge gradientId edge line =
     Svg.svg
         [ Svg.Attributes.width radius
         , Svg.Attributes.height radius
         , Svg.Attributes.viewBox ("0 0 " ++ radius ++ " " ++ radius)
         , Svg.Attributes.style "display:block;overflow:visible"
         ]
-        [ Svg.path
+        [ Svg.defs
+            []
+            [ Svg.linearGradient
+                [ Svg.Attributes.id gradientId
+                , Svg.Attributes.x1 line.x1
+                , Svg.Attributes.y1 line.y1
+                , Svg.Attributes.x2 line.x2
+                , Svg.Attributes.y2 line.y2
+                ]
+                [ Svg.stop
+                    [ Svg.Attributes.offset "0"
+                    , Svg.Attributes.stopColor (MyUi.colorToStyle MyUi.guildColumnBorder)
+                    ]
+                    []
+                , Svg.stop
+                    [ Svg.Attributes.offset "1"
+                    , Svg.Attributes.stopColor (MyUi.colorToStyle MyUi.guildIconSelectedBorder)
+                    ]
+                    []
+                ]
+            ]
+        , Svg.path
             [ Svg.Attributes.d edge
             , Svg.Attributes.fill "none"
-            , Svg.Attributes.stroke (MyUi.colorToStyle MyUi.guildColumnBorder)
+            , Svg.Attributes.stroke ("url(#" ++ gradientId ++ ")")
             , Svg.Attributes.strokeWidth "1"
             ]
             []

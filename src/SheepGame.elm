@@ -43,6 +43,7 @@ module SheepGame exposing
     , rankUpArrow
     , reactionTargetId
     , removeAttachedFileFromText
+    , replyPreview
     , resultsData
     , revealedQuestionId
     , saveInputAction
@@ -77,7 +78,7 @@ import FileName
 import FileStatus exposing (FileData, FileId, FileMetadata(..), FileStatus, IsEncrypted(..))
 import Go
 import GuildIcon
-import Html
+import Html exposing (Html)
 import Html.Attributes
 import Icons
 import Id exposing (Id, QuestionId, UserId)
@@ -97,6 +98,7 @@ import SeqSet
 import Sticker
 import String.Nonempty
 import Touch exposing (Drag)
+import Twemoji
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -511,6 +513,8 @@ type OutMsg
       -- Somebody wants to react with an emoji that isn't one of the ones they reach for
       -- most, so the full selector has to be opened for them.
     | OpenReactionEmojiSelector ReactionTarget
+      -- Somebody wants to reply to one of the results in the chat the match is in.
+    | ReplyToResult ReactionTarget
       -- An image attached to a question, an answer or a note, pressed to see it full size.
       -- Where that gets shown is the frontend's business rather than the game's.
     | ShowImage RichText.PressedImageData
@@ -1235,6 +1239,9 @@ updateGame localUser setup shared msg model =
                 MessageView.MessageViewMsg_PressedShowReactionEmojiSelector ->
                     ( model, Nothing, OpenReactionEmojiSelector target )
 
+                MessageView.MessageViewMsg_PressedReply ->
+                    ( model, Nothing, ReplyToResult target )
+
                 -- The rest of what a message offers belongs to the conversation it's in, and
                 -- an answer isn't in one
                 _ ->
@@ -1453,6 +1460,49 @@ updateAction setup action shared =
 
                 _ ->
                     shared
+
+
+replyPreview : Shared -> ReactionTarget -> Element msg
+replyPreview shared target =
+    case target of
+        AnswerReaction userId questionId ->
+            case SeqDict.get userId shared.answers of
+                Just answers ->
+                    case IdArray.get questionId answers of
+                        Just (Just answer) ->
+                            Ui.row
+                                [ Ui.spacing 4 ]
+                                [ Ui.el [ Ui.Font.size 20, Ui.width Ui.shrink ] (Ui.html sheepEmoji)
+                                , Ui.el [ Ui.clipWithEllipsis ] (Ui.text (replyPreviewText answer))
+                                ]
+
+                        _ ->
+                            Ui.none
+
+                Nothing ->
+                    Ui.none
+
+        NotesReaction questionId ->
+            case SeqDict.get questionId shared.notes of
+                Just (Just notes) ->
+                    Ui.row
+                        [ Ui.spacing 4 ]
+                        [ Ui.el [ Ui.Font.size 20, Ui.width Ui.shrink ] (Ui.html sheepEmoji)
+                        , Ui.el [ Ui.clipWithEllipsis ] (Ui.text (replyPreviewText notes))
+                        ]
+
+                _ ->
+                    Ui.none
+
+
+sheepEmoji : Html msg
+sheepEmoji =
+    Twemoji.spriteView "1em" Emoji.animalsNatureSpriteName "🐑"
+
+
+replyPreviewText : ValidatedInput -> String
+replyPreviewText input =
+    RichText.toString Time.utc False SeqDict.empty input.text |> String.trim
 
 
 {-| What two answers have to share to count as the same answer. Rendering the text with
@@ -1830,11 +1880,12 @@ gameView :
     -> LocalUser
     -> Drag
     -> LoggedIn a
+    -> Maybe ReactionTarget
     -> ValidatedSetup
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView time windowSize showMemberTab localUser drag loggedIn setup shared model =
+gameView time windowSize showMemberTab localUser drag loggedIn highlightedResult setup shared model =
     let
         isMobile : Bool
         isMobile =
@@ -1953,7 +2004,7 @@ gameView time windowSize showMemberTab localUser drag loggedIn setup shared mode
                         , Ui.widthMax maxWidth
                         , Ui.spacing 16
                         ]
-                        (revealingView isMobile time contentWidth localUser setup shared model)
+                        (revealingView isMobile time contentWidth localUser highlightedResult setup shared model)
             )
         )
 
@@ -2314,7 +2365,7 @@ groupingQuestionView isMobile time contentWidth localUser loggedIn setup shared 
                 (Ui.text "Preview")
             , Ui.column
                 [ Ui.spacing 16 ]
-                [ answerGroupsView isMobile time localUser contentWidth Nothing questionId result.answers
+                [ answerGroupsView isMobile time localUser contentWidth Nothing Nothing questionId result.answers
                 , case validatedDraft localUser questionId model.noteDrafts of
                     Just notes ->
                         messageWithProfile
@@ -2333,6 +2384,7 @@ groupingQuestionView isMobile time contentWidth localUser loggedIn setup shared 
                                 localUser
                                 contentWidth
                                 (NotesReaction questionId)
+                                Nothing
                                 Nothing
                                 notes.reactions
 
@@ -2659,8 +2711,8 @@ placeIn userId scores =
         |> List.length
 
 
-revealingView : Bool -> Time.Posix -> Int -> LocalUser -> ValidatedSetup -> Shared -> GameData -> List (Element GameMsg)
-revealingView isMobile time contentWidth localUser setup shared model =
+revealingView : Bool -> Time.Posix -> Int -> LocalUser -> Maybe ReactionTarget -> ValidatedSetup -> Shared -> GameData -> List (Element GameMsg)
+revealingView isMobile time contentWidth localUser highlightedResult setup shared model =
     let
         questionCount : Int
         questionCount =
@@ -2712,7 +2764,7 @@ revealingView isMobile time contentWidth localUser setup shared model =
                     ]
                 ]
                 :: List.indexedMap
-                    (resultsQuestionView isMobile time contentWidth localUser setup model.hoveredResult results.maxPoints)
+                    (resultsQuestionView isMobile time contentWidth localUser setup model.hoveredResult highlightedResult results.maxPoints)
                     (List.take (shared.questionsRevealed - 1) results.questions)
             )
     , if shared.questionsRevealed > questionCount then
@@ -2758,11 +2810,12 @@ resultsQuestionView :
     -> LocalUser
     -> ValidatedSetup
     -> Maybe ReactionTarget
+    -> Maybe ReactionTarget
     -> Int
     -> Int
     -> QuestionResult
     -> Element GameMsg
-resultsQuestionView isMobile time contentWidth localUser setup hoveredResult maxPoints index result =
+resultsQuestionView isMobile time contentWidth localUser setup hoveredResult highlightedResult maxPoints index result =
     let
         numberWidth : number
         numberWidth =
@@ -2796,7 +2849,7 @@ resultsQuestionView isMobile time contentWidth localUser setup hoveredResult max
             ]
         , Ui.column
             [ Ui.spacing 16 ]
-            [ answerGroupsView isMobile time localUser contentWidth hoveredResult (Id.fromInt index) result.answers
+            [ answerGroupsView isMobile time localUser contentWidth hoveredResult highlightedResult (Id.fromInt index) result.answers
             , scoreTableView isMobile localUser maxPoints result.answers
             , case result.notes of
                 Nothing ->
@@ -2820,6 +2873,7 @@ resultsQuestionView isMobile time contentWidth localUser setup hoveredResult max
                             contentWidth
                             (NotesReaction (Id.fromInt index))
                             hoveredResult
+                            highlightedResult
                             notes.reactions
             ]
         ]
@@ -2846,10 +2900,11 @@ answerGroupsView :
     -> LocalUser
     -> Int
     -> Maybe ReactionTarget
+    -> Maybe ReactionTarget
     -> Id QuestionId
     -> List AnswerResult
     -> Element GameMsg
-answerGroupsView isMobile time localUser contentWidth hoveredResult questionId answers =
+answerGroupsView isMobile time localUser contentWidth hoveredResult highlightedResult questionId answers =
     List.filterMap
         (\answerResult ->
             Maybe.map (\answer -> ( answerResult.userId, answerResult.group, answer )) answerResult.answer
@@ -2892,6 +2947,7 @@ answerGroupsView isMobile time localUser contentWidth hoveredResult questionId a
                                 contentWidth
                                 (AnswerReaction userId questionId)
                                 hoveredResult
+                                highlightedResult
                                 answer.reactions
                     )
                     (first :: rest)
@@ -2947,12 +3003,8 @@ reactionTargetId target =
             Dom.id ("sheepGame_revealedNotes_" ++ Id.toString questionId)
 
 
-{-| An answer or a note, drawn with the reactions it has and, while the pointer is over it,
-the menu for adding one. That menu is all that's on offer: editing, replying and the rest of
-what a message's menu does belong to the conversation a message is in.
--}
-reactableResult : Int -> LocalUser -> Int -> ReactionTarget -> Maybe ReactionTarget -> Reactions -> Element GameMsg -> Element GameMsg
-reactableResult paddingX2 localUser contentWidth target hoveredResult reactions content =
+reactableResult : Int -> LocalUser -> Int -> ReactionTarget -> Maybe ReactionTarget -> Maybe ReactionTarget -> Reactions -> Element GameMsg -> Element GameMsg
+reactableResult paddingX2 localUser contentWidth target hoveredResult highlightedResult reactions content =
     let
         isHovered : Bool
         isHovered =
@@ -2962,11 +3014,11 @@ reactableResult paddingX2 localUser contentWidth target hoveredResult reactions 
         [ Ui.id (Dom.idToString (reactionTargetId target))
         , Ui.paddingXY paddingX2 4
         , Ui.spacing 4
-        , Ui.attrIf isHovered (Ui.background MyUi.hoverHighlight)
+        , Ui.attrIf isHovered MyUi.hoverHighlightLayer
         , Ui.Events.onMouseEnter (ReactionMsg target MessageView.MessageView_MouseEnteredMessage)
         , Ui.Events.onMouseLeave (ReactionMsg target MessageView.MessageView_MouseExitedMessage)
         , if isHovered then
-            MessageView.reactionsMiniViewNearEdge
+            MessageView.gameMiniViewNearEdge
                 localUser.user
                 localUser.user.availableCustomEmojis
                 localUser.emojiData
@@ -2976,6 +3028,7 @@ reactableResult paddingX2 localUser contentWidth target hoveredResult reactions 
 
           else
             Ui.noAttr
+        , Ui.attrIf (highlightedResult == Just target) (MyUi.highlightFadeOut MyUi.replyToColor)
         ]
         (content
             :: (case
@@ -3080,7 +3133,8 @@ finalResultsView localUser winners =
         [ Ui.spacing 48, Ui.Font.size 24 ]
         [ Ui.Prose.paragraph
             [ Ui.Font.center ]
-            (Ui.text "🐑 And the winner is "
+            (Ui.html sheepEmoji
+                :: Ui.text " And the winner is "
                 :: (case winners of
                         [] ->
                             [ Ui.text "...no one?" ]
@@ -3098,7 +3152,7 @@ finalResultsView localUser winners =
                                 winners
                                 |> List.intersperse (Ui.text ", ")
                    )
-                ++ [ Ui.text " 🐑" ]
+                ++ [ Ui.text " ", Ui.html sheepEmoji ]
             )
         , Ui.Prose.paragraph [ Ui.Font.center ] [ Ui.text "Thanks for playing!" ]
         ]
@@ -3187,7 +3241,10 @@ resultsGridView isMobile localUser setup shared gridHovered =
                         , if count == highestMatchCount && count > 0 then
                             Ui.Prose.paragraph
                                 []
-                                [ Ui.text "🐑 This is the highest number of matching answers! 🐑" ]
+                                [ Ui.html sheepEmoji
+                                , Ui.text " This is the highest number of matching answers! "
+                                , Ui.html sheepEmoji
+                                ]
 
                           else
                             Ui.none

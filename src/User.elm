@@ -1009,16 +1009,16 @@ smallProfileImage roundLeftOnly user =
                 , bottomLeft = smallProfileImageRounding
                 , topRight =
                     if roundLeftOnly then
-                        smallProfileImageRounding
+                        0
 
                     else
-                        0
+                        smallProfileImageRounding
                 , bottomRight =
                     if roundLeftOnly then
-                        smallProfileImageRounding
+                        0
 
                     else
-                        0
+                        smallProfileImageRounding
                 }
     in
     case user of

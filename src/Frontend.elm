@@ -46,7 +46,7 @@ import GuildColumn
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_DmId)
 import ImageEditor
 import ImageViewer
 import Json.Decode
@@ -83,6 +83,7 @@ import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
+import SetViewing exposing (SetViewing(..))
 import SheepGame
 import Sticker
 import String.Extra
@@ -91,8 +92,8 @@ import TextEditor
 import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Drag(..), DragTarget(..), ScreenCoordinate, Touch)
-import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), ImportChannelStatus(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import TwoFactorAuthentication
+import Types exposing (ChannelDataToEncrypt, EmojiSelector(..), EncryptionRequests, FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), ImportChannelStatus(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PendingDecryptedManyMessages, PendingEncryptedFile, PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -102,7 +103,7 @@ import User exposing (FrontendUser)
 import UserAgent
 import UserColor
 import UserOptions
-import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
+import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), ToBeFilledInByBackend(..))
 import Vector2d
 import WordSpellingGame
 import X25519
@@ -329,7 +330,7 @@ subscriptions _ model =
                                         Subscription.none
 
                                     ChannelSidebarNotDragging { offset } ->
-                                        if offset == channelSidebarTarget loaded.route then
+                                        if offset == FrontendExtra.channelSidebarTarget loaded.route then
                                             Subscription.none
 
                                         else
@@ -438,7 +439,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
                 Ok loginData ->
                     -- The emoji data is requested as part of this same load, so it's
                     -- always still on its way at this point.
-                    loadedInitHelper startupData Nothing loginData loading |> Tuple.mapFirst LoggedIn
+                    FrontendExtra.loadedInitHelper startupData Nothing loginData loading |> Tuple.mapFirst LoggedIn
 
                 Err () ->
                     ( NotLoggedIn
@@ -461,7 +462,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , time = time
             , timezone = startupData.timezone
             , windowSize = loading.windowSize
-            , virtualKeyboardOpen = False
+            , visualViewportHeight = Coord.yRaw loading.windowSize
             , loginStatus = loginStatus
             , loginType = loading.loginType
             , elmUiState = Ui.Anim.init
@@ -477,6 +478,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , toFrontendLogs = Nothing
             , popSound = loading.popSound
             , startupData = startupData
+            , homePagePreview = { index = 0, changedAt = time, rotate = True }
             }
 
         ( model2, cmdA ) =
@@ -498,222 +500,6 @@ initLoadedFrontend loading clientId time startupData loginResult =
         ]
     , Audio.cmdNone
     )
-
-
-loadedInitHelper :
-    Ports.StartupData
-    -> Maybe CachedEmojiData
-    -> LoginData
-    -> { a | windowSize : Coord CssPixels, navigationKey : Key, route : Route }
-    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-loadedInitHelper startupData emojiData loginData loading =
-    let
-        backlog : List EncryptedBacklog
-        backlog =
-            encryptedBacklog (SeqSet.fromList startupData.e2eeKeys) loginData.dmChannels
-
-        local : LocalState
-        local =
-            loginDataToLocalState startupData SeqDict.empty backlog emojiData loginData
-
-        loggedIn : LoggedIn2
-        loggedIn =
-            { localState = Local.init local
-            , admin =
-                case loginData.adminData of
-                    IsAdminLoginData _ ->
-                        Pages.Admin.initForAdmin
-                            (case loading.route of
-                                AdminRoute params ->
-                                    params
-
-                                _ ->
-                                    { highlightLog = Nothing }
-                            )
-
-                    IsAdminButNoData ->
-                        Pages.Admin.initForAdmin
-                            (case loading.route of
-                                AdminRoute params ->
-                                    params
-
-                                _ ->
-                                    { highlightLog = Nothing }
-                            )
-
-                    IsNotAdminLoginData ->
-                        Pages.Admin.initForUser
-            , drafts = SeqDict.empty
-            , newChannelForm = SeqDict.empty
-            , editChannelForm = SeqDict.empty
-            , editGuildForm = SeqDict.empty
-            , newGuildForm = Nothing
-            , typingDebouncer = True
-            , textInputFocus = Nothing
-            , previousTextInputFocus = Nothing
-            , messageHover = NoMessageHover
-            , showEmojiSelector = EmojiSelectorHidden
-            , editMessage = SeqDict.empty
-            , replyTo = SeqDict.empty
-            , revealedSpoilers = SeqDict.empty
-            , sidebarMode = ChannelSidebarNotDragging { offset = channelSidebarTarget loading.route }
-            , userOptions = Nothing
-            , twoFactor =
-                case loginData.twoFactorAuthenticationEnabled of
-                    Just enabledAt ->
-                        TwoFactorAlreadyComplete enabledAt
-
-                    Nothing ->
-                        TwoFactorNotStarted
-            , filesToUpload = SeqDict.empty
-            , showFileToUploadInfo = Nothing
-            , isReloading = False
-            , channelScrollPosition = ScrolledToBottom
-            , textEditor = TextEditor.init
-            , profilePictureEditor = ImageEditor.init
-            , guildIconEditor = Nothing
-            , externalLinkWarning = Nothing
-            , emojiSelector = Emoji.selectorInit
-            , voiceChat = Call.initModel
-            , games = SeqDict.empty
-            , fileDragOverCount = NoFileDrag Nothing
-            , drawingMode = Drawing.init
-            , newMessagesWhileNotScrolledToBottom = 0
-            , showInviteLinkQrCode = Nothing
-            , friendsSearch = ""
-            , channelSearch = ""
-            , showNewPrivateKey = Nothing
-            , e2eeError = Nothing
-            , e2eePrivateKeyText = ""
-            , e2eeKeysOnThisDevice = SeqSet.fromList startupData.e2eeKeys
-            , encryptionRequests =
-                { pendingEncryptedMessages = SeqDict.empty
-                , nextEncryptionRequestId = Id.fromInt 0
-                , pendingDecryptedMessages = SeqDict.empty
-                , nextDecryptionRequestId = Id.fromInt 0
-                , pendingDecryptedManyMessages =
-                    List.indexedMap
-                        (\index backlog2 ->
-                            case backlog2 of
-                                PendingEncryption conversation ->
-                                    Just
-                                        ( Id.fromInt index
-                                        , { messageHashes = List.map Encryption.hash conversation.messages
-                                          , shiftScrollFrom = Nothing
-                                          }
-                                        )
-
-                                MissingKeys _ ->
-                                    Nothing
-                        )
-                        backlog
-                        |> List.filterMap identity
-                        |> SeqDict.fromList
-                , pendingDecryptedOldMessages = SeqDict.empty
-                , nextDecryptManyRequestId = Id.fromInt (List.length backlog)
-                , pendingEncryptedManyMessages = SeqDict.empty
-                , nextEncryptManyRequestId = Id.fromInt 0
-                , pendingEncryptedEdits = SeqDict.empty
-                , pendingEncryptedFiles = SeqDict.empty
-                , nextEncryptFileRequestId = Id.fromInt 0
-                }
-            , e2eeSectionsExpanded = SeqDict.empty
-            , typedTextCounter = 0
-            }
-    in
-    ( loggedIn
-    , Command.batch
-        [ List.indexedMap
-            (\index backlog2 ->
-                case backlog2 of
-                    PendingEncryption conversation ->
-                        Encryption.decryptManyMessages (Id.fromInt index) conversation.id conversation.messages |> Just
-
-                    MissingKeys _ ->
-                        Nothing
-            )
-            backlog
-            |> List.filterMap identity
-            |> Command.batch
-        , case loading.route of
-            AdminRoute params ->
-                case params.highlightLog of
-                    Just _ ->
-                        Dom.getElement Pages.Admin.logSectionId
-                            |> Task.andThen (\{ element } -> Dom.setViewport 0 (element.y + 40))
-                            |> Task.attempt (\_ -> ScrolledToLogSection)
-
-                    Nothing ->
-                        Command.none
-
-            _ ->
-                Command.none
-        , -- We need to check if a video preview is visible immediately since we might be on the call route
-          Call.displayModeChangeCmd
-            Call.NoVideo
-            (Call.displayMode (MyUi.isMobile loading) local.localUser.session.userId loading.route local.calls)
-            loggedIn.voiceChat
-        , GuildColumn.unreadNotificationCount local |> Ports.setAppBadge
-        ]
-    )
-
-
-loginDataToLocalState :
-    Ports.StartupData
-    -> SeqDict BytesHash (Result () (MessageContent (Id UserId)))
-    -> List EncryptedBacklog
-    -> Maybe CachedEmojiData
-    -> LoginData
-    -> LocalState
-loginDataToLocalState startupData decrypted encryptionBacklog emojiData loginData =
-    { adminData =
-        case loginData.adminData of
-            IsAdminLoginData adminData ->
-                IsAdmin (FrontendExtra.initAdminData adminData)
-
-            IsNotAdminLoginData ->
-                IsNotAdmin
-
-            IsAdminButNoData ->
-                IsAdminButDataNotLoaded
-    , guilds = loginData.guilds
-    , discordGuilds = loginData.discordGuilds
-    , dmChannels = loginData.dmChannels
-    , discordDmChannels = loginData.discordDmChannels
-    , joinGuildError = Nothing
-    , localUser =
-        { session = loginData.session
-        , currentlyViewing = loginData.currentlyViewing
-        , user = loginData.user
-        , otherUsers = loginData.otherUsers
-        , discordUsers = loginData.discordUsers
-        , timezone = startupData.timezone
-        , userAgent = startupData.userAgent
-        , devicePixelRatio = startupData.devicePixelRatio
-        , stickers = loginData.stickers
-        , customEmojis = loginData.customEmojis
-        , emojiData = emojiData
-        , decryptedMessages =
-            List.foldl
-                (\backlog decrypted2 ->
-                    case backlog of
-                        PendingEncryption _ ->
-                            decrypted2
-
-                        MissingKeys conversation ->
-                            List.foldl
-                                (\message decrypted3 -> SeqDict.insert (Encryption.hash message) (Err ()) decrypted3)
-                                decrypted2
-                                conversation.messages
-                )
-                decrypted
-                encryptionBacklog
-        }
-    , otherSessions = loginData.otherSessions
-    , publicVapidKey = loginData.publicVapidKey
-    , textEditor = loginData.textEditor
-    , calls = Call.init loginData.voiceChatPeers
-    }
 
 
 tryInitLoadedFrontend : LoadingFrontend -> ( FrontendModel_, Command FrontendOnly ToBackend FrontendMsg_, AudioCmd FrontendMsg_ )
@@ -862,19 +648,18 @@ updateLoaded msg model =
             )
 
         GotWindowSize width height ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn | drawingMode = Drawing.resetAnchor loggedIn.drawingMode }
-                    , -- Zooming the page changes the device pixel ratio and resizes the window at
-                      -- the same time, so this is where a new ratio turns up. Ask for it so ascii
-                      -- art can pick a font size that lands on whole device pixels. Moving the
-                      -- window to a screen with a different pixel density doesn't always resize it,
-                      -- but the startup data gets re-sent whenever the window regains focus, and
-                      -- that carries the ratio too.
-                      Ports.requestDevicePixelRatio
-                    )
-                )
-                { model | windowSize = Coord.xy width height }
+            ( { model
+                | windowSize = Coord.xy width height
+                , loginStatus =
+                    case model.loginStatus of
+                        LoggedIn loggedIn ->
+                            LoggedIn { loggedIn | drawingMode = Drawing.resetAnchor loggedIn.drawingMode }
+
+                        NotLoggedIn _ ->
+                            model.loginStatus
+              }
+            , Ports.requestDevicePixelRatio
+            )
 
         PressedShowLogin ->
             case model.loginStatus of
@@ -897,6 +682,11 @@ updateLoaded msg model =
                       }
                     , Command.none
                     )
+
+        PressedHomePagePreview index ->
+            ( { model | homePagePreview = { index = index, changedAt = model.time, rotate = False } }
+            , Command.none
+            )
 
         AdminPageMsg adminPageMsg ->
             case model.loginStatus of
@@ -1335,6 +1125,17 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedBanMember guildId userId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_BanMember guildId userId |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
         PressedToggleInviteLinkQrCode inviteLinkId ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -1548,6 +1349,29 @@ updateLoaded msg model =
 
                                         EmojiOrSticker_CustomEmoji customEmojiId ->
                                             addSheepGameReaction
+                                                guildOrDmId
+                                                matchId
+                                                target
+                                                (EmojiOrCustomEmoji_CustomEmoji customEmojiId)
+                                                model
+                                                loggedIn2
+
+                                        EmojiOrSticker_Sticker _ ->
+                                            ( loggedIn2, Command.none )
+
+                                EmojiSelectorForWordSpellingGameReaction guildOrDmId matchId target ->
+                                    case emojiOrSticker of
+                                        EmojiOrSticker_UnicodeEmoji emoji ->
+                                            addWordSpellingGameReaction
+                                                guildOrDmId
+                                                matchId
+                                                target
+                                                (EmojiOrCustomEmoji_Emoji emoji)
+                                                model
+                                                loggedIn2
+
+                                        EmojiOrSticker_CustomEmoji customEmojiId ->
+                                            addWordSpellingGameReaction
                                                 guildOrDmId
                                                 matchId
                                                 target
@@ -1940,7 +1764,7 @@ updateLoaded msg model =
                             let
                                 target : Float
                                 target =
-                                    channelSidebarTarget model.route
+                                    FrontendExtra.channelSidebarTarget model.route
 
                                 step : Float
                                 step =
@@ -2626,7 +2450,7 @@ updateLoaded msg model =
                                     case LocalState.guildOrDmIdToMessage guildOrDmId2 threadRoute (Local.model loggedIn.localState) of
                                         Just ( _, maybeRepliedTo ) ->
                                             case ( guildOrDmId2, maybeRepliedTo ) of
-                                                ( GuildOrDmId_Guild { guildId, channelId }, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
+                                                ( GuildOrDmId_Guild { guildId, channelId }, Message.ViewThreadWithRepliedTo threadId (Just repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
                                                         (GuildRoute
@@ -2640,7 +2464,7 @@ updateLoaded msg model =
                                                             Nothing
                                                         )
 
-                                                ( GuildOrDmId_Guild { guildId, channelId }, NoThreadWithMaybeMessage (Just repliedTo) ) ->
+                                                ( GuildOrDmId_Guild { guildId, channelId }, Message.NoThreadWithRepliedTo (Message.RepliedToMessage repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
                                                         (GuildRoute
@@ -2654,7 +2478,7 @@ updateLoaded msg model =
                                                             Nothing
                                                         )
 
-                                                ( GuildOrDmId_Dm { otherUserId }, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
+                                                ( GuildOrDmId_Dm { otherUserId }, Message.ViewThreadWithRepliedTo threadId (Just repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
                                                         (DmRoute
@@ -2670,7 +2494,7 @@ updateLoaded msg model =
                                                             }
                                                         )
 
-                                                ( GuildOrDmId_Dm { otherUserId }, NoThreadWithMaybeMessage (Just repliedTo) ) ->
+                                                ( GuildOrDmId_Dm { otherUserId }, Message.NoThreadWithRepliedTo (Message.RepliedToMessage repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
                                                         (DmRoute
@@ -2684,6 +2508,14 @@ updateLoaded msg model =
                                                             , channelsVisible = ChannelsHiddenOnMobile
                                                             , overlay = Nothing
                                                             }
+                                                        )
+
+                                                ( _, Message.NoThreadWithRepliedTo (Message.RepliedToGame matchId repliedToGame) ) ->
+                                                    FrontendExtra.routePush
+                                                        model
+                                                        (Route.setChannelHeaderTab
+                                                            (Just (ChannelHeaderTab_Games (Just matchId) (Just repliedToGame)))
+                                                            model.route
                                                         )
 
                                                 _ ->
@@ -2786,6 +2618,9 @@ updateLoaded msg model =
                                                     MessageMenu.mobileMenuOpeningOffset
                                                         guildOrDmId
                                                         threadRoute
+                                                        isThreadStarter
+                                                        Nothing
+                                                        Nothing
                                                         local
                                                         model
                                                 }
@@ -2980,7 +2815,7 @@ updateLoaded msg model =
                                 newRoute : Route
                                 newRoute =
                                     Route.setChannelHeaderTab
-                                        (Just (ChannelHeaderTab_Games (Just messageId)))
+                                        (Just (ChannelHeaderTab_Games (Just messageId) Nothing))
                                         model.route
                             in
                             if newRoute == model.route then
@@ -3419,7 +3254,7 @@ updateLoaded msg model =
                                 stillEncrypted =
                                     case SeqDict.get otherUserId local.dmChannels of
                                         Just dmChannel ->
-                                            encryptedMessagesIn dmChannel
+                                            FrontendExtra.encryptedMessagesIn dmChannel
 
                                         Nothing ->
                                             []
@@ -3561,7 +3396,7 @@ updateLoaded msg model =
                                         draft : ( AnyGuildOrDmId, ThreadRoute )
                                         draft =
                                             ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = pending.otherUserId })
-                                            , Id.threadRouteWithoutMaybeMessage pending.threadRoute
+                                            , Message.threadRouteWithoutRepliedTo pending.threadRoute
                                             )
                                     in
                                     FrontendExtra.handleLocalChange
@@ -3723,8 +3558,8 @@ updateLoaded msg model =
                 Nothing ->
                     ( model, Command.none )
 
-        VisualViewportResized _ ->
-            ( model, Command.none )
+        VisualViewportResized height ->
+            ( { model | visualViewportHeight = round height }, Command.none )
 
         TextEditorMsg textEditorMsg ->
             case model.loginStatus of
@@ -4652,16 +4487,7 @@ updateLoaded msg model =
                                                                 model.timezone
                                                                 guildOrDmId2
                                                                 nonempty
-                                                                (case threadRoute of
-                                                                    ViewThread threadId ->
-                                                                        ViewThreadWithMaybeMessage
-                                                                            threadId
-                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
-
-                                                                    NoThread ->
-                                                                        NoThreadWithMaybeMessage
-                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
-                                                                )
+                                                                (sendMessageThreadRoute guildOrDmIdWithThread threadRoute loggedIn)
                                                                 (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
                                                                     Just dict ->
                                                                         NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
@@ -4690,11 +4516,11 @@ updateLoaded msg model =
                                                                     ViewThread threadId ->
                                                                         ViewThreadWithMaybeMessage
                                                                             threadId
-                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
+                                                                            (repliedToMessage guildOrDmIdWithThread loggedIn |> Maybe.map Id.changeType)
 
                                                                     NoThread ->
                                                                         NoThreadWithMaybeMessage
-                                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
+                                                                            (repliedToMessage guildOrDmIdWithThread loggedIn)
                                                                 )
                                                                 (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
                                                                     Just dict ->
@@ -5773,7 +5599,7 @@ updateLoaded msg model =
                                 (ChannelRoute
                                     channelId
                                     (NoThreadWithFriends Nothing HideChannelSettings)
-                                    (Just (ChannelHeaderTab_Games (Just messageId)))
+                                    (Just (ChannelHeaderTab_Games (Just messageId) Nothing))
                                 )
                                 ChannelsHiddenOnMobile
                                 Nothing
@@ -5788,7 +5614,7 @@ updateLoaded msg model =
                                                 (Local.model loggedIn.localState).localUser.session.userId
                                                 otherUserId
                                         , threadRoute = NoThreadWithFriends Nothing HideChannelSettings
-                                        , tab = Just (ChannelHeaderTab_Games (Just messageId))
+                                        , tab = Just (ChannelHeaderTab_Games (Just messageId) Nothing)
                                         , channelsVisible = ChannelsHiddenOnMobile
                                         , overlay = Nothing
                                         }
@@ -6933,8 +6759,7 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
     case model.loginStatus of
         LoggedIn loggedIn ->
             ( { model
-                | virtualKeyboardOpen = False
-                , loginStatus =
+                | loginStatus =
                     LoggedIn
                         { loggedIn
                             | textInputFocus =
@@ -6980,8 +6805,7 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
 
         NotLoggedIn notLoggedIn ->
             ( { model
-                | virtualKeyboardOpen = False
-                , loginStatus =
+                | loginStatus =
                     NotLoggedIn
                         { notLoggedIn
                             | textInputFocus =
@@ -7162,6 +6986,29 @@ handleEditable editableMsg setter acceptEdit model =
         model
 
 
+{-| Which thread the message being written is going into, along with whatever it is replying to.
+-}
+sendMessageThreadRoute : ( AnyGuildOrDmId, ThreadRoute ) -> ThreadRoute -> LoggedIn2 -> Message.ThreadRouteWithRepliedTo
+sendMessageThreadRoute guildOrDmIdWithThread threadRoute loggedIn =
+    case threadRoute of
+        ViewThread threadId ->
+            Message.ViewThreadWithRepliedTo
+                threadId
+                (repliedToMessage guildOrDmIdWithThread loggedIn |> Maybe.map Id.changeType)
+
+        NoThread ->
+            SeqDict.get guildOrDmIdWithThread loggedIn.replyTo
+                |> Maybe.withDefault Message.NoReply
+                |> Message.NoThreadWithRepliedTo
+
+
+{-| The message being replied to, for the places that can only reply to another message.
+-}
+repliedToMessage : ( AnyGuildOrDmId, ThreadRoute ) -> LoggedIn2 -> Maybe (Id ChannelMessageId)
+repliedToMessage guildOrDmIdWithThread loggedIn =
+    SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.andThen Message.replyToMaybe
+
+
 pressedReply : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoggedIn2 -> LoadedFrontend -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 pressedReply guildOrDmId threadRoute loggedIn model =
     ( MessageMenu.close
@@ -7170,7 +7017,7 @@ pressedReply guildOrDmId threadRoute loggedIn model =
             | replyTo =
                 SeqDict.insert
                     ( guildOrDmId, Id.threadRouteWithoutMessage threadRoute )
-                    (Id.threadRouteToMessageId threadRoute)
+                    (Message.RepliedToMessage (Id.threadRouteToMessageId threadRoute))
                     loggedIn.replyTo
         }
     , Command.batch
@@ -7273,7 +7120,7 @@ results screen.
 -}
 addSheepGameReaction :
     GuildOrDmId
-    -> Id Id.ChannelMessageId
+    -> Id ChannelMessageId
     -> SheepGame.ReactionTarget
     -> EmojiOrCustomEmoji
     -> LoadedFrontend
@@ -7288,6 +7135,30 @@ addSheepGameReaction guildOrDmId matchId target emoji model loggedIn =
             , change = SheepGame.AddedReaction target emoji
             }
             |> Game.LocalChange_SheepGame matchId
+            |> Local_Game guildOrDmId
+            |> Just
+        )
+        { loggedIn | showEmojiSelector = EmojiSelectorHidden }
+        Command.none
+
+
+addWordSpellingGameReaction :
+    GuildOrDmId
+    -> Id ChannelMessageId
+    -> WordSpellingGame.ReactionTarget
+    -> EmojiOrCustomEmoji
+    -> LoadedFrontend
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+addWordSpellingGameReaction guildOrDmId matchId target emoji model loggedIn =
+    FrontendExtra.handleLocalChange
+        model.time
+        (WordSpellingGame.Action
+            { userId = (Local.model loggedIn.localState).localUser.session.userId
+            , time = model.time
+            , change = WordSpellingGame.AddedReaction target emoji
+            }
+            |> Game.LocalChange_WordSpellingGame matchId
             |> Local_Game guildOrDmId
             |> Just
         )
@@ -7319,6 +7190,9 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
                             EmojiSelectorHidden
 
                         EmojiSelectorForSheepGameReaction _ _ _ ->
+                            EmojiSelectorHidden
+
+                        EmojiSelectorForWordSpellingGameReaction _ _ _ ->
                             EmojiSelectorHidden
 
                         EmojiSelectorForSheepGameInput _ _ _ ->
@@ -7406,6 +7280,9 @@ handleAltPressedMessage guildOrDmId threadRoute isThreadStarter maybeImageUrl ma
                             MessageMenu.mobileMenuOpeningOffset
                                 guildOrDmId
                                 threadRoute
+                                isThreadStarter
+                                maybeImageUrl
+                                maybeLinkUrl
                                 local
                                 model
                         }
@@ -7725,63 +7602,6 @@ startClosingChannelSidebar model =
             FrontendExtra.routePush model (Route.setChannelsVisible ChannelsVisibleOnMobile model.route)
 
 
-{-| Which of the three screens the mobile layout is heading for: the member column at 0,
-the conversation view at 1, or the guild's channel list at 2.
--}
-channelSidebarTarget : Route -> Float
-channelSidebarTarget route =
-    case Route.toShowMembersTab route of
-        ( ShowChannelSettings, _ ) ->
-            0
-
-        ( HideChannelSettings, _ ) ->
-            let
-                helper channelsVisible =
-                    case channelsVisible of
-                        ChannelsVisibleOnMobile ->
-                            2
-
-                        ChannelsHiddenOnMobile ->
-                            1
-            in
-            case route of
-                GuildRoute _ _ channelsVisible _ ->
-                    helper channelsVisible
-
-                DiscordGuildRoute routeData ->
-                    helper routeData.channelsVisible
-
-                HomePageRoute _ ->
-                    2
-
-                AdminRoute _ ->
-                    2
-
-                NewGuildRoute ->
-                    2
-
-                DmRoute routeData ->
-                    helper routeData.channelsVisible
-
-                DiscordDmRoute routeData ->
-                    helper routeData.channelsVisible
-
-                AiChatRoute ->
-                    2
-
-                SlackOAuthRedirect _ ->
-                    2
-
-                TextEditorRoute ->
-                    2
-
-                LinkDiscord _ ->
-                    2
-
-                PublicGoMatchRoute _ ->
-                    2
-
-
 channelSidebarDragRange : Route -> { min : Float, max : Float }
 channelSidebarDragRange route =
     case Route.toShowMembersTab route of
@@ -7870,7 +7690,7 @@ updateLoadedFromBackend msg model =
                         LoginSuccess loginData ->
                             let
                                 ( loggedIn, cmdA ) =
-                                    loadedInitHelper model.startupData model.emojiData loginData model
+                                    FrontendExtra.loadedInitHelper model.startupData model.emojiData loginData model
 
                                 ( model2, cmdB ) =
                                     FrontendExtra.routeRequest
@@ -8262,7 +8082,7 @@ updateLoadedFromBackend msg model =
                                         Command.none
 
                             Local_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
-                                if SeqDict.isEmpty messagesLoaded then
+                                if SeqDict.isEmpty messagesLoaded.messages then
                                     Command.none
 
                                 else
@@ -8360,10 +8180,10 @@ updateLoadedFromBackend msg model =
                                                     Command.none
                                             )
 
-                                        Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ ->
+                                        Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ _ ->
                                             FrontendExtra.handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local loggedIn2 model
 
-                                        Server_SendEncryptedMessage senderId _ _ id _ content maybeRepliedTo ->
+                                        Server_SendEncryptedMessage senderId _ _ id _ content maybeRepliedTo _ ->
                                             ( FrontendExtra.mapEncryptionRequests
                                                 (\requests ->
                                                     { requests
@@ -8676,10 +8496,10 @@ updateLoadedFromBackend msg model =
 
                                 localState : Local LocalMsg LocalState
                                 localState =
-                                    loginDataToLocalState
+                                    FrontendExtra.loginDataToLocalState
                                         model.startupData
                                         local.localUser.decryptedMessages
-                                        (encryptedBacklog (SeqSet.fromList model.startupData.e2eeKeys) loginData.dmChannels)
+                                        (FrontendExtra.encryptedBacklog (SeqSet.fromList model.startupData.e2eeKeys) loginData.dmChannels)
                                         model.emojiData
                                         loginData
                                         |> Local.init
@@ -8796,10 +8616,6 @@ view _ model =
 
             Loaded loaded ->
                 let
-                    windowWidth : Int
-                    windowWidth =
-                        Coord.xRaw loaded.windowSize
-
                     isMobile =
                         MyUi.isMobile loaded
 
@@ -8915,7 +8731,7 @@ view _ model =
                                                     |> Ui.map LoginFormMsg
 
                                             Nothing ->
-                                                Ui.Lazy.lazy Pages.Home.view windowWidth
+                                                Ui.Lazy.lazy Pages.Home.view loaded
                                         )
                                     )
 
@@ -9203,9 +9019,33 @@ handleGameOutMsgs outMsgs model =
                         ( pushModel, pushCmd ) =
                             FrontendExtra.routePush
                                 model2
-                                (Route.setChannelHeaderTab (Just (ChannelHeaderTab_Games newSelected)) model2.route)
+                                (Route.setChannelHeaderTab (Just (ChannelHeaderTab_Games newSelected Nothing)) model2.route)
                     in
                     ( pushModel, pushCmd :: cmds )
+
+                Game.OutReplyToGame matchId repliedToGame ->
+                    let
+                        ( replyModel, replyCmd ) =
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn ->
+                                    case Route.toGuildOrDmId (Local.model loggedIn.localState).localUser.session.userId model2.route of
+                                        Just ( guildOrDmId, _ ) ->
+                                            ( { loggedIn
+                                                | replyTo =
+                                                    SeqDict.insert
+                                                        ( guildOrDmId, NoThread )
+                                                        (Message.RepliedToGame matchId repliedToGame)
+                                                        loggedIn.replyTo
+                                              }
+                                            , FrontendExtra.setFocus model2 Pages.Guild.channelTextInputId
+                                            )
+
+                                        Nothing ->
+                                            ( loggedIn, Command.none )
+                                )
+                                model2
+                    in
+                    ( replyModel, replyCmd :: cmds )
 
                 Game.OutLocalChange _ ->
                     ( model2, cmds )
@@ -9305,6 +9145,33 @@ handleGameOutMsgs outMsgs model =
                                     ( { loggedIn
                                         | showEmojiSelector =
                                             EmojiSelectorForSheepGameReaction guildOrDmId matchId target
+                                        , emojiSelector =
+                                            { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
+                                      }
+                                    , if MyUi.isMobile model2 then
+                                        Command.none
+
+                                      else
+                                        Dom.focus Emoji.searchInputId |> Task.attempt (\_ -> SetFocus)
+                                    )
+                                )
+                                model2
+                    in
+                    ( selectorModel, selectorCmd :: cmds )
+
+                Game.OpenWordSpellingGameReactionEmojiSelector guildOrDmId matchId target ->
+                    let
+                        ( selectorModel, selectorCmd ) =
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn ->
+                                    let
+                                        emojiSelectorModel : Emoji.Model
+                                        emojiSelectorModel =
+                                            loggedIn.emojiSelector
+                                    in
+                                    ( { loggedIn
+                                        | showEmojiSelector =
+                                            EmojiSelectorForWordSpellingGameReaction guildOrDmId matchId target
                                         , emojiSelector =
                                             { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
                                       }
@@ -9768,7 +9635,7 @@ encryptedMessagesJustLoaded localChange =
             encryptedMessagesLoadedInto
                 guildOrDmId
                 (Just (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage))
-                (SeqDict.values messagesLoaded)
+                (SeqDict.values messagesLoaded.messages)
 
         Local_LoadThreadMessages guildOrDmId _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
             encryptedMessagesLoadedInto
@@ -9777,7 +9644,7 @@ encryptedMessagesJustLoaded localChange =
                 (SeqDict.values messagesLoaded)
 
         Local_CurrentlyViewing _ (ViewDm data (FilledInByBackend messagesLoaded)) ->
-            encryptedMessagesInConversation data.id Nothing (SeqDict.values messagesLoaded)
+            encryptedMessagesInConversation data.id Nothing (SeqDict.values messagesLoaded.messages)
 
         Local_CurrentlyViewing _ (ViewDmThread data (FilledInByBackend messagesLoaded)) ->
             encryptedMessagesInConversation
@@ -9809,63 +9676,12 @@ encryptedMessagesInConversation :
     -> List (Message.Message messageId (Id UserId))
     -> Maybe LoadedEncryptedMessages
 encryptedMessagesInConversation id shiftScrollFrom messagesLoaded =
-    case List.filterMap encryptedMessageData messagesLoaded of
+    case List.filterMap FrontendExtra.encryptedMessageData messagesLoaded of
         [] ->
             Nothing
 
         messages ->
             Just { id = id, messages = messages, shiftScrollFrom = shiftScrollFrom }
-
-
-type EncryptedBacklog
-    = PendingEncryption { id : Viewing_DmId, messages : List (Encryption.EncryptedData (MessageContent (Id UserId))) }
-    | MissingKeys { id : Viewing_DmId, messages : List (Encryption.EncryptedData (MessageContent (Id UserId))) }
-
-
-encryptedBacklog : SeqSet (Id UserId) -> SeqDict (Id UserId) FrontendDmChannel -> List EncryptedBacklog
-encryptedBacklog keysOnThisDevice dmChannels =
-    List.filterMap
-        (\( otherUserId, dmChannel ) ->
-            case encryptedMessagesIn dmChannel of
-                [] ->
-                    Nothing
-
-                messages ->
-                    let
-                        id =
-                            { otherUserId = otherUserId }
-                    in
-                    (if SeqSet.member otherUserId keysOnThisDevice then
-                        PendingEncryption { id = id, messages = messages }
-
-                     else
-                        MissingKeys { id = id, messages = messages }
-                    )
-                        |> Just
-        )
-        (SeqDict.toList dmChannels)
-
-
-encryptedMessagesIn : FrontendDmChannel -> List (Encryption.EncryptedData (MessageContent (Id UserId)))
-encryptedMessagesIn dmChannel =
-    List.filterMap (\( _, message ) -> encryptedMessageData message) (MessageArray.toList dmChannel.messages)
-        ++ (SeqDict.values dmChannel.threads
-                |> List.concatMap
-                    (\thread ->
-                        MessageArray.toList thread.messages
-                            |> List.filterMap (\( _, message ) -> encryptedMessageData message)
-                    )
-           )
-
-
-encryptedMessageData : Message.Message messageId (Id UserId) -> Maybe (Encryption.EncryptedData (MessageContent (Id UserId)))
-encryptedMessageData message =
-    case message of
-        Message.EncryptedUserTextMessage data ->
-            Just data.content
-
-        _ ->
-            Nothing
 
 
 storeSharedSecret : Id UserId -> X25519.PrivateKey -> LoggedIn2 -> Result String (Command FrontendOnly ToBackend FrontendMsg_)
@@ -9944,14 +9760,7 @@ startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
                         requests.nextEncryptManyRequestId
                         { otherUserId = id.otherUserId
                         , threadRoute =
-                            case threadRoute of
-                                ViewThread threadId ->
-                                    ViewThreadWithMaybeMessage
-                                        threadId
-                                        (SeqDict.get guildOrDmId loggedIn.replyTo |> Maybe.map Id.changeType)
-
-                                NoThread ->
-                                    NoThreadWithMaybeMessage (SeqDict.get guildOrDmId loggedIn.replyTo)
+                            sendMessageThreadRoute guildOrDmId threadRoute loggedIn
                         , contentAndEmbeds = contentAndEmbeds
                         }
                         requests.pendingEncryptedMessages

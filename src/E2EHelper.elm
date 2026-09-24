@@ -169,6 +169,7 @@ import SecretId exposing (SecretId(..))
 import SeqDict
 import SeqSet
 import SessionIdHash exposing (SessionIdHash(..))
+import SetViewing exposing (SetViewing(..))
 import Slack
 import String.Nonempty exposing (NonemptyString(..))
 import Svg.Attributes
@@ -183,7 +184,7 @@ import Url exposing (Protocol(..), Url)
 import User
 import UserAgent
 import UserColor
-import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
+import UserSession exposing (NotificationMode(..), ToBeFilledInByBackend(..))
 import WordSpellingGame
 import X25519
 
@@ -2388,6 +2389,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_DeleteInviteLink _ _ ->
                     True
 
+                Local_BanMember _ _ ->
+                    True
+
                 Local_NewGuild _ _ _ ->
                     False
 
@@ -2582,7 +2586,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
 
                 Types.ServerChange serverChange ->
                     case serverChange of
-                        Types.Server_SendMessage _ _ _ _ _ _ _ _ ->
+                        Types.Server_SendMessage _ _ _ _ _ _ _ _ _ ->
                             True
 
                         --RichText.toString SeqDict.empty message |> String.contains "sensitive"
@@ -2840,7 +2844,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetPublicKey _ _ ->
                             True
 
-                        Types.Server_SendEncryptedMessage _ _ _ _ _ _ _ ->
+                        Types.Server_SendEncryptedMessage _ _ _ _ _ _ _ _ ->
                             True
 
                         Types.Server_SendEncryptedEditMessage _ _ _ _ _ _ ->
@@ -2982,6 +2986,10 @@ allAttackerLocalChanges =
         threadRouteWithMaybeMessage =
             NoThreadWithMaybeMessage (Just (Id.fromInt 0))
 
+        threadRouteWithRepliedTo : Message.ThreadRouteWithRepliedTo
+        threadRouteWithRepliedTo =
+            Message.NoThreadWithRepliedTo (Message.RepliedToMessage (Id.fromInt 0))
+
         emoji =
             EmojiOrCustomEmoji_Emoji (Emoji.UnicodeEmoji "👍")
 
@@ -3040,10 +3048,10 @@ allAttackerLocalChanges =
     , Local_RegisterPushSubscription (Time.millisToPosix 9) (SubscribeJsException "")
     , Local_RemoveReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
     , Local_SendEditMessage messageTime Time.utc (GuildOrDmId_Dm { otherUserId = normalUserId }) threadRouteWithMessage normalText SeqDict.empty
-    , Local_SendMessage messageTime Time.utc (GuildOrDmId_Guild { guildId = legitGuildId, channelId = channelId }) normalText threadRouteWithMaybeMessage SeqDict.empty []
+    , Local_SendMessage messageTime Time.utc (GuildOrDmId_Guild { guildId = legitGuildId, channelId = channelId }) normalText threadRouteWithRepliedTo SeqDict.empty []
     , Local_RemoveReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
     , Local_SendEditMessage messageTime Time.utc (GuildOrDmId_Dm { otherUserId = normalUserId }) threadRouteWithMessage normalText SeqDict.empty
-    , Local_SendMessage messageTime Time.utc (GuildOrDmId_Dm { otherUserId = normalUserId }) normalText threadRouteWithMaybeMessage SeqDict.empty [ EmojiOrCustomEmoji_Emoji Emoji.heart ]
+    , Local_SendMessage messageTime Time.utc (GuildOrDmId_Dm { otherUserId = normalUserId }) normalText threadRouteWithRepliedTo SeqDict.empty [ EmojiOrCustomEmoji_Emoji Emoji.heart ]
     , Local_SetDiscordGuildNotificationLevel discordUserId discordGuildId User.NotifyOnEveryMessage
     , Local_SetDomainWhitelist True (Domain "example.com")
     , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)
@@ -3098,6 +3106,7 @@ allAttackerLocalChanges =
             )
         )
     , Local_DeleteInviteLink legitGuildId (SecretId.fromString "123")
+    , Local_BanMember legitGuildId Broadcast.adminUserId
     , Local_Drawing
         guildOrDmId_guild
         (Drawing.MessageAnchor threadRouteWithMessage Drawing.UserIconAnchor)
@@ -3119,7 +3128,7 @@ allAttackerLocalChanges =
         SeqSet.empty
         (EncryptedData (Bytes.Encode.encode (Bytes.Encode.sequence [])))
         (EncryptedData (Bytes.Encode.encode (Bytes.Encode.sequence [])))
-        (NoThreadWithMaybeMessage Nothing)
+        (Message.NoThreadWithRepliedTo Message.NoReply)
     , Local_SendEncryptedEditMessage
         startTime
         { otherUserId = Broadcast.adminUserId }

@@ -122,23 +122,30 @@ mobileMenuMaxHeightHelper { items, height } =
     toFloat (height + List.length items) - 1 + mobileCloseButton + topPadding + bottomPadding
 
 
+{-| How far the menu slides up when it first opens. It stops half way through the fourth button so
+that the cut off button shows there is more to see if you drag it up further. Delete message is
+always further down the list than that, so it can't be hit by accident on the way past.
+-}
 mobileMenuOpeningOffset :
     AnyGuildOrDmId
     -> ThreadRouteWithMessage
+    -> Bool
+    -> Maybe String
+    -> Maybe String
     -> LocalState
     -> LoadedFrontend
     -> Quantity Float CssPixels
-mobileMenuOpeningOffset guildOrDmId threadRoute local model =
+mobileMenuOpeningOffset guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl local model =
     let
-        itemCount : Float
-        itemCount =
-            menuItems True guildOrDmId threadRoute False Nothing Nothing Coord.origin local model
-                |> .items
-                |> List.length
-                |> toFloat
-                |> min 3.4
+        menuItemsData : { items : List (Element FrontendMsg_), height : Int }
+        menuItemsData =
+            menuItems True guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl Coord.origin local model
     in
-    itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding |> CssPixels.cssPixels
+    if List.length menuItemsData.items <= 4 then
+        mobileMenuMaxHeightHelper menuItemsData |> CssPixels.cssPixels
+
+    else
+        3 * (buttonHeight True + 1) + buttonHeight True / 2 + mobileCloseButton + topPadding |> CssPixels.cssPixels
 
 
 messageMenuSpeed : Quantity Float (Rate CssPixels Seconds)
@@ -235,6 +242,12 @@ viewMobile offset extraOptions loggedIn local model =
     in
     Ui.column
         [ Ui.move { x = 0, y = negate offset |> round |> (+) height, z = 0 }
+
+        -- Ui.below wraps the menu in a height:0 element. Chrome stretches that wrapper to fit the
+        -- menu, Firefox leaves it collapsed, and there the whole menu ended up below the window.
+        -- Its bottom edge sits at the bottom of the window either way, so anchor to that.
+        , MyUi.htmlStyle "position" "absolute"
+        , MyUi.htmlStyle "bottom" "0"
         , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
         , Ui.background MyUi.black
         , MyUi.htmlStyle
@@ -702,7 +715,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                 button
                     isMobile
                     (Dom.id "messageMenu_replyTo")
-                    Icons.reply
+                    (Icons.reply 24)
                     "Reply to"
                     (MessageMenu_PressedReply threadRoute)
                     |> ButtonItem
@@ -993,7 +1006,7 @@ messageCustomEmojiIds message =
 buttonHeight : Bool -> number
 buttonHeight isMobile =
     if isMobile then
-        10 + 34
+        22 + 34
 
     else
         6 + 30

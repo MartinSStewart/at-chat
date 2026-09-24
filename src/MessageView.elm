@@ -1,4 +1,4 @@
-module MessageView exposing (MessageViewMsg(..), ReactionsHover(..), isPressMsg, miniView, profileImagePaddingRight, reactionEmojiButtonContent, reactionEmojiView, reactionsMiniView, reactionsMiniViewNearEdge)
+module MessageView exposing (MessageViewMsg(..), ReactionsHover(..), gameMiniViewNearEdge, isPressMsg, miniView, profileImagePaddingRight, reactionEmojiButtonContent, reactionEmojiView, reactionsMiniView)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -145,11 +145,7 @@ reactionEmojiButtonContent : Maybe CachedEmojiData -> SeqDict (Id CustomEmojiId)
 reactionEmojiButtonContent emojiData customEmojis emoji =
     case emoji of
         EmojiOrCustomEmoji_Emoji emoji2 ->
-            Html.div
-                [ Html.Attributes.style "font-size" "20px"
-                , Html.Attributes.style "transform" "translateY(-3px)"
-                ]
-                [ Emoji.unicodeView "1em" "0" emojiData emoji2 ]
+            Emoji.unicodeView "20px" emojiData emoji2
 
         EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
             CustomEmoji.view "1.1em" "0.2em" customEmojiId customEmojis LoopAFewTimesOnLoad
@@ -182,7 +178,7 @@ miniView user isThreadStarter canEdit availableCustomEmojis emojiData customEmoj
                         (Dom.id "miniView_reply")
                         MessageViewMsg_PressedReply
                         "Reply"
-                        Icons.reply
+                        (Icons.reply 24)
                , miniButtonWithPosition
                     (Dom.id "miniView_showFullMenu")
                     (MessageViewMsg_PressedShowFullMenu isThreadStarter)
@@ -210,21 +206,41 @@ reactionsMiniView user availableCustomEmojis emojiData customEmojis =
         )
 
 
-reactionsMiniViewNearEdge :
+{-| The menu for something inside a game, which sits against the right edge of the tab it's in.
+Unlike a message it can't be edited or opened in a thread, so it offers reactions and a reply.
+-}
+gameMiniViewNearEdge :
     FrontendCurrentUser
     -> SeqSet (Id CustomEmojiId)
     -> Maybe CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> Element MessageViewMsg
-reactionsMiniViewNearEdge user availableCustomEmojis emojiData customEmojis =
-    miniViewContainer
-        -8
+gameMiniViewNearEdge user availableCustomEmojis emojiData customEmojis =
+    Ui.row
+        [ Ui.alignRight
+        , Ui.background MyUi.background1
+        , Ui.rounded 4
+        , Ui.borderColor MyUi.border1
+        , Ui.border 1
+        , Ui.move { x = -8, y = -16, z = 0 }
+        , Ui.height (Ui.px miniButtonSize)
+        , Ui.clip
+
+        -- elm-ui gives Ui.inFront no z-index of its own, so without this the gradients drawn in
+        -- front of a game tab's scrolling content cover this menu when it's near an edge.
+        , MyUi.htmlStyle "z-index" "1"
+        ]
         (recentEmojiButtons user availableCustomEmojis emojiData customEmojis
             ++ [ miniButton
                     (Dom.id "miniView_showReactionEmojiSelector")
                     MessageViewMsg_PressedShowReactionEmojiSelector
                     "Add reaction"
                     Icons.smile
+               , miniButton
+                    (Dom.id "miniView_reply")
+                    MessageViewMsg_PressedReply
+                    "Reply"
+                    (Icons.reply 24)
                ]
         )
 
@@ -268,18 +284,6 @@ miniViewContainer xOffset buttons =
         buttons
 
 
-{-| An icon in the menu is drawn at the size of the box it's given rather than at whatever
-size the svg itself asks for (see the `mini-button-icon` rule in `MyUi.css`), since browsers
-don't agree on how to size an svg that leaves its height to them.
--}
-miniButtonIcon : Html msg -> Element msg
-miniButtonIcon svg =
-    Html.div
-        [ Html.Attributes.class "mini-button-icon" ]
-        [ svg ]
-        |> Ui.html
-
-
 miniButton : HtmlId -> msg -> String -> Html msg -> Element msg
 miniButton htmlId onPress hoverText svg =
     Ui.el
@@ -293,7 +297,7 @@ miniButton htmlId onPress hoverText svg =
         , MyUi.hoverText hoverText
         , MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
         ]
-        (miniButtonIcon svg)
+        (Ui.html svg)
 
 
 miniButtonWithPosition : HtmlId -> (Coord CssPixels -> msg) -> Html msg -> Element msg
@@ -314,7 +318,7 @@ miniButtonWithPosition htmlId onPress svg =
         , Ui.pointer
         , MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
         ]
-        (miniButtonIcon svg)
+        (Ui.html svg)
 
 
 {-| Whether the popup naming who reacted with an emoji comes up when the pointer is over
@@ -702,7 +706,7 @@ reactionPopup emojiData customEmojis allUsers placement emoji users =
             EmojiOrCustomEmoji_Emoji emoji2 ->
                 Ui.el
                     [ Ui.Font.size 40, Ui.width Ui.shrink, MyUi.noShrinking ]
-                    (Emoji.unicodeView "1em" "0" emojiData emoji2 |> Ui.html)
+                    (Emoji.unicodeView "1em" emojiData emoji2 |> Ui.html)
 
             EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
                 Ui.el

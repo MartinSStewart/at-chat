@@ -1,7 +1,12 @@
 module RateLimit exposing
-    ( checkAndUpdateRateLimit
+    ( SessionRateLimits
+    , checkAndUpdateRateLimit
+    , checkAndUpdateSessionRateLimit
     , longWindowDuration
     , longWindowMaxMessages
+    , sessionRateLimitsInit
+    , sessionShortWindowDuration
+    , sessionShortWindowMaxRequests
     , shortWindowDuration
     , shortWindowMaxMessages
     )
@@ -9,6 +14,7 @@ module RateLimit exposing
 import Array exposing (Array)
 import Array.Extra
 import Duration exposing (Duration)
+import Effect.Lamdera exposing (SessionId)
 import Effect.Time as Time
 import Id exposing (Id, UserId)
 import Quantity
@@ -76,3 +82,77 @@ checkAndUpdateRateLimit now key limits =
 
         Nothing ->
             Ok (SeqDict.insert key (Array.fromList [ now ]) limits)
+
+
+type alias SessionRateLimits =
+    { shortWindowStartedAt : Time.Posix
+    , shortWindowCounts : SeqDict SessionId Int
+    , longWindowStartedAt : Time.Posix
+    , longWindowCounts : SeqDict SessionId Int
+    }
+
+
+sessionRateLimitsInit : SessionRateLimits
+sessionRateLimitsInit =
+    { shortWindowStartedAt = Time.millisToPosix 0
+    , shortWindowCounts = SeqDict.empty
+    , longWindowStartedAt = Time.millisToPosix 0
+    , longWindowCounts = SeqDict.empty
+    }
+
+
+sessionShortWindowMaxRequests : Int
+sessionShortWindowMaxRequests =
+    150
+
+
+sessionLongWindowMaxRequests : Int
+sessionLongWindowMaxRequests =
+    2000
+
+
+sessionShortWindowDuration : Duration
+sessionShortWindowDuration =
+    Duration.seconds 10
+
+
+sessionLongWindowDuration : Duration
+sessionLongWindowDuration =
+    Duration.minutes 5
+
+
+checkAndUpdateSessionRateLimit : Time.Posix -> SessionId -> SessionRateLimits -> Result () SessionRateLimits
+checkAndUpdateSessionRateLimit now sessionId rateLimits =
+    let
+        ( shortWindowStartedAt, shortWindowCounts ) =
+            if Duration.from rateLimits.shortWindowStartedAt now |> Quantity.lessThan sessionShortWindowDuration then
+                ( rateLimits.shortWindowStartedAt, rateLimits.shortWindowCounts )
+
+            else
+                ( now, SeqDict.empty )
+
+        ( longWindowStartedAt, longWindowCounts ) =
+            if Duration.from rateLimits.longWindowStartedAt now |> Quantity.lessThan sessionLongWindowDuration then
+                ( rateLimits.longWindowStartedAt, rateLimits.longWindowCounts )
+
+            else
+                ( now, SeqDict.empty )
+
+        shortCount : Int
+        shortCount =
+            SeqDict.get sessionId shortWindowCounts |> Maybe.withDefault 0
+
+        longCount : Int
+        longCount =
+            SeqDict.get sessionId longWindowCounts |> Maybe.withDefault 0
+    in
+    if shortCount >= sessionShortWindowMaxRequests || longCount >= sessionLongWindowMaxRequests then
+        Err ()
+
+    else
+        Ok
+            { shortWindowStartedAt = shortWindowStartedAt
+            , shortWindowCounts = SeqDict.insert sessionId (shortCount + 1) shortWindowCounts
+            , longWindowStartedAt = longWindowStartedAt
+            , longWindowCounts = SeqDict.insert sessionId (longCount + 1) longWindowCounts
+            }
