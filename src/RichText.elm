@@ -3742,8 +3742,13 @@ viewHelper :
     -> Nonempty (RichText userId)
     -> ( ( Bool, Int ), Int, List (Html msg) )
 viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressImage onPressLink spoilerIndex state config embeds embedIndex nonempty =
+    let
+        nodes : List (RichText userId)
+        nodes =
+            List.Nonempty.toList nonempty
+    in
     List.foldl
-        (\item ( ( dropNextLineBreak2, spoilerIndex2 ), embedIndex2, currentList ) ->
+        (\( previousItem, item ) ( ( dropNextLineBreak2, spoilerIndex2 ), embedIndex2, currentList ) ->
             case item of
                 UserMention userId ->
                     ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ MyUi.userLabelHtml userId config.users ] )
@@ -4008,7 +4013,21 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                         )
                                         list2
                     in
-                    ( ( True, spoilerIndex3 ), embedIndex3, currentList ++ [ headingElement ] )
+                    ( ( True, spoilerIndex3 )
+                    , embedIndex3
+                    , case ( showLargeContent, previousItem ) of
+                        ( ShowLargeContent _, Just (NormalText char text) ) ->
+                            -- A line break at the end of the text is dropped by the browser when a
+                            -- block element follows it, which would lose the blank line above the heading.
+                            if String.endsWith "\n" (String.cons char text) then
+                                currentList ++ [ Html.br [] [], headingElement ]
+
+                            else
+                                currentList ++ [ headingElement ]
+
+                        _ ->
+                            currentList ++ [ headingElement ]
+                    )
 
                 Hyperlink data ->
                     let
@@ -4324,7 +4343,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                     )
         )
         ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
-        (List.Nonempty.toList nonempty)
+        (List.map2 Tuple.pair (Nothing :: List.map Just nodes) nodes)
 
 
 imageView :
