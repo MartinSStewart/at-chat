@@ -113,7 +113,7 @@ import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
 import PersonName
-import Ports exposing (RegisterPushSubscription(..))
+import Ports exposing (PwaStatus(..), RegisterPushSubscription(..))
 import Range exposing (Range)
 import RecoveryLogin
 import RichText exposing (Domain, RichText)
@@ -541,7 +541,13 @@ layout model attributes child =
                     (Html.node
                         "style"
                         []
-                        [ Html.text "body { height:100vh !important; height:100dvh !important; }" ]
+                        [ case model.startupData.pwaStatus of
+                            InstalledPwa ->
+                                Html.text "body { height:100vh !important; }"
+
+                            BrowserView ->
+                                Html.text "body { height:100dvh !important; }"
+                        ]
                     )
                 )
             :: Ui.Font.size 16
