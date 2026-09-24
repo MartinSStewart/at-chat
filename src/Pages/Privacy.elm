@@ -24,6 +24,21 @@ view noOp =
     NonemptyString
         '#'
         """ Privacy
+
+at-chat stores or has access to the following sensitive data:
+* Your email address
+* Your name (should you choose to provide your real name)
+* Any messages you write that contain sensitive data
+* Any files you upload that contain sensitive data
+* A session token with full access to your Discord account should you choose to use the Discord integration (a comprehensive warning is shown before a user can link a Discord account so they understand the implications)
+
+## Purposes
+
+Sensitive data is stored in order to provide you features. It is not used for marketing, advertising, AI training, or sold to 3rd parties. Sensitive data may be used by an administrator for the sole purpose of debugging bugs or other software issues within at-chat.
+
+Sensitive data is not accessible to any 3rd parties with two exceptions:
+* [Hetzner](https://www.hetzner.com/) which owns the hardware at-chat runs on. The server being rented is located in Finland.
+* If you use the Discord integration, then messages and files sent to a Discord guild or Discord user will of course be available to Discord.
 """
         |> RichText.fromNonemptyString Time.utc SeqDict.empty
         |> RichText.view
