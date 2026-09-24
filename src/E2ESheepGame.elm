@@ -567,7 +567,7 @@ threePlayerMatchTest normalConfig =
                                             |> Test.Html.Query.index 1
                                             |> Test.Html.Query.has [ Test.Html.Selector.text "Nobody said **green**" ]
                                     )
-                                , joe.snapshotView 100 { name = "Replies to a sheep game answer and notes" }
+                                , E2EHelper.tallSnapshot joe 100 { name = "Replies to a sheep game answer and notes" }
 
                                 -- Joe reads back over the first question instead of waiting at the
                                 -- bottom, so the next one to turn up is announced to him rather than

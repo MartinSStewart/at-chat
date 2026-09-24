@@ -84,12 +84,6 @@ checkAndUpdateRateLimit now key limits =
             Ok (SeqDict.insert key (Array.fromList [ now ]) limits)
 
 
-{-| Keeping a timestamp per request the way the message limit does would mean folding over
-a few thousand of them on every single ToBackend, so a session gets a count per window
-instead. The windows are fixed ones that everybody shares rather than sliding ones, so a
-session can spend its whole budget at the end of one window and again at the start of the
-next. Twice the limit in a burst is still a limit, and it costs two dictionary lookups.
--}
 type alias SessionRateLimits =
     { shortWindowStartedAt : Time.Posix
     , shortWindowCounts : SeqDict SessionId Int
@@ -107,9 +101,6 @@ sessionRateLimitsInit =
     }
 
 
-{-| A session is a browser rather than a tab, so someone with several tabs open shares one
-budget. Clicking around quickly in all of them should still stay well under this.
--}
 sessionShortWindowMaxRequests : Int
 sessionShortWindowMaxRequests =
     150
