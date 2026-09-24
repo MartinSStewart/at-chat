@@ -4713,7 +4713,7 @@ embedLoadingView onPressLink domainWhitelist url =
 
 favicon : Url -> String
 favicon url =
-    "https://icons.duckduckgo.com/ip2/" ++ url.host ++ ".ico"
+    FileStatus.domain ++ "/file/favicon/" ++ url.host
 
 
 smallHyperlink : (Url -> msg) -> SeqSet Domain -> Url -> Html msg

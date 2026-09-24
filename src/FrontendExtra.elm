@@ -1929,7 +1929,17 @@ routeRequest previousRoute newRoute model =
             ( model2, Command.none )
 
         PrivacyRoute ->
-            ( model2, Command.none )
+            ( { model2
+                | loginStatus =
+                    case model2.loginStatus of
+                        NotLoggedIn notLoggedIn ->
+                            NotLoggedIn { notLoggedIn | loginForm = Nothing }
+
+                        LoggedIn _ ->
+                            model2.loginStatus
+              }
+            , Command.none
+            )
 
         LinkDiscord result ->
             ( model2

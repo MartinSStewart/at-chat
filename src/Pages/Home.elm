@@ -90,16 +90,44 @@ header isMobile route loginStatus =
                 , description = "Logo"
                 , onLoad = Nothing
                 }
-            , case loginStatus of
-                LoggedIn _ ->
-                    Ui.none
+            , Ui.row
+                [ Ui.width Ui.shrink, Ui.height Ui.fill, Ui.alignRight ]
+                [ Ui.el
+                    [ Ui.width Ui.shrink
+                    , Ui.height Ui.fill
+                    , Ui.contentCenterY
+                    , Ui.paddingWith { left = 8, right = 8, top = 4, bottom = 8 }
+                    , Ui.linkNewTab Pages.Privacy.repoUrl
+                    , MyUi.hoverText "Source code on GitHub"
+                    , Ui.opacity 0.7
+                    , MyUi.hover isMobile [ Ui.Anim.opacity 1 ]
+                    ]
+                    (Ui.html (Icons.github 20))
+                , MyUi.elButton
+                    (Dom.id "homePage_privacyButton")
+                    (PressedLink PrivacyRoute)
+                    (buttonAttributes
+                        isMobile
+                        (case loginStatus of
+                            LoggedIn _ ->
+                                route == PrivacyRoute
 
-                NotLoggedIn notLoggedIn ->
-                    MyUi.elButton
-                        loginButtonId
-                        PressedShowLogin
-                        (buttonAttributes isMobile (notLoggedIn.loginForm /= Nothing || Route.requiresLogin route))
-                        (Ui.text loginSignupText)
+                            NotLoggedIn notLoggedIn ->
+                                route == PrivacyRoute && notLoggedIn.loginForm == Nothing
+                        )
+                    )
+                    (Ui.text "Privacy")
+                , case loginStatus of
+                    LoggedIn _ ->
+                        Ui.none
+
+                    NotLoggedIn notLoggedIn ->
+                        MyUi.elButton
+                            loginButtonId
+                            PressedShowLogin
+                            (buttonAttributes isMobile (notLoggedIn.loginForm /= Nothing || Route.requiresLogin route))
+                            (Ui.text loginSignupText)
+                ]
             ]
         )
 
@@ -109,7 +137,6 @@ buttonAttributes isMobile isSelected =
     [ Ui.Font.weight 600
     , Ui.rounded 8
     , Ui.padding 8
-    , Ui.alignRight
     , Ui.width Ui.shrink
     , Ui.height Ui.fill
     , Ui.paddingWith { left = 16, right = 16, top = 4, bottom = 8 }
@@ -1244,28 +1271,6 @@ view loaded =
               else
                 Ui.none
             ]
-        , footerLinks
-        ]
-
-
-footerLinks : Element FrontendMsg_
-footerLinks =
-    Ui.row
-        [ Ui.spacing 16, Ui.contentCenterX, Ui.Font.size 14 ]
-        [ Ui.el
-            [ Ui.width Ui.shrink
-            , Ui.Font.color MyUi.textLinkColorOnDarkBackground
-            , Ui.link (Route.encode PrivacyRoute)
-            ]
-            (Ui.text "Privacy")
-        , Ui.el
-            [ Ui.width Ui.shrink
-            , Ui.linkNewTab Pages.Privacy.repoUrl
-            , MyUi.hoverText "Source code on GitHub"
-            , Ui.opacity 0.7
-            , MyUi.hover False [ Ui.Anim.opacity 1 ]
-            ]
-            (Ui.html (Icons.github 20))
         ]
 
 

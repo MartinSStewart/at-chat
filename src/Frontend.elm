@@ -8845,17 +8845,27 @@ view _ model =
                             )
 
                     PrivacyRoute ->
-                        FrontendExtra.layout
-                            loaded
-                            [ Ui.background MyUi.background3
-                            , Ui.scrollable
-                            , Ui.heightMin 0
-                            , Ui.inFront (Pages.Home.header (MyUi.isMobile loaded) loaded.route loaded.loginStatus)
-                            ]
-                            (Ui.el
-                                [ MyUi.notoSans, Ui.paddingWith { left = 0, right = 0, top = 64, bottom = 32 } ]
-                                (Pages.Privacy.view FrontendNoOp)
-                            )
+                        case loaded.loginStatus of
+                            NotLoggedIn { loginForm, textInputFocus } ->
+                                case loginForm of
+                                    Just loginForm2 ->
+                                        LoginForm.view
+                                            textInputFocus
+                                            loginForm2
+                                            loaded.windowSize
+                                            loaded.startupData.pwaStatus
+                                            loaded.startupData.userAgent.browser
+                                            |> Ui.map LoginFormMsg
+                                            |> FrontendExtra.layout loaded
+                                                [ Ui.background MyUi.background3
+                                                , Ui.inFront (Pages.Home.header isMobile loaded.route loaded.loginStatus)
+                                                ]
+
+                                    Nothing ->
+                                        privacyPage isMobile loaded
+
+                            LoggedIn _ ->
+                                privacyPage isMobile loaded
 
                     DiscordDmRoute routeData ->
                         requiresLogin
@@ -8928,6 +8938,21 @@ view _ model =
                             )
         ]
     }
+
+
+privacyPage : Bool -> LoadedFrontend -> Html FrontendMsg_
+privacyPage isMobile loaded =
+    FrontendExtra.layout
+        loaded
+        [ Ui.background MyUi.background3
+        , Ui.scrollable
+        , Ui.heightMin 0
+        , Ui.inFront (Pages.Home.header isMobile loaded.route loaded.loginStatus)
+        ]
+        (Ui.el
+            [ MyUi.notoSans, Ui.paddingWith { left = 0, right = 0, top = 64, bottom = 32 } ]
+            (Pages.Privacy.view FrontendNoOp)
+        )
 
 
 errorPage : LoadedFrontend -> String -> Element FrontendMsg_
