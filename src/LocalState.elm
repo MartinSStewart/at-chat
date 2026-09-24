@@ -3633,6 +3633,9 @@ routeToViewing isMobile route local =
         TextEditorRoute ->
             StopViewingChannel
 
+        PrivacyRoute ->
+            StopViewingChannel
+
         LinkDiscord _ ->
             StopViewingChannel
 

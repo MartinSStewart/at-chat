@@ -70,6 +70,7 @@ import OneOrGreater
 import Pages.Admin
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
+import Pages.Privacy
 import Pagination
 import Point2d exposing (Point2d)
 import Ports exposing (PwaStatus(..))
@@ -2802,6 +2803,9 @@ updateLoaded msg model =
                         TextEditorRoute ->
                             ( model, Command.none )
 
+                        PrivacyRoute ->
+                            ( model, Command.none )
+
                         LinkDiscord _ ->
                             ( model, Command.none )
 
@@ -5300,6 +5304,9 @@ updateLoaded msg model =
                 TextEditorRoute ->
                     ( model, Command.none )
 
+                PrivacyRoute ->
+                    ( model, Command.none )
+
                 LinkDiscord _ ->
                     ( model, Command.none )
 
@@ -6906,6 +6913,9 @@ setShowMembers showMembers model =
             ( model, Command.none )
 
         TextEditorRoute ->
+            ( model, Command.none )
+
+        PrivacyRoute ->
             ( model, Command.none )
 
         LinkDiscord _ ->
@@ -8832,6 +8842,19 @@ view _ model =
                                     local.localUser.session.userId
                                     local.textEditor
                                     |> Ui.map TextEditorMsg
+                            )
+
+                    PrivacyRoute ->
+                        FrontendExtra.layout
+                            loaded
+                            [ Ui.background MyUi.background3
+                            , Ui.scrollable
+                            , Ui.heightMin 0
+                            , Ui.inFront (Pages.Home.header (MyUi.isMobile loaded) loaded.route loaded.loginStatus)
+                            ]
+                            (Ui.el
+                                [ MyUi.notoSans, Ui.paddingWith { left = 0, right = 0, top = 64, bottom = 32 } ]
+                                (Pages.Privacy.view FrontendNoOp)
                             )
 
                     DiscordDmRoute routeData ->

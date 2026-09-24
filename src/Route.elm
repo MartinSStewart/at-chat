@@ -60,6 +60,7 @@ type Route
     | AiChatRoute
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
     | TextEditorRoute
+    | PrivacyRoute
     | LinkDiscord (Result LinkDiscordError Discord.UserAuth)
     | PublicGoMatchRoute (SecretId GamePublicId)
 
@@ -435,6 +436,9 @@ decode url =
         [ "text-editor" ] ->
             TextEditorRoute
 
+        [ "privacy" ] ->
+            PrivacyRoute
+
         [ "link-discord" ] ->
             case Dict.get linkDiscordQueryParam url2.queryParameters of
                 Just [ data ] ->
@@ -547,6 +551,9 @@ toChannelHeaderTab route =
         TextEditorRoute ->
             Nothing
 
+        PrivacyRoute ->
+            Nothing
+
         LinkDiscord _ ->
             Nothing
 
@@ -639,6 +646,9 @@ toShowMembersTabVisible { sidebarMode } route =
         TextEditorRoute ->
             ( HideChannelSettings, False )
 
+        PrivacyRoute ->
+            ( HideChannelSettings, False )
+
         LinkDiscord _ ->
             ( HideChannelSettings, False )
 
@@ -699,6 +709,9 @@ toShowMembersTab route =
             ( HideChannelSettings, False )
 
         TextEditorRoute ->
+            ( HideChannelSettings, False )
+
+        PrivacyRoute ->
             ( HideChannelSettings, False )
 
         LinkDiscord _ ->
@@ -823,6 +836,9 @@ setChannelsVisible channelsVisible route =
         TextEditorRoute ->
             route
 
+        PrivacyRoute ->
+            route
+
         LinkDiscord _ ->
             route
 
@@ -861,6 +877,9 @@ toOverlay route =
             Nothing
 
         TextEditorRoute ->
+            Nothing
+
+        PrivacyRoute ->
             Nothing
 
         LinkDiscord _ ->
@@ -904,6 +923,9 @@ setOverlay overlay route =
             route
 
         TextEditorRoute ->
+            route
+
+        PrivacyRoute ->
             route
 
         LinkDiscord _ ->
@@ -1104,6 +1126,9 @@ encode route =
                 TextEditorRoute ->
                     ( [ "text-editor" ], [] )
 
+                PrivacyRoute ->
+                    ( [ "privacy" ], [] )
+
                 LinkDiscord _ ->
                     ( [ linkDiscordPath ], [] )
 
@@ -1235,6 +1260,9 @@ requiresLogin route =
             False
 
         TextEditorRoute ->
+            False
+
+        PrivacyRoute ->
             False
 
         DiscordDmRoute _ ->

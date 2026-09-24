@@ -950,6 +950,9 @@ tabBodyView isMobile local loggedIn model =
         TextEditorRoute ->
             Nothing
 
+        PrivacyRoute ->
+            Nothing
+
         LinkDiscord _ ->
             Nothing
 

@@ -427,6 +427,9 @@ displayMode isMobile currentUserId route local =
         TextEditorRoute ->
             thumbnailOrNoVideo
 
+        PrivacyRoute ->
+            thumbnailOrNoVideo
+
         LinkDiscord _ ->
             thumbnailOrNoVideo
 

@@ -30,6 +30,7 @@ import Log
 import Message
 import MyUi
 import Pages.Guild exposing (IsHovered(..))
+import Pages.Privacy
 import PersonName
 import Ports
 import Range exposing (Range)
@@ -791,9 +792,31 @@ view windowSize textInputFocus time local loggedIn loaded model =
                         )
                         |> Ui.el [ Ui.paddingXY 16 0 ]
                     ]
+                , privacyAndSourceLinks
                 ]
             )
         )
+
+
+privacyAndSourceLinks : Element FrontendMsg_
+privacyAndSourceLinks =
+    Ui.row
+        [ Ui.spacing 16, Ui.paddingXY 16 0, Ui.Font.size 14 ]
+        [ Ui.el
+            [ Ui.width Ui.shrink
+            , Ui.Font.color MyUi.textLinkColorOnDarkBackground
+            , Ui.link (Route.encode Route.PrivacyRoute)
+            ]
+            (Ui.text "Privacy")
+        , Ui.el
+            [ Ui.width Ui.shrink
+            , Ui.linkNewTab Pages.Privacy.repoUrl
+            , MyUi.hoverText "Source code on GitHub"
+            , Ui.opacity 0.7
+            , MyUi.hover False [ Ui.Anim.opacity 1 ]
+            ]
+            (Ui.html (Icons.github 20))
+        ]
 
 
 discordAcknowledgement : Bool -> Element FrontendMsg_

@@ -766,6 +766,9 @@ canDropFiles isMobile currentUserId route =
         TextEditorRoute ->
             Nothing
 
+        PrivacyRoute ->
+            Nothing
+
         LinkDiscord _ ->
             Nothing
 
@@ -1923,6 +1926,9 @@ routeRequest previousRoute newRoute model =
             )
 
         TextEditorRoute ->
+            ( model2, Command.none )
+
+        PrivacyRoute ->
             ( model2, Command.none )
 
         LinkDiscord result ->
@@ -8135,6 +8141,9 @@ channelSidebarTarget route =
                     2
 
                 TextEditorRoute ->
+                    2
+
+                PrivacyRoute ->
                     2
 
                 LinkDiscord _ ->

@@ -23,6 +23,7 @@ import FileStatus exposing (IsEncrypted(..))
 import FrontendExtra
 import Game
 import GuildName exposing (GuildName)
+import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, UserId)
 import IdArray
 import LinkedAndOtherDiscordUsers exposing (LinkedAndOtherDiscordUsers(..))
@@ -36,6 +37,7 @@ import MyUi
 import NonemptyDict
 import NonemptySet
 import Pages.Guild
+import Pages.Privacy
 import RichText
 import Route exposing (ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), Route(..))
 import SafeFloat exposing (SafeFloat)
@@ -1242,6 +1244,28 @@ view loaded =
               else
                 Ui.none
             ]
+        , footerLinks
+        ]
+
+
+footerLinks : Element FrontendMsg_
+footerLinks =
+    Ui.row
+        [ Ui.spacing 16, Ui.contentCenterX, Ui.Font.size 14 ]
+        [ Ui.el
+            [ Ui.width Ui.shrink
+            , Ui.Font.color MyUi.textLinkColorOnDarkBackground
+            , Ui.link (Route.encode PrivacyRoute)
+            ]
+            (Ui.text "Privacy")
+        , Ui.el
+            [ Ui.width Ui.shrink
+            , Ui.linkNewTab Pages.Privacy.repoUrl
+            , MyUi.hoverText "Source code on GitHub"
+            , Ui.opacity 0.7
+            , MyUi.hover False [ Ui.Anim.opacity 1 ]
+            ]
+            (Ui.html (Icons.github 20))
         ]
 
 
