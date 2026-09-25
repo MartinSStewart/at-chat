@@ -1,18 +1,6 @@
 <meta http-equiv="content-type" content="text/html; charset=UTF-8">
 <meta charset="utf-8">
-<meta name="viewport" id="viewport-meta"
-      content="width=device-width, initial-scale=1, minimum-scale=1.0, maximum-scale=1.0">
-<script>
-    // This has to happen here rather than in elm-pkg-js/stuff.js because the viewport is read while the document is parsed.
-    window.isPwa = window.matchMedia('(display-mode: standalone)').matches ||
-        window.navigator.standalone === true ||
-        document.referrer.includes('android-app://');
-
-    if (window.isPwa) {
-        document.getElementById('viewport-meta').content =
-            'viewport-fit=cover, width=device-width, initial-scale=1, minimum-scale=1.0, maximum-scale=1.0';
-    }
-</script>
+<meta name="viewport" id="viewport-meta" content="width=fit=cover, initial-scale=1, minimum-scale=1.0, maximum-scale=1.0">
 <meta name="csrf-token" content="HBJzdi8BKyMiIhp0RCwuJnESMAEIM3YXJv1BKSlaalBL7zoPGqam0wNo">
 <meta name="description" content="Chat with friends">
 <title>at-chat</title>
