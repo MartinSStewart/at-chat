@@ -190,34 +190,34 @@ type alias UnreadOverviewData =
     { guildChannels :
         SeqDict
             ( Id GuildId, Id ChannelId )
-            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) (Id ChannelId)))
     , guildThreads :
         SeqDict
             ( Id GuildId, Id ChannelId, Id ChannelMessageId )
-            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
-    , dmChannels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId)))
+    , dmChannels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) (Id ChannelId)))
     , dmThreads :
         SeqDict
             ( Id UserId, Id ChannelMessageId )
-            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId)))
     , discordGuildChannels :
         SeqDict
             ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId )
-            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
     , discordGuildThreads :
         SeqDict
             ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId, Id ChannelMessageId )
-            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId)))
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
     , discordDmChannels :
         SeqDict
             (Discord.Id Discord.PrivateChannelId)
-            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     }
 
 
 type alias ViewDiscordGuildData messageId =
-    { messages : SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId))
+    { messages : SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     , newUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     }
 

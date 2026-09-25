@@ -4042,7 +4042,7 @@ compare the contents of a channel or a thread against a list of strings. A messa
 has been reacted to gets each of its reactions and how many people added it appended to
 its text, for example `Old message 👍×2`.
 -}
-discordMessageToString : E2EHelper.BackendModel2 -> Message.Message messageId (Discord.Id Discord.UserId) -> String
+discordMessageToString : E2EHelper.BackendModel2 -> Message.Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId) -> String
 discordMessageToString backend message =
     let
         text : String
@@ -4353,7 +4353,7 @@ discordDmChannelId =
 
 {-| The most recent message in the Discord DM channel used by `discordDmMessage`.
 -}
-lastDiscordDmMessage : E2EHelper.BackendModel2 -> Maybe ( Id.Id Id.ChannelMessageId, Message.Message Id.ChannelMessageId (Discord.Id Discord.UserId) )
+lastDiscordDmMessage : E2EHelper.BackendModel2 -> Maybe ( Id.Id Id.ChannelMessageId, Message.Message Id.ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId) )
 lastDiscordDmMessage backend =
     case SeqDict.get discordDmChannelId (E2EHelper.unwrapBackend backend).discordDmChannels of
         Just channel ->

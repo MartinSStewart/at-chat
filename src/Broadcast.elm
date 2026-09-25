@@ -62,7 +62,7 @@ import Encryption exposing (EncryptedData)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Game
-import Id exposing (ChannelMessageId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_DmId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
@@ -73,7 +73,7 @@ import NonemptyDict
 import PersonName
 import Ports exposing (SubscribeData)
 import Postmark
-import RichText exposing (MentionedChannel, RichText)
+import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
@@ -502,7 +502,7 @@ messageNotification :
     -> Id UserId
     -> Viewing_ChannelId
     -> ThreadRoute
-    -> UserTextMessageData messageId (Id UserId)
+    -> UserTextMessageData messageId (Id UserId) (Id ChannelId)
     -> List (Id UserId)
     -> BackendModel
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
@@ -512,7 +512,7 @@ messageNotification usersMentioned time sender id threadRoute message members mo
         plainText =
             RichText.toString Time.utc True (NonemptyDict.toSeqDict model.users) channels message.content.content
 
-        channels : SeqDict MentionedChannel { name : ChannelName }
+        channels : SeqDict (Id ChannelId) { name : ChannelName }
         channels =
             case SeqDict.get id.guildId model.guilds of
                 Just guild ->
@@ -610,13 +610,13 @@ discordGuildMessageNotification :
     -> Discord.Id Discord.GuildId
     -> Discord.Id Discord.ChannelId
     -> ThreadRoute
-    -> Message messageId (Discord.Id Discord.UserId)
+    -> Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> List (Discord.Id Discord.UserId)
     -> BackendModel
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
 discordGuildMessageNotification usersMentioned time sender guildId channelId threadRoute message members model =
     let
-        channels : SeqDict MentionedChannel { name : ChannelName }
+        channels : SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName }
         channels =
             case SeqDict.get guildId model.discordGuilds of
                 Just guild ->
@@ -890,9 +890,9 @@ notification :
     -> String
     -> Maybe FileHash
     -> (userId -> String)
-    -> SeqDict MentionedChannel { name : ChannelName }
+    -> SeqDict channelId { name : ChannelName }
     -> String
-    -> Message messageId userId
+    -> Message messageId userId channelId
     -> Maybe Route
     -> SeqDict SessionId UserSession
     ->
@@ -1053,10 +1053,10 @@ messageNotificationEmail :
     -> EmailAddress
     -> String
     -> (userId -> String)
-    -> SeqDict MentionedChannel { name : ChannelName }
+    -> SeqDict channelId { name : ChannelName }
     -> Maybe Route
     -> String
-    -> Message messageId userId
+    -> Message messageId userId channelId
     -> Postmark.ApiKey
     -> Command BackendOnly toMsg BackendMsg
 messageNotificationEmail time email senderName userToString channels navigateTo plainText message postmarkApiKey =
@@ -1128,7 +1128,7 @@ styles and basic block elements.
 -}
 notificationEmailContent :
     (userId -> String)
-    -> SeqDict MentionedChannel { name : ChannelName }
+    -> SeqDict channelId { name : ChannelName }
     -> String
     -> String
     -> Nonempty (RichText userId channelId)
@@ -1200,7 +1200,7 @@ discordDmNotification :
     -> String
     -> Maybe FileHash
     -> String
-    -> UserTextMessageData messageId (Discord.Id Discord.UserId)
+    -> UserTextMessageData messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> BackendModel
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
 discordDmNotification time channelId senderId senderName senderIcon text message model =
@@ -1561,7 +1561,7 @@ broadcastDm :
     -> FrontendUser
     -> Id UserId
     -> NonemptyString
-    -> UserTextMessageData messageId (Id UserId)
+    -> UserTextMessageData messageId (Id UserId) (Id ChannelId)
     -> ThreadRouteWithRepliedTo
     -> SeqDict (Id FileId) FileData
     -> List EmojiOrCustomEmoji
@@ -1895,7 +1895,7 @@ gameStartedGuildNotification time sender id gameType members model =
         plainText =
             LocalState.gameStartedText gameType
 
-        message : Message messageId (Id UserId)
+        message : Message messageId (Id UserId) (Id ChannelId)
         message =
             GameStarted
                 { startedAt = time

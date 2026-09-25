@@ -3517,7 +3517,7 @@ lastGuildChannel backend =
 
 {-| The most recent message in the first channel of the most recently created guild.
 -}
-lastGuildChannelMessage : BackendModel2 -> Maybe ( Id GuildId, Id ChannelMessageId, Message.Message ChannelMessageId (Id UserId) )
+lastGuildChannelMessage : BackendModel2 -> Maybe ( Id GuildId, Id ChannelMessageId, Message.Message ChannelMessageId (Id UserId) (Id ChannelId) )
 lastGuildChannelMessage backend =
     case SeqDict.toList (unwrapBackend backend).guilds |> List.reverse |> List.head of
         Just ( guildId, guild ) ->
@@ -3537,7 +3537,7 @@ lastGuildChannelMessage backend =
             Nothing
 
 
-lastGuildChannelMessageAt : Id ChannelMessageId -> BackendModel2 -> Maybe (Message.Message ChannelMessageId (Id UserId))
+lastGuildChannelMessageAt : Id ChannelMessageId -> BackendModel2 -> Maybe (Message.Message ChannelMessageId (Id UserId) (Id ChannelId))
 lastGuildChannelMessageAt messageId backend =
     case lastGuildChannel backend of
         Just channel ->

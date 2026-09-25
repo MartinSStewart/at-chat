@@ -81,7 +81,7 @@ import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
 import Icons
-import Id exposing (Id, QuestionId, UserId)
+import Id exposing (ChannelId, Id, QuestionId, UserId)
 import IdArray exposing (IdArray)
 import List.Extra
 import List.Nonempty exposing (Nonempty)
@@ -181,7 +181,7 @@ type alias UnvalidatedInput =
 
 
 type alias ValidatedInput =
-    { text : Nonempty (RichText (Id UserId))
+    { text : Nonempty (RichText (Id UserId) (Id ChannelId))
     , attachedFiles : SeqDict (Id FileId) FileData
     , reactions : Reactions
     }
@@ -407,7 +407,7 @@ toDraft localUser saved =
 {-| The text someone would have typed to write this, so that an answer can be put back in
 the box it came from.
 -}
-toSourceText : LocalUser -> Nonempty (RichText (Id UserId)) -> String
+toSourceText : LocalUser -> Nonempty (RichText (Id UserId) (Id ChannelId)) -> String
 toSourceText localUser content =
     RichText.toString localUser.timezone False (User.allUsers localUser) SeqDict.empty content
 
@@ -857,7 +857,7 @@ holds. Text that isn't rich text yet has nothing in it to change.
 mapQuestionRichText :
     Time.Zone
     -> SeqDict (Id UserId) FrontendUser
-    -> (Nonempty (RichText (Id UserId)) -> Nonempty (RichText (Id UserId)))
+    -> (Nonempty (RichText (Id UserId) (Id ChannelId)) -> Nonempty (RichText (Id UserId) (Id ChannelId)))
     -> String
     -> String
 mapQuestionRichText timezone users change text =
@@ -1754,7 +1754,7 @@ questionInput localUser loggedIn users index question =
         htmlId =
             inputId (QuestionInput questionId)
 
-        richText : Maybe (Nonempty (RichText (Id UserId)))
+        richText : Maybe (Nonempty (RichText (Id UserId) (Id ChannelId)))
         richText =
             String.Nonempty.fromString question.text
                 |> Maybe.map (RichText.fromNonemptyString localUser.timezone users SeqDict.empty)
@@ -2024,7 +2024,7 @@ contentView :
     -> LocalUser
     -> HtmlId
     -> SeqDict (Id FileId) FileData
-    -> Nonempty (RichText (Id UserId))
+    -> Nonempty (RichText (Id UserId) (Id ChannelId))
     -> Element GameMsg
 contentView time contentWidth localUser htmlId attachedFiles content =
     RichText.view
@@ -2201,7 +2201,7 @@ answerInput localUser loggedIn questionId answer =
         users =
             User.allUsers localUser
 
-        richText : Maybe (Nonempty (RichText (Id UserId)))
+        richText : Maybe (Nonempty (RichText (Id UserId) (Id ChannelId)))
         richText =
             String.Nonempty.fromString answer.text
                 |> Maybe.map (RichText.fromNonemptyString localUser.timezone users SeqDict.empty)
@@ -2412,7 +2412,7 @@ notesInput localUser loggedIn questionId notes =
         users =
             User.allUsers localUser
 
-        richText : Maybe (Nonempty (RichText (Id UserId)))
+        richText : Maybe (Nonempty (RichText (Id UserId) (Id ChannelId)))
         richText =
             String.Nonempty.fromString notes.text
                 |> Maybe.map (RichText.fromNonemptyString localUser.timezone users SeqDict.empty)

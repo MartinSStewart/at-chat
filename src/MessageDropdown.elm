@@ -36,7 +36,7 @@ import NonemptyDict
 import PersonName
 import Ports
 import Range exposing (Range)
-import RichText exposing (MentionedChannel)
+import RichText
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker
@@ -179,19 +179,24 @@ userDropdownList isMobile nameSoFar guildOrDmId local =
         |> List.take (maxDropdownUsers isMobile)
 
 
-channelDropdownList : Bool -> NameSoFarData -> AnyGuildOrDmId -> LocalState -> List ( MentionedChannel, ChannelName )
+channelDropdownList : Bool -> NameSoFarData -> AnyGuildOrDmId -> LocalState -> List ChannelName
 channelDropdownList isMobile nameSoFar guildOrDmId local =
-    LocalState.channelMentions guildOrDmId local
-        |> SeqDict.toList
-        |> List.sortWith
-            (\( channel, { name } ) ->
+    (case guildOrDmId of
+        GuildOrDmId guildOrDmId2 ->
+            LocalState.channelMentions guildOrDmId2 local |> SeqDict.values
+
+        DiscordGuildOrDmId guildOrDmId2 ->
+            LocalState.discordChannelMentions guildOrDmId2 local |> SeqDict.values
+    )
+        |> List.filterMap
+            (\{ name } ->
                 if String.startsWith (String.toLower nameSoFar.nameSoFar) (ChannelName.toString name |> String.toLower) then
-                    Just ( channel, name )
+                    Just name
 
                 else
                     Nothing
             )
-        |> List.sortBy (\( _, name ) -> ChannelName.toString name)
+        |> List.sortBy ChannelName.toString
         |> List.take (maxDropdownUsers isMobile)
 
 
@@ -449,7 +454,7 @@ pressedDropdownItem setFocusMsg isMobile time nameSoFar guildOrDmId channelTextI
 
                 ChannelSoFar nameSoFarData ->
                     case channelDropdownList isMobile nameSoFarData guildOrDmId local |> List.Extra.getAt dropdownIndex of
-                        Just ( _, name ) ->
+                        Just name ->
                             ( { start = nameSoFarData.index
                               , end = nameSoFarData.index + String.length nameSoFarData.nameSoFar
                               }
@@ -628,7 +633,7 @@ view isMobile time nameSoFar guildOrDmId skinTone emojiData local dropdownButton
                 rows : List (Element Msg)
                 rows =
                     List.indexedMap
-                        (\index ( _, name ) ->
+                        (\index name ->
                             dropdownButton
                                 isMobile
                                 False

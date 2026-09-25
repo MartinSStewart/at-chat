@@ -44,7 +44,7 @@ import FileName exposing (FileName)
 import FileStatus exposing (FileData, FileHash, FileMetadata, IsEncrypted, Orientation)
 import Game
 import Go
-import Id exposing (ChannelMessageId, Id, ThreadMessageId, UserId)
+import Id exposing (ChannelId, ChannelMessageId, Id, ThreadMessageId, UserId)
 import IdArray exposing (IdArray)
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (BackendChannel, ChannelStatus, DiscordBackendChannel)
@@ -107,23 +107,23 @@ type alias GuildChannel =
     , createdBy : Id UserId
     , name : ChannelName
     , description : ChannelDescription
-    , messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+    , messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
     , status : ChannelStatus
-    , threads : SeqDict (Id ChannelMessageId) (Thread (Id UserId))
+    , threads : SeqDict (Id ChannelMessageId) (Thread (Id UserId) (Id ChannelId))
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
     , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
     }
 
 
-type alias Thread userId =
-    { messages : IdArray ThreadMessageId (Message ThreadMessageId userId)
+type alias Thread userId channelId =
+    { messages : IdArray ThreadMessageId (Message ThreadMessageId userId channelId)
     , dateDividerDrawings : SeqDict Date (Drawing userId)
     }
 
 
 type alias DmChannel =
-    { messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
-    , threads : SeqDict (Id ChannelMessageId) (Thread (Id UserId))
+    { messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
+    , threads : SeqDict (Id ChannelMessageId) (Thread (Id UserId) (Id ChannelId))
     , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
     , e2ee : E2eeStatus
@@ -134,16 +134,16 @@ type alias DiscordGuildChannel =
     { name : ChannelName
     , description : ChannelDescription
     , isForum : Bool
-    , messages : IdArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
+    , messages : IdArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     , status : ChannelStatus
-    , threads : SeqDict (Id ChannelMessageId) (Thread (Discord.Id Discord.UserId))
+    , threads : SeqDict (Id ChannelMessageId) (Thread (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
     , permissionOverwrites : List Discord.Overwrite
     }
 
 
 type alias DiscordDmChannel =
-    { messages : IdArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
+    { messages : IdArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     , members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
     , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
     }
@@ -275,9 +275,9 @@ guildChannelCodec =
         |> Codec.field "createdBy" .createdBy idCodec
         |> Codec.field "name" .name channelNameCodec
         |> Codec.field "description" .description channelDescriptionCodec
-        |> Codec.field "messages" .messages (idArrayCodec (messageCodec idCodec))
+        |> Codec.field "messages" .messages (idArrayCodec (messageCodec idCodec idCodec))
         |> Codec.field "status" .status channelStatusCodec
-        |> Codec.field "threads" .threads (seqDictCodec idCodec (threadCodec idCodec))
+        |> Codec.field "threads" .threads (seqDictCodec idCodec (threadCodec idCodec idCodec))
         |> Codec.field "dateDividerDrawings" .dateDividerDrawings (seqDictCodec dateCodec (drawingCodec idCodec))
         |> Codec.field "games" .games (seqDictCodec idCodec backendGameDataCodec)
         |> Codec.buildObject
@@ -286,8 +286,8 @@ guildChannelCodec =
 dmChannelCodec : Codec DmChannel
 dmChannelCodec =
     Codec.object DmChannel
-        |> Codec.field "messages" .messages (idArrayCodec (messageCodec idCodec))
-        |> Codec.field "threads" .threads (seqDictCodec idCodec (threadCodec idCodec))
+        |> Codec.field "messages" .messages (idArrayCodec (messageCodec idCodec idCodec))
+        |> Codec.field "threads" .threads (seqDictCodec idCodec (threadCodec idCodec idCodec))
         |> Codec.field "games" .games (seqDictCodec idCodec backendGameDataCodec)
         |> Codec.field "dateDividerDrawings" .dateDividerDrawings (seqDictCodec dateCodec (drawingCodec idCodec))
         |> Codec.field "e2ee" .e2ee e2eeStatusCodec
@@ -300,9 +300,9 @@ discordGuildChannelCodec =
         |> Codec.field "name" .name channelNameCodec
         |> Codec.field "description" .description channelDescriptionCodec
         |> Codec.field "isForum" .isForum Codec.bool
-        |> Codec.field "messages" .messages (idArrayCodec (messageCodec discordIdCodec))
+        |> Codec.field "messages" .messages (idArrayCodec (messageCodec discordIdCodec discordIdCodec))
         |> Codec.field "status" .status channelStatusCodec
-        |> Codec.field "threads" .threads (seqDictCodec idCodec (threadCodec discordIdCodec))
+        |> Codec.field "threads" .threads (seqDictCodec idCodec (threadCodec discordIdCodec discordIdCodec))
         |> Codec.field "dateDividerDrawings" .dateDividerDrawings (seqDictCodec dateCodec (drawingCodec discordIdCodec))
         |> Codec.field "permissionOverwrites" .permissionOverwrites (Codec.list overwriteCodec)
         |> Codec.buildObject
@@ -311,7 +311,7 @@ discordGuildChannelCodec =
 discordDmChannelCodec : Codec DiscordDmChannel
 discordDmChannelCodec =
     Codec.object DiscordDmChannel
-        |> Codec.field "messages" .messages (idArrayCodec (messageCodec discordIdCodec))
+        |> Codec.field "messages" .messages (idArrayCodec (messageCodec discordIdCodec discordIdCodec))
         |> Codec.field
             "members"
             .members
@@ -326,10 +326,10 @@ discordDmChannelCodec =
         |> Codec.buildObject
 
 
-threadCodec : Codec userId -> Codec (Thread userId)
-threadCodec userIdCodec =
+threadCodec : Codec userId -> Codec channelId -> Codec (Thread userId channelId)
+threadCodec userIdCodec channelIdCodec =
     Codec.object Thread
-        |> Codec.field "messages" .messages (idArrayCodec (messageCodec userIdCodec))
+        |> Codec.field "messages" .messages (idArrayCodec (messageCodec userIdCodec channelIdCodec))
         |> Codec.field "dateDividerDrawings" .dateDividerDrawings (seqDictCodec dateCodec (drawingCodec userIdCodec))
         |> Codec.buildObject
 
@@ -412,8 +412,8 @@ channelStatusCodec =
         |> Codec.buildCustom
 
 
-messageCodec : Codec userId -> Codec (Message messageId userId)
-messageCodec userId =
+messageCodec : Codec userId -> Codec channelId -> Codec (Message messageId userId channelId)
+messageCodec userId channelId =
     Codec.custom
         (\userTextMessageEncoder encryptedUserTextMessageEncoder userJoinedMessageEncoder deletedMessageEncoder callStartedEncoder gameStartedEncoder value ->
             case value of
@@ -435,7 +435,7 @@ messageCodec userId =
                 Message.GameStarted argA ->
                     gameStartedEncoder argA
         )
-        |> Codec.variant1 "UserTextMessage" Message.UserTextMessage (userTextMessageDataCodec userId)
+        |> Codec.variant1 "UserTextMessage" Message.UserTextMessage (userTextMessageDataCodec userId channelId)
         |> Codec.variant1
             "EncryptedUserTextMessage"
             Message.EncryptedUserTextMessage
@@ -453,12 +453,12 @@ messageCodec userId =
         |> Codec.buildCustom
 
 
-userTextMessageDataCodec : Codec userId -> Codec (Message.UserTextMessageData messageId userId)
-userTextMessageDataCodec userId =
+userTextMessageDataCodec : Codec userId -> Codec channelId -> Codec (Message.UserTextMessageData messageId userId channelId)
+userTextMessageDataCodec userId channelId =
     Codec.object Message.UserTextMessageData
         |> Codec.field "createdAt" .createdAt CodecExtra.time
         |> Codec.field "createdBy" .createdBy userId
-        |> Codec.field "content" .content (messageContentCodec userId)
+        |> Codec.field "content" .content (messageContentCodec userId channelId)
         |> Codec.field "reactions" .reactions (reactionsCodec userId)
         |> Codec.field "editedAt" .editedAt (Codec.nullable CodecExtra.time)
         |> Codec.field "repliedTo" .repliedTo repliedToCodec
@@ -554,10 +554,10 @@ gameTypeCodec =
         ]
 
 
-messageContentCodec : Codec userId -> Codec (Message.MessageContent userId)
-messageContentCodec userId =
+messageContentCodec : Codec userId -> Codec channelId -> Codec (Message.MessageContent userId channelId)
+messageContentCodec userId channelId =
     Codec.object Message.MessageContent
-        |> Codec.field "content" .content (nonemptyCodec (richTextCodec userId))
+        |> Codec.field "content" .content (nonemptyCodec (richTextCodec userId channelId))
         |> Codec.field "embeds" .embeds (Codec.array embedCodec)
         |> Codec.field "attachedFiles" .attachedFiles (seqDictCodec idCodec fileDataCodec)
         |> Codec.buildObject
@@ -888,8 +888,8 @@ durationCodec =
     Codec.map Duration.seconds Duration.inSeconds Codec.float
 
 
-richTextCodec : Codec userId -> Codec (RichText userId channelId)
-richTextCodec userId =
+richTextCodec : Codec userId -> Codec channelId -> Codec (RichText userId channelId)
+richTextCodec userId channelId =
     Codec.custom
         (\userMentionEncoder normalTextEncoder boldEncoder italicEncoder underlineEncoder strikethroughEncoder spoilerEncoder blockQuoteEncoder headingEncoder hyperlinkEncoder markdownLinkEncoder inlineCodeEncoder codeBlockEncoder attachedFileEncoder escapedCharEncoder stickerEncoder customEmojiEncoder bulletPointEncoder timestampEncoder channelMentionEncoder value ->
             case value of
@@ -950,27 +950,27 @@ richTextCodec userId =
                 RichText.Timestamp argA ->
                     timestampEncoder argA
 
-                RichText.ChannelMention argA ->
-                    channelMentionEncoder argA
+                RichText.ChannelMention argA argB ->
+                    channelMentionEncoder argA argB
         )
         |> Codec.variant1 "UserMention" RichText.UserMention userId
         |> Codec.variant2 "NormalText" RichText.NormalText Codec.char Codec.string
-        |> Codec.variant1 "Bold" RichText.Bold (nonemptyCodec (lazyRichText userId))
-        |> Codec.variant1 "Italic" RichText.Italic (nonemptyCodec (lazyRichText userId))
-        |> Codec.variant1 "Underline" RichText.Underline (nonemptyCodec (lazyRichText userId))
-        |> Codec.variant1 "Strikethrough" RichText.Strikethrough (nonemptyCodec (lazyRichText userId))
-        |> Codec.variant1 "Spoiler" RichText.Spoiler (nonemptyCodec (lazyRichText userId))
+        |> Codec.variant1 "Bold" RichText.Bold (nonemptyCodec (lazyRichText userId channelId))
+        |> Codec.variant1 "Italic" RichText.Italic (nonemptyCodec (lazyRichText userId channelId))
+        |> Codec.variant1 "Underline" RichText.Underline (nonemptyCodec (lazyRichText userId channelId))
+        |> Codec.variant1 "Strikethrough" RichText.Strikethrough (nonemptyCodec (lazyRichText userId channelId))
+        |> Codec.variant1 "Spoiler" RichText.Spoiler (nonemptyCodec (lazyRichText userId channelId))
         |> Codec.variant2
             "BlockQuote"
             RichText.BlockQuote
             hasLeadingLineBreakCodec
-            (Codec.list (lazyRichText userId))
+            (Codec.list (lazyRichText userId channelId))
         |> Codec.variant3
             "Heading"
             RichText.Heading
             headingLevelCodec
             hasLeadingLineBreakCodec
-            (nonemptyCodec (lazyRichText userId))
+            (nonemptyCodec (lazyRichText userId channelId))
         |> Codec.variant1 "Hyperlink" RichText.Hyperlink CodecExtra.url
         |> Codec.variant2 "MarkdownLink" RichText.MarkdownLink nonemptyStringCodec CodecExtra.url
         |> Codec.variant2 "InlineCode" RichText.InlineCode Codec.char Codec.string
@@ -983,31 +983,15 @@ richTextCodec userId =
             "BulletPoint"
             RichText.BulletPoint
             hasLeadingLineBreakCodec
-            (nonemptyCodec (Codec.list (lazyRichText userId)))
+            (nonemptyCodec (Codec.list (lazyRichText userId channelId)))
         |> Codec.variant1 "Timestamp" RichText.Timestamp timeInMinutesCodec
-        |> Codec.variant1 "ChannelMention" RichText.ChannelMention mentionedChannelCodec
+        |> Codec.variant2 "ChannelMention" RichText.ChannelMention channelId (Codec.nullable idCodec)
         |> Codec.buildCustom
 
 
-mentionedChannelCodec : Codec RichText.MentionedChannel
-mentionedChannelCodec =
-    Codec.custom
-        (\guildChannelEncoder discordChannelEncoder value ->
-            case value of
-                RichText.MentionedGuildChannel argA ->
-                    guildChannelEncoder argA
-
-                RichText.MentionedDiscordChannel argA ->
-                    discordChannelEncoder argA
-        )
-        |> Codec.variant1 "MentionedGuildChannel" RichText.MentionedGuildChannel idCodec
-        |> Codec.variant1 "MentionedDiscordChannel" RichText.MentionedDiscordChannel discordIdCodec
-        |> Codec.buildCustom
-
-
-lazyRichText : Codec userId -> Codec (RichText userId channelId)
-lazyRichText userId =
-    Codec.lazy (\() -> richTextCodec userId)
+lazyRichText : Codec userId -> Codec channelId -> Codec (RichText userId channelId)
+lazyRichText userId channelId =
+    Codec.lazy (\() -> richTextCodec userId channelId)
 
 
 hasLeadingLineBreakCodec : Codec RichText.HasLeadingLineBreak
@@ -1506,7 +1490,7 @@ sheepSetupCodec =
 sheepInputCodec : Codec SheepGame.ValidatedInput
 sheepInputCodec =
     Codec.object (\text attachedFiles reactions -> { text = text, attachedFiles = attachedFiles, reactions = reactions })
-        |> Codec.field "text" .text (nonemptyCodec (richTextCodec idCodec))
+        |> Codec.field "text" .text (nonemptyCodec (richTextCodec idCodec idCodec))
         |> Codec.field "attachedFiles" .attachedFiles (seqDictCodec idCodec fileDataCodec)
         |> Codec.field "reactions" .reactions (reactionsCodec idCodec)
         |> Codec.buildObject

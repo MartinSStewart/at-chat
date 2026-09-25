@@ -5,7 +5,7 @@ import Effect.Time as Time
 import Expect
 import FileName
 import FileStatus
-import Id exposing (Id, UserId)
+import Id exposing (ChannelId, Id, UserId)
 import IdArray
 import List.Nonempty exposing (Nonempty(..))
 import RichText
@@ -39,7 +39,7 @@ playerC =
 {-| Plain text as a question or an answer. Nobody to mention and no timezone to show a
 timestamp in, which is all the parsing needs.
 -}
-content : String -> Nonempty (RichText.RichText (Id UserId))
+content : String -> Nonempty (RichText.RichText (Id UserId) (Id ChannelId))
 content text =
     let
         ( first, rest ) =

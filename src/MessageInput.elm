@@ -39,7 +39,7 @@ import List.Nonempty exposing (Nonempty)
 import MyUi
 import PersonName exposing (PersonName)
 import Range exposing (Range, SelectionDirection)
-import RichText exposing (MentionedChannel, RichText)
+import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import Sticker exposing (StickerData)
 import String.Nonempty
@@ -269,7 +269,7 @@ textarea :
         }
     -> { c | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
-    -> SeqDict MentionedChannel { d | name : ChannelName }
+    -> SeqDict channelId { d | name : ChannelName }
     -> Html Msg
 textarea allowEnterKeyLinebreak channelTextInputId placeholder charsLeft text richText attachedFiles localUser loggedIn users channels =
     let
@@ -577,7 +577,7 @@ editView :
     -> LocalUser
     -> { c | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
-    -> SeqDict MentionedChannel { d | name : ChannelName }
+    -> SeqDict channelId { d | name : ChannelName }
     -> Element Msg
 editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachmentsUploading attachedFiles localUser loggedIn users channels =
     let
@@ -684,7 +684,7 @@ view :
         }
     -> { a | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
-    -> SeqDict MentionedChannel { d | name : ChannelName }
+    -> SeqDict channelId { d | name : ChannelName }
     -> Element Msg
 view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles localUser loggedIn users channels =
     let

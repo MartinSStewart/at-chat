@@ -350,7 +350,7 @@ previewMinutesAgo time minutes =
     Duration.addTo time (Duration.minutes -minutes)
 
 
-previewMessage : Time.Posix -> userId -> NonemptyString -> Message messageId userId
+previewMessage : Time.Posix -> userId -> NonemptyString -> Message messageId userId channelId
 previewMessage createdAt createdBy text =
     UserTextMessage
         { createdAt = createdAt
@@ -367,10 +367,10 @@ previewMessage createdAt createdBy text =
         }
 
 
-previewThread : List (Message ThreadMessageId (Id UserId)) -> Thread.FrontendThread
+previewThread : List (Message ThreadMessageId (Id UserId) (Id ChannelId)) -> Thread.FrontendThread
 previewThread messages =
     let
-        messages2 : MessageArray ThreadMessageId (Id UserId)
+        messages2 : MessageArray ThreadMessageId (Id UserId) (Id ChannelId)
         messages2 =
             List.foldl MessageArray.push MessageArray.empty messages
     in
@@ -382,12 +382,12 @@ previewThread messages =
 
 
 previewDmChannel :
-    List (Message ChannelMessageId (Id UserId))
+    List (Message ChannelMessageId (Id UserId) (Id ChannelId))
     -> SeqDict.SeqDict (Id ChannelMessageId) Thread.FrontendThread
     -> DmChannel.FrontendDmChannel
 previewDmChannel messages threads =
     let
-        messages2 : MessageArray ChannelMessageId (Id UserId)
+        messages2 : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
         messages2 =
             List.foldl MessageArray.push MessageArray.empty messages
 
@@ -432,7 +432,7 @@ previewDiscordDmChannels :
     -> SeqDict.SeqDict (Discord.Id Discord.PrivateChannelId) DmChannel.DiscordFrontendDmChannel
 previewDiscordDmChannels time =
     let
-        messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId)
+        messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
         messages =
             List.foldl
                 MessageArray.push
@@ -475,7 +475,7 @@ previewDiscordGuilds time =
 previewChannel : Time.Posix -> FrontendChannel
 previewChannel time =
     let
-        messages : MessageArray ChannelMessageId (Id UserId)
+        messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
         messages =
             List.foldl
                 MessageArray.push
@@ -582,7 +582,7 @@ conversation carries a date divider above the card.
 previewGameChannel : Time.Posix -> FrontendChannel
 previewGameChannel time =
     let
-        messages : MessageArray ChannelMessageId (Id UserId)
+        messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
         messages =
             List.foldl
                 MessageArray.push

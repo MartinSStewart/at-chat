@@ -18,7 +18,7 @@ import Encryption
 import Expect
 import Game
 import Go
-import Id exposing (Id, UserId)
+import Id exposing (ChannelId, Id, UserId)
 import IdArray
 import List.Nonempty
 import LocalState exposing (BackendChannel, ChannelStatus(..))
@@ -198,7 +198,7 @@ testThread =
     }
 
 
-textMessage : Message messageId (Id UserId)
+textMessage : Message messageId (Id UserId) (Id ChannelId)
 textMessage =
     UserTextMessage
         { createdAt = time 2
@@ -229,7 +229,7 @@ textMessage =
         }
 
 
-encryptedMessage : Message messageId (Id UserId)
+encryptedMessage : Message messageId (Id UserId) (Id ChannelId)
 encryptedMessage =
     EncryptedUserTextMessage
         { createdAt = time 4

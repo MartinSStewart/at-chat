@@ -5,11 +5,11 @@ import Effect.Time as Time
 import Expect
 import Fuzz exposing (Fuzzer)
 import Html
-import Id exposing (Id)
+import Id exposing (ChannelId, Id)
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import PersonName exposing (PersonName)
-import RichText exposing (EscapedChar(..), HasLeadingLineBreak(..), HeadingLevel(..), Language(..), MentionedChannel(..), RichText(..))
+import RichText exposing (EscapedChar(..), HasLeadingLineBreak(..), HeadingLevel(..), Language(..), RichText(..))
 import SeqDict
 import SeqSet
 import String.Nonempty exposing (NonemptyString(..))
@@ -30,11 +30,11 @@ users =
         ]
 
 
-channels : SeqDict.SeqDict MentionedChannel { name : ChannelName }
+channels : SeqDict.SeqDict (Id ChannelId) { name : ChannelName }
 channels =
     SeqDict.fromList
-        [ ( MentionedGuildChannel (Id.fromInt 1), { name = Unsafe.channelName "general" } )
-        , ( MentionedGuildChannel (Id.fromInt 2), { name = Unsafe.channelName "general-chat" } )
+        [ ( Id.fromInt 1, { name = Unsafe.channelName "general" } )
+        , ( Id.fromInt 2, { name = Unsafe.channelName "general-chat" } )
         ]
 
 
@@ -474,12 +474,12 @@ test =
             (Nonempty (Heading H1 NoLeadingLineBreak (Nonempty (Bold (Nonempty (NormalText 'b' "old heading") [])) [])) [])
         , fromNonemptyStringTest "## " (Nonempty (NormalText '#' "# ") [])
         , fromNonemptyStringTest "#hello" (Nonempty (NormalText '#' "hello") [])
-        , fromNonemptyStringTest "#general hi" (Nonempty (ChannelMention (MentionedGuildChannel (Id.fromInt 1))) [ NormalText ' ' "hi" ])
-        , fromNonemptyStringTest "#general-chat" (Nonempty (ChannelMention (MentionedGuildChannel (Id.fromInt 2))) [])
-        , fromNonemptyStringTest "see #general" (Nonempty (NormalText 's' "ee ") [ ChannelMention (MentionedGuildChannel (Id.fromInt 1)) ])
-        , fromNonemptyStringTest "*#general*" (Nonempty (Bold (Nonempty (ChannelMention (MentionedGuildChannel (Id.fromInt 1))) [])) [])
+        , fromNonemptyStringTest "#general hi" (Nonempty (ChannelMention (Id.fromInt 1) Nothing) [ NormalText ' ' "hi" ])
+        , fromNonemptyStringTest "#general-chat" (Nonempty (ChannelMention (Id.fromInt 2) Nothing) [])
+        , fromNonemptyStringTest "see #general" (Nonempty (NormalText 's' "ee ") [ ChannelMention (Id.fromInt 1) Nothing ])
+        , fromNonemptyStringTest "*#general*" (Nonempty (Bold (Nonempty (ChannelMention (Id.fromInt 1) Nothing) [])) [])
         , fromNonemptyStringTest "# general" (Nonempty (Heading H1 NoLeadingLineBreak (Nonempty (NormalText 'g' "eneral") [])) [])
-        , toStringTest (Nonempty (ChannelMention (MentionedGuildChannel (Id.fromInt 2))) [ NormalText ' ' "hi" ]) "#general-chat hi"
+        , toStringTest (Nonempty (ChannelMention (Id.fromInt 2) Nothing) [ NormalText ' ' "hi" ]) "#general-chat hi"
         , fromNonemptyStringTest "-#nope" (Nonempty (NormalText '-' "#nope") [])
         , fromNonemptyStringTest "# one\n## two\n### three\n-# small"
             (Nonempty
@@ -833,7 +833,7 @@ simpleTest name input output function =
     Test.test name (\_ -> function input |> Expect.equal output)
 
 
-fromNonemptyStringTest : String -> Nonempty (RichText (Id userId)) -> Test
+fromNonemptyStringTest : String -> Nonempty (RichText (Id userId) (Id ChannelId)) -> Test
 fromNonemptyStringTest input expected =
     case String.Nonempty.fromString input of
         Just nonempty ->
@@ -846,7 +846,7 @@ fromNonemptyStringTest input expected =
 {-| A timestamp is written as the date and time a clock in the reader's timezone shows, so
 what a piece of text means depends on which timezone it's read in.
 -}
-fromNonemptyStringInZoneTest : String -> Time.Zone -> String -> Nonempty (RichText (Id userId)) -> Test
+fromNonemptyStringInZoneTest : String -> Time.Zone -> String -> Nonempty (RichText (Id userId) (Id ChannelId)) -> Test
 fromNonemptyStringInZoneTest name timezone input expected =
     case String.Nonempty.fromString input of
         Just nonempty ->
@@ -877,7 +877,7 @@ roundTripTest name timezone =
             List.map
                 (\minutes ->
                     let
-                        original : Nonempty (RichText (Id ()))
+                        original : Nonempty (RichText (Id ()) (Id ChannelId))
                         original =
                             Nonempty
                                 (NormalText 'S' "tarts at ")
@@ -899,7 +899,7 @@ roundTripTest name timezone =
         )
 
 
-toStringTest : Nonempty (RichText (Id userId)) -> String -> Test
+toStringTest : Nonempty (RichText (Id userId) (Id ChannelId)) -> String -> Test
 toStringTest input expected =
     Test.test
         (Debug.toString ("RichText.toString: " ++ expected))

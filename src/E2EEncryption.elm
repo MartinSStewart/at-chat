@@ -29,7 +29,7 @@ import FileName
 import FileStatus
 import FrontendExtra
 import Html.Attributes
-import Id exposing (Id, UserId)
+import Id exposing (ChannelId, Id, UserId)
 import IdArray
 import Message exposing (MessageContent)
 import NonemptyDict
@@ -1296,7 +1296,7 @@ checkAttachmentStoredEncrypted backend =
             Err "The DM the file was attached in isn't on the server"
 
 
-encryptedAttachedFiles : Message.Message Id.ChannelMessageId (Id UserId) -> Maybe (List FileStatus.FileData)
+encryptedAttachedFiles : Message.Message Id.ChannelMessageId (Id UserId) (Id ChannelId) -> Maybe (List FileStatus.FileData)
 encryptedAttachedFiles message =
     case message of
         Message.EncryptedUserTextMessage data ->
@@ -1345,7 +1345,7 @@ checkFileKeysLeftWithBrowser expected clientId data =
 
 
 storeFileKeysRequest :
-    Encryption.ToJs (MessageContent (Id UserId))
+    Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId))
     -> Maybe (List { fileHash : String, key : Bytes })
 storeFileKeysRequest request =
     case request of
@@ -1388,7 +1388,7 @@ respondToFileEncrypted client =
 
 
 encryptFileRequest :
-    Encryption.ToJs (MessageContent (Id UserId))
+    Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId))
     -> Maybe ( Id Encryption.EncryptFileRequestId, Bytes )
 encryptFileRequest request =
     case request of
@@ -1610,7 +1610,7 @@ plainTextMessages dmChannel =
             )
 
 
-encryptedMessageText : Message.Message Id.ChannelMessageId (Id UserId) -> Maybe String
+encryptedMessageText : Message.Message Id.ChannelMessageId (Id UserId) (Id ChannelId) -> Maybe String
 encryptedMessageText message =
     case message of
         Message.EncryptedUserTextMessage data ->
@@ -2102,7 +2102,7 @@ checkNotificationHandedOver client expected data =
 
 
 encryptManyRequest :
-    Encryption.ToJs (MessageContent (Id UserId))
+    Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId))
     -> Maybe ( Id Encryption.EncryptManyRequestId, List Bytes )
 encryptManyRequest request =
     case request of
@@ -2114,7 +2114,7 @@ encryptManyRequest request =
 
 
 decryptManyRequest :
-    Encryption.ToJs (MessageContent (Id UserId))
+    Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId))
     -> Maybe ( Id Encryption.DecryptManyRequestId, List Bytes )
 decryptManyRequest request =
     case request of
@@ -2165,7 +2165,7 @@ stubIv payload =
 
 {-| Reads a message back out of the stand-in ciphertext it was put into.
 -}
-stubPlainText : Bytes -> Result String (MessageContent (Id UserId))
+stubPlainText : Bytes -> Result String (MessageContent (Id UserId) (Id ChannelId))
 stubPlainText cipherText =
     case
         Bytes.Decode.decode
@@ -2193,7 +2193,7 @@ that isn't already in the request.
 encryptionPortRequests :
     ClientId
     -> T.Data FrontendModel BackendModel2
-    -> List (Encryption.ToJs (MessageContent (Id UserId)))
+    -> List (Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId)))
 encryptionPortRequests clientId data =
     List.filterMap
         (\request ->
@@ -2211,15 +2211,15 @@ encryptionPortRequests clientId data =
 
 answerEncryptRequest :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> (Id Encryption.EncryptRequestId -> MessageContent (Id UserId) -> Encryption.FromJs (MessageContent (Id UserId)))
-    -> (Id Encryption.EncryptManyRequestId -> List Bytes -> Encryption.FromJs (MessageContent (Id UserId)))
+    -> (Id Encryption.EncryptRequestId -> MessageContent (Id UserId) (Id ChannelId) -> Encryption.FromJs (MessageContent (Id UserId) (Id ChannelId)))
+    -> (Id Encryption.EncryptManyRequestId -> List Bytes -> Encryption.FromJs (MessageContent (Id UserId) (Id ChannelId)))
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 answerEncryptRequest client toReply toManyReply =
     T.andThen
         100
         (\data ->
             let
-                requests : List (Encryption.ToJs (MessageContent (Id UserId)))
+                requests : List (Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId)))
                 requests =
                     encryptionPortRequests client.clientId data
 
@@ -2246,8 +2246,8 @@ answerEncryptRequest client toReply toManyReply =
 
 
 encryptRequest :
-    Encryption.ToJs (MessageContent (Id UserId))
-    -> Maybe ( Id Encryption.EncryptRequestId, MessageContent (Id UserId) )
+    Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId))
+    -> Maybe ( Id Encryption.EncryptRequestId, MessageContent (Id UserId) (Id ChannelId) )
 encryptRequest request =
     case request of
         Encryption.ToJs_EncryptNewMessage { requestId, data } ->
@@ -2258,7 +2258,7 @@ encryptRequest request =
 
 
 decryptRequest :
-    Encryption.ToJs (MessageContent (Id UserId))
+    Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId))
     -> Maybe ( Id Encryption.DecryptRequestId, Bytes )
 decryptRequest request =
     case request of
@@ -2271,7 +2271,7 @@ decryptRequest request =
 
 sendFromJs :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> Encryption.FromJs (MessageContent (Id UserId))
+    -> Encryption.FromJs (MessageContent (Id UserId) (Id ChannelId))
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 sendFromJs client fromJs =
     Serialize.encodeToBytes (Encryption.fromJsCodec Message.contentAndEmbedsCodec) fromJs

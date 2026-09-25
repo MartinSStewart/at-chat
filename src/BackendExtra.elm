@@ -393,11 +393,11 @@ unreadOverviewData userId user model =
             { channels :
                 SeqDict
                     ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId )
-                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
             , threads :
                 SeqDict
                     ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId, Id ChannelMessageId )
-                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId)))
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
             }
         discordGuilds =
             SeqDict.foldl
@@ -474,7 +474,7 @@ unreadOverviewData userId user model =
         discordDmChannels :
             SeqDict
                 (Discord.Id Discord.PrivateChannelId)
-                (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+                (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
         discordDmChannels =
             SeqDict.foldl
                 (\channelId dmChannel dict ->
@@ -508,11 +508,11 @@ unreadOverviewData userId user model =
             { channels :
                 SeqDict
                     ( Id GuildId, Id ChannelId )
-                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) (Id ChannelId)))
             , threads :
                 SeqDict
                     ( Id GuildId, Id ChannelId, Id ChannelMessageId )
-                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId)))
             }
         guilds =
             SeqDict.foldl
@@ -566,11 +566,11 @@ unreadOverviewData userId user model =
                 model.guilds
 
         dms :
-            { channels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+            { channels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) (Id ChannelId)))
             , threads :
                 SeqDict
                     ( Id UserId, Id ChannelMessageId )
-                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId)))
             }
         dms =
             SeqDict.foldl
@@ -633,7 +633,7 @@ in one list and are added in two passes instead.
 -}
 discordUsersInMessages :
     BackendModel
-    -> List (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId)))
+    -> List (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
 discordUsersInMessages model messageDicts foundSoFar =
@@ -665,7 +665,7 @@ discordUsersInMessages model messageDicts foundSoFar =
 
 {-| The users a message shows the name of: whoever wrote it, plus anyone it mentions.
 -}
-messageUserIds : Message messageId userId -> List userId
+messageUserIds : Message messageId userId channelId -> List userId
 messageUserIds message =
     case message of
         UserTextMessage data ->
@@ -692,8 +692,8 @@ of them, keyed by the index they sit at. `Nothing` when the user has read it to 
 -}
 unreadMessages :
     Maybe (Id messageId)
-    -> { a | messages : IdArray messageId (Message messageId userId) }
-    -> Maybe (SeqDict (Id messageId) (Message messageId userId))
+    -> { a | messages : IdArray messageId (Message messageId userId channelId) }
+    -> Maybe (SeqDict (Id messageId) (Message messageId userId channelId))
 unreadMessages maybeLastViewed channel =
     let
         messageCount : Int
@@ -1656,7 +1656,7 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
     case ( SeqDict.get id.channelId guild.channels, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of
         ( Just channel, Ok sendMessageRateLimits ) ->
             let
-                richText : Nonempty (RichText (Id UserId))
+                richText : Nonempty (RichText (Id UserId) (Id ChannelId))
                 richText =
                     RichText.fromNonemptyString
                         timezone
@@ -1960,7 +1960,7 @@ dmChannelsThatNeedEncrypting session dmChannels =
                                 SeqDict.foldl
                                     (\threadId thread threads ->
                                         let
-                                            plainText : SeqDict (Id ThreadMessageId) (MessageContent (Id UserId))
+                                            plainText : SeqDict (Id ThreadMessageId) (MessageContent (Id UserId) (Id ChannelId))
                                             plainText =
                                                 plainTextMessages thread.messages
                                         in
@@ -2006,8 +2006,8 @@ channelDataToDecrypt dmChannel =
 
 
 cipherTextMessages :
-    IdArray messageId (Message messageId (Id UserId))
-    -> SeqDict (Id messageId) (EncryptedData (MessageContent (Id UserId)))
+    IdArray messageId (Message messageId (Id UserId) (Id ChannelId))
+    -> SeqDict (Id messageId) (EncryptedData (MessageContent (Id UserId) (Id ChannelId)))
 cipherTextMessages messages =
     IdArray.foldlWithId
         (\messageId message dict ->
@@ -2035,8 +2035,8 @@ cipherTextMessages messages =
 
 
 plainTextMessages :
-    IdArray messageId (Message messageId (Id UserId))
-    -> SeqDict (Id messageId) (MessageContent (Id UserId))
+    IdArray messageId (Message messageId (Id UserId) (Id ChannelId))
+    -> SeqDict (Id messageId) (MessageContent (Id UserId) (Id ChannelId))
 plainTextMessages messages =
     IdArray.foldlWithId
         (\messageId message dict ->
@@ -2069,7 +2069,7 @@ sendEncryptedDm :
     -> ChangeId
     -> Viewing_DmId
     -> SeqSet FileHash
-    -> EncryptedData (MessageContent (Id UserId))
+    -> EncryptedData (MessageContent (Id UserId) (Id ChannelId))
     -> EncryptedData String
     -> ThreadRouteWithRepliedTo
     -> UserSession
@@ -2166,7 +2166,7 @@ sendDm :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles emojis session user otherUser dmChannelId dmChannel =
     let
-        richText : Nonempty (RichText (Id UserId))
+        richText : Nonempty (RichText (Id UserId) (Id ChannelId))
         richText =
             RichText.fromNonemptyString
                 timezone
@@ -3500,7 +3500,7 @@ decryptOldMessages :
     -> ChangeId
     -> LocalChange
     -> BackendModel
-    -> List ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+    -> List ( ThreadRouteWithMessage, MessageContent (Id UserId) (Id ChannelId) )
     -> UserSession
     -> DmChannelId
     -> BackendDmChannel
@@ -3572,7 +3572,7 @@ encryptOldMessages :
     -> ChangeId
     -> LocalChange
     -> BackendModel
-    -> List ( ThreadRouteWithMessage, SeqSet FileHash, EncryptedData (MessageContent (Id UserId)) )
+    -> List ( ThreadRouteWithMessage, SeqSet FileHash, EncryptedData (MessageContent (Id UserId) (Id ChannelId)) )
     -> DmChannelId
     -> BackendDmChannel
     -> ( BackendModel, Command BackendOnly ToFrontend backendMsg )

@@ -31,6 +31,7 @@ module RichText exposing
     , fromNonemptyString
     , hasLargeContent
     , hyperlinks
+    , mapChannelId
     , mapUserId
     , maxLength
     , mentionsChannel
@@ -75,7 +76,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelId, ChannelMessageId, CustomEmojiId, Id, StickerId)
+import Id exposing (ChannelMessageId, CustomEmojiId, Id, StickerId)
 import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -1063,6 +1064,77 @@ mapUserIdHelper mapUserIdFunc richText =
             BulletPoint
                 hasLeadingLineBreak
                 (List.Nonempty.map (List.map (mapUserIdHelper mapUserIdFunc)) points)
+
+        Timestamp time ->
+            Timestamp time
+
+
+mapChannelId : (channelIdA -> channelIdB) -> Nonempty (RichText userId channelIdA) -> Nonempty (RichText userId channelIdB)
+mapChannelId mapChannelIdFunc richText =
+    List.Nonempty.map (mapChannelIdHelper mapChannelIdFunc) richText
+
+
+mapChannelIdHelper : (channelIdA -> channelIdB) -> RichText userId channelIdA -> RichText userId channelIdB
+mapChannelIdHelper mapChannelIdFunc richText =
+    case richText of
+        UserMention userId ->
+            UserMention userId
+
+        ChannelMention channel thread ->
+            ChannelMention (mapChannelIdFunc channel) thread
+
+        NormalText char text ->
+            NormalText char text
+
+        Bold content ->
+            Bold (mapChannelId mapChannelIdFunc content)
+
+        Italic content ->
+            Italic (mapChannelId mapChannelIdFunc content)
+
+        Underline content ->
+            Underline (mapChannelId mapChannelIdFunc content)
+
+        Strikethrough content ->
+            Strikethrough (mapChannelId mapChannelIdFunc content)
+
+        Spoiler content ->
+            Spoiler (mapChannelId mapChannelIdFunc content)
+
+        BlockQuote hasLeadingLineBreak content ->
+            BlockQuote hasLeadingLineBreak (List.map (mapChannelIdHelper mapChannelIdFunc) content)
+
+        Heading level hasLeadingLineBreak content ->
+            Heading level hasLeadingLineBreak (mapChannelId mapChannelIdFunc content)
+
+        Hyperlink url ->
+            Hyperlink url
+
+        MarkdownLink text url ->
+            MarkdownLink text url
+
+        InlineCode char text ->
+            InlineCode char text
+
+        CodeBlock language text ->
+            CodeBlock language text
+
+        AttachedFile fileId ->
+            AttachedFile fileId
+
+        EscapedChar escapedChar ->
+            EscapedChar escapedChar
+
+        Sticker stickerId ->
+            Sticker stickerId
+
+        CustomEmoji customEmojiId ->
+            CustomEmoji customEmojiId
+
+        BulletPoint hasLeadingLineBreak points ->
+            BulletPoint
+                hasLeadingLineBreak
+                (List.Nonempty.map (List.map (mapChannelIdHelper mapChannelIdFunc)) points)
 
         Timestamp time ->
             Timestamp time

@@ -19,7 +19,7 @@ import Date exposing (Date)
 import Discord
 import Drawing
 import Effect.Time as Time
-import Id exposing (Id, ThreadMessageId, UserId)
+import Id exposing (ChannelId, Id, ThreadMessageId, UserId)
 import IdArray exposing (IdArray)
 import Message exposing (Message, RepliedTo(..))
 import MessageArray exposing (MessageArray)
@@ -29,22 +29,22 @@ import VisibleMessages exposing (VisibleMessages)
 
 
 type alias BackendThread =
-    { messages : IdArray ThreadMessageId (Message ThreadMessageId (Id UserId))
+    { messages : IdArray ThreadMessageId (Message ThreadMessageId (Id UserId) (Id ChannelId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
     }
 
 
 type alias DiscordBackendThread =
-    { messages : IdArray ThreadMessageId (Message ThreadMessageId (Discord.Id Discord.UserId))
+    { messages : IdArray ThreadMessageId (Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
     , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
     }
 
 
-type alias FrontendGenericThread userId =
-    { messages : MessageArray ThreadMessageId userId
+type alias FrontendGenericThread userId channelId =
+    { messages : MessageArray ThreadMessageId userId channelId
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing userId)
@@ -52,7 +52,7 @@ type alias FrontendGenericThread userId =
 
 
 type alias FrontendThread =
-    { messages : MessageArray ThreadMessageId (Id UserId)
+    { messages : MessageArray ThreadMessageId (Id UserId) (Id ChannelId)
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
@@ -60,7 +60,7 @@ type alias FrontendThread =
 
 
 type alias DiscordFrontendThread =
-    { messages : MessageArray ThreadMessageId (Discord.Id Discord.UserId)
+    { messages : MessageArray ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
@@ -79,7 +79,7 @@ backendInit =
     }
 
 
-frontendInit : FrontendGenericThread userId
+frontendInit : FrontendGenericThread userId channelId
 frontendInit =
     { messages = MessageArray.empty
     , visibleMessages = VisibleMessages.empty
@@ -124,7 +124,7 @@ discordToFrontend preloadMessages thread =
     }
 
 
-loadMessages : Bool -> IdArray messageId (Message messageId userId) -> MessageArray messageId userId
+loadMessages : Bool -> IdArray messageId (Message messageId userId channelId) -> MessageArray messageId userId channelId
 loadMessages preloadMessages messages =
     let
         messageCount : Int
@@ -140,11 +140,11 @@ loadMessages preloadMessages messages =
                 -- Load the latest message for each channel/thread in case it's needed for a preview somewhere
                 messageCount - 1 |> max 0
 
-        messagesToLoad : Array (Message messageId userId)
+        messagesToLoad : Array (Message messageId userId channelId)
         messagesToLoad =
             IdArray.toArray messages |> Array.slice oldestLoaded messageCount
 
-        referencedMessages : List ( Id messageId, Message messageId userId )
+        referencedMessages : List ( Id messageId, Message messageId userId channelId )
         referencedMessages =
             Array.foldl
                 (\message list ->

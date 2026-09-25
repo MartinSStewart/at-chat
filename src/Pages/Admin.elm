@@ -3987,7 +3987,7 @@ discordGuildChannel linkedGuildMembers guild guildId adminData ( channelId, chan
         ]
 
 
-firstMessageView : { a | firstMessage : Maybe (Message messageId userId) } -> Element Msg
+firstMessageView : { a | firstMessage : Maybe (Message messageId userId channelId) } -> Element Msg
 firstMessageView channel =
     case channel.firstMessage of
         Just firstMessage ->

@@ -149,7 +149,7 @@ batchAnswerBytes =
     [ 1, 0, 6, 64, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 104, 0, 0, 0, 1, 105, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
 
 
-shortMessage : Message.MessageContent (Id.Id Id.UserId)
+shortMessage : Message.MessageContent (Id.Id Id.UserId) (Id.Id Id.ChannelId)
 shortMessage =
     { content = List.Nonempty.Nonempty (RichText.NormalText 'h' "i") []
     , embeds = Array.empty

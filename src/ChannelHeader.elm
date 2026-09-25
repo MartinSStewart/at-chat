@@ -997,7 +997,7 @@ gameTabBody guildOrDmId maybeMatchId repliedTo local loggedIn matchData model =
 drawingCanUndoOrRedo : AnyGuildOrDmId -> Drawing.AnchorType -> LocalState -> ( Bool, Bool )
 drawingCanUndoOrRedo guildOrDmId anchor local =
     let
-        noThreadHelper : userId -> Drawing.MessageAnchor -> Id messageId -> { a | messages : MessageArray messageId userId } -> ( Bool, Bool )
+        noThreadHelper : userId -> Drawing.MessageAnchor -> Id messageId -> { a | messages : MessageArray messageId userId channelId } -> ( Bool, Bool )
         noThreadHelper userId anchor2 messageId channel2 =
             case MessageArray.get messageId channel2.messages of
                 Just message ->

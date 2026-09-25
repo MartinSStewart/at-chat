@@ -9,7 +9,7 @@ import Fuzz
 import Id exposing (CustomEmojiId, Id)
 import List.Nonempty exposing (Nonempty(..))
 import OneToOne exposing (OneToOne)
-import RichText exposing (DiscordCustomEmojiIdAndName, HasLeadingLineBreak(..), MentionedChannel(..), RichText(..))
+import RichText exposing (DiscordCustomEmojiIdAndName, HasLeadingLineBreak(..), RichText(..))
 import RichTextTests
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
@@ -52,7 +52,7 @@ emojiName =
     Unsafe.emojiName "z_"
 
 
-fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId))
+fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
 fromDiscordHelper text =
     RichText.fromDiscord text SeqDict.empty Discord.Missing customEmojis [] Discord.Missing |> List.Nonempty.toList
 
@@ -161,7 +161,7 @@ roundTripTests =
             "Text at-chat reads as plain text comes home as the same plain text"
             (\source ->
                 let
-                    written : Nonempty (RichText (Discord.Id Discord.UserId))
+                    written : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                     written =
                         RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty source
                 in
@@ -263,7 +263,7 @@ isPlainText item =
 expectSurvivesDiscord : NonemptyString -> Expect.Expectation
 expectSurvivesDiscord source =
     let
-        written : Nonempty (RichText (Discord.Id Discord.UserId))
+        written : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         written =
             RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty source
     in
@@ -577,7 +577,7 @@ basicFormattingTests =
         ]
 
 
-fromNonemptyStringTest : String -> Nonempty (RichText (Discord.Id Discord.UserId)) -> Test
+fromNonemptyStringTest : String -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)) -> Test
 fromNonemptyStringTest input expected =
     Test.test
         (Debug.toString input)
@@ -638,7 +638,7 @@ discordSpecificTests =
                 fromDiscordHelper "Go to <#137748026084163581>!"
                     |> Expect.equal
                         [ NormalText 'G' "o to "
-                        , ChannelMention (MentionedDiscordChannel channelId)
+                        , ChannelMention channelId Nothing
                         , NormalText '!' ""
                         ]
         , Test.test "channel mention is sent back to Discord unchanged" <|
@@ -653,7 +653,7 @@ discordSpecificTests =
                     Time.utc
                     SeqDict.empty
                     (SeqDict.singleton
-                        (MentionedDiscordChannel channelId)
+                        channelId
                         { name = generalChannelName }
                     )
                     (NonemptyString 'h' "i #general")

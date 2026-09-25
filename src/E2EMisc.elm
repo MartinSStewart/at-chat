@@ -277,7 +277,7 @@ exportedChannel data =
             Err ("Expected a single download, instead got " ++ String.fromInt (List.length downloads))
 
 
-messageHasDrawing : Message.Message messageId userId -> Bool
+messageHasDrawing : Message.Message messageId userId channelId -> Bool
 messageHasDrawing message =
     case message of
         Message.UserTextMessage data ->

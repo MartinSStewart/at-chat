@@ -290,7 +290,7 @@ backendInit =
 {-| Deleted messages are the cheapest kind to build and all that matters here is
 how many there are.
 -}
-messages : Int -> IdArray.IdArray messageId (Message messageId userId)
+messages : Int -> IdArray.IdArray messageId (Message messageId userId channelId)
 messages count =
     List.range 1 count
         |> List.map (\index -> DeletedMessage (Time.millisToPosix index))

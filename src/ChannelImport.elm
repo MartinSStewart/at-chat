@@ -24,7 +24,7 @@ import Drawing exposing (Drawing)
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji)
 import Game
-import Id exposing (ChannelMessageId, Id, ThreadMessageId, UserId)
+import Id exposing (ChannelId, ChannelMessageId, Id, ThreadMessageId, UserId)
 import IdArray exposing (IdArray)
 import Message exposing (Message(..), MessageContent, UserTextMessageDrawings)
 import NonemptySet exposing (NonemptySet)
@@ -46,7 +46,7 @@ type alias ImportedChannel =
     , createdBy : Maybe (Id UserId)
     , name : Maybe ChannelName
     , description : Maybe ChannelDescription
-    , messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+    , messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
     , threads : SeqDict (Id ChannelMessageId) BackendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
     , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
@@ -60,10 +60,10 @@ decode text model =
         Ok (GuildChannelExport channel) ->
             let
                 ( messages, messagesEncrypted ) =
-                    importMessage identity channel.messages
+                    importMessage identity identity channel.messages
 
                 ( threads, threadsEncrypted ) =
-                    importThread identity channel.threads
+                    importThread identity identity channel.threads
             in
             { createdAt = Just channel.createdAt
             , createdBy = Just channel.createdBy
@@ -80,10 +80,10 @@ decode text model =
         Ok (DmChannelExport channel) ->
             let
                 ( messages, messagesEncrypted ) =
-                    importMessage identity channel.messages
+                    importMessage identity identity channel.messages
 
                 ( threads, threadsEncrypted ) =
-                    importThread identity channel.threads
+                    importThread identity identity channel.threads
             in
             { createdAt = Nothing
             , createdBy = Nothing
@@ -100,10 +100,10 @@ decode text model =
         Ok (DiscordGuildChannelExport channel) ->
             let
                 ( messages, messagesEncrypted ) =
-                    importMessage (linkedUserId model) channel.messages
+                    importMessage (linkedUserId model) discordChannelId channel.messages
 
                 ( threads, threadsEncrypted ) =
-                    importThread (linkedUserId model) channel.threads
+                    importThread (linkedUserId model) discordChannelId channel.threads
             in
             { createdAt = Nothing
             , createdBy = Nothing
@@ -121,7 +121,7 @@ decode text model =
         Ok (DiscordDmChannelExport channel) ->
             let
                 ( messages, messagesEncrypted ) =
-                    importMessage (linkedUserId model) channel.messages
+                    importMessage (linkedUserId model) discordChannelId channel.messages
             in
             { createdAt = Nothing
             , createdBy = Nothing
@@ -156,6 +156,11 @@ linkedUserId model discordUserId =
             dummyUserId
 
 
+discordChannelId : Discord.Id Discord.ChannelId -> Id ChannelId
+discordChannelId _ =
+    Debug.todo "Discord channel mentions have no guild channel to point at once imported"
+
+
 dummyUserId : Id UserId
 dummyUserId =
     Id.fromInt -1
@@ -163,19 +168,20 @@ dummyUserId =
 
 importThread :
     (userIdA -> Id UserId)
+    -> (channelIdA -> Id ChannelId)
     ->
         SeqDict
             (Id ChannelMessageId)
-            { messages : IdArray ThreadMessageId (Message ThreadMessageId userIdA)
+            { messages : IdArray ThreadMessageId (Message ThreadMessageId userIdA channelIdA)
             , dateDividerDrawings : SeqDict Date (Drawing userIdA)
             }
     -> ( SeqDict (Id ChannelMessageId) BackendThread, Int )
-importThread mapUserId threads =
+importThread mapUserId mapChannelId threads =
     SeqDict.foldl
         (\threadId thread ( result, count ) ->
             let
                 ( messages, encrypted ) =
-                    importMessage mapUserId thread.messages
+                    importMessage mapUserId mapChannelId thread.messages
             in
             ( SeqDict.insert threadId
                 { messages = messages
@@ -192,9 +198,10 @@ importThread mapUserId threads =
 
 importMessage :
     (userIdA -> Id UserId)
-    -> IdArray messageId (Message messageId userIdA)
-    -> ( IdArray messageId (Message messageId (Id UserId)), Int )
-importMessage mapUserId messages =
+    -> (channelIdA -> Id ChannelId)
+    -> IdArray messageId (Message messageId userIdA channelIdA)
+    -> ( IdArray messageId (Message messageId (Id UserId) (Id ChannelId)), Int )
+importMessage mapUserId mapChannelId messages =
     let
         ( reversed, count ) =
             IdArray.foldl
@@ -207,7 +214,7 @@ importMessage mapUserId messages =
                             ( UserTextMessage
                                 { createdAt = data.createdAt
                                 , createdBy = mapUserId data.createdBy
-                                , content = mapContent mapUserId data.content
+                                , content = mapContent mapUserId mapChannelId data.content
                                 , reactions = mapReactions mapUserId data.reactions
                                 , editedAt = data.editedAt
                                 , repliedTo = data.repliedTo
@@ -262,9 +269,9 @@ importMessage mapUserId messages =
     ( IdArray.fromList (List.reverse reversed), count )
 
 
-mapContent : (userIdA -> userIdB) -> MessageContent userIdA -> MessageContent userIdB
-mapContent mapUserId content =
-    { content = RichText.mapUserId mapUserId content.content
+mapContent : (userIdA -> userIdB) -> (channelIdA -> channelIdB) -> MessageContent userIdA channelIdA -> MessageContent userIdB channelIdB
+mapContent mapUserId mapChannelId content =
+    { content = RichText.mapUserId mapUserId content.content |> RichText.mapChannelId mapChannelId
     , embeds = content.embeds
     , attachedFiles = content.attachedFiles
     }

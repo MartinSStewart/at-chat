@@ -254,7 +254,7 @@ handleDiscordDmEditMessage edit attachments model =
             case OneToOne.second edit.id channel.linkedMessageIds of
                 Just messageIndex ->
                     let
-                        richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                        richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                         richText =
                             RichText.fromDiscord
                                 edit.content
@@ -404,7 +404,7 @@ handleDiscordGuildEditMessage :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordGuildEditMessage guildId guild edit attachments model =
     let
-        richText : Nonempty (RichText (Discord.Id Discord.UserId))
+        richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         richText =
             RichText.fromDiscord
                 edit.content
@@ -616,11 +616,11 @@ handleDiscordDeleteGuildMessage discordGuildId discordChannelId discordMessageId
 
 deleteMessageHelper :
     Discord.Id Discord.MessageId
-    -> { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId)) }
+    -> { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)) }
     ->
         Maybe
             ( Id messageId
-            , { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId)) }
+            , { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)) }
             )
 deleteMessageHelper discordMessageId channel =
     case OneToOne.second discordMessageId channel.linkedMessageIds of
@@ -746,7 +746,7 @@ addDiscordChannel discordChannel =
 
 messagesAndLinks :
     { a
-        | messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId))
+        | messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
     }
     -> List Discord.Message
@@ -754,7 +754,7 @@ messagesAndLinks :
     -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
     ->
-        ( IdArray messageId (Message messageId (Discord.Id Discord.UserId))
+        ( IdArray messageId (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         , OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         )
 messagesAndLinks existingChannelOrThread messages customEmojis discordStickers discordAttachments =
@@ -967,7 +967,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
 
                     else
                         let
-                            richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                            richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                             richText =
                                 RichText.fromDiscord
                                     discordMessage.content
@@ -1232,7 +1232,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
 
                             Discord.GuildMemberJoin ->
                                 let
-                                    message : Message messageId (Discord.Id Discord.UserId)
+                                    message : Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
                                     message =
                                         Message.userJoined discordMessage.timestamp discordMessage.author.id
                                 in
@@ -1328,7 +1328,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
 
                             _ ->
                                 let
-                                    richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                    richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                     richText =
                                         RichText.fromDiscord
                                             content
@@ -1680,11 +1680,11 @@ addForumPost authentication post guild channel model =
         createdAt =
             discordIdCreatedAt post.threadId
 
-        richText : Nonempty (RichText (Discord.Id Discord.UserId))
+        richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         richText =
             RichText.fromDiscord post.name SeqDict.empty Missing model.discordCustomEmojis [] Missing
 
-        message : Message ChannelMessageId (Discord.Id Discord.UserId)
+        message : Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
         message =
             Message.userTextMessageNoEmbeds createdAt post.ownerId richText SeqDict.empty NoReply SeqDict.empty
                 |> UserTextMessage
@@ -1787,7 +1787,7 @@ handleForumPostRenamed thread time model =
                     of
                         Just messageId ->
                             let
-                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                 richText =
                                     RichText.fromDiscord name SeqDict.empty Missing model.discordCustomEmojis [] Missing
                             in
@@ -4415,7 +4415,7 @@ sendMessage :
     -> SeqDict (Id FileId) FileData
     -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     -> String
-    -> Nonempty (RichText (Discord.Id Discord.UserId))
+    -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     -> Task BackendOnly Discord.HttpError Discord.Message
 sendMessage secretKey discordUser channelId maybeReplyTo attachedFiles discordStickers discordText text =
     List.map

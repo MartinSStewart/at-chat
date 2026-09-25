@@ -21,7 +21,7 @@ import Effect.Lamdera as Lamdera exposing (ClientId)
 import EmailAddress
 import Env
 import Icons
-import Id exposing (ChannelMessageId, Id, UserId)
+import Id exposing (ChannelId, ChannelMessageId, Id, UserId)
 import ImageEditor
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
 import List.Nonempty exposing (Nonempty(..))
@@ -1024,7 +1024,7 @@ colorPreview :
     -> Element FrontendMsg_
 colorPreview time isMobile local allUsers color =
     let
-        message : Message.UserTextMessageData ChannelMessageId (Id UserId)
+        message : Message.UserTextMessageData ChannelMessageId (Id UserId) (Id ChannelId)
         message =
             Message.userTextMessageNoEmbeds
                 time

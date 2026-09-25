@@ -113,7 +113,7 @@ userTextMessageNoEmbeds :
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> RepliedTo messageId
     -> SeqDict (Id FileId) FileData
-    -> UserTextMessageData messageId userId
+    -> UserTextMessageData messageId userId channelId
 userTextMessageNoEmbeds createdAt2 createdBy content reactions repliedTo2 attachedFiles =
     { createdAt = createdAt2
     , createdBy = createdBy
@@ -143,7 +143,7 @@ userTextMessageBackend :
     -> SeqDict (Id FileId) FileData
     -> SeqDict (Id StickerId) StickerData
     ->
-        ( UserTextMessageData messageId userId
+        ( UserTextMessageData messageId userId channelId
         , Command BackendOnly toMsg ( Url, Result Http.Error EmbedData )
         , SeqDict (Id StickerId) StickerData
         )
@@ -195,7 +195,7 @@ encryptedUserTextMessageFrontend :
     -> SeqSet FileHash
     -> EncryptedData (MessageContent (Id UserId) (Id ChannelId))
     -> RepliedTo messageId
-    -> Message messageId (Id UserId)
+    -> Message messageId (Id UserId) channelId
 encryptedUserTextMessageFrontend createdAt2 createdBy fileHashes contentAndEmbeds repliedTo2 =
     EncryptedUserTextMessage
         { content = contentAndEmbeds
@@ -215,7 +215,7 @@ userTextMessageFrontend :
     -> Nonempty (RichText userId channelId)
     -> RepliedTo messageId
     -> SeqDict (Id FileId) FileData
-    -> Message messageId userId
+    -> Message messageId userId channelId
 userTextMessageFrontend createdAt2 createdBy content repliedTo2 attachedFiles =
     let
         hyperlinks : List Url
@@ -265,7 +265,7 @@ editAndEncryptUserTextMessage :
     Time.Posix
     -> SeqSet FileHash
     -> EncryptedData (MessageContent userId (Id ChannelId))
-    -> UserTextMessageData messageId userId
+    -> UserTextMessageData messageId userId channelId
     -> EncryptedUserTextMessageData messageId userId
 editAndEncryptUserTextMessage time fileHashes newContent data =
     { createdAt = data.createdAt
@@ -283,8 +283,8 @@ editUserTextMessage :
     Time.Posix
     -> Nonempty (RichText userId channelId)
     -> ChangeAttachments
-    -> UserTextMessageData messageId userId
-    -> UserTextMessageData messageId userId
+    -> UserTextMessageData messageId userId channelId
+    -> UserTextMessageData messageId userId channelId
 editUserTextMessage time newContent attachedFiles data =
     let
         oldUrls : SeqDict Url EmbedData
@@ -328,7 +328,7 @@ editUserTextMessage time newContent attachedFiles data =
     }
 
 
-addEmbed : ( Url, Result e EmbedData ) -> Message messageId userId -> Message messageId userId
+addEmbed : ( Url, Result e EmbedData ) -> Message messageId userId channelId -> Message messageId userId channelId
 addEmbed ( url, result ) message =
     case message of
         UserTextMessage message2 ->
@@ -475,7 +475,7 @@ maybeToReply maybeRepliedTo =
 
 {-| The match a message replies to something inside of.
 -}
-repliedToMatch : Message messageId userId -> Maybe (Id ChannelMessageId)
+repliedToMatch : Message messageId userId channelId -> Maybe (Id ChannelMessageId)
 repliedToMatch message =
     case message of
         UserTextMessage data ->
@@ -539,7 +539,7 @@ replyToMaybe repliedTo2 =
             Nothing
 
 
-toDecrypted : MessageContent userId (Id ChannelId) -> Message messageId userId -> Message messageId userId
+toDecrypted : MessageContent userId (Id ChannelId) -> Message messageId userId (Id ChannelId) -> Message messageId userId (Id ChannelId)
 toDecrypted content message =
     case message of
         EncryptedUserTextMessage data ->
@@ -572,8 +572,8 @@ toDecrypted content message =
 toEncrypted :
     SeqSet FileHash
     -> EncryptedData (MessageContent userId (Id ChannelId))
-    -> Message messageId userId
-    -> Message messageId userId
+    -> Message messageId userId channelId
+    -> Message messageId userId channelId
 toEncrypted fileHashes encryptedData message =
     case message of
         UserTextMessage data ->
@@ -656,7 +656,7 @@ type alias EncryptedUserTextMessageDataNoReply userId =
     }
 
 
-userJoined : Time.Posix -> userId -> Message messageId userId
+userJoined : Time.Posix -> userId -> Message messageId userId channelId
 userJoined time userId =
     UserJoinedMessage time userId SeqDict.empty Drawing.emptyDrawing
 
@@ -723,7 +723,7 @@ handleDrawingChangeHelper changeBy change anchorType data =
             data
 
 
-handleDrawingChange : userId -> Drawing.MessageAnchor -> Drawing.LocalChange -> Message messageId userId -> Message messageId userId
+handleDrawingChange : userId -> Drawing.MessageAnchor -> Drawing.LocalChange -> Message messageId userId channelId -> Message messageId userId channelId
 handleDrawingChange changeBy anchorType change message =
     case message of
         UserTextMessage data ->
@@ -814,7 +814,7 @@ userTextMessageDrawing anchor data =
             Drawing.emptyDrawing
 
 
-drawing : Drawing.MessageAnchor -> Message messageId userId -> Drawing userId
+drawing : Drawing.MessageAnchor -> Message messageId userId channelId -> Drawing userId
 drawing anchor message =
     case message of
         UserTextMessage data ->
@@ -864,7 +864,7 @@ drawing anchor message =
                     gameStarted.cardDrawings
 
 
-createdAt : Message messageId userId -> Time.Posix
+createdAt : Message messageId userId channelId -> Time.Posix
 createdAt message =
     case message of
         UserTextMessage data ->
@@ -888,7 +888,7 @@ createdAt message =
 
 {-| Encrypted messages are only ever in DMs, which have no channels to mention.
 -}
-mentionsChannel : Message messageId userId -> Bool
+mentionsChannel : Message messageId userId channelId -> Bool
 mentionsChannel message =
     case message of
         UserTextMessage data ->
@@ -910,7 +910,7 @@ mentionsChannel message =
             False
 
 
-addReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId
+addReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId channelId -> Message messageId userId channelId
 addReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
@@ -937,7 +937,7 @@ addReactionEmojiHelper userId emoji reactions =
     SeqDictHelper.addToSet emoji userId reactions
 
 
-removeReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId
+removeReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId channelId -> Message messageId userId channelId
 removeReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
@@ -980,7 +980,7 @@ removeReactionEmojiHelper userId emoji reactions =
         reactions
 
 
-reactionEmojis : Message messageId userId -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+reactionEmojis : Message messageId userId channelId -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 reactionEmojis message =
     case message of
         UserTextMessage data ->
@@ -1005,7 +1005,7 @@ reactionEmojis message =
 contentAndEmbedsCodec : Serialize.Codec String (MessageContent (Id UserId) (Id ChannelId))
 contentAndEmbedsCodec =
     Serialize.record MessageContent
-        |> Serialize.field .content (nonemptyCodec (RichText.codec Id.codec))
+        |> Serialize.field .content (nonemptyCodec (RichText.codec Id.codec Id.codec))
         |> Serialize.field .embeds (Serialize.array embedCodec)
         |> Serialize.field .attachedFiles (seqDictCodec Id.codec FileStatus.fileDataSerializeCodec)
         |> Serialize.finishRecord

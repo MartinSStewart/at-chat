@@ -432,7 +432,7 @@ channelOrThreadHasNotifications :
     -> channelId
     -> ThreadRoute
     -> Maybe (Id messageId)
-    -> { a | messages : MessageArray messageId userId }
+    -> { a | messages : MessageArray messageId userId channelId }
     -> ChannelNotificationType
 channelOrThreadHasNotifications isMuted maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
     case isMuted of
@@ -455,7 +455,7 @@ channelOrThreadHasNotificationsHelper :
     -> channelId
     -> ThreadRoute
     -> Maybe (Id messageId)
-    -> { a | messages : MessageArray messageId userId }
+    -> { a | messages : MessageArray messageId userId channelId }
     -> ChannelNotificationType
 channelOrThreadHasNotificationsHelper maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
     if notifyOnAllMessages then
@@ -480,7 +480,7 @@ channelOrThreadHasNotificationsHelper maybeDirectMentions notifyOnAllMessages ch
                         NoNotification
 
 
-newMessageCount : Maybe (Id messageId) -> { b | messages : MessageArray messageId userId } -> Int
+newMessageCount : Maybe (Id messageId) -> { b | messages : MessageArray messageId userId channelId } -> Int
 newMessageCount maybeLastViewed channel =
     case maybeLastViewed of
         Just lastViewed ->
@@ -495,8 +495,8 @@ channelNewMessageCount :
     -> FrontendCurrentUser
     ->
         { b
-            | messages : MessageArray ChannelMessageId userId
-            , threads : SeqDict (Id ChannelMessageId) { c | messages : MessageArray ThreadMessageId userId }
+            | messages : MessageArray ChannelMessageId userId channelId
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : MessageArray ThreadMessageId userId channelId }
         }
     -> Int
 channelNewMessageCount guildOrDmId currentUser channel =

@@ -53,12 +53,12 @@ applyToReference op array =
 {-| A `MessageArray` only holds messages, so the Int the reference model works in is
 carried through one, and read back out again on the way past.
 -}
-message : Int -> Message () Int
+message : Int -> Message () Int ()
 message value =
     Message.DeletedMessage (Time.millisToPosix value)
 
 
-messageValue : Message () Int -> Int
+messageValue : Message () Int () -> Int
 messageValue message2 =
     case message2 of
         Message.DeletedMessage time ->
@@ -68,7 +68,7 @@ messageValue message2 =
             0
 
 
-applyToMessageArray : Op -> MessageArray () Int -> MessageArray () Int
+applyToMessageArray : Op -> MessageArray () Int () -> MessageArray () Int ()
 applyToMessageArray op array =
     case op of
         Set index value ->
@@ -84,12 +84,12 @@ applyToMessageArray op array =
 {-| Turns a `MessageArray` back into the naive representation so the two can be
 compared.
 -}
-toReference : MessageArray () Int -> List (Maybe Int)
+toReference : MessageArray () Int () -> List (Maybe Int)
 toReference array =
     MessageArray.foldr (\_ maybe list -> Maybe.map messageValue maybe :: list) [] array
 
 
-fromOps : List Op -> ( Array (Maybe Int), MessageArray () Int )
+fromOps : List Op -> ( Array (Maybe Int), MessageArray () Int () )
 fromOps ops =
     List.foldl
         (\op ( reference, array ) -> ( applyToReference op reference, applyToMessageArray op array ))
@@ -97,7 +97,7 @@ fromOps ops =
         ops
 
 
-expectMatches : Array (Maybe Int) -> MessageArray () Int -> Expect.Expectation
+expectMatches : Array (Maybe Int) -> MessageArray () Int () -> Expect.Expectation
 expectMatches reference array =
     Expect.all
         [ \_ -> toReference array |> Expect.equalLists (Array.toList reference)
@@ -188,7 +188,7 @@ tests =
                     clampedEnd =
                         clamp clampedStart (Array.length reference) end
 
-                    sliced : MessageArray () Int
+                    sliced : MessageArray () Int ()
                     sliced =
                         MessageArray.slice (Id.fromInt start) (Id.fromInt end) array
                 in
@@ -208,7 +208,7 @@ tests =
                     ( reference, array ) =
                         fromOps ops
 
-                    entries : List ( Id.Id (), Message () Int )
+                    entries : List ( Id.Id (), Message () Int () )
                     entries =
                         List.map (Tuple.mapBoth Id.fromInt message) batch
                 in
@@ -281,7 +281,7 @@ tests =
         , Test.test "Values loaded either side of a gap stay put once the gap is filled" <|
             \_ ->
                 let
-                    array : MessageArray () Int
+                    array : MessageArray () Int ()
                     array =
                         MessageArray.fromArray 5 (Id.fromInt 0) Array.empty
                             |> MessageArray.set (Id.fromInt 0) (message 10)

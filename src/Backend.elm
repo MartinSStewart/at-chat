@@ -68,7 +68,7 @@ import Ports exposing (RegisterPushSubscription(..))
 import Postmark
 import Quantity
 import RateLimit
-import RichText exposing (DiscordCustomEmojiIdAndName, MentionedChannel, RichText)
+import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
 import Route exposing (ChannelsVisibleOnMobile(..), Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
@@ -3117,7 +3117,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 attachedFiles2 =
                                                     BackendExtra.validateAttachedFiles model.files attachedFiles
 
-                                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                                richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                                 richText =
                                                     textToDiscordRichText
                                                         timezone
@@ -3259,7 +3259,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     of
                                         ( NoThreadWithMaybeMessage maybeReplyTo, Ok sendMessageRateLimits ) ->
                                             let
-                                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                                richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                                 richText =
                                                     textToDiscordRichText
                                                         timezone
@@ -4158,7 +4158,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     id
                                     (\session user otherUser dmChannelId dmChannel ->
                                         let
-                                            richText : Nonempty (RichText (Id UserId))
+                                            richText : Nonempty (RichText (Id UserId) (Id ChannelId))
                                             richText =
                                                 RichText.fromNonemptyString
                                                     timezone
@@ -4223,7 +4223,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         { guildId = guildId, channelId = channelId, currentUserId = currentUserId }
                         (\_ userData _ guild channel ->
                             let
-                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                 richText =
                                     textToDiscordRichText
                                         timezone
@@ -4310,7 +4310,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         dmData
                         (\_ userData _ channel ->
                             let
-                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                 richText =
                                     textToDiscordRichText
                                         timezone
@@ -7369,13 +7369,13 @@ handleSheepGame :
     -> GuildOrDmId
     ->
         { c
-            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
         }
     ->
         ({ c
-            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
          }
@@ -7525,13 +7525,13 @@ handleWordSpellingGame :
     -> GuildOrDmId
     ->
         { c
-            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
         }
     ->
         ({ c
-            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
          }
@@ -7840,9 +7840,9 @@ textToDiscordRichText :
     Time.Zone
     -> NonemptyString
     -> List (Discord.Id Discord.UserId)
-    -> SeqDict MentionedChannel { name : ChannelName }
+    -> SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName }
     -> BackendModel
-    -> Nonempty (RichText (Discord.Id Discord.UserId))
+    -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
 textToDiscordRichText timezone text memberIds channels model =
     RichText.fromNonemptyString
         timezone
@@ -8416,8 +8416,8 @@ threadRouteToDiscordMessageId channelId channel threadRoute =
 
 
 loadMessagesHelper :
-    { a | messages : IdArray messageId (Message messageId userId) }
-    -> SeqDict (Id messageId) (Message messageId userId)
+    { a | messages : IdArray messageId (Message messageId userId channelId) }
+    -> SeqDict (Id messageId) (Message messageId userId channelId)
 loadMessagesHelper channel =
     let
         messageCount : Int
@@ -8439,8 +8439,8 @@ loadMessagesHelper channel =
 
 handleMessagesRequest :
     Id messageId
-    -> { b | messages : IdArray messageId (Message messageId userId) }
-    -> SeqDict (Id messageId) (Message messageId userId)
+    -> { b | messages : IdArray messageId (Message messageId userId channelId) }
+    -> SeqDict (Id messageId) (Message messageId userId channelId)
 handleMessagesRequest oldestVisibleMessage channel =
     let
         oldestVisibleMessage2 =
@@ -8472,7 +8472,7 @@ sendEditMessage clientId changeId time timezone newContent attachedFiles2 id thr
     case SeqDict.get id.channelId guild.channels of
         Just channel ->
             let
-                richText : Nonempty (RichText (Id UserId))
+                richText : Nonempty (RichText (Id UserId) (Id ChannelId))
                 richText =
                     RichText.fromNonemptyString
                         timezone

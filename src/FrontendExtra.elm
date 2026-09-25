@@ -116,7 +116,7 @@ import PersonName
 import Ports exposing (PwaStatus(..), RegisterPushSubscription(..))
 import Range exposing (Range)
 import RecoveryLogin
-import RichText exposing (Domain, MentionedChannel, RichText)
+import RichText exposing (Domain, RichText)
 import Route exposing (ChannelRoute(..), ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..), ThreadRouteWithFriends(..))
 import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
@@ -163,7 +163,7 @@ that a channel still waiting on its messages is marked as loading.
 -}
 discordViewMessages :
     ToBeFilledInByBackend (UserSession.ViewDiscordGuildData messageId)
-    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId)))
+    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
 discordViewMessages backendData =
     case backendData of
         FilledInByBackend data ->
@@ -1425,11 +1425,11 @@ playNotificationSound :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | messages : MessageArray ChannelMessageId (Id UserId)
-            , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Id UserId))
+            | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
+            , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Id UserId) (Id ChannelId))
         }
     -> LocalState
-    -> Nonempty (RichText (Id UserId))
+    -> Nonempty (RichText (Id UserId) (Id ChannelId))
     -> LoadedFrontend
     -> Command FrontendOnly toMsg msg
 playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel local content model =
@@ -1463,7 +1463,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                                 users =
                                     User.allUsers local.localUser
                             in
-                            Ports.showNotification (User.toString senderId users) (RichText.toString local.localUser.timezone True users (LocalState.channelMentions (GuildOrDmId guildOrDmId) local) content)
+                            Ports.showNotification (User.toString senderId users) (RichText.toString local.localUser.timezone True users (LocalState.channelMentions guildOrDmId local) content)
 
                         _ ->
                             Command.none
@@ -1482,11 +1482,11 @@ playNotificationSoundForDiscordMessage :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId)
-            , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Discord.Id Discord.UserId))
+            | messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
+            , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         }
     -> LocalState
-    -> Nonempty (RichText (Discord.Id Discord.UserId))
+    -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     -> LoadedFrontend
     -> Command FrontendOnly toMsg msg
 playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepliedTo channel local content model =
@@ -1525,7 +1525,7 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                         Ports.Granted ->
                             Ports.showNotification
                                 (User.toString senderId allUsers)
-                                (RichText.toString local.localUser.timezone True allUsers (LocalState.channelMentions (DiscordGuildOrDmId guildOrDmId) local) content)
+                                (RichText.toString local.localUser.timezone True allUsers (LocalState.discordChannelMentions guildOrDmId local) content)
 
                         _ ->
                             Command.none
@@ -2811,9 +2811,9 @@ setFocus model htmlId =
 textToRichText :
     NonemptyString
     -> List (Id UserId)
-    -> SeqDict MentionedChannel { a | name : ChannelName }
+    -> SeqDict (Id ChannelId) { a | name : ChannelName }
     -> LocalState
-    -> Nonempty (RichText (Id UserId))
+    -> Nonempty (RichText (Id UserId) (Id ChannelId))
 textToRichText text memberIds channels local =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
@@ -2841,9 +2841,9 @@ textToRichText text memberIds channels local =
 textToDiscordRichText :
     NonemptyString
     -> List (Discord.Id Discord.UserId)
-    -> SeqDict MentionedChannel { a | name : ChannelName }
+    -> SeqDict (Discord.Id Discord.ChannelId) { a | name : ChannelName }
     -> LocalState
-    -> Nonempty (RichText (Discord.Id Discord.UserId))
+    -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
 textToDiscordRichText text memberIds channels local =
     let
         allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
@@ -2889,7 +2889,7 @@ before the message was added, since that is what the message handlers have on ha
 -}
 newMessageThreadRoute :
     ThreadRoute
-    -> { a | messages : MessageArray ChannelMessageId c, threads : SeqDict (Id ChannelMessageId) { d | messages : MessageArray ThreadMessageId e } }
+    -> { a | messages : MessageArray ChannelMessageId c f, threads : SeqDict (Id ChannelMessageId) { d | messages : MessageArray ThreadMessageId e g } }
     -> ThreadRouteWithMessage
 newMessageThreadRoute threadRoute channel =
     case threadRoute of
@@ -5643,7 +5643,7 @@ changeUpdate localMsg local =
                     }
 
 
-callStartedMessage : Time.Posix -> Id UserId -> Message ChannelMessageId (Id UserId)
+callStartedMessage : Time.Posix -> Id UserId -> Message ChannelMessageId (Id UserId) (Id ChannelId)
 callStartedMessage time startedBy =
     CallStarted
         { startedAt = time
@@ -5955,14 +5955,14 @@ gameChangeUpdateChannel :
     -> Game.LocalChange
     ->
         { c
-            | messages : MessageArray ChannelMessageId (Id UserId)
+            | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
             , visibleMessages : VisibleMessages.VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.MatchData
         }
     ->
         { c
-            | messages : MessageArray ChannelMessageId (Id UserId)
+            | messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
             , visibleMessages : VisibleMessages.VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.MatchData
@@ -6216,7 +6216,7 @@ guildSendMessage :
     -> ThreadRouteWithRepliedTo
     -> Time.Posix
     -> Id UserId
-    -> Nonempty (RichText (Id UserId))
+    -> Nonempty (RichText (Id UserId) (Id ChannelId))
     -> SeqDict (Id FileId) FileData
     -> LocalState
     -> SeqDict (Id GuildId) FrontendGuild
@@ -6267,7 +6267,7 @@ discordGuildSendMessage :
     -> ThreadRouteWithMaybeMessage
     -> Time.Posix
     -> Discord.Id Discord.UserId
-    -> Nonempty (RichText (Discord.Id Discord.UserId))
+    -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     -> SeqDict (Id FileId) FileData
     -> LocalState
     -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
@@ -7271,7 +7271,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
             case guildOrDmId of
                 GuildOrDmId guildOrDmId2 ->
                     let
-                        maybeMessages : Maybe (List ( Int, MessageNoReply (Id UserId) ))
+                        maybeMessages : Maybe (List ( Int, MessageNoReply (Id UserId) (Id ChannelId) ))
                         maybeMessages =
                             LocalState.guildOrDmIdToLatestMessages
                                 editPreviousMessageLookback
@@ -7281,7 +7281,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                     case maybeMessages of
                         Just messages ->
                             let
-                                mostRecentMessage : Maybe ( Id ChannelMessageId, UserTextMessageDataNoReply (Id UserId) )
+                                mostRecentMessage : Maybe ( Id ChannelMessageId, UserTextMessageDataNoReply (Id UserId) (Id ChannelId) )
                                 mostRecentMessage =
                                     List.reverse messages
                                         |> List.Extra.findMap
@@ -7339,7 +7339,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                         local.localUser.timezone
                                                         False
                                                         (User.allUsers local.localUser)
-                                                        (LocalState.channelMentions (GuildOrDmId guildOrDmId2) local)
+                                                        (LocalState.channelMentions guildOrDmId2 local)
                                                         message.content.content
                                                 , attachedFiles =
                                                     SeqDict.map (\_ a -> FileUploaded a) message.content.attachedFiles
@@ -7357,7 +7357,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
 
                 DiscordGuildOrDmId guildOrDmId2 ->
                     let
-                        maybeMessages : Maybe (List ( Int, MessageNoReply (Discord.Id Discord.UserId) ))
+                        maybeMessages : Maybe (List ( Int, MessageNoReply (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId) ))
                         maybeMessages =
                             LocalState.discordGuildOrDmIdToLatestMessages
                                 editPreviousMessageLookback
@@ -7377,7 +7377,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                         DiscordGuildOrDmId_Dm data ->
                                             data.currentUserId
 
-                                mostRecentMessage : Maybe ( Id ChannelMessageId, UserTextMessageDataNoReply (Discord.Id Discord.UserId) )
+                                mostRecentMessage : Maybe ( Id ChannelMessageId, UserTextMessageDataNoReply (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId) )
                                 mostRecentMessage =
                                     List.reverse messages
                                         |> List.Extra.findMap
@@ -7418,7 +7418,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                         local.localUser.timezone
                                                         False
                                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
-                                                        (LocalState.channelMentions (DiscordGuildOrDmId guildOrDmId2) local)
+                                                        (LocalState.discordChannelMentions guildOrDmId2 local)
                                                         message.content.content
                                                 , attachedFiles =
                                                     SeqDict.map (\_ a -> FileUploaded a) message.content.attachedFiles
@@ -7468,7 +7468,7 @@ addEncryptedDmMessage :
     -> Id UserId
     -> Id UserId
     -> SeqSet FileHash
-    -> EncryptedData (MessageContent (Id UserId))
+    -> EncryptedData (MessageContent (Id UserId) (Id ChannelId))
     -> ThreadRouteWithRepliedTo
     -> LocalState
     -> LocalState
@@ -7519,7 +7519,7 @@ editEncryptedDmMessage :
     -> Id UserId
     -> ThreadRouteWithMessage
     -> SeqSet FileHash
-    -> EncryptedData (MessageContent (Id UserId))
+    -> EncryptedData (MessageContent (Id UserId) (Id ChannelId))
     -> LocalState
     -> LocalState
 editEncryptedDmMessage editedAt editedBy otherUserId threadRoute fileHashes content local =
@@ -7547,7 +7547,7 @@ editEncryptedDmMessage editedAt editedBy otherUserId threadRoute fileHashes cont
 handleServerSendMessage :
     Id UserId
     -> GuildOrDmId
-    -> Nonempty (RichText (Id UserId))
+    -> Nonempty (RichText (Id UserId) (Id ChannelId))
     -> ThreadRouteWithRepliedTo
     -> LocalState
     -> LoggedIn2
@@ -7630,7 +7630,7 @@ handleServerSendMessage senderId guildOrDmId content maybeRepliedTo local logged
 
 handleDecryptedMessage :
     Id Encryption.DecryptRequestId
-    -> Result () (MessageContent (Id UserId))
+    -> Result () (MessageContent (Id UserId) (Id ChannelId))
     -> LoadedFrontend
     -> LoggedIn2
     -> ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg_ )
@@ -7664,7 +7664,7 @@ handleDecryptedMessage requestId result model loggedIn =
 
 
 decryptOldMessages :
-    List ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+    List ( ThreadRouteWithMessage, MessageContent (Id UserId) (Id ChannelId) )
     -> FrontendDmChannel
     -> FrontendDmChannel
 decryptOldMessages messages dmChannel =
@@ -7702,7 +7702,7 @@ decryptOldMessages messages dmChannel =
 
 
 encryptOldMessages :
-    List ( ThreadRouteWithMessage, SeqSet FileHash, EncryptedData (MessageContent (Id UserId)) )
+    List ( ThreadRouteWithMessage, SeqSet FileHash, EncryptedData (MessageContent (Id UserId) (Id ChannelId)) )
     -> FrontendDmChannel
     -> FrontendDmChannel
 encryptOldMessages messages dmChannel =
@@ -7744,7 +7744,7 @@ alongside `fileDecryptedMessages` at every place a message becomes readable, sin
 browser fetches attached files on its own and needs the keys left where it will find them.
 -}
 storeDecryptedFileKeys :
-    List (Result () (MessageContent (Id UserId)))
+    List (Result () (MessageContent (Id UserId) (Id ChannelId)))
     -> Command FrontendOnly toMsg msg
 storeDecryptedFileKeys decrypted =
     case
@@ -7768,7 +7768,7 @@ storeDecryptedFileKeys decrypted =
 
 
 fileDecryptedMessages :
-    List ( BytesHash, Result () (MessageContent (Id UserId)) )
+    List ( BytesHash, Result () (MessageContent (Id UserId) (Id ChannelId)) )
     -> LoggedIn2
     -> LoggedIn2
 fileDecryptedMessages decrypted loggedIn =
@@ -7801,8 +7801,8 @@ handleServerSendDmMessage :
     -> Id UserId
     -> FrontendUser
     -> SeqDict (Id StickerId) StickerData
-    -> (Message.RepliedTo ChannelMessageId -> Message ChannelMessageId (Id UserId))
-    -> (Maybe (Id ThreadMessageId) -> Message ThreadMessageId (Id UserId))
+    -> (Message.RepliedTo ChannelMessageId -> Message ChannelMessageId (Id UserId) (Id ChannelId))
+    -> (Maybe (Id ThreadMessageId) -> Message ThreadMessageId (Id UserId) (Id ChannelId))
     -> ThreadRouteWithRepliedTo
     -> SeqDict (Id ChannelMessageId) Game.LoadedMatch
     -> LocalState
@@ -8027,7 +8027,7 @@ loadedInitHelper startupData emojiData loginData loading =
 
 loginDataToLocalState :
     Ports.StartupData
-    -> SeqDict BytesHash (Result () (MessageContent (Id UserId)))
+    -> SeqDict BytesHash (Result () (MessageContent (Id UserId) (Id ChannelId)))
     -> List EncryptedBacklog
     -> Maybe CachedEmojiData
     -> LoginData
@@ -8084,8 +8084,8 @@ loginDataToLocalState startupData decrypted encryptionBacklog emojiData loginDat
 
 
 type EncryptedBacklog
-    = PendingEncryption { id : Viewing_DmId, messages : List (EncryptedData (MessageContent (Id UserId))) }
-    | MissingKeys { id : Viewing_DmId, messages : List (EncryptedData (MessageContent (Id UserId))) }
+    = PendingEncryption { id : Viewing_DmId, messages : List (EncryptedData (MessageContent (Id UserId) (Id ChannelId))) }
+    | MissingKeys { id : Viewing_DmId, messages : List (EncryptedData (MessageContent (Id UserId) (Id ChannelId))) }
 
 
 encryptedBacklog : SeqSet (Id UserId) -> SeqDict (Id UserId) FrontendDmChannel -> List EncryptedBacklog
@@ -8112,7 +8112,7 @@ encryptedBacklog keysOnThisDevice dmChannels =
         (SeqDict.toList dmChannels)
 
 
-encryptedMessagesIn : FrontendDmChannel -> List (EncryptedData (MessageContent (Id UserId)))
+encryptedMessagesIn : FrontendDmChannel -> List (EncryptedData (MessageContent (Id UserId) (Id ChannelId)))
 encryptedMessagesIn dmChannel =
     List.filterMap (\( _, message ) -> encryptedMessageData message) (MessageArray.toList dmChannel.messages)
         ++ (SeqDict.values dmChannel.threads
@@ -8124,7 +8124,7 @@ encryptedMessagesIn dmChannel =
            )
 
 
-encryptedMessageData : Message messageId (Id UserId) -> Maybe (EncryptedData (MessageContent (Id UserId)))
+encryptedMessageData : Message messageId (Id UserId) (Id ChannelId) -> Maybe (EncryptedData (MessageContent (Id UserId) (Id ChannelId)))
 encryptedMessageData message =
     case message of
         Message.EncryptedUserTextMessage data ->

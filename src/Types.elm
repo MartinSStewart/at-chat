@@ -312,7 +312,7 @@ type alias EncryptionRequests =
 type alias PendingEncryptedMessage =
     { otherUserId : Id UserId
     , threadRoute : Message.ThreadRouteWithRepliedTo
-    , contentAndEmbeds : MessageContent (Id UserId)
+    , contentAndEmbeds : MessageContent (Id UserId) (Id ChannelId)
     }
 
 
@@ -326,7 +326,7 @@ type alias PendingDecryptedMessage =
 
 type alias PendingEncryptedManyMessages =
     { id : Viewing_DmId
-    , messages : List ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+    , messages : List ( ThreadRouteWithMessage, MessageContent (Id UserId) (Id ChannelId) )
     }
 
 
@@ -349,7 +349,7 @@ type alias PendingDecryptedOldMessages =
 type alias PendingEncryptedEdit =
     { id : Viewing_DmId
     , threadRoute : ThreadRouteWithMessage
-    , contentAndEmbeds : MessageContent (Id UserId)
+    , contentAndEmbeds : MessageContent (Id UserId) (Id ChannelId)
     }
 
 
@@ -734,7 +734,7 @@ type FrontendMsg_
     | UnreadOverviewChannelMsg AnyGuildOrDmId (Id ChannelMessageId) MessageViewMsg
     | UnreadOverviewThreadMsg AnyGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) MessageViewMsg
     | ValidatedE2eePrivateKey String E2eeKeysValid
-    | EncryptionFromJs (Result String (Encryption.FromJs (MessageContent (Id UserId))))
+    | EncryptionFromJs (Result String (Encryption.FromJs (MessageContent (Id UserId) (Id ChannelId))))
 
 
 type alias NewChannelForm =
@@ -1060,8 +1060,8 @@ type LocalMsg
 type ServerChange
     = -- The user that wrote the message comes along with it because the receiver might not
       -- have them loaded yet, which is what makes names show up as "<missing>"
-      Server_SendMessage (Id UserId) FrontendUser Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId))) Message.ThreadRouteWithRepliedTo (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData) (SeqDict (Id ChannelMessageId) Game.LoadedMatch)
-    | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
+      Server_SendMessage (Id UserId) FrontendUser Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId) (Id ChannelId))) Message.ThreadRouteWithRepliedTo (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData) (SeqDict (Id ChannelMessageId) Game.LoadedMatch)
+    | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId DiscordFrontendUser (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Server_ImportedChannel (Id GuildId) (Id ChannelId) FrontendChannel
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
@@ -1090,9 +1090,9 @@ type ServerChange
     | Server_DiscordAddReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) EmojiOrCustomEmoji
     | Server_DiscordRemoveReactionGuildEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage EmojiOrCustomEmoji
     | Server_DiscordRemoveReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) EmojiOrCustomEmoji
-    | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
-    | Server_DiscordSendEditGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Nonempty (RichText (Discord.Id Discord.UserId)))
-    | Server_DiscordSendEditDmMessage Time.Posix Viewing_DiscordDmId (Id ChannelMessageId) (Nonempty (RichText (Discord.Id Discord.UserId)))
+    | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId) (Id ChannelId))) (SeqDict (Id FileId) FileData)
+    | Server_DiscordSendEditGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
+    | Server_DiscordSendEditDmMessage Time.Posix Viewing_DiscordDmId (Id ChannelMessageId) (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
     | Server_MemberEditTyping Time.Posix (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DiscordDeleteGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage
@@ -1163,8 +1163,8 @@ type ServerChange
     | Server_E2eeRequestDeclined Viewing_DmId (Id UserId)
     | Server_E2eeAccepted Viewing_DmId Time.Posix
     | Server_SetPublicKey (Id UserId) X25519.PublicKey
-    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) Message.ThreadRouteWithRepliedTo (SeqDict (Id ChannelMessageId) Game.LoadedMatch)
-    | Server_SendEncryptedEditMessage Time.Posix (Id UserId) Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId)))
+    | Server_SendEncryptedMessage (Id UserId) FrontendUser Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId) (Id ChannelId))) Message.ThreadRouteWithRepliedTo (SeqDict (Id ChannelMessageId) Game.LoadedMatch)
+    | Server_SendEncryptedEditMessage Time.Posix (Id UserId) Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId) (Id ChannelId)))
     | Server_DisableE2ee Time.Posix (Id UserId) Viewing_DmId
 
 
@@ -1196,9 +1196,9 @@ type LocalChange
     | Local_CurrentlyViewing { markMessagesAsViewed : Bool } SetViewing
     | Local_SetName PersonName
     | Local_LoadChannelMessages GuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend DmChannel.LoadedMessages)
-    | Local_LoadThreadMessages GuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
-    | Local_Discord_LoadChannelMessages DiscordGuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
-    | Local_Discord_LoadThreadMessages DiscordGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId))))
+    | Local_LoadThreadMessages GuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId))))
+    | Local_Discord_LoadChannelMessages DiscordGuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))))
+    | Local_Discord_LoadThreadMessages DiscordGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))))
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Local_SetDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
     | Local_SetNotificationMode NotificationMode
@@ -1228,30 +1228,30 @@ type LocalChange
     | Local_DeclineE2eeRequestAsInitiator Viewing_DmId
     | Local_DeclineE2eeRequest Viewing_DmId
     | Local_SetPublicKey X25519.PublicKey (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
-    | Local_EncryptOldMessages Viewing_DmId (List ( ThreadRouteWithMessage, SeqSet FileHash, EncryptedData (MessageContent (Id UserId)) ))
+    | Local_EncryptOldMessages Viewing_DmId (List ( ThreadRouteWithMessage, SeqSet FileHash, EncryptedData (MessageContent (Id UserId) (Id ChannelId)) ))
     | Local_DisableE2ee Viewing_DmId (ToBeFilledInByBackend ChannelDataToDecrypt)
-    | Local_DecryptOldMessages Viewing_DmId Time.Posix (List ( ThreadRouteWithMessage, MessageContent (Id UserId) ))
+    | Local_DecryptOldMessages Viewing_DmId Time.Posix (List ( ThreadRouteWithMessage, MessageContent (Id UserId) (Id ChannelId) ))
     | Local_SetE2eeRisksAccepted Bool
     | Local_AcceptE2ee Viewing_DmId Time.Posix (ToBeFilledInByBackend (SeqDict Viewing_DmId ChannelDataToEncrypt))
     | -- The second ciphertext is the line the recipient's push notification shows. The
       -- server can't write one for a message it can't read, so the sender encrypts it too.
-      Local_SendEncryptedMessage Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId))) (EncryptedData String) Message.ThreadRouteWithRepliedTo
-    | Local_SendEncryptedEditMessage Time.Posix Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId)))
+      Local_SendEncryptedMessage Time.Posix Viewing_DmId (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId) (Id ChannelId))) (EncryptedData String) Message.ThreadRouteWithRepliedTo
+    | Local_SendEncryptedEditMessage Time.Posix Viewing_DmId ThreadRouteWithMessage (SeqSet FileHash) (EncryptedData (MessageContent (Id UserId) (Id ChannelId)))
 
 
 {-| The ciphertext of every message in one conversation, handed to the client that is
 turning encryption off so it can put the plain text back.
 -}
 type alias ChannelDataToDecrypt =
-    { channel : SeqDict (Id ChannelMessageId) (EncryptedData (MessageContent (Id UserId)))
+    { channel : SeqDict (Id ChannelMessageId) (EncryptedData (MessageContent (Id UserId) (Id ChannelId)))
     , threads :
         SeqDict
             (Id ChannelMessageId)
-            (NonemptyDict (Id ThreadMessageId) (EncryptedData (MessageContent (Id UserId))))
+            (NonemptyDict (Id ThreadMessageId) (EncryptedData (MessageContent (Id UserId) (Id ChannelId))))
     }
 
 
 type alias ChannelDataToEncrypt =
-    { channel : SeqDict (Id ChannelMessageId) (MessageContent (Id UserId))
-    , threads : SeqDict (Id ChannelMessageId) (SeqDict (Id ThreadMessageId) (MessageContent (Id UserId)))
+    { channel : SeqDict (Id ChannelMessageId) (MessageContent (Id UserId) (Id ChannelId))
+    , threads : SeqDict (Id ChannelMessageId) (SeqDict (Id ThreadMessageId) (MessageContent (Id UserId) (Id ChannelId)))
     }
