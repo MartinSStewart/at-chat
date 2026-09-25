@@ -249,7 +249,7 @@ categoryToEmojiString skinTone category =
         CustomEmojiCategory ->
             Ui.el
                 [ Ui.el
-                    [ Ui.move { x = 10, y = 4, z = 0 }
+                    [ Ui.move { x = 8, y = 2, z = 0 }
                     , Ui.Font.color MyUi.white
                     , Ui.Font.bold
                     , Ui.Shadow.font { offset = ( 0, 0 ), blur = 2, color = MyUi.black }
