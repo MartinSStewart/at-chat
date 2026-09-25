@@ -282,7 +282,7 @@ viewMobile offset extraOptions loggedIn local model =
                         let
                             editView :
                                 Int
-                                -> Maybe (Nonempty (RichText userId))
+                                -> Maybe (Nonempty (RichText userId channelId))
                                 -> SeqDict userId { b | name : PersonName }
                                 -> Element MessageInput.Msg
                             editView charsLeft richText allUsers =

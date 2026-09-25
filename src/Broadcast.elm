@@ -1131,7 +1131,7 @@ notificationEmailContent :
     -> SeqDict MentionedChannel { name : ChannelName }
     -> String
     -> String
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     -> SeqDict (Id FileId) FileData
     -> Email.Html.Html
 notificationEmailContent userToString channels senderName link content attachedFiles =

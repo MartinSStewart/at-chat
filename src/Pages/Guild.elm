@@ -6845,7 +6845,7 @@ messageEditingView :
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> Int
     -> EditMessage
-    -> Maybe (Nonempty (RichText userId))
+    -> Maybe (Nonempty (RichText userId channelId))
     -> LoggedIn2
     -> SeqDict BytesHash (Result () (MessageContent userId))
     -> userId
@@ -7021,7 +7021,7 @@ threadMessageEditingView :
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
     -> Int
     -> EditMessage
-    -> Maybe (Nonempty (RichText userId))
+    -> Maybe (Nonempty (RichText userId channelId))
     -> LoggedIn2
     -> SeqDict BytesHash (Result () (MessageContent userId))
     -> userId
@@ -11649,7 +11649,7 @@ fileUploadPreview :
     (Id FileId -> msg)
     -> (Id FileId -> msg)
     -> ({ fileId : Id FileId, removeSpoiler : Bool } -> msg)
-    -> Maybe (Nonempty (RichText userId))
+    -> Maybe (Nonempty (RichText userId channelId))
     -> NonemptyDict (Id FileId) FileStatus
     -> Element msg
 fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUpload2 =

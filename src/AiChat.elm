@@ -462,7 +462,7 @@ chatToMessage text =
             []
 
 
-richTextToMessage : String -> List Message -> Nonempty (RichText a) -> ( String, List Message )
+richTextToMessage : String -> List Message -> Nonempty (RichText a b) -> ( String, List Message )
 richTextToMessage previousText previousList nonempty =
     List.foldl
         (\a ( currentText, list ) ->
@@ -473,7 +473,7 @@ richTextToMessage previousText previousList nonempty =
                 RichText.UserMention _ ->
                     ( currentText, list )
 
-                RichText.ChannelMention _ ->
+                RichText.ChannelMention _ _ ->
                     ( currentText, list )
 
                 RichText.Bold nonempty2 ->

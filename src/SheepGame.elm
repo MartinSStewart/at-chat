@@ -3433,7 +3433,7 @@ fileUploadPreview :
     (Id FileId -> msg)
     -> (Id FileId -> msg)
     -> ({ fileId : Id FileId, removeSpoiler : Bool } -> msg)
-    -> Maybe (Nonempty (RichText userId))
+    -> Maybe (Nonempty (RichText userId channelId))
     -> NonemptyDict (Id FileId) FileStatus
     -> List (Element msg)
 fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUpload2 =

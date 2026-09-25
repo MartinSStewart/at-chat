@@ -247,7 +247,7 @@ sourceTextFuzzer =
 
 {-| Whether at-chat read this as text rather than as formatting. Only text is ever escaped.
 -}
-isPlainText : RichText userId -> Bool
+isPlainText : RichText userId channelId -> Bool
 isPlainText item =
     case item of
         NormalText _ _ ->
@@ -294,7 +294,7 @@ thing to a reader, and Discord has one way of writing both, so the two are level
 before comparing. Adjacent pieces of text are joined up for the same reason: whether `a_b`
 arrives as one piece or three isn't something a reader can tell.
 -}
-withoutEscapedChars : List (RichText userId) -> List (RichText userId)
+withoutEscapedChars : List (RichText userId channelId) -> List (RichText userId channelId)
 withoutEscapedChars list =
     List.map
         (\item ->
@@ -333,7 +333,7 @@ withoutEscapedChars list =
         |> joinAdjacentText
 
 
-withoutEscapedCharsNonempty : Nonempty (RichText userId) -> Nonempty (RichText userId)
+withoutEscapedCharsNonempty : Nonempty (RichText userId channelId) -> Nonempty (RichText userId channelId)
 withoutEscapedCharsNonempty nonempty =
     case withoutEscapedChars (List.Nonempty.toList nonempty) |> List.Nonempty.fromList of
         Just nonempty2 ->
@@ -343,7 +343,7 @@ withoutEscapedCharsNonempty nonempty =
             nonempty
 
 
-plainText : String -> RichText userId
+plainText : String -> RichText userId channelId
 plainText text =
     case String.Nonempty.fromString text of
         Just (NonemptyString char rest) ->
@@ -353,7 +353,7 @@ plainText text =
             NormalText ' ' ""
 
 
-joinAdjacentText : List (RichText userId) -> List (RichText userId)
+joinAdjacentText : List (RichText userId channelId) -> List (RichText userId channelId)
 joinAdjacentText list =
     List.foldr
         (\item acc ->

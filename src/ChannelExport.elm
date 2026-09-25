@@ -888,7 +888,7 @@ durationCodec =
     Codec.map Duration.seconds Duration.inSeconds Codec.float
 
 
-richTextCodec : Codec userId -> Codec (RichText userId)
+richTextCodec : Codec userId -> Codec (RichText userId channelId)
 richTextCodec userId =
     Codec.custom
         (\userMentionEncoder normalTextEncoder boldEncoder italicEncoder underlineEncoder strikethroughEncoder spoilerEncoder blockQuoteEncoder headingEncoder hyperlinkEncoder markdownLinkEncoder inlineCodeEncoder codeBlockEncoder attachedFileEncoder escapedCharEncoder stickerEncoder customEmojiEncoder bulletPointEncoder timestampEncoder channelMentionEncoder value ->
@@ -1005,7 +1005,7 @@ mentionedChannelCodec =
         |> Codec.buildCustom
 
 
-lazyRichText : Codec userId -> Codec (RichText userId)
+lazyRichText : Codec userId -> Codec (RichText userId channelId)
 lazyRichText userId =
     Codec.lazy (\() -> richTextCodec userId)
 

@@ -51,7 +51,7 @@ import Embed exposing (Embed(..), EmbedData, EmbedImageFormat(..))
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
 import FileStatus exposing (FileData, FileHash, FileId)
-import Id exposing (ChannelMessageId, Id, QuestionId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, Id, QuestionId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
 import Quantity exposing (Quantity)
@@ -66,8 +66,8 @@ import Time
 import Url exposing (Url)
 
 
-type Message messageId userId
-    = UserTextMessage (UserTextMessageData messageId userId)
+type Message messageId userId channelId
+    = UserTextMessage (UserTextMessageData messageId userId channelId)
     | EncryptedUserTextMessage (EncryptedUserTextMessageData messageId userId)
     | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
     | DeletedMessage Time.Posix
@@ -109,7 +109,7 @@ maxEmbeds =
 userTextMessageNoEmbeds :
     Time.Posix
     -> userId
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> RepliedTo messageId
     -> SeqDict (Id FileId) FileData
@@ -138,7 +138,7 @@ userTextMessageBackend :
     SecretId ServerSecret
     -> Time.Posix
     -> userId
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     -> RepliedTo messageId
     -> SeqDict (Id FileId) FileData
     -> SeqDict (Id StickerId) StickerData
@@ -193,7 +193,7 @@ encryptedUserTextMessageFrontend :
     Time.Posix
     -> Id UserId
     -> SeqSet FileHash
-    -> EncryptedData (MessageContent (Id UserId))
+    -> EncryptedData (MessageContent (Id UserId) (Id ChannelId))
     -> RepliedTo messageId
     -> Message messageId (Id UserId)
 encryptedUserTextMessageFrontend createdAt2 createdBy fileHashes contentAndEmbeds repliedTo2 =
@@ -212,7 +212,7 @@ encryptedUserTextMessageFrontend createdAt2 createdBy fileHashes contentAndEmbed
 userTextMessageFrontend :
     Time.Posix
     -> userId
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     -> RepliedTo messageId
     -> SeqDict (Id FileId) FileData
     -> Message messageId userId
@@ -249,7 +249,7 @@ carry over: the browser works those out again from the text it just encrypted.
 editEncryptedUserTextMessage :
     Time.Posix
     -> SeqSet FileHash
-    -> EncryptedData (MessageContent userId)
+    -> EncryptedData (MessageContent userId (Id ChannelId))
     -> EncryptedUserTextMessageData messageId userId
     -> EncryptedUserTextMessageData messageId userId
 editEncryptedUserTextMessage time fileHashes newContent data =
@@ -264,7 +264,7 @@ message into an encrypted one.
 editAndEncryptUserTextMessage :
     Time.Posix
     -> SeqSet FileHash
-    -> EncryptedData (MessageContent userId)
+    -> EncryptedData (MessageContent userId (Id ChannelId))
     -> UserTextMessageData messageId userId
     -> EncryptedUserTextMessageData messageId userId
 editAndEncryptUserTextMessage time fileHashes newContent data =
@@ -281,7 +281,7 @@ editAndEncryptUserTextMessage time fileHashes newContent data =
 
 editUserTextMessage :
     Time.Posix
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     -> ChangeAttachments
     -> UserTextMessageData messageId userId
     -> UserTextMessageData messageId userId
@@ -333,7 +333,7 @@ addEmbed ( url, result ) message =
     case message of
         UserTextMessage message2 ->
             let
-                contentAndEmbeds : MessageContent userId
+                contentAndEmbeds : MessageContent userId channelId
                 contentAndEmbeds =
                     message2.content
             in
@@ -381,10 +381,10 @@ addEmbed ( url, result ) message =
             message
 
 
-type alias UserTextMessageData messageId userId =
+type alias UserTextMessageData messageId userId channelId =
     { createdAt : Time.Posix
     , createdBy : userId
-    , content : MessageContent userId
+    , content : MessageContent userId channelId
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , repliedTo : RepliedTo messageId
@@ -539,15 +539,7 @@ replyToMaybe repliedTo2 =
             Nothing
 
 
-{-| Puts the plain text of a message back in place of its ciphertext, for a conversation
-that is no longer encrypted.
-
-Any attached files stay as they were. Their bytes are still encrypted on the server, and
-the key that opens them is in the message content, which is what makes them readable now
-that the message itself is.
-
--}
-toDecrypted : MessageContent userId -> Message messageId userId -> Message messageId userId
+toDecrypted : MessageContent userId (Id ChannelId) -> Message messageId userId -> Message messageId userId
 toDecrypted content message =
     case message of
         EncryptedUserTextMessage data ->
@@ -579,7 +571,7 @@ toDecrypted content message =
 
 toEncrypted :
     SeqSet FileHash
-    -> EncryptedData (MessageContent userId)
+    -> EncryptedData (MessageContent userId (Id ChannelId))
     -> Message messageId userId
     -> Message messageId userId
 toEncrypted fileHashes encryptedData message =
@@ -612,14 +604,14 @@ toEncrypted fileHashes encryptedData message =
             message
 
 
-type alias MessageContent userId =
-    { content : Nonempty (RichText userId), embeds : Array Embed, attachedFiles : SeqDict (Id FileId) FileData }
+type alias MessageContent userId channelId =
+    { content : Nonempty (RichText userId channelId), embeds : Array Embed, attachedFiles : SeqDict (Id FileId) FileData }
 
 
 type alias EncryptedUserTextMessageData messageId userId =
     { createdAt : Time.Posix
     , createdBy : userId
-    , content : EncryptedData (MessageContent userId)
+    , content : EncryptedData (MessageContent userId (Id ChannelId))
     , fileHashes : SeqSet FileHash
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
@@ -637,8 +629,8 @@ type alias UserTextMessageDrawings userId =
     }
 
 
-type MessageNoReply userId
-    = UserTextMessage_NoReply (UserTextMessageDataNoReply userId)
+type MessageNoReply userId channelId
+    = UserTextMessage_NoReply (UserTextMessageDataNoReply userId channelId)
     | EncryptedUserTextMessage_NoReply (EncryptedUserTextMessageDataNoReply userId)
     | UserJoinedMessage_NoReply Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
     | DeletedMessage_NoReply Time.Posix
@@ -646,10 +638,10 @@ type MessageNoReply userId
     | GoMatchStarted_NoReply Time.Posix (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
 
 
-type alias UserTextMessageDataNoReply userId =
+type alias UserTextMessageDataNoReply userId channelId =
     { createdAt : Time.Posix
     , createdBy : userId
-    , content : MessageContent userId
+    , content : MessageContent userId channelId
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     }
@@ -658,7 +650,7 @@ type alias UserTextMessageDataNoReply userId =
 type alias EncryptedUserTextMessageDataNoReply userId =
     { createdAt : Time.Posix
     , createdBy : userId
-    , content : EncryptedData (MessageContent userId)
+    , content : EncryptedData (MessageContent userId (Id ChannelId))
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     }
@@ -1010,7 +1002,7 @@ reactionEmojis message =
             gameStarted.reactions
 
 
-contentAndEmbedsCodec : Serialize.Codec String (MessageContent (Id UserId))
+contentAndEmbedsCodec : Serialize.Codec String (MessageContent (Id UserId) (Id ChannelId))
 contentAndEmbedsCodec =
     Serialize.record MessageContent
         |> Serialize.field .content (nonemptyCodec (RichText.codec Id.codec))

@@ -195,6 +195,14 @@ channelDropdownList isMobile nameSoFar guildOrDmId local =
         |> List.take (maxDropdownUsers isMobile)
 
 
+channelSortBy text channel =
+    let
+        name =
+            ChannelName.toString channel
+    in
+    0
+
+
 maxDropdownUsers : Bool -> number
 maxDropdownUsers isMobile =
     if isMobile then

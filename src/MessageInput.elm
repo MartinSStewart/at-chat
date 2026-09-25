@@ -257,7 +257,7 @@ textarea :
     -> Html Msg
     -> Int
     -> String
-    -> Maybe (Nonempty (RichText userId))
+    -> Maybe (Nonempty (RichText userId channelId))
     -> SeqDict (Id FileId) a
     ->
         { localUser
@@ -571,7 +571,7 @@ editView :
     -> String
     -> Int
     -> String
-    -> Maybe (Nonempty (RichText userId))
+    -> Maybe (Nonempty (RichText userId channelId))
     -> Bool
     -> SeqDict (Id FileId) a
     -> LocalUser
@@ -672,7 +672,7 @@ view :
     -> Html Msg
     -> Int
     -> String
-    -> Maybe (Nonempty (RichText userId))
+    -> Maybe (Nonempty (RichText userId channelId))
     -> SeqDict (Id FileId) FileStatus
     ->
         { localUser

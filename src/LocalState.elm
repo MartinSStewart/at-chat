@@ -526,7 +526,7 @@ messageReactionsNoThread messageId channel =
 {-| The channels a #channel reference in a message can point to. Channel ids are only unique
 within a guild, so this is only ever the channels of the guild the message is in.
 -}
-channelMentions : AnyGuildOrDmId -> LocalState -> SeqDict MentionedChannel { name : ChannelName, url : String }
+channelMentions : AnyGuildOrDmId -> LocalState -> SeqDict channelId { name : ChannelName, url : String }
 channelMentions guildOrDmId local =
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild { guildId }) ->
@@ -2226,7 +2226,7 @@ updateChannel updateFunc channelId guild =
 editMessageHelper :
     Time.Posix
     -> userId
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     -> ChangeAttachments
     -> ThreadRouteWithMessage
     ->
@@ -2277,7 +2277,7 @@ editMessageHelper time editedBy newContent attachedFiles threadRoute channel =
 editMessageHelperNoThread :
     Time.Posix
     -> userId
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     -> ChangeAttachments
     -> Id messageId
     -> { b | messages : IdArray messageId (Message messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
@@ -2321,7 +2321,7 @@ editMessageHelperNoThread time editedBy newContent attachedFiles messageIndex ch
 editMessageFrontendHelper :
     Time.Posix
     -> userId
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     -> ChangeAttachments
     -> ThreadRouteWithMessage
     -> { b | messages : MessageArray ChannelMessageId userId, lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
@@ -2348,7 +2348,7 @@ editMessageFrontendHelper time editedBy newContent attachedFiles threadRoute cha
 editMessageFrontendHelperNoThread :
     Time.Posix
     -> userId
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     -> ChangeAttachments
     -> Id messageId
     -> { b | messages : MessageArray messageId userId, lastTypedAt : SeqDict userId (LastTypedAt messageId) }
@@ -3321,7 +3321,7 @@ addEmbedFrontend messageId embed channel =
 
 usersMentionedOrRepliedToBackend :
     ThreadRouteWithMaybeMessage
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     -> List userId
     ->
         { a
@@ -3384,7 +3384,7 @@ usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channe
 
 usersMentionedOrRepliedToFrontend :
     ThreadRouteWithMaybeMessage
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     ->
         { a
             | messages : MessageArray ChannelMessageId userId
