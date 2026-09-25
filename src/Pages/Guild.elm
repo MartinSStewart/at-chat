@@ -7365,7 +7365,7 @@ highlightLayer : HighlightMessage -> Ui.Attribute msg
 highlightLayer highlight =
     case highlight of
         NoHighlight ->
-            Ui.noAttr
+            MyUi.emptyLayer
 
         ReplyToHighlight ->
             MyUi.highlightFadeOut MyUi.replyToColor
@@ -9302,7 +9302,7 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
          ]
             ++ (case isHovered of
                     IsNotHovered ->
-                        []
+                        [ MyUi.emptyLayer ]
 
                     IsHovered ->
                         [ MyUi.hoverHighlightLayer
@@ -9318,7 +9318,7 @@ messageContainer containerWidth isThreadStarter timezone currentTime availableCu
                         ]
 
                     IsHoveredWhileSelectingAnchor ->
-                        []
+                        [ MyUi.emptyLayer ]
                )
             ++ [ highlightLayer highlight ]
         )
@@ -9388,7 +9388,7 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
          ]
             ++ (case isHovered of
                     IsNotHovered ->
-                        []
+                        [ MyUi.emptyLayer ]
 
                     IsHovered ->
                         [ MyUi.hoverHighlightLayer
@@ -9404,7 +9404,7 @@ threadMessageContainer containerWidth highlight messageIndex canEdit currentUser
                         ]
 
                     IsHoveredWhileSelectingAnchor ->
-                        []
+                        [ MyUi.emptyLayer ]
                )
             ++ [ highlightLayer highlight ]
         )

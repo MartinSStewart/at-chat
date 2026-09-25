@@ -40,6 +40,7 @@ module MyUi exposing
     , disabledButtonBorder
     , elButton
     , emailAddress
+    , emptyLayer
     , errorBox
     , errorColor
     , fadeIn
@@ -882,6 +883,16 @@ hoverHighlightLayer =
             [ Ui.height Ui.fill, Ui.background hoverHighlight ]
             Ui.none
         )
+
+
+{-| Stands in for `hoverHighlightLayer` or `highlightFadeOut` when there's nothing to draw. Behind
+layers are placed before an element's content in the DOM, so adding or removing one shifts the
+content's position and the virtual DOM rebuilds it, which restarts any audio or video playing in it.
+Keeping a layer in the same slot either way leaves the content alone.
+-}
+emptyLayer : Ui.Attribute msg
+emptyLayer =
+    Ui.behindContent Ui.none
 
 
 noPointerEvents : Ui.Attribute msg
