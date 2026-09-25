@@ -530,7 +530,7 @@ channelMentions guildOrDmId local =
         GuildOrDmId_Guild { guildId } ->
             case SeqDict.get guildId local.guilds of
                 Just guild ->
-                    guildChannelMentions guildId guild
+                    guildChannelMentions local.localUser guildId guild
 
                 Nothing ->
                     SeqDict.empty
@@ -539,7 +539,7 @@ channelMentions guildOrDmId local =
             SeqDict.empty
 
 
-discordChannelMentions : DiscordGuildOrDmId -> LocalState -> SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName, url : String }
+discordChannelMentions : DiscordGuildOrDmId -> LocalState -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
 discordChannelMentions guildOrDmId local =
     case guildOrDmId of
         DiscordGuildOrDmId_Guild { guildId, currentUserId } ->
@@ -554,12 +554,12 @@ discordChannelMentions guildOrDmId local =
             SeqDict.empty
 
 
-guildChannelMentions : Id GuildId -> FrontendGuild -> SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
-guildChannelMentions guildId guild =
+guildChannelMentions : LocalUser -> Id GuildId -> FrontendGuild -> SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
+guildChannelMentions localUser guildId guild =
     SeqDict.foldl
         (\channelId channel dict ->
             SeqDict.foldl
-                (\threadId thread dict2 ->
+                (\threadId _ dict2 ->
                     SeqDict.insert
                         ( channelId, Just threadId )
                         { name =
@@ -567,7 +567,12 @@ guildChannelMentions guildId guild =
                                 ++ "/"
                                 ++ (case MessageArray.get threadId channel.messages of
                                         Just message ->
-                                            message.content
+                                            messageToString
+                                                localUser.timezone
+                                                (User.allUsers localUser)
+                                                SeqDict.empty
+                                                localUser.decryptedMessages
+                                                message
 
                                         Nothing ->
                                             "<missing>"
@@ -605,13 +610,13 @@ discordGuildChannelMentions :
     Discord.Id Discord.UserId
     -> Discord.Id Discord.GuildId
     -> DiscordFrontendGuild
-    -> SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName, url : String }
+    -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
 discordGuildChannelMentions currentUserId guildId guild =
     SeqDict.foldl
         (\channelId channel dict ->
             SeqDict.insert
-                channelId
-                { name = channel.name
+                ( channelId, Nothing )
+                { name = ChannelName.toString channel.name
                 , url =
                     DiscordGuildRoute
                         { currentDiscordUserId = currentUserId
@@ -632,18 +637,18 @@ discordGuildChannelMentions currentUserId guildId guild =
         guild.channels
 
 
-guildChannelNames : SeqDict (Id ChannelId) { a | name : ChannelName } -> SeqDict (Id ChannelId) { name : ChannelName }
+guildChannelNames : SeqDict (Id ChannelId) { a | name : ChannelName } -> SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
 guildChannelNames channels =
     SeqDict.foldl
-        (\channelId channel dict -> SeqDict.insert channelId { name = channel.name } dict)
+        (\channelId channel dict -> SeqDict.insert ( channelId, Nothing ) { name = ChannelName.toString channel.name } dict)
         SeqDict.empty
         channels
 
 
-discordGuildChannelNames : SeqDict (Discord.Id Discord.ChannelId) { a | name : ChannelName } -> SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName }
+discordGuildChannelNames : SeqDict (Discord.Id Discord.ChannelId) { a | name : ChannelName } -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
 discordGuildChannelNames channels =
     SeqDict.foldl
-        (\channelId channel dict -> SeqDict.insert channelId { name = channel.name } dict)
+        (\channelId channel dict -> SeqDict.insert ( channelId, Nothing ) { name = ChannelName.toString channel.name } dict)
         SeqDict.empty
         channels
 
@@ -651,7 +656,7 @@ discordGuildChannelNames channels =
 messageToString :
     Time.Zone
     -> SeqDict userId { a | name : PersonName }
-    -> SeqDict channelId { b | name : ChannelName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String }
     -> SeqDict BytesHash (Result () (MessageContent userId channelId))
     -> Message messageId userId channelId
     -> String

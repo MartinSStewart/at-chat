@@ -878,7 +878,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                         threadSource
                                                             guild.name
                                                             channel.name
-                                                            (threadPreviewText local.localUser.timezone allUsers (LocalState.guildChannelMentions guildId guild) threadId local.localUser.decryptedMessages channel)
+                                                            (threadPreviewText local.localUser.timezone allUsers (LocalState.guildChannelMentions local.localUser guildId guild) threadId local.localUser.decryptedMessages channel)
                                                     , route =
                                                         GuildRoute
                                                             guildId
@@ -2994,7 +2994,7 @@ pageMissingMobile text =
 threadPreviewText :
     Time.Zone
     -> SeqDict userId { a | name : PersonName }
-    -> SeqDict channelId { c | name : ChannelName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { c | name : String }
     -> Id ChannelMessageId
     -> SeqDict BytesHash (Result () (MessageContent userId channelId))
     -> { b | messages : MessageArray ChannelMessageId userId channelId }
@@ -3960,7 +3960,7 @@ conversationViewHelper :
     -> List ( String, Element FrontendMsg_ )
 conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId channel loggedIn local model =
     let
-        channels : SeqDict (Id ChannelId) { name : ChannelName, url : String }
+        channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
             LocalState.channelMentions guildOrDmIdNoThread local
 
@@ -4317,7 +4317,7 @@ discordConversationViewHelper :
     -> List ( String, Element FrontendMsg_ )
 discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId channel loggedIn local model =
     let
-        channels : SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName, url : String }
+        channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
             LocalState.discordChannelMentions guildOrDmIdNoThread local
 
@@ -4677,7 +4677,7 @@ threadConversationViewHelper :
     -> List ( String, Element FrontendMsg_ )
 threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeUrlMessageId thread loggedIn local model =
     let
-        channels : SeqDict (Id ChannelId) { name : ChannelName, url : String }
+        channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
             LocalState.channelMentions guildOrDmIdNoThread local
 
@@ -4901,7 +4901,7 @@ discordThreadConversationViewHelper :
     -> List ( String, Element FrontendMsg_ )
 discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNoThread threadId maybeUrlMessageId thread loggedIn local model =
     let
-        channels : SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName, url : String }
+        channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
             LocalState.discordChannelMentions guildOrDmIdNoThread local
 
@@ -5771,7 +5771,7 @@ conversationView :
     -> Element FrontendMsg_
 conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local missingPrivateKey name channel =
     let
-        channels : SeqDict (Id ChannelId) { name : ChannelName, url : String }
+        channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
             LocalState.channelMentions guildOrDmIdNoThread local
 
@@ -5959,7 +5959,7 @@ discordConversationView :
     -> Element FrontendMsg_
 discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel availableCustomEmojis availableStickers =
     let
-        channels : SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName, url : String }
+        channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
             LocalState.discordChannelMentions guildOrDmIdNoThread local
 
@@ -6244,7 +6244,7 @@ threadConversationView :
     -> Element FrontendMsg_
 threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local missingPrivateKey name threadName channel =
     let
-        channels : SeqDict (Id ChannelId) { name : ChannelName, url : String }
+        channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
             LocalState.channelMentions guildOrDmIdNoThread local
 
@@ -6446,7 +6446,7 @@ discordThreadConversationView :
     -> Element FrontendMsg_
 discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name availableCustomEmojis availableStickers channel =
     let
-        channels : SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName, url : String }
+        channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
             LocalState.discordChannelMentions guildOrDmIdNoThread local
 
@@ -6622,7 +6622,7 @@ threadStarterMessage :
     -> Element FrontendMsg_
 threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex channel loggedIn local model =
     let
-        channels : SeqDict (Id ChannelId) { name : ChannelName, url : String }
+        channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
             LocalState.channelMentions normalGuildOrDmIdNoThread local
 
@@ -6743,7 +6743,7 @@ discordThreadStarterMessage :
     -> Element FrontendMsg_
 discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex channel loggedIn local model =
     let
-        channels : SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName, url : String }
+        channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
             LocalState.discordChannelMentions discordGuildOrDmId local
 
@@ -6878,7 +6878,7 @@ messageEditingView :
     -> SeqDict BytesHash (Result () (MessageContent userId channelId))
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
-    -> SeqDict channelId { name : ChannelName, url : String }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> LocalState
     -> Element FrontendMsg_
 messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers charsLeft editing editingRichText loggedIn decrypted currentUserId allUsers channels local =
@@ -7051,7 +7051,7 @@ threadMessageEditingView :
     -> SeqDict BytesHash (Result () (MessageContent userId channelId))
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
-    -> SeqDict channelId { name : ChannelName, url : String }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> LocalState
     -> Element FrontendMsg_
 threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers charsLeft editing editingRichText loggedIn decrypted currentUserId allUsers channels local =
@@ -7433,7 +7433,7 @@ messageView :
     -> Bool
     -> Id UserId
     -> SeqDict (Id UserId) FrontendUser
-    -> SeqDict (Id ChannelId) { name : ChannelName, url : String }
+    -> SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> LocalUser
     -> Maybe (RepliedToView ChannelMessageId (Id UserId) (Id ChannelId) MessageViewMsg)
     -> Maybe (FrontendGenericThread (Id UserId) (Id ChannelId))
@@ -7698,7 +7698,7 @@ discordMessageView :
     -> IsHovered
     -> Discord.Id Discord.UserId
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
-    -> SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName, url : String }
+    -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> LocalUser
     -> Maybe (RepliedToView ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId) MessageViewMsg)
     -> Maybe (FrontendGenericThread (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
@@ -7943,7 +7943,7 @@ threadMessageView :
     -> IsHovered
     -> Bool
     -> SeqDict (Id UserId) FrontendUser
-    -> SeqDict (Id ChannelId) { name : ChannelName, url : String }
+    -> SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> Id UserId
     -> LocalUser
     -> Maybe (RepliedToView ThreadMessageId (Id UserId) (Id ChannelId) MessageViewMsg)
@@ -8167,7 +8167,7 @@ discordThreadMessageView :
     -> HighlightMessage
     -> IsHovered
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
-    -> SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName, url : String }
+    -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> Discord.Id Discord.UserId
     -> LocalUser
     -> Maybe (RepliedToView ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId) MessageViewMsg)
@@ -8430,7 +8430,7 @@ userTextMessageContent :
     -> LocalUser
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id UserId) FrontendUser
-    -> SeqDict (Id ChannelId) { name : ChannelName, url : String }
+    -> SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> (Id UserId -> UserColor)
     -> IsHovered
     -> Id messageId
@@ -8602,7 +8602,7 @@ discordUserTextMessageContent :
     -> LocalUser
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
-    -> SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName, url : String }
+    -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> IsHovered
     -> Id messageId
     -> MessageContent (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
@@ -8814,7 +8814,7 @@ replyToHeaderAboveMessage_userTextMessage :
     -> Maybe CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
-    -> SeqDict channelId { name : ChannelName, url : String }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> MessageContent userId channelId
     -> userId
@@ -8852,7 +8852,7 @@ replyToHeaderAboveMessage :
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict BytesHash (Result () (MessageContent userId channelId))
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
-    -> SeqDict channelId { name : ChannelName, url : String }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> Element MessageViewMsg
 replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoilers emojiData customEmojis decrypted allUsers channels =
     case maybeRepliedTo2 of
@@ -8927,7 +8927,7 @@ userTextMessagePreview :
     -> Maybe CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
-    -> SeqDict channelId { name : ChannelName, url : String }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> SeqSet Int
     -> MessageContent userId channelId
     -> userId
@@ -9274,7 +9274,7 @@ messageContainer :
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> Maybe CachedEmojiData
     -> SeqDict userId { a | name : PersonName }
-    -> SeqDict channelId { name : ChannelName, url : String }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> HighlightMessage
     -> Id ChannelMessageId
     -> Bool
@@ -9439,7 +9439,7 @@ previewThreadLastMessage_userTextMessage :
     -> Maybe CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
-    -> SeqDict channelId { name : ChannelName, url : String }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> MessageContent userId channelId
     -> userId
     -> List (Html MessageViewMsg)
@@ -9470,7 +9470,7 @@ previewThreadLastMessage :
     -> Maybe CachedEmojiData
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
-    -> SeqDict channelId { name : ChannelName, url : String }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> SeqDict BytesHash (Result () (MessageContent userId channelId))
     -> Id ChannelMessageId
     -> FrontendGenericThread userId channelId
@@ -9782,7 +9782,7 @@ channelColumn isMobile time localUser guildId guild channelRoute canScroll2 chan
     let
         channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
-            LocalState.guildChannelMentions guildId guild
+            LocalState.guildChannelMentions localUser guildId guild
 
         guildName : String
         guildName =
@@ -10051,7 +10051,7 @@ discordChannelColumn :
     -> Element FrontendMsg_
 discordChannelColumn isMobile time localUser routeData guild canScroll2 channelSearch =
     let
-        channels : SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName, url : String }
+        channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
             LocalState.discordGuildChannelMentions routeData.currentDiscordUserId routeData.guildId guild
 
@@ -10282,7 +10282,7 @@ channelColumnThreads :
     -> ChannelRoute
     -> Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     -> LocalUser
-    -> SeqDict (Id ChannelId) { name : ChannelName, url : String }
+    -> SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> Id GuildId
     -> Id ChannelId
     -> FrontendChannel
@@ -10430,7 +10430,7 @@ discordChannelColumnThreads :
     -> DiscordGuildRouteData
     -> Maybe (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
     -> LocalUser
-    -> SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName, url : String }
+    -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     -> Discord.Id Discord.ChannelId
     -> DiscordFrontendChannel
     -> SeqDict (Id ChannelMessageId) DiscordFrontendThread

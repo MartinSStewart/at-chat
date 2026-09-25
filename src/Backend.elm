@@ -7840,7 +7840,7 @@ textToDiscordRichText :
     Time.Zone
     -> NonemptyString
     -> List (Discord.Id Discord.UserId)
-    -> SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName }
+    -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
     -> BackendModel
     -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
 textToDiscordRichText timezone text memberIds channels model =

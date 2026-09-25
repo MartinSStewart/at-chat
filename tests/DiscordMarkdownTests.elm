@@ -1,6 +1,5 @@
 module DiscordMarkdownTests exposing (test)
 
-import ChannelName exposing (ChannelName)
 import CustomEmoji exposing (EmojiName)
 import Discord
 import Effect.Time as Time
@@ -612,11 +611,6 @@ channelId =
     Unsafe.uint64 "137748026084163581" |> Discord.idFromUInt64
 
 
-generalChannelName : ChannelName
-generalChannelName =
-    Unsafe.channelName "general"
-
-
 discordSpecificTests : Test
 discordSpecificTests =
     Test.describe
@@ -652,10 +646,7 @@ discordSpecificTests =
                 RichText.fromNonemptyString
                     Time.utc
                     SeqDict.empty
-                    (SeqDict.singleton
-                        channelId
-                        { name = generalChannelName }
-                    )
+                    (SeqDict.singleton ( channelId, Nothing ) { name = "general" })
                     (NonemptyString 'h' "i #general")
                     |> RichText.toDiscord customEmojis
                     |> Expect.equal (Ok "hi <#137748026084163581>")

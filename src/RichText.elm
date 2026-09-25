@@ -56,7 +56,6 @@ module RichText exposing
 
 import Array exposing (Array)
 import Basics.Extra
-import ChannelName exposing (ChannelName)
 import Char
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -1140,7 +1139,7 @@ mapChannelIdHelper mapChannelIdFunc richText =
             Timestamp time
 
 
-toStringWithGetter : Time.Zone -> (a -> String) -> Bool -> SeqDict userId a -> SeqDict channelId { b | name : ChannelName } -> Nonempty (RichText userId channelId) -> String
+toStringWithGetter : Time.Zone -> (a -> String) -> Bool -> SeqDict userId a -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String } -> Nonempty (RichText userId channelId) -> String
 toStringWithGetter timezone userToString emojisForStickersAndAttachments users channels nonempty =
     toStringHelper timezone userToString emojisForStickersAndAttachments users channels (List.Nonempty.toList nonempty)
 
@@ -1196,7 +1195,7 @@ headingToString hasLeadingLineBreak level inner =
         ++ inner
 
 
-toString : Time.Zone -> Bool -> SeqDict userId { a | name : PersonName } -> SeqDict channelId { b | name : ChannelName } -> Nonempty (RichText userId channelId) -> String
+toString : Time.Zone -> Bool -> SeqDict userId { a | name : PersonName } -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String } -> Nonempty (RichText userId channelId) -> String
 toString timezone emojisForStickersAndAttachments users channels nonempty =
     toStringHelper
         timezone
@@ -1212,7 +1211,7 @@ maxLength =
     2000
 
 
-toStringHelper : Time.Zone -> (a -> String) -> Bool -> SeqDict userId a -> SeqDict channelId { b | name : ChannelName } -> List (RichText userId channelId) -> String
+toStringHelper : Time.Zone -> (a -> String) -> Bool -> SeqDict userId a -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String } -> List (RichText userId channelId) -> String
 toStringHelper timezone userToString emojisForStickersAndAttachments users channels list =
     List.map
         (\richText ->
@@ -1229,14 +1228,9 @@ toStringHelper timezone userToString emojisForStickersAndAttachments users chann
                             "@<missing>"
 
                 ChannelMention channel maybeThread ->
-                    case SeqDict.get channel channels of
+                    case SeqDict.get ( channel, maybeThread ) channels of
                         Just { name } ->
-                            case maybeThread of
-                                Just thread ->
-                                    "#" ++ Debug.todo "thread"
-
-                                Nothing ->
-                                    "#" ++ ChannelName.toString name
+                            "#" ++ name
 
                         Nothing ->
                             "#<missing>"
@@ -1344,7 +1338,7 @@ toStringHelper timezone userToString emojisForStickersAndAttachments users chann
 type alias EmailConfig userId channelId =
     { attachedFiles : SeqDict (Id FileId) FileData
     , userToString : userId -> String
-    , channels : SeqDict channelId { name : ChannelName }
+    , channels : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
     }
 
 
@@ -1388,14 +1382,9 @@ emailViewHelper config dropNextLineBreak state nonempty =
                 ChannelMention channel maybeThread ->
                     ( False
                     , currentList
-                        ++ [ case SeqDict.get channel config.channels of
+                        ++ [ case SeqDict.get ( channel, maybeThread ) config.channels of
                                 Just { name } ->
-                                    case maybeThread of
-                                        Just thread ->
-                                            Debug.todo "thread"
-
-                                        Nothing ->
-                                            emailMentionLabel ("#" ++ ChannelName.toString name)
+                                    emailMentionLabel ("#" ++ name)
 
                                 Nothing ->
                                     emailMentionLabel "#<missing>"
@@ -1811,7 +1800,7 @@ emailFileDownloadView isSpoilered fileData =
 fromNonemptyString :
     Time.Zone
     -> SeqDict userId { a | name : PersonName }
-    -> SeqDict channelId { b | name : ChannelName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String }
     -> NonemptyString
     -> Nonempty (RichText userId channelId)
 fromNonemptyString timezone users channels string =
@@ -1850,7 +1839,7 @@ fromNonemptyString timezone users channels string =
             Nonempty (normalTextFromNonempty string) []
 
 
-parseBlockQuoteContent : Time.Zone -> SeqDict userId { a | name : PersonName } -> SeqDict channelId { b | name : ChannelName } -> String -> List (RichText userId channelId)
+parseBlockQuoteContent : Time.Zone -> SeqDict userId { a | name : PersonName } -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String } -> String -> List (RichText userId channelId)
 parseBlockQuoteContent timezone users channels content =
     case parseLoop timezone content 0 users channels [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
@@ -1860,7 +1849,7 @@ parseBlockQuoteContent timezone users channels content =
             []
 
 
-parseHeadingContent : Time.Zone -> SeqDict userId { a | name : PersonName } -> SeqDict channelId { b | name : ChannelName } -> NonemptyString -> Nonempty (RichText userId channelId)
+parseHeadingContent : Time.Zone -> SeqDict userId { a | name : PersonName } -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String } -> NonemptyString -> Nonempty (RichText userId channelId)
 parseHeadingContent timezone users channels content =
     case parseLoop timezone (String.Nonempty.toString content) 0 users channels [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
@@ -2441,7 +2430,7 @@ parseInner :
     -> String
     -> Int
     -> SeqDict userId { a | name : PersonName }
-    -> SeqDict channelId { b | name : ChannelName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String }
     -> List Modifiers
     -> { nodes : List (RichText userId channelId), nextIndex : Int }
 parseInner timezone source index users channels modifiers =
@@ -2624,7 +2613,7 @@ parseLoop :
     -> String
     -> Int
     -> SeqDict userId { a | name : PersonName }
-    -> SeqDict channelId { b | name : ChannelName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String }
     -> List Modifiers
     -> String
     -> List (RichText userId channelId)
@@ -2765,8 +2754,8 @@ parseLoop timezone source index users channels modifiers accText revNodes =
                         index + 1
                 in
                 case tryMatchChannel channels (String.slice afterHash (String.length source) source) of
-                    Just ( channel, matchLen ) ->
-                        parseLoop timezone source (afterHash + matchLen) users channels modifiers "" (ChannelMention channel Nothing :: flushText accText revNodes)
+                    Just ( ( channel, maybeThread ), matchLen ) ->
+                        parseLoop timezone source (afterHash + matchLen) users channels modifiers "" (ChannelMention channel maybeThread :: flushText accText revNodes)
 
                     Nothing ->
                         parseLoop timezone source afterHash users channels modifiers (accText ++ "#") revNodes
@@ -3144,18 +3133,14 @@ tryMatchUser users remaining =
         |> List.head
 
 
-tryMatchChannel : SeqDict channelId { a | name : ChannelName } -> String -> Maybe ( channelId, Int )
+tryMatchChannel : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { a | name : String } -> String -> Maybe ( ( channelId, Maybe (Id ChannelMessageId) ), Int )
 tryMatchChannel channels remaining =
     SeqDict.toList channels
-        |> List.sortBy (\( _, channel ) -> ChannelName.toString channel.name |> String.length |> negate)
+        |> List.sortBy (\( _, channel ) -> String.length channel.name |> negate)
         |> List.filterMap
-            (\( channelId, channel ) ->
-                let
-                    name =
-                        ChannelName.toString channel.name
-                in
-                if String.startsWith name remaining then
-                    Just ( channelId, String.length name )
+            (\( key, channel ) ->
+                if String.startsWith channel.name remaining then
+                    Just ( key, String.length channel.name )
 
                 else
                     Nothing
@@ -3816,7 +3801,7 @@ type alias Config a userId channelId =
     { domainWhitelist : SeqSet Domain
     , revealedSpoilers : SeqSet Int
     , users : SeqDict userId { a | name : PersonName }
-    , channels : SeqDict channelId { name : ChannelName, url : String }
+    , channels : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     , attachedFiles : SeqDict (Id FileId) FileData
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
@@ -3837,7 +3822,7 @@ type alias PreviewConfig a userId channelId =
     { domainWhitelist : SeqSet Domain
     , revealedSpoilers : SeqSet Int
     , users : SeqDict userId { a | name : PersonName }
-    , channels : SeqDict channelId { name : ChannelName, url : String }
+    , channels : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     , attachedFiles : SeqDict (Id FileId) FileData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , emojiData : Maybe Emoji.CachedEmojiData
@@ -5289,21 +5274,16 @@ fileDownloadView maybeHtmlId isSpoilered fileData =
         ]
 
 
-channelMentionView : channelId -> Maybe (Id ChannelMessageId) -> SeqDict channelId { name : ChannelName, url : String } -> Html msg
+channelMentionView : channelId -> Maybe (Id ChannelMessageId) -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> Html msg
 channelMentionView channel maybeThread channels =
-    case SeqDict.get channel channels of
+    case SeqDict.get ( channel, maybeThread ) channels of
         Just { name, url } ->
-            case maybeThread of
-                Just thread ->
-                    Debug.todo ""
-
-                Nothing ->
-                    Html.a
-                        (Html.Attributes.href url
-                            :: Html.Attributes.style "text-decoration" "none"
-                            :: MyUi.userLabelHtmlAttributes
-                        )
-                        [ Html.text ("#" ++ ChannelName.toString name) ]
+            Html.a
+                (Html.Attributes.href url
+                    :: Html.Attributes.style "text-decoration" "none"
+                    :: MyUi.userLabelHtmlAttributes
+                )
+                [ Html.text ("#" ++ name) ]
 
         Nothing ->
             Html.span MyUi.userLabelHtmlAttributes [ Html.text "#<missing>" ]
@@ -5313,7 +5293,7 @@ textInputView :
     Time.Zone
     -> Maybe Emoji.CachedEmojiData
     -> SeqDict userId { a | name : PersonName }
-    -> SeqDict channelId { c | name : ChannelName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { c | name : String }
     -> SeqDict (Id FileId) b
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
@@ -5367,7 +5347,7 @@ textInputViewHelper :
     -> Maybe Emoji.CachedEmojiData
     -> RichTextState
     -> SeqDict userId { a | name : PersonName }
-    -> SeqDict channelId { c | name : ChannelName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { c | name : String }
     -> SeqDict (Id FileId) b
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
@@ -5396,20 +5376,15 @@ textInputViewHelper timezone emojiData state allUsers channels attachedFiles cus
                             ( index2 + 1, output2 )
 
                 ChannelMention channel maybeThread ->
-                    case SeqDict.get channel channels of
+                    case SeqDict.get ( channel, maybeThread ) channels of
                         Just { name } ->
-                            case maybeThread of
-                                Just thread ->
-                                    Debug.todo "thread"
-
-                                Nothing ->
-                                    let
-                                        text =
-                                            "#" ++ ChannelName.toString name
-                                    in
-                                    ( index2 + String.length text
-                                    , Array.push (mentionInputView selection index2 text) output2
-                                    )
+                            let
+                                text =
+                                    "#" ++ name
+                            in
+                            ( index2 + String.length text
+                            , Array.push (mentionInputView selection index2 text) output2
+                            )
 
                         Nothing ->
                             ( index2 + 1, output2 )

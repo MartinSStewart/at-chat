@@ -56,7 +56,7 @@ import Bytes.Encode
 import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelHeader
-import ChannelName exposing (ChannelName)
+import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
@@ -2811,7 +2811,7 @@ setFocus model htmlId =
 textToRichText :
     NonemptyString
     -> List (Id UserId)
-    -> SeqDict (Id ChannelId) { a | name : ChannelName }
+    -> SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { a | name : String }
     -> LocalState
     -> Nonempty (RichText (Id UserId) (Id ChannelId))
 textToRichText text memberIds channels local =
@@ -2841,7 +2841,7 @@ textToRichText text memberIds channels local =
 textToDiscordRichText :
     NonemptyString
     -> List (Discord.Id Discord.UserId)
-    -> SeqDict (Discord.Id Discord.ChannelId) { a | name : ChannelName }
+    -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { a | name : String }
     -> LocalState
     -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
 textToDiscordRichText text memberIds channels local =
@@ -2951,7 +2951,7 @@ changeUpdate localMsg local =
                                                 threadRouteWithRepliedTo
                                                 createdAt
                                                 localUser.session.userId
-                                                (textToRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) (LocalState.guildChannelNames guild.channels) local)
+                                                (textToRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) (LocalState.guildChannelMentions local.localUser id.guildId guild) local)
                                                 attachedFiles
                                                 local
                                         , localUser =
@@ -3047,7 +3047,7 @@ changeUpdate localMsg local =
                                                 threadRouteWithRepliedTo
                                                 createdAt
                                                 currentUserId
-                                                (textToDiscordRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) (LocalState.discordGuildChannelNames guild.channels) local)
+                                                (textToDiscordRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) (LocalState.discordGuildChannelMentions currentUserId guildId guild) local)
                                                 attachedFiles
                                                 local
                                         , localUser =
@@ -3247,7 +3247,7 @@ changeUpdate localMsg local =
                                                 (textToDiscordRichText
                                                     newContent
                                                     (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                                    (LocalState.discordGuildChannelNames guild.channels)
+                                                    (LocalState.discordGuildChannelMentions currentUserId guildId guild)
                                                     local
                                                 )
                                                 DoNotChangeAttachments
@@ -6679,7 +6679,7 @@ editMessage time userId guildOrDmId newContent attachedFiles threadRoute local =
                                         (textToRichText
                                             newContent
                                             (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                            (LocalState.guildChannelNames guild.channels)
+                                            (LocalState.guildChannelMentions local.localUser guildId guild)
                                             local
                                         )
                                         (ChangeAttachments attachedFiles)

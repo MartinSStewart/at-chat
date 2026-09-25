@@ -21,7 +21,6 @@ module MessageInput exposing
     , view
     )
 
-import ChannelName exposing (ChannelName)
 import CustomEmoji exposing (CustomEmojiData)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.File as File exposing (File)
@@ -32,7 +31,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (CustomEmojiId, Id, StickerId, UserId)
+import Id exposing (ChannelMessageId, CustomEmojiId, Id, StickerId, UserId)
 import Json.Decode
 import Json.Decode.Extra
 import List.Nonempty exposing (Nonempty)
@@ -269,7 +268,7 @@ textarea :
         }
     -> { c | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
-    -> SeqDict channelId { d | name : ChannelName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { d | name : String }
     -> Html Msg
 textarea allowEnterKeyLinebreak channelTextInputId placeholder charsLeft text richText attachedFiles localUser loggedIn users channels =
     let
@@ -577,7 +576,7 @@ editView :
     -> LocalUser
     -> { c | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
-    -> SeqDict channelId { d | name : ChannelName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { d | name : String }
     -> Element Msg
 editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachmentsUploading attachedFiles localUser loggedIn users channels =
     let
@@ -684,7 +683,7 @@ view :
         }
     -> { a | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
-    -> SeqDict channelId { d | name : ChannelName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { d | name : String }
     -> Element Msg
 view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles localUser loggedIn users channels =
     let

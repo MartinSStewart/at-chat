@@ -1,11 +1,10 @@
 module RichTextTests exposing (simpleTest, test)
 
-import ChannelName exposing (ChannelName)
 import Effect.Time as Time
 import Expect
 import Fuzz exposing (Fuzzer)
 import Html
-import Id exposing (ChannelId, Id)
+import Id exposing (ChannelId, ChannelMessageId, Id)
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import PersonName exposing (PersonName)
@@ -30,11 +29,12 @@ users =
         ]
 
 
-channels : SeqDict.SeqDict (Id ChannelId) { name : ChannelName }
+channels : SeqDict.SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
 channels =
     SeqDict.fromList
-        [ ( Id.fromInt 1, { name = Unsafe.channelName "general" } )
-        , ( Id.fromInt 2, { name = Unsafe.channelName "general-chat" } )
+        [ ( ( Id.fromInt 1, Nothing ), { name = "general" } )
+        , ( ( Id.fromInt 2, Nothing ), { name = "general-chat" } )
+        , ( ( Id.fromInt 1, Just (Id.fromInt 5) ), { name = "general/Plans for the weekend" } )
         ]
 
 
@@ -476,6 +476,8 @@ test =
         , fromNonemptyStringTest "#hello" (Nonempty (NormalText '#' "hello") [])
         , fromNonemptyStringTest "#general hi" (Nonempty (ChannelMention (Id.fromInt 1) Nothing) [ NormalText ' ' "hi" ])
         , fromNonemptyStringTest "#general-chat" (Nonempty (ChannelMention (Id.fromInt 2) Nothing) [])
+        , fromNonemptyStringTest "#general/Plans for the weekend!" (Nonempty (ChannelMention (Id.fromInt 1) (Just (Id.fromInt 5))) [ NormalText '!' "" ])
+        , toStringTest (Nonempty (ChannelMention (Id.fromInt 1) (Just (Id.fromInt 5))) []) "#general/Plans for the weekend"
         , fromNonemptyStringTest "see #general" (Nonempty (NormalText 's' "ee ") [ ChannelMention (Id.fromInt 1) Nothing ])
         , fromNonemptyStringTest "*#general*" (Nonempty (Bold (Nonempty (ChannelMention (Id.fromInt 1) Nothing) [])) [])
         , fromNonemptyStringTest "# general" (Nonempty (Heading H1 NoLeadingLineBreak (Nonempty (NormalText 'g' "eneral") [])) [])

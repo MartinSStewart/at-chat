@@ -13,7 +13,7 @@ import Browser.Navigation
 import Bytes exposing (Bytes)
 import Call exposing (MediaDevicesStatus(..))
 import ChannelDescription
-import ChannelName exposing (ChannelName)
+import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji
@@ -2228,7 +2228,7 @@ updateLoaded msg model =
                         allUsers =
                             User.allUsers local.localUser
 
-                        removeFile : SeqDict channelId { name : ChannelName, url : String } -> NonemptyString -> Maybe NonemptyString
+                        removeFile : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> NonemptyString -> Maybe NonemptyString
                         removeFile channels draft =
                             case
                                 RichText.fromNonemptyString local.localUser.timezone allUsers channels draft
@@ -2289,7 +2289,7 @@ updateLoaded msg model =
                         allUsers =
                             User.allUsers local.localUser
 
-                        removeFile : SeqDict channelId { name : ChannelName, url : String } -> NonemptyString -> String -> String
+                        removeFile : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> NonemptyString -> String -> String
                         removeFile channels nonempty text =
                             case
                                 RichText.fromNonemptyString local.localUser.timezone allUsers channels nonempty
@@ -4831,7 +4831,7 @@ updateLoaded msg model =
                                         timezone =
                                             Local.model loggedIn.localState |> .localUser |> .timezone
 
-                                        toggleSpoiler : SeqDict channelId { name : ChannelName, url : String } -> String
+                                        toggleSpoiler : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> String
                                         toggleSpoiler channels =
                                             (if removeSpoiler then
                                                 RichText.fromNonemptyString timezone allUsers channels text
@@ -4879,7 +4879,7 @@ updateLoaded msg model =
                                                 timezone2 =
                                                     Local.model loggedIn.localState |> .localUser |> .timezone
 
-                                                toggleSpoiler : SeqDict channelId { name : ChannelName, url : String } -> String
+                                                toggleSpoiler : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> String
                                                 toggleSpoiler channels =
                                                     (if removeSpoiler then
                                                         RichText.fromNonemptyString timezone2 allUsers channels nonempty

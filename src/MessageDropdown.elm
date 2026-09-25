@@ -13,7 +13,6 @@ module MessageDropdown exposing
     )
 
 import Array
-import ChannelName exposing (ChannelName)
 import CustomEmoji
 import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -22,6 +21,7 @@ import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (CachedEmojiData, EmojiOrSticker(..), SkinTone)
 import Html.Events
+import Icons
 import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, StickerId, UserId)
 import Json.Decode
 import LinkedAndOtherDiscordUsers
@@ -181,20 +181,24 @@ userDropdownList isMobile nameSoFar guildOrDmId local =
         |> List.map Tuple.first
 
 
-channelDropdownList : Bool -> NameSoFarData -> AnyGuildOrDmId -> LocalState -> List { name : String, thread : Maybe String }
+channelDropdownList : Bool -> NameSoFarData -> AnyGuildOrDmId -> LocalState -> List { name : String, isThread : Bool }
 channelDropdownList isMobile nameSoFar guildOrDmId local =
     (case guildOrDmId of
         GuildOrDmId guildOrDmId2 ->
-            LocalState.channelMentions guildOrDmId2 local |> SeqDict.values
+            LocalState.channelMentions guildOrDmId2 local
+                |> SeqDict.toList
+                |> List.map (\( ( _, maybeThread ), mention ) -> { name = mention.name, isThread = maybeThread /= Nothing })
 
         DiscordGuildOrDmId guildOrDmId2 ->
-            LocalState.discordChannelMentions guildOrDmId2 local |> SeqDict.values
+            LocalState.discordChannelMentions guildOrDmId2 local
+                |> SeqDict.toList
+                |> List.map (\( ( _, maybeThread ), mention ) -> { name = mention.name, isThread = maybeThread /= Nothing })
     )
         |> List.filterMap
             (\mention ->
-                case namesSortBy nameSoFar.nameSoFar (ChannelName.toString mention.name) of
+                case namesSortBy nameSoFar.nameSoFar mention.name of
                     Just a ->
-                        Just ( mention.name, a )
+                        Just ( mention, a )
 
                     Nothing ->
                         Nothing
@@ -465,11 +469,11 @@ pressedDropdownItem setFocusMsg isMobile time nameSoFar guildOrDmId channelTextI
 
                 ChannelSoFar nameSoFarData ->
                     case channelDropdownList isMobile nameSoFarData guildOrDmId local |> List.Extra.getAt dropdownIndex of
-                        Just name ->
+                        Just { name } ->
                             ( { start = nameSoFarData.index
                               , end = nameSoFarData.index + String.length nameSoFarData.nameSoFar
                               }
-                            , ChannelName.toString name
+                            , name
                             )
                                 |> Just
 
@@ -644,14 +648,25 @@ view isMobile time nameSoFar guildOrDmId skinTone emojiData local dropdownButton
                 rows : List (Element Msg)
                 rows =
                     List.indexedMap
-                        (\index name ->
+                        (\index { name, isThread } ->
                             dropdownButton
                                 isMobile
                                 False
                                 dropdown
                                 dropdownButtonId
                                 index
-                                (Ui.text ("#" ++ ChannelName.toString name))
+                                (if isThread then
+                                    Ui.row
+                                        [ Ui.height Ui.fill ]
+                                        [ Ui.el
+                                            [ Ui.width Ui.shrink, Ui.height Ui.fill, Ui.clip, Ui.Font.color MyUi.font3 ]
+                                            (Ui.html Icons.threadSingleSegment)
+                                        , Ui.text name
+                                        ]
+
+                                 else
+                                    Ui.text ("#" ++ name)
+                                )
                         )
                         (channelDropdownList isMobile nameSoFarData guildOrDmId local)
 

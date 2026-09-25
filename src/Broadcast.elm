@@ -41,7 +41,6 @@ module Broadcast exposing
     , usersViewingDiscordDm
     )
 
-import ChannelName exposing (ChannelName)
 import Codec exposing (Codec)
 import Discord
 import DiscordUserData exposing (DiscordUserData(..))
@@ -512,7 +511,7 @@ messageNotification usersMentioned time sender id threadRoute message members mo
         plainText =
             RichText.toString Time.utc True (NonemptyDict.toSeqDict model.users) channels message.content.content
 
-        channels : SeqDict (Id ChannelId) { name : ChannelName }
+        channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
         channels =
             case SeqDict.get id.guildId model.guilds of
                 Just guild ->
@@ -616,7 +615,7 @@ discordGuildMessageNotification :
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
 discordGuildMessageNotification usersMentioned time sender guildId channelId threadRoute message members model =
     let
-        channels : SeqDict (Discord.Id Discord.ChannelId) { name : ChannelName }
+        channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
         channels =
             case SeqDict.get guildId model.discordGuilds of
                 Just guild ->
@@ -890,7 +889,7 @@ notification :
     -> String
     -> Maybe FileHash
     -> (userId -> String)
-    -> SeqDict channelId { name : ChannelName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
     -> String
     -> Message messageId userId channelId
     -> Maybe Route
@@ -1053,7 +1052,7 @@ messageNotificationEmail :
     -> EmailAddress
     -> String
     -> (userId -> String)
-    -> SeqDict channelId { name : ChannelName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
     -> Maybe Route
     -> String
     -> Message messageId userId channelId
@@ -1128,7 +1127,7 @@ styles and basic block elements.
 -}
 notificationEmailContent :
     (userId -> String)
-    -> SeqDict channelId { name : ChannelName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
     -> String
     -> String
     -> Nonempty (RichText userId channelId)
