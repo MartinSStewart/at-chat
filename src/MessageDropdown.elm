@@ -166,7 +166,7 @@ userDropdownList isMobile nameSoFar guildOrDmId local =
             (\userId ->
                 case SeqDict.get userId allUsers of
                     Just user ->
-                        if String.startsWith nameSoFar.nameSoFar (PersonName.toString user.name) then
+                        if String.startsWith (String.toLower nameSoFar.nameSoFar) (PersonName.toString user.name |> String.toLower) then
                             Just ( userId, user )
 
                         else
@@ -183,9 +183,9 @@ channelDropdownList : Bool -> NameSoFarData -> AnyGuildOrDmId -> LocalState -> L
 channelDropdownList isMobile nameSoFar guildOrDmId local =
     LocalState.channelMentions guildOrDmId local
         |> SeqDict.toList
-        |> List.filterMap
+        |> List.sortWith
             (\( channel, { name } ) ->
-                if String.startsWith nameSoFar.nameSoFar (ChannelName.toString name) then
+                if String.startsWith (String.toLower nameSoFar.nameSoFar) (ChannelName.toString name |> String.toLower) then
                     Just ( channel, name )
 
                 else
