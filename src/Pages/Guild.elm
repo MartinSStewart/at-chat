@@ -287,7 +287,7 @@ loggedInAsView localUser =
         , Ui.spacing 8
         , Ui.clipWithEllipsis
         ]
-        [ User.profileImageNoRounding (Just localUser.user)
+        [ User.profileImage (Just localUser.user)
         , Ui.text (PersonName.toString localUser.user.name)
         , MyUi.elButton
             (Dom.id "guild_showUserOptions")
