@@ -1063,17 +1063,7 @@ exports.init = async function init(app)
         // back here keeps the layout and the pwaStatus the Elm side sees in agreement.
         const isPwa = window.isPwa === true;
 
-        const insetProbe = document.createElement('div');
-        insetProbe.style.position = 'fixed';
-        insetProbe.style.top = '0';
-        insetProbe.style.left = '0';
-        insetProbe.style.width = '0';
-        insetProbe.style.height = 'env(safe-area-inset-top)';
-        insetProbe.style.visibility = 'hidden';
-        insetProbe.style.pointerEvents = 'none';
-        document.body.appendChild(insetProbe);
-        const safeAreaInsetTop = insetProbe.getBoundingClientRect().height;
-        insetProbe.parentNode.removeChild(insetProbe);
+        const safeAreaInsets = measureSafeAreaInsets();
 
         let zone;
         try {
@@ -1098,7 +1088,8 @@ exports.init = async function init(app)
             scrollbarWidth: scrollbarWidth,
             isPwa: isPwa,
             notificationPermission: ("Notification" in window) ? Notification.permission : "unsupported",
-            safeAreaInsetTop: safeAreaInsetTop,
+            safeAreaInsetTop: safeAreaInsets.top,
+            safeAreaInsetBottom: safeAreaInsets.bottom,
             devicePixelRatio: window.devicePixelRatio || 1,
             timezone: zone,
             randomSeed: Array.from(crypto.getRandomValues(new Uint32Array(32))),
@@ -1158,6 +1149,30 @@ exports.init = async function init(app)
 
     app.ports.load_startup_data_to_js.subscribe((a) => {
         sendStartupData();
+    });
+
+    function measureSafeAreaInset(side) {
+        const probe = document.createElement('div');
+        probe.style.position = 'fixed';
+        probe.style.top = '0';
+        probe.style.left = '0';
+        probe.style.width = '0';
+        probe.style.height = 'env(safe-area-inset-' + side + ')';
+        probe.style.visibility = 'hidden';
+        probe.style.pointerEvents = 'none';
+        document.body.appendChild(probe);
+        const height = probe.getBoundingClientRect().height;
+        probe.parentNode.removeChild(probe);
+        return height;
+    }
+
+    function measureSafeAreaInsets() {
+        return { top: measureSafeAreaInset('top'), bottom: measureSafeAreaInset('bottom') };
+    }
+
+    // Rotating the device changes the insets, and it resizes the window when it does.
+    window.addEventListener('resize', () => {
+        app.ports.safe_area_insets_from_js.send(measureSafeAreaInsets());
     });
 
     app.ports.shift_scroll_by_element_delta_to_js.subscribe((data) => {

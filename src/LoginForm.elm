@@ -411,8 +411,8 @@ mobileWarning windowSize browser =
         ]
 
 
-view : Maybe { a | htmlId : HtmlId, selection : Range } -> LoginForm -> Coord CssPixels -> PwaStatus -> Browser -> Element Msg
-view textSelection loginForm windowSize pwaStatus browser =
+view : Maybe { a | htmlId : HtmlId, selection : Range } -> LoginForm -> Coord CssPixels -> Int -> PwaStatus -> Browser -> Element Msg
+view textSelection loginForm windowSize safeAreaInsetTop pwaStatus browser =
     let
         isMobile =
             MyUi.isMobileAlt windowSize
@@ -423,7 +423,7 @@ view textSelection loginForm windowSize pwaStatus browser =
     Ui.column
         [ MyUi.notoSans
         , if isMobile then
-            MyUi.htmlStyle "padding" ("calc(" ++ MyUi.insetTop ++ " + 88px) 8px 0 8px")
+            MyUi.htmlStyle "padding" (String.fromInt (safeAreaInsetTop + 88) ++ "px 8px 0 8px")
 
           else
             Ui.padding 16

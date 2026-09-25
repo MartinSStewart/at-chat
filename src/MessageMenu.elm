@@ -253,11 +253,9 @@ viewMobile offset extraOptions loggedIn local model =
         , MyUi.htmlStyle
             "padding"
             (String.fromInt topPadding
-                ++ "px 8px calc("
-                ++ MyUi.insetBottom
-                ++ " * 0.5 + "
-                ++ String.fromInt bottomPadding
-                ++ "px) 8px"
+                ++ "px 8px "
+                ++ String.fromInt (model.startupData.safeAreaInsetBottom // 2 + bottomPadding)
+                ++ "px 8px"
             )
         , MyUi.blockClickPropagation MessageMenu_PressedContainer
         , Ui.height (Ui.px height)

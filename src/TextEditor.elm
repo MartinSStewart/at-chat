@@ -420,8 +420,8 @@ inputId =
     Dom.id "textEditor_input"
 
 
-view : Id UserId -> LocalState -> Element Msg
-view currentUserId local =
+view : Int -> Int -> Id UserId -> LocalState -> Element Msg
+view safeAreaInsetTop safeAreaInsetBottom currentUserId local =
     let
         editorState : EditorState
         editorState =
@@ -439,7 +439,7 @@ view currentUserId local =
                     ]
                 )
             )
-        , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 " ++ MyUi.insetBottom ++ " 0")
+        , MyUi.htmlStyle "padding" (String.fromInt safeAreaInsetTop ++ "px 0 " ++ String.fromInt safeAreaInsetBottom ++ "px 0")
         , Ui.inFront
             (MyUi.elButton
                 (Dom.id "textEditor_reset")
@@ -450,7 +450,7 @@ view currentUserId local =
                 , Ui.background MyUi.buttonBackground
                 , Ui.border 1
                 , Ui.borderColor MyUi.buttonBorder
-                , MyUi.htmlStyle "transform" ("translateY(" ++ MyUi.insetTop ++ ")")
+                , MyUi.htmlStyle "transform" ("translateY(" ++ String.fromInt safeAreaInsetTop ++ "px)")
                 ]
                 (Ui.text "Reset")
             )

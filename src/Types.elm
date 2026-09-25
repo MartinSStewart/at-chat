@@ -678,6 +678,7 @@ type FrontendMsg_
     | PageHasFocusChanged Bool
     | GotServiceWorkerMessage String
     | VisualViewportResized Float
+    | SafeAreaInsetsChanged { top : Int, bottom : Int }
     | TextEditorMsg TextEditor.Msg
     | PressedDiscordAcknowledgment Bool
     | PressedReloadDiscordUser (Discord.Id Discord.UserId)

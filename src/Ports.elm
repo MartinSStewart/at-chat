@@ -31,6 +31,7 @@ port module Ports exposing
     , registerServiceWorker
     , requestDevicePixelRatio
     , requestNotificationPermission
+    , safeAreaInsetsChanged
     , selectionChanged
     , serviceWorkerData
     , serviceWorkerMessage
@@ -271,6 +272,7 @@ type alias StartupData =
     , pwaStatus : PwaStatus
     , notificationPermission : NotificationPermission
     , safeAreaInsetTop : Int
+    , safeAreaInsetBottom : Int
     , devicePixelRatio : Float
     , timezone : Time.Zone
     , randomSeed : List Int
@@ -327,6 +329,12 @@ decodeStartupData =
         |> Json.Decode.Extra.andMap
             (Json.Decode.oneOf
                 [ Json.Decode.field "safeAreaInsetTop" (Json.Decode.map round Json.Decode.float)
+                , Json.Decode.succeed 0
+                ]
+            )
+        |> Json.Decode.Extra.andMap
+            (Json.Decode.oneOf
+                [ Json.Decode.field "safeAreaInsetBottom" (Json.Decode.map round Json.Decode.float)
                 , Json.Decode.succeed 0
                 ]
             )
@@ -413,6 +421,9 @@ port set_app_badge_to_js : Json.Encode.Value -> Cmd msg
 port visual_viewport_resized_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
+port safe_area_insets_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
 port request_device_pixel_ratio_to_js : Json.Encode.Value -> Cmd msg
 
 
@@ -471,6 +482,24 @@ visualViewportResized msg =
         "visual_viewport_resized_from_js"
         visual_viewport_resized_from_js
         (\json -> Json.Decode.decodeValue Json.Decode.float json |> Result.withDefault 0 |> msg)
+
+
+safeAreaInsetsChanged : ({ top : Int, bottom : Int } -> msg) -> Subscription FrontendOnly msg
+safeAreaInsetsChanged msg =
+    Subscription.fromJs
+        "safe_area_insets_from_js"
+        safe_area_insets_from_js
+        (\json ->
+            Json.Decode.decodeValue
+                (Json.Decode.map2
+                    (\top bottom -> { top = top, bottom = bottom })
+                    (Json.Decode.field "top" (Json.Decode.map round Json.Decode.float))
+                    (Json.Decode.field "bottom" (Json.Decode.map round Json.Decode.float))
+                )
+                json
+                |> Result.withDefault { top = 0, bottom = 0 }
+                |> msg
+        )
 
 
 {-| Zooming the page changes the device pixel ratio and resizes the window at the same time,

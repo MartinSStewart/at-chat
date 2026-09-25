@@ -555,7 +555,12 @@ layout model attributes child =
             :: Ui.htmlAttribute (Html.Events.onClick PressedBody)
             :: (case model.imageViewer of
                     Just imageViewer ->
-                        ImageViewer.view isMobile model.windowSize imageViewer
+                        ImageViewer.view
+                            isMobile
+                            model.windowSize
+                            model.startupData.safeAreaInsetTop
+                            model.startupData.safeAreaInsetBottom
+                            imageViewer
                             |> Ui.map ImageViewerMsg
                             |> Ui.inFront
 
@@ -2591,6 +2596,9 @@ isPressMsg msg =
             False
 
         VisualViewportResized _ ->
+            False
+
+        SafeAreaInsetsChanged _ ->
             False
 
         TextEditorMsg textEditorMsg ->

@@ -38,6 +38,7 @@ import NonemptyDict
 import NonemptySet
 import Pages.Guild
 import Pages.Privacy
+import Ports
 import RichText
 import Route exposing (ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), Route(..))
 import SafeFloat exposing (SafeFloat)
@@ -68,14 +69,14 @@ loginSignupText =
     "Login/Signup"
 
 
-header : Bool -> Route -> LoginStatus -> Element FrontendMsg_
-header isMobile route loginStatus =
+header : Bool -> Int -> Route -> LoginStatus -> Element FrontendMsg_
+header isMobile safeAreaInsetTop route loginStatus =
     Ui.el
         [ Ui.background MyUi.background1
         , Ui.Shadow.shadows [ { x = 0, y = 1, blur = 2, size = 0, color = Ui.rgba 0 0 0 0.05 } ]
         ]
         (Ui.row
-            [ MyUi.htmlStyle "padding" ("calc(4px + " ++ MyUi.insetTop ++ ")" ++ " 16px 0 16px")
+            [ MyUi.htmlStyle "padding" (String.fromInt (4 + safeAreaInsetTop) ++ "px 16px 0 16px")
             , Ui.contentCenterY
             , MyUi.notoSans
             , Ui.widthMax 1280
@@ -1058,10 +1059,19 @@ previewTime =
 view : LoadedFrontend -> Element FrontendMsg_
 view loaded =
     let
+        startupData : Ports.StartupData
+        startupData =
+            loaded.startupData
+
+        -- The preview isn't at the edge of the screen, so nothing covers it
+        previewStartupData : Ports.StartupData
+        previewStartupData =
+            { startupData | safeAreaInsetTop = 0, safeAreaInsetBottom = 0 }
+
         previewLoggedIn : Types.LoggedIn2
         previewLoggedIn =
             FrontendExtra.loadedInitHelper
-                loaded.startupData
+                previewStartupData
                 loaded.emojiData
                 (previewLoginData previewTime loaded.startupData.userAgent)
                 loaded
@@ -1162,7 +1172,7 @@ view loaded =
         previewReadLoggedIn : Types.LoggedIn2
         previewReadLoggedIn =
             FrontendExtra.loadedInitHelper
-                loaded.startupData
+                previewStartupData
                 loaded.emojiData
                 (previewReadLoginData previewTime loaded.startupData.userAgent)
                 loaded
@@ -1177,6 +1187,7 @@ view loaded =
                             | windowSize = innerSize
                             , route = GuildRoute guildId slideRoute ChannelsVisibleOnMobile Nothing
                             , time = previewTime
+                            , startupData = previewStartupData
                         }
                         guildId
                         slideRoute
@@ -1192,6 +1203,7 @@ view loaded =
                         { loaded
                             | windowSize = innerSize
                             , route = HomePageRoute Nothing
+                            , startupData = previewStartupData
                         }
                         { previewReadLoggedIn | sidebarMode = ChannelSidebarNotDragging { offset = 1 } }
                         (Local.model previewReadLoggedIn.localState)

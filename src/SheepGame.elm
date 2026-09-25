@@ -1877,6 +1877,7 @@ paddingX isMobile =
 gameView :
     Time.Posix
     -> Coord CssPixels
+    -> Int
     -> Bool
     -> LocalUser
     -> Drag
@@ -1886,7 +1887,7 @@ gameView :
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView time windowSize showMemberTab localUser drag loggedIn highlightedResult setup shared model =
+gameView time windowSize safeAreaInsetBottom showMemberTab localUser drag loggedIn highlightedResult setup shared model =
     let
         isMobile : Bool
         isMobile =
@@ -1970,9 +1971,9 @@ gameView time windowSize showMemberTab localUser drag loggedIn highlightedResult
                             "padding"
                             ("16px "
                                 ++ String.fromInt (paddingX isMobile)
-                                ++ "px calc(16px + "
-                                ++ MyUi.insetBottom
-                                ++ ") "
+                                ++ "px "
+                                ++ String.fromInt (16 + safeAreaInsetBottom)
+                                ++ "px "
                                 ++ String.fromInt (paddingX isMobile)
                                 ++ "px"
                             )

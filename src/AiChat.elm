@@ -975,8 +975,8 @@ isMobile windowSize =
     Coord.xRaw windowSize < 800
 
 
-view : Coord CssPixels -> FrontendModel -> Element Msg
-view windowSize model =
+view : Coord CssPixels -> Int -> Int -> FrontendModel -> Element Msg
+view windowSize safeAreaInsetTop safeAreaInsetBottom model =
     let
         isMobile2 =
             isMobile windowSize
@@ -986,7 +986,7 @@ view windowSize model =
     in
     Ui.column
         [ if isMobile2 then
-            MyUi.htmlStyle "padding-bottom" MyUi.insetBottom
+            MyUi.htmlStyle "padding-bottom" (String.fromInt safeAreaInsetBottom ++ "px")
 
           else
             Ui.paddingXY 16 16
@@ -1000,7 +1000,7 @@ view windowSize model =
         , Ui.Font.color MyUi.font1
         , Ui.background MyUi.background1
         , Ui.el
-            [ MyUi.htmlStyle "height" MyUi.insetTop
+            [ MyUi.htmlStyle "height" (String.fromInt safeAreaInsetTop ++ "px")
             , Ui.backgroundGradient
                 [ Ui.Gradient.linear
                     (Ui.radians 0)
@@ -1029,7 +1029,7 @@ view windowSize model =
                         , Ui.borderColor MyUi.border1
                         , MyUi.htmlStyle
                             "transform"
-                            ("translateX(-21px) translateY(calc(4px + " ++ MyUi.insetTop ++ "))")
+                            ("translateX(-21px) translateY(" ++ String.fromInt (4 + safeAreaInsetTop) ++ "px)")
                         , Ui.Font.size 14
                         , Ui.Font.bold
                         , Ui.spacing 4
@@ -1060,7 +1060,7 @@ view windowSize model =
                 , containerShadow
                 , Ui.height Ui.fill
                 , Ui.background MyUi.inputBackground
-                , MyUi.htmlStyle "padding-top" MyUi.insetTop
+                , MyUi.htmlStyle "padding-top" (String.fromInt safeAreaInsetTop ++ "px")
                 ]
                 [ Ui.Input.multiline
                     [ Ui.border 0

@@ -41,87 +41,11 @@ import UserColor
 
 guildColumnLazy : Bool -> LoadedFrontend -> LocalState -> Element FrontendMsg_
 guildColumnLazy isMobile model local =
-    Ui.Lazy.lazy6
-        (case ( MyUi.canScroll isMobile model.drag, isMobile ) of
-            ( True, True ) ->
-                guildColumnCanScrollMobile
-
-            ( True, False ) ->
-                guildColumnCanScrollNotMobile
-
-            ( False, True ) ->
-                guildColumnCannotScrollMobile
-
-            ( False, False ) ->
-                guildColumnCannotScrollNotMobile
-        )
-        model.route
-        local.localUser
-        local.dmChannels
-        local.discordDmChannels
-        local.guilds
-        local.discordGuilds
-
-
-guildColumnCanScrollMobile :
-    Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg_
-guildColumnCanScrollMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
-    guildColumn True route localUser dmChannels discordDmChannels guilds discordGuilds True
-
-
-guildColumnCanScrollNotMobile :
-    Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg_
-guildColumnCanScrollNotMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
-    guildColumn False route localUser dmChannels discordDmChannels guilds discordGuilds True
-
-
-guildColumnCannotScrollMobile :
-    Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg_
-guildColumnCannotScrollMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
-    guildColumn True route localUser dmChannels discordDmChannels guilds discordGuilds False
-
-
-guildColumnCannotScrollNotMobile :
-    Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg_
-guildColumnCannotScrollNotMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
-    guildColumn False route localUser dmChannels discordDmChannels guilds discordGuilds False
-
-
-guildColumn :
-    Bool
-    -> Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Bool
-    -> Element FrontendMsg_
-guildColumn isMobile route localUser dmChannels discordDmChannels guilds discordGuilds canScroll2 =
+    let
+        topPadding : String
+        topPadding =
+            String.fromInt (max 6 model.startupData.safeAreaInsetTop) ++ "px"
+    in
     Ui.el
         [ Ui.inFront
             (Ui.el
@@ -132,7 +56,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                         , Ui.Gradient.percent 100 MyUi.black
                         ]
                     ]
-                , MyUi.htmlStyle "height" ("calc(max(6px, " ++ MyUi.insetTop ++ "))")
+                , MyUi.htmlStyle "height" topPadding
                 ]
                 Ui.none
             )
@@ -140,39 +64,60 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
         , Ui.height Ui.fill
         , Ui.move { x = 1, y = 0, z = 0 }
         ]
-        (Ui.column
-            [ Ui.spacing 6
-            , Ui.width (Ui.px MyUi.guildIconFullWidth)
+        (Ui.el
+            [ Ui.width (Ui.px MyUi.guildIconFullWidth)
             , Ui.height Ui.fill
-            , MyUi.scrollable canScroll2
+            , MyUi.scrollable (MyUi.canScroll isMobile model.drag)
             , MyUi.htmlStyle "overflow-x" "hidden"
             , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
-            , MyUi.htmlStyle "padding" ("calc(max(6px, " ++ MyUi.insetTop ++ ")) 0 4px 0")
+            , MyUi.htmlStyle "padding" (topPadding ++ " 0 4px 0")
             , MyUi.bounceScroll isMobile
             ]
-            (List.map
-                (\( otherUserId, dmChannel ) ->
-                    Ui.Lazy.lazy4 dmGuildIcon route localUser otherUserId dmChannel
-                )
-                (SeqDict.toList dmChannels)
-                ++ List.map
-                    (\( channelId, dmChannel ) ->
-                        Ui.Lazy.lazy4 discordDmGuildIcon route localUser channelId dmChannel
-                    )
-                    (SeqDict.toList discordDmChannels)
-                ++ GuildIcon.showFriendsButton (PressedLink (HomePageRoute Nothing))
-                :: List.map
-                    (\( guildId, guild ) -> Ui.Lazy.lazy4 guildIcon localUser route guildId guild)
-                    (SeqDict.toList guilds)
-                ++ List.map
-                    (\( guildId, guild ) -> Ui.Lazy.lazy4 discordGuildIcon localUser route guildId guild)
-                    (SeqDict.toList discordGuilds)
-                ++ [ GuildIcon.addGuildButton
-                        (Dom.id "guild_createGuild")
-                        (route == NewGuildRoute)
-                        (PressedLink NewGuildRoute)
-                   ]
+            (Ui.Lazy.lazy6
+                guildIcons
+                model.route
+                local.localUser
+                local.dmChannels
+                local.discordDmChannels
+                local.guilds
+                local.discordGuilds
             )
+        )
+
+
+guildIcons :
+    Route
+    -> LocalUser
+    -> SeqDict (Id UserId) FrontendDmChannel
+    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
+    -> SeqDict (Id GuildId) FrontendGuild
+    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
+    -> Element FrontendMsg_
+guildIcons route localUser dmChannels discordDmChannels guilds discordGuilds =
+    Ui.column
+        [ Ui.spacing 6 ]
+        (List.map
+            (\( otherUserId, dmChannel ) ->
+                Ui.Lazy.lazy4 dmGuildIcon route localUser otherUserId dmChannel
+            )
+            (SeqDict.toList dmChannels)
+            ++ List.map
+                (\( channelId, dmChannel ) ->
+                    Ui.Lazy.lazy4 discordDmGuildIcon route localUser channelId dmChannel
+                )
+                (SeqDict.toList discordDmChannels)
+            ++ GuildIcon.showFriendsButton (PressedLink (HomePageRoute Nothing))
+            :: List.map
+                (\( guildId, guild ) -> Ui.Lazy.lazy4 guildIcon localUser route guildId guild)
+                (SeqDict.toList guilds)
+            ++ List.map
+                (\( guildId, guild ) -> Ui.Lazy.lazy4 discordGuildIcon localUser route guildId guild)
+                (SeqDict.toList discordGuilds)
+            ++ [ GuildIcon.addGuildButton
+                    (Dom.id "guild_createGuild")
+                    (route == NewGuildRoute)
+                    (PressedLink NewGuildRoute)
+               ]
         )
 
 

@@ -62,8 +62,6 @@ module MyUi exposing
     , imagePlaceholderStyle
     , inputBackground
     , inputBorder
-    , insetBottom
-    , insetTop
     , isMobile
     , isMobileAlt
     , label
@@ -1622,18 +1620,6 @@ guildIconFullWidth =
 memberColumnWidth : number
 memberColumnWidth =
     300
-
-
-insetTop : String
-insetTop =
-    --"40px"
-    "env(safe-area-inset-top)"
-
-
-insetBottom : String
-insetBottom =
-    --"40px"
-    "env(safe-area-inset-bottom)"
 
 
 isMobile : { a | windowSize : Coord CssPixels } -> Bool

@@ -262,6 +262,7 @@ subscriptions _ model =
         , Ports.serviceWorkerMessage GotServiceWorkerMessage
         , Ports.serviceWorkerData GotServiceWorkerData
         , Ports.visualViewportResized VisualViewportResized
+        , Ports.safeAreaInsetsChanged SafeAreaInsetsChanged
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
         , Call.fromJs GotVoiceChatSignalFromJs
@@ -3586,6 +3587,19 @@ updateLoaded msg model =
 
         VisualViewportResized height ->
             ( { model | visualViewportHeight = round height }, Command.none )
+
+        SafeAreaInsetsChanged insets ->
+            let
+                startupData : Ports.StartupData
+                startupData =
+                    model.startupData
+            in
+            ( { model
+                | startupData =
+                    { startupData | safeAreaInsetTop = insets.top, safeAreaInsetBottom = insets.bottom }
+              }
+            , Command.none
+            )
 
         TextEditorMsg textEditorMsg ->
             case model.loginStatus of
@@ -8765,12 +8779,13 @@ view _ model =
                                     notLoggedIn.textInputFocus
                                     (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                                     loaded.windowSize
+                                    loaded.startupData.safeAreaInsetTop
                                     loaded.startupData.pwaStatus
                                     loaded.startupData.userAgent.browser
                                     |> Ui.map LoginFormMsg
                                     |> FrontendExtra.layout loaded
                                         [ Ui.background MyUi.background3
-                                        , Ui.inFront (Pages.Home.header isMobile loaded.route loaded.loginStatus)
+                                        , Ui.inFront (Pages.Home.header isMobile loaded.startupData.safeAreaInsetTop loaded.route loaded.loginStatus)
                                         ]
                 in
                 case loaded.route of
@@ -8787,7 +8802,7 @@ view _ model =
                                     loaded
                                     [ Ui.background MyUi.background3 ]
                                     (Ui.el
-                                        [ Ui.inFront (Pages.Home.header isMobile loaded.route loaded.loginStatus)
+                                        [ Ui.inFront (Pages.Home.header isMobile loaded.startupData.safeAreaInsetTop loaded.route loaded.loginStatus)
                                         , Ui.height Ui.fill
                                         ]
                                         (case notLoggedIn.loginForm of
@@ -8796,6 +8811,7 @@ view _ model =
                                                     notLoggedIn.textInputFocus
                                                     loginForm2
                                                     loaded.windowSize
+                                                    loaded.startupData.safeAreaInsetTop
                                                     loaded.startupData.pwaStatus
                                                     loaded.startupData.userAgent.browser
                                                     |> Ui.map LoginFormMsg
@@ -8815,7 +8831,7 @@ view _ model =
                                     |> Ui.map RecoveryLoginMsg
                                     |> FrontendExtra.layout loaded
                                         [ Ui.background MyUi.background3
-                                        , Ui.inFront (Pages.Home.header isMobile loaded.route loaded.loginStatus)
+                                        , Ui.inFront (Pages.Home.header isMobile loaded.startupData.safeAreaInsetTop loaded.route loaded.loginStatus)
                                         ]
 
                             _ ->
@@ -8825,6 +8841,8 @@ view _ model =
                                             IsAdmin adminData ->
                                                 Pages.Admin.view
                                                     (MyUi.isMobile loaded)
+                                                    loaded.startupData.safeAreaInsetTop
+                                                    loaded.startupData.safeAreaInsetBottom
                                                     loaded.versionNumber
                                                     loaded.time
                                                     local
@@ -8843,11 +8861,11 @@ view _ model =
                         requiresLogin
                             (\loggedIn _ ->
                                 Maybe.withDefault Pages.Guild.newGuildFormInit loggedIn.newGuildForm
-                                    |> Pages.Guild.newGuildFormView
+                                    |> Pages.Guild.newGuildFormView loaded.startupData.safeAreaInsetTop
                             )
 
                     AiChatRoute ->
-                        AiChat.view loaded.windowSize loaded.aiChatModel
+                        AiChat.view loaded.windowSize loaded.startupData.safeAreaInsetTop loaded.startupData.safeAreaInsetBottom loaded.aiChatModel
                             |> Ui.map AiChatMsg
                             |> FrontendExtra.layout loaded
                                 [ if
@@ -8899,6 +8917,8 @@ view _ model =
                         requiresLogin
                             (\_ local ->
                                 TextEditor.view
+                                    loaded.startupData.safeAreaInsetTop
+                                    loaded.startupData.safeAreaInsetBottom
                                     local.localUser.session.userId
                                     local.textEditor
                                     |> Ui.map TextEditorMsg
@@ -8913,12 +8933,13 @@ view _ model =
                                             textInputFocus
                                             loginForm2
                                             loaded.windowSize
+                                            loaded.startupData.safeAreaInsetTop
                                             loaded.startupData.pwaStatus
                                             loaded.startupData.userAgent.browser
                                             |> Ui.map LoginFormMsg
                                             |> FrontendExtra.layout loaded
                                                 [ Ui.background MyUi.background3
-                                                , Ui.inFront (Pages.Home.header isMobile loaded.route loaded.loginStatus)
+                                                , Ui.inFront (Pages.Home.header isMobile loaded.startupData.safeAreaInsetTop loaded.route loaded.loginStatus)
                                                 ]
 
                                     Nothing ->
@@ -8946,6 +8967,7 @@ view _ model =
                                             notLoggedIn.textInputFocus
                                             (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                                             loaded.windowSize
+                                            loaded.startupData.safeAreaInsetTop
                                             -- Don't show PWA warning on this login screen
                                             InstalledPwa
                                             loaded.startupData.userAgent.browser
@@ -9007,7 +9029,7 @@ privacyPage isMobile loaded =
         [ Ui.background MyUi.background3
         , Ui.scrollable
         , Ui.heightMin 0
-        , Ui.inFront (Pages.Home.header isMobile loaded.route loaded.loginStatus)
+        , Ui.inFront (Pages.Home.header isMobile loaded.startupData.safeAreaInsetTop loaded.route loaded.loginStatus)
         ]
         (Ui.el
             [ MyUi.notoSans, Ui.paddingWith { left = 0, right = 0, top = 64, bottom = 32 } ]
@@ -9018,7 +9040,7 @@ privacyPage isMobile loaded =
 errorPage : LoadedFrontend -> String -> Element FrontendMsg_
 errorPage model text =
     Ui.el
-        [ Ui.inFront (Pages.Home.header (MyUi.isMobile model) model.route model.loginStatus)
+        [ Ui.inFront (Pages.Home.header (MyUi.isMobile model) model.startupData.safeAreaInsetTop model.route model.loginStatus)
         , Ui.height Ui.fill
         ]
         (Ui.column
