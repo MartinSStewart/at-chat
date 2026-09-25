@@ -9780,7 +9780,7 @@ channelColumn :
     -> Element FrontendMsg_
 channelColumn isMobile time localUser guildId guild channelRoute canScroll2 channelSearch =
     let
-        channels : SeqDict (Id ChannelId) { name : ChannelName, url : String }
+        channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
             LocalState.guildChannelMentions guildId guild
 

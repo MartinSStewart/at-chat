@@ -166,20 +166,22 @@ userDropdownList isMobile nameSoFar guildOrDmId local =
             (\userId ->
                 case SeqDict.get userId allUsers of
                     Just user ->
-                        if String.startsWith (String.toLower nameSoFar.nameSoFar) (PersonName.toString user.name |> String.toLower) then
-                            Just ( userId, user )
+                        case namesSortBy nameSoFar.nameSoFar (PersonName.toString user.name) of
+                            Just a ->
+                                Just ( ( userId, user ), a )
 
-                        else
-                            Nothing
+                            Nothing ->
+                                Nothing
 
                     Nothing ->
                         Nothing
             )
-        |> List.sortBy (\( _, user ) -> PersonName.toString user.name)
+        |> List.sortBy Tuple.second
         |> List.take (maxDropdownUsers isMobile)
+        |> List.map Tuple.first
 
 
-channelDropdownList : Bool -> NameSoFarData -> AnyGuildOrDmId -> LocalState -> List ChannelName
+channelDropdownList : Bool -> NameSoFarData -> AnyGuildOrDmId -> LocalState -> List { name : String, thread : Maybe String }
 channelDropdownList isMobile nameSoFar guildOrDmId local =
     (case guildOrDmId of
         GuildOrDmId guildOrDmId2 ->
@@ -189,23 +191,32 @@ channelDropdownList isMobile nameSoFar guildOrDmId local =
             LocalState.discordChannelMentions guildOrDmId2 local |> SeqDict.values
     )
         |> List.filterMap
-            (\{ name } ->
-                if String.startsWith (String.toLower nameSoFar.nameSoFar) (ChannelName.toString name |> String.toLower) then
-                    Just name
+            (\mention ->
+                case namesSortBy nameSoFar.nameSoFar (ChannelName.toString mention.name) of
+                    Just a ->
+                        Just ( mention.name, a )
 
-                else
-                    Nothing
+                    Nothing ->
+                        Nothing
             )
-        |> List.sortBy ChannelName.toString
+        |> List.sortBy Tuple.second
         |> List.take (maxDropdownUsers isMobile)
+        |> List.map Tuple.first
 
 
-channelSortBy text channel =
-    let
-        name =
-            ChannelName.toString channel
-    in
-    0
+namesSortBy : String -> String -> Maybe String
+namesSortBy text name =
+    if String.startsWith text name then
+        "   " ++ name |> Just
+
+    else if String.startsWith (String.toLower text) (String.toLower name) then
+        "  " ++ name |> Just
+
+    else if String.contains (String.toLower text) (String.toLower name) then
+        " " ++ name |> Just
+
+    else
+        Nothing
 
 
 maxDropdownUsers : Bool -> number
