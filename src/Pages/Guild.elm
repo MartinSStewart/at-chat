@@ -205,14 +205,14 @@ olderUnreadMessagesText count =
         String.fromInt count ++ " older unread messages"
 
 
-loggedInAsView : Int -> LocalUser -> Element FrontendMsg_
-loggedInAsView safeAreaInsetBottom localUser =
+loggedInAsView : LocalUser -> Element FrontendMsg_
+loggedInAsView localUser =
     Ui.row
         [ Ui.Font.color MyUi.font2
         , Ui.borderColor MyUi.border1
         , Ui.borderWith { left = 0, bottom = 0, top = 1, right = 0 }
         , Ui.background MyUi.background1
-        , MyUi.htmlStyle "padding" ("4px 4px " ++ String.fromInt (safeAreaInsetBottom + 4) ++ "px 4px")
+        , Ui.paddingWith { left = 4, right = 4, top = 4, bottom = localUser.safeAreaInsetBottom + 4 }
         , Ui.spacing 8
         , Ui.clipWithEllipsis
         ]
@@ -247,7 +247,7 @@ homePageLoggedInView :
 homePageLoggedInView maybeOtherUserId model loggedIn local =
     case loggedIn.showFileToUploadInfo of
         Just fileData ->
-            FileStatus.imageInfoView model.startupData.safeAreaInsetTop model.startupData.safeAreaInsetBottom model.timezone PressedCloseImageInfo fileData
+            FileStatus.imageInfoView local.localUser.safeAreaInsetTop local.localUser.safeAreaInsetBottom model.timezone PressedCloseImageInfo fileData
 
         Nothing ->
             if MyUi.isMobile model then
@@ -270,7 +270,6 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                             Just otherUserId ->
                                                 dmChannelSettingsMobile
                                                     canScroll2
-                                                    model.startupData.safeAreaInsetBottom
                                                     local.localUser
                                                     otherUserId
                                                     isThread
@@ -280,7 +279,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                                     |> Ui.el
                                                         [ Ui.height Ui.fill
                                                         , Ui.background MyUi.background3
-                                                        , MyUi.htmlStyle "padding" (String.fromInt model.startupData.safeAreaInsetTop ++ "px 0 0 0")
+                                                        , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                                         , Ui.move
                                                             { x = Call.memberColumnOffset loggedIn.sidebarMode model
                                                             , y = 0
@@ -297,7 +296,6 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                             Just dmChannel ->
                                                 discordDmChannelSettingsMobile
                                                     canScroll2
-                                                    model.startupData.safeAreaInsetBottom
                                                     local.localUser
                                                     routeData.currentDiscordUserId
                                                     routeData.channelId
@@ -305,7 +303,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                                     |> Ui.el
                                                         [ Ui.height Ui.fill
                                                         , Ui.background MyUi.background3
-                                                        , MyUi.htmlStyle "padding" (String.fromInt model.startupData.safeAreaInsetTop ++ "px 0 0 0")
+                                                        , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                                         , Ui.move
                                                             { x = Call.memberColumnOffset loggedIn.sidebarMode model
                                                             , y = 0
@@ -336,7 +334,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                     |> Ui.el
                                         [ Ui.height Ui.fill
                                         , Ui.background MyUi.background3
-                                        , MyUi.htmlStyle "padding" (String.fromInt model.startupData.safeAreaInsetTop ++ "px 0 0 0")
+                                        , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                         , Ui.move
                                             { x = Call.conversationOffset loggedIn.sidebarMode model
                                             , y = 0
@@ -353,7 +351,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                     |> Ui.el
                                         [ Ui.height Ui.fill
                                         , Ui.background MyUi.background3
-                                        , MyUi.htmlStyle "padding" (String.fromInt model.startupData.safeAreaInsetTop ++ "px 0 0 0")
+                                        , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                         , Ui.move
                                             { x = Call.conversationOffset loggedIn.sidebarMode model
                                             , y = 0
@@ -372,7 +370,6 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ GuildColumn.guildColumnLazy True model local
                             , friendsColumnLazy
-                                model.startupData.safeAreaInsetTop
                                 canScroll2
                                 True
                                 model.time
@@ -381,7 +378,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 (Maybe.map .htmlId loggedIn.textInputFocus == Just friendsSearchInputId)
                                 local
                             ]
-                        , Ui.Lazy.lazy2 loggedInAsView model.startupData.safeAreaInsetBottom local.localUser
+                        , Ui.Lazy.lazy loggedInAsView local.localUser
                         ]
                     ]
 
@@ -396,7 +393,6 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ GuildColumn.guildColumnLazy False model local
                             , friendsColumnLazy
-                                model.startupData.safeAreaInsetTop
                                 (MyUi.canScroll False model.drag)
                                 False
                                 model.time
@@ -405,7 +401,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 (Maybe.map .htmlId loggedIn.textInputFocus == Just friendsSearchInputId)
                                 local
                             ]
-                        , Ui.Lazy.lazy2 loggedInAsView model.startupData.safeAreaInsetBottom local.localUser
+                        , Ui.Lazy.lazy loggedInAsView local.localUser
                         ]
                     , case maybeOtherUserId of
                         SelectedDmChannel dmRoute ->
@@ -419,7 +415,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                     ]
                                 |> Ui.el
                                     [ Ui.height Ui.fill
-                                    , MyUi.htmlStyle "padding-top" (String.fromInt model.startupData.safeAreaInsetTop ++ "px")
+                                    , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                     ]
 
                         SelectedDiscordDmChannel routeData ->
@@ -433,7 +429,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                     ]
                                 |> Ui.el
                                     [ Ui.height Ui.fill
-                                    , MyUi.htmlStyle "padding-top" (String.fromInt model.startupData.safeAreaInsetTop ++ "px")
+                                    , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                     ]
 
                         NoDmChannelSelected ->
@@ -447,7 +443,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                     ]
                                 |> Ui.el
                                     [ Ui.height Ui.fill
-                                    , MyUi.htmlStyle "padding-top" (String.fromInt model.startupData.safeAreaInsetTop ++ "px")
+                                    , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                     ]
                     , case ( Route.toShowMembersTabVisible loggedIn model.route, maybeOtherUserId ) of
                         ( ( ShowChannelSettings, isThread ), SelectedDmChannel dmRoute ) ->
@@ -463,7 +459,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                         |> Ui.el
                                             [ Ui.width Ui.shrink
                                             , Ui.height Ui.fill
-                                            , MyUi.htmlStyle "padding-top" (String.fromInt model.startupData.safeAreaInsetTop ++ "px")
+                                            , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                             ]
 
                                 Nothing ->
@@ -481,7 +477,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                         |> Ui.el
                                             [ Ui.width Ui.shrink
                                             , Ui.height Ui.fill
-                                            , MyUi.htmlStyle "padding-top" (String.fromInt model.startupData.safeAreaInsetTop ++ "px")
+                                            , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                             ]
 
                                 Nothing ->
@@ -1616,7 +1612,7 @@ guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalSt
 guildView model guildId channelRoute loggedIn local =
     case loggedIn.showFileToUploadInfo of
         Just fileData ->
-            FileStatus.imageInfoView model.startupData.safeAreaInsetTop model.startupData.safeAreaInsetBottom model.timezone PressedCloseImageInfo fileData
+            FileStatus.imageInfoView local.localUser.safeAreaInsetTop local.localUser.safeAreaInsetBottom model.timezone PressedCloseImageInfo fileData
 
         Nothing ->
             case SeqDict.get guildId local.guilds of
@@ -1639,7 +1635,6 @@ guildView model guildId channelRoute loggedIn local =
                                 ( ShowChannelSettings, isThread ) ->
                                     channelSettingsMobile
                                         canScroll2
-                                        model.startupData.safeAreaInsetBottom
                                         local.localUser
                                         guildId
                                         channelRoute
@@ -1649,7 +1644,7 @@ guildView model guildId channelRoute loggedIn local =
                                         |> Ui.el
                                             [ Ui.height Ui.fill
                                             , Ui.background MyUi.background3
-                                            , MyUi.htmlStyle "padding" (String.fromInt model.startupData.safeAreaInsetTop ++ "px 0 0 0")
+                                            , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                             , Ui.move
                                                 { x = Call.memberColumnOffset loggedIn.sidebarMode model
                                                 , y = 0
@@ -1666,7 +1661,7 @@ guildView model guildId channelRoute loggedIn local =
                                 |> Ui.el
                                     [ Ui.height Ui.fill
                                     , Ui.background MyUi.background3
-                                    , MyUi.htmlStyle "padding" (String.fromInt model.startupData.safeAreaInsetTop ++ "px 0 0 0")
+                                    , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                     , Ui.move
                                         { x = Call.conversationOffset loggedIn.sidebarMode model
                                         , y = 0
@@ -1681,7 +1676,7 @@ guildView model guildId channelRoute loggedIn local =
                                 [ GuildColumn.guildColumnLazy True model local
                                 , channelColumnLazy True canScroll2 model loggedIn local.localUser guildId guild channelRoute
                                 ]
-                            , Ui.Lazy.lazy2 loggedInAsView model.startupData.safeAreaInsetBottom local.localUser
+                            , Ui.Lazy.lazy loggedInAsView local.localUser
                             ]
 
                     else
@@ -1696,7 +1691,7 @@ guildView model guildId channelRoute loggedIn local =
                                     [ GuildColumn.guildColumnLazy False model local
                                     , channelColumnLazy False True model loggedIn local.localUser guildId guild channelRoute
                                     ]
-                                , Ui.Lazy.lazy2 loggedInAsView model.startupData.safeAreaInsetBottom local.localUser
+                                , Ui.Lazy.lazy loggedInAsView local.localUser
                                 ]
                             , channelView channelRoute guildId guild loggedIn local model
                                 |> Ui.el
@@ -1708,7 +1703,7 @@ guildView model guildId channelRoute loggedIn local =
                                     ]
                                 |> Ui.el
                                     [ Ui.height Ui.fill
-                                    , MyUi.htmlStyle "padding-top" (String.fromInt model.startupData.safeAreaInsetTop ++ "px")
+                                    , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                     ]
                             , case Route.toShowMembersTabVisible loggedIn model.route of
                                 ( ShowChannelSettings, isThread ) ->
@@ -1722,7 +1717,7 @@ guildView model guildId channelRoute loggedIn local =
                                         |> Ui.el
                                             [ Ui.width Ui.shrink
                                             , Ui.height Ui.fill
-                                            , MyUi.htmlStyle "padding-top" (String.fromInt model.startupData.safeAreaInsetTop ++ "px")
+                                            , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                             ]
 
                                 ( HideChannelSettings, _ ) ->
@@ -1742,7 +1737,7 @@ guildView model guildId channelRoute loggedIn local =
                                 [ GuildColumn.guildColumnLazy True model local
                                 , pageMissingMobile guildNotFoundText
                                 ]
-                            , Ui.Lazy.lazy2 loggedInAsView model.startupData.safeAreaInsetBottom local.localUser
+                            , Ui.Lazy.lazy loggedInAsView local.localUser
                             ]
 
                     else
@@ -1753,7 +1748,7 @@ guildView model guildId channelRoute loggedIn local =
                                 , Ui.width (Ui.px (MyUi.channelAndGuildColumnWidth model.windowSize))
                                 ]
                                 [ GuildColumn.guildColumnLazy False model local
-                                , Ui.Lazy.lazy2 loggedInAsView model.startupData.safeAreaInsetBottom local.localUser
+                                , Ui.Lazy.lazy loggedInAsView local.localUser
                                 ]
                             , pageMissing guildNotFoundText
                             ]
@@ -1773,7 +1768,7 @@ discordGuildView :
 discordGuildView model routeData loggedIn local =
     case loggedIn.showFileToUploadInfo of
         Just fileData ->
-            FileStatus.imageInfoView model.startupData.safeAreaInsetTop model.startupData.safeAreaInsetBottom model.timezone PressedCloseImageInfo fileData
+            FileStatus.imageInfoView local.localUser.safeAreaInsetTop local.localUser.safeAreaInsetBottom model.timezone PressedCloseImageInfo fileData
 
         Nothing ->
             case
@@ -1809,9 +1804,9 @@ discordGuildView model routeData loggedIn local =
                                 ( ShowChannelSettings, _ ) ->
                                     case routeData.channelRoute of
                                         DiscordChannel_ChannelRoute channelId threadRoute _ ->
-                                            discordChannelSettingsMobile
+                                            Ui.Lazy.lazy6
+                                                discordChannelSettingsMobile
                                                 canScroll2
-                                                model.startupData.safeAreaInsetBottom
                                                 local.localUser
                                                 routeData
                                                 guild
@@ -1820,7 +1815,7 @@ discordGuildView model routeData loggedIn local =
                                                 |> Ui.el
                                                     [ Ui.height Ui.fill
                                                     , Ui.background MyUi.background3
-                                                    , MyUi.htmlStyle "padding" (String.fromInt model.startupData.safeAreaInsetTop ++ "px 0 0 0")
+                                                    , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                                     , Ui.move
                                                         { x = Call.memberColumnOffset loggedIn.sidebarMode model
                                                         , y = 0
@@ -1843,7 +1838,7 @@ discordGuildView model routeData loggedIn local =
                                 |> Ui.el
                                     [ Ui.height Ui.fill
                                     , Ui.background MyUi.background3
-                                    , MyUi.htmlStyle "padding" (String.fromInt model.startupData.safeAreaInsetTop ++ "px 0 0 0")
+                                    , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                     , Ui.move
                                         { x = Call.conversationOffset loggedIn.sidebarMode model
                                         , y = 0
@@ -1858,7 +1853,7 @@ discordGuildView model routeData loggedIn local =
                                 [ GuildColumn.guildColumnLazy True model local
                                 , discordChannelColumnLazy True canScroll2 model loggedIn local.localUser routeData guild
                                 ]
-                            , Ui.Lazy.lazy2 loggedInAsView model.startupData.safeAreaInsetBottom local.localUser
+                            , Ui.Lazy.lazy loggedInAsView local.localUser
                             ]
 
                     else
@@ -1873,7 +1868,7 @@ discordGuildView model routeData loggedIn local =
                                     [ GuildColumn.guildColumnLazy False model local
                                     , discordChannelColumnLazy False True model loggedIn local.localUser routeData guild
                                     ]
-                                , Ui.Lazy.lazy2 loggedInAsView model.startupData.safeAreaInsetBottom local.localUser
+                                , Ui.Lazy.lazy loggedInAsView local.localUser
                                 ]
                             , discordChannelView routeData guild loggedIn local model
                                 |> Ui.el
@@ -1885,7 +1880,7 @@ discordGuildView model routeData loggedIn local =
                                     ]
                                 |> Ui.el
                                     [ Ui.height Ui.fill
-                                    , MyUi.htmlStyle "padding-top" (String.fromInt model.startupData.safeAreaInsetTop ++ "px")
+                                    , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                     ]
                             , case Route.toShowMembersTabVisible loggedIn model.route of
                                 ( ShowChannelSettings, _ ) ->
@@ -1902,7 +1897,7 @@ discordGuildView model routeData loggedIn local =
                                                 |> Ui.el
                                                     [ Ui.width Ui.shrink
                                                     , Ui.height Ui.fill
-                                                    , MyUi.htmlStyle "padding-top" (String.fromInt model.startupData.safeAreaInsetTop ++ "px")
+                                                    , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                                                     ]
 
                                         DiscordChannel_NewChannelRoute ->
@@ -1936,7 +1931,7 @@ guildErrorPage error local model =
                 [ GuildColumn.guildColumnLazy True model local
                 , pageMissingMobile error
                 ]
-            , Ui.Lazy.lazy2 loggedInAsView model.startupData.safeAreaInsetBottom local.localUser
+            , Ui.Lazy.lazy loggedInAsView local.localUser
             ]
 
     else
@@ -1947,7 +1942,7 @@ guildErrorPage error local model =
                 , Ui.width (Ui.px (MyUi.channelAndGuildColumnWidth model.windowSize))
                 ]
                 [ GuildColumn.guildColumnLazy False model local
-                , Ui.Lazy.lazy2 loggedInAsView model.startupData.safeAreaInsetBottom local.localUser
+                , Ui.Lazy.lazy loggedInAsView local.localUser
                 ]
             , pageMissing error
             ]
@@ -2336,7 +2331,6 @@ discordMemberColumnContainer contents =
 
 channelSettingsMobile :
     Bool
-    -> Int
     -> LocalUser
     -> Id GuildId
     -> ChannelRoute
@@ -2344,7 +2338,7 @@ channelSettingsMobile :
     -> SeqDict ( Id GuildId, Id ChannelId ) EditChannelForm
     -> Bool
     -> Element FrontendMsg_
-channelSettingsMobile canScroll2 safeAreaInsetBottom localUser guildId channelRoute guild editChannelForm isThread =
+channelSettingsMobile canScroll2 localUser guildId channelRoute guild editChannelForm isThread =
     Ui.column
         [ Ui.height Ui.fill ]
         [ Ui.row
@@ -2366,7 +2360,7 @@ channelSettingsMobile canScroll2 safeAreaInsetBottom localUser guildId channelRo
             [ Ui.height Ui.fill
             , Ui.background MyUi.background2
             , Ui.Font.color MyUi.font1
-            , MyUi.htmlStyle "padding" ("16px 0 " ++ String.fromInt (safeAreaInsetBottom + 16) ++ "px 0")
+            , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = localUser.safeAreaInsetBottom + 16 }
             , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
@@ -2378,14 +2372,13 @@ channelSettingsMobile canScroll2 safeAreaInsetBottom localUser guildId channelRo
 
 discordChannelSettingsMobile :
     Bool
-    -> Int
     -> LocalUser
     -> DiscordGuildRouteData
     -> DiscordFrontendGuild
     -> Discord.Id Discord.ChannelId
     -> ThreadRouteWithFriends
     -> Element FrontendMsg_
-discordChannelSettingsMobile canScroll2 safeAreaInsetBottom localUser routeData guild channelId threadRoute =
+discordChannelSettingsMobile canScroll2 localUser routeData guild channelId threadRoute =
     Ui.column
         [ Ui.height Ui.fill ]
         [ Ui.row
@@ -2408,18 +2401,17 @@ discordChannelSettingsMobile canScroll2 safeAreaInsetBottom localUser routeData 
             [ Ui.height Ui.fill
             , Ui.background MyUi.background2
             , Ui.Font.color MyUi.font1
-            , MyUi.htmlStyle "padding" ("16px 0 " ++ String.fromInt (safeAreaInsetBottom + 16) ++ "px 0")
+            , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = localUser.safeAreaInsetBottom + 16 }
             , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
-            [ Ui.Lazy.lazy5
-                discordChannelSettingsForm
+            [ discordChannelSettingsForm
                 localUser
                 routeData.currentDiscordUserId
                 routeData.guildId
                 channelId
                 threadRoute
-            , Ui.Lazy.lazy6 discordMemberListView True routeData.currentDiscordUserId localUser routeData.guildId guild channelId
+            , discordMemberListView True routeData.currentDiscordUserId localUser routeData.guildId guild channelId
             ]
         ]
 
@@ -2779,7 +2771,6 @@ dmChannelSettingsNotMobile localUser otherUserId isThread e2ee isExpanded keyInp
 
 dmChannelSettingsMobile :
     Bool
-    -> Int
     -> LocalUser
     -> Id UserId
     -> Bool
@@ -2787,7 +2778,7 @@ dmChannelSettingsMobile :
     -> Bool
     -> E2eeKeyInput
     -> Element FrontendMsg_
-dmChannelSettingsMobile canScroll2 safeAreaInsetBottom localUser otherUserId isThread e2ee isExpanded keyInput =
+dmChannelSettingsMobile canScroll2 localUser otherUserId isThread e2ee isExpanded keyInput =
     let
         members : List (Id UserId)
         members =
@@ -2814,7 +2805,7 @@ dmChannelSettingsMobile canScroll2 safeAreaInsetBottom localUser otherUserId isT
             [ Ui.height Ui.fill
             , Ui.background MyUi.background2
             , Ui.Font.color MyUi.font1
-            , MyUi.htmlStyle "padding" ("16px 0 " ++ String.fromInt (safeAreaInsetBottom + 16) ++ "px 0")
+            , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = localUser.safeAreaInsetBottom + 16 }
             , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
@@ -2868,13 +2859,12 @@ discordDmMemberColumnNotMobile localUser currentDiscordUserId channelId dmChanne
 
 discordDmChannelSettingsMobile :
     Bool
-    -> Int
     -> LocalUser
     -> Discord.Id Discord.UserId
     -> Discord.Id Discord.PrivateChannelId
     -> DiscordFrontendDmChannel
     -> Element FrontendMsg_
-discordDmChannelSettingsMobile canScroll2 safeAreaInsetBottom localUser currentDiscordUserId channelId dmChannel =
+discordDmChannelSettingsMobile canScroll2 localUser currentDiscordUserId channelId dmChannel =
     let
         members : List (Discord.Id Discord.UserId)
         members =
@@ -2897,7 +2887,7 @@ discordDmChannelSettingsMobile canScroll2 safeAreaInsetBottom localUser currentD
             [ Ui.height Ui.fill
             , Ui.background MyUi.background2
             , Ui.Font.color MyUi.font1
-            , MyUi.htmlStyle "padding" ("16px 0 " ++ String.fromInt (safeAreaInsetBottom + 16) ++ "px 0")
+            , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = localUser.safeAreaInsetBottom + 16 }
             , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
@@ -6221,21 +6211,17 @@ peopleAreTypingView allUsers channel currentUserId model =
             , MyUi.noShrinking
             , Ui.contentCenterY
             , MyUi.htmlStyle "user-select" "none"
-            , MyUi.htmlStyle
-                "padding"
-                ("0 "
-                    ++ String.fromInt (12 + model.startupData.safeAreaInsetBottom // 2)
-                    ++ "px "
-                    ++ (if MyUi.virtualKeyboardOpen model then
-                            "0"
+            , Ui.paddingWith
+                { left = 12 + model.startupData.safeAreaInsetBottom // 2
+                , right = 12 + model.startupData.safeAreaInsetBottom // 2
+                , top = 0
+                , bottom =
+                    if MyUi.virtualKeyboardOpen model then
+                        0
 
-                        else
-                            String.fromInt model.startupData.safeAreaInsetBottom ++ "px"
-                       )
-                    ++ " "
-                    ++ String.fromInt (12 + model.startupData.safeAreaInsetBottom // 2)
-                    ++ "px"
-                )
+                    else
+                        model.startupData.safeAreaInsetBottom
+                }
             ]
 
 
@@ -9618,7 +9604,6 @@ channelColumnLazy isMobile canScroll2 model loggedIn localUser guildId guild cha
         -- The search text changes too often for laziness to be worth it here
         channelColumn
             isMobile
-            model.startupData.safeAreaInsetTop
             (Time.millisToPosix (nearestHour model.time))
             localUser
             guildId
@@ -9628,7 +9613,7 @@ channelColumnLazy isMobile canScroll2 model loggedIn localUser guildId guild cha
             loggedIn.channelSearch
 
     else
-        Ui.Lazy.lazy6
+        Ui.Lazy.lazy5
             (if isMobile then
                 if canScroll2 then
                     channelColumnCanScrollMobile
@@ -9639,7 +9624,6 @@ channelColumnLazy isMobile canScroll2 model loggedIn localUser guildId guild cha
              else
                 channelColumnNotMobile
             )
-            model.startupData.safeAreaInsetTop
             localUser
             (nearestHour model.time)
             guildId
@@ -9661,7 +9645,6 @@ discordChannelColumnLazy isMobile canScroll2 model loggedIn localUser routeData 
         -- The search text changes too often for laziness to be worth it here
         discordChannelColumn
             isMobile
-            model.startupData.safeAreaInsetTop
             (Time.millisToPosix (nearestHour model.time))
             localUser
             routeData
@@ -9670,7 +9653,7 @@ discordChannelColumnLazy isMobile canScroll2 model loggedIn localUser routeData 
             loggedIn.channelSearch
 
     else
-        Ui.Lazy.lazy5
+        Ui.Lazy.lazy4
             (if isMobile then
                 if canScroll2 then
                     discordChannelColumnCanScrollMobile
@@ -9681,7 +9664,6 @@ discordChannelColumnLazy isMobile canScroll2 model loggedIn localUser routeData 
              else
                 discordChannelColumnNotMobile
             )
-            model.startupData.safeAreaInsetTop
             (nearestHour model.time)
             localUser
             routeData
@@ -9689,78 +9671,72 @@ discordChannelColumnLazy isMobile canScroll2 model loggedIn localUser routeData 
 
 
 channelColumnNotMobile :
-    Int
-    -> LocalUser
+    LocalUser
     -> Int
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Element FrontendMsg_
-channelColumnNotMobile safeAreaInsetTop localUser time guildId guild channelRoute =
-    channelColumn False safeAreaInsetTop (Time.millisToPosix time) localUser guildId guild channelRoute True ""
+channelColumnNotMobile localUser time guildId guild channelRoute =
+    channelColumn False (Time.millisToPosix time) localUser guildId guild channelRoute True ""
 
 
 discordChannelColumnNotMobile :
     Int
-    -> Int
     -> LocalUser
     -> DiscordGuildRouteData
     -> DiscordFrontendGuild
     -> Element FrontendMsg_
-discordChannelColumnNotMobile safeAreaInsetTop time localUser routeData guild =
-    discordChannelColumn False safeAreaInsetTop (Time.millisToPosix time) localUser routeData guild True ""
+discordChannelColumnNotMobile time localUser routeData guild =
+    discordChannelColumn False (Time.millisToPosix time) localUser routeData guild True ""
 
 
 channelColumnCanScrollMobile :
-    Int
-    -> LocalUser
+    LocalUser
     -> Int
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Element FrontendMsg_
-channelColumnCanScrollMobile safeAreaInsetTop localUser time guildId guild channelRoute =
-    channelColumn True safeAreaInsetTop (Time.millisToPosix time) localUser guildId guild channelRoute True ""
+channelColumnCanScrollMobile localUser time guildId guild channelRoute =
+    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute True ""
 
 
 channelColumnCannotScrollMobile :
-    Int
-    -> LocalUser
+    LocalUser
     -> Int
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Element FrontendMsg_
-channelColumnCannotScrollMobile safeAreaInsetTop localUser time guildId guild channelRoute =
-    channelColumn True safeAreaInsetTop (Time.millisToPosix time) localUser guildId guild channelRoute False ""
+channelColumnCannotScrollMobile localUser time guildId guild channelRoute =
+    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute False ""
 
 
 discordChannelColumnCanScrollMobile :
     Int
-    -> Int
     -> LocalUser
     -> DiscordGuildRouteData
     -> DiscordFrontendGuild
     -> Element FrontendMsg_
-discordChannelColumnCanScrollMobile safeAreaInsetTop time localUser guildId guild =
-    discordChannelColumn True safeAreaInsetTop (Time.millisToPosix time) localUser guildId guild True ""
+discordChannelColumnCanScrollMobile time localUser guildId guild =
+    discordChannelColumn True (Time.millisToPosix time) localUser guildId guild True ""
 
 
 discordChannelColumnCannotScrollMobile :
     Int
-    -> Int
     -> LocalUser
     -> DiscordGuildRouteData
     -> DiscordFrontendGuild
     -> Element FrontendMsg_
-discordChannelColumnCannotScrollMobile safeAreaInsetTop time localUser guildId guild =
-    discordChannelColumn True safeAreaInsetTop (Time.millisToPosix time) localUser guildId guild False ""
+discordChannelColumnCannotScrollMobile time localUser guildId guild =
+    discordChannelColumn True (Time.millisToPosix time) localUser guildId guild False ""
 
 
 channelColumnContainer : Int -> List (Element msg) -> Element msg -> Element msg -> Element msg
 channelColumnContainer safeAreaInsetTop header subHeader content =
     Ui.el
-        [ Ui.height Ui.fill, MyUi.htmlStyle "padding-top" (String.fromInt safeAreaInsetTop ++ "px") ]
+        [ Ui.height Ui.fill, Ui.paddingWith { left = 0, right = 0, top = safeAreaInsetTop, bottom = 0 } ]
         (Ui.column
             [ Ui.height Ui.fill
             , Ui.background MyUi.background2
@@ -9772,7 +9748,7 @@ channelColumnContainer safeAreaInsetTop header subHeader content =
             ]
             [ Ui.row
                 [ Ui.Font.bold
-                , MyUi.htmlStyle "padding" ("0 4px 0 " ++ String.fromInt (max (safeAreaInsetTop // 4) 8) ++ "px")
+                , Ui.paddingWith { left = max (safeAreaInsetTop // 4) 8, right = 4, top = 0, bottom = 0 }
                 , Ui.spacing 8
                 , Ui.Font.color MyUi.font1
                 , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
@@ -9790,7 +9766,6 @@ channelColumnContainer safeAreaInsetTop header subHeader content =
 
 channelColumn :
     Bool
-    -> Int
     -> Time.Posix
     -> LocalUser
     -> Id GuildId
@@ -9799,7 +9774,7 @@ channelColumn :
     -> Bool
     -> String
     -> Element FrontendMsg_
-channelColumn isMobile safeAreaInsetTop time localUser guildId guild channelRoute canScroll2 channelSearch =
+channelColumn isMobile time localUser guildId guild channelRoute canScroll2 channelSearch =
     let
         channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
@@ -9854,7 +9829,7 @@ channelColumn isMobile safeAreaInsetTop time localUser guildId guild channelRout
                     Ui.none
     in
     channelColumnContainer
-        safeAreaInsetTop
+        localUser.safeAreaInsetTop
         [ Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName)
         , GuildColumn.elLinkButton
             (Dom.id "guild_inviteLinkCreatorRoute")
@@ -10064,7 +10039,6 @@ channelSearchRow isMobile channelSearch =
 
 discordChannelColumn :
     Bool
-    -> Int
     -> Time.Posix
     -> LocalUser
     -> DiscordGuildRouteData
@@ -10072,7 +10046,7 @@ discordChannelColumn :
     -> Bool
     -> String
     -> Element FrontendMsg_
-discordChannelColumn isMobile safeAreaInsetTop time localUser routeData guild canScroll2 channelSearch =
+discordChannelColumn isMobile time localUser routeData guild canScroll2 channelSearch =
     let
         channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
@@ -10099,7 +10073,7 @@ discordChannelColumn isMobile safeAreaInsetTop time localUser routeData guild ca
             SeqDict.get routeData.guildId localUser.user.discordDirectMentions
     in
     channelColumnContainer
-        safeAreaInsetTop
+        localUser.safeAreaInsetTop
         [ Ui.row
             [ MyUi.hoverText guildName
             , Ui.spacing 4
@@ -10691,8 +10665,7 @@ discordChannelColumnRow isMobile isMuted hasNotifications routeData channelId ch
 
 
 friendsColumnLazy :
-    Int
-    -> Bool
+    Bool
     -> Bool
     -> Time.Posix
     -> DmChannelSelection
@@ -10700,7 +10673,7 @@ friendsColumnLazy :
     -> Bool
     -> LocalState
     -> Element FrontendMsg_
-friendsColumnLazy safeAreaInsetTop canScroll2 isMobile currentTime openedOtherUserId friendsSearch friendsSearchHasFocus local =
+friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearch friendsSearchHasFocus local =
     let
         currentTimeRoundedToMinute : Int
         currentTimeRoundedToMinute =
@@ -10713,7 +10686,6 @@ friendsColumnLazy safeAreaInsetTop canScroll2 isMobile currentTime openedOtherUs
     if (friendsSearch /= "") || friendsSearchHasFocus then
         -- The search text changes too often for laziness to be worth it here
         friendsColumn
-            safeAreaInsetTop
             canScroll2
             isMobile
             currentTimeRoundedToMinute
@@ -10727,9 +10699,8 @@ friendsColumnLazy safeAreaInsetTop canScroll2 isMobile currentTime openedOtherUs
     else
         case openedOtherUserId of
             NoDmChannelSelected ->
-                Ui.Lazy.lazy6
+                Ui.Lazy.lazy5
                     friendsColumn_NoDmChannelSelected
-                    safeAreaInsetTop
                     packed
                     isMobile
                     local.dmChannels
@@ -10737,14 +10708,13 @@ friendsColumnLazy safeAreaInsetTop canScroll2 isMobile currentTime openedOtherUs
                     local.localUser
 
             SelectedDmChannel dmRouteData ->
-                Ui.Lazy.lazy6
+                Ui.Lazy.lazy5
                     (if isMobile then
                         friendsColumn_SelectedDmChannel_Mobile
 
                      else
                         friendsColumn_SelectedDmChannel_NotMobile
                     )
-                    safeAreaInsetTop
                     packed
                     dmRouteData
                     local.dmChannels
@@ -10752,14 +10722,13 @@ friendsColumnLazy safeAreaInsetTop canScroll2 isMobile currentTime openedOtherUs
                     local.localUser
 
             SelectedDiscordDmChannel discordDmRouteData ->
-                Ui.Lazy.lazy6
+                Ui.Lazy.lazy5
                     (if isMobile then
                         friendsColumn_SelectedDiscordDmChannel_Mobile
 
                      else
                         friendsColumn_SelectedDiscordDmChannel_NotMobile
                     )
-                    safeAreaInsetTop
                     packed
                     discordDmRouteData
                     local.dmChannels
@@ -10767,54 +10736,53 @@ friendsColumnLazy safeAreaInsetTop canScroll2 isMobile currentTime openedOtherUs
                     local.localUser
 
 
-friendsColumn_NoDmChannelSelected : Int -> Int -> Bool -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
-friendsColumn_NoDmChannelSelected safeAreaInsetTop packed isMobile dmChannels discordDmChannels localUser =
+friendsColumn_NoDmChannelSelected : Int -> Bool -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
+friendsColumn_NoDmChannelSelected packed isMobile dmChannels discordDmChannels localUser =
     let
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn safeAreaInsetTop canScroll isMobile time "" False NoDmChannelSelected dmChannels discordDmChannels localUser
+    friendsColumn canScroll isMobile time "" False NoDmChannelSelected dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDiscordDmChannel_Mobile : Int -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
-friendsColumn_SelectedDiscordDmChannel_Mobile safeAreaInsetTop packed discordDmRoute dmChannels discordDmChannels localUser =
+friendsColumn_SelectedDiscordDmChannel_Mobile : Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
+friendsColumn_SelectedDiscordDmChannel_Mobile packed discordDmRoute dmChannels discordDmChannels localUser =
     let
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn safeAreaInsetTop canScroll True time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
+    friendsColumn canScroll True time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDiscordDmChannel_NotMobile : Int -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
-friendsColumn_SelectedDiscordDmChannel_NotMobile safeAreaInsetTop packed discordDmRoute dmChannels discordDmChannels localUser =
+friendsColumn_SelectedDiscordDmChannel_NotMobile : Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
+friendsColumn_SelectedDiscordDmChannel_NotMobile packed discordDmRoute dmChannels discordDmChannels localUser =
     let
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn safeAreaInsetTop canScroll False time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
+    friendsColumn canScroll False time "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDmChannel_Mobile : Int -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
-friendsColumn_SelectedDmChannel_Mobile safeAreaInsetTop packed dmRoute dmChannels discordDmChannels localUser =
+friendsColumn_SelectedDmChannel_Mobile : Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
+friendsColumn_SelectedDmChannel_Mobile packed dmRoute dmChannels discordDmChannels localUser =
     let
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn safeAreaInsetTop canScroll True time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
+    friendsColumn canScroll True time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDmChannel_NotMobile : Int -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
-friendsColumn_SelectedDmChannel_NotMobile safeAreaInsetTop packed dmRoute dmChannels discordDmChannels localUser =
+friendsColumn_SelectedDmChannel_NotMobile : Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
+friendsColumn_SelectedDmChannel_NotMobile packed dmRoute dmChannels discordDmChannels localUser =
     let
         { canScroll, time } =
             decodeFriendsColumn packed
     in
-    friendsColumn safeAreaInsetTop canScroll False time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
+    friendsColumn canScroll False time "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
 
 
 friendsColumn :
-    Int
-    -> Bool
+    Bool
     -> Bool
     -> Int
     -> String
@@ -10824,7 +10792,7 @@ friendsColumn :
     -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> LocalUser
     -> Element FrontendMsg_
-friendsColumn safeAreaInsetTop canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocus dmChannelSelection dmChannels discordDmChannels localUser =
+friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocus dmChannelSelection dmChannels discordDmChannels localUser =
     let
         dmChannelsIncludingCurrentUser : SeqDict (Id UserId) FrontendDmChannel
         dmChannelsIncludingCurrentUser =
@@ -10978,7 +10946,7 @@ friendsColumn safeAreaInsetTop canScroll2 isMobile currentTime friendsSearch fri
                     (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
     in
     channelColumnContainer
-        safeAreaInsetTop
+        localUser.safeAreaInsetTop
         [ Ui.el
             [ Ui.height Ui.fill
             , -- The search input is always in the DOM, invisible and covering the magnifying glass
@@ -11646,12 +11614,11 @@ newGuildFormView : Int -> NewGuildForm -> Element FrontendMsg_
 newGuildFormView safeAreaInsetTop form =
     Ui.column
         [ Ui.Font.color MyUi.font1
-        , Ui.paddingXY 0 16
+        , Ui.paddingWith { left = 0, right = 0, top = safeAreaInsetTop, bottom = 16 }
         , Ui.alignTop
         , Ui.spacing 16
         , Ui.height Ui.fill
         , Ui.background MyUi.background1
-        , MyUi.htmlStyle "padding-top" (String.fromInt safeAreaInsetTop ++ "px")
         ]
         [ Ui.el [ Ui.Font.size 24, Ui.paddingXY 16 0 ] (Ui.text "Create new guild")
         , guildNameInput form |> Ui.map NewGuildFormChanged

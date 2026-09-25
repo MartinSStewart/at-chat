@@ -195,6 +195,48 @@ setDevicePixelRatio devicePixelRatio model =
     }
 
 
+{-| LocalUser keeps a copy of the safe-area insets for the same reason it keeps the device pixel
+ratio: so lazily rendered views can read them without taking another parameter. Rotating the
+device changes them.
+-}
+setSafeAreaInsets : { top : Int, bottom : Int } -> LoadedFrontend -> LoadedFrontend
+setSafeAreaInsets insets model =
+    let
+        startupData : Ports.StartupData
+        startupData =
+            model.startupData
+    in
+    { model
+        | startupData = { startupData | safeAreaInsetTop = insets.top, safeAreaInsetBottom = insets.bottom }
+        , loginStatus =
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    LoggedIn
+                        { loggedIn
+                            | localState =
+                                Local.mapModel
+                                    (\local ->
+                                        let
+                                            localUser : User.LocalUser
+                                            localUser =
+                                                local.localUser
+                                        in
+                                        { local
+                                            | localUser =
+                                                { localUser
+                                                    | safeAreaInsetTop = insets.top
+                                                    , safeAreaInsetBottom = insets.bottom
+                                                }
+                                        }
+                                    )
+                                    loggedIn.localState
+                        }
+
+                NotLoggedIn _ ->
+                    model.loginStatus
+    }
+
+
 {-| LocalUser keeps a copy of the emoji data so that a reaction can name the emoji it
 shows without messageView needing another parameter. It arrives once, after the rest of
 the page has loaded, so both copies are filled in when it does.
@@ -3033,7 +3075,9 @@ updateLoaded msg model =
         GotStartupData startupData ->
             case startupData of
                 Ok startupData2 ->
-                    ( setDevicePixelRatio startupData2.devicePixelRatio { model | startupData = startupData2 }
+                    ( { model | startupData = startupData2 }
+                        |> setDevicePixelRatio startupData2.devicePixelRatio
+                        |> setSafeAreaInsets { top = startupData2.safeAreaInsetTop, bottom = startupData2.safeAreaInsetBottom }
                     , Command.none
                     )
 
@@ -3589,17 +3633,7 @@ updateLoaded msg model =
             ( { model | visualViewportHeight = round height }, Command.none )
 
         SafeAreaInsetsChanged insets ->
-            let
-                startupData : Ports.StartupData
-                startupData =
-                    model.startupData
-            in
-            ( { model
-                | startupData =
-                    { startupData | safeAreaInsetTop = insets.top, safeAreaInsetBottom = insets.bottom }
-              }
-            , Command.none
-            )
+            ( setSafeAreaInsets insets model, Command.none )
 
         TextEditorMsg textEditorMsg ->
             case model.loginStatus of
@@ -8841,8 +8875,6 @@ view _ model =
                                             IsAdmin adminData ->
                                                 Pages.Admin.view
                                                     (MyUi.isMobile loaded)
-                                                    loaded.startupData.safeAreaInsetTop
-                                                    loaded.startupData.safeAreaInsetBottom
                                                     loaded.versionNumber
                                                     loaded.time
                                                     local

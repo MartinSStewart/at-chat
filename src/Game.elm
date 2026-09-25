@@ -1331,7 +1331,6 @@ view currentTime windowSize showMemberTab drag startupData lastCopied localUser 
                                     SheepGame.gameView
                                         currentTime
                                         windowSize
-                                        startupData.safeAreaInsetBottom
                                         showMemberTab
                                         localUser
                                         drag

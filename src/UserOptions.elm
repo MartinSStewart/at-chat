@@ -282,7 +282,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
         , Ui.inFront
             (Ui.el
                 [ Ui.background MyUi.background1
-                , MyUi.htmlStyle "padding-top" (String.fromInt loaded.startupData.safeAreaInsetTop ++ "px")
+                , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                 , Ui.el
                     [ Ui.alignBottom
                     , Ui.paddingXY
@@ -313,13 +313,12 @@ view windowSize textInputFocus time local loggedIn loaded model =
         (Ui.el
             [ Ui.scrollable, Ui.heightMin 0 ]
             (Ui.column
-                [ MyUi.htmlStyle
-                    "padding"
-                    (String.fromInt (80 + loaded.startupData.safeAreaInsetTop)
-                        ++ "px 0 "
-                        ++ String.fromInt (24 + loaded.startupData.safeAreaInsetBottom)
-                        ++ "px 0"
-                    )
+                [ Ui.paddingWith
+                    { left = 0
+                    , right = 0
+                    , top = 80 + local.localUser.safeAreaInsetTop
+                    , bottom = 24 + local.localUser.safeAreaInsetBottom
+                    }
 
                 --Ui.paddingXY 0 64
                 , Ui.spacing 16

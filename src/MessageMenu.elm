@@ -250,13 +250,12 @@ viewMobile offset extraOptions loggedIn local model =
         , MyUi.htmlStyle "bottom" "0"
         , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
         , Ui.background MyUi.black
-        , MyUi.htmlStyle
-            "padding"
-            (String.fromInt topPadding
-                ++ "px 8px "
-                ++ String.fromInt (model.startupData.safeAreaInsetBottom // 2 + bottomPadding)
-                ++ "px 8px"
-            )
+        , Ui.paddingWith
+            { left = 8
+            , right = 8
+            , top = topPadding
+            , bottom = local.localUser.safeAreaInsetBottom // 2 + bottomPadding
+            }
         , MyUi.blockClickPropagation MessageMenu_PressedContainer
         , Ui.height (Ui.px height)
         ]

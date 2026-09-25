@@ -76,7 +76,7 @@ header isMobile safeAreaInsetTop route loginStatus =
         , Ui.Shadow.shadows [ { x = 0, y = 1, blur = 2, size = 0, color = Ui.rgba 0 0 0 0.05 } ]
         ]
         (Ui.row
-            [ MyUi.htmlStyle "padding" (String.fromInt (4 + safeAreaInsetTop) ++ "px 16px 0 16px")
+            [ Ui.paddingWith { left = 16, right = 16, top = 4 + safeAreaInsetTop, bottom = 0 }
             , Ui.contentCenterY
             , MyUi.notoSans
             , Ui.widthMax 1280

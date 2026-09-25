@@ -439,7 +439,7 @@ view safeAreaInsetTop safeAreaInsetBottom currentUserId local =
                     ]
                 )
             )
-        , MyUi.htmlStyle "padding" (String.fromInt safeAreaInsetTop ++ "px 0 " ++ String.fromInt safeAreaInsetBottom ++ "px 0")
+        , Ui.paddingWith { left = 0, right = 0, top = safeAreaInsetTop, bottom = safeAreaInsetBottom }
         , Ui.inFront
             (MyUi.elButton
                 (Dom.id "textEditor_reset")

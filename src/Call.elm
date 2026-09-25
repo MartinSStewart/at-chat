@@ -70,7 +70,6 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import Ports
 import Route exposing (ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), Route(..), ShowChannelSettings(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -460,7 +459,7 @@ type VideoNodeState
 
 videoNodes :
     LocalUser
-    -> { a | windowSize : Coord CssPixels, route : Route, startupData : Ports.StartupData }
+    -> { a | windowSize : Coord CssPixels, route : Route }
     -> { b | voiceChat : Model, sidebarMode : ChannelSidebarMode }
     -> Local
     -> Html Msg
@@ -468,10 +467,6 @@ videoNodes localUser config loggedIn local =
     let
         model =
             loggedIn.voiceChat
-
-        safeAreaInsetTop : Int
-        safeAreaInsetTop =
-            config.startupData.safeAreaInsetTop
 
         voiceChatX : Int
         voiceChatX =
@@ -566,7 +561,6 @@ videoNodes localUser config loggedIn local =
                 VideoNodeHidden
                 (getPosAndSize 0 (posAndSizes 1))
                 model.localIsSpeaking
-                safeAreaInsetTop
                 model
             ]
 
@@ -579,7 +573,6 @@ videoNodes localUser config loggedIn local =
                 VideoNodeFullSize
                 (getPosAndSize 0 (posAndSizes 1))
                 model.localIsSpeaking
-                safeAreaInsetTop
                 model
             ]
 
@@ -610,7 +603,6 @@ videoNodes localUser config loggedIn local =
                 VideoNodeFullSize
                 (getPosAndSize 0 list)
                 model.localIsSpeaking
-                safeAreaInsetTop
                 model
                 :: List.indexedMap
                     (\index ( session, data ) ->
@@ -627,7 +619,6 @@ videoNodes localUser config loggedIn local =
                             VideoNodeFullSize
                             (getPosAndSize (index + 1) list)
                             (SeqSet.member connectionId model.isSpeaking)
-                            safeAreaInsetTop
                             model
                     )
                     sessions
@@ -665,7 +656,6 @@ videoNodes localUser config loggedIn local =
                 )
                 ( thumbnailPosition isMobile config.windowSize model, thumbnailWindowWidth isMobile )
                 model.localIsSpeaking
-                safeAreaInsetTop
                 model
                 :: List.indexedMap
                     (\index ( session, data ) ->
@@ -687,7 +677,6 @@ videoNodes localUser config loggedIn local =
                             )
                             ( thumbnailPosition isMobile config.windowSize model, thumbnailWindowWidth isMobile )
                             (SeqSet.member connectionId model.isSpeaking)
-                            safeAreaInsetTop
                             model
                     )
                     sessions
@@ -695,8 +684,7 @@ videoNodes localUser config loggedIn local =
         ++ (if showDebugData then
                 [ ( "call_debugData"
                   , debugDataView
-                        safeAreaInsetTop
-                        { left = voiceChatX, top = voiceChatY, maxHeight = maxHeight }
+                        { left = voiceChatX, top = localUser.safeAreaInsetTop + voiceChatY, maxHeight = maxHeight }
                         model.debugData
                   )
                 ]
@@ -710,12 +698,12 @@ videoNodes localUser config loggedIn local =
 {-| Drawn as part of the video layer rather than inside the voice chat panel,
 because the videos sit on top of that panel and would cover it.
 -}
-debugDataView : Int -> { left : Int, top : Int, maxHeight : Int } -> List DebugSection -> Html msg
-debugDataView safeAreaInsetTop position sections =
+debugDataView : { left : Int, top : Int, maxHeight : Int } -> List DebugSection -> Html msg
+debugDataView position sections =
     Html.div
         [ Html.Attributes.style "position" "absolute"
         , Html.Attributes.style "left" (String.fromInt position.left ++ "px")
-        , Html.Attributes.style "top" (String.fromInt (safeAreaInsetTop + position.top) ++ "px")
+        , Html.Attributes.style "top" (String.fromInt position.top ++ "px")
         , Html.Attributes.style "width" "440px"
         , Html.Attributes.style "max-width" "calc(100% - 16px)"
         , Html.Attributes.style "max-height" (String.fromInt position.maxHeight ++ "px")
@@ -972,10 +960,9 @@ videoNode :
     -> VideoNodeState
     -> ( Coord CssPixels, Int )
     -> Bool
-    -> Int
     -> Model
     -> ( String, Html Msg )
-videoNode userId localUser id remoteCallData videoNodeState ( position, width ) isSpeaking safeAreaInsetTop model =
+videoNode userId localUser id remoteCallData videoNodeState ( position, width ) isSpeaking model =
     let
         height : Float
         height =
@@ -995,7 +982,7 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, width ) 
          , Html.Attributes.style "height" (String.fromFloat height ++ "px")
          , Html.Attributes.style "position" "absolute"
          , Html.Attributes.style "left" (String.fromInt (Coord.xRaw position) ++ "px")
-         , Html.Attributes.style "top" (String.fromInt (safeAreaInsetTop + Coord.yRaw position) ++ "px")
+         , Html.Attributes.style "top" (String.fromInt (localUser.safeAreaInsetTop + Coord.yRaw position) ++ "px")
          , Html.Attributes.style
             "pointer-events"
             (if videoNodeState == VideoNodeHidden then

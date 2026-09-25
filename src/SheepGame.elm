@@ -1877,7 +1877,6 @@ paddingX isMobile =
 gameView :
     Time.Posix
     -> Coord CssPixels
-    -> Int
     -> Bool
     -> LocalUser
     -> Drag
@@ -1887,7 +1886,7 @@ gameView :
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView time windowSize safeAreaInsetBottom showMemberTab localUser drag loggedIn highlightedResult setup shared model =
+gameView time windowSize showMemberTab localUser drag loggedIn highlightedResult setup shared model =
     let
         isMobile : Bool
         isMobile =
@@ -1967,16 +1966,12 @@ gameView time windowSize safeAreaInsetBottom showMemberTab localUser drag logged
             (case shared.phase of
                 Answering ->
                     Ui.column
-                        [ MyUi.htmlStyle
-                            "padding"
-                            ("16px "
-                                ++ String.fromInt (paddingX isMobile)
-                                ++ "px "
-                                ++ String.fromInt (16 + safeAreaInsetBottom)
-                                ++ "px "
-                                ++ String.fromInt (paddingX isMobile)
-                                ++ "px"
-                            )
+                        [ Ui.paddingWith
+                            { left = paddingX isMobile
+                            , right = paddingX isMobile
+                            , top = 16
+                            , bottom = 16 + localUser.safeAreaInsetBottom
+                            }
                         , Ui.centerX
                         , Ui.widthMax maxWidth
                         , Ui.spacing 16

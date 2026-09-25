@@ -1756,12 +1756,12 @@ pendingChangesText change =
             "Regenerate server secret"
 
 
-view : Bool -> Int -> Int -> Maybe Int -> Time.Posix -> LocalState -> AdminData -> Model -> Element Msg
-view isMobile2 safeAreaInsetTop safeAreaInsetBottom version time local adminData model =
+view : Bool -> Maybe Int -> Time.Posix -> LocalState -> AdminData -> Model -> Element Msg
+view isMobile2 version time local adminData model =
     Ui.el
         [ Ui.scrollable
         , Ui.background MyUi.background3
-        , MyUi.htmlStyle "padding" (String.fromInt safeAreaInsetTop ++ "px 0 " ++ String.fromInt safeAreaInsetBottom ++ "px 0")
+        , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = local.localUser.safeAreaInsetBottom }
         , Ui.heightMin 0
         ]
         (MyUi.column

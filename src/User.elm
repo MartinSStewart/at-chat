@@ -806,6 +806,8 @@ type alias LocalUser =
       timezone : Time.Zone
     , userAgent : UserAgent
     , devicePixelRatio : Float
+    , safeAreaInsetTop : Int
+    , safeAreaInsetBottom : Int
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , emojiData : Maybe Emoji.CachedEmojiData

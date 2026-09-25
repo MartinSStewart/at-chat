@@ -986,7 +986,7 @@ view windowSize safeAreaInsetTop safeAreaInsetBottom model =
     in
     Ui.column
         [ if isMobile2 then
-            MyUi.htmlStyle "padding-bottom" (String.fromInt safeAreaInsetBottom ++ "px")
+            Ui.paddingWith { left = 0, right = 0, top = 0, bottom = safeAreaInsetBottom }
 
           else
             Ui.paddingXY 16 16
@@ -1060,7 +1060,7 @@ view windowSize safeAreaInsetTop safeAreaInsetBottom model =
                 , containerShadow
                 , Ui.height Ui.fill
                 , Ui.background MyUi.inputBackground
-                , MyUi.htmlStyle "padding-top" (String.fromInt safeAreaInsetTop ++ "px")
+                , Ui.paddingWith { left = 0, right = 0, top = safeAreaInsetTop, bottom = 0 }
                 ]
                 [ Ui.Input.multiline
                     [ Ui.border 0

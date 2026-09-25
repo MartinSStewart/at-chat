@@ -8065,6 +8065,8 @@ loginDataToLocalState startupData decrypted encryptionBacklog emojiData loginDat
         , timezone = startupData.timezone
         , userAgent = startupData.userAgent
         , devicePixelRatio = startupData.devicePixelRatio
+        , safeAreaInsetTop = startupData.safeAreaInsetTop
+        , safeAreaInsetBottom = startupData.safeAreaInsetBottom
         , stickers = loginData.stickers
         , customEmojis = loginData.customEmojis
         , emojiData = emojiData

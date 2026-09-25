@@ -1239,7 +1239,7 @@ infoPanel safeAreaInsetTop safeAreaInsetBottom contents =
         , Ui.scrollable
         , Ui.heightMin 0
         , Ui.background MyUi.background1
-        , MyUi.htmlStyle "padding" (String.fromInt (safeAreaInsetTop + 16) ++ "px 0px " ++ String.fromInt safeAreaInsetBottom ++ "px 0px")
+        , Ui.paddingWith { left = 0, right = 0, top = safeAreaInsetTop + 16, bottom = safeAreaInsetBottom }
         , Ui.spacing 16
         ]
         contents

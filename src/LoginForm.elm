@@ -423,7 +423,7 @@ view textSelection loginForm windowSize safeAreaInsetTop pwaStatus browser =
     Ui.column
         [ MyUi.notoSans
         , if isMobile then
-            MyUi.htmlStyle "padding" (String.fromInt (safeAreaInsetTop + 88) ++ "px 8px 0 8px")
+            Ui.paddingWith { left = 8, right = 8, top = safeAreaInsetTop + 88, bottom = 0 }
 
           else
             Ui.padding 16
