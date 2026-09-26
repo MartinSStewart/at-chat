@@ -136,9 +136,8 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                 ]
                 Ui.none
             )
-        , Ui.width Ui.shrink
+        , Ui.width (Ui.px (MyUi.guildIconFullWidth - 1))
         , Ui.height Ui.fill
-        , Ui.move { x = 1, y = 0, z = 0 }
         ]
         (Ui.column
             [ Ui.spacing 6
