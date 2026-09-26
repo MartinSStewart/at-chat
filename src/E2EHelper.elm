@@ -369,6 +369,9 @@ handlePortToJs requestAndData =
         "shift_scroll_by_element_delta_to_js" ->
             Nothing
 
+        "clear_browser_storage_to_js" ->
+            Nothing
+
         _ ->
             let
                 _ =

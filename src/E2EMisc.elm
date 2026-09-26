@@ -1854,7 +1854,7 @@ channelSuggestionTest config =
                 , admin.input 100 Pages.Guild.channelTextInputId "See #gen"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 8, end = 8 }
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text MessageDropdown.mentionChannelText ])
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "#general" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "general" ])
                 , admin.input 100 Pages.Guild.channelTextInputId "See #zz"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 7, end = 7 }
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text MessageDropdown.mentionChannelText ])
