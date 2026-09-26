@@ -63,7 +63,7 @@ import NonemptySet
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination
-import PersonName
+import PersonName exposing (PersonName)
 import Ports exposing (RegisterPushSubscription(..))
 import Postmark
 import Quantity
@@ -3137,14 +3137,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 attachedFiles2 =
                                                     BackendExtra.validateAttachedFiles model.files attachedFiles
 
+                                                guildMembers : SeqDict (Discord.Id Discord.UserId) { name : PersonName }
+                                                guildMembers =
+                                                    DiscordUserData.names (MembersAndOwner.membersAndOwner guild.membersAndOwner) model.discordUsers
+
                                                 richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                                 richText =
-                                                    textToDiscordRichText
-                                                        timezone
-                                                        text
-                                                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                                        (LocalState.discordGuildChannelNames guild.channels)
-                                                        model
+                                                    RichText.fromNonemptyString timezone guildMembers (LocalState.guildChannelNames timezone guildMembers guild.channels) text
                                             in
                                             case
                                                 ( RichText.toDiscord model.discordCustomEmojis guild.channels richText
@@ -3285,12 +3284,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             let
                                                 richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                                 richText =
-                                                    textToDiscordRichText
+                                                    RichText.fromNonemptyString
                                                         timezone
-                                                        text
-                                                        (NonemptyDict.keys dmChannel.members |> List.Nonempty.toList)
+                                                        (DiscordUserData.names (NonemptyDict.keys dmChannel.members |> List.Nonempty.toList) model.discordUsers)
                                                         SeqDict.empty
-                                                        model
+                                                        text
                                             in
                                             case
                                                 ( RichText.toDiscord model.discordCustomEmojis SeqDict.empty richText
@@ -4247,14 +4245,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         { guildId = guildId, channelId = channelId, currentUserId = currentUserId }
                         (\_ userData _ guild channel ->
                             let
+                                guildMembers : SeqDict (Discord.Id Discord.UserId) { name : PersonName }
+                                guildMembers =
+                                    DiscordUserData.names (MembersAndOwner.membersAndOwner guild.membersAndOwner) model.discordUsers
+
                                 richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                 richText =
-                                    textToDiscordRichText
-                                        timezone
-                                        newContent
-                                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                        (LocalState.discordGuildChannelNames guild.channels)
-                                        model
+                                    RichText.fromNonemptyString timezone guildMembers (LocalState.guildChannelNames timezone guildMembers guild.channels) newContent
                             in
                             case
                                 ( RichText.toDiscord model.discordCustomEmojis guild.channels richText
@@ -4336,12 +4333,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             let
                                 richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                 richText =
-                                    textToDiscordRichText
+                                    RichText.fromNonemptyString
                                         timezone
-                                        newContent
-                                        (NonemptyDict.keys channel.members |> List.Nonempty.toList)
+                                        (DiscordUserData.names (NonemptyDict.keys channel.members |> List.Nonempty.toList) model.discordUsers)
                                         SeqDict.empty
-                                        model
+                                        newContent
                             in
                             case
                                 ( RichText.toDiscord model.discordCustomEmojis SeqDict.empty richText
@@ -7873,38 +7869,6 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
 
-textToDiscordRichText :
-    Time.Zone
-    -> NonemptyString
-    -> List (Discord.Id Discord.UserId)
-    -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
-    -> BackendModel
-    -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
-textToDiscordRichText timezone text memberIds channels model =
-    RichText.fromNonemptyString
-        timezone
-        (List.foldl
-            (\memberId dict ->
-                case SeqDict.get memberId model.discordUsers of
-                    Just member ->
-                        SeqDict.insert
-                            memberId
-                            { name =
-                                DiscordUserData.username member
-                                    |> PersonName.fromStringLossy
-                            }
-                            dict
-
-                    Nothing ->
-                        dict
-            )
-            SeqDict.empty
-            memberIds
-        )
-        channels
-        text
-
-
 emojiOrCustomEmojiToDiscord : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId) -> EmojiOrCustomEmoji -> Result () Discord.Emoji
 emojiOrCustomEmojiToDiscord customEmojis emoji =
     case emoji of
@@ -8509,24 +8473,23 @@ sendEditMessage clientId changeId time timezone newContent attachedFiles2 id thr
     case SeqDict.get id.channelId guild.channels of
         Just channel ->
             let
+                guildMembers : SeqDict (Id UserId) BackendUser
+                guildMembers =
+                    List.foldl
+                        (\memberId dict ->
+                            case NonemptyDict.get memberId model2.users of
+                                Just member ->
+                                    SeqDict.insert memberId member dict
+
+                                Nothing ->
+                                    dict
+                        )
+                        SeqDict.empty
+                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+
                 richText : Nonempty (RichText (Id UserId) (Id ChannelId))
                 richText =
-                    RichText.fromNonemptyString
-                        timezone
-                        (List.foldl
-                            (\memberId dict ->
-                                case NonemptyDict.get memberId model2.users of
-                                    Just member ->
-                                        SeqDict.insert memberId member dict
-
-                                    Nothing ->
-                                        dict
-                            )
-                            SeqDict.empty
-                            (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                        )
-                        (LocalState.guildChannelNames guild.channels)
-                        newContent
+                    RichText.fromNonemptyString timezone guildMembers (LocalState.guildChannelNames timezone guildMembers guild.channels) newContent
             in
             case
                 LocalState.editMessageHelper

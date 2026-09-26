@@ -87,7 +87,6 @@ module LocalState exposing
     , discordDmChannelWithUser
     , discordGuildAvailableStickersAndCustomEmojis
     , discordGuildChannelMentions
-    , discordGuildChannelNames
     , discordGuildOrDmIdToLatestMessages
     , discordGuildOrDmIdToMessage
     , discordTopicToDescription
@@ -560,21 +559,20 @@ threadMentionName :
     -> LocalUser
     -> String
 threadMentionName threadId channel localUser =
-    ChannelName.toString channel.name
-        ++ "/"
-        ++ (case MessageArray.get threadId channel.messages of
-                Just message ->
-                    messageToString
-                        localUser.timezone
-                        (User.allUsers localUser)
-                        SeqDict.empty
-                        localUser.decryptedMessages
-                        message
-                        |> String.left 50
+    threadName
+        channel.name
+        (case MessageArray.get threadId channel.messages of
+            Just message ->
+                messageToString
+                    localUser.timezone
+                    (User.allUsers localUser)
+                    SeqDict.empty
+                    localUser.decryptedMessages
+                    message
 
-                Nothing ->
-                    "<missing>"
-           )
+            Nothing ->
+                "<missing>"
+        )
 
 
 discordThreadMentionName :
@@ -583,21 +581,20 @@ discordThreadMentionName :
     -> LocalUser
     -> String
 discordThreadMentionName threadId channel localUser =
-    ChannelName.toString channel.name
-        ++ "/"
-        ++ (case MessageArray.get threadId channel.messages of
-                Just message ->
-                    messageToString
-                        localUser.timezone
-                        (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
-                        SeqDict.empty
-                        SeqDict.empty
-                        message
-                        |> String.left 50
+    threadName
+        channel.name
+        (case MessageArray.get threadId channel.messages of
+            Just message ->
+                messageToString
+                    localUser.timezone
+                    (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
+                    SeqDict.empty
+                    SeqDict.empty
+                    message
 
-                Nothing ->
-                    "<missing>"
-           )
+            Nothing ->
+                "<missing>"
+        )
 
 
 guildChannelMentions :
@@ -697,18 +694,52 @@ discordGuildChannelMentions localUser currentUserId guildId guild =
         guild.channels
 
 
-guildChannelNames : SeqDict (Id ChannelId) { a | name : ChannelName } -> SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
-guildChannelNames channels =
-    SeqDict.foldl
-        (\channelId channel dict -> SeqDict.insert ( channelId, Nothing ) { name = ChannelName.toString channel.name } dict)
-        SeqDict.empty
-        channels
+{-| How a thread is written in a #mention: the name of its channel and the start of the message
+the thread hangs off of. The backend reads mentions with these names, so they have to come out the
+same there as they do on the frontend.
+-}
+threadName : ChannelName -> String -> String
+threadName channelName threadMessage =
+    ChannelName.toString channelName ++ "/" ++ String.left 50 threadMessage
 
 
-discordGuildChannelNames : SeqDict (Discord.Id Discord.ChannelId) { a | name : ChannelName } -> SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
-discordGuildChannelNames channels =
+{-| The names that #mentions of a guild's channels and threads are read with on the backend.
+-}
+guildChannelNames :
+    Time.Zone
+    -> SeqDict userId { a | name : PersonName }
+    ->
+        SeqDict
+            channelId
+            { b
+                | name : ChannelName
+                , messages : IdArray ChannelMessageId (Message ChannelMessageId userId channelId)
+                , threads : SeqDict (Id ChannelMessageId) c
+            }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
+guildChannelNames timezone users channels =
     SeqDict.foldl
-        (\channelId channel dict -> SeqDict.insert ( channelId, Nothing ) { name = ChannelName.toString channel.name } dict)
+        (\channelId channel dict ->
+            SeqDict.foldl
+                (\threadId _ dict2 ->
+                    SeqDict.insert
+                        ( channelId, Just threadId )
+                        { name =
+                            threadName
+                                channel.name
+                                (case IdArray.get threadId channel.messages of
+                                    Just message ->
+                                        messageToString timezone users SeqDict.empty SeqDict.empty message
+
+                                    Nothing ->
+                                        "<missing>"
+                                )
+                        }
+                        dict2
+                )
+                (SeqDict.insert ( channelId, Nothing ) { name = ChannelName.toString channel.name } dict)
+                channel.threads
+        )
         SeqDict.empty
         channels
 

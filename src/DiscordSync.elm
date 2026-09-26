@@ -1586,7 +1586,14 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                     DiscordUserData.username
                                                                     False
                                                                     model2.discordUsers
-                                                                    (LocalState.discordGuildChannelNames guild.channels)
+                                                                    (LocalState.guildChannelNames
+                                                                        timezone
+                                                                        (DiscordUserData.names
+                                                                            (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                                                            model2.discordUsers
+                                                                        )
+                                                                        guild.channels
+                                                                    )
                                                                     richText
                                                                     |> String.Nonempty.fromString
                                                                     |> Maybe.withDefault (NonemptyString ' ' "")

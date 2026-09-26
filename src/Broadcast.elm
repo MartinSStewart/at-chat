@@ -515,7 +515,7 @@ messageNotification usersMentioned time sender id threadRoute message members mo
         channels =
             case SeqDict.get id.guildId model.guilds of
                 Just guild ->
-                    LocalState.guildChannelNames guild.channels
+                    LocalState.guildChannelNames Time.utc (NonemptyDict.toSeqDict model.users) guild.channels
 
                 Nothing ->
                     SeqDict.empty
@@ -619,7 +619,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
         channels =
             case SeqDict.get guildId model.discordGuilds of
                 Just guild ->
-                    LocalState.discordGuildChannelNames guild.channels
+                    LocalState.guildChannelNames Time.utc (DiscordUserData.names members model.discordUsers) guild.channels
 
                 Nothing ->
                     SeqDict.empty

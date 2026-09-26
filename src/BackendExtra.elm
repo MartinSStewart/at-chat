@@ -1657,24 +1657,23 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
     case ( SeqDict.get id.channelId guild.channels, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of
         ( Just channel, Ok sendMessageRateLimits ) ->
             let
+                guildMembers : SeqDict (Id UserId) BackendUser
+                guildMembers =
+                    List.foldl
+                        (\memberId dict ->
+                            case NonemptyDict.get memberId model.users of
+                                Just member ->
+                                    SeqDict.insert memberId member dict
+
+                                Nothing ->
+                                    dict
+                        )
+                        SeqDict.empty
+                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+
                 richText : Nonempty (RichText (Id UserId) (Id ChannelId))
                 richText =
-                    RichText.fromNonemptyString
-                        timezone
-                        (List.foldl
-                            (\memberId dict ->
-                                case NonemptyDict.get memberId model.users of
-                                    Just member ->
-                                        SeqDict.insert memberId member dict
-
-                                    Nothing ->
-                                        dict
-                            )
-                            SeqDict.empty
-                            (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                        )
-                        (LocalState.guildChannelNames guild.channels)
-                        text
+                    RichText.fromNonemptyString timezone guildMembers (LocalState.guildChannelNames timezone guildMembers guild.channels) text
 
                 threadRouteNoReply : ThreadRoute
                 threadRouteNoReply =
