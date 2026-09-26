@@ -1187,12 +1187,22 @@ updateHelper msg model =
                             attachments2 =
                                 DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments
 
-                            ( messages2, linkedMessageIds ) =
+                            linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId)
+                            linkedMessageIds =
+                                DiscordSync.messageLinks (List.reverse reload.messages)
+
+                            -- Mentions of this channel's own threads have to be looked up in the
+                            -- messages being loaded rather than the ones they replace
+                            channels : SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
+                            channels =
+                                SeqDict.insert channelId { channel | linkedMessageIds = linkedMessageIds } guild.channels
+
+                            ( messages2, _ ) =
                                 DiscordSync.messagesAndLinks
                                     channel
                                     (List.reverse reload.messages)
                                     model.discordCustomEmojis
-                                    guild.channels
+                                    channels
                                     model.discordStickers
                                     attachments2
 
@@ -1225,7 +1235,7 @@ updateHelper msg model =
                                                             existingThread
                                                             (List.reverse thread.messages)
                                                             model.discordCustomEmojis
-                                                            guild.channels
+                                                            channels
                                                             model.discordStickers
                                                             attachments2
                                                 in

@@ -12,6 +12,7 @@ module DiscordSync exposing
     , handleEditMessage
     , handleForumPostRenamed
     , http
+    , messageLinks
     , messagesAndLinks
     , reloadChannelMaxMessages
     , sendMessage
@@ -765,49 +766,13 @@ messagesAndLinks :
         )
 messagesAndLinks existingChannelOrThread messages customEmojis channels discordStickers discordAttachments =
     let
-        -- The ids of the messages a thread can hang off of. A thread created message isn't one
-        -- of them, it stands in for a thread that has no message to hang off of.
-        threadStarterIds : SeqSet (Discord.Id Discord.MessageId)
-        threadStarterIds =
-            List.filterMap
-                (\message ->
-                    case message.type_ of
-                        Discord.ThreadCreated ->
-                            Nothing
-
-                        _ ->
-                            Just message.id
-                )
-                messages
-                |> SeqSet.fromList
-
-        messages2 : List Discord.Message
-        messages2 =
-            List.filter
-                (\message ->
-                    case message.type_ of
-                        Discord.ThreadStarterMessage ->
-                            -- Discord posts this as the first message of a thread that was started
-                            -- from a message. It never has any content, it only points back at the
-                            -- message the thread was started from, which is the message the thread
-                            -- hangs off of here, so there's nothing to show.
-                            False
-
-                        Discord.ThreadCreated ->
-                            -- If the thread this announces was started from a message we are also
-                            -- loading then the thread hangs off that message and this message would
-                            -- be a second copy of it.
-                            SeqSet.member (messageLinkId message) threadStarterIds |> not
-
-                        _ ->
-                            True
-                )
-                messages
+        linkable : List Discord.Message
+        linkable =
+            linkableMessages messages
 
         linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         linkedMessageIds =
-            List.indexedMap (\index message -> ( messageLinkId message, Id.fromInt index )) messages2
-                |> OneToOne.fromList
+            messageLinks messages
     in
     ( List.map
         (\message ->
@@ -864,10 +829,62 @@ messagesAndLinks existingChannelOrThread messages customEmojis channels discordS
                 (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
                 |> UserTextMessage
         )
-        messages2
+        linkable
         |> IdArray.fromList
     , linkedMessageIds
     )
+
+
+{-| The messages that end up in a channel or thread. Some of what Discord posts only points at a
+thread and has nothing to show.
+-}
+linkableMessages : List Discord.Message -> List Discord.Message
+linkableMessages messages =
+    let
+        -- The ids of the messages a thread can hang off of. A thread created message isn't one
+        -- of them, it stands in for a thread that has no message to hang off of.
+        threadStarterIds : SeqSet (Discord.Id Discord.MessageId)
+        threadStarterIds =
+            List.filterMap
+                (\message ->
+                    case message.type_ of
+                        Discord.ThreadCreated ->
+                            Nothing
+
+                        _ ->
+                            Just message.id
+                )
+                messages
+                |> SeqSet.fromList
+    in
+    List.filter
+        (\message ->
+            case message.type_ of
+                Discord.ThreadStarterMessage ->
+                    -- Discord posts this as the first message of a thread that was started
+                    -- from a message. It never has any content, it only points back at the
+                    -- message the thread was started from, which is the message the thread
+                    -- hangs off of here, so there's nothing to show.
+                    False
+
+                Discord.ThreadCreated ->
+                    -- If the thread this announces was started from a message we are also
+                    -- loading then the thread hangs off that message and this message would
+                    -- be a second copy of it.
+                    SeqSet.member (messageLinkId message) threadStarterIds |> not
+
+                _ ->
+                    True
+        )
+        messages
+
+
+{-| Which Discord message each message of a channel or thread is linked to.
+-}
+messageLinks : List Discord.Message -> OneToOne (Discord.Id Discord.MessageId) (Id messageId)
+messageLinks messages =
+    List.indexedMap (\index message -> ( messageLinkId message, Id.fromInt index )) (linkableMessages messages)
+        |> OneToOne.fromList
 
 
 {-| The Discord message id a message gets linked to. Threads hang off a message here, so a
