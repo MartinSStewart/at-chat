@@ -3055,7 +3055,12 @@ changeUpdate localMsg local =
                                                 threadRouteWithRepliedTo
                                                 createdAt
                                                 currentUserId
-                                                (textToDiscordRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) (LocalState.discordGuildChannelMentions currentUserId guildId guild) local)
+                                                (textToDiscordRichText
+                                                    text
+                                                    (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                                    (LocalState.discordGuildChannelMentions localUser currentUserId guildId guild)
+                                                    local
+                                                )
                                                 attachedFiles
                                                 local
                                         , localUser =
@@ -3255,7 +3260,7 @@ changeUpdate localMsg local =
                                                 (textToDiscordRichText
                                                     newContent
                                                     (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                                    (LocalState.discordGuildChannelMentions currentUserId guildId guild)
+                                                    (LocalState.discordGuildChannelMentions local.localUser currentUserId guildId guild)
                                                     local
                                                 )
                                                 DoNotChangeAttachments

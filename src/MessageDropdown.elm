@@ -181,18 +181,18 @@ userDropdownList isMobile nameSoFar guildOrDmId local =
         |> List.map Tuple.first
 
 
-channelDropdownList : Bool -> NameSoFarData -> AnyGuildOrDmId -> LocalState -> List { name : String, isThread : Bool }
+channelDropdownList : Bool -> NameSoFarData -> AnyGuildOrDmId -> LocalState -> List { name : String }
 channelDropdownList isMobile nameSoFar guildOrDmId local =
     (case guildOrDmId of
         GuildOrDmId guildOrDmId2 ->
             LocalState.channelMentions guildOrDmId2 local
                 |> SeqDict.toList
-                |> List.map (\( ( _, maybeThread ), mention ) -> { name = mention.name, isThread = maybeThread /= Nothing })
+                |> List.map (\( _, mention ) -> { name = mention.name })
 
         DiscordGuildOrDmId guildOrDmId2 ->
             LocalState.discordChannelMentions guildOrDmId2 local
                 |> SeqDict.toList
-                |> List.map (\( ( _, maybeThread ), mention ) -> { name = mention.name, isThread = maybeThread /= Nothing })
+                |> List.map (\( _, mention ) -> { name = mention.name })
     )
         |> List.filterMap
             (\mention ->
@@ -648,24 +648,20 @@ view isMobile time nameSoFar guildOrDmId skinTone emojiData local dropdownButton
                 rows : List (Element Msg)
                 rows =
                     List.indexedMap
-                        (\index { name, isThread } ->
+                        (\index { name } ->
                             dropdownButton
                                 isMobile
                                 False
                                 dropdown
                                 dropdownButtonId
                                 index
-                                (if isThread then
-                                    Ui.row
-                                        [ Ui.height Ui.fill ]
-                                        [ Ui.el
-                                            [ Ui.width Ui.shrink, Ui.height Ui.fill, Ui.clip, Ui.Font.color MyUi.font3 ]
-                                            (Ui.html Icons.threadSingleSegment)
-                                        , Ui.text name
-                                        ]
-
-                                 else
-                                    Ui.text ("#" ++ name)
+                                (Ui.row
+                                    [ Ui.height Ui.fill, Ui.clipWithEllipsis ]
+                                    [ Ui.el
+                                        [ Ui.width Ui.shrink, Ui.centerY, Ui.Font.color MyUi.font3 ]
+                                        (Ui.html Icons.hashtag)
+                                    , Ui.text name
+                                    ]
                                 )
                         )
                         (channelDropdownList isMobile nameSoFarData guildOrDmId local)

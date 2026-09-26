@@ -2756,7 +2756,15 @@ parseLoop timezone source index users channels modifiers accText revNodes =
                 in
                 case tryMatchChannel channels (String.slice afterHash (String.length source) source) of
                     Just ( ( channel, maybeThread ), matchLen ) ->
-                        parseLoop timezone source (afterHash + matchLen) users channels modifiers "" (ChannelMention channel maybeThread :: flushText accText revNodes)
+                        parseLoop
+                            timezone
+                            source
+                            (afterHash + matchLen)
+                            users
+                            channels
+                            modifiers
+                            ""
+                            (ChannelMention channel maybeThread :: flushText accText revNodes)
 
                     Nothing ->
                         parseLoop timezone source afterHash users channels modifiers (accText ++ "#") revNodes

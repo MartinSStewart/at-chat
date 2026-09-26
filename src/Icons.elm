@@ -647,14 +647,14 @@ threadBottomSegment =
         ]
 
 
-threadSingleSegment : Svg msg
-threadSingleSegment =
+threadSingleSegment : Int -> Svg msg
+threadSingleSegment width =
     Svg.svg
         [ Svg.Attributes.fill "none"
         , Svg.Attributes.viewBox "0 0 20 38"
         , Svg.Attributes.strokeWidth "1.5"
         , Svg.Attributes.stroke "currentColor"
-        , Svg.Attributes.width "20"
+        , Svg.Attributes.width (String.fromInt width)
         ]
         [ Svg.g []
             [ Svg.line

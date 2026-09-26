@@ -908,7 +908,6 @@ exports.init = async function init(app)
         var textarea = document.getElementById(data.htmlId);
         textarea.focus();
         data.commands.forEach((item) => {
-            console.log(item.args[0]);
             switch (item.tag) {
                 case 'undo': {
                     document.execCommand(item.tag, false, null);
@@ -924,7 +923,6 @@ exports.init = async function init(app)
                     break;
                 }
             }
-
         });
     });
 

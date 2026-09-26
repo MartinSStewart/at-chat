@@ -1033,7 +1033,19 @@ unreadOverviewChannels local allDiscordUsers =
                                                                     threadSource
                                                                         guild.name
                                                                         channel.name
-                                                                        (threadPreviewText local.localUser.timezone allDiscordUsers (LocalState.discordGuildChannelMentions currentDiscordUserId guildId guild) threadId SeqDict.empty channel)
+                                                                        (threadPreviewText
+                                                                            local.localUser.timezone
+                                                                            allDiscordUsers
+                                                                            (LocalState.discordGuildChannelMentions
+                                                                                local.localUser
+                                                                                currentDiscordUserId
+                                                                                guildId
+                                                                                guild
+                                                                            )
+                                                                            threadId
+                                                                            SeqDict.empty
+                                                                            channel
+                                                                        )
                                                                 , route =
                                                                     DiscordGuildRoute
                                                                         { currentDiscordUserId = currentDiscordUserId
@@ -10050,7 +10062,7 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
     let
         channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
-            LocalState.discordGuildChannelMentions routeData.currentDiscordUserId routeData.guildId guild
+            LocalState.discordGuildChannelMentions localUser routeData.currentDiscordUserId routeData.guildId guild
 
         guildName : String
         guildName =
@@ -10391,7 +10403,7 @@ channelColumnThreadsHelper isMobile isSelected isMuted hasNotifications index vi
             ]
             (Ui.html
                 (if visibleThreadCount == 1 then
-                    Icons.threadSingleSegment
+                    Icons.threadSingleSegment 20
 
                  else if visibleThreadCount - 1 == index then
                     Icons.threadBottomSegment

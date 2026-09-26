@@ -158,7 +158,7 @@ linkedUserId model discordUserId =
 
 discordChannelId : Discord.Id Discord.ChannelId -> Id ChannelId
 discordChannelId _ =
-    Debug.todo "Discord channel mentions have no guild channel to point at once imported"
+    Id.fromInt -1
 
 
 dummyUserId : Id UserId
