@@ -76,7 +76,6 @@ import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (ChannelMessageId, CustomEmojiId, Id, StickerId)
-import IdArray exposing (IdArray)
 import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
