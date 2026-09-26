@@ -76,6 +76,7 @@ import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (ChannelMessageId, CustomEmojiId, Id, StickerId)
+import IdArray exposing (IdArray)
 import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -6756,13 +6757,17 @@ discordParseLoop customEmojis2 source index modifiers accText revNodes =
 
 toDiscord :
     OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
+    ->
+        SeqDict
+            (Discord.Id Discord.ChannelId)
+            { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId) }
     -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     -> Result Int String
-toDiscord customEmojis2 content =
+toDiscord customEmojis2 channels content =
     let
         text : String
         text =
-            toDiscordHelper customEmojis2 (List.Nonempty.toList content)
+            toDiscordHelper customEmojis2 channels (List.Nonempty.toList content)
     in
     if String.length text > maxLength then
         Err (maxLength - String.length text)
@@ -6778,7 +6783,7 @@ discordCharsLeft :
 discordCharsLeft customEmojis2 richText =
     case richText of
         Just richText2 ->
-            case toDiscord customEmojis2 richText2 of
+            case toDiscord customEmojis2 SeqDict.empty richText2 of
                 Ok text ->
                     maxLength - String.length text
 
@@ -6795,9 +6800,13 @@ type alias DiscordCustomEmojiIdAndName =
 
 toDiscordHelper :
     OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
+    ->
+        SeqDict
+            (Discord.Id Discord.ChannelId)
+            { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId) }
     -> List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     -> String
-toDiscordHelper customEmojis2 content =
+toDiscordHelper customEmojis2 channels content =
     List.map
         (\item ->
             case item of
@@ -6806,8 +6815,29 @@ toDiscordHelper customEmojis2 content =
 
                 ChannelMention channelId maybeThread ->
                     case maybeThread of
-                        Just thread ->
-                            Debug.todo ""
+                        Just threadId ->
+                            let
+                                messageId : Maybe (Discord.Id Discord.MessageId)
+                                messageId =
+                                    SeqDict.foldl
+                                        (\_ channel data ->
+                                            case data of
+                                                Nothing ->
+                                                    OneToOne.first threadId channel.linkedMessageIds
+
+                                                Just _ ->
+                                                    data
+                                        )
+                                        Nothing
+                                        channels
+                            in
+                            case messageId of
+                                Just messageId2 ->
+                                    "<#" ++ Discord.idToString messageId2 ++ ">"
+
+                                Nothing ->
+                                    -- A placeholder so the char count is reasonably accurate
+                                    "<#0000000000000000000>"
 
                         Nothing ->
                             "<#" ++ Discord.idToString channelId ++ ">"
@@ -6816,13 +6846,13 @@ toDiscordHelper customEmojis2 content =
                     escapeDiscordText (String.cons char string)
 
                 Bold nonempty ->
-                    "**" ++ toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty) ++ "**"
+                    "**" ++ toDiscordHelper customEmojis2 channels (List.Nonempty.toList nonempty) ++ "**"
 
                 Italic nonempty ->
                     let
                         inner : String
                         inner =
-                            toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty)
+                            toDiscordHelper customEmojis2 channels (List.Nonempty.toList nonempty)
                     in
                     if String.startsWith "*" inner || String.endsWith "*" inner then
                         -- Italic written with asterisks around bold runs the two markers
@@ -6835,13 +6865,13 @@ toDiscordHelper customEmojis2 content =
                         "*" ++ inner ++ "*"
 
                 Underline nonempty ->
-                    "__" ++ toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty) ++ "__"
+                    "__" ++ toDiscordHelper customEmojis2 channels (List.Nonempty.toList nonempty) ++ "__"
 
                 Strikethrough nonempty ->
-                    "~~" ++ toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty) ++ "~~"
+                    "~~" ++ toDiscordHelper customEmojis2 channels (List.Nonempty.toList nonempty) ++ "~~"
 
                 Spoiler nonempty ->
-                    "||" ++ toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty) ++ "||"
+                    "||" ++ toDiscordHelper customEmojis2 channels (List.Nonempty.toList nonempty) ++ "||"
 
                 BlockQuote hasLeadingLineBreak list ->
                     (case hasLeadingLineBreak of
@@ -6852,7 +6882,7 @@ toDiscordHelper customEmojis2 content =
                             ""
                     )
                         ++ "> "
-                        ++ String.replace "\n" "\n> " (toDiscordHelper customEmojis2 list)
+                        ++ String.replace "\n" "\n> " (toDiscordHelper customEmojis2 channels list)
 
                 Heading level hasLeadingLineBreak nonempty ->
                     let
@@ -6867,7 +6897,7 @@ toDiscordHelper customEmojis2 content =
                             )
                                 ++ headingLevelToMarker level
                     in
-                    prefix ++ toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty)
+                    prefix ++ toDiscordHelper customEmojis2 channels (List.Nonempty.toList nonempty)
 
                 Hyperlink data ->
                     Url.toString data
@@ -6920,7 +6950,7 @@ toDiscordHelper customEmojis2 content =
                             ""
                     )
                         ++ (List.Nonempty.toList items
-                                |> List.map (\bulletItem -> "* " ++ toDiscordHelper customEmojis2 bulletItem)
+                                |> List.map (\bulletItem -> "* " ++ toDiscordHelper customEmojis2 channels bulletItem)
                                 |> String.join "\n"
                            )
 

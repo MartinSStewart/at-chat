@@ -3133,7 +3133,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         (LocalState.discordGuildChannelNames guild.channels)
                                                         model
                                             in
-                                            case ( RichText.toDiscord model.discordCustomEmojis richText, threadRouteWithMaybeReplyTo ) of
+                                            case
+                                                ( RichText.toDiscord model.discordCustomEmojis guild.channels richText
+                                                , threadRouteWithMaybeReplyTo
+                                                )
+                                            of
                                                 ( Ok discordText, NoThreadWithMaybeMessage maybeReplyTo ) ->
                                                     ( { model
                                                         | pendingDiscordCreateMessages =
@@ -3276,7 +3280,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         model
                                             in
                                             case
-                                                ( RichText.toDiscord model.discordCustomEmojis richText
+                                                ( RichText.toDiscord model.discordCustomEmojis SeqDict.empty richText
                                                   -- Sending messages in a DM channel the linked account has barely
                                                   -- used is likely to trigger Discord's spam bot heuristics
                                                 , LocalState.sentEnoughDiscordDmMessages data.currentUserId dmChannel
@@ -4240,7 +4244,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         model
                             in
                             case
-                                ( RichText.toDiscord model.discordCustomEmojis richText
+                                ( RichText.toDiscord model.discordCustomEmojis guild.channels richText
                                 , LocalState.editMessageHelper
                                     time
                                     currentUserId
@@ -4327,7 +4331,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         model
                             in
                             case
-                                ( RichText.toDiscord model.discordCustomEmojis richText
+                                ( RichText.toDiscord model.discordCustomEmojis SeqDict.empty richText
                                 , LocalState.editMessageHelperNoThread
                                     time
                                     dmData.currentUserId
