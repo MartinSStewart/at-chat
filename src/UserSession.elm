@@ -80,6 +80,7 @@ type UserOptionSection
     | UserOption_Discord
     | UserOption_ConnectedDevices
     | UserOption_Debug
+    | UserOption_Privacy
 
 
 type alias FrontendUserSession =

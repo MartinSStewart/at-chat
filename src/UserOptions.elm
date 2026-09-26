@@ -794,32 +794,27 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                )
                         )
                         |> Ui.el [ Ui.paddingXY 16 0 ]
+                    , Ui.row
+                        [ Ui.width Ui.shrink
+                        , Ui.spacing 8
+                        , Ui.paddingXY 16 0
+                        , Ui.linkNewTab Pages.Privacy.repoUrl
+                        , Ui.Font.color MyUi.textLinkColorOnDarkBackground
+                        ]
+                        [ Ui.html (Icons.github 20), Ui.text "Source code" ]
                     ]
-                , privacyAndSourceLinks
+                , MyUi.container
+                    16
+                    (SeqSet.member UserOption_Privacy local.localUser.session.expandedUserOptions)
+                    (Dom.id "userOptions_privacy")
+                    (PressedExpandContainer UserOption_Privacy)
+                    MyUi.background1
+                    isMobile
+                    "Privacy"
+                    [ Pages.Privacy.view FrontendNoOp |> Ui.el [ Ui.paddingXY 16 0 ] ]
                 ]
             )
         )
-
-
-privacyAndSourceLinks : Element FrontendMsg_
-privacyAndSourceLinks =
-    Ui.row
-        [ Ui.spacing 16, Ui.paddingXY 16 0, Ui.Font.size 14 ]
-        [ Ui.el
-            [ Ui.width Ui.shrink
-            , Ui.Font.color MyUi.textLinkColorOnDarkBackground
-            , Ui.link (Route.encode Route.PrivacyRoute)
-            ]
-            (Ui.text "Privacy")
-        , Ui.el
-            [ Ui.width Ui.shrink
-            , Ui.linkNewTab Pages.Privacy.repoUrl
-            , MyUi.hoverText "Source code on GitHub"
-            , Ui.opacity 0.7
-            , MyUi.hover False [ Ui.Anim.opacity 1 ]
-            ]
-            (Ui.html (Icons.github 20))
-        ]
 
 
 discordAcknowledgement : Bool -> Element FrontendMsg_

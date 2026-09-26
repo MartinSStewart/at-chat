@@ -84,4 +84,3 @@ Sensitive data is not accessible to any 3rd parties with 3 exceptions:
             Array.empty
         |> Html.div [ Html.Attributes.style "white-space" "pre-wrap" ]
         |> Ui.html
-        |> Ui.el [ Ui.centerX, Ui.widthMax 1000, Ui.paddingXY 16 32 ]

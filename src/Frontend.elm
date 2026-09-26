@@ -9122,7 +9122,7 @@ privacyPage isMobile loaded =
         ]
         (Ui.el
             [ MyUi.notoSans, Ui.paddingWith { left = 0, right = 0, top = 64, bottom = 32 } ]
-            (Pages.Privacy.view FrontendNoOp)
+            (Pages.Privacy.view FrontendNoOp |> Ui.el [ Ui.centerX, Ui.widthMax 1000, Ui.paddingXY 16 32 ])
         )
 
 
