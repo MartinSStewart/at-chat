@@ -2679,6 +2679,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             let
                                 currentlyViewing =
                                     BackendExtra.requestedForToGuildOrDmId session.userId requestMessagesFor
+
+                                session2 : UserSession
+                                session2 =
+                                    UserSession.setLastViewedGuild currentlyViewing session
                             in
                             ( { model
                                 | connections =
@@ -2689,8 +2693,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (\connection -> { connection | currentlyViewing = currentlyViewing })
                                         )
                                         model.connections
+                                , sessions = SeqDict.insert sessionId session2 model.sessions
                               }
-                            , BackendExtra.getLoginData sessionId clientId currentlyViewing session user requestMessagesFor model
+                            , BackendExtra.getLoginData sessionId clientId currentlyViewing session2 user requestMessagesFor model
                                 |> Ok
                                 |> CheckLoginResponse (loginType model)
                                 |> Lamdera.sendToFrontend clientId
@@ -2738,6 +2743,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             session : UserSession
                             session =
                                 UserSession.init time sessionId Broadcast.adminUserId userAgent
+                                    |> UserSession.setLastViewedGuild currentlyViewing
                         in
                         ( { model
                             | sessions = SeqDict.insert sessionId session model.sessions
@@ -2869,6 +2875,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         session : UserSession
                                         session =
                                             UserSession.init time sessionId pendingLogin.userId userAgent
+                                                |> UserSession.setLastViewedGuild currentlyViewing
                                     in
                                     ( { model
                                         | sessions = SeqDict.insert sessionId session model.sessions
@@ -4798,6 +4805,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     (\connection2 -> { connection2 | currentlyViewing = currentlyViewing })
                                 )
                                 model.connections
+
+                        sessions : SeqDict SessionId UserSession
+                        sessions =
+                            SeqDict.updateIfExists sessionId (UserSession.setLastViewedGuild currentlyViewing) model.sessions
                     in
                     case viewing of
                         ViewDm data _ ->
@@ -4950,6 +4961,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         )
                                                         model.users
                                                 , connections = connections
+                                                , sessions = sessions
                                               }
                                             , Command.batch
                                                 [ ViewChannel
@@ -5004,6 +5016,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         )
                                                         model.users
                                                 , connections = connections
+                                                , sessions = sessions
                                               }
                                             , Command.batch
                                                 [ ViewChannelThread
@@ -5067,6 +5080,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 )
                                                 model.users
                                         , connections = connections
+                                        , sessions = sessions
                                       }
                                     , Command.batch
                                         [ ViewDiscordChannel
@@ -5113,6 +5127,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 )
                                                 model.users
                                         , connections = connections
+                                        , sessions = sessions
                                       }
                                     , Command.batch
                                         [ ViewDiscordChannelThread

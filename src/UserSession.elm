@@ -2,6 +2,7 @@ module UserSession exposing
     ( ChannelHeaderTab(..)
     , DiscordFrontendUser
     , FrontendUserSession
+    , LastViewedGuild(..)
     , NotificationMode(..)
     , PreviouslyLastViewedMessage(..)
     , PushSubscription(..)
@@ -24,6 +25,7 @@ module UserSession exposing
     , init
     , isViewing
     , isViewingGame
+    , setLastViewedGuild
     , setPreviouslyLastViewedChannelMessage
     , setPreviouslyLastViewedThreadMessage
     , setSheepGameQuestions
@@ -57,7 +59,13 @@ type alias UserSession =
     , lastClientDisconnect : Maybe Time.Posix
     , expandedUserOptions : SeqSet UserOptionSection
     , savedSheepGameQuestions : IdArray QuestionId SheepGameQuestion
+    , lastViewedGuild : Maybe LastViewedGuild
     }
+
+
+type LastViewedGuild
+    = LastViewedGuild (Id GuildId)
+    | LastViewedDiscordGuild (Discord.Id Discord.GuildId)
 
 
 type alias SheepGameQuestion =
@@ -390,6 +398,7 @@ init time sessionId userId userAgent =
     , lastClientDisconnect = Nothing
     , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
     , savedSheepGameQuestions = IdArray.empty
+    , lastViewedGuild = Nothing
     }
 
 
@@ -401,6 +410,37 @@ expandUserOptionSection section session =
 collapseUserOptionSection : UserOptionSection -> UserSession -> UserSession
 collapseUserOptionSection section session =
     { session | expandedUserOptions = SeqSet.remove section session.expandedUserOptions }
+
+
+setLastViewedGuild : Viewing -> UserSession -> UserSession
+setLastViewedGuild viewing session =
+    case viewing of
+        Viewing_Channel data ->
+            { session | lastViewedGuild = Just (LastViewedGuild data.id.guildId) }
+
+        Viewing_ChannelThread data ->
+            { session | lastViewedGuild = Just (LastViewedGuild data.id.guildId) }
+
+        Viewing_DiscordChannel data ->
+            { session | lastViewedGuild = Just (LastViewedDiscordGuild data.id.guildId) }
+
+        Viewing_DiscordChannelThread data ->
+            { session | lastViewedGuild = Just (LastViewedDiscordGuild data.id.guildId) }
+
+        Viewing_Dm _ ->
+            session
+
+        Viewing_DmThread _ ->
+            session
+
+        Viewing_DiscordDm _ ->
+            session
+
+        Viewing_None ->
+            session
+
+        Viewing_Overview ->
+            session
 
 
 setSheepGameQuestions : IdArray QuestionId SheepGameQuestion -> UserSession -> UserSession

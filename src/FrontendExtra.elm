@@ -3332,6 +3332,15 @@ changeUpdate localMsg local =
                     let
                         localUser : LocalUser
                         localUser =
+                            { previousLocalUser
+                                | session =
+                                    UserSession.setLastViewedGuild
+                                        (SetViewing.setViewingToCurrentlyViewing viewing)
+                                        previousLocalUser.session
+                            }
+
+                        previousLocalUser : LocalUser
+                        previousLocalUser =
                             local.localUser
                     in
                     case viewing of

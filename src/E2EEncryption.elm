@@ -445,6 +445,7 @@ tests config =
                                                     )
                                                 ]
                                             )
+                                        , adminB.click 100 (Dom.id "guildIcon_showFriends")
                                         , respondToManyMessagesDecrypted adminB
                                         , adminB.click 100 (Dom.id "guild_friendLabel_0")
                                         , adminB.checkView
@@ -617,6 +618,7 @@ tests config =
                                             )
                                         ]
                                     )
+                                , adminB.click 100 (Dom.id "guildIcon_showFriends")
                                 , writeEncryptedMessage admin 100 "Note to self"
                                 , T.checkBackend 100 (checkSoloDmHasNoPlainText "Note to self")
                                 , T.checkBackend 100 (checkSoloDmMessageStored "Note to self")
@@ -810,6 +812,7 @@ tests config =
                                             )
                                         ]
                                     )
+                                , adminB.click 100 (Dom.id "guildIcon_showFriends")
                                 , adminB.checkView
                                     100
                                     (Test.Html.Query.hasNot [ Test.Html.Selector.text backlogMessage ])
@@ -878,6 +881,7 @@ tests config =
                                             )
                                         ]
                                     )
+                                , adminB.click 100 (Dom.id "guildIcon_showFriends")
                                 , adminB.click 100 (Dom.id "guild_friendLabel_0")
 
                                 -- Opening the conversation asks for its messages to be
@@ -961,6 +965,7 @@ tests config =
                                             )
                                         ]
                                     )
+                                , adminB.click 100 (Dom.id "guildIcon_showFriends")
                                 , adminB.click 100 (Dom.id "guild_friendLabel_0")
                                 , respondToManyMessagesDecrypted adminB
                                 , adminB.checkView
@@ -1052,6 +1057,7 @@ tests config =
                                             )
                                         ]
                                     )
+                                , adminB.click 100 (Dom.id "guildIcon_showFriends")
                                 , respondToManyMessagesDecrypted adminB
                                 , admin.checkView
                                     100

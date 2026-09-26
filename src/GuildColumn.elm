@@ -4,8 +4,10 @@ module GuildColumn exposing
     , discordDmCurrentUserId
     , discordDmHasNotifications
     , discordGuildCurrentUserId
+    , discordGuildRoute
     , elLinkButton
     , guildColumnLazy
+    , guildRoute
     , newMessageCount
     , rowLinkButton
     , unreadNotificationCount
@@ -195,32 +197,7 @@ discordGuildIcon localUser route guildId guild =
         Just discordUserId ->
             elLinkButton
                 (Dom.id ("guild_openDiscordGuild_" ++ Discord.idToString guildId))
-                ({ currentDiscordUserId = discordUserId
-                 , guildId = guildId
-                 , channelRoute =
-                    case SeqDict.get guildId localUser.user.lastDiscordChannelViewed of
-                        Just ( channelId, threadRoute ) ->
-                            DiscordChannel_ChannelRoute
-                                channelId
-                                (case threadRoute of
-                                    ViewThread threadId ->
-                                        ViewThreadWithFriends threadId Nothing HideChannelSettings
-
-                                    NoThread ->
-                                        NoThreadWithFriends Nothing HideChannelSettings
-                                )
-                                Nothing
-
-                        Nothing ->
-                            DiscordChannel_ChannelRoute
-                                (LocalState.discordAnnouncementChannel guild)
-                                (NoThreadWithFriends Nothing HideChannelSettings)
-                                Nothing
-                 , channelsVisible = ChannelsVisibleOnMobile
-                 , overlay = Nothing
-                 }
-                    |> DiscordGuildRoute
-                )
+                (discordGuildRoute localUser discordUserId guildId guild)
                 []
                 (GuildIcon.discordView
                     (case route of
@@ -246,30 +223,7 @@ guildIcon : LocalUser -> Route -> Id GuildId -> FrontendGuild -> Element Fronten
 guildIcon localUser route guildId guild =
     elLinkButton
         (Dom.id ("guild_openGuild_" ++ Id.toString guildId))
-        (GuildRoute
-            guildId
-            (case SeqDict.get guildId localUser.user.lastChannelViewed of
-                Just ( channelId, threadRoute ) ->
-                    ChannelRoute
-                        channelId
-                        (case threadRoute of
-                            ViewThread threadId ->
-                                ViewThreadWithFriends threadId Nothing HideChannelSettings
-
-                            NoThread ->
-                                NoThreadWithFriends Nothing HideChannelSettings
-                        )
-                        Nothing
-
-                Nothing ->
-                    ChannelRoute
-                        (LocalState.announcementChannel guild)
-                        (NoThreadWithFriends Nothing HideChannelSettings)
-                        Nothing
-            )
-            ChannelsVisibleOnMobile
-            Nothing
-        )
+        (guildRoute localUser guildId guild)
         []
         (GuildIcon.view
             (case route of
@@ -286,6 +240,62 @@ guildIcon localUser route guildId guild =
             )
             guild
         )
+
+
+guildRoute : LocalUser -> Id GuildId -> FrontendGuild -> Route
+guildRoute localUser guildId guild =
+    GuildRoute
+        guildId
+        (case SeqDict.get guildId localUser.user.lastChannelViewed of
+            Just ( channelId, threadRoute ) ->
+                ChannelRoute
+                    channelId
+                    (case threadRoute of
+                        ViewThread threadId ->
+                            ViewThreadWithFriends threadId Nothing HideChannelSettings
+
+                        NoThread ->
+                            NoThreadWithFriends Nothing HideChannelSettings
+                    )
+                    Nothing
+
+            Nothing ->
+                ChannelRoute
+                    (LocalState.announcementChannel guild)
+                    (NoThreadWithFriends Nothing HideChannelSettings)
+                    Nothing
+        )
+        ChannelsVisibleOnMobile
+        Nothing
+
+
+discordGuildRoute : LocalUser -> Discord.Id Discord.UserId -> Discord.Id Discord.GuildId -> DiscordFrontendGuild -> Route
+discordGuildRoute localUser discordUserId guildId guild =
+    { currentDiscordUserId = discordUserId
+    , guildId = guildId
+    , channelRoute =
+        case SeqDict.get guildId localUser.user.lastDiscordChannelViewed of
+            Just ( channelId, threadRoute ) ->
+                DiscordChannel_ChannelRoute
+                    channelId
+                    (case threadRoute of
+                        ViewThread threadId ->
+                            ViewThreadWithFriends threadId Nothing HideChannelSettings
+
+                        NoThread ->
+                            NoThreadWithFriends Nothing HideChannelSettings
+                    )
+                    Nothing
+
+            Nothing ->
+                DiscordChannel_ChannelRoute
+                    (LocalState.discordAnnouncementChannel guild)
+                    (NoThreadWithFriends Nothing HideChannelSettings)
+                    Nothing
+    , channelsVisible = ChannelsVisibleOnMobile
+    , overlay = Nothing
+    }
+        |> DiscordGuildRoute
 
 
 dmGuildIcon : Route -> LocalUser -> Id UserId -> FrontendDmChannel -> Element FrontendMsg_

@@ -722,6 +722,7 @@ previewLoginData time userAgent =
         , lastClientDisconnect = Nothing
         , expandedUserOptions = SeqSet.empty
         , savedSheepGameQuestions = IdArray.empty
+        , lastViewedGuild = Nothing
         }
     , currentlyViewing = Viewing_None
     , adminData = IsNotAdminLoginData

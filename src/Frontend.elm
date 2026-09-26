@@ -104,7 +104,7 @@ import User exposing (FrontendUser)
 import UserAgent
 import UserColor
 import UserOptions
-import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), ToBeFilledInByBackend(..))
+import UserSession exposing (ChannelHeaderTab(..), LastViewedGuild(..), NotificationMode(..), ToBeFilledInByBackend(..))
 import Vector2d
 import WordSpellingGame
 import X25519
@@ -498,11 +498,20 @@ initLoadedFrontend loading clientId time startupData loginResult =
         ( aiChatModel, aiChatCmd ) =
             AiChat.init
 
+        route : Route
+        route =
+            case loginStatus of
+                LoggedIn loggedIn ->
+                    startupRoute loading loggedIn
+
+                NotLoggedIn _ ->
+                    loading.route
+
         model : LoadedFrontend
         model =
             { navigationKey = loading.navigationKey
             , clientId = clientId
-            , route = loading.route
+            , route = route
             , time = time
             , timezone = startupData.timezone
             , windowSize = loading.windowSize
@@ -532,6 +541,11 @@ initLoadedFrontend loading clientId time startupData loginResult =
     , Command.batch
         [ cmdB
         , cmdA
+        , if route == loading.route then
+            Command.none
+
+          else
+            FrontendExtra.routeReplace model2 route
         , Command.map AiChatToBackend AiChatMsg aiChatCmd
         , checkAppVersion
         , case loginResult of
@@ -544,6 +558,49 @@ initLoadedFrontend loading clientId time startupData loginResult =
         ]
     , Audio.cmdNone
     )
+
+
+startupRoute : LoadingFrontend -> LoggedIn2 -> Route
+startupRoute loading loggedIn =
+    case loading.route of
+        HomePageRoute overlay ->
+            if MyUi.isMobile loading then
+                loading.route
+
+            else
+                let
+                    local : LocalState
+                    local =
+                        Local.model loggedIn.localState
+                in
+                case local.localUser.session.lastViewedGuild of
+                    Just (LastViewedGuild guildId) ->
+                        case SeqDict.get guildId local.guilds of
+                            Just guild ->
+                                GuildColumn.guildRoute local.localUser guildId guild |> Route.setOverlay overlay
+
+                            Nothing ->
+                                loading.route
+
+                    Just (LastViewedDiscordGuild guildId) ->
+                        case SeqDict.get guildId local.discordGuilds of
+                            Just guild ->
+                                case GuildColumn.discordGuildCurrentUserId local.localUser guild of
+                                    Just discordUserId ->
+                                        GuildColumn.discordGuildRoute local.localUser discordUserId guildId guild
+                                            |> Route.setOverlay overlay
+
+                                    Nothing ->
+                                        loading.route
+
+                            Nothing ->
+                                loading.route
+
+                    Nothing ->
+                        loading.route
+
+        _ ->
+            loading.route
 
 
 tryInitLoadedFrontend : LoadingFrontend -> ( FrontendModel_, Command FrontendOnly ToBackend FrontendMsg_, AudioCmd FrontendMsg_ )

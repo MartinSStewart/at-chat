@@ -770,6 +770,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                 session : UserSession
                                 session =
                                     UserSession.init time sessionId pendingLogin.userId userAgent
+                                        |> UserSession.setLastViewedGuild currentlyViewing
                             in
                             ( { model
                                 | sessions = SeqDict.insert sessionId session model.sessions

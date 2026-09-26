@@ -19,6 +19,7 @@ module E2EMisc exposing
     , markMessageAsUnreadTest
     , mentionSuggestionTest
     , noTimestampSuggestionTest
+    , openLastViewedGuildOnStartupTest
     , profileImageOpensDm
     , reactionPopupNamesEmojiTest
     , reloadingAConversationLeavesItUnreadTest
@@ -1241,6 +1242,99 @@ inactiveThreadsAreHiddenTest config =
         ]
 
 
+openLastViewedGuildOnStartupTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+openLastViewedGuildOnStartupTest config =
+    let
+        loadStartupData : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+        loadStartupData client =
+            T.andThen
+                10
+                (\data -> [ client.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+    in
+    T.start
+        "Opening the homepage on desktop goes to the session's last viewed guild"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.checkModel 100 checkHomePageRoute
+                , admin.click 100 (Dom.id "guild_openGuild_0")
+                ]
+            )
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ loadStartupData admin
+                , admin.checkModel 100 checkGuild0Route
+                ]
+            )
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.iphone14Window
+            (\admin ->
+                [ loadStartupData admin
+                , admin.checkModel 100 checkHomePageRoute
+                ]
+            )
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId1
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.checkModel 100 checkHomePageRoute
+                ]
+            )
+        ]
+
+
+checkHomePageRoute : FrontendModel -> Result String ()
+checkHomePageRoute model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.route of
+                Route.HomePageRoute _ ->
+                    Ok ()
+
+                _ ->
+                    Err "Expected to stay on the homepage"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
+
+
+checkGuild0Route : FrontendModel -> Result String ()
+checkGuild0Route model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.route of
+                Route.GuildRoute guildId _ _ _ ->
+                    if guildId == Id.fromInt 0 then
+                        Ok ()
+
+                    else
+                        Err "Opened the wrong guild"
+
+                _ ->
+                    Err "Expected to be sent to the last viewed guild"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
+
+
 {-| DM threads carry their own route, are listed underneath the DM in the friends
 column and notify with the red count that every unread DM message gets.
 -}
@@ -1409,6 +1503,7 @@ inactiveDmThreadsAreHiddenTest config =
                             (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
                         ]
                     )
+                , admin.click 100 (Dom.id "guildIcon_showFriends")
 
                 -- A week without a message and nothing unread in it, so the thread is gone
                 -- from the column
