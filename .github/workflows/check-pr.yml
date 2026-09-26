@@ -126,14 +126,6 @@ jobs:
 
       - name: Tests (end-to-end)
         run: yarn end-to-end-tests
-
-      - name: Report compile time
-        uses: thollander/actions-comment-pull-request@v2
-        with:
-          comment_tag: execution
-          mode: recreate
-          message: |
-            The compile time was ${{ steps.build.outputs.time }}
   Rust:
     name: Check rust-server compiles and its tests pass
     runs-on: ubuntu-latest
