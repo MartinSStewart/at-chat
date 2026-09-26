@@ -1070,41 +1070,56 @@ mapUserIdHelper mapUserIdFunc richText =
 
 mapChannelId : (channelIdA -> channelIdB) -> Nonempty (RichText userId channelIdA) -> Nonempty (RichText userId channelIdB)
 mapChannelId mapChannelIdFunc richText =
-    List.Nonempty.map (mapChannelIdHelper mapChannelIdFunc) richText
+    mapChannelMention (\channel thread -> ( mapChannelIdFunc channel, thread )) richText
 
 
-mapChannelIdHelper : (channelIdA -> channelIdB) -> RichText userId channelIdA -> RichText userId channelIdB
-mapChannelIdHelper mapChannelIdFunc richText =
+mapChannelMention :
+    (channelIdA -> Maybe (Id ChannelMessageId) -> ( channelIdB, Maybe (Id ChannelMessageId) ))
+    -> Nonempty (RichText userId channelIdA)
+    -> Nonempty (RichText userId channelIdB)
+mapChannelMention mapFunc richText =
+    List.Nonempty.map (mapChannelMentionHelper mapFunc) richText
+
+
+mapChannelMentionHelper :
+    (channelIdA -> Maybe (Id ChannelMessageId) -> ( channelIdB, Maybe (Id ChannelMessageId) ))
+    -> RichText userId channelIdA
+    -> RichText userId channelIdB
+mapChannelMentionHelper mapFunc richText =
     case richText of
         UserMention userId ->
             UserMention userId
 
         ChannelMention channel thread ->
-            ChannelMention (mapChannelIdFunc channel) thread
+            let
+                ( channel2, thread2 ) =
+                    mapFunc channel thread
+            in
+            ChannelMention channel2 thread2
 
         NormalText char text ->
             NormalText char text
 
         Bold content ->
-            Bold (mapChannelId mapChannelIdFunc content)
+            Bold (mapChannelMention mapFunc content)
 
         Italic content ->
-            Italic (mapChannelId mapChannelIdFunc content)
+            Italic (mapChannelMention mapFunc content)
 
         Underline content ->
-            Underline (mapChannelId mapChannelIdFunc content)
+            Underline (mapChannelMention mapFunc content)
 
         Strikethrough content ->
-            Strikethrough (mapChannelId mapChannelIdFunc content)
+            Strikethrough (mapChannelMention mapFunc content)
 
         Spoiler content ->
-            Spoiler (mapChannelId mapChannelIdFunc content)
+            Spoiler (mapChannelMention mapFunc content)
 
         BlockQuote hasLeadingLineBreak content ->
-            BlockQuote hasLeadingLineBreak (List.map (mapChannelIdHelper mapChannelIdFunc) content)
+            BlockQuote hasLeadingLineBreak (List.map (mapChannelMentionHelper mapFunc) content)
 
         Heading level hasLeadingLineBreak content ->
-            Heading level hasLeadingLineBreak (mapChannelId mapChannelIdFunc content)
+            Heading level hasLeadingLineBreak (mapChannelMention mapFunc content)
 
         Hyperlink url ->
             Hyperlink url
@@ -1133,7 +1148,7 @@ mapChannelIdHelper mapChannelIdFunc richText =
         BulletPoint hasLeadingLineBreak points ->
             BulletPoint
                 hasLeadingLineBreak
-                (List.Nonempty.map (List.map (mapChannelIdHelper mapChannelIdFunc)) points)
+                (List.Nonempty.map (List.map (mapChannelMentionHelper mapFunc)) points)
 
         Timestamp time ->
             Timestamp time
@@ -6021,10 +6036,14 @@ fromDiscord :
     -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> Discord.OptionalData (List Discord.Embed)
     -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
+    ->
+        SeqDict
+            (Discord.Id Discord.ChannelId)
+            { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId) }
     -> List (Id StickerId)
     -> Discord.OptionalData (List Discord.MessageSnapshot)
     -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
-fromDiscord text attachments2 embeds customEmojis2 stickers2 messageSnapshots =
+fromDiscord text attachments2 embeds customEmojis2 channels stickers2 messageSnapshots =
     let
         messageSnapshots3 : List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         messageSnapshots3 =
@@ -6050,6 +6069,43 @@ fromDiscord text attachments2 embeds customEmojis2 stickers2 messageSnapshots =
     (fromDiscordHelper text attachments2 embeds customEmojis2 stickers2 ++ messageSnapshots3)
         |> List.Nonempty.fromList
         |> Maybe.withDefault emptyPlaceholder
+        |> mapChannelMention (discordThreadMention channels)
+
+
+{-| Discord writes a mention of a thread the same way as a mention of a channel, with the
+thread's id in place of the channel's. That id is also the id of the message the thread hangs
+off of, which is how at-chat keeps track of threads.
+-}
+discordThreadMention :
+    SeqDict
+        (Discord.Id Discord.ChannelId)
+        { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId) }
+    -> Discord.Id Discord.ChannelId
+    -> Maybe (Id ChannelMessageId)
+    -> ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) )
+discordThreadMention channels channelId maybeThread =
+    if maybeThread /= Nothing || SeqDict.member channelId channels then
+        ( channelId, maybeThread )
+
+    else
+        let
+            messageId : Discord.Id Discord.MessageId
+            messageId =
+                Discord.idToUInt64 channelId |> Discord.idFromUInt64
+        in
+        SeqDict.foldl
+            (\parentId channel found ->
+                case found of
+                    Nothing ->
+                        OneToOne.second messageId channel.linkedMessageIds
+                            |> Maybe.map (\threadId -> ( parentId, Just threadId ))
+
+                    Just _ ->
+                        found
+            )
+            Nothing
+            channels
+            |> Maybe.withDefault ( channelId, Nothing )
 
 
 fromDiscordHelper :

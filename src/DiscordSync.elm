@@ -261,6 +261,7 @@ handleDiscordDmEditMessage edit attachments model =
                                 attachments
                                 (Included edit.embeds)
                                 model.discordCustomEmojis
+                                SeqDict.empty
                                 (case edit.stickerItems of
                                     Missing ->
                                         []
@@ -411,6 +412,7 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
                 attachments
                 (Included edit.embeds)
                 model.discordCustomEmojis
+                guild.channels
                 (case edit.stickerItems of
                     Missing ->
                         []
@@ -751,13 +753,17 @@ messagesAndLinks :
     }
     -> List Discord.Message
     -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
+    ->
+        SeqDict
+            (Discord.Id Discord.ChannelId)
+            { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId) }
     -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
     ->
         ( IdArray messageId (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         , OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         )
-messagesAndLinks existingChannelOrThread messages customEmojis discordStickers discordAttachments =
+messagesAndLinks existingChannelOrThread messages customEmojis channels discordStickers discordAttachments =
     let
         -- The ids of the messages a thread can hang off of. A thread created message isn't one
         -- of them, it stands in for a thread that has no message to hang off of.
@@ -818,6 +824,7 @@ messagesAndLinks existingChannelOrThread messages customEmojis discordStickers d
                     attachments
                     message.embeds
                     customEmojis
+                    channels
                     (case message.stickerItems of
                         Missing ->
                             []
@@ -974,6 +981,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                     attachments
                                     discordMessage.embeds
                                     model.discordCustomEmojis
+                                    SeqDict.empty
                                     (case discordMessage.stickerItems of
                                         Missing ->
                                             []
@@ -1335,6 +1343,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                             attachments
                                             discordMessage.embeds
                                             model.discordCustomEmojis
+                                            guild.channels
                                             (case discordMessage.stickerItems of
                                                 Missing ->
                                                     []
@@ -1682,7 +1691,7 @@ addForumPost authentication post guild channel model =
 
         richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         richText =
-            RichText.fromDiscord post.name SeqDict.empty Missing model.discordCustomEmojis [] Missing
+            RichText.fromDiscord post.name SeqDict.empty Missing model.discordCustomEmojis SeqDict.empty [] Missing
 
         message : Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
         message =
@@ -1789,7 +1798,7 @@ handleForumPostRenamed thread time model =
                             let
                                 richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                 richText =
-                                    RichText.fromDiscord name SeqDict.empty Missing model.discordCustomEmojis [] Missing
+                                    RichText.fromDiscord name SeqDict.empty Missing model.discordCustomEmojis SeqDict.empty [] Missing
                             in
                             case
                                 LocalState.editMessageHelper

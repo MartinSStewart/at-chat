@@ -1192,6 +1192,7 @@ updateHelper msg model =
                                     channel
                                     (List.reverse reload.messages)
                                     model.discordCustomEmojis
+                                    guild.channels
                                     model.discordStickers
                                     attachments2
 
@@ -1224,6 +1225,7 @@ updateHelper msg model =
                                                             existingThread
                                                             (List.reverse thread.messages)
                                                             model.discordCustomEmojis
+                                                            guild.channels
                                                             model.discordStickers
                                                             attachments2
                                                 in
@@ -1299,6 +1301,7 @@ updateHelper msg model =
                                     channel
                                     (List.reverse reload.messages)
                                     model.discordCustomEmojis
+                                    SeqDict.empty
                                     model.discordStickers
                                     attachments2
 

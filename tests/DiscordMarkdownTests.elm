@@ -5,7 +5,7 @@ import Discord
 import Effect.Time as Time
 import Expect
 import Fuzz
-import Id exposing (CustomEmojiId, Id)
+import Id exposing (ChannelMessageId, CustomEmojiId, Id)
 import List.Nonempty exposing (Nonempty(..))
 import OneToOne exposing (OneToOne)
 import RichText exposing (DiscordCustomEmojiIdAndName, HasLeadingLineBreak(..), RichText(..))
@@ -53,7 +53,7 @@ emojiName =
 
 fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
 fromDiscordHelper text =
-    RichText.fromDiscord text SeqDict.empty Discord.Missing customEmojis [] Discord.Missing |> List.Nonempty.toList
+    RichText.fromDiscord text SeqDict.empty Discord.Missing customEmojis SeqDict.empty [] Discord.Missing |> List.Nonempty.toList
 
 
 {-| What Discord is sent when someone writes `source` in at-chat.
@@ -66,7 +66,7 @@ toDiscordTest source expected =
             case String.Nonempty.fromString source of
                 Just nonempty ->
                     RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty nonempty
-                        |> RichText.toDiscord customEmojis
+                        |> RichText.toDiscord customEmojis SeqDict.empty
                         |> Expect.equal (Ok expected)
 
                 Nothing ->
@@ -266,9 +266,9 @@ expectSurvivesDiscord source =
         written =
             RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty source
     in
-    case RichText.toDiscord customEmojis written of
+    case RichText.toDiscord customEmojis SeqDict.empty written of
         Ok sent ->
-            RichText.fromDiscord sent SeqDict.empty Discord.Missing customEmojis [] Discord.Missing
+            RichText.fromDiscord sent SeqDict.empty Discord.Missing customEmojis SeqDict.empty [] Discord.Missing
                 |> List.Nonempty.toList
                 |> withoutEscapedChars
                 |> Expect.equal (withoutEscapedChars (List.Nonempty.toList written))
@@ -277,7 +277,7 @@ expectSurvivesDiscord source =
                         ++ Debug.toString sent
                         ++ " which at-chat reads as "
                         ++ Debug.toString
-                            (RichText.fromDiscord sent SeqDict.empty Discord.Missing customEmojis [] Discord.Missing
+                            (RichText.fromDiscord sent SeqDict.empty Discord.Missing customEmojis SeqDict.empty [] Discord.Missing
                                 |> List.Nonempty.toList
                             )
                         ++ " instead of "
@@ -585,6 +585,7 @@ fromNonemptyStringTest input expected =
                 SeqDict.empty
                 Discord.Missing
                 customEmojis
+                SeqDict.empty
                 []
                 Discord.Missing
                 |> Expect.equal expected
@@ -609,6 +610,16 @@ userId =
 channelId : Discord.Id Discord.ChannelId
 channelId =
     Unsafe.uint64 "137748026084163581" |> Discord.idFromUInt64
+
+
+{-| A channel with a thread hanging off of its message 137748026084163599, which is also the
+thread's id on Discord.
+-}
+channelWithThread : SeqDict.SeqDict (Discord.Id Discord.ChannelId) { linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId) }
+channelWithThread =
+    SeqDict.singleton
+        channelId
+        { linkedMessageIds = OneToOne.singleton (Unsafe.uint64 "137748026084163599" |> Discord.idFromUInt64) (Id.fromInt 5) }
 
 
 discordSpecificTests : Test
@@ -639,7 +650,7 @@ discordSpecificTests =
             \_ ->
                 fromDiscordHelper "<#137748026084163581>"
                     |> List.Nonempty.fromList
-                    |> Maybe.map (RichText.toDiscord customEmojis)
+                    |> Maybe.map (RichText.toDiscord customEmojis SeqDict.empty)
                     |> Expect.equal (Just (Ok "<#137748026084163581>"))
         , Test.test "channel mention typed in at-chat is sent to Discord by id" <|
             \_ ->
@@ -648,8 +659,18 @@ discordSpecificTests =
                     SeqDict.empty
                     (SeqDict.singleton ( channelId, Nothing ) { name = "general" })
                     (NonemptyString 'h' "i #general")
-                    |> RichText.toDiscord customEmojis
+                    |> RichText.toDiscord customEmojis SeqDict.empty
                     |> Expect.equal (Ok "hi <#137748026084163581>")
+        , Test.test "thread mention is read as the thread it points at" <|
+            \_ ->
+                RichText.fromDiscord "<#137748026084163599>" SeqDict.empty Discord.Missing customEmojis channelWithThread [] Discord.Missing
+                    |> List.Nonempty.toList
+                    |> Expect.equal [ ChannelMention channelId (Just (Id.fromInt 5)) ]
+        , Test.test "thread mention is sent back to Discord unchanged" <|
+            \_ ->
+                RichText.fromDiscord "<#137748026084163599>" SeqDict.empty Discord.Missing customEmojis channelWithThread [] Discord.Missing
+                    |> RichText.toDiscord customEmojis channelWithThread
+                    |> Expect.equal (Ok "<#137748026084163599>")
         , Test.test "timestamp with a format hint" <|
             \_ ->
                 fromDiscordHelper "<t:1786013400:s>"
