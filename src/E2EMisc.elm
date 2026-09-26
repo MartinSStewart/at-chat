@@ -737,8 +737,8 @@ orphanedFilesTest config =
                                     (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
                                 ]
                             )
-                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.OrphanedFilesSection)
-                        , E2EHelper.hasExactText adminPage [ "unusedFile", "File count: 1, total size: 4.9kb" ]
+                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.FilesSection)
+                        , E2EHelper.hasExactText adminPage [ "unusedFile", "Orphaned file count: 1, total size: 4.9kb" ]
                         , E2EHelper.hasNotExactText adminPage [ "123123123" ]
                         ]
                     )

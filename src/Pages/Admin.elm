@@ -1804,7 +1804,6 @@ view isMobile2 version time local adminData model =
             , Ui.Lazy.lazy2 webCodecsTestSection isMobile2 model.expandedSections
             , Ui.Lazy.lazy3 wordSpellingGameSwedishSection isMobile2 model.expandedSections adminData
             , Ui.Lazy.lazy3 filesSection isMobile2 model.expandedSections adminData
-            , Ui.Lazy.lazy3 orphanedFilesSection isMobile2 model.expandedSections adminData
             , Ui.Lazy.lazy3 stickersAndEmojisSection isMobile2 local model.expandedSections
             , Ui.Lazy.lazy4 toBackendLogsSection isMobile2 time model.expandedSections adminData
             , Ui.Lazy.lazy4 backendMsgLogsSection isMobile2 time model.expandedSections adminData
@@ -2493,16 +2492,8 @@ filesSection isMobile expandedSections adminData =
         isMobile
         expandedSections
         FilesSection
-        [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
-
-
-orphanedFilesSection : Bool -> SeqSet AdminUiSection -> AdminData -> Element Msg
-orphanedFilesSection isMobile expandedSections adminData =
-    section
-        isMobile
-        expandedSections
-        OrphanedFilesSection
-        [ case adminData.orphanedFiles of
+        [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount)
+        , case adminData.orphanedFiles of
             AdminDataNotLoaded ->
                 Ui.text loadingText
 
@@ -2522,7 +2513,7 @@ orphanedFilesSection isMobile expandedSections adminData =
                     Ui.column
                         [ Ui.spacing 8 ]
                         [ Ui.text
-                            ("File count: "
+                            ("Orphaned file count: "
                                 ++ String.fromInt (SeqDict.size orphanedFiles)
                                 ++ ", total size: "
                                 ++ FileStatus.sizeToString (List.sum (List.map (\( _, file ) -> file.fileSize) largestFirst))
@@ -2543,7 +2534,19 @@ orphanedFilesSection isMobile expandedSections adminData =
                                                 Nothing ->
                                                     Ui.none
                                             )
-                                        , Ui.text (FileStatus.fileHashToString fileHash)
+                                        , Ui.el
+                                            [ Ui.linkNewTab
+                                                (case file.imageSize of
+                                                    Just _ ->
+                                                        -- Browsers show any image format sent as image/png
+                                                        FileStatus.fileUrl FileStatus.pngContent fileHash
+
+                                                    Nothing ->
+                                                        FileStatus.fileUrl FileStatus.unknownContentType fileHash
+                                                )
+                                            , Ui.Font.color MyUi.textLinkColor
+                                            ]
+                                            (Ui.text (FileStatus.fileHashToString fileHash))
                                         ]
                                 )
                                 largestFirst
@@ -4977,9 +4980,6 @@ sectionDataToLoad section2 adminData =
                 ++ loadIfNeeded adminData.discordUsers (LoadDiscordUsers EmptyPlaceholder)
 
         FilesSection ->
-            []
-
-        OrphanedFilesSection ->
             loadIfNeeded adminData.orphanedFiles (LoadOrphanedFiles EmptyPlaceholder)
 
         ToBackendLogsSection ->
@@ -5035,7 +5035,6 @@ type AdminUiSection
     | ExportSection
     | ConnectionsSection
     | FilesSection
-    | OrphanedFilesSection
     | ToBackendLogsSection
     | BackendMsgLogsSection
     | StickersAndEmojisSection
@@ -5083,9 +5082,6 @@ sectionToString section2 =
 
         FilesSection ->
             "Files"
-
-        OrphanedFilesSection ->
-            "Orphaned files"
 
         ToBackendLogsSection ->
             "ToBackend logs"

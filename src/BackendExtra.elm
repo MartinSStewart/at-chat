@@ -1627,9 +1627,8 @@ adminSessions model =
         |> SeqDict.fromList
 
 
-{-| Uploaded files that nothing refers to anymore, so deleting them wouldn't break anything.
-`discordAttachments` counts as a reference even when no message uses the file, since it's what
-stops a Discord attachment from being uploaded again the next time a channel is reloaded.
+{-| Uploaded files that nothing refers to anymore. `discordAttachments` doesn't count as a
+reference since it only remembers which Discord attachments have already been uploaded.
 -}
 orphanedFiles : BackendModel -> SeqDict FileHash BackendFileData
 orphanedFiles model =
@@ -1649,7 +1648,6 @@ usedFiles model =
         , SeqDict.values model.sessions |> List.concatMap savedSheepGameQuestionFiles
         , SeqDict.values model.stickers |> List.filterMap stickerFile
         , SeqDict.values model.customEmojis |> List.filterMap customEmojiFile
-        , SeqDict.values model.discordAttachments |> List.map .fileHash
         ]
 
 

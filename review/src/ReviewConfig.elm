@@ -29,6 +29,7 @@ import NoModuleOnExposedNames
 import NoRedundantUiAttributes
 import NoSimpleLetBody
 import NoStaleReferences
+import NoUnhandledFileHashes
 import NoUnused.CustomTypeConstructors
 import NoUnused.Dependencies
 import NoUnused.Exports
@@ -141,6 +142,63 @@ config =
         |> Review.Rule.ignoreErrorsForFiles [ "src/LamderaRPC.elm" ]
         |> Review.Rule.ignoreErrorsForDirectories [ "src/Evergreen", "vendored/mdgriffith" ]
     , NoBrokenParserFunctions.rule
+    , NoUnhandledFileHashes.rule
+        { handled =
+            [ "customEmojis.url.CustomEmojiInternal"
+            , "deletedGuilds.guild.channels.games.GameData_SheepGame.answers.attachedFiles.fileHash"
+            , "deletedGuilds.guild.channels.games.GameData_SheepGame.change.ChangedNotes.attachedFiles.fileHash"
+            , "deletedGuilds.guild.channels.games.GameData_SheepGame.change.SubmittedAnswer.attachedFiles.fileHash"
+            , "deletedGuilds.guild.channels.games.GameData_SheepGame.notes.attachedFiles.fileHash"
+            , "deletedGuilds.guild.channels.games.GameData_SheepGame.questions.attachedFiles.fileHash"
+            , "deletedGuilds.guild.channels.messages.EncryptedUserTextMessage.fileHashes"
+            , "deletedGuilds.guild.channels.messages.UserTextMessage.content.attachedFiles.fileHash"
+            , "deletedGuilds.guild.channels.threads.messages.EncryptedUserTextMessage.fileHashes"
+            , "deletedGuilds.guild.channels.threads.messages.UserTextMessage.content.attachedFiles.fileHash"
+            , "deletedGuilds.guild.icon"
+            , "discordDmChannels.messages.EncryptedUserTextMessage.fileHashes"
+            , "discordDmChannels.messages.UserTextMessage.content.attachedFiles.fileHash"
+            , "discordGuilds.channels.messages.EncryptedUserTextMessage.fileHashes"
+            , "discordGuilds.channels.messages.UserTextMessage.content.attachedFiles.fileHash"
+            , "discordGuilds.channels.threads.messages.EncryptedUserTextMessage.fileHashes"
+            , "discordGuilds.channels.threads.messages.UserTextMessage.content.attachedFiles.fileHash"
+            , "discordGuilds.icon"
+            , "discordUsers.BasicData.icon"
+            , "discordUsers.FullData.icon"
+            , "discordUsers.NeedsAuthAgain.icon"
+            , "dmChannels.games.GameData_SheepGame.answers.attachedFiles.fileHash"
+            , "dmChannels.games.GameData_SheepGame.change.ChangedNotes.attachedFiles.fileHash"
+            , "dmChannels.games.GameData_SheepGame.change.SubmittedAnswer.attachedFiles.fileHash"
+            , "dmChannels.games.GameData_SheepGame.notes.attachedFiles.fileHash"
+            , "dmChannels.games.GameData_SheepGame.questions.attachedFiles.fileHash"
+            , "dmChannels.messages.EncryptedUserTextMessage.fileHashes"
+            , "dmChannels.messages.UserTextMessage.content.attachedFiles.fileHash"
+            , "dmChannels.threads.messages.EncryptedUserTextMessage.fileHashes"
+            , "dmChannels.threads.messages.UserTextMessage.content.attachedFiles.fileHash"
+            , "guilds.channels.games.GameData_SheepGame.answers.attachedFiles.fileHash"
+            , "guilds.channels.games.GameData_SheepGame.change.ChangedNotes.attachedFiles.fileHash"
+            , "guilds.channels.games.GameData_SheepGame.change.SubmittedAnswer.attachedFiles.fileHash"
+            , "guilds.channels.games.GameData_SheepGame.notes.attachedFiles.fileHash"
+            , "guilds.channels.games.GameData_SheepGame.questions.attachedFiles.fileHash"
+            , "guilds.channels.messages.EncryptedUserTextMessage.fileHashes"
+            , "guilds.channels.messages.UserTextMessage.content.attachedFiles.fileHash"
+            , "guilds.channels.threads.messages.EncryptedUserTextMessage.fileHashes"
+            , "guilds.channels.threads.messages.UserTextMessage.content.attachedFiles.fileHash"
+            , "guilds.icon"
+            , "sessions.savedSheepGameQuestions.attachedFiles.FileUploaded.fileHash"
+            , "stickers.url.StickerInternal"
+            , "users.icon"
+            ]
+        , excluded =
+            [ "files"
+
+            -- Only remembers which Discord attachments have already been uploaded
+            , "discordAttachments"
+
+            -- Copies of channels taken while an export is running
+            , "exportState"
+            , "scheduledExportState"
+            ]
+        }
     , NoInvalidTypesInToBackend.rule
         { disallowed =
             [ ( [ "Basics" ], "Float" )
