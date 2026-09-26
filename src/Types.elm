@@ -1,6 +1,5 @@
 module Types exposing
     ( AdminStatusLoginData(..)
-    , BackendFileData
     , BackendModel
     , BackendMsg(..)
     , ChannelDataToDecrypt
@@ -92,7 +91,7 @@ import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
 import Encryption exposing (BytesHash, DecryptManyRequestId, DecryptRequestId, EncryptFileRequestId, EncryptManyRequestId, EncryptRequestId, EncryptedData)
-import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
+import FileStatus exposing (BackendFileData, FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import Game
 import Go
 import GuildName exposing (GuildName)
@@ -522,10 +521,6 @@ type alias PendingGatewayReconnect =
 
 type alias DiscordAttachmentData =
     { fileHash : FileHash, metadata : Maybe FileStatus.FileMetadata }
-
-
-type alias BackendFileData =
-    { fileSize : Int, imageSize : Maybe (Coord CssPixels) }
 
 
 type LoginTokenData

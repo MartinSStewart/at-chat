@@ -1,5 +1,6 @@
 module FileStatus exposing
     ( AesPrivateKey(..)
+    , BackendFileData
     , ContentType(..)
     , ContentTypeType(..)
     , EncryptedThumbnail(..)
@@ -171,6 +172,10 @@ measuredFileSerializeCodec =
         |> Serialize.variant1 MeasuredImage coordSerializeCodec
         |> Serialize.variant2 MeasuredVideo coordSerializeCodec (Serialize.maybe durationSerializeCodec)
         |> Serialize.finishCustomType
+
+
+type alias BackendFileData =
+    { fileSize : Int, imageSize : Maybe (Coord CssPixels) }
 
 
 type alias FileDataWithImage =

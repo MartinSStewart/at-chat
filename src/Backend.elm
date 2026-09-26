@@ -8939,6 +8939,14 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 (Pages.Admin.LoadWebsocketCloseEvents (FilledInByBackend model.websocketCloseEvents))
             )
 
+        Pages.Admin.LoadOrphanedFiles _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadOrphanedFiles (FilledInByBackend (BackendExtra.orphanedFiles model)))
+            )
+
         Pages.Admin.LoadToBackendLogs _ ->
             ( model
             , adminDataResponse

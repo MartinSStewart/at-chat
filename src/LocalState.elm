@@ -175,7 +175,7 @@ import Effect.Websocket as Websocket
 import Embed exposing (EmbedData)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (BytesHash, EncryptedData)
-import FileStatus exposing (FileHash)
+import FileStatus exposing (BackendFileData, FileHash)
 import Game
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DmId)
@@ -990,6 +990,7 @@ type alias AdminData =
     , serverSecretRefreshedAt : ServerSecretStatus
     , lastBackup : Maybe LastBackup
     , websocketCloseEvents : AdminDataStatus (Array WebsocketClosedEvent)
+    , orphanedFiles : AdminDataStatus (SeqDict FileHash BackendFileData)
     , sessions : AdminDataStatus (SeqDict SessionIdHash UserSession)
     , wordSpellingGameEnglish : WordSpellingGameStatus
     , wordSpellingGameSwedish : WordSpellingGameStatus

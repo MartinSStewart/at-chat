@@ -20,6 +20,7 @@ module E2EMisc exposing
     , mentionSuggestionTest
     , noTimestampSuggestionTest
     , openLastViewedGuildOnStartupTest
+    , orphanedFilesTest
     , profileImageOpensDm
     , reactionPopupNamesEmojiTest
     , reloadingAConversationLeavesItUnreadTest
@@ -697,6 +698,48 @@ adminConnectionsShowWhatIsViewedTest config =
                         , E2EHelper.hasExactText
                             adminPage
                             [ "Viewing: My new guild! #general", "Viewing: Nothing" ]
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| The file attached to a message is in use, so only the upload nothing refers to is listed.
+-}
+orphanedFilesTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+orphanedFilesTest config =
+    E2EHelper.startTest
+        "Admin page lists uploaded files that nothing uses"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.uploadImageAttachment admin
+                , E2EHelper.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , T.backendUpdate 100 (Types.Rpc_GotFileUpload (FileStatus.fileHash "unusedFile") 5000 Nothing)
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId0
+                    "/admin"
+                    E2EHelper.desktopWindow
+                    (\adminPage ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ adminPage.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.OrphanedFilesSection)
+                        , E2EHelper.hasExactText adminPage [ "unusedFile", "File count: 1, total size: 4.9kb" ]
+                        , E2EHelper.hasNotExactText adminPage [ "123123123" ]
                         ]
                     )
                 ]

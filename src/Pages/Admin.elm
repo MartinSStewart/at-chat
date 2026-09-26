@@ -47,6 +47,7 @@ import Bytes exposing (Bytes)
 import Bytes.Encode
 import ChannelName
 import Codec
+import Coord
 import CustomEmoji
 import Discord
 import DmChannelId exposing (DmChannelId)
@@ -65,6 +66,7 @@ import Effect.Time as Time
 import Effect.Websocket exposing (CloseEventCode(..))
 import EmailAddress
 import Env
+import FileStatus exposing (BackendFileData, FileHash)
 import GuildName
 import Html
 import Html.Attributes
@@ -347,6 +349,7 @@ type AdminChange
     | LoadDiscordUsers (ToBeFilledInByBackend (SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin))
     | LoadSessions (ToBeFilledInByBackend (SeqDict SessionIdHash UserSession))
     | LoadWebsocketCloseEvents (ToBeFilledInByBackend (Array WebsocketClosedEvent))
+    | LoadOrphanedFiles (ToBeFilledInByBackend (SeqDict FileHash BackendFileData))
     | LoadToBackendLogs (ToBeFilledInByBackend (Array ToBackendLogData))
     | LoadBackendMsgLogs (ToBeFilledInByBackend (Array BackendMsgLogData))
     | SetEmailNotificationsEnabled Bool
@@ -512,6 +515,9 @@ updateAdmin changedBy change adminData local =
 
         LoadWebsocketCloseEvents filledInByBackend ->
             { local | adminData = IsAdmin { adminData | websocketCloseEvents = loadedAdminData filledInByBackend } }
+
+        LoadOrphanedFiles filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | orphanedFiles = loadedAdminData filledInByBackend } }
 
         LoadToBackendLogs filledInByBackend ->
             { local | adminData = IsAdmin { adminData | toBackendLogs = loadedAdminData filledInByBackend } }
@@ -1677,6 +1683,9 @@ pendingChangesText change =
         LoadWebsocketCloseEvents _ ->
             "Loading websocket close events in admin page"
 
+        LoadOrphanedFiles _ ->
+            "Loading orphaned files in admin page"
+
         LoadToBackendLogs _ ->
             "Loading toBackend logs in admin page"
 
@@ -1795,6 +1804,7 @@ view isMobile2 version time local adminData model =
             , Ui.Lazy.lazy2 webCodecsTestSection isMobile2 model.expandedSections
             , Ui.Lazy.lazy3 wordSpellingGameSwedishSection isMobile2 model.expandedSections adminData
             , Ui.Lazy.lazy3 filesSection isMobile2 model.expandedSections adminData
+            , Ui.Lazy.lazy3 orphanedFilesSection isMobile2 model.expandedSections adminData
             , Ui.Lazy.lazy3 stickersAndEmojisSection isMobile2 local model.expandedSections
             , Ui.Lazy.lazy4 toBackendLogsSection isMobile2 time model.expandedSections adminData
             , Ui.Lazy.lazy4 backendMsgLogsSection isMobile2 time model.expandedSections adminData
@@ -2484,6 +2494,62 @@ filesSection isMobile expandedSections adminData =
         expandedSections
         FilesSection
         [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
+
+
+orphanedFilesSection : Bool -> SeqSet AdminUiSection -> AdminData -> Element Msg
+orphanedFilesSection isMobile expandedSections adminData =
+    section
+        isMobile
+        expandedSections
+        OrphanedFilesSection
+        [ case adminData.orphanedFiles of
+            AdminDataNotLoaded ->
+                Ui.text loadingText
+
+            AdminDataLoading ->
+                Ui.text loadingText
+
+            AdminDataLoaded orphanedFiles ->
+                if SeqDict.isEmpty orphanedFiles then
+                    Ui.text "No orphaned files"
+
+                else
+                    let
+                        largestFirst : List ( FileHash, BackendFileData )
+                        largestFirst =
+                            SeqDict.toList orphanedFiles |> List.sortBy (\( _, file ) -> -file.fileSize)
+                    in
+                    Ui.column
+                        [ Ui.spacing 8 ]
+                        [ Ui.text
+                            ("File count: "
+                                ++ String.fromInt (SeqDict.size orphanedFiles)
+                                ++ ", total size: "
+                                ++ FileStatus.sizeToString (List.sum (List.map (\( _, file ) -> file.fileSize) largestFirst))
+                            )
+                        , Ui.column
+                            [ Ui.spacing 2, Ui.Font.size 14 ]
+                            (List.map
+                                (\( fileHash, file ) ->
+                                    Ui.row
+                                        [ Ui.spacing 16 ]
+                                        [ Ui.el [ Ui.width (Ui.px 80) ] (Ui.text (FileStatus.sizeToString file.fileSize))
+                                        , Ui.el
+                                            [ Ui.width (Ui.px 100) ]
+                                            (case file.imageSize of
+                                                Just imageSize ->
+                                                    Ui.text (String.fromInt (Coord.xRaw imageSize) ++ "×" ++ String.fromInt (Coord.yRaw imageSize))
+
+                                                Nothing ->
+                                                    Ui.none
+                                            )
+                                        , Ui.text (FileStatus.fileHashToString fileHash)
+                                        ]
+                                )
+                                largestFirst
+                            )
+                        ]
+        ]
 
 
 wordSpellingGameSwedishSection : Bool -> SeqSet AdminUiSection -> AdminData -> Element Msg
@@ -4913,6 +4979,9 @@ sectionDataToLoad section2 adminData =
         FilesSection ->
             []
 
+        OrphanedFilesSection ->
+            loadIfNeeded adminData.orphanedFiles (LoadOrphanedFiles EmptyPlaceholder)
+
         ToBackendLogsSection ->
             loadIfNeeded adminData.toBackendLogs (LoadToBackendLogs EmptyPlaceholder)
 
@@ -4966,6 +5035,7 @@ type AdminUiSection
     | ExportSection
     | ConnectionsSection
     | FilesSection
+    | OrphanedFilesSection
     | ToBackendLogsSection
     | BackendMsgLogsSection
     | StickersAndEmojisSection
@@ -5013,6 +5083,9 @@ sectionToString section2 =
 
         FilesSection ->
             "Files"
+
+        OrphanedFilesSection ->
+            "Orphaned files"
 
         ToBackendLogsSection ->
             "ToBackend logs"
