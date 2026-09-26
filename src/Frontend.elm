@@ -8954,31 +8954,40 @@ view _ model =
                             )
 
                     AiChatRoute ->
-                        AiChat.view loaded.windowSize loaded.startupData.safeAreaInsetTop loaded.startupData.safeAreaInsetBottom loaded.aiChatModel
-                            |> Ui.map AiChatMsg
-                            |> FrontendExtra.layout loaded
-                                [ if
-                                    (loaded.aiChatModel.chatHistory == "")
-                                        && (loaded.aiChatModel.message == "")
-                                        && MyUi.isMobile loaded
-                                        && (loaded.startupData.pwaStatus == BrowserView)
-                                  then
-                                    Ui.inFront
-                                        (Ui.el
-                                            [ Ui.centerX
-                                            , Ui.centerY
-                                            , Ui.widthMax 380
-                                            , Ui.padding 16
-                                            ]
-                                            (LoginForm.mobileWarning
-                                                loaded.windowSize
-                                                loaded.startupData.userAgent.browser
-                                            )
-                                        )
+                        requiresLogin
+                            (\_ local ->
+                                case local.adminData of
+                                    IsNotAdmin ->
+                                        errorPage loaded "Admin access required to view this page"
 
-                                  else
-                                    Ui.noAttr
-                                ]
+                                    _ ->
+                                        AiChat.view loaded.windowSize loaded.startupData.safeAreaInsetTop loaded.startupData.safeAreaInsetBottom loaded.aiChatModel
+                                            |> Ui.map AiChatMsg
+                                            |> Ui.el
+                                                [ Ui.height Ui.fill
+                                                , if
+                                                    (loaded.aiChatModel.chatHistory == "")
+                                                        && (loaded.aiChatModel.message == "")
+                                                        && MyUi.isMobile loaded
+                                                        && (loaded.startupData.pwaStatus == BrowserView)
+                                                  then
+                                                    Ui.inFront
+                                                        (Ui.el
+                                                            [ Ui.centerX
+                                                            , Ui.centerY
+                                                            , Ui.widthMax 380
+                                                            , Ui.padding 16
+                                                            ]
+                                                            (LoginForm.mobileWarning
+                                                                loaded.windowSize
+                                                                loaded.startupData.userAgent.browser
+                                                            )
+                                                        )
+
+                                                  else
+                                                    Ui.noAttr
+                                                ]
+                            )
 
                     GuildRoute guildId maybeChannelId _ _ ->
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)

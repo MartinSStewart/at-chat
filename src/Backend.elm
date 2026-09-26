@@ -6654,12 +6654,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 (twoFactorAuthenticationUpdateFromFrontend clientId time toBackend2 model)
 
         AiChatToBackend aiChatToBackend ->
-            ( model
-            , Command.map
-                AiChatToFrontend
-                AiChatBackendMsg
-                (AiChat.updateFromFrontend clientId aiChatToBackend model.openRouterKey)
-            )
+            BackendExtra.asAdmin
+                model
+                sessionId
+                (\_ _ ->
+                    ( model
+                    , Command.map
+                        AiChatToFrontend
+                        AiChatBackendMsg
+                        (AiChat.updateFromFrontend clientId aiChatToBackend model.openRouterKey)
+                    )
+                )
 
         JoinGuildByInviteRequest guildId inviteLinkId ->
             BackendExtra.asUser
