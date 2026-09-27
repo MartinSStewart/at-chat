@@ -31,7 +31,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (CustomEmojiId, Id, StickerId, UserId)
+import Id exposing (ChannelMessageId, CustomEmojiId, Id, StickerId, UserId)
 import Json.Decode
 import Json.Decode.Extra
 import List.Nonempty exposing (Nonempty)
@@ -62,6 +62,7 @@ type alias TextInputFocus =
 type NameSoFar
     = NameSoFar NameSoFarData
     | EmojiSoFar NameSoFarData
+    | ChannelSoFar NameSoFarData
     | TimestampSoFar Range TimestampData
 
 
@@ -255,7 +256,7 @@ textarea :
     -> Html Msg
     -> Int
     -> String
-    -> Maybe (Nonempty (RichText userId))
+    -> Maybe (Nonempty (RichText userId channelId))
     -> SeqDict (Id FileId) a
     ->
         { localUser
@@ -267,8 +268,9 @@ textarea :
         }
     -> { c | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { d | name : String }
     -> Html Msg
-textarea allowEnterKeyLinebreak channelTextInputId placeholder charsLeft text richText attachedFiles localUser loggedIn users =
+textarea allowEnterKeyLinebreak channelTextInputId placeholder charsLeft text richText attachedFiles localUser loggedIn users channels =
     let
         keyDownNoDropdown : Html.Attribute Msg
         keyDownNoDropdown =
@@ -444,6 +446,7 @@ textarea allowEnterKeyLinebreak channelTextInputId placeholder charsLeft text ri
                         localUser.timezone
                         localUser.emojiData
                         users
+                        channels
                         attachedFiles
                         localUser.customEmojis
                         localUser.stickers
@@ -511,11 +514,12 @@ disabledTextarea placeholderText text attachedFiles localUser =
                         localUser.timezone
                         localUser.emojiData
                         users
+                        SeqDict.empty
                         attachedFiles
                         localUser.customEmojis
                         localUser.stickers
                         Nothing
-                        (RichText.fromNonemptyString localUser.timezone users nonempty)
+                        (RichText.fromNonemptyString localUser.timezone users SeqDict.empty nonempty)
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
@@ -566,14 +570,15 @@ editView :
     -> String
     -> Int
     -> String
-    -> Maybe (Nonempty (RichText userId))
+    -> Maybe (Nonempty (RichText userId channelId))
     -> Bool
     -> SeqDict (Id FileId) a
     -> LocalUser
     -> { c | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { d | name : String }
     -> Element Msg
-editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachmentsUploading attachedFiles localUser loggedIn users =
+editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachmentsUploading attachedFiles localUser loggedIn users channels =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
@@ -590,6 +595,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
         localUser
         loggedIn
         users
+        channels
         |> Ui.html
         |> Ui.el (Ui.height (Ui.px height) :: Ui.heightMax height :: containerAttributes roundTopCorners)
         |> Ui.el
@@ -665,7 +671,7 @@ view :
     -> Html Msg
     -> Int
     -> String
-    -> Maybe (Nonempty (RichText userId))
+    -> Maybe (Nonempty (RichText userId channelId))
     -> SeqDict (Id FileId) FileStatus
     ->
         { localUser
@@ -677,8 +683,9 @@ view :
         }
     -> { a | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { d | name : String }
     -> Element Msg
-view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles localUser loggedIn users =
+view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles localUser loggedIn users channels =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
@@ -695,6 +702,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
         localUser
         loggedIn
         users
+        channels
         |> Ui.html
         |> Ui.el (Ui.heightMax 400 :: containerAttributes roundTopCorners)
         |> Ui.el

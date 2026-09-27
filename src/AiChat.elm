@@ -454,7 +454,7 @@ chatToMessage : String -> List Message
 chatToMessage text =
     case String.Nonempty.fromString text of
         Just text2 ->
-            RichText.fromNonemptyString Time.utc SeqDict.empty text2
+            RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty text2
                 |> richTextToMessage "" []
                 |> (\( currentText, list ) -> TextMessage currentText :: list |> List.reverse)
 
@@ -462,7 +462,7 @@ chatToMessage text =
             []
 
 
-richTextToMessage : String -> List Message -> Nonempty (RichText a) -> ( String, List Message )
+richTextToMessage : String -> List Message -> Nonempty (RichText a b) -> ( String, List Message )
 richTextToMessage previousText previousList nonempty =
     List.foldl
         (\a ( currentText, list ) ->
@@ -471,6 +471,9 @@ richTextToMessage previousText previousList nonempty =
                     ( currentText ++ String.fromChar char ++ rest, list )
 
                 RichText.UserMention _ ->
+                    ( currentText, list )
+
+                RichText.ChannelMention _ _ ->
                     ( currentText, list )
 
                 RichText.Bold nonempty2 ->
@@ -972,8 +975,8 @@ isMobile windowSize =
     Coord.xRaw windowSize < 800
 
 
-view : Coord CssPixels -> FrontendModel -> Element Msg
-view windowSize model =
+view : Coord CssPixels -> Int -> Int -> FrontendModel -> Element Msg
+view windowSize safeAreaInsetTop safeAreaInsetBottom model =
     let
         isMobile2 =
             isMobile windowSize
@@ -983,7 +986,7 @@ view windowSize model =
     in
     Ui.column
         [ if isMobile2 then
-            MyUi.htmlStyle "padding-bottom" MyUi.insetBottom
+            Ui.paddingWith { left = 0, right = 0, top = 0, bottom = safeAreaInsetBottom }
 
           else
             Ui.paddingXY 16 16
@@ -997,7 +1000,7 @@ view windowSize model =
         , Ui.Font.color MyUi.font1
         , Ui.background MyUi.background1
         , Ui.el
-            [ MyUi.htmlStyle "height" MyUi.insetTop
+            [ MyUi.htmlStyle "height" (String.fromInt safeAreaInsetTop ++ "px")
             , Ui.backgroundGradient
                 [ Ui.Gradient.linear
                     (Ui.radians 0)
@@ -1026,7 +1029,7 @@ view windowSize model =
                         , Ui.borderColor MyUi.border1
                         , MyUi.htmlStyle
                             "transform"
-                            ("translateX(-21px) translateY(calc(4px + " ++ MyUi.insetTop ++ "))")
+                            ("translateX(-21px) translateY(" ++ String.fromInt (4 + safeAreaInsetTop) ++ "px)")
                         , Ui.Font.size 14
                         , Ui.Font.bold
                         , Ui.spacing 4
@@ -1057,7 +1060,7 @@ view windowSize model =
                 , containerShadow
                 , Ui.height Ui.fill
                 , Ui.background MyUi.inputBackground
-                , MyUi.htmlStyle "padding-top" MyUi.insetTop
+                , Ui.paddingWith { left = 0, right = 0, top = safeAreaInsetTop, bottom = 0 }
                 ]
                 [ Ui.Input.multiline
                     [ Ui.border 0

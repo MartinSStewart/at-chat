@@ -61,7 +61,7 @@ import Encryption exposing (EncryptedData)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Game
-import Id exposing (ChannelMessageId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_DmId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
@@ -501,7 +501,7 @@ messageNotification :
     -> Id UserId
     -> Viewing_ChannelId
     -> ThreadRoute
-    -> UserTextMessageData messageId (Id UserId)
+    -> UserTextMessageData messageId (Id UserId) (Id ChannelId)
     -> List (Id UserId)
     -> BackendModel
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
@@ -509,7 +509,16 @@ messageNotification usersMentioned time sender id threadRoute message members mo
     let
         plainText : String
         plainText =
-            RichText.toString Time.utc True (NonemptyDict.toSeqDict model.users) message.content.content
+            RichText.toString Time.utc True (NonemptyDict.toSeqDict model.users) channels message.content.content
+
+        channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
+        channels =
+            case SeqDict.get id.guildId model.guilds of
+                Just guild ->
+                    LocalState.guildChannelNames Time.utc (NonemptyDict.toSeqDict model.users) guild.channels
+
+                Nothing ->
+                    SeqDict.empty
 
         alwaysNotify : SeqSet (Id UserId)
         alwaysNotify =
@@ -573,6 +582,7 @@ messageNotification usersMentioned time sender id threadRoute message members mo
                                         Nothing ->
                                             User.missingName
                                 )
+                                channels
                                 plainText
                                 (UserTextMessage message)
                                 (GuildRoute
@@ -599,12 +609,21 @@ discordGuildMessageNotification :
     -> Discord.Id Discord.GuildId
     -> Discord.Id Discord.ChannelId
     -> ThreadRoute
-    -> Message messageId (Discord.Id Discord.UserId)
+    -> Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> List (Discord.Id Discord.UserId)
     -> BackendModel
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
 discordGuildMessageNotification usersMentioned time sender guildId channelId threadRoute message members model =
     let
+        channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String }
+        channels =
+            case SeqDict.get guildId model.discordGuilds of
+                Just guild ->
+                    LocalState.guildChannelNames Time.utc (DiscordUserData.names members model.discordUsers) guild.channels
+
+                Nothing ->
+                    SeqDict.empty
+
         senderData : Maybe DiscordUserData
         senderData =
             SeqDict.get sender model.discordUsers
@@ -683,6 +702,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                         Nothing ->
                                             User.missingName
                                 )
+                                channels
                                 (case message of
                                     UserTextMessage message2 ->
                                         RichText.toStringWithGetter
@@ -690,6 +710,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                             DiscordUserData.username
                                             True
                                             model.discordUsers
+                                            channels
                                             message2.content.content
 
                                     EncryptedUserTextMessage _ ->
@@ -868,8 +889,9 @@ notification :
     -> String
     -> Maybe FileHash
     -> (userId -> String)
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
     -> String
-    -> Message messageId userId
+    -> Message messageId userId channelId
     -> Maybe Route
     -> SeqDict SessionId UserSession
     ->
@@ -880,7 +902,7 @@ notification :
             , postmarkApiKey : Postmark.ApiKey
         }
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
-notification time userToNotify title senderIcon userToString plainText message navigateTo sessions model =
+notification time userToNotify title senderIcon userToString channels plainText message navigateTo sessions model =
     let
         -- Email notifications are a user setting (not a session setting like push
         -- notifications) so we send at most one email per notification, regardless
@@ -896,6 +918,7 @@ notification time userToNotify title senderIcon userToString plainText message n
                                 user.email
                                 title
                                 userToString
+                                channels
                                 navigateTo
                                 plainText
                                 message
@@ -1029,12 +1052,13 @@ messageNotificationEmail :
     -> EmailAddress
     -> String
     -> (userId -> String)
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
     -> Maybe Route
     -> String
-    -> Message messageId userId
+    -> Message messageId userId channelId
     -> Postmark.ApiKey
     -> Command BackendOnly toMsg BackendMsg
-messageNotificationEmail time email senderName userToString navigateTo plainText message postmarkApiKey =
+messageNotificationEmail time email senderName userToString channels navigateTo plainText message postmarkApiKey =
     let
         helper subject body =
             Postmark.sendEmail
@@ -1060,7 +1084,7 @@ messageNotificationEmail time email senderName userToString navigateTo plainText
             helper
                 (notificationEmailSubject senderName)
                 (Postmark.BodyBoth
-                    (notificationEmailContent userToString senderName link data.content.content data.content.attachedFiles)
+                    (notificationEmailContent userToString channels senderName link data.content.content data.content.attachedFiles)
                     (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ link ++ " to reply.")
                 )
 
@@ -1068,7 +1092,7 @@ messageNotificationEmail time email senderName userToString navigateTo plainText
             helper
                 (notificationEmailSubject senderName)
                 (Postmark.BodyBoth
-                    (notificationEmailContent userToString senderName link RichText.messageIsEncrypted SeqDict.empty)
+                    (notificationEmailContent userToString channels senderName link RichText.messageIsEncrypted SeqDict.empty)
                     (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ link ++ " to reply.")
                 )
 
@@ -1103,12 +1127,13 @@ styles and basic block elements.
 -}
 notificationEmailContent :
     (userId -> String)
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
     -> String
     -> String
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     -> SeqDict (Id FileId) FileData
     -> Email.Html.Html
-notificationEmailContent userToString senderName link content attachedFiles =
+notificationEmailContent userToString channels senderName link content attachedFiles =
     Email.Html.div
         [ Email.Html.Attributes.backgroundColor (MyUi.colorToStyle MyUi.background3)
         , Email.Html.Attributes.padding "8px"
@@ -1127,7 +1152,7 @@ notificationEmailContent userToString senderName link content attachedFiles =
             , Email.Html.Attributes.lineHeight "1.4"
             , Email.Html.Attributes.style "white-space" "pre-wrap"
             ]
-            (RichText.emailView { userToString = userToString, attachedFiles = attachedFiles } content)
+            (RichText.emailView { userToString = userToString, channels = channels, attachedFiles = attachedFiles } content)
         , Email.Html.div
             [ Email.Html.Attributes.paddingTop "20px" ]
             [ Email.Html.b
@@ -1174,7 +1199,7 @@ discordDmNotification :
     -> String
     -> Maybe FileHash
     -> String
-    -> UserTextMessageData messageId (Discord.Id Discord.UserId)
+    -> UserTextMessageData messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
     -> BackendModel
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
 discordDmNotification time channelId senderId senderName senderIcon text message model =
@@ -1222,6 +1247,7 @@ discordDmNotification time channelId senderId senderName senderIcon text message
                         Nothing ->
                             User.missingName
                 )
+                SeqDict.empty
                 text
                 (UserTextMessage message)
                 (Route.DiscordDmRoute
@@ -1534,7 +1560,7 @@ broadcastDm :
     -> FrontendUser
     -> Id UserId
     -> NonemptyString
-    -> UserTextMessageData messageId (Id UserId)
+    -> UserTextMessageData messageId (Id UserId) (Id ChannelId)
     -> ThreadRouteWithRepliedTo
     -> SeqDict (Id FileId) FileData
     -> List EmojiOrCustomEmoji
@@ -1596,6 +1622,7 @@ broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserI
                                     Nothing ->
                                         User.missingName
                             )
+                            SeqDict.empty
                             (String.Nonempty.toString text)
                             (UserTextMessage message)
                             (DmRoute
@@ -1692,6 +1719,7 @@ gameStartedDmNotification time senderId { otherUserId } gameType model =
                             Nothing ->
                                 User.missingName
                     )
+                    SeqDict.empty
                     (LocalState.gameStartedText gameType)
                     (GameStarted
                         { startedAt = time
@@ -1866,7 +1894,7 @@ gameStartedGuildNotification time sender id gameType members model =
         plainText =
             LocalState.gameStartedText gameType
 
-        message : Message messageId (Id UserId)
+        message : Message messageId (Id UserId) (Id ChannelId)
         message =
             GameStarted
                 { startedAt = time
@@ -1914,6 +1942,7 @@ gameStartedGuildNotification time sender id gameType members model =
                                         Nothing ->
                                             User.missingName
                                 )
+                                SeqDict.empty
                                 plainText
                                 message
                                 (GuildRoute

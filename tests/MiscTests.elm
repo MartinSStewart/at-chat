@@ -4,6 +4,7 @@ import Array
 import Backend
 import BackendMsgLog exposing (BackendMsgLog(..))
 import Bytes.Encode
+import ChannelName
 import Coord
 import CssPixels exposing (CssPixels)
 import DiscordSync
@@ -12,10 +13,16 @@ import Emoji exposing (EmojiOrCustomEmoji(..))
 import Expect
 import FileName
 import FileStatus
-import Id exposing (CustomEmojiId, Id)
+import Id exposing (ChannelId, CustomEmojiId, Id, UserId)
+import IdArray
+import List.Nonempty exposing (Nonempty(..))
+import LocalState
+import Message exposing (Message(..), RepliedTo(..))
 import Pages.Guild exposing (HighlightMessage(..), IsHovered(..))
+import RichText exposing (RichText(..))
+import SeqDict
 import SeqSet
-import String.Nonempty
+import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
 import Types exposing (BackendModel, BackendMsg(..))
 import User
@@ -239,6 +246,47 @@ encryptedWith thumbnail =
         thumbnail
 
 
+{-| The backend reads the text of a sent message again, so it has to know thread names too, and
+when one thread's name starts with another's the longer one is meant.
+-}
+threadMentionOnBackendTest : Test
+threadMentionOnBackendTest =
+    Test.test "A #mention of a thread is read on the backend as that thread" <|
+        \_ ->
+            let
+                channelId : Id ChannelId
+                channelId =
+                    Id.fromInt 0
+
+                threadMessage : String -> Message messageId (Id UserId) (Id ChannelId)
+                threadMessage text =
+                    Message.userTextMessageNoEmbeds
+                        (Time.millisToPosix 0)
+                        (Id.fromInt 0)
+                        (Nonempty (NormalText 't' text) [])
+                        SeqDict.empty
+                        NoReply
+                        SeqDict.empty
+                        |> UserTextMessage
+            in
+            RichText.fromNonemptyString
+                Time.utc
+                SeqDict.empty
+                (LocalState.guildChannelNames
+                    Time.utc
+                    SeqDict.empty
+                    (SeqDict.singleton
+                        channelId
+                        { name = ChannelName.fromStringLossy "general"
+                        , messages = IdArray.fromList [ threadMessage "est", threadMessage "est testtest testtest" ]
+                        , threads = SeqDict.fromList [ ( Id.fromInt 0, () ), ( Id.fromInt 1, () ) ]
+                        }
+                    )
+                )
+                (NonemptyString '#' "general/test testtest testtest")
+                |> Expect.equal (Nonempty (ChannelMention channelId (Just (Id.fromInt 1))) [])
+
+
 tests : Test
 tests =
     Test.describe
@@ -247,6 +295,7 @@ tests =
         , attachmentUrlTests
         , uploadedFileMetadataTests
         , backendMsgLogTests
+        , threadMentionOnBackendTest
         , Test.test "Round trip message view encoding" <|
             \_ ->
                 let

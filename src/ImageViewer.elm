@@ -756,8 +756,8 @@ touchPositions event =
     List.map .clientPos event.touches
 
 
-view : Bool -> Coord CssPixels -> Model -> Element Msg
-view isMobile windowSize model =
+view : Bool -> Coord CssPixels -> Int -> Int -> Model -> Element Msg
+view isMobile windowSize safeAreaInsetTop safeAreaInsetBottom model =
     let
         ( fittedWidth, fittedHeight ) =
             fittedSize windowSize model
@@ -806,8 +806,8 @@ view isMobile windowSize model =
                     []
 
                 else
-                    [ Ui.inFront closeButton
-                    , Ui.inFront zoomButtons
+                    [ Ui.inFront (closeButton safeAreaInsetTop)
+                    , Ui.inFront (zoomButtons safeAreaInsetBottom)
                     ]
                )
         )
@@ -865,8 +865,8 @@ stopPressPropagation =
     ]
 
 
-closeButton : Element Msg
-closeButton =
+closeButton : Int -> Element Msg
+closeButton safeAreaInsetTop =
     MyUi.elButton
         (Dom.id "imageViewer_close")
         PressedClose
@@ -874,7 +874,7 @@ closeButton =
          , Ui.alignTop
          , Ui.paddingXY 16 16
          , Ui.Font.color MyUi.white
-         , MyUi.htmlStyle "transform" ("translateY(" ++ MyUi.insetTop ++ ")")
+         , MyUi.htmlStyle "transform" ("translateY(" ++ String.fromInt safeAreaInsetTop ++ "px)")
          , Ui.background MyUi.scrim
          , MyUi.hoverText "Close"
          ]
@@ -901,15 +901,15 @@ zoomButton htmlId onPress title label =
         (Ui.text label)
 
 
-zoomButtons : Element Msg
-zoomButtons =
+zoomButtons : Int -> Element Msg
+zoomButtons safeAreaInsetBottom =
     Ui.row
         ([ Ui.alignBottom
          , Ui.centerX
          , Ui.width Ui.shrink
          , Ui.spacing 16
          , Ui.paddingXY 16 24
-         , MyUi.htmlStyle "transform" ("translateY(-" ++ MyUi.insetBottom ++ ")")
+         , MyUi.htmlStyle "transform" ("translateY(-" ++ String.fromInt safeAreaInsetBottom ++ "px)")
          ]
             ++ stopPressPropagation
         )

@@ -5,7 +5,7 @@ import Discord
 import Effect.Time as Time
 import Expect
 import Fuzz
-import Id exposing (CustomEmojiId, Id)
+import Id exposing (ChannelMessageId, CustomEmojiId, Id)
 import List.Nonempty exposing (Nonempty(..))
 import OneToOne exposing (OneToOne)
 import RichText exposing (DiscordCustomEmojiIdAndName, HasLeadingLineBreak(..), RichText(..))
@@ -51,9 +51,9 @@ emojiName =
     Unsafe.emojiName "z_"
 
 
-fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId))
+fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
 fromDiscordHelper text =
-    RichText.fromDiscord text SeqDict.empty Discord.Missing customEmojis [] Discord.Missing |> List.Nonempty.toList
+    RichText.fromDiscord text SeqDict.empty Discord.Missing customEmojis SeqDict.empty [] Discord.Missing |> List.Nonempty.toList
 
 
 {-| What Discord is sent when someone writes `source` in at-chat.
@@ -65,8 +65,8 @@ toDiscordTest source expected =
         (\_ ->
             case String.Nonempty.fromString source of
                 Just nonempty ->
-                    RichText.fromNonemptyString Time.utc SeqDict.empty nonempty
-                        |> RichText.toDiscord customEmojis
+                    RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty nonempty
+                        |> RichText.toDiscord customEmojis SeqDict.empty
                         |> Expect.equal (Ok expected)
 
                 Nothing ->
@@ -96,6 +96,11 @@ escapingTests =
         , toDiscordTest "_italic_" "*italic*"
         , toDiscordTest "`code`" "`code`"
         , toDiscordTest "__underline__" "__underline__"
+        , -- Italic around bold written with asterisks would run the markers together into
+          -- "***", which Discord reads as bold around italic instead
+          toDiscordTest "_*bold*_" "_**bold**_"
+        , toDiscordTest "_*bold* and more_" "_**bold** and more_"
+        , toDiscordTest "*_italic_*" "***italic***"
         ]
 
 
@@ -143,15 +148,21 @@ roundTripTests =
           roundTripTest "- not a bullet point"
         , -- An underline that never closes is text, and the heading inside it stays text too
           roundTripTest "__\n# a"
+        , roundTripTest "_*bold inside italic*_"
+        , roundTripTest "*_italic inside bold_*"
+        , roundTripTest "_*bold* then text_"
+        , roundTripTest "*_italic_ then text*"
+        , roundTripTest "_text then *bold*_"
+        , roundTripTest "_a *b* c_"
         , roundTripTest "a link https://abc.com/a_b in the middle"
         , Test.fuzz
             sourceTextFuzzer
             "Text at-chat reads as plain text comes home as the same plain text"
             (\source ->
                 let
-                    written : Nonempty (RichText (Discord.Id Discord.UserId))
+                    written : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                     written =
-                        RichText.fromNonemptyString Time.utc SeqDict.empty source
+                        RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty source
                 in
                 if List.Nonempty.all isPlainText written then
                     expectSurvivesDiscord source
@@ -235,7 +246,7 @@ sourceTextFuzzer =
 
 {-| Whether at-chat read this as text rather than as formatting. Only text is ever escaped.
 -}
-isPlainText : RichText userId -> Bool
+isPlainText : RichText userId channelId -> Bool
 isPlainText item =
     case item of
         NormalText _ _ ->
@@ -251,13 +262,13 @@ isPlainText item =
 expectSurvivesDiscord : NonemptyString -> Expect.Expectation
 expectSurvivesDiscord source =
     let
-        written : Nonempty (RichText (Discord.Id Discord.UserId))
+        written : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         written =
-            RichText.fromNonemptyString Time.utc SeqDict.empty source
+            RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty source
     in
-    case RichText.toDiscord customEmojis written of
+    case RichText.toDiscord customEmojis SeqDict.empty written of
         Ok sent ->
-            RichText.fromDiscord sent SeqDict.empty Discord.Missing customEmojis [] Discord.Missing
+            RichText.fromDiscord sent SeqDict.empty Discord.Missing customEmojis SeqDict.empty [] Discord.Missing
                 |> List.Nonempty.toList
                 |> withoutEscapedChars
                 |> Expect.equal (withoutEscapedChars (List.Nonempty.toList written))
@@ -266,7 +277,7 @@ expectSurvivesDiscord source =
                         ++ Debug.toString sent
                         ++ " which at-chat reads as "
                         ++ Debug.toString
-                            (RichText.fromDiscord sent SeqDict.empty Discord.Missing customEmojis [] Discord.Missing
+                            (RichText.fromDiscord sent SeqDict.empty Discord.Missing customEmojis SeqDict.empty [] Discord.Missing
                                 |> List.Nonempty.toList
                             )
                         ++ " instead of "
@@ -282,7 +293,7 @@ thing to a reader, and Discord has one way of writing both, so the two are level
 before comparing. Adjacent pieces of text are joined up for the same reason: whether `a_b`
 arrives as one piece or three isn't something a reader can tell.
 -}
-withoutEscapedChars : List (RichText userId) -> List (RichText userId)
+withoutEscapedChars : List (RichText userId channelId) -> List (RichText userId channelId)
 withoutEscapedChars list =
     List.map
         (\item ->
@@ -321,7 +332,7 @@ withoutEscapedChars list =
         |> joinAdjacentText
 
 
-withoutEscapedCharsNonempty : Nonempty (RichText userId) -> Nonempty (RichText userId)
+withoutEscapedCharsNonempty : Nonempty (RichText userId channelId) -> Nonempty (RichText userId channelId)
 withoutEscapedCharsNonempty nonempty =
     case withoutEscapedChars (List.Nonempty.toList nonempty) |> List.Nonempty.fromList of
         Just nonempty2 ->
@@ -331,7 +342,7 @@ withoutEscapedCharsNonempty nonempty =
             nonempty
 
 
-plainText : String -> RichText userId
+plainText : String -> RichText userId channelId
 plainText text =
     case String.Nonempty.fromString text of
         Just (NonemptyString char rest) ->
@@ -341,7 +352,7 @@ plainText text =
             NormalText ' ' ""
 
 
-joinAdjacentText : List (RichText userId) -> List (RichText userId)
+joinAdjacentText : List (RichText userId channelId) -> List (RichText userId channelId)
 joinAdjacentText list =
     List.foldr
         (\item acc ->
@@ -376,6 +387,10 @@ basicFormattingTests =
                         , Bold (Nonempty (NormalText 'w' "orld") [])
                         , NormalText ' ' "test"
                         ]
+        , Test.test "three asterisks are bold around italic" <|
+            \_ ->
+                fromDiscordHelper "***abc***"
+                    |> Expect.equal [ Bold (Nonempty (Italic (Nonempty (NormalText 'a' "bc") [])) []) ]
         , Test.test "italic text" <|
             \_ ->
                 fromDiscordHelper "_italic_"
@@ -561,7 +576,7 @@ basicFormattingTests =
         ]
 
 
-fromNonemptyStringTest : String -> Nonempty (RichText (Discord.Id Discord.UserId)) -> Test
+fromNonemptyStringTest : String -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)) -> Test
 fromNonemptyStringTest input expected =
     Test.test
         (Debug.toString input)
@@ -570,6 +585,7 @@ fromNonemptyStringTest input expected =
                 SeqDict.empty
                 Discord.Missing
                 customEmojis
+                SeqDict.empty
                 []
                 Discord.Missing
                 |> Expect.equal expected
@@ -591,6 +607,21 @@ userId =
     Unsafe.uint64 "137748026084163580" |> Discord.idFromUInt64
 
 
+channelId : Discord.Id Discord.ChannelId
+channelId =
+    Unsafe.uint64 "137748026084163581" |> Discord.idFromUInt64
+
+
+{-| A channel with a thread hanging off of its message 137748026084163599, which is also the
+thread's id on Discord.
+-}
+channelWithThread : SeqDict.SeqDict (Discord.Id Discord.ChannelId) { linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId) }
+channelWithThread =
+    SeqDict.singleton
+        channelId
+        { linkedMessageIds = OneToOne.singleton (Unsafe.uint64 "137748026084163599" |> Discord.idFromUInt64) (Id.fromInt 5) }
+
+
 discordSpecificTests : Test
 discordSpecificTests =
     Test.describe
@@ -607,6 +638,39 @@ discordSpecificTests =
                         , UserMention userId
                         , NormalText ' ' "how are you?"
                         ]
+        , Test.test "channel mention" <|
+            \_ ->
+                fromDiscordHelper "Go to <#137748026084163581>!"
+                    |> Expect.equal
+                        [ NormalText 'G' "o to "
+                        , ChannelMention channelId Nothing
+                        , NormalText '!' ""
+                        ]
+        , Test.test "channel mention is sent back to Discord unchanged" <|
+            \_ ->
+                fromDiscordHelper "<#137748026084163581>"
+                    |> List.Nonempty.fromList
+                    |> Maybe.map (RichText.toDiscord customEmojis SeqDict.empty)
+                    |> Expect.equal (Just (Ok "<#137748026084163581>"))
+        , Test.test "channel mention typed in at-chat is sent to Discord by id" <|
+            \_ ->
+                RichText.fromNonemptyString
+                    Time.utc
+                    SeqDict.empty
+                    (SeqDict.singleton ( channelId, Nothing ) { name = "general" })
+                    (NonemptyString 'h' "i #general")
+                    |> RichText.toDiscord customEmojis SeqDict.empty
+                    |> Expect.equal (Ok "hi <#137748026084163581>")
+        , Test.test "thread mention is read as the thread it points at" <|
+            \_ ->
+                RichText.fromDiscord "<#137748026084163599>" SeqDict.empty Discord.Missing customEmojis channelWithThread [] Discord.Missing
+                    |> List.Nonempty.toList
+                    |> Expect.equal [ ChannelMention channelId (Just (Id.fromInt 5)) ]
+        , Test.test "thread mention is sent back to Discord unchanged" <|
+            \_ ->
+                RichText.fromDiscord "<#137748026084163599>" SeqDict.empty Discord.Missing customEmojis channelWithThread [] Discord.Missing
+                    |> RichText.toDiscord customEmojis channelWithThread
+                    |> Expect.equal (Ok "<#137748026084163599>")
         , Test.test "timestamp with a format hint" <|
             \_ ->
                 fromDiscordHelper "<t:1786013400:s>"

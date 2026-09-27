@@ -124,6 +124,7 @@ sheepGameDmTest normalConfig =
                                             (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
                                         ]
                                     )
+                                , user2.click 100 (Dom.id "guildIcon_showFriends")
                                 , user2.click 100 (Dom.id "guild_friendLabel_0")
                                 , user2.click 100 (Dom.id "guild_gameStartedCard_0")
                                 , user2.checkView

@@ -62,8 +62,6 @@ module MyUi exposing
     , imagePlaceholderStyle
     , inputBackground
     , inputBorder
-    , insetBottom
-    , insetTop
     , isMobile
     , isMobileAlt
     , label
@@ -107,6 +105,7 @@ module MyUi exposing
     , userLabelBackground
     , userLabelFontColor
     , userLabelHtml
+    , userLabelHtmlAttributes
     , virtualKeyboardOpen
     , warningHeader
     , weakHoverHighlight
@@ -888,10 +887,6 @@ noPointerEvents =
     htmlStyle "pointer-events" "none"
 
 
-
--- Buttons --
-
-
 unselectedBackground : Ui.Attribute msg
 unselectedBackground =
     Ui.background unselectedGray
@@ -1625,18 +1620,6 @@ guildIconFullWidth =
 memberColumnWidth : number
 memberColumnWidth =
     300
-
-
-insetTop : String
-insetTop =
-    --"40px"
-    "env(safe-area-inset-top)"
-
-
-insetBottom : String
-insetBottom =
-    --"40px"
-    "env(safe-area-inset-bottom)"
 
 
 isMobile : { a | windowSize : Coord CssPixels } -> Bool

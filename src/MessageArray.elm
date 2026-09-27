@@ -51,21 +51,21 @@ inclusive, `end` is exclusive). `start` is only ever non-zero for the result of
 them to zero.
 
 -}
-type MessageArray messageId userId
+type MessageArray messageId userId channelId
     = MessageArray
         { start : Int
         , end : Int
-        , runs : Array (Run messageId userId)
+        , runs : Array (Run messageId userId channelId)
         }
 
 
 {-| Opaque. A group of values at consecutive indices. `values` is never empty.
 -}
-type alias Run messageId userId =
-    { start : Int, values : Array (Message messageId userId) }
+type alias Run messageId userId channelId =
+    { start : Int, values : Array (Message messageId userId channelId) }
 
 
-empty : MessageArray k v
+empty : MessageArray k v c
 empty =
     MessageArray { start = 0, end = 0, runs = Array.empty }
 
@@ -73,7 +73,7 @@ empty =
 {-| An array spanning `count` indices, where `values` is loaded starting at
 `start` and everything else is unloaded.
 -}
-fromArray : Int -> Id messageId -> Array (Message messageId userId) -> MessageArray messageId userId
+fromArray : Int -> Id messageId -> Array (Message messageId userId channelId) -> MessageArray messageId userId channelId
 fromArray count startId values =
     let
         end : Int
@@ -84,7 +84,7 @@ fromArray count startId values =
         start =
             Id.toInt startId |> clamp 0 end
 
-        clipped : Array (Message messageId userId)
+        clipped : Array (Message messageId userId channelId)
         clipped =
             Array.slice 0 (min (Array.length values) (end - start)) values
     in
@@ -102,19 +102,19 @@ fromArray count startId values =
 
 {-| The number of indices this array spans, loaded or not.
 -}
-length : MessageArray k v -> Int
+length : MessageArray k v c -> Int
 length (MessageArray array) =
     array.end - array.start
 
 
-isEmpty : MessageArray k v -> Bool
+isEmpty : MessageArray k v c -> Bool
 isEmpty (MessageArray array) =
     array.end <= array.start
 
 
 {-| `Nothing` means the index is either out of range or not loaded.
 -}
-get : Id k -> MessageArray k v -> Maybe (Message k v)
+get : Id k -> MessageArray k v c -> Maybe (Message k v c)
 get id (MessageArray array) =
     let
         index : Int
@@ -139,7 +139,7 @@ get id (MessageArray array) =
 
 {-| Loads a value at the given index. Does nothing if the index is out of range.
 -}
-set : Id k -> Message k v -> MessageArray k v -> MessageArray k v
+set : Id k -> Message k v c -> MessageArray k v c -> MessageArray k v c
 set id value (MessageArray array) =
     let
         index : Int
@@ -179,7 +179,7 @@ but the runs are only rebuilt once instead of once per value, which matters when
 loading something like the thread starters of a channel that has a lot of
 threads. If the same index appears twice, the value later in the list wins.
 -}
-setMany : List ( Id messageId, Message messageId userId ) -> MessageArray messageId userId -> MessageArray messageId userId
+setMany : List ( Id messageId, Message messageId userId channelId ) -> MessageArray messageId userId channelId -> MessageArray messageId userId channelId
 setMany entries (MessageArray array) =
     case
         List.filterMap
@@ -213,7 +213,7 @@ setMany entries (MessageArray array) =
 
 {-| Changes a value if it's loaded. Does nothing otherwise.
 -}
-updateIfExists : Id k -> (Message k v -> Message k v) -> MessageArray k v -> MessageArray k v
+updateIfExists : Id k -> (Message k v c -> Message k v c) -> MessageArray k v c -> MessageArray k v c
 updateIfExists id updateFunc array =
     case get id array of
         Just value ->
@@ -225,14 +225,14 @@ updateIfExists id updateFunc array =
 
 {-| Grows the array by one index and loads `value` into it.
 -}
-push : Message k v -> MessageArray k v -> MessageArray k v
+push : Message k v c -> MessageArray k v c -> MessageArray k v c
 push value (MessageArray array) =
     set (Id.fromInt array.end) value (MessageArray { array | end = array.end + 1 })
 
 
 {-| The value at the last index, if that index is loaded.
 -}
-last : MessageArray k v -> Maybe (Message k v)
+last : MessageArray k v c -> Maybe (Message k v c)
 last (MessageArray array) =
     get (Id.fromInt (array.end - 1)) (MessageArray array)
 
@@ -241,7 +241,7 @@ last (MessageArray array) =
 indices the values had in the original array, so folding over a slice hands back
 the same ids as folding over the whole thing.
 -}
-slice : Id k -> Id k -> MessageArray k v -> MessageArray k v
+slice : Id k -> Id k -> MessageArray k v c -> MessageArray k v c
 slice startId endId (MessageArray array) =
     let
         start : Int
@@ -271,7 +271,7 @@ slice startId endId (MessageArray array) =
 {-| Folds over every index in the array, starting at the last one. Indices that
 aren't loaded are handed to the fold function as `Nothing`.
 -}
-foldr : (Id k -> Maybe (Message k v) -> b -> b) -> b -> MessageArray k v -> b
+foldr : (Id k -> Maybe (Message k v c) -> b -> b) -> b -> MessageArray k v c -> b
 foldr foldFunc startingValue (MessageArray array) =
     foldrHelper
         foldFunc
@@ -284,7 +284,7 @@ foldr foldFunc startingValue (MessageArray array) =
 
 {-| Every loaded value paired with its index, in ascending index order.
 -}
-toList : MessageArray k v -> List ( Id k, Message k v )
+toList : MessageArray k v c -> List ( Id k, Message k v c )
 toList (MessageArray array) =
     Array.foldr
         (\run list ->
@@ -301,7 +301,7 @@ toList (MessageArray array) =
 {-| The last loaded value that passes the given test, searching backwards from
 the end of the array. Unloaded indices are skipped over.
 -}
-findRight : (Message k v -> Bool) -> MessageArray k v -> Maybe ( Id k, Message k v )
+findRight : (Message k v c -> Bool) -> MessageArray k v c -> Maybe ( Id k, Message k v c )
 findRight selectFunc (MessageArray array) =
     findRightHelper selectFunc (Array.length array.runs - 1) array.runs
 
@@ -310,7 +310,7 @@ findRight selectFunc (MessageArray array) =
 -- Internals
 
 
-runEnd : Run k v -> Int
+runEnd : Run k v c -> Int
 runEnd run =
     run.start + Array.length run.values
 
@@ -318,12 +318,12 @@ runEnd run =
 {-| The position of the first run that ends after `index`. Equal to the number of
 runs if every run ends at or before it.
 -}
-lowerBound : Int -> Array (Run k v) -> Int
+lowerBound : Int -> Array (Run k v c) -> Int
 lowerBound index runs =
     lowerBoundHelper index 0 (Array.length runs) runs
 
 
-lowerBoundHelper : Int -> Int -> Int -> Array (Run k v) -> Int
+lowerBoundHelper : Int -> Int -> Int -> Array (Run k v c) -> Int
 lowerBoundHelper index low high runs =
     if low >= high then
         low
@@ -349,12 +349,12 @@ lowerBoundHelper index low high runs =
 {-| The position of the first run that starts at or after `index`. Equal to the
 number of runs if every run starts before it.
 -}
-upperBound : Int -> Array (Run k v) -> Int
+upperBound : Int -> Array (Run k v c) -> Int
 upperBound index runs =
     upperBoundHelper index 0 (Array.length runs) runs
 
 
-upperBoundHelper : Int -> Int -> Int -> Array (Run k v) -> Int
+upperBoundHelper : Int -> Int -> Int -> Array (Run k v c) -> Int
 upperBoundHelper index low high runs =
     if low >= high then
         low
@@ -404,11 +404,11 @@ holding them, and sets the rest aside. Both lists are ascending; the entries tha
 were set aside come back descending.
 -}
 replaceLoaded :
-    List ( Int, Message k v )
-    -> List (Run k v)
-    -> List (Run k v)
-    -> List ( Int, Message k v )
-    -> ( List (Run k v), List ( Int, Message k v ) )
+    List ( Int, Message k v c )
+    -> List (Run k v c)
+    -> List (Run k v c)
+    -> List ( Int, Message k v c )
+    -> ( List (Run k v c), List ( Int, Message k v c ) )
 replaceLoaded entries runs passedRuns gaps =
     case runs of
         run :: restRuns ->
@@ -437,7 +437,7 @@ replaceLoaded entries runs passedRuns gaps =
 {-| Groups entries that aren't inside any existing run into runs of their own.
 Takes a descending list and hands back an ascending one.
 -}
-gapsToRuns : List ( Int, Message k v ) -> List (Run k v)
+gapsToRuns : List ( Int, Message k v c ) -> List (Run k v c)
 gapsToRuns gaps =
     List.foldl
         (\( index, value ) runs ->
@@ -460,7 +460,7 @@ gapsToRuns gaps =
 {-| Merges two ascending lists of runs that don't overlap each other, joining any
 runs that turn out to be adjacent.
 -}
-mergeRuns : List (Run k v) -> List (Run k v) -> List (Run k v) -> List (Run k v)
+mergeRuns : List (Run k v c) -> List (Run k v c) -> List (Run k v c) -> List (Run k v c)
 mergeRuns runsA runsB reversed =
     case ( runsA, runsB ) of
         ( runA :: restA, runB :: restB ) ->
@@ -483,7 +483,7 @@ mergeRuns runsA runsB reversed =
 {-| Adds a run to a descending list of runs, joining it onto the previous run if
 the two are adjacent.
 -}
-appendRun : Run k v -> List (Run k v) -> List (Run k v)
+appendRun : Run k v c -> List (Run k v c) -> List (Run k v c)
 appendRun run reversed =
     case reversed of
         previous :: rest ->
@@ -501,10 +501,10 @@ appendRun run reversed =
 containing only `index` would belong. If the neighbouring runs now touch this
 index they absorb it instead, so runs never end up adjacent to each other.
 -}
-insertAt : Int -> Message k v -> Int -> Array (Run k v) -> Array (Run k v)
+insertAt : Int -> Message k v c -> Int -> Array (Run k v c) -> Array (Run k v c)
 insertAt index value position runs =
     let
-        previous : Maybe (Run k v)
+        previous : Maybe (Run k v c)
         previous =
             case Array.get (position - 1) runs of
                 Just run ->
@@ -517,7 +517,7 @@ insertAt index value position runs =
                 Nothing ->
                     Nothing
 
-        next : Maybe (Run k v)
+        next : Maybe (Run k v c)
         next =
             case Array.get position runs of
                 Just run ->
@@ -557,7 +557,7 @@ insertAt index value position runs =
 {-| Drops the parts of a run that fall outside of `[start, end)`. Only ever
 called on runs that overlap that range, so the result is never empty.
 -}
-clipRun : Int -> Int -> Run k v -> Run k v
+clipRun : Int -> Int -> Run k v c -> Run k v c
 clipRun start end run =
     if run.start >= start && runEnd run <= end then
         run
@@ -575,7 +575,7 @@ clipRun start end run =
         { start = from, values = Array.slice (from - run.start) (to - run.start) run.values }
 
 
-foldrHelper : (Id k -> Maybe (Message k v) -> b -> b) -> Int -> Int -> Int -> Array (Run k v) -> b -> b
+foldrHelper : (Id k -> Maybe (Message k v c) -> b -> b) -> Int -> Int -> Int -> Array (Run k v c) -> b -> b
 foldrHelper foldFunc runIndex index start runs state =
     if index < start then
         state
@@ -602,7 +602,7 @@ foldrHelper foldFunc runIndex index start runs state =
                 foldrHelper foldFunc runIndex (index - 1) start runs (foldFunc (Id.fromInt index) Nothing state)
 
 
-findRightHelper : (Message k v -> Bool) -> Int -> Array (Run k v) -> Maybe ( Id k, Message k v )
+findRightHelper : (Message k v c -> Bool) -> Int -> Array (Run k v c) -> Maybe ( Id k, Message k v c )
 findRightHelper selectFunc runIndex runs =
     case Array.get runIndex runs of
         Just run ->
@@ -617,7 +617,7 @@ findRightHelper selectFunc runIndex runs =
             Nothing
 
 
-findRightInRun : (Message k v -> Bool) -> Int -> Run k v -> Maybe ( Id k, Message k v )
+findRightInRun : (Message k v c -> Bool) -> Int -> Run k v c -> Maybe ( Id k, Message k v c )
 findRightInRun selectFunc index run =
     case Array.get index run.values of
         Just value ->

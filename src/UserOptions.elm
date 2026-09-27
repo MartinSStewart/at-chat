@@ -21,7 +21,7 @@ import Effect.Lamdera as Lamdera exposing (ClientId)
 import EmailAddress
 import Env
 import Icons
-import Id exposing (ChannelMessageId, Id, UserId)
+import Id exposing (ChannelId, ChannelMessageId, Id, UserId)
 import ImageEditor
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
 import List.Nonempty exposing (Nonempty(..))
@@ -30,6 +30,7 @@ import Log
 import Message
 import MyUi
 import Pages.Guild exposing (IsHovered(..))
+import Pages.Privacy
 import PersonName
 import Ports
 import Range exposing (Range)
@@ -281,7 +282,7 @@ view windowSize textInputFocus time local loggedIn loaded model =
         , Ui.inFront
             (Ui.el
                 [ Ui.background MyUi.background1
-                , MyUi.htmlStyle "padding-top" MyUi.insetTop
+                , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = 0 }
                 , Ui.el
                     [ Ui.alignBottom
                     , Ui.paddingXY
@@ -312,9 +313,12 @@ view windowSize textInputFocus time local loggedIn loaded model =
         (Ui.el
             [ Ui.scrollable, Ui.heightMin 0 ]
             (Ui.column
-                [ MyUi.htmlStyle
-                    "padding"
-                    ("calc(80px + " ++ MyUi.insetTop ++ ") 0 calc(24px + " ++ MyUi.insetBottom ++ ") 0")
+                [ Ui.paddingWith
+                    { left = 0
+                    , right = 0
+                    , top = 80 + local.localUser.safeAreaInsetTop
+                    , bottom = 24 + local.localUser.safeAreaInsetBottom
+                    }
 
                 --Ui.paddingXY 0 64
                 , Ui.spacing 16
@@ -790,7 +794,24 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                )
                         )
                         |> Ui.el [ Ui.paddingXY 16 0 ]
+                    , Ui.row
+                        [ Ui.width Ui.shrink
+                        , Ui.spacing 8
+                        , Ui.paddingXY 16 0
+                        , Ui.linkNewTab Pages.Privacy.repoUrl
+                        , Ui.Font.color MyUi.textLinkColorOnDarkBackground
+                        ]
+                        [ Ui.html (Icons.github 20), Ui.text "Source code" ]
                     ]
+                , MyUi.container
+                    16
+                    (SeqSet.member UserOption_Privacy local.localUser.session.expandedUserOptions)
+                    (Dom.id "userOptions_privacy")
+                    (PressedExpandContainer UserOption_Privacy)
+                    MyUi.background1
+                    isMobile
+                    "Privacy"
+                    [ Pages.Privacy.view FrontendNoOp |> Ui.el [ Ui.paddingXY 16 0 ] ]
                 ]
             )
         )
@@ -1001,12 +1022,12 @@ colorPreview :
     -> Element FrontendMsg_
 colorPreview time isMobile local allUsers color =
     let
-        message : Message.UserTextMessageData ChannelMessageId (Id UserId)
+        message : Message.UserTextMessageData ChannelMessageId (Id UserId) (Id ChannelId)
         message =
             Message.userTextMessageNoEmbeds
                 time
                 local.localUser.session.userId
-                (NonemptyString '#' "# Hello" |> RichText.fromNonemptyString local.localUser.timezone allUsers)
+                (NonemptyString '#' "# Hello" |> RichText.fromNonemptyString local.localUser.timezone allUsers SeqDict.empty)
                 SeqDict.empty
                 Message.NoReply
                 SeqDict.empty
@@ -1026,6 +1047,7 @@ colorPreview time isMobile local allUsers color =
               )
             ]
         )
+        SeqDict.empty
         (\_ -> color)
         IsNotHovered
         (Id.fromInt 0)

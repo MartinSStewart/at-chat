@@ -19,7 +19,7 @@ import Env
 import FileStatus
 import Html exposing (Html)
 import Icons
-import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, StickerId, ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, StickerId, ThreadRouteWithMessage(..), UserId)
 import LinkedAndOtherDiscordUsers
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
@@ -250,15 +250,12 @@ viewMobile offset extraOptions loggedIn local model =
         , MyUi.htmlStyle "bottom" "0"
         , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
         , Ui.background MyUi.black
-        , MyUi.htmlStyle
-            "padding"
-            (String.fromInt topPadding
-                ++ "px 8px calc("
-                ++ MyUi.insetBottom
-                ++ " * 0.5 + "
-                ++ String.fromInt bottomPadding
-                ++ "px) 8px"
-            )
+        , Ui.paddingWith
+            { left = 8
+            , right = 8
+            , top = topPadding
+            , bottom = local.localUser.safeAreaInsetBottom // 2 + bottomPadding
+            }
         , MyUi.blockClickPropagation MessageMenu_PressedContainer
         , Ui.height (Ui.px height)
         ]
@@ -281,10 +278,11 @@ viewMobile offset extraOptions loggedIn local model =
                         let
                             editView :
                                 Int
-                                -> Maybe (Nonempty (RichText userId))
+                                -> Maybe (Nonempty (RichText userId channelId))
                                 -> SeqDict userId { b | name : PersonName }
+                                -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
                                 -> Element MessageInput.Msg
-                            editView charsLeft richText allUsers =
+                            editView charsLeft richText allUsers channels =
                                 MessageInput.editView
                                     (Dom.id "messageMenu_editMobile")
                                     (mobileMenuMaxHeightHelper menuItemsData |> round |> (+) -32)
@@ -300,34 +298,43 @@ viewMobile offset extraOptions loggedIn local model =
                                     local.localUser
                                     loggedIn
                                     allUsers
+                                    channels
                         in
                         [ (case extraOptions.guildOrDmId of
-                            GuildOrDmId _ ->
+                            GuildOrDmId guildOrDmId ->
                                 let
                                     allUsers =
                                         User.allUsers local.localUser
 
-                                    richText : Maybe (Nonempty (RichText (Id UserId)))
+                                    channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
+                                    channels =
+                                        LocalState.channelMentions guildOrDmId local
+
+                                    richText : Maybe (Nonempty (RichText (Id UserId) (Id ChannelId)))
                                     richText =
                                         case String.Nonempty.fromString edit.text of
                                             Just nonempty ->
-                                                RichText.fromNonemptyString local.localUser.timezone allUsers nonempty |> Just
+                                                RichText.fromNonemptyString local.localUser.timezone allUsers channels nonempty |> Just
 
                                             Nothing ->
                                                 Nothing
                                 in
-                                editView (RichText.maxLength - String.length edit.text) richText allUsers
+                                editView (RichText.maxLength - String.length edit.text) richText allUsers channels
 
-                            DiscordGuildOrDmId _ ->
+                            DiscordGuildOrDmId guildOrDmId ->
                                 let
                                     allUsers =
                                         LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
 
-                                    richText : Maybe (Nonempty (RichText (Discord.Id Discord.UserId)))
+                                    channels : SeqDict ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
+                                    channels =
+                                        LocalState.discordChannelMentions guildOrDmId local
+
+                                    richText : Maybe (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
                                     richText =
                                         case String.Nonempty.fromString edit.text of
                                             Just nonempty ->
-                                                RichText.fromNonemptyString local.localUser.timezone allUsers nonempty |> Just
+                                                RichText.fromNonemptyString local.localUser.timezone allUsers channels nonempty |> Just
 
                                             Nothing ->
                                                 Nothing
@@ -342,6 +349,7 @@ viewMobile offset extraOptions loggedIn local model =
                                     )
                                     richText
                                     allUsers
+                                    channels
                           )
                             |> Ui.map
                                 (EditMessage_MessageInputMsg
@@ -451,8 +459,8 @@ menuItems :
     -> { items : List (Element FrontendMsg_), height : Int }
 menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl position local model =
     let
-        helper : Bool -> Id messageId -> { a | messages : MessageArray messageId (Id UserId) } -> Maybe MenuItemsData
-        helper isPrivateDm messageId thread =
+        helper : GuildOrDmId -> Bool -> Id messageId -> { a | messages : MessageArray messageId (Id UserId) (Id ChannelId) } -> Maybe MenuItemsData
+        helper guildOrDmId2 isPrivateDm messageId thread =
             case MessageArray.get messageId thread.messages of
                 Just message ->
                     { canEditAndDelete =
@@ -478,6 +486,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         LocalState.messageToString
                             local.localUser.timezone
                             (User.allUsers local.localUser)
+                            (LocalState.channelMentions guildOrDmId2 local)
                             local.localUser.decryptedMessages
                             message
                     , messageCustomEmojiIdsList = messageCustomEmojiIds message
@@ -510,8 +519,8 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                 _ ->
                     Nothing
 
-        discordHelper : Bool -> Id messageId -> { a | messages : MessageArray messageId (Discord.Id Discord.UserId) } -> Maybe MenuItemsData
-        discordHelper isPrivateDm messageId thread =
+        discordHelper : DiscordGuildOrDmId -> Bool -> Id messageId -> { a | messages : MessageArray messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId) } -> Maybe MenuItemsData
+        discordHelper guildOrDmId2 isPrivateDm messageId thread =
             case MessageArray.get messageId thread.messages of
                 Just message ->
                     let
@@ -547,6 +556,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         LocalState.messageToString
                             local.localUser.timezone
                             (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                            (LocalState.discordChannelMentions guildOrDmId2 local)
                             SeqDict.empty
                             message
                     , messageCustomEmojiIdsList = messageCustomEmojiIds message
@@ -571,61 +581,61 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
         maybeData : Maybe MenuItemsData
         maybeData =
             case guildOrDmId of
-                GuildOrDmId (GuildOrDmId_Guild id) ->
+                GuildOrDmId ((GuildOrDmId_Guild id) as guildOrDmId2) ->
                     case LocalState.getGuildAndChannel id local of
                         Just ( _, channel ) ->
                             case threadRoute of
                                 ViewThreadWithMessage threadMessageIndex messageId ->
                                     case SeqDict.get threadMessageIndex channel.threads of
                                         Just thread ->
-                                            helper False messageId thread
+                                            helper guildOrDmId2 False messageId thread
 
                                         Nothing ->
                                             Nothing
 
                                 NoThreadWithMessage messageId ->
-                                    helper False messageId channel
+                                    helper guildOrDmId2 False messageId channel
 
                         Nothing ->
                             Nothing
 
-                GuildOrDmId (GuildOrDmId_Dm { otherUserId }) ->
+                GuildOrDmId ((GuildOrDmId_Dm { otherUserId }) as guildOrDmId2) ->
                     case SeqDict.get otherUserId local.dmChannels of
                         Just dmChannel ->
                             case threadRoute of
                                 ViewThreadWithMessage threadMessageIndex messageId ->
                                     case SeqDict.get threadMessageIndex dmChannel.threads of
                                         Just thread ->
-                                            helper True messageId thread
+                                            helper guildOrDmId2 True messageId thread
 
                                         Nothing ->
                                             Nothing
 
                                 NoThreadWithMessage messageId ->
-                                    helper True messageId dmChannel
+                                    helper guildOrDmId2 True messageId dmChannel
 
                         Nothing ->
                             Nothing
 
-                DiscordGuildOrDmId (DiscordGuildOrDmId_Guild id) ->
+                DiscordGuildOrDmId ((DiscordGuildOrDmId_Guild id) as guildOrDmId2) ->
                     case LocalState.getDiscordGuildAndChannel id.guildId id.channelId local of
                         Just ( _, channel ) ->
                             case threadRoute of
                                 ViewThreadWithMessage threadMessageIndex messageId ->
                                     case SeqDict.get threadMessageIndex channel.threads of
                                         Just thread ->
-                                            discordHelper False messageId thread
+                                            discordHelper guildOrDmId2 False messageId thread
 
                                         Nothing ->
                                             Nothing
 
                                 NoThreadWithMessage messageId ->
-                                    discordHelper False messageId channel
+                                    discordHelper guildOrDmId2 False messageId channel
 
                         Nothing ->
                             Nothing
 
-                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm id) ->
+                DiscordGuildOrDmId ((DiscordGuildOrDmId_Dm id) as guildOrDmId2) ->
                     case SeqDict.get id.channelId local.discordDmChannels of
                         Just channel ->
                             case threadRoute of
@@ -634,6 +644,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
                                 NoThreadWithMessage messageId ->
                                     discordHelper
+                                        guildOrDmId2
                                         (NonemptyDict.size channel.members < 3)
                                         messageId
                                         channel
@@ -967,7 +978,7 @@ button isMobile htmlId icon text msg =
         [ Ui.el [ Ui.width (Ui.px 24) ] (Ui.html icon), Ui.text text ]
 
 
-messageCustomEmojiIds : Message messageId userId -> List (Id CustomEmojiId)
+messageCustomEmojiIds : Message messageId userId channelId -> List (Id CustomEmojiId)
 messageCustomEmojiIds message =
     let
         reactionIds : SeqDict EmojiOrCustomEmoji a -> List (Id CustomEmojiId)

@@ -70,6 +70,7 @@ import OneOrGreater
 import Pages.Admin
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
+import Pages.Privacy
 import Pagination
 import Point2d exposing (Point2d)
 import Ports exposing (PwaStatus(..))
@@ -87,7 +88,7 @@ import SetViewing exposing (SetViewing(..))
 import SheepGame
 import Sticker
 import String.Extra
-import String.Nonempty
+import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import Thread
 import Toop exposing (T4(..))
@@ -103,7 +104,7 @@ import User exposing (FrontendUser)
 import UserAgent
 import UserColor
 import UserOptions
-import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), ToBeFilledInByBackend(..))
+import UserSession exposing (ChannelHeaderTab(..), LastViewedGuild(..), NotificationMode(..), ToBeFilledInByBackend(..))
 import Vector2d
 import WordSpellingGame
 import X25519
@@ -194,6 +195,48 @@ setDevicePixelRatio devicePixelRatio model =
     }
 
 
+{-| LocalUser keeps a copy of the safe-area insets for the same reason it keeps the device pixel
+ratio: so lazily rendered views can read them without taking another parameter. Rotating the
+device changes them.
+-}
+setSafeAreaInsets : { top : Int, bottom : Int } -> LoadedFrontend -> LoadedFrontend
+setSafeAreaInsets insets model =
+    let
+        startupData : Ports.StartupData
+        startupData =
+            model.startupData
+    in
+    { model
+        | startupData = { startupData | safeAreaInsetTop = insets.top, safeAreaInsetBottom = insets.bottom }
+        , loginStatus =
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    LoggedIn
+                        { loggedIn
+                            | localState =
+                                Local.mapModel
+                                    (\local ->
+                                        let
+                                            localUser : User.LocalUser
+                                            localUser =
+                                                local.localUser
+                                        in
+                                        { local
+                                            | localUser =
+                                                { localUser
+                                                    | safeAreaInsetTop = insets.top
+                                                    , safeAreaInsetBottom = insets.bottom
+                                                }
+                                        }
+                                    )
+                                    loggedIn.localState
+                        }
+
+                NotLoggedIn _ ->
+                    model.loginStatus
+    }
+
+
 {-| LocalUser keeps a copy of the emoji data so that a reaction can name the emoji it
 shows without messageView needing another parameter. It arrives once, after the rest of
 the page has loaded, so both copies are filled in when it does.
@@ -261,6 +304,7 @@ subscriptions _ model =
         , Ports.serviceWorkerMessage GotServiceWorkerMessage
         , Ports.serviceWorkerData GotServiceWorkerData
         , Ports.visualViewportResized VisualViewportResized
+        , Ports.safeAreaInsetsChanged SafeAreaInsetsChanged
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
         , Call.fromJs GotVoiceChatSignalFromJs
@@ -454,11 +498,20 @@ initLoadedFrontend loading clientId time startupData loginResult =
         ( aiChatModel, aiChatCmd ) =
             AiChat.init
 
+        route : Route
+        route =
+            case loginStatus of
+                LoggedIn loggedIn ->
+                    startupRoute loading loggedIn
+
+                NotLoggedIn _ ->
+                    loading.route
+
         model : LoadedFrontend
         model =
             { navigationKey = loading.navigationKey
             , clientId = clientId
-            , route = loading.route
+            , route = route
             , time = time
             , timezone = startupData.timezone
             , windowSize = loading.windowSize
@@ -488,6 +541,11 @@ initLoadedFrontend loading clientId time startupData loginResult =
     , Command.batch
         [ cmdB
         , cmdA
+        , if route == loading.route then
+            Command.none
+
+          else
+            FrontendExtra.routeReplace model2 route
         , Command.map AiChatToBackend AiChatMsg aiChatCmd
         , checkAppVersion
         , case loginResult of
@@ -500,6 +558,49 @@ initLoadedFrontend loading clientId time startupData loginResult =
         ]
     , Audio.cmdNone
     )
+
+
+startupRoute : LoadingFrontend -> LoggedIn2 -> Route
+startupRoute loading loggedIn =
+    case loading.route of
+        HomePageRoute overlay ->
+            if MyUi.isMobile loading then
+                loading.route
+
+            else
+                let
+                    local : LocalState
+                    local =
+                        Local.model loggedIn.localState
+                in
+                case local.localUser.session.lastViewedGuild of
+                    Just (LastViewedGuild guildId) ->
+                        case SeqDict.get guildId local.guilds of
+                            Just guild ->
+                                GuildColumn.guildRoute local.localUser guildId guild |> Route.setOverlay overlay
+
+                            Nothing ->
+                                loading.route
+
+                    Just (LastViewedDiscordGuild guildId) ->
+                        case SeqDict.get guildId local.discordGuilds of
+                            Just guild ->
+                                case GuildColumn.discordGuildCurrentUserId local.localUser guild of
+                                    Just discordUserId ->
+                                        GuildColumn.discordGuildRoute local.localUser discordUserId guildId guild
+                                            |> Route.setOverlay overlay
+
+                                    Nothing ->
+                                        loading.route
+
+                            Nothing ->
+                                loading.route
+
+                    Nothing ->
+                        loading.route
+
+        _ ->
+            loading.route
 
 
 tryInitLoadedFrontend : LoadingFrontend -> ( FrontendModel_, Command FrontendOnly ToBackend FrontendMsg_, AudioCmd FrontendMsg_ )
@@ -800,7 +901,11 @@ updateLoaded msg model =
                                 FrontendExtra.routePush model2 (HomePageRoute Nothing)
 
                             else
-                                ( model2, Command.none )
+                                ( model2
+                                , FrontendExtra.routeReplace
+                                    model2
+                                    (HomePageRoute Nothing)
+                                )
 
         RecoveryLoginMsg recoveryLoginMsg ->
             case model.loginStatus of
@@ -2222,6 +2327,19 @@ updateLoaded msg model =
 
                         allUsers =
                             User.allUsers local.localUser
+
+                        removeFile : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> NonemptyString -> Maybe NonemptyString
+                        removeFile channels draft =
+                            case
+                                RichText.fromNonemptyString local.localUser.timezone allUsers channels draft
+                                    |> RichText.removeAttachedFile (\a -> a == fileId)
+                            of
+                                Just richText ->
+                                    RichText.toString local.localUser.timezone False allUsers channels richText
+                                        |> String.Nonempty.fromString
+
+                                Nothing ->
+                                    Nothing
                     in
                     ( { loggedIn
                         | filesToUpload =
@@ -2244,16 +2362,12 @@ updateLoaded msg model =
                                 (\maybe ->
                                     case maybe of
                                         Just draft ->
-                                            case
-                                                RichText.fromNonemptyString local.localUser.timezone allUsers draft
-                                                    |> RichText.removeAttachedFile (\a -> a == fileId)
-                                            of
-                                                Just richText ->
-                                                    RichText.toString local.localUser.timezone False allUsers richText
-                                                        |> String.Nonempty.fromString
+                                            case Tuple.first guildOrDmId of
+                                                GuildOrDmId guildOrDmId2 ->
+                                                    removeFile (LocalState.channelMentions guildOrDmId2 local) draft
 
-                                                Nothing ->
-                                                    Nothing
+                                                DiscordGuildOrDmId guildOrDmId2 ->
+                                                    removeFile (LocalState.discordChannelMentions guildOrDmId2 local) draft
 
                                         Nothing ->
                                             Nothing
@@ -2274,6 +2388,18 @@ updateLoaded msg model =
 
                         allUsers =
                             User.allUsers local.localUser
+
+                        removeFile : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> NonemptyString -> String -> String
+                        removeFile channels nonempty text =
+                            case
+                                RichText.fromNonemptyString local.localUser.timezone allUsers channels nonempty
+                                    |> RichText.removeAttachedFile (\a -> a == fileId)
+                            of
+                                Just richText ->
+                                    RichText.toString local.localUser.timezone False allUsers channels richText
+
+                                Nothing ->
+                                    text
                     in
                     ( case SeqDict.get guildOrDmId loggedIn.editMessage of
                         Just edit ->
@@ -2285,15 +2411,12 @@ updateLoaded msg model =
                                             | text =
                                                 case String.Nonempty.fromString edit.text of
                                                     Just nonempty ->
-                                                        case
-                                                            RichText.fromNonemptyString local.localUser.timezone allUsers nonempty
-                                                                |> RichText.removeAttachedFile (\a -> a == fileId)
-                                                        of
-                                                            Just richText ->
-                                                                RichText.toString local.localUser.timezone False allUsers richText
+                                                        case Tuple.first guildOrDmId of
+                                                            GuildOrDmId guildOrDmId2 ->
+                                                                removeFile (LocalState.channelMentions guildOrDmId2 local) nonempty edit.text
 
-                                                            Nothing ->
-                                                                edit.text
+                                                            DiscordGuildOrDmId guildOrDmId2 ->
+                                                                removeFile (LocalState.discordChannelMentions guildOrDmId2 local) nonempty edit.text
 
                                                     Nothing ->
                                                         edit.text
@@ -2802,6 +2925,9 @@ updateLoaded msg model =
                         TextEditorRoute ->
                             ( model, Command.none )
 
+                        PrivacyRoute ->
+                            ( model, Command.none )
+
                         LinkDiscord _ ->
                             ( model, Command.none )
 
@@ -3006,7 +3132,9 @@ updateLoaded msg model =
         GotStartupData startupData ->
             case startupData of
                 Ok startupData2 ->
-                    ( setDevicePixelRatio startupData2.devicePixelRatio { model | startupData = startupData2 }
+                    ( { model | startupData = startupData2 }
+                        |> setDevicePixelRatio startupData2.devicePixelRatio
+                        |> setSafeAreaInsets { top = startupData2.safeAreaInsetTop, bottom = startupData2.safeAreaInsetBottom }
                     , Command.none
                     )
 
@@ -3250,7 +3378,7 @@ updateLoaded msg model =
                                    is on this device. Without this the conversation only becomes
                                    readable after a reload, which is when the backlog is decrypted.
                                 -}
-                                stillEncrypted : List (Encryption.EncryptedData (MessageContent (Id UserId)))
+                                stillEncrypted : List (Encryption.EncryptedData (MessageContent (Id UserId) (Id ChannelId)))
                                 stillEncrypted =
                                     case SeqDict.get otherUserId local.dmChannels of
                                         Just dmChannel ->
@@ -3358,7 +3486,7 @@ updateLoaded msg model =
                             case SeqDict.get requestId loggedIn.encryptionRequests.pendingDecryptedOldMessages of
                                 Just pending ->
                                     let
-                                        decrypted : List ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+                                        decrypted : List ( ThreadRouteWithMessage, MessageContent (Id UserId) (Id ChannelId) )
                                         decrypted =
                                             List.map2 Tuple.pair pending.messages results
                                                 |> List.filterMap
@@ -3560,6 +3688,9 @@ updateLoaded msg model =
 
         VisualViewportResized height ->
             ( { model | visualViewportHeight = round height }, Command.none )
+
+        SafeAreaInsetsChanged insets ->
+            ( setSafeAreaInsets insets model, Command.none )
 
         TextEditorMsg textEditorMsg ->
             case model.loginStatus of
@@ -3973,7 +4104,7 @@ updateLoaded msg model =
                                             local =
                                                 Local.model loggedIn.localState
 
-                                            editedRichText : Maybe (Nonempty (RichText (Id UserId)))
+                                            editedRichText : Maybe (Nonempty (RichText (Id UserId) (Id ChannelId)))
                                             editedRichText =
                                                 case
                                                     ( String.Nonempty.fromString edit.text
@@ -3991,11 +4122,12 @@ updateLoaded msg model =
                                                 of
                                                     ( Just nonempty, Just ( message, _ ) ) ->
                                                         let
-                                                            richText : Nonempty (RichText (Id UserId))
+                                                            richText : Nonempty (RichText (Id UserId) (Id ChannelId))
                                                             richText =
                                                                 RichText.fromNonemptyString
                                                                     local.localUser.timezone
                                                                     (User.allUsers local.localUser)
+                                                                    SeqDict.empty
                                                                     nonempty
                                                         in
                                                         if message.content.content == richText then
@@ -4068,11 +4200,12 @@ updateLoaded msg model =
                                                             of
                                                                 ( Just nonempty, Just ( message, _ ) ) ->
                                                                     let
-                                                                        richText : Nonempty (RichText (Id UserId))
+                                                                        richText : Nonempty (RichText (Id UserId) (Id ChannelId))
                                                                         richText =
                                                                             RichText.fromNonemptyString
                                                                                 local.localUser.timezone
                                                                                 (User.allUsers local.localUser)
+                                                                                (LocalState.channelMentions guildOrDmId2 local)
                                                                                 nonempty
                                                                     in
                                                                     if message.content.content == richText then
@@ -4108,11 +4241,12 @@ updateLoaded msg model =
                                                             of
                                                                 ( Just nonempty, Just ( message, _ ) ) ->
                                                                     let
-                                                                        richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                                                        richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                                                         richText =
                                                                             RichText.fromNonemptyString
                                                                                 local.localUser.timezone
                                                                                 (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                                                                                (LocalState.discordChannelMentions guildOrDmId2 local)
                                                                                 nonempty
                                                                     in
                                                                     if message.content.content == richText then
@@ -4428,7 +4562,7 @@ updateLoaded msg model =
                                         local =
                                             Local.model loggedIn.localState
 
-                                        nonempty : String.Nonempty.NonemptyString
+                                        nonempty : NonemptyString
                                         nonempty =
                                             User.redactPrivateKeys local.localUser.user draft
 
@@ -4465,6 +4599,7 @@ updateLoaded msg model =
                                                         RichText.fromNonemptyString
                                                             local.localUser.timezone
                                                             (User.allUsers local.localUser)
+                                                            SeqDict.empty
                                                             nonempty
                                                     , embeds = Array.empty
                                                     , attachedFiles =
@@ -4497,7 +4632,7 @@ updateLoaded msg model =
                                                                 )
                                                                 (case model.emojiData of
                                                                     Just emojiData2 ->
-                                                                        RichText.fromNonemptyString Time.utc SeqDict.empty nonempty
+                                                                        RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty nonempty
                                                                             |> RichText.emojisAndCustomEmojis emojiData2
                                                                             |> SeqSet.fromList
                                                                             |> SeqSet.toList
@@ -4800,16 +4935,26 @@ updateLoaded msg model =
                                         timezone : Time.Zone
                                         timezone =
                                             Local.model loggedIn.localState |> .localUser |> .timezone
-                                    in
-                                    (if removeSpoiler then
-                                        RichText.fromNonemptyString timezone allUsers text
-                                            |> RichText.unspoilerAttachedFile fileId
 
-                                     else
-                                        RichText.fromNonemptyString timezone allUsers text
-                                            |> RichText.spoilerAttachedFile fileId
+                                        toggleSpoiler : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> String
+                                        toggleSpoiler channels =
+                                            (if removeSpoiler then
+                                                RichText.fromNonemptyString timezone allUsers channels text
+                                                    |> RichText.unspoilerAttachedFile fileId
+
+                                             else
+                                                RichText.fromNonemptyString timezone allUsers channels text
+                                                    |> RichText.spoilerAttachedFile fileId
+                                            )
+                                                |> RichText.toString timezone False allUsers channels
+                                    in
+                                    (case Tuple.first guildOrDmId of
+                                        GuildOrDmId guildOrDmId2 ->
+                                            toggleSpoiler (LocalState.channelMentions guildOrDmId2 (Local.model loggedIn.localState))
+
+                                        DiscordGuildOrDmId guildOrDmId2 ->
+                                            toggleSpoiler (LocalState.discordChannelMentions guildOrDmId2 (Local.model loggedIn.localState))
                                     )
-                                        |> RichText.toString timezone False allUsers
                                         |> String.Nonempty.fromString
                                         |> Maybe.withDefault text
                                 )
@@ -4838,18 +4983,27 @@ updateLoaded msg model =
                                                 timezone2 : Time.Zone
                                                 timezone2 =
                                                     Local.model loggedIn.localState |> .localUser |> .timezone
-                                            in
-                                            { edit
-                                                | text =
+
+                                                toggleSpoiler : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> String
+                                                toggleSpoiler channels =
                                                     (if removeSpoiler then
-                                                        RichText.fromNonemptyString timezone2 allUsers nonempty
+                                                        RichText.fromNonemptyString timezone2 allUsers channels nonempty
                                                             |> RichText.unspoilerAttachedFile fileId
 
                                                      else
-                                                        RichText.fromNonemptyString timezone2 allUsers nonempty
+                                                        RichText.fromNonemptyString timezone2 allUsers channels nonempty
                                                             |> RichText.spoilerAttachedFile fileId
                                                     )
-                                                        |> RichText.toString timezone2 False allUsers
+                                                        |> RichText.toString timezone2 False allUsers channels
+                                            in
+                                            { edit
+                                                | text =
+                                                    case Tuple.first guildOrDmId of
+                                                        GuildOrDmId guildOrDmId2 ->
+                                                            toggleSpoiler (LocalState.channelMentions guildOrDmId2 (Local.model loggedIn.localState))
+
+                                                        DiscordGuildOrDmId guildOrDmId2 ->
+                                                            toggleSpoiler (LocalState.discordChannelMentions guildOrDmId2 (Local.model loggedIn.localState))
                                             }
 
                                         Nothing ->
@@ -5298,6 +5452,9 @@ updateLoaded msg model =
                     ( model, Command.none )
 
                 TextEditorRoute ->
+                    ( model, Command.none )
+
+                PrivacyRoute ->
                     ( model, Command.none )
 
                 LinkDiscord _ ->
@@ -6587,6 +6744,15 @@ selectionChanged maybeHtmlId maybeRange model =
                                                         Nothing ->
                                                             False
 
+                                                Just (ChannelSoFar channelSoFar) ->
+                                                    MessageDropdown.channelDropdownList
+                                                        (MyUi.isMobile model)
+                                                        channelSoFar
+                                                        guildOrDmId
+                                                        local
+                                                        |> List.isEmpty
+                                                        |> not
+
                                                 Just (TimestampSoFar _ _) ->
                                                     True
 
@@ -6908,6 +7074,9 @@ setShowMembers showMembers model =
         TextEditorRoute ->
             ( model, Command.none )
 
+        PrivacyRoute ->
+            ( model, Command.none )
+
         LinkDiscord _ ->
             ( model, Command.none )
 
@@ -7042,7 +7211,12 @@ pressedEditMessage guildOrDmId threadRoute model =
                         GuildOrDmId guildOrDmId2 ->
                             case LocalState.guildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
-                                    ( RichText.toString local.localUser.timezone False (User.allUsers local.localUser) message.content.content
+                                    ( RichText.toString
+                                        local.localUser.timezone
+                                        False
+                                        (User.allUsers local.localUser)
+                                        (LocalState.channelMentions guildOrDmId2 local)
+                                        message.content.content
                                     , message.content.attachedFiles
                                     )
                                         |> Just
@@ -7057,6 +7231,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                                         local.localUser.timezone
                                         False
                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                                        (LocalState.discordChannelMentions guildOrDmId2 local)
                                         message.content.content
                                     , message.content.attachedFiles
                                     )
@@ -8695,12 +8870,13 @@ view _ model =
                                     notLoggedIn.textInputFocus
                                     (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                                     loaded.windowSize
+                                    loaded.startupData.safeAreaInsetTop
                                     loaded.startupData.pwaStatus
                                     loaded.startupData.userAgent.browser
                                     |> Ui.map LoginFormMsg
                                     |> FrontendExtra.layout loaded
                                         [ Ui.background MyUi.background3
-                                        , Ui.inFront (Pages.Home.header isMobile loaded.route loaded.loginStatus)
+                                        , Ui.inFront (Pages.Home.header isMobile loaded.startupData.safeAreaInsetTop loaded.route loaded.loginStatus)
                                         ]
                 in
                 case loaded.route of
@@ -8717,7 +8893,7 @@ view _ model =
                                     loaded
                                     [ Ui.background MyUi.background3 ]
                                     (Ui.el
-                                        [ Ui.inFront (Pages.Home.header isMobile loaded.route loaded.loginStatus)
+                                        [ Ui.inFront (Pages.Home.header isMobile loaded.startupData.safeAreaInsetTop loaded.route loaded.loginStatus)
                                         , Ui.height Ui.fill
                                         ]
                                         (case notLoggedIn.loginForm of
@@ -8726,6 +8902,7 @@ view _ model =
                                                     notLoggedIn.textInputFocus
                                                     loginForm2
                                                     loaded.windowSize
+                                                    loaded.startupData.safeAreaInsetTop
                                                     loaded.startupData.pwaStatus
                                                     loaded.startupData.userAgent.browser
                                                     |> Ui.map LoginFormMsg
@@ -8745,7 +8922,7 @@ view _ model =
                                     |> Ui.map RecoveryLoginMsg
                                     |> FrontendExtra.layout loaded
                                         [ Ui.background MyUi.background3
-                                        , Ui.inFront (Pages.Home.header isMobile loaded.route loaded.loginStatus)
+                                        , Ui.inFront (Pages.Home.header isMobile loaded.startupData.safeAreaInsetTop loaded.route loaded.loginStatus)
                                         ]
 
                             _ ->
@@ -8773,35 +8950,44 @@ view _ model =
                         requiresLogin
                             (\loggedIn _ ->
                                 Maybe.withDefault Pages.Guild.newGuildFormInit loggedIn.newGuildForm
-                                    |> Pages.Guild.newGuildFormView
+                                    |> Pages.Guild.newGuildFormView loaded.startupData.safeAreaInsetTop
                             )
 
                     AiChatRoute ->
-                        AiChat.view loaded.windowSize loaded.aiChatModel
-                            |> Ui.map AiChatMsg
-                            |> FrontendExtra.layout loaded
-                                [ if
-                                    (loaded.aiChatModel.chatHistory == "")
-                                        && (loaded.aiChatModel.message == "")
-                                        && MyUi.isMobile loaded
-                                        && (loaded.startupData.pwaStatus == BrowserView)
-                                  then
-                                    Ui.inFront
-                                        (Ui.el
-                                            [ Ui.centerX
-                                            , Ui.centerY
-                                            , Ui.widthMax 380
-                                            , Ui.padding 16
-                                            ]
-                                            (LoginForm.mobileWarning
-                                                loaded.windowSize
-                                                loaded.startupData.userAgent.browser
-                                            )
-                                        )
+                        requiresLogin
+                            (\_ local ->
+                                case local.adminData of
+                                    IsNotAdmin ->
+                                        errorPage loaded "Admin access required to view this page"
 
-                                  else
-                                    Ui.noAttr
-                                ]
+                                    _ ->
+                                        AiChat.view loaded.windowSize loaded.startupData.safeAreaInsetTop loaded.startupData.safeAreaInsetBottom loaded.aiChatModel
+                                            |> Ui.map AiChatMsg
+                                            |> Ui.el
+                                                [ Ui.height Ui.fill
+                                                , if
+                                                    (loaded.aiChatModel.chatHistory == "")
+                                                        && (loaded.aiChatModel.message == "")
+                                                        && MyUi.isMobile loaded
+                                                        && (loaded.startupData.pwaStatus == BrowserView)
+                                                  then
+                                                    Ui.inFront
+                                                        (Ui.el
+                                                            [ Ui.centerX
+                                                            , Ui.centerY
+                                                            , Ui.widthMax 380
+                                                            , Ui.padding 16
+                                                            ]
+                                                            (LoginForm.mobileWarning
+                                                                loaded.windowSize
+                                                                loaded.startupData.userAgent.browser
+                                                            )
+                                                        )
+
+                                                  else
+                                                    Ui.noAttr
+                                                ]
+                            )
 
                     GuildRoute guildId maybeChannelId _ _ ->
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)
@@ -8829,10 +9015,36 @@ view _ model =
                         requiresLogin
                             (\_ local ->
                                 TextEditor.view
+                                    loaded.startupData.safeAreaInsetTop
+                                    loaded.startupData.safeAreaInsetBottom
                                     local.localUser.session.userId
                                     local.textEditor
                                     |> Ui.map TextEditorMsg
                             )
+
+                    PrivacyRoute ->
+                        case loaded.loginStatus of
+                            NotLoggedIn { loginForm, textInputFocus } ->
+                                case loginForm of
+                                    Just loginForm2 ->
+                                        LoginForm.view
+                                            textInputFocus
+                                            loginForm2
+                                            loaded.windowSize
+                                            loaded.startupData.safeAreaInsetTop
+                                            loaded.startupData.pwaStatus
+                                            loaded.startupData.userAgent.browser
+                                            |> Ui.map LoginFormMsg
+                                            |> FrontendExtra.layout loaded
+                                                [ Ui.background MyUi.background3
+                                                , Ui.inFront (Pages.Home.header isMobile loaded.startupData.safeAreaInsetTop loaded.route loaded.loginStatus)
+                                                ]
+
+                                    Nothing ->
+                                        privacyPage isMobile loaded
+
+                            LoggedIn _ ->
+                                privacyPage isMobile loaded
 
                     DiscordDmRoute routeData ->
                         requiresLogin
@@ -8853,6 +9065,7 @@ view _ model =
                                             notLoggedIn.textInputFocus
                                             (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                                             loaded.windowSize
+                                            loaded.startupData.safeAreaInsetTop
                                             -- Don't show PWA warning on this login screen
                                             InstalledPwa
                                             loaded.startupData.userAgent.browser
@@ -8907,10 +9120,25 @@ view _ model =
     }
 
 
+privacyPage : Bool -> LoadedFrontend -> Html FrontendMsg_
+privacyPage isMobile loaded =
+    FrontendExtra.layout
+        loaded
+        [ Ui.background MyUi.background3
+        , Ui.scrollable
+        , Ui.heightMin 0
+        , Ui.inFront (Pages.Home.header isMobile loaded.startupData.safeAreaInsetTop loaded.route loaded.loginStatus)
+        ]
+        (Ui.el
+            [ MyUi.notoSans, Ui.paddingWith { left = 0, right = 0, top = 64, bottom = 32 } ]
+            (Pages.Privacy.view FrontendNoOp |> Ui.el [ Ui.centerX, Ui.widthMax 1000, Ui.paddingXY 16 32 ])
+        )
+
+
 errorPage : LoadedFrontend -> String -> Element FrontendMsg_
 errorPage model text =
     Ui.el
-        [ Ui.inFront (Pages.Home.header (MyUi.isMobile model) model.route model.loginStatus)
+        [ Ui.inFront (Pages.Home.header (MyUi.isMobile model) model.startupData.safeAreaInsetTop model.route model.loginStatus)
         , Ui.height Ui.fill
         ]
         (Ui.column
@@ -9330,7 +9558,7 @@ the other thing that goes over as many messages at once.
 -}
 manyMessagesEncrypted :
     Id EncryptManyRequestId
-    -> List (Encryption.EncryptedData (MessageContent (Id UserId)))
+    -> List (Encryption.EncryptedData (MessageContent (Id UserId) (Id ChannelId)))
     -> LoadedFrontend
     -> LoggedIn2
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
@@ -9340,8 +9568,8 @@ manyMessagesEncrypted requestId encrypted model loggedIn =
             let
                 pairs :
                     List
-                        ( ( ThreadRouteWithMessage, MessageContent (Id UserId) )
-                        , Encryption.EncryptedData (MessageContent (Id UserId))
+                        ( ( ThreadRouteWithMessage, MessageContent (Id UserId) (Id ChannelId) )
+                        , Encryption.EncryptedData (MessageContent (Id UserId) (Id ChannelId))
                         )
                 pairs =
                     List.map2
@@ -9397,7 +9625,7 @@ forgetEncryptManyRequest requestId requests =
 
 type alias OldMessagesToEncrypt =
     { id : Viewing_DmId
-    , messages : List ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+    , messages : List ( ThreadRouteWithMessage, MessageContent (Id UserId) (Id ChannelId) )
     }
 
 
@@ -9422,12 +9650,12 @@ that turns encryption off.
 -}
 handleManyMessagesDecrypted :
     Id Encryption.DecryptManyRequestId
-    -> List (Result () (MessageContent (Id UserId)))
+    -> List (Result () (MessageContent (Id UserId) (Id ChannelId)))
     -> LoggedIn2
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 handleManyMessagesDecrypted requestId results loggedIn =
     let
-        decrypted : List ( BytesHash, Result () (MessageContent (Id UserId)) )
+        decrypted : List ( BytesHash, Result () (MessageContent (Id UserId) (Id ChannelId)) )
         decrypted =
             case SeqDict.get requestId loggedIn.encryptionRequests.pendingDecryptedManyMessages of
                 Just pending ->
@@ -9464,7 +9692,7 @@ handleManyMessagesDecrypted requestId results loggedIn =
 
 type alias OldMessagesToDecrypt =
     { id : Viewing_DmId
-    , messages : List ( ThreadRouteWithMessage, Encryption.EncryptedData (MessageContent (Id UserId)) )
+    , messages : List ( ThreadRouteWithMessage, Encryption.EncryptedData (MessageContent (Id UserId) (Id ChannelId)) )
     }
 
 
@@ -9566,7 +9794,7 @@ locallyLoadedMessagesToEncrypt local =
                                 SeqDict.foldl
                                     (\threadId thread threads ->
                                         let
-                                            plainText : SeqDict (Id Id.ThreadMessageId) (MessageContent (Id UserId))
+                                            plainText : SeqDict (Id Id.ThreadMessageId) (MessageContent (Id UserId) (Id ChannelId))
                                             plainText =
                                                 plainTextLoaded thread.messages
                                         in
@@ -9594,8 +9822,8 @@ locallyLoadedMessagesToEncrypt local =
 
 
 plainTextLoaded :
-    MessageArray messageId (Id UserId)
-    -> SeqDict (Id messageId) (MessageContent (Id UserId))
+    MessageArray messageId (Id UserId) (Id ChannelId)
+    -> SeqDict (Id messageId) (MessageContent (Id UserId) (Id ChannelId))
 plainTextLoaded messages =
     MessageArray.toList messages
         |> List.filterMap
@@ -9623,7 +9851,7 @@ encryptConversation ( requestId, conversation ) =
 
 type alias LoadedEncryptedMessages =
     { id : Viewing_DmId
-    , messages : List (Encryption.EncryptedData (MessageContent (Id UserId)))
+    , messages : List (Encryption.EncryptedData (MessageContent (Id UserId) (Id ChannelId)))
     , shiftScrollFrom : Maybe HtmlId
     }
 
@@ -9659,7 +9887,7 @@ encryptedMessagesJustLoaded localChange =
 encryptedMessagesLoadedInto :
     GuildOrDmId
     -> Maybe HtmlId
-    -> List (Message.Message messageId (Id UserId))
+    -> List (Message.Message messageId (Id UserId) (Id ChannelId))
     -> Maybe LoadedEncryptedMessages
 encryptedMessagesLoadedInto guildOrDmId shiftScrollFrom messagesLoaded =
     case guildOrDmId of
@@ -9673,7 +9901,7 @@ encryptedMessagesLoadedInto guildOrDmId shiftScrollFrom messagesLoaded =
 encryptedMessagesInConversation :
     Viewing_DmId
     -> Maybe HtmlId
-    -> List (Message.Message messageId (Id UserId))
+    -> List (Message.Message messageId (Id UserId) (Id ChannelId))
     -> Maybe LoadedEncryptedMessages
 encryptedMessagesInConversation id shiftScrollFrom messagesLoaded =
     case List.filterMap FrontendExtra.encryptedMessageData messagesLoaded of
@@ -9711,7 +9939,7 @@ until the ciphertext comes back. Editing doesn't notify anyone, so unlike
 startEncryptingEdit :
     Viewing_DmId
     -> ThreadRouteWithMessage
-    -> MessageContent (Id UserId)
+    -> MessageContent (Id UserId) (Id ChannelId)
     -> LoggedIn2
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 startEncryptingEdit id threadRoute contentAndEmbeds loggedIn =
@@ -9738,7 +9966,7 @@ startEncryptingEdit id threadRoute contentAndEmbeds loggedIn =
 startEncryptingMessage :
     Viewing_DmId
     -> ThreadRoute
-    -> MessageContent (Id UserId)
+    -> MessageContent (Id UserId) (Id ChannelId)
     -> LoggedIn2
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
@@ -9779,6 +10007,7 @@ startEncryptingMessage id threadRoute contentAndEmbeds loggedIn =
             localUser.timezone
             True
             (User.allUsers localUser)
+            SeqDict.empty
             contentAndEmbeds.content
         )
     )

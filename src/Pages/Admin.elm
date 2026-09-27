@@ -47,6 +47,7 @@ import Bytes exposing (Bytes)
 import Bytes.Encode
 import ChannelName
 import Codec
+import Coord
 import CustomEmoji
 import Discord
 import DmChannelId exposing (DmChannelId)
@@ -65,6 +66,7 @@ import Effect.Time as Time
 import Effect.Websocket exposing (CloseEventCode(..))
 import EmailAddress
 import Env
+import FileStatus exposing (BackendFileData, FileHash)
 import GuildName
 import Html
 import Html.Attributes
@@ -347,6 +349,7 @@ type AdminChange
     | LoadDiscordUsers (ToBeFilledInByBackend (SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin))
     | LoadSessions (ToBeFilledInByBackend (SeqDict SessionIdHash UserSession))
     | LoadWebsocketCloseEvents (ToBeFilledInByBackend (Array WebsocketClosedEvent))
+    | LoadOrphanedFiles (ToBeFilledInByBackend (SeqDict FileHash BackendFileData))
     | LoadToBackendLogs (ToBeFilledInByBackend (Array ToBackendLogData))
     | LoadBackendMsgLogs (ToBeFilledInByBackend (Array BackendMsgLogData))
     | SetEmailNotificationsEnabled Bool
@@ -512,6 +515,9 @@ updateAdmin changedBy change adminData local =
 
         LoadWebsocketCloseEvents filledInByBackend ->
             { local | adminData = IsAdmin { adminData | websocketCloseEvents = loadedAdminData filledInByBackend } }
+
+        LoadOrphanedFiles filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | orphanedFiles = loadedAdminData filledInByBackend } }
 
         LoadToBackendLogs filledInByBackend ->
             { local | adminData = IsAdmin { adminData | toBackendLogs = loadedAdminData filledInByBackend } }
@@ -1677,6 +1683,9 @@ pendingChangesText change =
         LoadWebsocketCloseEvents _ ->
             "Loading websocket close events in admin page"
 
+        LoadOrphanedFiles _ ->
+            "Loading orphaned files in admin page"
+
         LoadToBackendLogs _ ->
             "Loading toBackend logs in admin page"
 
@@ -1761,7 +1770,7 @@ view isMobile2 version time local adminData model =
     Ui.el
         [ Ui.scrollable
         , Ui.background MyUi.background3
-        , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 " ++ MyUi.insetBottom ++ " 0")
+        , Ui.paddingWith { left = 0, right = 0, top = local.localUser.safeAreaInsetTop, bottom = local.localUser.safeAreaInsetBottom }
         , Ui.heightMin 0
         ]
         (MyUi.column
@@ -2483,7 +2492,67 @@ filesSection isMobile expandedSections adminData =
         isMobile
         expandedSections
         FilesSection
-        [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
+        [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount)
+        , case adminData.orphanedFiles of
+            AdminDataNotLoaded ->
+                Ui.text loadingText
+
+            AdminDataLoading ->
+                Ui.text loadingText
+
+            AdminDataLoaded orphanedFiles ->
+                if SeqDict.isEmpty orphanedFiles then
+                    Ui.text "No orphaned files"
+
+                else
+                    let
+                        largestFirst : List ( FileHash, BackendFileData )
+                        largestFirst =
+                            SeqDict.toList orphanedFiles |> List.sortBy (\( _, file ) -> -file.fileSize)
+                    in
+                    Ui.column
+                        [ Ui.spacing 8 ]
+                        [ Ui.text
+                            ("Orphaned file count: "
+                                ++ String.fromInt (SeqDict.size orphanedFiles)
+                                ++ ", total size: "
+                                ++ FileStatus.sizeToString (List.sum (List.map (\( _, file ) -> file.fileSize) largestFirst))
+                            )
+                        , Ui.column
+                            [ Ui.spacing 2, Ui.Font.size 14 ]
+                            (List.map
+                                (\( fileHash, file ) ->
+                                    Ui.row
+                                        [ Ui.spacing 16 ]
+                                        [ Ui.el [ Ui.width (Ui.px 80) ] (Ui.text (FileStatus.sizeToString file.fileSize))
+                                        , Ui.el
+                                            [ Ui.width (Ui.px 100) ]
+                                            (case file.imageSize of
+                                                Just imageSize ->
+                                                    Ui.text (String.fromInt (Coord.xRaw imageSize) ++ "×" ++ String.fromInt (Coord.yRaw imageSize))
+
+                                                Nothing ->
+                                                    Ui.none
+                                            )
+                                        , Ui.el
+                                            [ Ui.linkNewTab
+                                                (case file.imageSize of
+                                                    Just _ ->
+                                                        -- Browsers show any image format sent as image/png
+                                                        FileStatus.fileUrl FileStatus.pngContent fileHash
+
+                                                    Nothing ->
+                                                        FileStatus.fileUrl FileStatus.unknownContentType fileHash
+                                                )
+                                            , Ui.Font.color MyUi.textLinkColor
+                                            ]
+                                            (Ui.text (FileStatus.fileHashToString fileHash))
+                                        ]
+                                )
+                                largestFirst
+                            )
+                        ]
+        ]
 
 
 wordSpellingGameSwedishSection : Bool -> SeqSet AdminUiSection -> AdminData -> Element Msg
@@ -3987,7 +4056,7 @@ discordGuildChannel linkedGuildMembers guild guildId adminData ( channelId, chan
         ]
 
 
-firstMessageView : { a | firstMessage : Maybe (Message messageId userId) } -> Element Msg
+firstMessageView : { a | firstMessage : Maybe (Message messageId userId channelId) } -> Element Msg
 firstMessageView channel =
     case channel.firstMessage of
         Just firstMessage ->
@@ -4005,7 +4074,7 @@ firstMessageView channel =
                     , Ui.background MyUi.background2
                     , Ui.height (Ui.px channelRowHeight)
                     ]
-                    { text = LocalState.messageToString Time.utc SeqDict.empty SeqDict.empty firstMessage
+                    { text = LocalState.messageToString Time.utc SeqDict.empty SeqDict.empty SeqDict.empty firstMessage
                     , onChange = \_ -> TypedInReadOnlyTextInput
                     , label = firstMessageLabel.id
                     , placeholder = Nothing
@@ -4911,7 +4980,7 @@ sectionDataToLoad section2 adminData =
                 ++ loadIfNeeded adminData.discordUsers (LoadDiscordUsers EmptyPlaceholder)
 
         FilesSection ->
-            []
+            loadIfNeeded adminData.orphanedFiles (LoadOrphanedFiles EmptyPlaceholder)
 
         ToBackendLogsSection ->
             loadIfNeeded adminData.toBackendLogs (LoadToBackendLogs EmptyPlaceholder)

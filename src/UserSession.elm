@@ -2,6 +2,7 @@ module UserSession exposing
     ( ChannelHeaderTab(..)
     , DiscordFrontendUser
     , FrontendUserSession
+    , LastViewedGuild(..)
     , NotificationMode(..)
     , PreviouslyLastViewedMessage(..)
     , PushSubscription(..)
@@ -24,6 +25,7 @@ module UserSession exposing
     , init
     , isViewing
     , isViewingGame
+    , setLastViewedGuild
     , setPreviouslyLastViewedChannelMessage
     , setPreviouslyLastViewedThreadMessage
     , setSheepGameQuestions
@@ -57,7 +59,13 @@ type alias UserSession =
     , lastClientDisconnect : Maybe Time.Posix
     , expandedUserOptions : SeqSet UserOptionSection
     , savedSheepGameQuestions : IdArray QuestionId SheepGameQuestion
+    , lastViewedGuild : Maybe LastViewedGuild
     }
+
+
+type LastViewedGuild
+    = LastViewedGuild (Id GuildId)
+    | LastViewedDiscordGuild (Discord.Id Discord.GuildId)
 
 
 type alias SheepGameQuestion =
@@ -72,6 +80,7 @@ type UserOptionSection
     | UserOption_Discord
     | UserOption_ConnectedDevices
     | UserOption_Debug
+    | UserOption_Privacy
 
 
 type alias FrontendUserSession =
@@ -190,34 +199,34 @@ type alias UnreadOverviewData =
     { guildChannels :
         SeqDict
             ( Id GuildId, Id ChannelId )
-            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) (Id ChannelId)))
     , guildThreads :
         SeqDict
             ( Id GuildId, Id ChannelId, Id ChannelMessageId )
-            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
-    , dmChannels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId)))
+    , dmChannels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) (Id ChannelId)))
     , dmThreads :
         SeqDict
             ( Id UserId, Id ChannelMessageId )
-            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId)))
     , discordGuildChannels :
         SeqDict
             ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId )
-            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
     , discordGuildThreads :
         SeqDict
             ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId, Id ChannelMessageId )
-            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId)))
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
     , discordDmChannels :
         SeqDict
             (Discord.Id Discord.PrivateChannelId)
-            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     }
 
 
 type alias ViewDiscordGuildData messageId =
-    { messages : SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId))
+    { messages : SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     , newUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     }
 
@@ -390,6 +399,7 @@ init time sessionId userId userAgent =
     , lastClientDisconnect = Nothing
     , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
     , savedSheepGameQuestions = IdArray.empty
+    , lastViewedGuild = Nothing
     }
 
 
@@ -401,6 +411,37 @@ expandUserOptionSection section session =
 collapseUserOptionSection : UserOptionSection -> UserSession -> UserSession
 collapseUserOptionSection section session =
     { session | expandedUserOptions = SeqSet.remove section session.expandedUserOptions }
+
+
+setLastViewedGuild : Viewing -> UserSession -> UserSession
+setLastViewedGuild viewing session =
+    case viewing of
+        Viewing_Channel data ->
+            { session | lastViewedGuild = Just (LastViewedGuild data.id.guildId) }
+
+        Viewing_ChannelThread data ->
+            { session | lastViewedGuild = Just (LastViewedGuild data.id.guildId) }
+
+        Viewing_DiscordChannel data ->
+            { session | lastViewedGuild = Just (LastViewedDiscordGuild data.id.guildId) }
+
+        Viewing_DiscordChannelThread data ->
+            { session | lastViewedGuild = Just (LastViewedDiscordGuild data.id.guildId) }
+
+        Viewing_Dm _ ->
+            session
+
+        Viewing_DmThread _ ->
+            session
+
+        Viewing_DiscordDm _ ->
+            session
+
+        Viewing_None ->
+            session
+
+        Viewing_Overview ->
+            session
 
 
 setSheepGameQuestions : IdArray QuestionId SheepGameQuestion -> UserSession -> UserSession

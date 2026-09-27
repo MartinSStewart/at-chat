@@ -76,6 +76,7 @@ async fn main() {
                     "/file/internal/custom-request",
                     post(custom_request_endpoint).options(options_endpoint),
                 )
+                .route("/file/favicon/{host}", get(favicon_endpoint))
                 .route(
                     "/file/discord-sticker/{sticker_id}",
                     get(discord_sticker_endpoint).options(options_endpoint),
@@ -1562,6 +1563,84 @@ async fn discord_sticker_endpoint(sticker_path: Path<String>) -> http::Response<
     }
 }
 
+/// Favicons change rarely, so a week keeps the browser from asking for the same
+/// icon on every page load. A site with no favicon gets a shorter expiry in case
+/// it adds one.
+const FAVICON_CACHE_CONTROL: &str = "public, max-age=604800";
+const MISSING_FAVICON_CACHE_CONTROL: &str = "public, max-age=86400";
+
+fn is_valid_favicon_host(host: &str) -> bool {
+    !host.is_empty()
+        && host.len() <= 253
+        && host
+            .chars()
+            .all(|x| x.is_ascii_alphanumeric() || x == '.' || x == '-')
+}
+
+/// Fetching link preview favicons through here rather than from DuckDuckGo
+/// directly means DuckDuckGo sees the server instead of each user's IP address.
+async fn favicon_endpoint(Path(host): Path<String>) -> http::Response<Body> {
+    if !is_valid_favicon_host(&host) {
+        return Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from("Invalid host"))
+            .unwrap();
+    }
+
+    let response = match embed_client() {
+        Some(client) => client
+            .get(format!("https://icons.duckduckgo.com/ip2/{host}.ico"))
+            .send()
+            .await
+            .ok(),
+        None => None,
+    };
+
+    match response {
+        Some(response2) => {
+            let status = response2.status();
+            let content_type = response2
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .filter(|v| v.starts_with("image/"))
+                .map(|v| v.to_owned());
+
+            // DuckDuckGo answers a site without a favicon with a 404 carrying a
+            // placeholder image, so that is passed on as it is.
+            match (content_type, response2.bytes().await) {
+                (Some(content_type2), Ok(bytes))
+                    if status.is_success() || status == StatusCode::NOT_FOUND =>
+                {
+                    Response::builder()
+                        .status(status)
+                        .header("Content-Type", content_type2)
+                        .header(
+                            "Cache-Control",
+                            if status.is_success() {
+                                FAVICON_CACHE_CONTROL
+                            } else {
+                                MISSING_FAVICON_CACHE_CONTROL
+                            },
+                        )
+                        .header("Content-Security-Policy", SANDBOX_CSP)
+                        .header("X-Content-Type-Options", NOSNIFF)
+                        .body(Body::from(bytes))
+                        .unwrap()
+                }
+                _ => Response::builder()
+                    .status(StatusCode::BAD_GATEWAY)
+                    .body(Body::from("Failed to load favicon"))
+                    .unwrap(),
+            }
+        }
+        None => Response::builder()
+            .status(StatusCode::BAD_GATEWAY)
+            .body(Body::from("Failed to load favicon"))
+            .unwrap(),
+    }
+}
+
 /// Files are addressed by a hash of their contents, so the bytes behind a given
 /// URL can never change and the browser is free to keep them indefinitely
 /// without revalidating. Without this the browser has no expiry and no
@@ -1898,6 +1977,26 @@ pub struct UploadUrl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // The host goes straight into the DuckDuckGo url, so anything that could
+    // change its path or point it somewhere else has to be turned away.
+    #[test]
+    fn favicon_host_rejects_anything_but_a_hostname() {
+        assert!(is_valid_favicon_host("github.com"));
+        assert!(is_valid_favicon_host("my-site.co.uk"));
+        assert!(!is_valid_favicon_host(""));
+        assert!(!is_valid_favicon_host("evil.com/../other"));
+        assert!(!is_valid_favicon_host("evil.com?x=1"));
+        assert!(!is_valid_favicon_host("evil.com#x"));
+        assert!(!is_valid_favicon_host("user@evil.com"));
+        assert!(!is_valid_favicon_host(&"a".repeat(254)));
+    }
+
+    #[tokio::test]
+    async fn favicon_endpoint_refuses_an_invalid_host() {
+        let response = favicon_endpoint(Path("a/b".to_owned())).await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
 
     // Regression test for the production crash where pasting a link to a binary
     // image file made post_embed feed the raw image bytes to the HTML parser,

@@ -5,7 +5,7 @@ import Effect.Time as Time
 import Expect
 import FileName
 import FileStatus
-import Id exposing (Id, UserId)
+import Id exposing (ChannelId, Id, UserId)
 import IdArray
 import List.Nonempty exposing (Nonempty(..))
 import RichText
@@ -39,13 +39,13 @@ playerC =
 {-| Plain text as a question or an answer. Nobody to mention and no timezone to show a
 timestamp in, which is all the parsing needs.
 -}
-content : String -> Nonempty (RichText.RichText (Id UserId))
+content : String -> Nonempty (RichText.RichText (Id UserId) (Id ChannelId))
 content text =
     let
         ( first, rest ) =
             String.uncons text |> Maybe.withDefault ( ' ', "" )
     in
-    RichText.fromNonemptyString Time.utc SeqDict.empty (NonemptyString first rest)
+    RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty (NonemptyString first rest)
 
 
 {-| A question, which unlike an answer can have files attached to it. None of these do.
@@ -113,7 +113,7 @@ answerTexts userId shared =
                         (\answer ->
                             case answer of
                                 Just answer2 ->
-                                    RichText.toString Time.utc False SeqDict.empty answer2.text
+                                    RichText.toString Time.utc False SeqDict.empty SeqDict.empty answer2.text
 
                                 Nothing ->
                                     ""
@@ -306,7 +306,7 @@ tests =
                     ]
                     |> .notes
                     |> SeqDict.get (Id.fromInt 0)
-                    |> Maybe.andThen (Maybe.map (\notes -> RichText.toString Time.utc False SeqDict.empty notes.text))
+                    |> Maybe.andThen (Maybe.map (\notes -> RichText.toString Time.utc False SeqDict.empty SeqDict.empty notes.text))
                     |> Expect.equal (Just "Nobody said **green**")
             )
         , Test.test "Only the host can write notes"
@@ -329,7 +329,7 @@ tests =
                     ]
                     |> SheepGame.resultsData (setup 2)
                     |> .questions
-                    |> List.map (\result -> Maybe.map (\notes -> RichText.toString Time.utc False SeqDict.empty notes.text) result.notes)
+                    |> List.map (\result -> Maybe.map (\notes -> RichText.toString Time.utc False SeqDict.empty SeqDict.empty notes.text) result.notes)
                     |> Expect.equal [ Just "Only just made it", Nothing ]
             )
         , Test.test "Answers submitted after the host locked them are ignored"

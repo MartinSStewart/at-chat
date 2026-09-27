@@ -38,6 +38,7 @@ module BackendExtra exposing
     , loginEmailContent
     , loginEmailSubject
     , loginWithToken
+    , orphanedFiles
     , ownMessageIsReadBackend
     , requestedForToGuildOrDmId
     , sendDm
@@ -60,6 +61,7 @@ import Broadcast
 import Bytes.Decode
 import Bytes.Encode
 import Call exposing (CallId(..))
+import CustomEmoji exposing (CustomEmojiData, CustomEmojiUrl(..))
 import Discord
 import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
 import DmChannel exposing (BackendDmChannel, DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
@@ -75,7 +77,8 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
 import Encryption exposing (EncryptedData)
-import FileStatus exposing (FileData, FileHash, FileId)
+import FileStatus exposing (BackendFileData, FileData, FileHash, FileId)
+import Game
 import Hex
 import Http
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DiscordChannelId, Viewing_DiscordDmId, Viewing_DmId)
@@ -103,10 +106,12 @@ import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import SheepGame
+import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import ToBackendLog exposing (ToBackendLog(..))
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), ChannelDataToDecrypt, ChannelDataToEncrypt, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), ChannelDataToDecrypt, ChannelDataToEncrypt, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, FrontendUser)
 import UserAgent exposing (UserAgent)
@@ -393,11 +398,11 @@ unreadOverviewData userId user model =
             { channels :
                 SeqDict
                     ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId )
-                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
             , threads :
                 SeqDict
                     ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId, Id ChannelMessageId )
-                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId)))
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
             }
         discordGuilds =
             SeqDict.foldl
@@ -474,7 +479,7 @@ unreadOverviewData userId user model =
         discordDmChannels :
             SeqDict
                 (Discord.Id Discord.PrivateChannelId)
-                (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+                (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
         discordDmChannels =
             SeqDict.foldl
                 (\channelId dmChannel dict ->
@@ -508,11 +513,11 @@ unreadOverviewData userId user model =
             { channels :
                 SeqDict
                     ( Id GuildId, Id ChannelId )
-                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) (Id ChannelId)))
             , threads :
                 SeqDict
                     ( Id GuildId, Id ChannelId, Id ChannelMessageId )
-                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId)))
             }
         guilds =
             SeqDict.foldl
@@ -566,11 +571,11 @@ unreadOverviewData userId user model =
                 model.guilds
 
         dms :
-            { channels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+            { channels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId) (Id ChannelId)))
             , threads :
                 SeqDict
                     ( Id UserId, Id ChannelMessageId )
-                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId)))
             }
         dms =
             SeqDict.foldl
@@ -633,7 +638,7 @@ in one list and are added in two passes instead.
 -}
 discordUsersInMessages :
     BackendModel
-    -> List (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId)))
+    -> List (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
 discordUsersInMessages model messageDicts foundSoFar =
@@ -665,7 +670,7 @@ discordUsersInMessages model messageDicts foundSoFar =
 
 {-| The users a message shows the name of: whoever wrote it, plus anyone it mentions.
 -}
-messageUserIds : Message messageId userId -> List userId
+messageUserIds : Message messageId userId channelId -> List userId
 messageUserIds message =
     case message of
         UserTextMessage data ->
@@ -692,8 +697,8 @@ of them, keyed by the index they sit at. `Nothing` when the user has read it to 
 -}
 unreadMessages :
     Maybe (Id messageId)
-    -> { a | messages : IdArray messageId (Message messageId userId) }
-    -> Maybe (SeqDict (Id messageId) (Message messageId userId))
+    -> { a | messages : IdArray messageId (Message messageId userId channelId) }
+    -> Maybe (SeqDict (Id messageId) (Message messageId userId channelId))
 unreadMessages maybeLastViewed channel =
     let
         messageCount : Int
@@ -770,6 +775,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                 session : UserSession
                                 session =
                                     UserSession.init time sessionId pendingLogin.userId userAgent
+                                        |> UserSession.setLastViewedGuild currentlyViewing
                             in
                             ( { model
                                 | sessions = SeqDict.insert sessionId session model.sessions
@@ -1621,6 +1627,146 @@ adminSessions model =
         |> SeqDict.fromList
 
 
+{-| Uploaded files that nothing refers to anymore. `discordAttachments` doesn't count as a
+reference since it only remembers which Discord attachments have already been uploaded.
+-}
+orphanedFiles : BackendModel -> SeqDict FileHash BackendFileData
+orphanedFiles model =
+    List.foldl SeqDict.remove model.files (usedFiles model)
+
+
+usedFiles : BackendModel -> List FileHash
+usedFiles model =
+    List.concat
+        [ NonemptyDict.values model.users |> List.Nonempty.toList |> List.filterMap .icon
+        , SeqDict.values model.discordUsers |> List.filterMap DiscordUserData.icon
+        , SeqDict.values model.guilds |> List.concatMap guildFiles
+        , SeqDict.values model.deletedGuilds |> List.concatMap (\deleted -> guildFiles deleted.guild)
+        , SeqDict.values model.discordGuilds |> List.concatMap discordGuildFiles
+        , SeqDict.values model.dmChannels |> List.concatMap dmChannelFiles
+        , SeqDict.values model.discordDmChannels |> List.concatMap (\dmChannel -> messagesFiles dmChannel.messages)
+        , SeqDict.values model.sessions |> List.concatMap savedSheepGameQuestionFiles
+        , SeqDict.values model.stickers |> List.filterMap stickerFile
+        , SeqDict.values model.customEmojis |> List.filterMap customEmojiFile
+        ]
+
+
+guildFiles : BackendGuild -> List FileHash
+guildFiles guild =
+    Maybe.Extra.toList guild.icon
+        ++ List.concatMap
+            (\channel ->
+                messagesFiles channel.messages
+                    ++ List.concatMap (\thread -> messagesFiles thread.messages) (SeqDict.values channel.threads)
+                    ++ List.concatMap gameFiles (SeqDict.values channel.games)
+            )
+            (SeqDict.values guild.channels)
+
+
+discordGuildFiles : DiscordBackendGuild -> List FileHash
+discordGuildFiles guild =
+    Maybe.Extra.toList guild.icon
+        ++ List.concatMap
+            (\channel ->
+                messagesFiles channel.messages
+                    ++ List.concatMap (\thread -> messagesFiles thread.messages) (SeqDict.values channel.threads)
+            )
+            (SeqDict.values guild.channels)
+
+
+dmChannelFiles : BackendDmChannel -> List FileHash
+dmChannelFiles dmChannel =
+    messagesFiles dmChannel.messages
+        ++ List.concatMap (\thread -> messagesFiles thread.messages) (SeqDict.values dmChannel.threads)
+        ++ List.concatMap gameFiles (SeqDict.values dmChannel.games)
+
+
+messagesFiles : IdArray messageId (Message messageId userId channelId) -> List FileHash
+messagesFiles messages =
+    IdArray.toList messages |> List.concatMap messageFiles
+
+
+messageFiles : Message messageId userId channelId -> List FileHash
+messageFiles message =
+    case message of
+        UserTextMessage data ->
+            SeqDict.values data.content.attachedFiles |> List.map .fileHash
+
+        EncryptedUserTextMessage data ->
+            SeqSet.toList data.fileHashes
+
+        UserJoinedMessage _ _ _ _ ->
+            []
+
+        DeletedMessage _ ->
+            []
+
+        CallStarted _ ->
+            []
+
+        GameStarted _ ->
+            []
+
+
+gameFiles : Game.BackendGameData -> List FileHash
+gameFiles gameData =
+    case gameData of
+        Game.GameData_Go _ _ ->
+            []
+
+        Game.GameData_WordSpellingGame _ _ _ ->
+            []
+
+        Game.GameData_SheepGame setup actions shared ->
+            List.Nonempty.toList setup.questions
+                ++ List.filterMap sheepGameActionInput (Array.toList actions)
+                ++ List.concatMap (\answers -> List.filterMap identity (IdArray.toList answers)) (SeqDict.values shared.answers)
+                ++ List.filterMap identity (SeqDict.values shared.notes)
+                |> List.concatMap (\input -> SeqDict.values input.attachedFiles |> List.map .fileHash)
+
+
+sheepGameActionInput : SheepGame.ActionWithTime -> Maybe SheepGame.ValidatedInput
+sheepGameActionInput action =
+    case action.change of
+        SheepGame.SubmittedAnswer _ input ->
+            input
+
+        SheepGame.ChangedNotes _ input ->
+            input
+
+        _ ->
+            Nothing
+
+
+savedSheepGameQuestionFiles : UserSession -> List FileHash
+savedSheepGameQuestionFiles session =
+    IdArray.toList session.savedSheepGameQuestions
+        |> List.concatMap (\question -> FileStatus.onlyUploadedFiles question.attachedFiles |> SeqDict.values |> List.map .fileHash)
+
+
+stickerFile : StickerData -> Maybe FileHash
+stickerFile sticker =
+    case sticker.url of
+        StickerInternal fileHash _ ->
+            Just fileHash
+
+        DiscordStandardSticker _ ->
+            Nothing
+
+        StickerLoading ->
+            Nothing
+
+
+customEmojiFile : CustomEmojiData -> Maybe FileHash
+customEmojiFile customEmoji =
+    case customEmoji.url of
+        CustomEmojiInternal fileHash _ ->
+            Just fileHash
+
+        CustomEmojiLoading ->
+            Nothing
+
+
 wordListStatus : WordList -> LocalState.WordSpellingGameStatus
 wordListStatus wordList =
     case wordList of
@@ -1656,23 +1802,23 @@ sendGuildMessage model time timezone clientId changeId id threadRouteWithMaybeRe
     case ( SeqDict.get id.channelId guild.channels, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of
         ( Just channel, Ok sendMessageRateLimits ) ->
             let
-                richText : Nonempty (RichText (Id UserId))
-                richText =
-                    RichText.fromNonemptyString
-                        timezone
-                        (List.foldl
-                            (\memberId dict ->
-                                case NonemptyDict.get memberId model.users of
-                                    Just member ->
-                                        SeqDict.insert memberId member dict
+                guildMembers : SeqDict (Id UserId) BackendUser
+                guildMembers =
+                    List.foldl
+                        (\memberId dict ->
+                            case NonemptyDict.get memberId model.users of
+                                Just member ->
+                                    SeqDict.insert memberId member dict
 
-                                    Nothing ->
-                                        dict
-                            )
-                            SeqDict.empty
-                            (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                Nothing ->
+                                    dict
                         )
-                        text
+                        SeqDict.empty
+                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+
+                richText : Nonempty (RichText (Id UserId) (Id ChannelId))
+                richText =
+                    RichText.fromNonemptyString timezone guildMembers (LocalState.guildChannelNames timezone guildMembers guild.channels) text
 
                 threadRouteNoReply : ThreadRoute
                 threadRouteNoReply =
@@ -1959,7 +2105,7 @@ dmChannelsThatNeedEncrypting session dmChannels =
                                 SeqDict.foldl
                                     (\threadId thread threads ->
                                         let
-                                            plainText : SeqDict (Id ThreadMessageId) (MessageContent (Id UserId))
+                                            plainText : SeqDict (Id ThreadMessageId) (MessageContent (Id UserId) (Id ChannelId))
                                             plainText =
                                                 plainTextMessages thread.messages
                                         in
@@ -2005,8 +2151,8 @@ channelDataToDecrypt dmChannel =
 
 
 cipherTextMessages :
-    IdArray messageId (Message messageId (Id UserId))
-    -> SeqDict (Id messageId) (EncryptedData (MessageContent (Id UserId)))
+    IdArray messageId (Message messageId (Id UserId) (Id ChannelId))
+    -> SeqDict (Id messageId) (EncryptedData (MessageContent (Id UserId) (Id ChannelId)))
 cipherTextMessages messages =
     IdArray.foldlWithId
         (\messageId message dict ->
@@ -2034,8 +2180,8 @@ cipherTextMessages messages =
 
 
 plainTextMessages :
-    IdArray messageId (Message messageId (Id UserId))
-    -> SeqDict (Id messageId) (MessageContent (Id UserId))
+    IdArray messageId (Message messageId (Id UserId) (Id ChannelId))
+    -> SeqDict (Id messageId) (MessageContent (Id UserId) (Id ChannelId))
 plainTextMessages messages =
     IdArray.foldlWithId
         (\messageId message dict ->
@@ -2068,7 +2214,7 @@ sendEncryptedDm :
     -> ChangeId
     -> Viewing_DmId
     -> SeqSet FileHash
-    -> EncryptedData (MessageContent (Id UserId))
+    -> EncryptedData (MessageContent (Id UserId) (Id ChannelId))
     -> EncryptedData String
     -> ThreadRouteWithRepliedTo
     -> UserSession
@@ -2165,11 +2311,12 @@ sendDm :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles emojis session user otherUser dmChannelId dmChannel =
     let
-        richText : Nonempty (RichText (Id UserId))
+        richText : Nonempty (RichText (Id UserId) (Id ChannelId))
         richText =
             RichText.fromNonemptyString
                 timezone
                 (SeqDict.fromList [ ( session.userId, user ), ( otherUserId, otherUser ) ])
+                SeqDict.empty
                 text
     in
     case ( threadRouteWithReplyTo, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of
@@ -3498,7 +3645,7 @@ decryptOldMessages :
     -> ChangeId
     -> LocalChange
     -> BackendModel
-    -> List ( ThreadRouteWithMessage, MessageContent (Id UserId) )
+    -> List ( ThreadRouteWithMessage, MessageContent (Id UserId) (Id ChannelId) )
     -> UserSession
     -> DmChannelId
     -> BackendDmChannel
@@ -3570,7 +3717,7 @@ encryptOldMessages :
     -> ChangeId
     -> LocalChange
     -> BackendModel
-    -> List ( ThreadRouteWithMessage, SeqSet FileHash, EncryptedData (MessageContent (Id UserId)) )
+    -> List ( ThreadRouteWithMessage, SeqSet FileHash, EncryptedData (MessageContent (Id UserId) (Id ChannelId)) )
     -> DmChannelId
     -> BackendDmChannel
     -> ( BackendModel, Command BackendOnly ToFrontend backendMsg )

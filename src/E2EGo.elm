@@ -103,6 +103,7 @@ goMatchTest normalConfig =
                                 [ T.andThen
                                     10
                                     (\data -> [ user2.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                                , user2.click 100 (Dom.id "guildIcon_showFriends")
                                 , user2.click 100 (Dom.id "guild_friendLabel_0")
                                 , user2.click 100 (Dom.id "guild_openGamesTab")
                                 , user2.click 100 (Dom.id "game_select_Go (Baduk)")

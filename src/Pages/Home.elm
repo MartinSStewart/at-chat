@@ -23,6 +23,7 @@ import FileStatus exposing (IsEncrypted(..))
 import FrontendExtra
 import Game
 import GuildName exposing (GuildName)
+import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, UserId)
 import IdArray
 import LinkedAndOtherDiscordUsers exposing (LinkedAndOtherDiscordUsers(..))
@@ -36,6 +37,8 @@ import MyUi
 import NonemptyDict
 import NonemptySet
 import Pages.Guild
+import Pages.Privacy
+import Ports
 import RichText
 import Route exposing (ChannelSidebarMode(..), ChannelsVisibleOnMobile(..), Route(..))
 import SafeFloat exposing (SafeFloat)
@@ -66,14 +69,14 @@ loginSignupText =
     "Login/Signup"
 
 
-header : Bool -> Route -> LoginStatus -> Element FrontendMsg_
-header isMobile route loginStatus =
+header : Bool -> Int -> Route -> LoginStatus -> Element FrontendMsg_
+header isMobile safeAreaInsetTop route loginStatus =
     Ui.el
         [ Ui.background MyUi.background1
         , Ui.Shadow.shadows [ { x = 0, y = 1, blur = 2, size = 0, color = Ui.rgba 0 0 0 0.05 } ]
         ]
         (Ui.row
-            [ MyUi.htmlStyle "padding" ("calc(4px + " ++ MyUi.insetTop ++ ")" ++ " 16px 0 16px")
+            [ Ui.paddingWith { left = 16, right = 16, top = 4 + safeAreaInsetTop, bottom = 0 }
             , Ui.contentCenterY
             , MyUi.notoSans
             , Ui.widthMax 1280
@@ -88,16 +91,44 @@ header isMobile route loginStatus =
                 , description = "Logo"
                 , onLoad = Nothing
                 }
-            , case loginStatus of
-                LoggedIn _ ->
-                    Ui.none
+            , Ui.row
+                [ Ui.width Ui.shrink, Ui.height Ui.fill, Ui.alignRight ]
+                [ Ui.el
+                    [ Ui.width Ui.shrink
+                    , Ui.height Ui.fill
+                    , Ui.contentCenterY
+                    , Ui.paddingWith { left = 16, right = 16, top = 4, bottom = 8 }
+                    , Ui.linkNewTab Pages.Privacy.repoUrl
+                    , MyUi.hoverText "Source code on GitHub"
+                    , Ui.opacity 0.7
+                    , MyUi.hover isMobile [ Ui.Anim.opacity 1 ]
+                    ]
+                    (Ui.html (Icons.github 20))
+                , MyUi.elButton
+                    (Dom.id "homePage_privacyButton")
+                    (PressedLink PrivacyRoute)
+                    (buttonAttributes
+                        isMobile
+                        (case loginStatus of
+                            LoggedIn _ ->
+                                route == PrivacyRoute
 
-                NotLoggedIn notLoggedIn ->
-                    MyUi.elButton
-                        loginButtonId
-                        PressedShowLogin
-                        (buttonAttributes isMobile (notLoggedIn.loginForm /= Nothing || Route.requiresLogin route))
-                        (Ui.text loginSignupText)
+                            NotLoggedIn notLoggedIn ->
+                                route == PrivacyRoute && notLoggedIn.loginForm == Nothing
+                        )
+                    )
+                    (Ui.text "Privacy")
+                , case loginStatus of
+                    LoggedIn _ ->
+                        Ui.none
+
+                    NotLoggedIn notLoggedIn ->
+                        MyUi.elButton
+                            loginButtonId
+                            PressedShowLogin
+                            (buttonAttributes isMobile (notLoggedIn.loginForm /= Nothing || Route.requiresLogin route))
+                            (Ui.text loginSignupText)
+                ]
             ]
         )
 
@@ -107,7 +138,6 @@ buttonAttributes isMobile isSelected =
     [ Ui.Font.weight 600
     , Ui.rounded 8
     , Ui.padding 8
-    , Ui.alignRight
     , Ui.width Ui.shrink
     , Ui.height Ui.fill
     , Ui.paddingWith { left = 16, right = 16, top = 4, bottom = 8 }
@@ -321,13 +351,13 @@ previewMinutesAgo time minutes =
     Duration.addTo time (Duration.minutes -minutes)
 
 
-previewMessage : Time.Posix -> userId -> NonemptyString -> Message messageId userId
+previewMessage : Time.Posix -> userId -> NonemptyString -> Message messageId userId channelId
 previewMessage createdAt createdBy text =
     UserTextMessage
         { createdAt = createdAt
         , createdBy = createdBy
         , content =
-            { content = RichText.fromNonemptyString Time.utc SeqDict.empty text
+            { content = RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty text
             , embeds = Array.empty
             , attachedFiles = SeqDict.empty
             }
@@ -338,10 +368,10 @@ previewMessage createdAt createdBy text =
         }
 
 
-previewThread : List (Message ThreadMessageId (Id UserId)) -> Thread.FrontendThread
+previewThread : List (Message ThreadMessageId (Id UserId) (Id ChannelId)) -> Thread.FrontendThread
 previewThread messages =
     let
-        messages2 : MessageArray ThreadMessageId (Id UserId)
+        messages2 : MessageArray ThreadMessageId (Id UserId) (Id ChannelId)
         messages2 =
             List.foldl MessageArray.push MessageArray.empty messages
     in
@@ -353,12 +383,12 @@ previewThread messages =
 
 
 previewDmChannel :
-    List (Message ChannelMessageId (Id UserId))
+    List (Message ChannelMessageId (Id UserId) (Id ChannelId))
     -> SeqDict.SeqDict (Id ChannelMessageId) Thread.FrontendThread
     -> DmChannel.FrontendDmChannel
 previewDmChannel messages threads =
     let
-        messages2 : MessageArray ChannelMessageId (Id UserId)
+        messages2 : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
         messages2 =
             List.foldl MessageArray.push MessageArray.empty messages
 
@@ -403,7 +433,7 @@ previewDiscordDmChannels :
     -> SeqDict.SeqDict (Discord.Id Discord.PrivateChannelId) DmChannel.DiscordFrontendDmChannel
 previewDiscordDmChannels time =
     let
-        messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId)
+        messages : MessageArray ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
         messages =
             List.foldl
                 MessageArray.push
@@ -446,7 +476,7 @@ previewDiscordGuilds time =
 previewChannel : Time.Posix -> FrontendChannel
 previewChannel time =
     let
-        messages : MessageArray ChannelMessageId (Id UserId)
+        messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
         messages =
             List.foldl
                 MessageArray.push
@@ -459,6 +489,7 @@ previewChannel time =
                         { content =
                             RichText.fromNonemptyString
                                 Time.utc
+                                SeqDict.empty
                                 SeqDict.empty
                                 (NonemptyString '[' "!1] here's that bird I drew, now on my backpack!")
                         , embeds = Array.empty
@@ -507,7 +538,7 @@ previewChannel time =
                     { createdAt = previewMinutesAgo time 1621
                     , createdBy = previewUserId
                     , content =
-                        { content = RichText.fromNonemptyString Time.utc SeqDict.empty (NonemptyString 'b' "ird!")
+                        { content = RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty (NonemptyString 'b' "ird!")
                         , embeds = Array.empty
                         , attachedFiles = SeqDict.empty
                         }
@@ -552,7 +583,7 @@ conversation carries a date divider above the card.
 previewGameChannel : Time.Posix -> FrontendChannel
 previewGameChannel time =
     let
-        messages : MessageArray ChannelMessageId (Id UserId)
+        messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
         messages =
             List.foldl
                 MessageArray.push
@@ -572,7 +603,7 @@ previewGameChannel time =
                     { createdAt = previewMinutesAgo time 1
                     , createdBy = Id.fromInt 4
                     , content =
-                        { content = RichText.fromNonemptyString Time.utc SeqDict.empty (NonemptyString 'C' "ould have gotten a triple with that 😛")
+                        { content = RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty (NonemptyString 'C' "ould have gotten a triple with that 😛")
                         , embeds = Array.empty
                         , attachedFiles = SeqDict.empty
                         }
@@ -691,6 +722,7 @@ previewLoginData time userAgent =
         , lastClientDisconnect = Nothing
         , expandedUserOptions = SeqSet.empty
         , savedSheepGameQuestions = IdArray.empty
+        , lastViewedGuild = Nothing
         }
     , currentlyViewing = Viewing_None
     , adminData = IsNotAdminLoginData
@@ -1028,10 +1060,19 @@ previewTime =
 view : LoadedFrontend -> Element FrontendMsg_
 view loaded =
     let
+        startupData : Ports.StartupData
+        startupData =
+            loaded.startupData
+
+        -- The preview isn't at the edge of the screen, so nothing covers it
+        previewStartupData : Ports.StartupData
+        previewStartupData =
+            { startupData | safeAreaInsetTop = 0, safeAreaInsetBottom = 0 }
+
         previewLoggedIn : Types.LoggedIn2
         previewLoggedIn =
             FrontendExtra.loadedInitHelper
-                loaded.startupData
+                previewStartupData
                 loaded.emojiData
                 (previewLoginData previewTime loaded.startupData.userAgent)
                 loaded
@@ -1132,7 +1173,7 @@ view loaded =
         previewReadLoggedIn : Types.LoggedIn2
         previewReadLoggedIn =
             FrontendExtra.loadedInitHelper
-                loaded.startupData
+                previewStartupData
                 loaded.emojiData
                 (previewReadLoginData previewTime loaded.startupData.userAgent)
                 loaded
@@ -1147,6 +1188,7 @@ view loaded =
                             | windowSize = innerSize
                             , route = GuildRoute guildId slideRoute ChannelsVisibleOnMobile Nothing
                             , time = previewTime
+                            , startupData = previewStartupData
                         }
                         guildId
                         slideRoute
@@ -1162,6 +1204,7 @@ view loaded =
                         { loaded
                             | windowSize = innerSize
                             , route = HomePageRoute Nothing
+                            , startupData = previewStartupData
                         }
                         { previewReadLoggedIn | sidebarMode = ChannelSidebarNotDragging { offset = 1 } }
                         (Local.model previewReadLoggedIn.localState)

@@ -427,6 +427,9 @@ displayMode isMobile currentUserId route local =
         TextEditorRoute ->
             thumbnailOrNoVideo
 
+        PrivacyRoute ->
+            thumbnailOrNoVideo
+
         LinkDiscord _ ->
             thumbnailOrNoVideo
 
@@ -681,7 +684,7 @@ videoNodes localUser config loggedIn local =
         ++ (if showDebugData then
                 [ ( "call_debugData"
                   , debugDataView
-                        { left = voiceChatX, top = voiceChatY, maxHeight = maxHeight }
+                        { left = voiceChatX, top = localUser.safeAreaInsetTop + voiceChatY, maxHeight = maxHeight }
                         model.debugData
                   )
                 ]
@@ -700,7 +703,7 @@ debugDataView position sections =
     Html.div
         [ Html.Attributes.style "position" "absolute"
         , Html.Attributes.style "left" (String.fromInt position.left ++ "px")
-        , Html.Attributes.style "top" ("calc(" ++ MyUi.insetTop ++ " + " ++ String.fromInt position.top ++ "px)")
+        , Html.Attributes.style "top" (String.fromInt position.top ++ "px")
         , Html.Attributes.style "width" "440px"
         , Html.Attributes.style "max-width" "calc(100% - 16px)"
         , Html.Attributes.style "max-height" (String.fromInt position.maxHeight ++ "px")
@@ -979,7 +982,7 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, width ) 
          , Html.Attributes.style "height" (String.fromFloat height ++ "px")
          , Html.Attributes.style "position" "absolute"
          , Html.Attributes.style "left" (String.fromInt (Coord.xRaw position) ++ "px")
-         , Html.Attributes.style "top" ("calc(" ++ MyUi.insetTop ++ " + " ++ String.fromInt (Coord.yRaw position) ++ "px)")
+         , Html.Attributes.style "top" (String.fromInt (localUser.safeAreaInsetTop + Coord.yRaw position) ++ "px")
          , Html.Attributes.style
             "pointer-events"
             (if videoNodeState == VideoNodeHidden then

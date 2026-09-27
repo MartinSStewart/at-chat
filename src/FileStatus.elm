@@ -1,5 +1,6 @@
 module FileStatus exposing
     ( AesPrivateKey(..)
+    , BackendFileData
     , ContentType(..)
     , ContentTypeType(..)
     , EncryptedThumbnail(..)
@@ -171,6 +172,10 @@ measuredFileSerializeCodec =
         |> Serialize.variant1 MeasuredImage coordSerializeCodec
         |> Serialize.variant2 MeasuredVideo coordSerializeCodec (Serialize.maybe durationSerializeCodec)
         |> Serialize.finishCustomType
+
+
+type alias BackendFileData =
+    { fileSize : Int, imageSize : Maybe (Coord CssPixels) }
 
 
 type alias FileDataWithImage =
@@ -1136,8 +1141,8 @@ websocketDomain =
     String.replace "http" "ws" domain
 
 
-imageInfoView : Time.Zone -> msg -> FileDataWithImage -> Element msg
-imageInfoView timezone onPressClose fileData =
+imageInfoView : Int -> Int -> Time.Zone -> msg -> FileDataWithImage -> Element msg
+imageInfoView safeAreaInsetTop safeAreaInsetBottom timezone onPressClose fileData =
     Ui.el
         [ Ui.inFront
             (MyUi.elButton
@@ -1145,7 +1150,7 @@ imageInfoView timezone onPressClose fileData =
                 onPressClose
                 [ Ui.alignRight
                 , Ui.paddingXY 16 16
-                , MyUi.htmlStyle "transform" ("translateY(" ++ MyUi.insetTop ++ ")")
+                , MyUi.htmlStyle "transform" ("translateY(" ++ String.fromInt safeAreaInsetTop ++ "px)")
                 , MyUi.hoverText "Close"
                 ]
                 (Ui.html Icons.x)
@@ -1153,7 +1158,8 @@ imageInfoView timezone onPressClose fileData =
         ]
         (case fileData.metadata of
             FileMetadata_Image metadata ->
-                infoPanel
+                infoPanel safeAreaInsetTop
+                    safeAreaInsetBottom
                     [ Ui.column
                         [ Ui.spacing 2
                         , Ui.alignBottom
@@ -1186,7 +1192,8 @@ imageInfoView timezone onPressClose fileData =
                     ]
 
             FileMetadata_Video metadata ->
-                infoPanel
+                infoPanel safeAreaInsetTop
+                    safeAreaInsetBottom
                     [ Ui.column
                         [ Ui.spacing 2
                         , Ui.alignBottom
@@ -1230,14 +1237,14 @@ imageInfoView timezone onPressClose fileData =
 
 {-| The scrolling panel both kinds of file info are laid out inside.
 -}
-infoPanel : List (Element msg) -> Element msg
-infoPanel contents =
+infoPanel : Int -> Int -> List (Element msg) -> Element msg
+infoPanel safeAreaInsetTop safeAreaInsetBottom contents =
     Ui.column
         [ Ui.height Ui.fill
         , Ui.scrollable
         , Ui.heightMin 0
         , Ui.background MyUi.background1
-        , MyUi.htmlStyle "padding" ("calc(" ++ MyUi.insetTop ++ " + 16px) 0px " ++ MyUi.insetBottom ++ " 0px")
+        , Ui.paddingWith { left = 0, right = 0, top = safeAreaInsetTop + 16, bottom = safeAreaInsetBottom }
         , Ui.spacing 16
         ]
         contents

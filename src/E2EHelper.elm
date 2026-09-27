@@ -211,6 +211,7 @@ startupDataJsonWithInset time userAgent safeAreaInsetTop isPwa =
         , ( "isPwa", Json.Encode.bool isPwa )
         , ( "notificationPermission", Json.Encode.string "denied" )
         , ( "safeAreaInsetTop", Json.Encode.int safeAreaInsetTop )
+        , ( "safeAreaInsetBottom", Json.Encode.int 0 )
         , ( "devicePixelRatio", Json.Encode.float 2 )
         , ( "timezone", testTimezone )
         , ( "randomSeed", testRandomSeed time )
@@ -229,6 +230,7 @@ startupDataJsonWithE2eeKeys time userAgent e2eeKeys =
         , ( "isPwa", Json.Encode.bool False )
         , ( "notificationPermission", Json.Encode.string "denied" )
         , ( "safeAreaInsetTop", Json.Encode.int 0 )
+        , ( "safeAreaInsetBottom", Json.Encode.int 0 )
         , ( "devicePixelRatio", Json.Encode.float 2 )
         , ( "timezone", testTimezone )
         , ( "randomSeed", testRandomSeed time )
@@ -365,6 +367,9 @@ handlePortToJs requestAndData =
             Nothing
 
         "shift_scroll_by_element_delta_to_js" ->
+            Nothing
+
+        "clear_browser_storage_to_js" ->
             Nothing
 
         _ ->
@@ -3517,7 +3522,7 @@ lastGuildChannel backend =
 
 {-| The most recent message in the first channel of the most recently created guild.
 -}
-lastGuildChannelMessage : BackendModel2 -> Maybe ( Id GuildId, Id ChannelMessageId, Message.Message ChannelMessageId (Id UserId) )
+lastGuildChannelMessage : BackendModel2 -> Maybe ( Id GuildId, Id ChannelMessageId, Message.Message ChannelMessageId (Id UserId) (Id ChannelId) )
 lastGuildChannelMessage backend =
     case SeqDict.toList (unwrapBackend backend).guilds |> List.reverse |> List.head of
         Just ( guildId, guild ) ->
@@ -3537,7 +3542,7 @@ lastGuildChannelMessage backend =
             Nothing
 
 
-lastGuildChannelMessageAt : Id ChannelMessageId -> BackendModel2 -> Maybe (Message.Message ChannelMessageId (Id UserId))
+lastGuildChannelMessageAt : Id ChannelMessageId -> BackendModel2 -> Maybe (Message.Message ChannelMessageId (Id UserId) (Id ChannelId))
 lastGuildChannelMessageAt messageId backend =
     case lastGuildChannel backend of
         Just channel ->

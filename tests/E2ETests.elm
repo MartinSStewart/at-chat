@@ -381,10 +381,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.noTimestampSuggestionTest normalConfig
     , E2EMisc.mentionSuggestionTest normalConfig
     , E2EMisc.emojiSuggestionTest normalConfig
+    , E2EMisc.channelSuggestionTest normalConfig
     , E2EEncryption.tests normalConfig
     , E2EEncryption.fileUploadTest encryptedImageUploadConfig
     , E2EMisc.codeBlockInputTest normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig
+    , E2EMisc.orphanedFilesTest imageUploadConfig
     , E2EHelper.startTest
         "Admin can open admin page"
         E2EHelper.startTime
@@ -410,6 +412,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , E2EMisc.adminConnectionsShowWhatIsViewedTest normalConfig
     , E2EMisc.inactiveThreadsAreHiddenTest normalConfig
+    , E2EMisc.openLastViewedGuildOnStartupTest normalConfig
     , E2EMisc.dmThreadsTest normalConfig
     , E2EMisc.startingACallOrGameStaysReadTest normalConfig
     , E2EMisc.markMessageAsUnreadTest normalConfig
@@ -1650,18 +1653,17 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         (\index -> E2EHelper.writeMessage admin 1500 ("Unread message " ++ String.fromInt index))
                     |> T.group
 
-                -- A client that connects after the messages were sent hasn't scrolled
+                -- A session that logs in after the messages were sent hasn't scrolled
                 -- through the channel, so it only has the messages the backend sends along
-                -- with the overview.
+                -- with the overview. Reloading the user's first session would open the
+                -- guild it last viewed instead of the overview.
                 , T.connectFrontend
                     100
-                    E2EHelper.sessionId1
-                    (Route.encode (Route.HomePageRoute Nothing))
+                    E2EHelper.sessionId2
+                    "/"
                     E2EHelper.desktopWindow
                     (\userReload ->
-                        [ T.andThen
-                            10
-                            (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.userEmail userReload
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.text newestUnreadMessage ])
@@ -1756,18 +1758,17 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (Duration.hours 0.05 |> Duration.inMilliseconds)
                     "Unread in the thread, a day later"
 
-                -- A client that connects after the messages were sent only has what the
+                -- A session that logs in after the messages were sent only has what the
                 -- backend sends along with the overview, so this checks that thread
-                -- messages are sent too.
+                -- messages are sent too. Reloading the user's first session would open the
+                -- guild it last viewed instead of the overview.
                 , T.connectFrontend
                     100
-                    E2EHelper.sessionId1
-                    (Route.encode (Route.HomePageRoute Nothing))
+                    E2EHelper.sessionId2
+                    "/"
                     E2EHelper.desktopWindow
                     (\userReload ->
-                        [ T.andThen
-                            10
-                            (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.userEmail userReload
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.text "Unread in the channel" ])
@@ -1816,7 +1817,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         -- The thread stays read once the page is loaded from scratch again.
                         , T.connectFrontend
                             100
-                            E2EHelper.sessionId1
+                            E2EHelper.sessionId2
                             (Route.encode (Route.HomePageRoute Nothing))
                             E2EHelper.desktopWindow
                             (\userReload2 ->
@@ -1851,15 +1852,16 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , List.range 3 (VisibleMessages.pageSize + 11)
                     |> List.map (\index -> E2EHelper.writeMessage user 1000 ("Message " ++ String.fromInt index))
                     |> T.group
+
+                -- A new session, since reloading the user's first session would open the
+                -- guild it last viewed and load the messages before the latency is raised.
                 , T.connectFrontend
                     100
-                    E2EHelper.sessionId1
-                    (Route.encode (Route.HomePageRoute Nothing))
+                    E2EHelper.sessionId2
+                    "/"
                     E2EHelper.desktopWindow
                     (\userReload ->
-                        [ T.andThen
-                            10
-                            (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.userEmail userReload
 
                         -- Everything below turns on what the view looks like midway through a
                         -- load, so the round trip is stretched out to leave room to look.

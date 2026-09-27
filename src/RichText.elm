@@ -31,8 +31,10 @@ module RichText exposing
     , fromNonemptyString
     , hasLargeContent
     , hyperlinks
+    , mapChannelId
     , mapUserId
     , maxLength
+    , mentionsChannel
     , mentionsUser
     , messageIsEncrypted
     , preview
@@ -73,7 +75,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (CustomEmojiId, Id, StickerId)
+import Id exposing (ChannelMessageId, CustomEmojiId, Id, StickerId)
 import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -138,16 +140,17 @@ hyperlinkColor =
     "rgb(66,133,244)"
 
 
-type RichText userId
+type RichText userId channelId
     = UserMention userId
+    | ChannelMention channelId (Maybe (Id ChannelMessageId))
     | NormalText Char String
-    | Bold (Nonempty (RichText userId))
-    | Italic (Nonempty (RichText userId))
-    | Underline (Nonempty (RichText userId))
-    | Strikethrough (Nonempty (RichText userId))
-    | Spoiler (Nonempty (RichText userId))
-    | BlockQuote HasLeadingLineBreak (List (RichText userId))
-    | Heading HeadingLevel HasLeadingLineBreak (Nonempty (RichText userId))
+    | Bold (Nonempty (RichText userId channelId))
+    | Italic (Nonempty (RichText userId channelId))
+    | Underline (Nonempty (RichText userId channelId))
+    | Strikethrough (Nonempty (RichText userId channelId))
+    | Spoiler (Nonempty (RichText userId channelId))
+    | BlockQuote HasLeadingLineBreak (List (RichText userId channelId))
+    | Heading HeadingLevel HasLeadingLineBreak (Nonempty (RichText userId channelId))
     | Hyperlink Url
     | MarkdownLink NonemptyString Url
     | InlineCode Char String
@@ -156,7 +159,7 @@ type RichText userId
     | EscapedChar EscapedChar
     | Sticker (Id StickerId)
     | CustomEmoji (Id CustomEmojiId)
-    | BulletPoint HasLeadingLineBreak (Nonempty (List (RichText userId)))
+    | BulletPoint HasLeadingLineBreak (Nonempty (List (RichText userId channelId)))
     | Timestamp TimeInMinutes
 
 
@@ -271,12 +274,12 @@ asciiFontSize containerWidth dpi text =
     String.fromFloat (18 * toFloat scale / dpi) ++ "px"
 
 
-normalTextFromNonempty : NonemptyString -> RichText userId
+normalTextFromNonempty : NonemptyString -> RichText userId channelId
 normalTextFromNonempty text =
     NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
 
 
-spoilerAttachedFile : Id FileId -> Nonempty (RichText userId) -> Nonempty (RichText userId)
+spoilerAttachedFile : Id FileId -> Nonempty (RichText userId channelId) -> Nonempty (RichText userId channelId)
 spoilerAttachedFile fileId nonempty =
     List.Nonempty.map
         (\richText ->
@@ -285,6 +288,9 @@ spoilerAttachedFile fileId nonempty =
                     richText
 
                 UserMention _ ->
+                    richText
+
+                ChannelMention _ _ ->
                     richText
 
                 Bold nonempty2 ->
@@ -350,10 +356,10 @@ spoilerAttachedFile fileId nonempty =
         nonempty
 
 
-unspoilerAttachedFile : Id FileId -> Nonempty (RichText userId) -> Nonempty (RichText userId)
+unspoilerAttachedFile : Id FileId -> Nonempty (RichText userId channelId) -> Nonempty (RichText userId channelId)
 unspoilerAttachedFile fileId nonempty =
     let
-        helper : Nonempty (RichText userId) -> ( Bool, Nonempty (RichText userId) )
+        helper : Nonempty (RichText userId channelId) -> ( Bool, Nonempty (RichText userId channelId) )
         helper nonempty2 =
             let
                 unspoilered =
@@ -377,7 +383,7 @@ unspoilerAttachedFile fileId nonempty =
                 |> Maybe.withDefault nonempty2
             )
 
-        unspoilerAttachedFileHelper : Nonempty (RichText userId) -> Nonempty ( Bool, RichText userId )
+        unspoilerAttachedFileHelper : Nonempty (RichText userId channelId) -> Nonempty ( Bool, RichText userId channelId )
         unspoilerAttachedFileHelper nonempty2 =
             List.Nonempty.concatMap
                 (\richText ->
@@ -386,6 +392,9 @@ unspoilerAttachedFile fileId nonempty =
                             Nonempty ( False, richText ) []
 
                         UserMention _ ->
+                            Nonempty ( False, richText ) []
+
+                        ChannelMention _ _ ->
                             Nonempty ( False, richText ) []
 
                         Bold nonempty3 ->
@@ -468,6 +477,9 @@ unspoilerAttachedFile fileId nonempty =
                 UserMention _ ->
                     Nonempty richText []
 
+                ChannelMention _ _ ->
+                    Nonempty richText []
+
                 Bold nonempty2 ->
                     Nonempty (Bold (unspoilerAttachedFile fileId nonempty2)) []
 
@@ -537,7 +549,7 @@ unspoilerAttachedFile fileId nonempty =
         nonempty
 
 
-removeAttachedFile : (Id FileId -> Bool) -> Nonempty (RichText userId) -> Maybe (Nonempty (RichText userId))
+removeAttachedFile : (Id FileId -> Bool) -> Nonempty (RichText userId channelId) -> Maybe (Nonempty (RichText userId channelId))
 removeAttachedFile shouldRemove list =
     List.filterMap
         (\richText ->
@@ -546,6 +558,9 @@ removeAttachedFile shouldRemove list =
                     Just richText
 
                 UserMention _ ->
+                    Just richText
+
+                ChannelMention _ _ ->
                     Just richText
 
                 Bold nonempty ->
@@ -632,7 +647,7 @@ removeAttachedFile shouldRemove list =
         |> List.Nonempty.fromList
 
 
-hyperlinks : Nonempty (RichText userId) -> List Url
+hyperlinks : Nonempty (RichText userId channelId) -> List Url
 hyperlinks nonempty =
     List.concatMap
         (\richText ->
@@ -644,6 +659,9 @@ hyperlinks nonempty =
                     [ url ]
 
                 UserMention _ ->
+                    []
+
+                ChannelMention _ _ ->
                     []
 
                 NormalText _ _ ->
@@ -697,12 +715,12 @@ hyperlinks nonempty =
         (List.Nonempty.toList nonempty)
 
 
-attachments : Nonempty (RichText userId) -> List { attachmentId : Id FileId, isSpoilered : Bool }
+attachments : Nonempty (RichText userId channelId) -> List { attachmentId : Id FileId, isSpoilered : Bool }
 attachments nonempty =
     attachmentsHelper False nonempty
 
 
-attachmentsHelper : Bool -> Nonempty (RichText userId) -> List { attachmentId : Id FileId, isSpoilered : Bool }
+attachmentsHelper : Bool -> Nonempty (RichText userId channelId) -> List { attachmentId : Id FileId, isSpoilered : Bool }
 attachmentsHelper isSpoilered nonempty =
     List.concatMap
         (\richText ->
@@ -714,6 +732,9 @@ attachmentsHelper isSpoilered nonempty =
                     []
 
                 UserMention _ ->
+                    []
+
+                ChannelMention _ _ ->
                     []
 
                 NormalText _ _ ->
@@ -767,7 +788,7 @@ attachmentsHelper isSpoilered nonempty =
         (List.Nonempty.toList nonempty)
 
 
-customEmojis : Nonempty (RichText userId) -> List (Id CustomEmojiId)
+customEmojis : Nonempty (RichText userId channelId) -> List (Id CustomEmojiId)
 customEmojis nonempty =
     List.concatMap
         (\richText ->
@@ -779,6 +800,9 @@ customEmojis nonempty =
                     []
 
                 UserMention _ ->
+                    []
+
+                ChannelMention _ _ ->
                     []
 
                 NormalText _ _ ->
@@ -832,7 +856,7 @@ customEmojis nonempty =
         (List.Nonempty.toList nonempty)
 
 
-emojisAndCustomEmojis : Emoji.CachedEmojiData -> Nonempty (RichText userId) -> List EmojiOrCustomEmoji
+emojisAndCustomEmojis : Emoji.CachedEmojiData -> Nonempty (RichText userId channelId) -> List EmojiOrCustomEmoji
 emojisAndCustomEmojis emojiData nonempty =
     List.concatMap
         (\richText ->
@@ -844,6 +868,9 @@ emojisAndCustomEmojis emojiData nonempty =
                     Emoji.emojisInText emojiData (String.Nonempty.toString text) |> List.map EmojiOrCustomEmoji_Emoji
 
                 UserMention _ ->
+                    []
+
+                ChannelMention _ _ ->
                     []
 
                 NormalText char rest ->
@@ -899,7 +926,7 @@ emojisAndCustomEmojis emojiData nonempty =
         (List.Nonempty.toList nonempty)
 
 
-stickers : Nonempty (RichText userId) -> List (Id StickerId)
+stickers : Nonempty (RichText userId channelId) -> List (Id StickerId)
 stickers nonempty =
     List.concatMap
         (\richText ->
@@ -911,6 +938,9 @@ stickers nonempty =
                     []
 
                 UserMention _ ->
+                    []
+
+                ChannelMention _ _ ->
                     []
 
                 NormalText _ _ ->
@@ -967,16 +997,19 @@ stickers nonempty =
 {-| Swaps out who every mention points at, for text that is being moved from one place to
 another, such as a Discord channel being imported.
 -}
-mapUserId : (userIdA -> userIdB) -> Nonempty (RichText userIdA) -> Nonempty (RichText userIdB)
+mapUserId : (userIdA -> userIdB) -> Nonempty (RichText userIdA channelId) -> Nonempty (RichText userIdB channelId)
 mapUserId mapUserIdFunc richText =
     List.Nonempty.map (mapUserIdHelper mapUserIdFunc) richText
 
 
-mapUserIdHelper : (userIdA -> userIdB) -> RichText userIdA -> RichText userIdB
+mapUserIdHelper : (userIdA -> userIdB) -> RichText userIdA channelId -> RichText userIdB channelId
 mapUserIdHelper mapUserIdFunc richText =
     case richText of
         UserMention userId ->
             UserMention (mapUserIdFunc userId)
+
+        ChannelMention channel thread ->
+            ChannelMention channel thread
 
         NormalText char text ->
             NormalText char text
@@ -1035,9 +1068,95 @@ mapUserIdHelper mapUserIdFunc richText =
             Timestamp time
 
 
-toStringWithGetter : Time.Zone -> (a -> String) -> Bool -> SeqDict userId a -> Nonempty (RichText userId) -> String
-toStringWithGetter timezone userToString emojisForStickersAndAttachments users nonempty =
-    toStringHelper timezone userToString emojisForStickersAndAttachments users (List.Nonempty.toList nonempty)
+mapChannelId : (channelIdA -> channelIdB) -> Nonempty (RichText userId channelIdA) -> Nonempty (RichText userId channelIdB)
+mapChannelId mapChannelIdFunc richText =
+    mapChannelMention (\channel thread -> ( mapChannelIdFunc channel, thread )) richText
+
+
+mapChannelMention :
+    (channelIdA -> Maybe (Id ChannelMessageId) -> ( channelIdB, Maybe (Id ChannelMessageId) ))
+    -> Nonempty (RichText userId channelIdA)
+    -> Nonempty (RichText userId channelIdB)
+mapChannelMention mapFunc richText =
+    List.Nonempty.map (mapChannelMentionHelper mapFunc) richText
+
+
+mapChannelMentionHelper :
+    (channelIdA -> Maybe (Id ChannelMessageId) -> ( channelIdB, Maybe (Id ChannelMessageId) ))
+    -> RichText userId channelIdA
+    -> RichText userId channelIdB
+mapChannelMentionHelper mapFunc richText =
+    case richText of
+        UserMention userId ->
+            UserMention userId
+
+        ChannelMention channel thread ->
+            let
+                ( channel2, thread2 ) =
+                    mapFunc channel thread
+            in
+            ChannelMention channel2 thread2
+
+        NormalText char text ->
+            NormalText char text
+
+        Bold content ->
+            Bold (mapChannelMention mapFunc content)
+
+        Italic content ->
+            Italic (mapChannelMention mapFunc content)
+
+        Underline content ->
+            Underline (mapChannelMention mapFunc content)
+
+        Strikethrough content ->
+            Strikethrough (mapChannelMention mapFunc content)
+
+        Spoiler content ->
+            Spoiler (mapChannelMention mapFunc content)
+
+        BlockQuote hasLeadingLineBreak content ->
+            BlockQuote hasLeadingLineBreak (List.map (mapChannelMentionHelper mapFunc) content)
+
+        Heading level hasLeadingLineBreak content ->
+            Heading level hasLeadingLineBreak (mapChannelMention mapFunc content)
+
+        Hyperlink url ->
+            Hyperlink url
+
+        MarkdownLink text url ->
+            MarkdownLink text url
+
+        InlineCode char text ->
+            InlineCode char text
+
+        CodeBlock language text ->
+            CodeBlock language text
+
+        AttachedFile fileId ->
+            AttachedFile fileId
+
+        EscapedChar escapedChar ->
+            EscapedChar escapedChar
+
+        Sticker stickerId ->
+            Sticker stickerId
+
+        CustomEmoji customEmojiId ->
+            CustomEmoji customEmojiId
+
+        BulletPoint hasLeadingLineBreak points ->
+            BulletPoint
+                hasLeadingLineBreak
+                (List.Nonempty.map (List.map (mapChannelMentionHelper mapFunc)) points)
+
+        Timestamp time ->
+            Timestamp time
+
+
+toStringWithGetter : Time.Zone -> (a -> String) -> Bool -> SeqDict userId a -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String } -> Nonempty (RichText userId channelId) -> String
+toStringWithGetter timezone userToString emojisForStickersAndAttachments users channels nonempty =
+    toStringHelper timezone userToString emojisForStickersAndAttachments users channels (List.Nonempty.toList nonempty)
 
 
 blockQuoteToString : HasLeadingLineBreak -> String -> String
@@ -1091,13 +1210,14 @@ headingToString hasLeadingLineBreak level inner =
         ++ inner
 
 
-toString : Time.Zone -> Bool -> SeqDict userId { a | name : PersonName } -> Nonempty (RichText userId) -> String
-toString timezone emojisForStickersAndAttachments users nonempty =
+toString : Time.Zone -> Bool -> SeqDict userId { a | name : PersonName } -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String } -> Nonempty (RichText userId channelId) -> String
+toString timezone emojisForStickersAndAttachments users channels nonempty =
     toStringHelper
         timezone
         (\user -> PersonName.toString user.name)
         emojisForStickersAndAttachments
         users
+        channels
         (List.Nonempty.toList nonempty)
 
 
@@ -1106,8 +1226,8 @@ maxLength =
     2000
 
 
-toStringHelper : Time.Zone -> (a -> String) -> Bool -> SeqDict userId a -> List (RichText userId) -> String
-toStringHelper timezone userToString emojisForStickersAndAttachments users list =
+toStringHelper : Time.Zone -> (a -> String) -> Bool -> SeqDict userId a -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String } -> List (RichText userId channelId) -> String
+toStringHelper timezone userToString emojisForStickersAndAttachments users channels list =
     List.map
         (\richText ->
             case richText of
@@ -1122,41 +1242,49 @@ toStringHelper timezone userToString emojisForStickersAndAttachments users list 
                         Nothing ->
                             "@<missing>"
 
+                ChannelMention channel maybeThread ->
+                    case SeqDict.get ( channel, maybeThread ) channels of
+                        Just { name } ->
+                            "#" ++ name
+
+                        Nothing ->
+                            "#<missing>"
+
                 Bold a ->
                     "*"
-                        ++ toStringHelper timezone userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
+                        ++ toStringHelper timezone userToString emojisForStickersAndAttachments users channels (List.Nonempty.toList a)
                         ++ "*"
 
                 Italic a ->
                     "_"
-                        ++ toStringHelper timezone userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
+                        ++ toStringHelper timezone userToString emojisForStickersAndAttachments users channels (List.Nonempty.toList a)
                         ++ "_"
 
                 Underline a ->
                     "__"
-                        ++ toStringHelper timezone userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
+                        ++ toStringHelper timezone userToString emojisForStickersAndAttachments users channels (List.Nonempty.toList a)
                         ++ "__"
 
                 Strikethrough a ->
                     "~~"
-                        ++ toStringHelper timezone userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
+                        ++ toStringHelper timezone userToString emojisForStickersAndAttachments users channels (List.Nonempty.toList a)
                         ++ "~~"
 
                 Spoiler a ->
                     "||"
-                        ++ toStringHelper timezone userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
+                        ++ toStringHelper timezone userToString emojisForStickersAndAttachments users channels (List.Nonempty.toList a)
                         ++ "||"
 
                 BlockQuote hasLeadingLineBreak a ->
                     blockQuoteToString
                         hasLeadingLineBreak
-                        (toStringHelper timezone userToString emojisForStickersAndAttachments users a)
+                        (toStringHelper timezone userToString emojisForStickersAndAttachments users channels a)
 
                 Heading level hasLeadingLineBreak a ->
                     headingToString
                         hasLeadingLineBreak
                         level
-                        (toStringHelper timezone userToString emojisForStickersAndAttachments users (List.Nonempty.toList a))
+                        (toStringHelper timezone userToString emojisForStickersAndAttachments users channels (List.Nonempty.toList a))
 
                 Hyperlink data ->
                     Url.toString data
@@ -1210,7 +1338,7 @@ toStringHelper timezone userToString emojisForStickersAndAttachments users list 
                         ++ (List.Nonempty.toList items
                                 |> List.map
                                     (\item ->
-                                        "* " ++ toStringHelper timezone userToString emojisForStickersAndAttachments users item
+                                        "* " ++ toStringHelper timezone userToString emojisForStickersAndAttachments users channels item
                                     )
                                 |> String.join "\n"
                            )
@@ -1222,9 +1350,10 @@ toStringHelper timezone userToString emojisForStickersAndAttachments users list 
         |> String.concat
 
 
-type alias EmailConfig userId =
+type alias EmailConfig userId channelId =
     { attachedFiles : SeqDict (Id FileId) FileData
     , userToString : userId -> String
+    , channels : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
     }
 
 
@@ -1237,7 +1366,7 @@ are always shown in their hidden form (email can't reveal them on click); and
 attachments, stickers and custom emojis become simple placeholders since the
 lookup tables needed to render them aren't available here.
 -}
-emailView : EmailConfig userId -> Nonempty (RichText userId) -> List Email.Html.Html
+emailView : EmailConfig userId channelId -> Nonempty (RichText userId channelId) -> List Email.Html.Html
 emailView config nonempty =
     emailViewHelper
         config
@@ -1253,17 +1382,29 @@ emailContainerWidth =
 
 
 emailViewHelper :
-    EmailConfig userId
+    EmailConfig userId channelId
     -> Bool
     -> RichTextState
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     -> ( Bool, List Email.Html.Html )
 emailViewHelper config dropNextLineBreak state nonempty =
     List.foldl
         (\item ( dropNextLineBreak2, currentList ) ->
             case item of
                 UserMention userId ->
-                    ( False, currentList ++ [ emailUserLabel (config.userToString userId) ] )
+                    ( False, currentList ++ [ emailMentionLabel ("@" ++ config.userToString userId) ] )
+
+                ChannelMention channel maybeThread ->
+                    ( False
+                    , currentList
+                        ++ [ case SeqDict.get ( channel, maybeThread ) config.channels of
+                                Just { name } ->
+                                    emailMentionLabel ("#" ++ name)
+
+                                Nothing ->
+                                    emailMentionLabel "#<missing>"
+                           ]
+                    )
 
                 NormalText char text ->
                     ( False
@@ -1592,8 +1733,8 @@ emailNormalTextView text state =
     ]
 
 
-emailUserLabel : String -> Email.Html.Html
-emailUserLabel name =
+emailMentionLabel : String -> Email.Html.Html
+emailMentionLabel name =
     Email.Html.span
         [ Email.Html.Attributes.backgroundColor (MyUi.colorToHex MyUi.userLabelBackground)
         , Email.Html.Attributes.padding "1px 1px 0 1px"
@@ -1601,7 +1742,7 @@ emailUserLabel name =
         , Email.Html.Attributes.borderRadius "2px"
         , Email.Html.Attributes.style "white-space" "nowrap"
         ]
-        [ Email.Html.text ("@" ++ name) ]
+        [ Email.Html.text name ]
 
 
 emailLinkView : RichTextState -> String -> String -> Email.Html.Html
@@ -1671,8 +1812,13 @@ emailFileDownloadView isSpoilered fileData =
         ]
 
 
-fromNonemptyString : Time.Zone -> SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
-fromNonemptyString timezone users string =
+fromNonemptyString :
+    Time.Zone
+    -> SeqDict userId { a | name : PersonName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String }
+    -> NonemptyString
+    -> Nonempty (RichText userId channelId)
+fromNonemptyString timezone users channels string =
     let
         source =
             String.Nonempty.toString string
@@ -1680,15 +1826,15 @@ fromNonemptyString timezone users string =
         ( startIndex, startRevNodes ) =
             case extractBlockQuote source 0 of
                 Just ( content, endIndex ) ->
-                    ( endIndex, [ BlockQuote NoLeadingLineBreak (parseBlockQuoteContent timezone users content) ] )
+                    ( endIndex, [ BlockQuote NoLeadingLineBreak (parseBlockQuoteContent timezone users channels content) ] )
 
                 Nothing ->
                     case extractHeading source 0 of
                         Just ( level, content, endIndex ) ->
-                            ( endIndex, [ Heading level NoLeadingLineBreak (parseHeadingContent timezone users content) ] )
+                            ( endIndex, [ Heading level NoLeadingLineBreak (parseHeadingContent timezone users channels content) ] )
 
                         Nothing ->
-                            case extractBulletPoint starBulletMarker (parseBlockQuoteContent timezone users) source 0 of
+                            case extractBulletPoint starBulletMarker (parseBlockQuoteContent timezone users channels) source 0 of
                                 Just bullet ->
                                     ( bullet.endIndex
                                     , bulletRevNodes (BulletPoint NoLeadingLineBreak bullet.items) bullet.trailing []
@@ -1698,7 +1844,7 @@ fromNonemptyString timezone users string =
                                     ( 0, [] )
 
         result =
-            parseLoop timezone source startIndex users [] "" startRevNodes
+            parseLoop timezone source startIndex users channels [] "" startRevNodes
     in
     case List.Nonempty.fromList result.nodes of
         Just nonempty ->
@@ -1708,9 +1854,9 @@ fromNonemptyString timezone users string =
             Nonempty (normalTextFromNonempty string) []
 
 
-parseBlockQuoteContent : Time.Zone -> SeqDict userId { a | name : PersonName } -> String -> List (RichText userId)
-parseBlockQuoteContent timezone users content =
-    case parseLoop timezone content 0 users [] "" [] |> .nodes |> List.Nonempty.fromList of
+parseBlockQuoteContent : Time.Zone -> SeqDict userId { a | name : PersonName } -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String } -> String -> List (RichText userId channelId)
+parseBlockQuoteContent timezone users channels content =
+    case parseLoop timezone content 0 users channels [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
             normalize nonempty |> List.Nonempty.toList
 
@@ -1718,9 +1864,9 @@ parseBlockQuoteContent timezone users content =
             []
 
 
-parseHeadingContent : Time.Zone -> SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
-parseHeadingContent timezone users content =
-    case parseLoop timezone (String.Nonempty.toString content) 0 users [] "" [] |> .nodes |> List.Nonempty.fromList of
+parseHeadingContent : Time.Zone -> SeqDict userId { a | name : PersonName } -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String } -> NonemptyString -> Nonempty (RichText userId channelId)
+parseHeadingContent timezone users channels content =
+    case parseLoop timezone (String.Nonempty.toString content) 0 users channels [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
             normalize nonempty
 
@@ -1860,11 +2006,11 @@ bulletContinuation matchMarker source lineEnd =
 
 collectBulletLines :
     (String -> Int -> Maybe Int)
-    -> (String -> List (RichText userId))
+    -> (String -> List (RichText userId channelId))
     -> String
     -> Int
     -> String
-    -> { items : List (List (RichText userId)), trailing : String, endIndex : Int }
+    -> { items : List (List (RichText userId channelId)), trailing : String, endIndex : Int }
 collectBulletLines matchMarker parseContent source contentStart markerPrefix =
     let
         lineEnd =
@@ -1893,10 +2039,10 @@ collectBulletLines matchMarker parseContent source contentStart markerPrefix =
 
 extractBulletPoint :
     (String -> Int -> Maybe Int)
-    -> (String -> List (RichText userId))
+    -> (String -> List (RichText userId channelId))
     -> String
     -> Int
-    -> Maybe { items : Nonempty (List (RichText userId)), trailing : String, endIndex : Int }
+    -> Maybe { items : Nonempty (List (RichText userId channelId)), trailing : String, endIndex : Int }
 extractBulletPoint matchMarker parseContent source index =
     case matchMarker source index of
         Just markerLen ->
@@ -1922,7 +2068,7 @@ extractBulletPoint matchMarker parseContent source index =
 
 {-| Prepends a bullet point node (and any leftover trailing text) to the reversed node list.
 -}
-bulletRevNodes : RichText userId -> String -> List (RichText userId) -> List (RichText userId)
+bulletRevNodes : RichText userId channelId -> String -> List (RichText userId channelId) -> List (RichText userId channelId)
 bulletRevNodes bulletNode trailing flushed =
     case String.Nonempty.fromString trailing of
         Just t ->
@@ -1934,7 +2080,7 @@ bulletRevNodes bulletNode trailing flushed =
 
 {-| Applies a function to the contents of a single bullet item, preserving empty items.
 -}
-mapBulletItem : (Nonempty (RichText userId) -> Nonempty (RichText userId)) -> List (RichText userId) -> List (RichText userId)
+mapBulletItem : (Nonempty (RichText userId channelId) -> Nonempty (RichText userId channelId)) -> List (RichText userId channelId) -> List (RichText userId channelId)
 mapBulletItem f item =
     case List.Nonempty.fromList item of
         Just nonempty ->
@@ -1946,7 +2092,7 @@ mapBulletItem f item =
 
 {-| Collects values from the contents of a single bullet item.
 -}
-bulletItemConcatMap : (Nonempty (RichText userId) -> List a) -> List (RichText userId) -> List a
+bulletItemConcatMap : (Nonempty (RichText userId channelId) -> List a) -> List (RichText userId channelId) -> List a
 bulletItemConcatMap f item =
     case List.Nonempty.fromList item of
         Just nonempty ->
@@ -1956,7 +2102,7 @@ bulletItemConcatMap f item =
             []
 
 
-normalize : Nonempty (RichText userId) -> Nonempty (RichText userId)
+normalize : Nonempty (RichText userId channelId) -> Nonempty (RichText userId channelId)
 normalize nonempty =
     List.foldl
         (\richText nonempty2 ->
@@ -1981,6 +2127,9 @@ normalize nonempty =
                     List.Nonempty.cons (Underline (normalize a)) nonempty2
 
                 UserMention _ ->
+                    List.Nonempty.cons richText nonempty2
+
+                ChannelMention _ _ ->
                     List.Nonempty.cons richText nonempty2
 
                 Strikethrough a ->
@@ -2044,6 +2193,9 @@ normalize nonempty =
 
                 UserMention id ->
                     UserMention id
+
+                ChannelMention channel thread ->
+                    ChannelMention channel thread
 
                 NormalText char string ->
                     NormalText char string
@@ -2229,7 +2381,7 @@ attachedFileSuffix =
     "]"
 
 
-flushText : String -> List (RichText userId) -> List (RichText userId)
+flushText : String -> List (RichText userId channelId) -> List (RichText userId channelId)
 flushText text revNodes =
     case String.uncons text of
         Just ( char, rest ) ->
@@ -2242,10 +2394,10 @@ flushText text revNodes =
 finalizeResult :
     (modifier -> NonemptyString)
     -> String
-    -> List (RichText userId)
+    -> List (RichText userId channelId)
     -> List modifier
     -> Int
-    -> { nodes : List (RichText userId), nextIndex : Int }
+    -> { nodes : List (RichText userId channelId), nextIndex : Int }
 finalizeResult modifierToString accText revNodes modifiers index =
     let
         flushed =
@@ -2269,7 +2421,7 @@ finalizeResult modifierToString accText revNodes modifiers index =
     }
 
 
-closeModifier : Int -> String -> List (RichText userId) -> (Nonempty (RichText userId) -> RichText userId) -> NonemptyString -> { nodes : List (RichText userId), nextIndex : Int }
+closeModifier : Int -> String -> List (RichText userId channelId) -> (Nonempty (RichText userId channelId) -> RichText userId channelId) -> NonemptyString -> { nodes : List (RichText userId channelId), nextIndex : Int }
 closeModifier afterSymbol accText revNodes container symbol =
     let
         flushed =
@@ -2288,9 +2440,16 @@ closeModifier afterSymbol accText revNodes container symbol =
             }
 
 
-parseInner : Time.Zone -> String -> Int -> SeqDict userId { a | name : PersonName } -> List Modifiers -> { nodes : List (RichText userId), nextIndex : Int }
-parseInner timezone source index users modifiers =
-    parseLoop timezone source index users modifiers "" []
+parseInner :
+    Time.Zone
+    -> String
+    -> Int
+    -> SeqDict userId { a | name : PersonName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String }
+    -> List Modifiers
+    -> { nodes : List (RichText userId channelId), nextIndex : Int }
+parseInner timezone source index users channels modifiers =
+    parseLoop timezone source index users channels modifiers "" []
 
 
 stringAt : Int -> String -> Maybe String
@@ -2469,11 +2628,12 @@ parseLoop :
     -> String
     -> Int
     -> SeqDict userId { a | name : PersonName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { b | name : String }
     -> List Modifiers
     -> String
-    -> List (RichText userId)
-    -> { nodes : List (RichText userId), nextIndex : Int }
-parseLoop timezone source index users modifiers accText revNodes =
+    -> List (RichText userId channelId)
+    -> { nodes : List (RichText userId channelId), nextIndex : Int }
+parseLoop timezone source index users channels modifiers accText revNodes =
     if index >= String.length source then
         finalizeResult modifierToSymbol accText revNodes modifiers index
 
@@ -2482,10 +2642,10 @@ parseLoop timezone source index users modifiers accText revNodes =
             "❓" ->
                 case parseCustomEmojiId (index + 1) source of
                     ( index2, Just customEmojiId ) ->
-                        parseLoop timezone source index2 users modifiers "" (CustomEmoji customEmojiId :: flushText accText revNodes)
+                        parseLoop timezone source index2 users channels modifiers "" (CustomEmoji customEmojiId :: flushText accText revNodes)
 
                     ( _, Nothing ) ->
-                        parseLoop timezone source (index + 1) users modifiers (accText ++ "❓") revNodes
+                        parseLoop timezone source (index + 1) users channels modifiers (accText ++ "❓") revNodes
 
             "\n" ->
                 if List.isEmpty modifiers then
@@ -2495,11 +2655,12 @@ parseLoop timezone source index users modifiers accText revNodes =
                                 source
                                 endIndex
                                 users
+                                channels
                                 modifiers
                                 ""
                                 (BlockQuote
                                     HasLeadingLineBreak
-                                    (parseBlockQuoteContent timezone users content)
+                                    (parseBlockQuoteContent timezone users channels content)
                                     :: flushText accText revNodes
                                 )
 
@@ -2510,22 +2671,24 @@ parseLoop timezone source index users modifiers accText revNodes =
                                         source
                                         endIndex
                                         users
+                                        channels
                                         modifiers
                                         ""
                                         (Heading
                                             level
                                             HasLeadingLineBreak
-                                            (parseHeadingContent timezone users content)
+                                            (parseHeadingContent timezone users channels content)
                                             :: flushText accText revNodes
                                         )
 
                                 Nothing ->
-                                    case extractBulletPoint starBulletMarker (parseBlockQuoteContent timezone users) source (index + 1) of
+                                    case extractBulletPoint starBulletMarker (parseBlockQuoteContent timezone users channels) source (index + 1) of
                                         Just bullet ->
                                             parseLoop timezone
                                                 source
                                                 bullet.endIndex
                                                 users
+                                                channels
                                                 modifiers
                                                 ""
                                                 (bulletRevNodes
@@ -2537,17 +2700,17 @@ parseLoop timezone source index users modifiers accText revNodes =
                                         Nothing ->
                                             case parseStickerId (index + 1) source of
                                                 ( index2, Just stickerId ) ->
-                                                    parseLoop timezone source index2 users modifiers "" (Sticker stickerId :: flushText accText revNodes)
+                                                    parseLoop timezone source index2 users channels modifiers "" (Sticker stickerId :: flushText accText revNodes)
 
                                                 ( _, Nothing ) ->
-                                                    parseLoop timezone source (index + 1) users modifiers (accText ++ "\n") revNodes
+                                                    parseLoop timezone source (index + 1) users channels modifiers (accText ++ "\n") revNodes
 
                 else
                     -- A line break doesn't close an open modifier, so `*bold\nstill bold*` stays bold
                     -- all the way through and a code block can be spoilered. The constructs above
                     -- that start a line are skipped while a modifier is open though, since a heading
                     -- or bullet point nested inside bold text isn't something anyone means to write.
-                    parseLoop timezone source (index + 1) users modifiers (accText ++ "\n") revNodes
+                    parseLoop timezone source (index + 1) users channels modifiers (accText ++ "\n") revNodes
 
             "¯" ->
                 if String.slice index (index + String.length shrugEmoticon) source == shrugEmoticon then
@@ -2555,12 +2718,13 @@ parseLoop timezone source index users modifiers accText revNodes =
                         source
                         (index + String.length shrugEmoticon)
                         users
+                        channels
                         modifiers
                         ""
                         (NormalText '¯' "\\_(ツ)_/¯" :: flushText accText revNodes)
 
                 else
-                    parseLoop timezone source (index + 1) users modifiers (accText ++ "¯") revNodes
+                    parseLoop timezone source (index + 1) users channels modifiers (accText ++ "¯") revNodes
 
             "\\" ->
                 let
@@ -2571,7 +2735,7 @@ parseLoop timezone source index users modifiers accText revNodes =
                     Just nextChar ->
                         case Dict.get nextChar charToEscaped of
                             Just escaped ->
-                                parseLoop timezone source (afterBackslash + 1) users modifiers "" (EscapedChar escaped :: flushText accText revNodes)
+                                parseLoop timezone source (afterBackslash + 1) users channels modifiers "" (EscapedChar escaped :: flushText accText revNodes)
 
                             Nothing ->
                                 -- The backslash isn't escaping anything, so only it is taken and
@@ -2579,10 +2743,10 @@ parseLoop timezone source index users modifiers accText revNodes =
                                 -- would have been without it. Taking that character too meant
                                 -- `\http://a.com` never reached the code that spots an address,
                                 -- so a backslash in front of one quietly stopped it being a link.
-                                parseLoop timezone source afterBackslash users modifiers (accText ++ "\\") revNodes
+                                parseLoop timezone source afterBackslash users channels modifiers (accText ++ "\\") revNodes
 
                     Nothing ->
-                        parseLoop timezone source afterBackslash users modifiers (accText ++ "\\") revNodes
+                        parseLoop timezone source afterBackslash users channels modifiers (accText ++ "\\") revNodes
 
             "@" ->
                 let
@@ -2594,10 +2758,30 @@ parseLoop timezone source index users modifiers accText revNodes =
                 in
                 case tryMatchUser users remaining of
                     Just ( userId, matchLen ) ->
-                        parseLoop timezone source (afterAt + matchLen) users modifiers "" (UserMention userId :: flushText accText revNodes)
+                        parseLoop timezone source (afterAt + matchLen) users channels modifiers "" (UserMention userId :: flushText accText revNodes)
 
                     Nothing ->
-                        parseLoop timezone source afterAt users modifiers (accText ++ "@") revNodes
+                        parseLoop timezone source afterAt users channels modifiers (accText ++ "@") revNodes
+
+            "#" ->
+                let
+                    afterHash =
+                        index + 1
+                in
+                case tryMatchChannel channels (String.slice afterHash (String.length source) source) of
+                    Just ( ( channel, maybeThread ), matchLen ) ->
+                        parseLoop
+                            timezone
+                            source
+                            (afterHash + matchLen)
+                            users
+                            channels
+                            modifiers
+                            ""
+                            (ChannelMention channel maybeThread :: flushText accText revNodes)
+
+                    Nothing ->
+                        parseLoop timezone source afterHash users channels modifiers (accText ++ "#") revNodes
 
             "*" ->
                 let
@@ -2616,7 +2800,7 @@ parseLoop timezone source index users modifiers accText revNodes =
                             String.slice afterSymbol (afterSymbol + 1) source
                     in
                     if nextChar == "*" || nextChar == " " then
-                        parseLoop timezone source afterSymbol users modifiers (accText ++ "*") revNodes
+                        parseLoop timezone source afterSymbol users channels modifiers (accText ++ "*") revNodes
 
                     else
                         let
@@ -2624,16 +2808,16 @@ parseLoop timezone source index users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner timezone source afterSymbol users (IsBold :: modifiers)
+                                parseInner timezone source afterSymbol users channels (IsBold :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop timezone source inner.nextIndex users modifiers "" newRevNodes
+                        parseLoop timezone source inner.nextIndex users channels modifiers "" newRevNodes
 
             "_" ->
                 if String.slice index (index + 4) source == "____" then
-                    parseLoop timezone source (index + 4) users modifiers (accText ++ "____") revNodes
+                    parseLoop timezone source (index + 4) users channels modifiers (accText ++ "____") revNodes
 
                 else if String.slice index (index + 2) source == "__" then
                     let
@@ -2652,12 +2836,12 @@ parseLoop timezone source index users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner timezone source afterSymbol users (IsUnderlined :: modifiers)
+                                parseInner timezone source afterSymbol users channels (IsUnderlined :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop timezone source inner.nextIndex users modifiers "" newRevNodes
+                        parseLoop timezone source inner.nextIndex users channels modifiers "" newRevNodes
 
                 else
                     let
@@ -2676,16 +2860,16 @@ parseLoop timezone source index users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner timezone source afterSymbol users (IsItalic :: modifiers)
+                                parseInner timezone source afterSymbol users channels (IsItalic :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop timezone source inner.nextIndex users modifiers "" newRevNodes
+                        parseLoop timezone source inner.nextIndex users channels modifiers "" newRevNodes
 
             "~" ->
                 if (List.head modifiers /= Just IsStrikethrough) && String.slice index (index + 4) source == "~~~~" then
-                    parseLoop timezone source (index + 4) users modifiers (accText ++ "~~~~") revNodes
+                    parseLoop timezone source (index + 4) users channels modifiers (accText ++ "~~~~") revNodes
 
                 else if String.slice index (index + 2) source == "~~" then
                     let
@@ -2704,19 +2888,19 @@ parseLoop timezone source index users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner timezone source afterSymbol users (IsStrikethrough :: modifiers)
+                                parseInner timezone source afterSymbol users channels (IsStrikethrough :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop timezone source inner.nextIndex users modifiers "" newRevNodes
+                        parseLoop timezone source inner.nextIndex users channels modifiers "" newRevNodes
 
                 else
-                    parseLoop timezone source (index + 1) users modifiers (accText ++ "~") revNodes
+                    parseLoop timezone source (index + 1) users channels modifiers (accText ++ "~") revNodes
 
             "|" ->
                 if (List.head modifiers /= Just IsSpoilered) && String.slice index (index + 4) source == "||||" then
-                    parseLoop timezone source (index + 4) users modifiers (accText ++ "||||") revNodes
+                    parseLoop timezone source (index + 4) users channels modifiers (accText ++ "||||") revNodes
 
                 else if String.slice index (index + 2) source == "||" then
                     let
@@ -2735,15 +2919,15 @@ parseLoop timezone source index users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner timezone source afterSymbol users (IsSpoilered :: modifiers)
+                                parseInner timezone source afterSymbol users channels (IsSpoilered :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop timezone source inner.nextIndex users modifiers "" newRevNodes
+                        parseLoop timezone source inner.nextIndex users channels modifiers "" newRevNodes
 
                 else
-                    parseLoop timezone source (index + 1) users modifiers (accText ++ "|") revNodes
+                    parseLoop timezone source (index + 1) users channels modifiers (accText ++ "|") revNodes
 
             "`" ->
                 case ( stringAtRange index 3 source, findSubstring source (index + 3) "```" ) of
@@ -2757,10 +2941,10 @@ parseLoop timezone source index users modifiers accText revNodes =
                         in
                         case String.Nonempty.fromString codeContent of
                             Just _ ->
-                                parseLoop timezone source (closeIndex + 3) users modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
+                                parseLoop timezone source (closeIndex + 3) users channels modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
 
                             Nothing ->
-                                parseLoop timezone source (closeIndex + 3) users modifiers (accText ++ "``````") revNodes
+                                parseLoop timezone source (closeIndex + 3) users channels modifiers (accText ++ "``````") revNodes
 
                     _ ->
                         case findSingleBacktick source (index + 1) of
@@ -2771,13 +2955,13 @@ parseLoop timezone source index users modifiers accText revNodes =
                                 in
                                 case ( String.Nonempty.fromString content, String.contains "\n" content ) of
                                     ( Just a, False ) ->
-                                        parseLoop timezone source (closeIndex + 1) users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+                                        parseLoop timezone source (closeIndex + 1) users channels modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
 
                                     _ ->
-                                        parseLoop timezone source (index + 1) users modifiers (accText ++ "`") revNodes
+                                        parseLoop timezone source (index + 1) users channels modifiers (accText ++ "`") revNodes
 
                             Nothing ->
-                                parseLoop timezone source (index + 1) users modifiers (accText ++ "`") revNodes
+                                parseLoop timezone source (index + 1) users channels modifiers (accText ++ "`") revNodes
 
             "h" ->
                 case parseUrlBody False modifierToSymbol modifiers index source of
@@ -2786,6 +2970,7 @@ parseLoop timezone source index users modifiers accText revNodes =
                             source
                             (index + String.length (Url.toString url))
                             users
+                            channels
                             modifiers
                             ""
                             (Hyperlink url :: flushText accText revNodes)
@@ -2795,6 +2980,7 @@ parseLoop timezone source index users modifiers accText revNodes =
                             source
                             (index + String.length errText)
                             users
+                            channels
                             modifiers
                             (accText ++ errText)
                             revNodes
@@ -2803,18 +2989,18 @@ parseLoop timezone source index users modifiers accText revNodes =
                 if String.slice index (index + 2) source == "[!" then
                     case parseFileId source (index + 2) of
                         Just ( fileId, nextIndex ) ->
-                            parseLoop timezone source nextIndex users modifiers "" (AttachedFile (Id.fromInt fileId) :: flushText accText revNodes)
+                            parseLoop timezone source nextIndex users channels modifiers "" (AttachedFile (Id.fromInt fileId) :: flushText accText revNodes)
 
                         Nothing ->
-                            parseLoop timezone source (index + 1) users modifiers (accText ++ "[") revNodes
+                            parseLoop timezone source (index + 1) users channels modifiers (accText ++ "[") revNodes
 
                 else
                     case parseMarkdownLink False source (index + 1) of
                         Just ( alias, url, nextIndex ) ->
-                            parseLoop timezone source nextIndex users modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
+                            parseLoop timezone source nextIndex users channels modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
 
                         Nothing ->
-                            parseLoop timezone source (index + 1) users modifiers (accText ++ "[") revNodes
+                            parseLoop timezone source (index + 1) users channels modifiers (accText ++ "[") revNodes
 
             _ ->
                 -- A timestamp starts with a month name rather than a symbol, so unlike
@@ -2823,14 +3009,14 @@ parseLoop timezone source index users modifiers accText revNodes =
                 -- loop back here often enough for this to get a look at them.
                 case tryParseTimestamp timezone source index of
                     Just ( time, timeEndIndex ) ->
-                        parseLoop timezone source timeEndIndex users modifiers "" (Timestamp time :: flushText accText revNodes)
+                        parseLoop timezone source timeEndIndex users channels modifiers "" (Timestamp time :: flushText accText revNodes)
 
                     Nothing ->
                         let
                             nextIndex =
                                 skipNormalChars source (index + 1)
                         in
-                        parseLoop timezone source nextIndex users modifiers (accText ++ String.slice index nextIndex source) revNodes
+                        parseLoop timezone source nextIndex users channels modifiers (accText ++ String.slice index nextIndex source) revNodes
 
 
 {-| at-chat's own timestamp syntax, which is just how a timestamp reads:
@@ -2963,6 +3149,21 @@ tryMatchUser users remaining =
                 in
                 if String.startsWith name remaining then
                     Just ( userId, String.length name )
+
+                else
+                    Nothing
+            )
+        |> List.head
+
+
+tryMatchChannel : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { a | name : String } -> String -> Maybe ( ( channelId, Maybe (Id ChannelMessageId) ), Int )
+tryMatchChannel channels remaining =
+    SeqDict.toList channels
+        |> List.sortBy (\( _, channel ) -> String.length channel.name |> negate)
+        |> List.filterMap
+            (\( key, channel ) ->
+                if String.startsWith channel.name remaining then
+                    Just ( key, String.length channel.name )
 
                 else
                     Nothing
@@ -3275,7 +3476,7 @@ skipNormalChars source index =
             c =
                 String.slice index (index + 1) source
         in
-        if c == "[" || c == "@" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "\n" || c == "❓" || c == "¯" || isMonthStart c then
+        if c == "[" || c == "@" || c == "#" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "\n" || c == "❓" || c == "¯" || isMonthStart c then
             index
 
         else
@@ -3291,12 +3492,12 @@ isMonthStart c =
     c == "J" || c == "F" || c == "M" || c == "A" || c == "S" || c == "O" || c == "N" || c == "D"
 
 
-mentionsUser : Nonempty (RichText userId) -> SeqSet userId
+mentionsUser : Nonempty (RichText userId channelId) -> SeqSet userId
 mentionsUser nonempty =
     mentionsUserHelper SeqSet.empty nonempty
 
 
-mentionsUserHelper : SeqSet userId -> Nonempty (RichText userId) -> SeqSet userId
+mentionsUserHelper : SeqSet userId -> Nonempty (RichText userId channelId) -> SeqSet userId
 mentionsUserHelper set nonempty =
     List.Nonempty.foldl
         (\richText set2 ->
@@ -3306,6 +3507,9 @@ mentionsUserHelper set nonempty =
 
                 UserMention mentionedUser ->
                     SeqSet.insert mentionedUser set2
+
+                ChannelMention _ _ ->
+                    set2
 
                 Bold nonempty2 ->
                     mentionsUserHelper set2 nonempty2
@@ -3388,7 +3592,7 @@ domainToString (Domain domain) =
     domain
 
 
-failedToDecryptMessage : Nonempty (RichText userId)
+failedToDecryptMessage : Nonempty (RichText userId channelId)
 failedToDecryptMessage =
     Nonempty (Italic (Nonempty (NormalText 'F' "ailed to decrypt message") [])) []
 
@@ -3398,7 +3602,7 @@ failedToDecryptMessageText =
     "Failed to decrypt message"
 
 
-messageIsEncrypted : Nonempty (RichText userId)
+messageIsEncrypted : Nonempty (RichText userId channelId)
 messageIsEncrypted =
     Nonempty (Italic (Nonempty (NormalText 'M' "essage is encrypted") [])) []
 
@@ -3408,7 +3612,77 @@ type ShowLargeContent
     | NoLargeContent
 
 
-hasLargeContent : Nonempty (RichText userId) -> Bool
+mentionsChannel : Nonempty (RichText userId channelId) -> Bool
+mentionsChannel richText =
+    List.Nonempty.any
+        (\richText2 ->
+            case richText2 of
+                ChannelMention _ _ ->
+                    True
+
+                UserMention _ ->
+                    False
+
+                NormalText _ _ ->
+                    False
+
+                Bold a ->
+                    mentionsChannel a
+
+                Italic a ->
+                    mentionsChannel a
+
+                Underline a ->
+                    mentionsChannel a
+
+                Strikethrough a ->
+                    mentionsChannel a
+
+                Spoiler a ->
+                    mentionsChannel a
+
+                BlockQuote _ a ->
+                    List.Nonempty.fromList a |> Maybe.map mentionsChannel |> Maybe.withDefault False
+
+                Heading _ _ a ->
+                    mentionsChannel a
+
+                Hyperlink _ ->
+                    False
+
+                MarkdownLink _ _ ->
+                    False
+
+                InlineCode _ _ ->
+                    False
+
+                CodeBlock _ _ ->
+                    False
+
+                AttachedFile _ ->
+                    False
+
+                EscapedChar _ ->
+                    False
+
+                Sticker _ ->
+                    False
+
+                CustomEmoji _ ->
+                    False
+
+                BulletPoint _ a ->
+                    List.Nonempty.any
+                        (\list -> List.Nonempty.fromList list |> Maybe.map mentionsChannel |> Maybe.withDefault False)
+                        a
+
+                Timestamp _ ->
+                    False
+        )
+        richText
+
+
+hasLargeContent : Nonempty (RichText userId channelId) -> Bool
 hasLargeContent richText =
     List.Nonempty.any
         (\richText2 ->
@@ -3417,6 +3691,9 @@ hasLargeContent richText =
                     hasLargeContent a
 
                 UserMention _ ->
+                    False
+
+                ChannelMention _ _ ->
                     False
 
                 NormalText _ _ ->
@@ -3488,9 +3765,9 @@ view :
     -> (Url -> msg)
     -> (Int -> msg)
     -> (PressedImageData -> msg)
-    -> Config a userId
+    -> Config a userId channelId
     -> Array Embed
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     -> List (Html msg)
 view htmlIdPrefix containerWidth onPressLink onPressSpoiler onPressImage config embeds nonempty =
     viewHelper
@@ -3508,7 +3785,7 @@ view htmlIdPrefix containerWidth onPressLink onPressSpoiler onPressImage config 
         |> (\( _, _, a ) -> a)
 
 
-preview : (Url -> msg) -> PreviewConfig a userId -> Nonempty (RichText userId) -> List (Html msg)
+preview : (Url -> msg) -> PreviewConfig a userId channelId -> Nonempty (RichText userId channelId) -> List (Html msg)
 preview onPressLink config nonempty =
     viewHelper
         False
@@ -3521,6 +3798,7 @@ preview onPressLink config nonempty =
         { domainWhitelist = config.domainWhitelist
         , revealedSpoilers = config.revealedSpoilers
         , users = config.users
+        , channels = config.channels
         , attachedFiles = config.attachedFiles
         , stickers = SeqDict.empty
         , customEmojis = config.customEmojis
@@ -3542,10 +3820,11 @@ preview onPressLink config nonempty =
         |> (\( _, _, a ) -> a)
 
 
-type alias Config a userId =
+type alias Config a userId channelId =
     { domainWhitelist : SeqSet Domain
     , revealedSpoilers : SeqSet Int
     , users : SeqDict userId { a | name : PersonName }
+    , channels : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     , attachedFiles : SeqDict (Id FileId) FileData
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
@@ -3562,10 +3841,11 @@ type alias Config a userId =
     }
 
 
-type alias PreviewConfig a userId =
+type alias PreviewConfig a userId channelId =
     { domainWhitelist : SeqSet Domain
     , revealedSpoilers : SeqSet Int
     , users : SeqDict userId { a | name : PersonName }
+    , channels : SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
     , attachedFiles : SeqDict (Id FileId) FileData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , emojiData : Maybe Emoji.CachedEmojiData
@@ -3736,17 +4016,25 @@ viewHelper :
     -> (Url -> msg)
     -> Int
     -> RichTextState
-    -> Config a userId
+    -> Config a userId channelId
     -> Array Embed
     -> Int
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     -> ( ( Bool, Int ), Int, List (Html msg) )
 viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressImage onPressLink spoilerIndex state config embeds embedIndex nonempty =
+    let
+        nodes : List (RichText userId channelId)
+        nodes =
+            List.Nonempty.toList nonempty
+    in
     List.foldl
-        (\item ( ( dropNextLineBreak2, spoilerIndex2 ), embedIndex2, currentList ) ->
+        (\( previousItem, item ) ( ( dropNextLineBreak2, spoilerIndex2 ), embedIndex2, currentList ) ->
             case item of
                 UserMention userId ->
                     ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ MyUi.userLabelHtml userId config.users ] )
+
+                ChannelMention channel thread ->
+                    ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ channelMentionView channel thread config.channels ] )
 
                 NormalText char text ->
                     ( ( False, spoilerIndex2 )
@@ -4008,7 +4296,21 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                         )
                                         list2
                     in
-                    ( ( True, spoilerIndex3 ), embedIndex3, currentList ++ [ headingElement ] )
+                    ( ( True, spoilerIndex3 )
+                    , embedIndex3
+                    , case ( showLargeContent, previousItem ) of
+                        ( ShowLargeContent _, Just (NormalText char text) ) ->
+                            -- A line break at the end of the text is dropped by the browser when a
+                            -- block element follows it, which would lose the blank line above the heading.
+                            if String.endsWith "\n" (String.cons char text) then
+                                currentList ++ [ Html.br [] [], headingElement ]
+
+                            else
+                                currentList ++ [ headingElement ]
+
+                        _ ->
+                            currentList ++ [ headingElement ]
+                    )
 
                 Hyperlink data ->
                     let
@@ -4324,14 +4626,14 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                     )
         )
         ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
-        (List.Nonempty.toList nonempty)
+        (List.map2 Tuple.pair (Nothing :: List.map Just nodes) nodes)
 
 
 imageView :
     Maybe ( HtmlId, Int -> msg )
     -> Maybe (PressedImageData -> msg)
     -> Int
-    -> Config b userId
+    -> Config b userId channelId
     -> Coord CssPixels
     -> Id FileId
     -> FileData
@@ -4713,7 +5015,7 @@ embedLoadingView onPressLink domainWhitelist url =
 
 favicon : Url -> String
 favicon url =
-    "https://icons.duckduckgo.com/ip2/" ++ url.host ++ ".ico"
+    FileStatus.domain ++ "/file/favicon/" ++ url.host
 
 
 smallHyperlink : (Url -> msg) -> SeqSet Domain -> Url -> Html msg
@@ -4995,22 +5297,39 @@ fileDownloadView maybeHtmlId isSpoilered fileData =
         ]
 
 
+channelMentionView : channelId -> Maybe (Id ChannelMessageId) -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String, url : String } -> Html msg
+channelMentionView channel maybeThread channels =
+    case SeqDict.get ( channel, maybeThread ) channels of
+        Just { name, url } ->
+            Html.a
+                (Html.Attributes.href url
+                    :: Html.Attributes.style "text-decoration" "none"
+                    :: MyUi.userLabelHtmlAttributes
+                )
+                [ Html.text ("#" ++ name) ]
+
+        Nothing ->
+            Html.span MyUi.userLabelHtmlAttributes [ Html.text "#<missing>" ]
+
+
 textInputView :
     Time.Zone
     -> Maybe Emoji.CachedEmojiData
     -> SeqDict userId { a | name : PersonName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { c | name : String }
     -> SeqDict (Id FileId) b
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
     -> Maybe Range
-    -> Nonempty (RichText userId)
+    -> Nonempty (RichText userId channelId)
     -> List (Html msg)
-textInputView timezone emojiData users attachedFiles customEmojis2 stickers2 selection nonempty =
+textInputView timezone emojiData users channels attachedFiles customEmojis2 stickers2 selection nonempty =
     textInputViewHelper
         timezone
         emojiData
         { underline = False, italic = False, bold = False, strikethrough = False, spoiler = False }
         users
+        channels
         attachedFiles
         customEmojis2
         stickers2
@@ -5036,21 +5355,32 @@ type alias RichTextState =
     { italic : Bool, underline : Bool, bold : Bool, strikethrough : Bool, spoiler : Bool }
 
 
+mentionInputView : Maybe Range -> Int -> String -> Html msg
+mentionInputView selection index text =
+    Html.span
+        [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.userLabelFontColor)
+        , Html.Attributes.style "background-color" "rgba(57,77,255,0.5)"
+        , Html.Attributes.style "border-radius" "2px"
+        ]
+        (textWithSelection selection index text)
+
+
 textInputViewHelper :
     Time.Zone
     -> Maybe Emoji.CachedEmojiData
     -> RichTextState
     -> SeqDict userId { a | name : PersonName }
+    -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { c | name : String }
     -> SeqDict (Id FileId) b
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
     -> Int
     -> Maybe Range
-    -> List (RichText userId)
+    -> List (RichText userId channelId)
     -> Bool
     -> Array (Html msg)
     -> ( Int, Array (Html msg) )
-textInputViewHelper timezone emojiData state allUsers attachedFiles customEmojis2 stickers2 index selection list inBlockQuote output =
+textInputViewHelper timezone emojiData state allUsers channels attachedFiles customEmojis2 stickers2 index selection list inBlockQuote output =
     List.foldl
         (\item ( index2, output2 ) ->
             case item of
@@ -5062,15 +5392,21 @@ textInputViewHelper timezone emojiData state allUsers attachedFiles customEmojis
                                     "@" ++ PersonName.toString user.name
                             in
                             ( index2 + String.length text
-                            , Array.push
-                                (Html.span
-                                    [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.userLabelFontColor)
-                                    , Html.Attributes.style "background-color" "rgba(57,77,255,0.5)"
-                                    , Html.Attributes.style "border-radius" "2px"
-                                    ]
-                                    (textWithSelection selection index2 text)
-                                )
-                                output2
+                            , Array.push (mentionInputView selection index2 text) output2
+                            )
+
+                        Nothing ->
+                            ( index2 + 1, output2 )
+
+                ChannelMention channel maybeThread ->
+                    case SeqDict.get ( channel, maybeThread ) channels of
+                        Just { name } ->
+                            let
+                                text =
+                                    "#" ++ name
+                            in
+                            ( index2 + String.length text
+                            , Array.push (mentionInputView selection index2 text) output2
                             )
 
                         Nothing ->
@@ -5125,6 +5461,7 @@ textInputViewHelper timezone emojiData state allUsers attachedFiles customEmojis
                                 emojiData
                                 { state | italic = True }
                                 allUsers
+                                channels
                                 attachedFiles
                                 customEmojis2
                                 stickers2
@@ -5144,6 +5481,7 @@ textInputViewHelper timezone emojiData state allUsers attachedFiles customEmojis
                                 emojiData
                                 { state | underline = True }
                                 allUsers
+                                channels
                                 attachedFiles
                                 customEmojis2
                                 stickers2
@@ -5163,6 +5501,7 @@ textInputViewHelper timezone emojiData state allUsers attachedFiles customEmojis
                                 emojiData
                                 { state | bold = True }
                                 allUsers
+                                channels
                                 attachedFiles
                                 customEmojis2
                                 stickers2
@@ -5182,6 +5521,7 @@ textInputViewHelper timezone emojiData state allUsers attachedFiles customEmojis
                                 emojiData
                                 { state | strikethrough = True }
                                 allUsers
+                                channels
                                 attachedFiles
                                 customEmojis2
                                 stickers2
@@ -5201,6 +5541,7 @@ textInputViewHelper timezone emojiData state allUsers attachedFiles customEmojis
                                 emojiData
                                 { state | spoiler = True }
                                 allUsers
+                                channels
                                 attachedFiles
                                 customEmojis2
                                 stickers2
@@ -5228,6 +5569,7 @@ textInputViewHelper timezone emojiData state allUsers attachedFiles customEmojis
                         emojiData
                         state
                         allUsers
+                        channels
                         attachedFiles
                         customEmojis2
                         stickers2
@@ -5255,6 +5597,7 @@ textInputViewHelper timezone emojiData state allUsers attachedFiles customEmojis
                         emojiData
                         state
                         allUsers
+                        channels
                         attachedFiles
                         customEmojis2
                         stickers2
@@ -5492,6 +5835,7 @@ textInputViewHelper timezone emojiData state allUsers attachedFiles customEmojis
                                 emojiData
                                 state
                                 allUsers
+                                channels
                                 attachedFiles
                                 customEmojis2
                                 stickers2
@@ -5692,12 +6036,16 @@ fromDiscord :
     -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> Discord.OptionalData (List Discord.Embed)
     -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
+    ->
+        SeqDict
+            (Discord.Id Discord.ChannelId)
+            { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId) }
     -> List (Id StickerId)
     -> Discord.OptionalData (List Discord.MessageSnapshot)
-    -> Nonempty (RichText (Discord.Id Discord.UserId))
-fromDiscord text attachments2 embeds customEmojis2 stickers2 messageSnapshots =
+    -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
+fromDiscord text attachments2 embeds customEmojis2 channels stickers2 messageSnapshots =
     let
-        messageSnapshots3 : List (RichText (Discord.Id Discord.UserId))
+        messageSnapshots3 : List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         messageSnapshots3 =
             case messageSnapshots of
                 Discord.Included messageSnapshots2 ->
@@ -5721,6 +6069,43 @@ fromDiscord text attachments2 embeds customEmojis2 stickers2 messageSnapshots =
     (fromDiscordHelper text attachments2 embeds customEmojis2 stickers2 ++ messageSnapshots3)
         |> List.Nonempty.fromList
         |> Maybe.withDefault emptyPlaceholder
+        |> mapChannelMention (discordThreadMention channels)
+
+
+{-| Discord writes a mention of a thread the same way as a mention of a channel, with the
+thread's id in place of the channel's. That id is also the id of the message the thread hangs
+off of, which is how at-chat keeps track of threads.
+-}
+discordThreadMention :
+    SeqDict
+        (Discord.Id Discord.ChannelId)
+        { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId) }
+    -> Discord.Id Discord.ChannelId
+    -> Maybe (Id ChannelMessageId)
+    -> ( Discord.Id Discord.ChannelId, Maybe (Id ChannelMessageId) )
+discordThreadMention channels channelId maybeThread =
+    if maybeThread /= Nothing || SeqDict.member channelId channels then
+        ( channelId, maybeThread )
+
+    else
+        let
+            messageId : Discord.Id Discord.MessageId
+            messageId =
+                Discord.idToUInt64 channelId |> Discord.idFromUInt64
+        in
+        SeqDict.foldl
+            (\parentId channel found ->
+                case found of
+                    Nothing ->
+                        OneToOne.second messageId channel.linkedMessageIds
+                            |> Maybe.map (\threadId -> ( parentId, Just threadId ))
+
+                    Just _ ->
+                        found
+            )
+            Nothing
+            channels
+            |> Maybe.withDefault ( channelId, Nothing )
 
 
 fromDiscordHelper :
@@ -5729,7 +6114,7 @@ fromDiscordHelper :
     -> Discord.OptionalData (List Discord.Embed)
     -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     -> List (Id StickerId)
-    -> List (RichText (Discord.Id Discord.UserId))
+    -> List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
 fromDiscordHelper text attachments2 embeds customEmojis2 stickers2 =
     let
         ( urlEmbeds, richTextEmbeds ) =
@@ -5778,7 +6163,7 @@ fromDiscordHelper text attachments2 embeds customEmojis2 stickers2 =
                         []
                 )
 
-        applyExtraEmbeds : Nonempty (RichText userId) -> Nonempty (RichText userId)
+        applyExtraEmbeds : Nonempty (RichText userId channelId) -> Nonempty (RichText userId channelId)
         applyExtraEmbeds richText =
             let
                 urls : List Url
@@ -5802,11 +6187,11 @@ fromDiscordHelper text attachments2 embeds customEmojis2 stickers2 =
             else
                 richText
 
-        applyStickers : List (RichText userId) -> List (RichText userId)
+        applyStickers : List (RichText userId channelId) -> List (RichText userId channelId)
         applyStickers richText =
             richText ++ List.map Sticker stickers2
 
-        spoileredAttachments : List (RichText userId)
+        spoileredAttachments : List (RichText userId channelId)
         spoileredAttachments =
             List.map
                 (\( fileId, attachment ) ->
@@ -5879,7 +6264,7 @@ fromDiscordHelper text attachments2 embeds customEmojis2 stickers2 =
                         |> applyStickers
 
 
-emptyPlaceholder : Nonempty (RichText userId)
+emptyPlaceholder : Nonempty (RichText userId channelId)
 emptyPlaceholder =
     Nonempty (NormalText '<' "empty>") []
 
@@ -5923,8 +6308,8 @@ discordParseLoop :
     -> Int
     -> List DiscordModifiers
     -> String
-    -> List (RichText (Discord.Id Discord.UserId))
-    -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
+    -> List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
+    -> { nodes : List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)), nextIndex : Int }
 discordParseLoop customEmojis2 source index modifiers accText revNodes =
     if index >= String.length source then
         finalizeResult discordModifierToSymbol accText revNodes modifiers index
@@ -6052,6 +6437,20 @@ discordParseLoop customEmojis2 source index modifiers accText revNodes =
                             Nothing ->
                                 bailOutHelper ()
 
+                    Just "#" ->
+                        case tryParseDiscordChannelMention source index of
+                            Just ( channelId, nextIndex ) ->
+                                discordParseLoop
+                                    customEmojis2
+                                    source
+                                    nextIndex
+                                    modifiers
+                                    ""
+                                    (ChannelMention channelId Nothing :: flushText accText revNodes)
+
+                            Nothing ->
+                                bailOutHelper ()
+
                     Just "h" ->
                         case parseUrlBody True discordModifierToSymbol modifiers (index + 1) source of
                             Ok url ->
@@ -6149,6 +6548,11 @@ discordParseLoop customEmojis2 source index modifiers accText revNodes =
                     in
                     if List.head modifiers == Just DiscordIsBold then
                         closeModifier afterSymbol accText revNodes Bold (discordModifierToSymbol DiscordIsBold)
+
+                    else if List.head modifiers == Just DiscordIsItalic && String.slice index (index + 3) source == "***" then
+                        -- Three asterisks in a row end the italic first and leave the last two
+                        -- to end the bold around it
+                        closeModifier (index + 1) accText revNodes Italic (discordModifierToSymbol DiscordIsItalic)
 
                     else if List.member DiscordIsBold modifiers then
                         finalizeResult discordModifierToSymbol accText revNodes modifiers index
@@ -6416,13 +6820,17 @@ discordParseLoop customEmojis2 source index modifiers accText revNodes =
 
 toDiscord :
     OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
-    -> Nonempty (RichText (Discord.Id Discord.UserId))
+    ->
+        SeqDict
+            (Discord.Id Discord.ChannelId)
+            { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId) }
+    -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     -> Result Int String
-toDiscord customEmojis2 content =
+toDiscord customEmojis2 channels content =
     let
         text : String
         text =
-            toDiscordHelper customEmojis2 (List.Nonempty.toList content)
+            toDiscordHelper customEmojis2 channels (List.Nonempty.toList content)
     in
     if String.length text > maxLength then
         Err (maxLength - String.length text)
@@ -6433,12 +6841,12 @@ toDiscord customEmojis2 content =
 
 discordCharsLeft :
     OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
-    -> Maybe (Nonempty (RichText (Discord.Id Discord.UserId)))
+    -> Maybe (Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)))
     -> Int
 discordCharsLeft customEmojis2 richText =
     case richText of
         Just richText2 ->
-            case toDiscord customEmojis2 richText2 of
+            case toDiscord customEmojis2 SeqDict.empty richText2 of
                 Ok text ->
                     maxLength - String.length text
 
@@ -6455,32 +6863,78 @@ type alias DiscordCustomEmojiIdAndName =
 
 toDiscordHelper :
     OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
-    -> List (RichText (Discord.Id Discord.UserId))
+    ->
+        SeqDict
+            (Discord.Id Discord.ChannelId)
+            { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId) }
+    -> List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     -> String
-toDiscordHelper customEmojis2 content =
+toDiscordHelper customEmojis2 channels content =
     List.map
         (\item ->
             case item of
                 UserMention discordUserId ->
                     "<@!" ++ Discord.idToString discordUserId ++ ">"
 
+                ChannelMention channelId maybeThread ->
+                    case maybeThread of
+                        Just threadId ->
+                            let
+                                messageId : Maybe (Discord.Id Discord.MessageId)
+                                messageId =
+                                    SeqDict.foldl
+                                        (\_ channel data ->
+                                            case data of
+                                                Nothing ->
+                                                    OneToOne.first threadId channel.linkedMessageIds
+
+                                                Just _ ->
+                                                    data
+                                        )
+                                        Nothing
+                                        channels
+                            in
+                            case messageId of
+                                Just messageId2 ->
+                                    "<#" ++ Discord.idToString messageId2 ++ ">"
+
+                                Nothing ->
+                                    -- A placeholder so the char count is reasonably accurate
+                                    "<#0000000000000000000>"
+
+                        Nothing ->
+                            "<#" ++ Discord.idToString channelId ++ ">"
+
                 NormalText char string ->
                     escapeDiscordText (String.cons char string)
 
                 Bold nonempty ->
-                    "**" ++ toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty) ++ "**"
+                    "**" ++ toDiscordHelper customEmojis2 channels (List.Nonempty.toList nonempty) ++ "**"
 
                 Italic nonempty ->
-                    "*" ++ toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty) ++ "*"
+                    let
+                        inner : String
+                        inner =
+                            toDiscordHelper customEmojis2 channels (List.Nonempty.toList nonempty)
+                    in
+                    if String.startsWith "*" inner || String.endsWith "*" inner then
+                        -- Italic written with asterisks around bold runs the two markers
+                        -- together into "***", which Discord reads as bold around italic
+                        -- instead. Underscores are Discord's other way of writing italic and
+                        -- don't run together with the bold markers.
+                        "_" ++ inner ++ "_"
+
+                    else
+                        "*" ++ inner ++ "*"
 
                 Underline nonempty ->
-                    "__" ++ toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty) ++ "__"
+                    "__" ++ toDiscordHelper customEmojis2 channels (List.Nonempty.toList nonempty) ++ "__"
 
                 Strikethrough nonempty ->
-                    "~~" ++ toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty) ++ "~~"
+                    "~~" ++ toDiscordHelper customEmojis2 channels (List.Nonempty.toList nonempty) ++ "~~"
 
                 Spoiler nonempty ->
-                    "||" ++ toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty) ++ "||"
+                    "||" ++ toDiscordHelper customEmojis2 channels (List.Nonempty.toList nonempty) ++ "||"
 
                 BlockQuote hasLeadingLineBreak list ->
                     (case hasLeadingLineBreak of
@@ -6491,7 +6945,7 @@ toDiscordHelper customEmojis2 content =
                             ""
                     )
                         ++ "> "
-                        ++ String.replace "\n" "\n> " (toDiscordHelper customEmojis2 list)
+                        ++ String.replace "\n" "\n> " (toDiscordHelper customEmojis2 channels list)
 
                 Heading level hasLeadingLineBreak nonempty ->
                     let
@@ -6506,7 +6960,7 @@ toDiscordHelper customEmojis2 content =
                             )
                                 ++ headingLevelToMarker level
                     in
-                    prefix ++ toDiscordHelper customEmojis2 (List.Nonempty.toList nonempty)
+                    prefix ++ toDiscordHelper customEmojis2 channels (List.Nonempty.toList nonempty)
 
                 Hyperlink data ->
                     Url.toString data
@@ -6559,7 +7013,7 @@ toDiscordHelper customEmojis2 content =
                             ""
                     )
                         ++ (List.Nonempty.toList items
-                                |> List.map (\bulletItem -> "* " ++ toDiscordHelper customEmojis2 bulletItem)
+                                |> List.map (\bulletItem -> "* " ++ toDiscordHelper customEmojis2 channels bulletItem)
                                 |> String.join "\n"
                            )
 
@@ -6614,12 +7068,12 @@ discordParseInner :
     -> String
     -> Int
     -> List DiscordModifiers
-    -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
+    -> { nodes : List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)), nextIndex : Int }
 discordParseInner customEmojis2 source index modifiers =
     discordParseLoop customEmojis2 source index modifiers "" []
 
 
-parseDiscordBlockQuoteContent : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId) -> String -> List (RichText (Discord.Id Discord.UserId))
+parseDiscordBlockQuoteContent : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId) -> String -> List (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
 parseDiscordBlockQuoteContent customEmojis2 content =
     case discordParseLoop customEmojis2 content 0 [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
@@ -6629,7 +7083,7 @@ parseDiscordBlockQuoteContent customEmojis2 content =
             []
 
 
-parseDiscordHeadingContent : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId) -> NonemptyString -> Nonempty (RichText (Discord.Id Discord.UserId))
+parseDiscordHeadingContent : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId) -> NonemptyString -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
 parseDiscordHeadingContent customEmojis2 content =
     case discordParseLoop customEmojis2 (String.Nonempty.toString content) 0 [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
@@ -6685,6 +7139,30 @@ tryParseDiscordMention source index =
         case UInt64.fromString (String.slice afterBang digitEnd source) of
             Just discordUserId ->
                 Just ( Discord.idFromUInt64 discordUserId, digitEnd + 1 )
+
+            Nothing ->
+                Nothing
+
+    else
+        Nothing
+
+
+tryParseDiscordChannelMention : String -> Int -> Maybe ( Discord.Id Discord.ChannelId, Int )
+tryParseDiscordChannelMention source index =
+    let
+        len =
+            String.length source
+
+        afterHash =
+            index + 2
+
+        digitEnd =
+            skipDigits source afterHash len
+    in
+    if digitEnd > afterHash && digitEnd < len && String.slice digitEnd (digitEnd + 1) source == ">" then
+        case UInt64.fromString (String.slice afterHash digitEnd source) of
+            Just channelId ->
+                Just ( Discord.idFromUInt64 channelId, digitEnd + 1 )
 
             Nothing ->
                 Nothing
@@ -6751,10 +7229,10 @@ skipDiscordNormalChars source index len =
             skipDiscordNormalChars source (index + 1) len
 
 
-codec : Serialize.Codec e userId -> Serialize.Codec e (RichText userId)
-codec userIdCodec =
+codec : Serialize.Codec e userId -> Serialize.Codec e channelId -> Serialize.Codec e (RichText userId channelId)
+codec userIdCodec channelIdCodec =
     Serialize.customType
-        (\userMentionEncoder normalTextEncoder boldEncoder italicEncoder underlineEncoder strikethroughEncoder spoilerEncoder blockQuoteEncoder headingEncoder hyperlinkEncoder markdownLinkEncoder inlineCodeEncoder codeBlockEncoder attachedFileEncoder escapedCharEncoder stickerEncoder customEmojiEncoder bulletPointEncoder timestampEncoder value ->
+        (\userMentionEncoder normalTextEncoder boldEncoder italicEncoder underlineEncoder strikethroughEncoder spoilerEncoder blockQuoteEncoder headingEncoder hyperlinkEncoder markdownLinkEncoder inlineCodeEncoder codeBlockEncoder attachedFileEncoder escapedCharEncoder stickerEncoder customEmojiEncoder bulletPointEncoder timestampEncoder channelMentionEncoder value ->
             case value of
                 UserMention argA ->
                     userMentionEncoder argA
@@ -6812,23 +7290,26 @@ codec userIdCodec =
 
                 Timestamp argA ->
                     timestampEncoder argA
+
+                ChannelMention argA argB ->
+                    channelMentionEncoder argA argB
         )
         |> Serialize.variant1 UserMention userIdCodec
         |> Serialize.variant2 NormalText charCodec Serialize.string
-        |> Serialize.variant1 Bold (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec)))
-        |> Serialize.variant1 Italic (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec)))
-        |> Serialize.variant1 Underline (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec)))
-        |> Serialize.variant1 Strikethrough (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec)))
-        |> Serialize.variant1 Spoiler (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec)))
+        |> Serialize.variant1 Bold (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec channelIdCodec)))
+        |> Serialize.variant1 Italic (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec channelIdCodec)))
+        |> Serialize.variant1 Underline (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec channelIdCodec)))
+        |> Serialize.variant1 Strikethrough (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec channelIdCodec)))
+        |> Serialize.variant1 Spoiler (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec channelIdCodec)))
         |> Serialize.variant2
             BlockQuote
             hasLeadingLineBreakCodec
-            (Serialize.list (Serialize.lazy (\() -> codec userIdCodec)))
+            (Serialize.list (Serialize.lazy (\() -> codec userIdCodec channelIdCodec)))
         |> Serialize.variant3
             Heading
             headingLevelCodec
             hasLeadingLineBreakCodec
-            (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec)))
+            (nonemptyCodec (Serialize.lazy (\() -> codec userIdCodec channelIdCodec)))
         |> Serialize.variant1 Hyperlink urlCodec
         |> Serialize.variant2 MarkdownLink nonemptyStringCodec urlCodec
         |> Serialize.variant2 InlineCode charCodec Serialize.string
@@ -6840,8 +7321,9 @@ codec userIdCodec =
         |> Serialize.variant2
             BulletPoint
             hasLeadingLineBreakCodec
-            (nonemptyCodec (Serialize.list (Serialize.lazy (\() -> codec userIdCodec))))
+            (nonemptyCodec (Serialize.list (Serialize.lazy (\() -> codec userIdCodec channelIdCodec))))
         |> Serialize.variant1 Timestamp timeInMinutesCodec
+        |> Serialize.variant2 ChannelMention channelIdCodec (Serialize.maybe Id.codec)
         |> Serialize.finishCustomType
 
 

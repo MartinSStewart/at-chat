@@ -72,8 +72,8 @@ firstLoad messageCount =
 
 
 slice :
-    { a | visibleMessages : VisibleMessages messageId, messages : MessageArray messageId message }
-    -> MessageArray messageId message
+    { a | visibleMessages : VisibleMessages messageId, messages : MessageArray messageId message channelId }
+    -> MessageArray messageId message channelId
 slice { visibleMessages, messages } =
     MessageArray.slice
         visibleMessages.oldest

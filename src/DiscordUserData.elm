@@ -5,6 +5,7 @@ module DiscordUserData exposing
     , DiscordUserLoadingData(..)
     , NeedsAuthAgainData
     , icon
+    , names
     , username
     )
 
@@ -13,6 +14,8 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import FileStatus exposing (FileHash)
 import Id exposing (Id, UserId)
+import PersonName exposing (PersonName)
+import SeqDict exposing (SeqDict)
 
 
 type DiscordUserData
@@ -81,3 +84,20 @@ icon discordUser =
 
         NeedsAuthAgain data ->
             data.icon
+
+
+{-| The names of some Discord users, for writing out messages that mention them.
+-}
+names : List (Discord.Id Discord.UserId) -> SeqDict (Discord.Id Discord.UserId) DiscordUserData -> SeqDict (Discord.Id Discord.UserId) { name : PersonName }
+names userIds users =
+    List.foldl
+        (\userId dict ->
+            case SeqDict.get userId users of
+                Just user ->
+                    SeqDict.insert userId { name = username user |> PersonName.fromStringLossy } dict
+
+                Nothing ->
+                    dict
+        )
+        SeqDict.empty
+        userIds

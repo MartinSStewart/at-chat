@@ -88,6 +88,7 @@ main =
                     { domainWhitelist = SeqSet.empty
                     , revealedSpoilers = SeqSet.fromList [ 1, 3, 5, 7 ]
                     , users = SeqDict.empty
+                    , channels = SeqDict.empty
                     , attachedFiles = attachments
                     , stickers = stickers
                     , customEmojis = SeqDict.empty
@@ -195,6 +196,7 @@ stickersSection =
             { domainWhitelist = SeqSet.empty
             , revealedSpoilers = SeqSet.empty
             , users = SeqDict.empty
+            , channels = SeqDict.empty
             , attachedFiles = SeqDict.empty
             , stickers = stickers
             , customEmojis = SeqDict.empty
@@ -220,7 +222,7 @@ stickersSection =
             (Dom.id "channel")
             (MessageInput.textPlaceholder "Placeholder")
             123
-            (richText |> RichText.toString Time.utc False SeqDict.empty)
+            (richText |> RichText.toString Time.utc False SeqDict.empty SeqDict.empty)
             (Just richText)
             SeqDict.empty
             { userAgent = UserAgent.init
@@ -230,6 +232,7 @@ stickersSection =
             , customEmojis = SeqDict.empty
             }
             { typedTextCounter = 0, textInputFocus = Nothing }
+            SeqDict.empty
             SeqDict.empty
             |> Ui.map (\_ -> ())
         ]
@@ -562,6 +565,7 @@ embedExamples whitelistedDomains =
                 { domainWhitelist = whitelistedDomains
                 , revealedSpoilers = SeqSet.empty
                 , users = SeqDict.empty
+                , channels = SeqDict.empty
                 , attachedFiles = SeqDict.empty
                 , customEmojis = SeqDict.empty
                 , emojiData = Nothing
@@ -577,7 +581,7 @@ embedExamples whitelistedDomains =
                 , isHovered = True
                 }
                 (Array.fromList embeds)
-                (RichText.fromNonemptyString Time.utc SeqDict.empty text)
+                (RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty text)
                 |> Html.div []
                 |> Ui.html
 

@@ -29,11 +29,10 @@ import FileName
 import FileStatus
 import FrontendExtra
 import Html.Attributes
-import Id exposing (Id, UserId)
+import Id exposing (ChannelId, Id, UserId)
 import IdArray
 import Message exposing (MessageContent)
 import NonemptyDict
-import Pages.Guild
 import RichText
 import SeqDict
 import Serialize
@@ -65,35 +64,35 @@ tests config =
                 , admin.click 100 (Dom.id "guild_showMembers")
                 , admin.checkView
                     100
-                    (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.e2eeSectionTitle ])
+                    (Test.Html.Query.has [ Test.Html.Selector.text Encryption.e2eeSectionTitle ])
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text warning ])
                 , admin.click 100 (Dom.id "guild_e2eeSection")
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text warning ])
                 , admin.checkView
                     100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ])
                 , admin.click 100 (Dom.id "guild_e2eeAcceptRisks")
 
                 -- Encrypting anything needs a key pair on the account first, so that
                 -- stands in front of enabling it.
                 , admin.checkView
                     100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ])
                 , addPrivateKeyToAccount admin
                     (\adminPrivateKey ->
                         [ admin.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ])
                         , admin.click 100 (Dom.id "guild_enableE2ee")
                         , admin.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ])
                         , admin.checkView
                             100
                             (Test.Html.Query.has
-                                [ Test.Html.Selector.text Pages.Guild.waitingForE2eeText
+                                [ Test.Html.Selector.text Encryption.waitingForE2eeText
                                 , Test.Html.Selector.text E2EHelper.userName
-                                , Test.Html.Selector.text Pages.Guild.toAcceptE2eeText
+                                , Test.Html.Selector.text Encryption.toAcceptE2eeText
                                 , Test.Html.Selector.id "guild_cancelE2ee"
                                 ]
                             )
@@ -119,25 +118,25 @@ tests config =
                         , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
                         , user.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.enterPrivateKeyText ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Encryption.enterPrivateKeyText ])
                         , addPrivateKeyToAccount user
                             (\_ ->
                                 [ user.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text Pages.Guild.enterPrivateKeyText ]
+                                        [ Test.Html.Selector.text Encryption.enterPrivateKeyText ]
                                     )
                                 , T.checkBackend 100 checkBothKeysStoredAndDifferent
                                 , admin.click 100 (Dom.id "guild_cancelE2ee")
                                 , user.checkView
                                     100
                                     (Test.Html.Query.hasNot
-                                        [ Test.Html.Selector.text Pages.Guild.enterPrivateKeyText ]
+                                        [ Test.Html.Selector.text Encryption.enterPrivateKeyText ]
                                     )
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ]
+                                        [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ]
                                     )
 
                                 -- Accepting the risks is answered once for the account rather than once
@@ -155,7 +154,7 @@ tests config =
                                     100
                                     (Test.Html.Query.has
                                         [ Test.Html.Selector.text warning
-                                        , Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing)
+                                        , Test.Html.Selector.text (Encryption.enableE2eeText Nothing)
                                         ]
                                     )
 
@@ -204,7 +203,7 @@ tests config =
                         , user.click 100 (Dom.id "guild_showMembers")
                         , user.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.declineE2eeText ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text Encryption.declineE2eeText ])
                         , user.click 100 (Dom.id "guild_declineE2ee")
                         , T.checkBackend 100 (checkDmE2eeDeclinedBy (Id.fromInt 2))
 
@@ -214,7 +213,7 @@ tests config =
                             100
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.text
-                                    (E2EHelper.userName ++ " " ++ Pages.Guild.e2eeDeclinedText)
+                                    (E2EHelper.userName ++ " " ++ Encryption.e2eeDeclinedText)
                                 ]
                             )
                         , admin.checkView
@@ -225,24 +224,24 @@ tests config =
                             (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_enableE2ee" ])
                         , admin.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ])
                         , E2EHelper.tallSnapshot admin 100 { name = "Encryption request was declined" }
 
                         -- The person who declined has nothing left waiting on them, so
                         -- their section closes again and has to be opened to go on.
                         , user.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.declineE2eeText ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Encryption.declineE2eeText ])
                         , user.click 100 (Dom.id "guild_e2eeSection")
                         , user.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text Pages.Guild.youDeclinedE2eeText ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text Encryption.youDeclinedE2eeText ])
 
                         -- Saying no isn't saying no forever. Asking is theirs to do now,
                         -- and it still costs them the same steps anybody pays.
                         , user.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ])
                         , user.click 100 (Dom.id "guild_e2eeAcceptRisks")
                         , addPrivateKeyToAccount user
                             (\_ ->
@@ -257,13 +256,13 @@ tests config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text Pages.Guild.declineE2eeText ]
+                                        [ Test.Html.Selector.text Encryption.declineE2eeText ]
                                     )
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.hasNot
                                         [ Test.Html.Selector.text
-                                            (E2EHelper.userName ++ " " ++ Pages.Guild.e2eeDeclinedText)
+                                            (E2EHelper.userName ++ " " ++ Encryption.e2eeDeclinedText)
                                         ]
                                     )
                                 ]
@@ -311,7 +310,7 @@ tests config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text (E2EHelper.userName ++ " " ++ Pages.Guild.requestAcceptedText) ]
+                                        [ Test.Html.Selector.text (E2EHelper.userName ++ " " ++ Encryption.requestAcceptedText) ]
                                     )
                                 , admin.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
                                 , respondToSharedSecretStored admin (Id.fromInt 2)
@@ -446,6 +445,7 @@ tests config =
                                                     )
                                                 ]
                                             )
+                                        , adminB.click 100 (Dom.id "guildIcon_showFriends")
                                         , respondToManyMessagesDecrypted adminB
                                         , adminB.click 100 (Dom.id "guild_friendLabel_0")
                                         , adminB.checkView
@@ -492,7 +492,7 @@ tests config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text (E2EHelper.userName ++ " " ++ Pages.Guild.requestAcceptedText) ]
+                                        [ Test.Html.Selector.text (E2EHelper.userName ++ " " ++ Encryption.requestAcceptedText) ]
                                     )
 
                                 -- The second of the others asks the admin to encrypt,
@@ -526,7 +526,7 @@ tests config =
                                         , admin.checkView
                                             100
                                             (Test.Html.Query.hasNot
-                                                [ Test.Html.Selector.text Pages.Guild.missingPrivateKeyText ]
+                                                [ Test.Html.Selector.text Encryption.missingPrivateKeyText ]
                                             )
 
                                         -- and so does the one that wasn't, where messages
@@ -537,7 +537,7 @@ tests config =
                                         , admin.checkView
                                             100
                                             (Test.Html.Query.hasNot
-                                                [ Test.Html.Selector.text Pages.Guild.missingPrivateKeyText ]
+                                                [ Test.Html.Selector.text Encryption.missingPrivateKeyText ]
                                             )
                                         , admin.click 100 (Dom.id "guild_hideMembers")
                                         , E2EHelper.writeMessage admin 100 "Hello in secret"
@@ -577,11 +577,11 @@ tests config =
                     (\adminPrivateKey ->
                         [ admin.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text (Pages.Guild.enableE2eeText Nothing) ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text (Encryption.enableE2eeText Nothing) ])
                         , admin.click 100 (Dom.id "guild_enableE2ee")
                         , admin.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Pages.Guild.toAcceptE2eeText ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text Encryption.toAcceptE2eeText ])
                         , admin.checkView
                             100
                             (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_cancelE2ee" ])
@@ -597,7 +597,7 @@ tests config =
                         , admin.checkView
                             100
                             (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.text Pages.Guild.missingPrivateKeyText ]
+                                [ Test.Html.Selector.text Encryption.missingPrivateKeyText ]
                             )
                         , admin.click 100 (Dom.id "guild_hideMembers")
                         , T.connectFrontend
@@ -618,6 +618,7 @@ tests config =
                                             )
                                         ]
                                     )
+                                , adminB.click 100 (Dom.id "guildIcon_showFriends")
                                 , writeEncryptedMessage admin 100 "Note to self"
                                 , T.checkBackend 100 (checkSoloDmHasNoPlainText "Note to self")
                                 , T.checkBackend 100 (checkSoloDmMessageStored "Note to self")
@@ -678,7 +679,7 @@ tests config =
                                 , adminC.checkView
                                     100
                                     (Test.Html.Query.hasNot
-                                        [ Test.Html.Selector.text Pages.Guild.disableE2eeText ]
+                                        [ Test.Html.Selector.text Encryption.disableE2eeText ]
                                     )
                                 , adminC.input 100 (Dom.id "guild_e2eePrivateKey") adminPrivateKey
                                 , respondToSharedSecretStored adminC Broadcast.adminUserId
@@ -686,7 +687,7 @@ tests config =
                                 , adminC.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text Pages.Guild.disableE2eeText ]
+                                        [ Test.Html.Selector.text Encryption.disableE2eeText ]
                                     )
                                 , respondToManyMessagesDecrypted adminC
                                 , writeEncryptedMessage adminC 100 "Note to self from adminB should be encrypted"
@@ -811,6 +812,7 @@ tests config =
                                             )
                                         ]
                                     )
+                                , adminB.click 100 (Dom.id "guildIcon_showFriends")
                                 , adminB.checkView
                                     100
                                     (Test.Html.Query.hasNot [ Test.Html.Selector.text backlogMessage ])
@@ -879,6 +881,7 @@ tests config =
                                             )
                                         ]
                                     )
+                                , adminB.click 100 (Dom.id "guildIcon_showFriends")
                                 , adminB.click 100 (Dom.id "guild_friendLabel_0")
 
                                 -- Opening the conversation asks for its messages to be
@@ -962,6 +965,7 @@ tests config =
                                             )
                                         ]
                                     )
+                                , adminB.click 100 (Dom.id "guildIcon_showFriends")
                                 , adminB.click 100 (Dom.id "guild_friendLabel_0")
                                 , respondToManyMessagesDecrypted adminB
                                 , adminB.checkView
@@ -1053,11 +1057,12 @@ tests config =
                                             )
                                         ]
                                     )
+                                , adminB.click 100 (Dom.id "guildIcon_showFriends")
                                 , respondToManyMessagesDecrypted adminB
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text Pages.Guild.disableE2eeText ]
+                                        [ Test.Html.Selector.text Encryption.disableE2eeText ]
                                     )
                                 , admin.click 100 (Dom.id "guild_disableE2ee")
 
@@ -1071,7 +1076,7 @@ tests config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text (Pages.Guild.enableE2eeText (Just ( E2EHelper.defaultAdminId, Time.millisToPosix 0 ))) ]
+                                        [ Test.Html.Selector.text (Encryption.enableE2eeText (Just ( E2EHelper.defaultAdminId, Time.millisToPosix 0 ))) ]
                                     )
                                 , admin.checkView
                                     100
@@ -1085,7 +1090,7 @@ tests config =
                                 , adminB.checkView
                                     100
                                     (Test.Html.Query.has
-                                        [ Test.Html.Selector.text (Pages.Guild.enableE2eeText (Just ( E2EHelper.defaultAdminId, Time.millisToPosix 0 ))) ]
+                                        [ Test.Html.Selector.text (Encryption.enableE2eeText (Just ( E2EHelper.defaultAdminId, Time.millisToPosix 0 ))) ]
                                     )
                                 , adminB.snapshotView 100 { name = "E2EE disabled" }
                                 ]
@@ -1297,7 +1302,7 @@ checkAttachmentStoredEncrypted backend =
             Err "The DM the file was attached in isn't on the server"
 
 
-encryptedAttachedFiles : Message.Message Id.ChannelMessageId (Id UserId) -> Maybe (List FileStatus.FileData)
+encryptedAttachedFiles : Message.Message Id.ChannelMessageId (Id UserId) (Id ChannelId) -> Maybe (List FileStatus.FileData)
 encryptedAttachedFiles message =
     case message of
         Message.EncryptedUserTextMessage data ->
@@ -1346,7 +1351,7 @@ checkFileKeysLeftWithBrowser expected clientId data =
 
 
 storeFileKeysRequest :
-    Encryption.ToJs (MessageContent (Id UserId))
+    Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId))
     -> Maybe (List { fileHash : String, key : Bytes })
 storeFileKeysRequest request =
     case request of
@@ -1389,7 +1394,7 @@ respondToFileEncrypted client =
 
 
 encryptFileRequest :
-    Encryption.ToJs (MessageContent (Id UserId))
+    Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId))
     -> Maybe ( Id Encryption.EncryptFileRequestId, Bytes )
 encryptFileRequest request =
     case request of
@@ -1552,7 +1557,7 @@ checkPrivateKeyNeverReachedTheServer privateKeyText backend =
                     (\message ->
                         case message of
                             Message.UserTextMessage data ->
-                                RichText.toString Time.utc False SeqDict.empty data.content.content |> Just
+                                RichText.toString Time.utc False SeqDict.empty SeqDict.empty data.content.content |> Just
 
                             _ ->
                                 Nothing
@@ -1604,14 +1609,14 @@ plainTextMessages dmChannel =
             (\message ->
                 case message of
                     Message.UserTextMessage data ->
-                        RichText.toString Time.utc False SeqDict.empty data.content.content |> Just
+                        RichText.toString Time.utc False SeqDict.empty SeqDict.empty data.content.content |> Just
 
                     _ ->
                         Nothing
             )
 
 
-encryptedMessageText : Message.Message Id.ChannelMessageId (Id UserId) -> Maybe String
+encryptedMessageText : Message.Message Id.ChannelMessageId (Id UserId) (Id ChannelId) -> Maybe String
 encryptedMessageText message =
     case message of
         Message.EncryptedUserTextMessage data ->
@@ -1619,7 +1624,7 @@ encryptedMessageText message =
                 Just bytes ->
                     case stubPlainText bytes of
                         Ok contentAndEmbeds ->
-                            RichText.toString Time.utc False SeqDict.empty contentAndEmbeds.content |> Just
+                            RichText.toString Time.utc False SeqDict.empty SeqDict.empty contentAndEmbeds.content |> Just
 
                         Err _ ->
                             Just "<not a message the test could read>"
@@ -2103,7 +2108,7 @@ checkNotificationHandedOver client expected data =
 
 
 encryptManyRequest :
-    Encryption.ToJs (MessageContent (Id UserId))
+    Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId))
     -> Maybe ( Id Encryption.EncryptManyRequestId, List Bytes )
 encryptManyRequest request =
     case request of
@@ -2115,7 +2120,7 @@ encryptManyRequest request =
 
 
 decryptManyRequest :
-    Encryption.ToJs (MessageContent (Id UserId))
+    Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId))
     -> Maybe ( Id Encryption.DecryptManyRequestId, List Bytes )
 decryptManyRequest request =
     case request of
@@ -2166,7 +2171,7 @@ stubIv payload =
 
 {-| Reads a message back out of the stand-in ciphertext it was put into.
 -}
-stubPlainText : Bytes -> Result String (MessageContent (Id UserId))
+stubPlainText : Bytes -> Result String (MessageContent (Id UserId) (Id ChannelId))
 stubPlainText cipherText =
     case
         Bytes.Decode.decode
@@ -2194,7 +2199,7 @@ that isn't already in the request.
 encryptionPortRequests :
     ClientId
     -> T.Data FrontendModel BackendModel2
-    -> List (Encryption.ToJs (MessageContent (Id UserId)))
+    -> List (Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId)))
 encryptionPortRequests clientId data =
     List.filterMap
         (\request ->
@@ -2212,15 +2217,15 @@ encryptionPortRequests clientId data =
 
 answerEncryptRequest :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> (Id Encryption.EncryptRequestId -> MessageContent (Id UserId) -> Encryption.FromJs (MessageContent (Id UserId)))
-    -> (Id Encryption.EncryptManyRequestId -> List Bytes -> Encryption.FromJs (MessageContent (Id UserId)))
+    -> (Id Encryption.EncryptRequestId -> MessageContent (Id UserId) (Id ChannelId) -> Encryption.FromJs (MessageContent (Id UserId) (Id ChannelId)))
+    -> (Id Encryption.EncryptManyRequestId -> List Bytes -> Encryption.FromJs (MessageContent (Id UserId) (Id ChannelId)))
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 answerEncryptRequest client toReply toManyReply =
     T.andThen
         100
         (\data ->
             let
-                requests : List (Encryption.ToJs (MessageContent (Id UserId)))
+                requests : List (Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId)))
                 requests =
                     encryptionPortRequests client.clientId data
 
@@ -2247,8 +2252,8 @@ answerEncryptRequest client toReply toManyReply =
 
 
 encryptRequest :
-    Encryption.ToJs (MessageContent (Id UserId))
-    -> Maybe ( Id Encryption.EncryptRequestId, MessageContent (Id UserId) )
+    Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId))
+    -> Maybe ( Id Encryption.EncryptRequestId, MessageContent (Id UserId) (Id ChannelId) )
 encryptRequest request =
     case request of
         Encryption.ToJs_EncryptNewMessage { requestId, data } ->
@@ -2259,7 +2264,7 @@ encryptRequest request =
 
 
 decryptRequest :
-    Encryption.ToJs (MessageContent (Id UserId))
+    Encryption.ToJs (MessageContent (Id UserId) (Id ChannelId))
     -> Maybe ( Id Encryption.DecryptRequestId, Bytes )
 decryptRequest request =
     case request of
@@ -2272,7 +2277,7 @@ decryptRequest request =
 
 sendFromJs :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> Encryption.FromJs (MessageContent (Id UserId))
+    -> Encryption.FromJs (MessageContent (Id UserId) (Id ChannelId))
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 sendFromJs client fromJs =
     Serialize.encodeToBytes (Encryption.fromJsCodec Message.contentAndEmbedsCodec) fromJs

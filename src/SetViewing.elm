@@ -5,7 +5,7 @@ module SetViewing exposing
 
 import Discord
 import DmChannel
-import Id exposing (ChannelMessageId, Id, ThreadMessageId, UserId)
+import Id exposing (ChannelId, ChannelMessageId, Id, ThreadMessageId, UserId)
 import Message exposing (Message)
 import SeqDict exposing (SeqDict)
 import UserSession exposing (ToBeFilledInByBackend, UnreadOverviewData, ViewDiscordGuildData, Viewing(..), Viewing_ChannelData, Viewing_ChannelThreadData, Viewing_DiscordChannelData, Viewing_DiscordChannelThreadData, Viewing_DiscordDmData, Viewing_DmData, Viewing_DmThreadData)
@@ -13,10 +13,10 @@ import UserSession exposing (ToBeFilledInByBackend, UnreadOverviewData, ViewDisc
 
 type SetViewing
     = ViewDm Viewing_DmData (ToBeFilledInByBackend DmChannel.LoadedMessages)
-    | ViewDmThread Viewing_DmThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
-    | ViewDiscordDm Viewing_DiscordDmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
+    | ViewDmThread Viewing_DmThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId))))
+    | ViewDiscordDm Viewing_DiscordDmData (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))))
     | ViewChannel Viewing_ChannelData (ToBeFilledInByBackend DmChannel.LoadedMessages)
-    | ViewChannelThread Viewing_ChannelThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
+    | ViewChannelThread Viewing_ChannelThreadData (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId) (Id ChannelId))))
     | ViewDiscordChannel Viewing_DiscordChannelData (ToBeFilledInByBackend (ViewDiscordGuildData ChannelMessageId))
     | ViewDiscordChannelThread Viewing_DiscordChannelThreadData (ToBeFilledInByBackend (ViewDiscordGuildData ThreadMessageId))
     | StopViewingChannel

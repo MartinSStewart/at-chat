@@ -63,7 +63,7 @@ import NonemptySet
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination
-import PersonName
+import PersonName exposing (PersonName)
 import Ports exposing (RegisterPushSubscription(..))
 import Postmark
 import Quantity
@@ -1187,11 +1187,22 @@ updateHelper msg model =
                             attachments2 =
                                 DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments
 
-                            ( messages2, linkedMessageIds ) =
+                            linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId)
+                            linkedMessageIds =
+                                DiscordSync.messageLinks (List.reverse reload.messages)
+
+                            -- Mentions of this channel's own threads have to be looked up in the
+                            -- messages being loaded rather than the ones they replace
+                            channels : SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
+                            channels =
+                                SeqDict.insert channelId { channel | linkedMessageIds = linkedMessageIds } guild.channels
+
+                            ( messages2, _ ) =
                                 DiscordSync.messagesAndLinks
                                     channel
                                     (List.reverse reload.messages)
                                     model.discordCustomEmojis
+                                    channels
                                     model.discordStickers
                                     attachments2
 
@@ -1224,6 +1235,7 @@ updateHelper msg model =
                                                             existingThread
                                                             (List.reverse thread.messages)
                                                             model.discordCustomEmojis
+                                                            channels
                                                             model.discordStickers
                                                             attachments2
                                                 in
@@ -1299,6 +1311,7 @@ updateHelper msg model =
                                     channel
                                     (List.reverse reload.messages)
                                     model.discordCustomEmojis
+                                    SeqDict.empty
                                     model.discordStickers
                                     attachments2
 
@@ -2623,6 +2636,7 @@ discordStartThread timezone discordUser channel channelId threadId messageId mod
                                 DiscordUserData.username
                                 True
                                 model.discordUsers
+                                SeqDict.empty
                                 a.content.content
 
                         EncryptedUserTextMessage _ ->
@@ -2678,6 +2692,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             let
                                 currentlyViewing =
                                     BackendExtra.requestedForToGuildOrDmId session.userId requestMessagesFor
+
+                                session2 : UserSession
+                                session2 =
+                                    UserSession.setLastViewedGuild currentlyViewing session
                             in
                             ( { model
                                 | connections =
@@ -2688,8 +2706,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (\connection -> { connection | currentlyViewing = currentlyViewing })
                                         )
                                         model.connections
+                                , sessions = SeqDict.insert sessionId session2 model.sessions
                               }
-                            , BackendExtra.getLoginData sessionId clientId currentlyViewing session user requestMessagesFor model
+                            , BackendExtra.getLoginData sessionId clientId currentlyViewing session2 user requestMessagesFor model
                                 |> Ok
                                 |> CheckLoginResponse (loginType model)
                                 |> Lamdera.sendToFrontend clientId
@@ -2737,6 +2756,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             session : UserSession
                             session =
                                 UserSession.init time sessionId Broadcast.adminUserId userAgent
+                                    |> UserSession.setLastViewedGuild currentlyViewing
                         in
                         ( { model
                             | sessions = SeqDict.insert sessionId session model.sessions
@@ -2868,6 +2888,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         session : UserSession
                                         session =
                                             UserSession.init time sessionId pendingLogin.userId userAgent
+                                                |> UserSession.setLastViewedGuild currentlyViewing
                                     in
                                     ( { model
                                         | sessions = SeqDict.insert sessionId session model.sessions
@@ -3116,15 +3137,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 attachedFiles2 =
                                                     BackendExtra.validateAttachedFiles model.files attachedFiles
 
-                                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                                guildMembers : SeqDict (Discord.Id Discord.UserId) { name : PersonName }
+                                                guildMembers =
+                                                    DiscordUserData.names (MembersAndOwner.membersAndOwner guild.membersAndOwner) model.discordUsers
+
+                                                richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                                 richText =
-                                                    textToDiscordRichText
-                                                        timezone
-                                                        text
-                                                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                                        model
+                                                    RichText.fromNonemptyString timezone guildMembers (LocalState.guildChannelNames timezone guildMembers guild.channels) text
                                             in
-                                            case ( RichText.toDiscord model.discordCustomEmojis richText, threadRouteWithMaybeReplyTo ) of
+                                            case
+                                                ( RichText.toDiscord model.discordCustomEmojis guild.channels richText
+                                                , threadRouteWithMaybeReplyTo
+                                                )
+                                            of
                                                 ( Ok discordText, NoThreadWithMaybeMessage maybeReplyTo ) ->
                                                     ( { model
                                                         | pendingDiscordCreateMessages =
@@ -3257,16 +3282,16 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     of
                                         ( NoThreadWithMaybeMessage maybeReplyTo, Ok sendMessageRateLimits ) ->
                                             let
-                                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                                richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                                 richText =
-                                                    textToDiscordRichText
+                                                    RichText.fromNonemptyString
                                                         timezone
+                                                        (DiscordUserData.names (NonemptyDict.keys dmChannel.members |> List.Nonempty.toList) model.discordUsers)
+                                                        SeqDict.empty
                                                         text
-                                                        (NonemptyDict.keys dmChannel.members |> List.Nonempty.toList)
-                                                        model
                                             in
                                             case
-                                                ( RichText.toDiscord model.discordCustomEmojis richText
+                                                ( RichText.toDiscord model.discordCustomEmojis SeqDict.empty richText
                                                   -- Sending messages in a DM channel the linked account has barely
                                                   -- used is likely to trigger Discord's spam bot heuristics
                                                 , LocalState.sentEnoughDiscordDmMessages data.currentUserId dmChannel
@@ -4155,7 +4180,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     id
                                     (\session user otherUser dmChannelId dmChannel ->
                                         let
-                                            richText : Nonempty (RichText (Id UserId))
+                                            richText : Nonempty (RichText (Id UserId) (Id ChannelId))
                                             richText =
                                                 RichText.fromNonemptyString
                                                     timezone
@@ -4164,6 +4189,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         , ( id.otherUserId, otherUser )
                                                         ]
                                                     )
+                                                    SeqDict.empty
                                                     newContent
                                         in
                                         case
@@ -4219,16 +4245,16 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         { guildId = guildId, channelId = channelId, currentUserId = currentUserId }
                         (\_ userData _ guild channel ->
                             let
-                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                guildMembers : SeqDict (Discord.Id Discord.UserId) { name : PersonName }
+                                guildMembers =
+                                    DiscordUserData.names (MembersAndOwner.membersAndOwner guild.membersAndOwner) model.discordUsers
+
+                                richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                 richText =
-                                    textToDiscordRichText
-                                        timezone
-                                        newContent
-                                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                        model
+                                    RichText.fromNonemptyString timezone guildMembers (LocalState.guildChannelNames timezone guildMembers guild.channels) newContent
                             in
                             case
-                                ( RichText.toDiscord model.discordCustomEmojis richText
+                                ( RichText.toDiscord model.discordCustomEmojis guild.channels richText
                                 , LocalState.editMessageHelper
                                     time
                                     currentUserId
@@ -4305,16 +4331,16 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         dmData
                         (\_ userData _ channel ->
                             let
-                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                 richText =
-                                    textToDiscordRichText
+                                    RichText.fromNonemptyString
                                         timezone
+                                        (DiscordUserData.names (NonemptyDict.keys channel.members |> List.Nonempty.toList) model.discordUsers)
+                                        SeqDict.empty
                                         newContent
-                                        (NonemptyDict.keys channel.members |> List.Nonempty.toList)
-                                        model
                             in
                             case
-                                ( RichText.toDiscord model.discordCustomEmojis richText
+                                ( RichText.toDiscord model.discordCustomEmojis SeqDict.empty richText
                                 , LocalState.editMessageHelperNoThread
                                     time
                                     dmData.currentUserId
@@ -4792,6 +4818,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     (\connection2 -> { connection2 | currentlyViewing = currentlyViewing })
                                 )
                                 model.connections
+
+                        sessions : SeqDict SessionId UserSession
+                        sessions =
+                            SeqDict.updateIfExists sessionId (UserSession.setLastViewedGuild currentlyViewing) model.sessions
                     in
                     case viewing of
                         ViewDm data _ ->
@@ -4944,6 +4974,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         )
                                                         model.users
                                                 , connections = connections
+                                                , sessions = sessions
                                               }
                                             , Command.batch
                                                 [ ViewChannel
@@ -4998,6 +5029,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         )
                                                         model.users
                                                 , connections = connections
+                                                , sessions = sessions
                                               }
                                             , Command.batch
                                                 [ ViewChannelThread
@@ -5061,6 +5093,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 )
                                                 model.users
                                         , connections = connections
+                                        , sessions = sessions
                                       }
                                     , Command.batch
                                         [ ViewDiscordChannel
@@ -5107,6 +5140,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 )
                                                 model.users
                                         , connections = connections
+                                        , sessions = sessions
                                       }
                                     , Command.batch
                                         [ ViewDiscordChannelThread
@@ -6629,12 +6663,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 (twoFactorAuthenticationUpdateFromFrontend clientId time toBackend2 model)
 
         AiChatToBackend aiChatToBackend ->
-            ( model
-            , Command.map
-                AiChatToFrontend
-                AiChatBackendMsg
-                (AiChat.updateFromFrontend clientId aiChatToBackend model.openRouterKey)
-            )
+            BackendExtra.asAdmin
+                model
+                sessionId
+                (\_ _ ->
+                    ( model
+                    , Command.map
+                        AiChatToFrontend
+                        AiChatBackendMsg
+                        (AiChat.updateFromFrontend clientId aiChatToBackend model.openRouterKey)
+                    )
+                )
 
         JoinGuildByInviteRequest guildId inviteLinkId ->
             BackendExtra.asUser
@@ -7363,13 +7402,13 @@ handleSheepGame :
     -> GuildOrDmId
     ->
         { c
-            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
         }
     ->
         ({ c
-            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
          }
@@ -7519,13 +7558,13 @@ handleWordSpellingGame :
     -> GuildOrDmId
     ->
         { c
-            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
         }
     ->
         ({ c
-            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
          }
@@ -7828,36 +7867,6 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
 
                 _ ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-
-textToDiscordRichText :
-    Time.Zone
-    -> NonemptyString
-    -> List (Discord.Id Discord.UserId)
-    -> BackendModel
-    -> Nonempty (RichText (Discord.Id Discord.UserId))
-textToDiscordRichText timezone text memberIds model =
-    RichText.fromNonemptyString
-        timezone
-        (List.foldl
-            (\memberId dict ->
-                case SeqDict.get memberId model.discordUsers of
-                    Just member ->
-                        SeqDict.insert
-                            memberId
-                            { name =
-                                DiscordUserData.username member
-                                    |> PersonName.fromStringLossy
-                            }
-                            dict
-
-                    Nothing ->
-                        dict
-            )
-            SeqDict.empty
-            memberIds
-        )
-        text
 
 
 emojiOrCustomEmojiToDiscord : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId) -> EmojiOrCustomEmoji -> Result () Discord.Emoji
@@ -8408,8 +8417,8 @@ threadRouteToDiscordMessageId channelId channel threadRoute =
 
 
 loadMessagesHelper :
-    { a | messages : IdArray messageId (Message messageId userId) }
-    -> SeqDict (Id messageId) (Message messageId userId)
+    { a | messages : IdArray messageId (Message messageId userId channelId) }
+    -> SeqDict (Id messageId) (Message messageId userId channelId)
 loadMessagesHelper channel =
     let
         messageCount : Int
@@ -8431,8 +8440,8 @@ loadMessagesHelper channel =
 
 handleMessagesRequest :
     Id messageId
-    -> { b | messages : IdArray messageId (Message messageId userId) }
-    -> SeqDict (Id messageId) (Message messageId userId)
+    -> { b | messages : IdArray messageId (Message messageId userId channelId) }
+    -> SeqDict (Id messageId) (Message messageId userId channelId)
 handleMessagesRequest oldestVisibleMessage channel =
     let
         oldestVisibleMessage2 =
@@ -8464,23 +8473,23 @@ sendEditMessage clientId changeId time timezone newContent attachedFiles2 id thr
     case SeqDict.get id.channelId guild.channels of
         Just channel ->
             let
-                richText : Nonempty (RichText (Id UserId))
-                richText =
-                    RichText.fromNonemptyString
-                        timezone
-                        (List.foldl
-                            (\memberId dict ->
-                                case NonemptyDict.get memberId model2.users of
-                                    Just member ->
-                                        SeqDict.insert memberId member dict
+                guildMembers : SeqDict (Id UserId) BackendUser
+                guildMembers =
+                    List.foldl
+                        (\memberId dict ->
+                            case NonemptyDict.get memberId model2.users of
+                                Just member ->
+                                    SeqDict.insert memberId member dict
 
-                                    Nothing ->
-                                        dict
-                            )
-                            SeqDict.empty
-                            (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                Nothing ->
+                                    dict
                         )
-                        newContent
+                        SeqDict.empty
+                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+
+                richText : Nonempty (RichText (Id UserId) (Id ChannelId))
+                richText =
+                    RichText.fromNonemptyString timezone guildMembers (LocalState.guildChannelNames timezone guildMembers guild.channels) newContent
             in
             case
                 LocalState.editMessageHelper
@@ -8928,6 +8937,14 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 changeId
                 clientId
                 (Pages.Admin.LoadWebsocketCloseEvents (FilledInByBackend model.websocketCloseEvents))
+            )
+
+        Pages.Admin.LoadOrphanedFiles _ ->
+            ( model
+            , adminDataResponse
+                changeId
+                clientId
+                (Pages.Admin.LoadOrphanedFiles (FilledInByBackend (BackendExtra.orphanedFiles model)))
             )
 
         Pages.Admin.LoadToBackendLogs _ ->

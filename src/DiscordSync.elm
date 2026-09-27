@@ -12,6 +12,7 @@ module DiscordSync exposing
     , handleEditMessage
     , handleForumPostRenamed
     , http
+    , messageLinks
     , messagesAndLinks
     , reloadChannelMaxMessages
     , sendMessage
@@ -254,13 +255,14 @@ handleDiscordDmEditMessage edit attachments model =
             case OneToOne.second edit.id channel.linkedMessageIds of
                 Just messageIndex ->
                     let
-                        richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                        richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                         richText =
                             RichText.fromDiscord
                                 edit.content
                                 attachments
                                 (Included edit.embeds)
                                 model.discordCustomEmojis
+                                SeqDict.empty
                                 (case edit.stickerItems of
                                     Missing ->
                                         []
@@ -404,13 +406,14 @@ handleDiscordGuildEditMessage :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordGuildEditMessage guildId guild edit attachments model =
     let
-        richText : Nonempty (RichText (Discord.Id Discord.UserId))
+        richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         richText =
             RichText.fromDiscord
                 edit.content
                 attachments
                 (Included edit.embeds)
                 model.discordCustomEmojis
+                guild.channels
                 (case edit.stickerItems of
                     Missing ->
                         []
@@ -616,11 +619,11 @@ handleDiscordDeleteGuildMessage discordGuildId discordChannelId discordMessageId
 
 deleteMessageHelper :
     Discord.Id Discord.MessageId
-    -> { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId)) }
+    -> { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)) }
     ->
         Maybe
             ( Id messageId
-            , { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId)) }
+            , { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)) }
             )
 deleteMessageHelper discordMessageId channel =
     case OneToOne.second discordMessageId channel.linkedMessageIds of
@@ -746,62 +749,30 @@ addDiscordChannel discordChannel =
 
 messagesAndLinks :
     { a
-        | messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId))
+        | messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
     }
     -> List Discord.Message
     -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
+    ->
+        SeqDict
+            (Discord.Id Discord.ChannelId)
+            { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId) }
     -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
     ->
-        ( IdArray messageId (Message messageId (Discord.Id Discord.UserId))
+        ( IdArray messageId (Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         , OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         )
-messagesAndLinks existingChannelOrThread messages customEmojis discordStickers discordAttachments =
+messagesAndLinks existingChannelOrThread messages customEmojis channels discordStickers discordAttachments =
     let
-        -- The ids of the messages a thread can hang off of. A thread created message isn't one
-        -- of them, it stands in for a thread that has no message to hang off of.
-        threadStarterIds : SeqSet (Discord.Id Discord.MessageId)
-        threadStarterIds =
-            List.filterMap
-                (\message ->
-                    case message.type_ of
-                        Discord.ThreadCreated ->
-                            Nothing
-
-                        _ ->
-                            Just message.id
-                )
-                messages
-                |> SeqSet.fromList
-
-        messages2 : List Discord.Message
-        messages2 =
-            List.filter
-                (\message ->
-                    case message.type_ of
-                        Discord.ThreadStarterMessage ->
-                            -- Discord posts this as the first message of a thread that was started
-                            -- from a message. It never has any content, it only points back at the
-                            -- message the thread was started from, which is the message the thread
-                            -- hangs off of here, so there's nothing to show.
-                            False
-
-                        Discord.ThreadCreated ->
-                            -- If the thread this announces was started from a message we are also
-                            -- loading then the thread hangs off that message and this message would
-                            -- be a second copy of it.
-                            SeqSet.member (messageLinkId message) threadStarterIds |> not
-
-                        _ ->
-                            True
-                )
-                messages
+        linkable : List Discord.Message
+        linkable =
+            linkableMessages messages
 
         linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         linkedMessageIds =
-            List.indexedMap (\index message -> ( messageLinkId message, Id.fromInt index )) messages2
-                |> OneToOne.fromList
+            messageLinks messages
     in
     ( List.map
         (\message ->
@@ -818,6 +789,7 @@ messagesAndLinks existingChannelOrThread messages customEmojis discordStickers d
                     attachments
                     message.embeds
                     customEmojis
+                    channels
                     (case message.stickerItems of
                         Missing ->
                             []
@@ -857,10 +829,62 @@ messagesAndLinks existingChannelOrThread messages customEmojis discordStickers d
                 (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
                 |> UserTextMessage
         )
-        messages2
+        linkable
         |> IdArray.fromList
     , linkedMessageIds
     )
+
+
+{-| The messages that end up in a channel or thread. Some of what Discord posts only points at a
+thread and has nothing to show.
+-}
+linkableMessages : List Discord.Message -> List Discord.Message
+linkableMessages messages =
+    let
+        -- The ids of the messages a thread can hang off of. A thread created message isn't one
+        -- of them, it stands in for a thread that has no message to hang off of.
+        threadStarterIds : SeqSet (Discord.Id Discord.MessageId)
+        threadStarterIds =
+            List.filterMap
+                (\message ->
+                    case message.type_ of
+                        Discord.ThreadCreated ->
+                            Nothing
+
+                        _ ->
+                            Just message.id
+                )
+                messages
+                |> SeqSet.fromList
+    in
+    List.filter
+        (\message ->
+            case message.type_ of
+                Discord.ThreadStarterMessage ->
+                    -- Discord posts this as the first message of a thread that was started
+                    -- from a message. It never has any content, it only points back at the
+                    -- message the thread was started from, which is the message the thread
+                    -- hangs off of here, so there's nothing to show.
+                    False
+
+                Discord.ThreadCreated ->
+                    -- If the thread this announces was started from a message we are also
+                    -- loading then the thread hangs off that message and this message would
+                    -- be a second copy of it.
+                    SeqSet.member (messageLinkId message) threadStarterIds |> not
+
+                _ ->
+                    True
+        )
+        messages
+
+
+{-| Which Discord message each message of a channel or thread is linked to.
+-}
+messageLinks : List Discord.Message -> OneToOne (Discord.Id Discord.MessageId) (Id messageId)
+messageLinks messages =
+    List.indexedMap (\index message -> ( messageLinkId message, Id.fromInt index )) (linkableMessages messages)
+        |> OneToOne.fromList
 
 
 {-| The Discord message id a message gets linked to. Threads hang off a message here, so a
@@ -967,13 +991,14 @@ handleCreateMessage websocketJson discordMessage attachments model =
 
                     else
                         let
-                            richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                            richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                             richText =
                                 RichText.fromDiscord
                                     discordMessage.content
                                     attachments
                                     discordMessage.embeds
                                     model.discordCustomEmojis
+                                    SeqDict.empty
                                     (case discordMessage.stickerItems of
                                         Missing ->
                                             []
@@ -1023,7 +1048,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                 Nothing ->
                                                     Nothing
                                             )
-                                            (RichText.toStringWithGetter Time.utc DiscordUserData.username True model.discordUsers richText)
+                                            (RichText.toStringWithGetter Time.utc DiscordUserData.username True model.discordUsers SeqDict.empty richText)
                                             message
                                             model
 
@@ -1078,6 +1103,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                             DiscordUserData.username
                                                             False
                                                             model2.discordUsers
+                                                            SeqDict.empty
                                                             richText
                                                             |> String.Nonempty.fromString
                                                             |> Maybe.withDefault (NonemptyString ' ' "")
@@ -1231,7 +1257,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
 
                             Discord.GuildMemberJoin ->
                                 let
-                                    message : Message messageId (Discord.Id Discord.UserId)
+                                    message : Message messageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
                                     message =
                                         Message.userJoined discordMessage.timestamp discordMessage.author.id
                                 in
@@ -1327,13 +1353,14 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
 
                             _ ->
                                 let
-                                    richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                    richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                     richText =
                                         RichText.fromDiscord
                                             content
                                             attachments
                                             discordMessage.embeds
                                             model.discordCustomEmojis
+                                            guild.channels
                                             (case discordMessage.stickerItems of
                                                 Missing ->
                                                     []
@@ -1559,6 +1586,14 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                     DiscordUserData.username
                                                                     False
                                                                     model2.discordUsers
+                                                                    (LocalState.guildChannelNames
+                                                                        timezone
+                                                                        (DiscordUserData.names
+                                                                            (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                                                            model2.discordUsers
+                                                                        )
+                                                                        guild.channels
+                                                                    )
                                                                     richText
                                                                     |> String.Nonempty.fromString
                                                                     |> Maybe.withDefault (NonemptyString ' ' "")
@@ -1678,11 +1713,11 @@ addForumPost authentication post guild channel model =
         createdAt =
             discordIdCreatedAt post.threadId
 
-        richText : Nonempty (RichText (Discord.Id Discord.UserId))
+        richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
         richText =
-            RichText.fromDiscord post.name SeqDict.empty Missing model.discordCustomEmojis [] Missing
+            RichText.fromDiscord post.name SeqDict.empty Missing model.discordCustomEmojis SeqDict.empty [] Missing
 
-        message : Message ChannelMessageId (Discord.Id Discord.UserId)
+        message : Message ChannelMessageId (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId)
         message =
             Message.userTextMessageNoEmbeds createdAt post.ownerId richText SeqDict.empty NoReply SeqDict.empty
                 |> UserTextMessage
@@ -1785,9 +1820,9 @@ handleForumPostRenamed thread time model =
                     of
                         Just messageId ->
                             let
-                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                richText : Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
                                 richText =
-                                    RichText.fromDiscord name SeqDict.empty Missing model.discordCustomEmojis [] Missing
+                                    RichText.fromDiscord name SeqDict.empty Missing model.discordCustomEmojis SeqDict.empty [] Missing
                             in
                             case
                                 LocalState.editMessageHelper
@@ -4413,7 +4448,7 @@ sendMessage :
     -> SeqDict (Id FileId) FileData
     -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     -> String
-    -> Nonempty (RichText (Discord.Id Discord.UserId))
+    -> Nonempty (RichText (Discord.Id Discord.UserId) (Discord.Id Discord.ChannelId))
     -> Task BackendOnly Discord.HttpError Discord.Message
 sendMessage secretKey discordUser channelId maybeReplyTo attachedFiles discordStickers discordText text =
     List.map
