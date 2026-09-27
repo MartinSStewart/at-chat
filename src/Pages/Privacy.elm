@@ -25,7 +25,7 @@ view : msg -> Ui.Element msg
 view noOp =
     NonemptyString
         '#'
-        (""" Privacy
+        (""" Privacy policy
 
 ## What is stored
 
@@ -45,7 +45,6 @@ Sensitive data may be used by an administrator for the sole purpose of fixing so
             ++ Route.encode (Route.HomePageRoute (Just E2eeInfoOverlay))
             ++ """) on direct messages to restrict what is visible to an admin.
 
-
 Sensitive data is not accessible to any 3rd parties with 3 exceptions:
 * [Hetzner](https://www.hetzner.com/) which owns the hardware at-chat runs on. The server being rented is located in Finland.
 * If you use the Discord integration, then messages and files sent to a Discord guild or Discord user will of course be available to Discord.
@@ -53,7 +52,9 @@ Sensitive data is not accessible to any 3rd parties with 3 exceptions:
 
 ## When is it deleted
 
-<WIP>
+Your email address, name, messages, and Discord session tokens, will all be automatically deleted if you delete your account. Account deletion takes 2 weeks in order to give other users a chance to backup any conversations they would like to have a personal copy of.
+
+Uploaded files are automatically deleted after a few days once they are no longer referenced in at-chat. Note that, this means if you attach a file to a message, and then someone duplicates your message, the file won't be deleted until both messages are deleted.
 """
         )
         |> RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty
