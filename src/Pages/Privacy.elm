@@ -55,6 +55,8 @@ Sensitive data is not accessible to any 3rd parties with 3 exceptions:
 Your email address, name, messages, and Discord session tokens, will all be automatically deleted if you delete your account. Account deletion takes 2 weeks in order to give other users a chance to backup any conversations they would like to have a personal copy of.
 
 Uploaded files are automatically deleted after a few days once they are no longer referenced in at-chat. Note that, this means if you attach a file to a message, and then someone duplicates your message, the file won't be deleted until both messages are deleted.
+
+Backups of at-chat's backend are stored for up to 30 days before automatically being deleted.
 """
         )
         |> RichText.fromNonemptyString Time.utc SeqDict.empty SeqDict.empty
