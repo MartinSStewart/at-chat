@@ -315,4 +315,4 @@ pickedReferenceNames =
 
 testUser : User.BackendUser
 testUser =
-    User.init (Time.millisToPosix 0) (Unsafe.personName "Sven") (Unsafe.emailAddress "sven@example.com") False
+    User.init (Time.millisToPosix 0) (Unsafe.personName "Sven") (User.UserHasEmail (Unsafe.emailAddress "sven@example.com")) False

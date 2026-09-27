@@ -618,7 +618,7 @@ startTime =
 
 adminEmail : EmailAddress
 adminEmail =
-    Backend.adminUser.email
+    Backend.adminEmail
 
 
 {-| The admin's display name, taken from the admin user itself so that tests reading it off

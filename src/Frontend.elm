@@ -8005,6 +8005,15 @@ updateLoadedFromBackend msg model =
                             , Command.none
                             )
 
+                        UserIsDeleted ->
+                            ( { model
+                                | loginStatus =
+                                    NotLoggedIn
+                                        { notLoggedIn | loginForm = Maybe.map LoginForm.userIsDeleted notLoggedIn.loginForm }
+                              }
+                            , Command.none
+                            )
+
                 LoggedIn _ ->
                     ( model, Command.none )
 

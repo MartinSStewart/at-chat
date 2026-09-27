@@ -2443,7 +2443,6 @@ deleteAccountTest config discordOp0Ready discordOp0ReadySupplemental =
                         , E2EHelper.writeMessage user 100 "In a DM"
                         , E2EHelper.createThread user (Id.fromInt 0)
                         , E2EHelper.writeMessage user 100 "In a thread"
-                        , T.checkState 100 (checkDeletedMessages 0)
                         , user.click 100 (Dom.id "guild_showUserOptions")
                         , user.click 100 UserOptions.deleteAccountButtonId
                         , T.checkState 100 (checkAccountDeletion E2EHelper.userEmail True)
@@ -2485,12 +2484,22 @@ deleteAccountTest config discordOp0Ready discordOp0ReadySupplemental =
         -- Nothing happens until the two weeks are up. The frontends are gone by now so that
         -- simulating two weeks of their timers doesn't slow the test down, which is also why
         -- this test uses T.start instead of E2EHelper.startTest and its attacker frontend.
-        , T.checkState (Duration.days 14 |> Quantity.minus Duration.hour |> Duration.inMilliseconds) checkAccountIsStillScheduled
-        , T.checkState 0 (checkDeletedMessages 0)
-        , T.checkState 0 (checkDiscordAccountIsLinked True)
-        , T.checkState (Duration.hours 2 |> Duration.inMilliseconds) checkAccountWasDeleted
-        , T.checkState 0 (checkDeletedMessages 3)
-        , T.checkState 0 (checkDiscordAccountIsLinked False)
+        , T.andThen
+            0
+            (\data ->
+                case userIdByEmail E2EHelper.userEmail data of
+                    Just ( userId, _ ) ->
+                        [ T.checkState (Duration.days 14 |> Quantity.minus Duration.hour |> Duration.inMilliseconds) (checkAccountIsStillScheduled userId)
+                        , T.checkState 0 (checkDeletedMessages userId 0)
+                        , T.checkState 0 (checkDiscordAccountIsLinked True)
+                        , T.checkState (Duration.hours 2 |> Duration.inMilliseconds) (checkAccountWasDeleted userId)
+                        , T.checkState 0 (checkDeletedMessages userId 3)
+                        , T.checkState 0 (checkDiscordAccountIsLinked False)
+                        ]
+
+                    Nothing ->
+                        [ T.checkState 0 (\_ -> Err "Expected the user to exist on the backend") ]
+            )
         ]
 
 
@@ -2525,7 +2534,7 @@ checkDiscordAccountIsLinked isLinked data =
 userIdByEmail : EmailAddress -> T.Data FrontendModel E2EHelper.BackendModel2 -> Maybe ( Id.Id Id.UserId, User.BackendUser )
 userIdByEmail email state =
     NonemptyDict.toList (E2EHelper.unwrapBackend state.backend).users
-        |> List.filter (\( _, user ) -> user.email == email)
+        |> List.filter (\( _, user ) -> user.email == User.UserHasEmail email)
         |> List.head
 
 
@@ -2557,10 +2566,10 @@ checkAccountDeletion email isScheduled state =
             Err "Expected the user to exist on the backend"
 
 
-checkAccountIsStillScheduled : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
-checkAccountIsStillScheduled state =
-    case userIdByEmail E2EHelper.userEmail state of
-        Just ( _, user ) ->
+checkAccountIsStillScheduled : Id.Id Id.UserId -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkAccountIsStillScheduled userId state =
+    case NonemptyDict.get userId (E2EHelper.unwrapBackend state.backend).users of
+        Just user ->
             if user.deleteAccountAt == Nothing then
                 Err "The account should still be scheduled for deletion"
 
@@ -2571,12 +2580,15 @@ checkAccountIsStillScheduled state =
             Err "Expected the user to exist on the backend"
 
 
-checkAccountWasDeleted : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
-checkAccountWasDeleted state =
-    case userIdByEmail E2EHelper.userEmail state of
-        Just ( userId, user ) ->
+checkAccountWasDeleted : Id.Id Id.UserId -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkAccountWasDeleted userId state =
+    case NonemptyDict.get userId (E2EHelper.unwrapBackend state.backend).users of
+        Just user ->
             if PersonName.toString user.name /= "<delete_user_" ++ Id.toString userId ++ ">" then
                 Err ("The deleted account should have been renamed but is called " ++ PersonName.toString user.name)
+
+            else if user.email /= User.DeletedUser then
+                Err "The deleted account shouldn't have an email address"
 
             else if user.deleteAccountAt /= Nothing then
                 Err "The deleted account shouldn't be scheduled for deletion again"
@@ -2591,8 +2603,8 @@ checkAccountWasDeleted state =
 {-| Counts the deleted messages in every guild and DM, and checks nothing the invited user wrote
 is left while the admin's message still is.
 -}
-checkDeletedMessages : Int -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
-checkDeletedMessages expectedDeleted state =
+checkDeletedMessages : Id.Id Id.UserId -> Int -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkDeletedMessages userId expectedDeleted state =
     let
         backend : Types.BackendModel
         backend =
@@ -2613,22 +2625,17 @@ checkDeletedMessages expectedDeleted state =
         authors =
             List.filterMap Tuple.first allMessages
     in
-    case ( userIdByEmail E2EHelper.userEmail state, userIdByEmail E2EHelper.adminEmail state ) of
-        ( Just ( userId, _ ), Just ( adminId, _ ) ) ->
-            if deletedCount /= expectedDeleted then
-                Err ("Expected " ++ String.fromInt expectedDeleted ++ " deleted messages but got " ++ String.fromInt deletedCount)
+    if deletedCount /= expectedDeleted then
+        Err ("Expected " ++ String.fromInt expectedDeleted ++ " deleted messages but got " ++ String.fromInt deletedCount)
 
-            else if expectedDeleted > 0 && List.member userId authors then
-                Err "A message written by the deleted account is left"
+    else if expectedDeleted > 0 && List.member userId authors then
+        Err "A message written by the deleted account is left"
 
-            else if not (List.member adminId authors) then
-                Err "The admin's message should be left alone"
+    else if not (List.member Broadcast.adminUserId authors) then
+        Err "The admin's message should be left alone"
 
-            else
-                Ok ()
-
-        _ ->
-            Err "Expected the user and the admin to exist on the backend"
+    else
+        Ok ()
 
 
 messagesInChannel :

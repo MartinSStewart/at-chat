@@ -355,7 +355,7 @@ tests =
                     (SeqSet.singleton usableCustomEmoji)
                     (User.addRecentlyUsedEmojis
                         (List.repeat 3 (EmojiOrCustomEmoji_CustomEmoji usableCustomEmoji))
-                        Backend.adminUser
+                        (User.backendToFrontendCurrent Backend.adminEmail Backend.adminUser)
                     )
                     |> List.map Tuple.first
                     |> Expect.equal
@@ -370,7 +370,7 @@ tests =
                     (SeqSet.singleton usableCustomEmoji)
                     (User.addRecentlyUsedEmojis
                         (List.repeat 5 (EmojiOrCustomEmoji_CustomEmoji unusableCustomEmoji))
-                        Backend.adminUser
+                        (User.backendToFrontendCurrent Backend.adminEmail Backend.adminUser)
                     )
                     |> List.map Tuple.first
                     |> Expect.equal

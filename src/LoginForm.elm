@@ -27,6 +27,7 @@ module LoginForm exposing
     , twoFactorCodeLength
     , typedCode
     , update
+    , userIsDeleted
     , validateCode
     , view
     )
@@ -112,6 +113,7 @@ type alias EnterEmail2 =
     , pressedSubmitEmail : Bool
     , rateLimited : Bool
     , showSignupsDisabled : Bool
+    , showUserIsDeleted : Bool
     }
 
 
@@ -827,11 +829,12 @@ rateLimited loginForm =
                 , pressedSubmitEmail = False
                 , rateLimited = True
                 , showSignupsDisabled = False
+                , showUserIsDeleted = False
                 }
 
         EnterTwoFactorCode _ ->
             EnterEmail
-                { email = "", pressedSubmitEmail = False, rateLimited = True, showSignupsDisabled = False }
+                { email = "", pressedSubmitEmail = False, rateLimited = True, showSignupsDisabled = False, showUserIsDeleted = False }
 
         EnterUserData _ ->
             loginForm
@@ -849,11 +852,35 @@ signupsDisabled loginForm =
                 , pressedSubmitEmail = False
                 , rateLimited = False
                 , showSignupsDisabled = True
+                , showUserIsDeleted = False
                 }
 
         EnterTwoFactorCode _ ->
             EnterEmail
-                { email = "", pressedSubmitEmail = False, rateLimited = False, showSignupsDisabled = True }
+                { email = "", pressedSubmitEmail = False, rateLimited = False, showSignupsDisabled = True, showUserIsDeleted = False }
+
+        EnterUserData _ ->
+            loginForm
+
+
+userIsDeleted : LoginForm -> LoginForm
+userIsDeleted loginForm =
+    case loginForm of
+        EnterEmail enterEmail ->
+            EnterEmail { enterEmail | showUserIsDeleted = True }
+
+        EnterLoginCode enterLoginCode ->
+            EnterEmail
+                { email = EmailAddress.toString enterLoginCode.sentTo
+                , pressedSubmitEmail = False
+                , rateLimited = False
+                , showSignupsDisabled = False
+                , showUserIsDeleted = True
+                }
+
+        EnterTwoFactorCode _ ->
+            EnterEmail
+                { email = "", pressedSubmitEmail = False, rateLimited = False, showSignupsDisabled = False, showUserIsDeleted = True }
 
         EnterUserData _ ->
             loginForm
@@ -922,6 +949,9 @@ enterEmailView model =
           else if model.showSignupsDisabled then
             errorView "New sign ups are currently disabled."
 
+          else if model.showUserIsDeleted then
+            errorView "This account has been deleted."
+
           else
             Ui.none
         ]
@@ -946,4 +976,5 @@ init =
         , pressedSubmitEmail = False
         , rateLimited = False
         , showSignupsDisabled = False
+        , showUserIsDeleted = False
         }

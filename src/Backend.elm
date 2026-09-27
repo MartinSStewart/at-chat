@@ -1,5 +1,6 @@
 module Backend exposing
-    ( adminUser
+    ( adminEmail
+    , adminUser
     , app
     , app_
     , handleExportBackendStep
@@ -37,7 +38,7 @@ import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
 import Effect.Websocket as Websocket
-import EmailAddress
+import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
@@ -123,7 +124,12 @@ app_ =
 
 adminUser : BackendUser
 adminUser =
-    User.init (Time.millisToPosix 0) PersonName.widestName (Unsafe.emailAddress "a@a.aa" |> UserHasEmail) True
+    User.init (Time.millisToPosix 0) PersonName.widestName (UserHasEmail adminEmail) True
+
+
+adminEmail : EmailAddress
+adminEmail =
+    Unsafe.emailAddress "a@a.aa"
 
 
 {-| Sha256 hash of the password that logs you in as the admin user when the Postmark API key is
@@ -2769,7 +2775,7 @@ deleteAccounts time model =
                             User.init
                                 user.createdAt
                                 (PersonName.fromStringLossy ("<delete_user_" ++ Id.toString userId ++ ">"))
-                                user.email
+                                DeletedUser
                                 False
 
                         else
@@ -3052,8 +3058,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         model.connections
                                 , sessions = SeqDict.insert sessionId session2 model.sessions
                               }
-                            , BackendExtra.getLoginData sessionId clientId currentlyViewing session2 user requestMessagesFor model
-                                |> Ok
+                            , (case user.email of
+                                UserHasEmail email ->
+                                    BackendExtra.getLoginData sessionId clientId currentlyViewing session2 email user requestMessagesFor model
+                                        |> Ok
+
+                                DeletedUser ->
+                                    Err ()
+                              )
                                 |> CheckLoginResponse (loginType model)
                                 |> Lamdera.sendToFrontend clientId
                             )
@@ -3092,49 +3104,54 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             case ( loginType model, NonemptyDict.get Broadcast.adminUserId model.users ) of
                 ( LoginWithRecoveryPassword, Just user ) ->
                     if Sha256.sha256 password == recoveryPasswordHash then
-                        let
-                            currentlyViewing : Viewing
-                            currentlyViewing =
-                                BackendExtra.requestedForToGuildOrDmId Broadcast.adminUserId requestMessagesFor
+                        case user.email of
+                            UserHasEmail email ->
+                                let
+                                    currentlyViewing : Viewing
+                                    currentlyViewing =
+                                        BackendExtra.requestedForToGuildOrDmId Broadcast.adminUserId requestMessagesFor
 
-                            session : UserSession
-                            session =
-                                UserSession.init time sessionId Broadcast.adminUserId userAgent
-                                    |> UserSession.setLastViewedGuild currentlyViewing
-                        in
-                        ( { model
-                            | sessions = SeqDict.insert sessionId session model.sessions
-                            , pendingLogins = SeqDict.remove sessionId model.pendingLogins
-                          }
-                        , Command.batch
-                            [ BackendExtra.getLoginData
-                                sessionId
-                                clientId
-                                currentlyViewing
-                                session
-                                email
-                                user
-                                requestMessagesFor
-                                model
-                                |> LoginSuccess
-                                |> LoginWithTokenResponse
-                                |> Lamdera.sendToFrontends sessionId
-                            , Broadcast.toUser
-                                (Just clientId)
-                                Nothing
-                                Broadcast.adminUserId
-                                (Server_NewSession
-                                    session.sessionIdHash
-                                    { notificationMode = session.notificationMode
-                                    , currentlyViewing = SeqDict.singleton clientId currentlyViewing
-                                    , userAgent = session.userAgent
-                                    , lastActiveAt = time
-                                    }
-                                    |> ServerChange
+                                    session : UserSession
+                                    session =
+                                        UserSession.init time sessionId Broadcast.adminUserId userAgent
+                                            |> UserSession.setLastViewedGuild currentlyViewing
+                                in
+                                ( { model
+                                    | sessions = SeqDict.insert sessionId session model.sessions
+                                    , pendingLogins = SeqDict.remove sessionId model.pendingLogins
+                                  }
+                                , Command.batch
+                                    [ BackendExtra.getLoginData
+                                        sessionId
+                                        clientId
+                                        currentlyViewing
+                                        session
+                                        email
+                                        user
+                                        requestMessagesFor
+                                        model
+                                        |> LoginSuccess
+                                        |> LoginWithTokenResponse
+                                        |> Lamdera.sendToFrontends sessionId
+                                    , Broadcast.toUser
+                                        (Just clientId)
+                                        Nothing
+                                        Broadcast.adminUserId
+                                        (Server_NewSession
+                                            session.sessionIdHash
+                                            { notificationMode = session.notificationMode
+                                            , currentlyViewing = SeqDict.singleton clientId currentlyViewing
+                                            , userAgent = session.userAgent
+                                            , lastActiveAt = time
+                                            }
+                                            |> ServerChange
+                                        )
+                                        model
+                                    ]
                                 )
-                                model
-                            ]
-                        )
+
+                            DeletedUser ->
+                                ( model, UserIsDeleted |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId )
 
                     else
                         ( model
@@ -3226,57 +3243,62 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         of
                             ( Just user, Just { secret } ) ->
                                 if TwoFactorAuthentication.isValidCode time loginCode secret then
-                                    let
-                                        currentlyViewing : Viewing
-                                        currentlyViewing =
-                                            BackendExtra.requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor
+                                    case user.email of
+                                        UserHasEmail email ->
+                                            let
+                                                currentlyViewing : Viewing
+                                                currentlyViewing =
+                                                    BackendExtra.requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor
 
-                                        session : UserSession
-                                        session =
-                                            UserSession.init time sessionId pendingLogin.userId userAgent
-                                                |> UserSession.setLastViewedGuild currentlyViewing
-                                    in
-                                    ( { model
-                                        | sessions = SeqDict.insert sessionId session model.sessions
-                                        , connections =
-                                            SeqDict.updateIfExists
-                                                sessionId
-                                                (NonemptyDict.updateIfExists
+                                                session : UserSession
+                                                session =
+                                                    UserSession.init time sessionId pendingLogin.userId userAgent
+                                                        |> UserSession.setLastViewedGuild currentlyViewing
+                                            in
+                                            ( { model
+                                                | sessions = SeqDict.insert sessionId session model.sessions
+                                                , connections =
+                                                    SeqDict.updateIfExists
+                                                        sessionId
+                                                        (NonemptyDict.updateIfExists
+                                                            clientId
+                                                            (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                                        )
+                                                        model.connections
+                                                , pendingLogins = SeqDict.remove sessionId model.pendingLogins
+                                              }
+                                            , Command.batch
+                                                [ BackendExtra.getLoginData
+                                                    sessionId
                                                     clientId
-                                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
-                                                )
-                                                model.connections
-                                        , pendingLogins = SeqDict.remove sessionId model.pendingLogins
-                                      }
-                                    , Command.batch
-                                        [ BackendExtra.getLoginData
-                                            sessionId
-                                            clientId
-                                            currentlyViewing
-                                            session
-                                            email
-                                            user
-                                            requestMessagesFor
-                                            model
-                                            |> LoginSuccess
-                                            |> LoginWithTokenResponse
-                                            |> Lamdera.sendToFrontends sessionId
-                                        , Broadcast.toUser
-                                            (Just clientId)
-                                            Nothing
-                                            pendingLogin.userId
-                                            (Server_NewSession
-                                                session.sessionIdHash
-                                                { notificationMode = session.notificationMode
-                                                , currentlyViewing = SeqDict.singleton clientId currentlyViewing
-                                                , userAgent = session.userAgent
-                                                , lastActiveAt = time
-                                                }
-                                                |> ServerChange
+                                                    currentlyViewing
+                                                    session
+                                                    email
+                                                    user
+                                                    requestMessagesFor
+                                                    model
+                                                    |> LoginSuccess
+                                                    |> LoginWithTokenResponse
+                                                    |> Lamdera.sendToFrontends sessionId
+                                                , Broadcast.toUser
+                                                    (Just clientId)
+                                                    Nothing
+                                                    pendingLogin.userId
+                                                    (Server_NewSession
+                                                        session.sessionIdHash
+                                                        { notificationMode = session.notificationMode
+                                                        , currentlyViewing = SeqDict.singleton clientId currentlyViewing
+                                                        , userAgent = session.userAgent
+                                                        , lastActiveAt = time
+                                                        }
+                                                        |> ServerChange
+                                                    )
+                                                    model
+                                                ]
                                             )
-                                            model
-                                        ]
-                                    )
+
+                                        DeletedUser ->
+                                            ( model, UserIsDeleted |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId )
 
                                 else
                                     ( { model
@@ -3319,7 +3341,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             in
             case
                 ( NonemptyDict.toList model3.users
-                    |> List.Extra.find (\( _, user ) -> user.email == email)
+                    |> List.Extra.find (\( _, user ) -> user.email == UserHasEmail email)
                 , result
                 )
             of
@@ -5844,38 +5866,39 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model
                         sessionId
                         (\session user ->
-                            if user.isAdmin then
-                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-                            else
-                                let
-                                    deleteAt : Time.Posix
-                                    deleteAt =
-                                        User.accountDeletionTime time
-                                in
-                                ( { model
-                                    | users =
-                                        NonemptyDict.insert
+                            case ( user.isAdmin, user.email ) of
+                                ( False, UserHasEmail email ) ->
+                                    let
+                                        deleteAt : Time.Posix
+                                        deleteAt =
+                                            User.accountDeletionTime time
+                                    in
+                                    ( { model
+                                        | users =
+                                            NonemptyDict.insert
+                                                session.userId
+                                                { user | deleteAccountAt = Just deleteAt }
+                                                model.users
+                                      }
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId (Local_ScheduleAccountDeletion deleteAt)
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toUser
+                                            (Just clientId)
+                                            Nothing
                                             session.userId
-                                            { user | deleteAccountAt = Just deleteAt }
-                                            model.users
-                                  }
-                                , Command.batch
-                                    [ LocalChangeResponse changeId (Local_ScheduleAccountDeletion deleteAt)
-                                        |> Lamdera.sendToFrontend clientId
-                                    , Broadcast.toUser
-                                        (Just clientId)
-                                        Nothing
-                                        session.userId
-                                        (LocalChange session.userId (Local_ScheduleAccountDeletion deleteAt))
-                                        model
-                                    , BackendExtra.sendAccountDeletionEmail
-                                        (SentNotificationEmail time session.userId)
-                                        user.email
-                                        deleteAt
-                                        model.postmarkApiKey
-                                    ]
-                                )
+                                            (LocalChange session.userId (Local_ScheduleAccountDeletion deleteAt))
+                                            model
+                                        , BackendExtra.sendAccountDeletionEmail
+                                            (SentNotificationEmail time session.userId)
+                                            email
+                                            deleteAt
+                                            model.postmarkApiKey
+                                        ]
+                                    )
+
+                                _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
                 Local_CancelAccountDeletion ->
@@ -7126,8 +7149,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
                                 model.connections
                       }
-                    , BackendExtra.getLoginData sessionId clientId currentlyViewing session user requestMessagesFor model
-                        |> Ok
+                    , (case user.email of
+                        UserHasEmail email ->
+                            BackendExtra.getLoginData sessionId clientId currentlyViewing session email user requestMessagesFor model
+                                |> Ok
+
+                        DeletedUser ->
+                            Err ()
+                      )
                         |> ReloadDataResponse
                         |> Lamdera.sendToFrontend clientId
                     )
@@ -9155,26 +9184,31 @@ twoFactorAuthenticationUpdateFromFrontend clientId time toBackend model session 
                 ( model2, secret ) =
                     SecretId.getUniqueId time model
             in
-            case TwoFactorAuthentication.getConfig (EmailAddress.toString user.email) secret of
-                Ok key ->
-                    ( { model2
-                        | twoFactorAuthenticationSetup =
-                            SeqDict.insert
-                                session.userId
-                                { startedAt = time, secret = secret }
-                                model2.twoFactorAuthenticationSetup
-                      }
-                    , TwoFactorAuthentication.EnableTwoFactorAuthenticationResponse
-                        { qrCodeUrl =
-                            TOTP.Key.toString key
-                                -- https://github.com/choonkeat/elm-totp/issues/3
-                                |> String.replace "%3D" ""
-                        }
-                        |> TwoFactorAuthenticationToFrontend
-                        |> Lamdera.sendToFrontend clientId
-                    )
+            case user.email of
+                UserHasEmail email ->
+                    case TwoFactorAuthentication.getConfig (EmailAddress.toString email) secret of
+                        Ok key ->
+                            ( { model2
+                                | twoFactorAuthenticationSetup =
+                                    SeqDict.insert
+                                        session.userId
+                                        { startedAt = time, secret = secret }
+                                        model2.twoFactorAuthenticationSetup
+                              }
+                            , TwoFactorAuthentication.EnableTwoFactorAuthenticationResponse
+                                { qrCodeUrl =
+                                    TOTP.Key.toString key
+                                        -- https://github.com/choonkeat/elm-totp/issues/3
+                                        |> String.replace "%3D" ""
+                                }
+                                |> TwoFactorAuthenticationToFrontend
+                                |> Lamdera.sendToFrontend clientId
+                            )
 
-                Err _ ->
+                        Err _ ->
+                            ( model2, Command.none )
+
+                DeletedUser ->
                     ( model2, Command.none )
 
         TwoFactorAuthentication.ConfirmTwoFactorAuthenticationRequest code ->

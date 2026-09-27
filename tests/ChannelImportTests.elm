@@ -147,12 +147,12 @@ users =
 
 admin : BackendUser
 admin =
-    User.init (time 0) (Unsafe.personName "Martin") (Unsafe.emailAddress "martin@example.com") False
+    User.init (time 0) (Unsafe.personName "Martin") (User.UserHasEmail (Unsafe.emailAddress "martin@example.com")) False
 
 
 otherUser : BackendUser
 otherUser =
-    User.init (time 0) (Unsafe.personName "Sven") (Unsafe.emailAddress "sven@example.com") False
+    User.init (time 0) (Unsafe.personName "Sven") (User.UserHasEmail (Unsafe.emailAddress "sven@example.com")) False
 
 
 time : Int -> Time.Posix
