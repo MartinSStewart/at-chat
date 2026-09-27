@@ -435,6 +435,15 @@ view windowSize textInputFocus time local loggedIn loaded model =
                         , ( User.NotifyMeWhenMentioned, "Send me email notifications" )
                         ]
                         |> Ui.el [ Ui.paddingXY 16 0 ]
+                    , MyUi.radioColumn
+                        (Dom.id "userOptions_embedVisibility")
+                        SelectedEmbedVisibility
+                        (Just local.localUser.user.embedVisibility)
+                        (Ui.text "Link embeds")
+                        [ ( User.ShowEmbeds, "Show embeds for links" )
+                        , ( User.HideEmbeds, "Don't show embeds for links" )
+                        ]
+                        |> Ui.el [ Ui.paddingXY 16 0 ]
                     , Ui.column
                         [ Ui.spacing 8 ]
                         (Ui.el [ Ui.Font.bold, Ui.paddingXY 16 0 ] (Ui.text "Color")

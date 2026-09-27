@@ -71,7 +71,7 @@ import Quantity
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
 import Route exposing (ChannelsVisibleOnMobile(..), Route)
-import SecretId exposing (SecretId)
+import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
@@ -243,6 +243,7 @@ init =
       , slackDms = OneToOne.empty
       , slackToken = Nothing
       , files = SeqDict.empty
+      , orphanedFilesLastHour = SeqSet.empty
       , publicVapidKey =
             if Env.isProduction then
                 ""
@@ -512,8 +513,11 @@ updateHelper msg model =
                                 )
                            )
 
-        SentLoginEmail time emailAddress result ->
-            BackendExtra.addLog time (Log.LoginEmail result emailAddress) model
+        SentLoginEmail time userId result ->
+            BackendExtra.addLog time (Log.LoginEmail (withoutRecipients result) userId) model
+
+        SentSignupEmail time result ->
+            BackendExtra.addLog time (Log.SignupEmail (withoutRecipients result)) model
 
         SentLogErrorEmail time email result ->
             case result of
@@ -2006,6 +2010,18 @@ updateHelper msg model =
 
         HourlyUpdate time ->
             let
+                orphanedFiles : SeqSet FileHash
+                orphanedFiles =
+                    SeqDict.keys (BackendExtra.orphanedFiles model) |> SeqSet.fromList
+
+                filesToDelete : SeqSet FileHash
+                filesToDelete =
+                    SeqSet.intersect model.orphanedFilesLastHour orphanedFiles
+
+                withNewOrphanedFiles : BackendModel
+                withNewOrphanedFiles =
+                    { model | orphanedFilesLastHour = SeqSet.diff orphanedFiles filesToDelete }
+
                 shouldExport : Bool
                 shouldExport =
                     case model.lastScheduledExportTime of
@@ -2049,10 +2065,10 @@ updateHelper msg model =
                         (SeqDict.toList model.sessions)
             in
             ( if shouldExport then
-                startExport time model
+                startExport time withNewOrphanedFiles
 
               else
-                { model
+                { withNewOrphanedFiles
                     | lastScheduledExportTime =
                         case model.lastScheduledExportTime of
                             Just _ ->
@@ -2069,9 +2085,17 @@ updateHelper msg model =
                     , connections = List.foldl SeqDict.remove model.connections expiredSessions
                     , sessions = List.foldl SeqDict.remove model.sessions expiredSessions
                 }
-            , Discord.getStickerPacksPayload
-                |> DiscordSync.http model.serverSecret
-                |> Task.attempt (GotDiscordStandardStickerPacks time)
+            , Command.batch
+                [ Discord.getStickerPacksPayload
+                    |> DiscordSync.http model.serverSecret
+                    |> Task.attempt (GotDiscordStandardStickerPacks time)
+                , if SeqSet.isEmpty filesToDelete then
+                    Command.none
+
+                  else
+                    deleteFiles model.serverSecret (SeqSet.toList filesToDelete)
+                        |> Task.attempt (HourlyDeletedOrphanedFiles time (SeqSet.toList filesToDelete))
+                ]
             )
 
         GotDiscordStandardStickerPacks time result ->
@@ -2143,23 +2167,18 @@ updateHelper msg model =
             in
             case result of
                 Ok () ->
-                    let
-                        deletedSet : SeqSet FileHash
-                        deletedSet =
-                            SeqSet.fromList deleted
-                    in
-                    ( { model
-                        | files = List.foldl SeqDict.remove model.files deleted
-                        , discordAttachments =
-                            SeqDict.filter
-                                (\_ attachment -> not (SeqSet.member attachment.fileHash deletedSet))
-                                model.discordAttachments
-                      }
-                    , responseCmd
-                    )
+                    ( removeDeletedFiles deleted model, responseCmd )
 
                 Err error ->
                     BackendExtra.addLogWithCmd time (Log.FailedToDeleteOrphanedFiles error) model responseCmd
+
+        HourlyDeletedOrphanedFiles time deleted result ->
+            case result of
+                Ok () ->
+                    ( removeDeletedFiles deleted model, Command.none )
+
+                Err error ->
+                    BackendExtra.addLog time (Log.FailedToDeleteOrphanedFiles error) model
 
         RegeneratedServerSecret time changeId clientId result ->
             let
@@ -2671,6 +2690,70 @@ disconnectClient time sessionId clientId model =
             ( model, Command.none )
 
 
+{-| Postmark's errors list who the email was for, which would put the email address in the log.
+-}
+withoutRecipients : Result Postmark.SendEmailError () -> Result Postmark.SendEmailError ()
+withoutRecipients result =
+    Result.mapError
+        (\error ->
+            case error of
+                Postmark.PostmarkError response ->
+                    Postmark.PostmarkError { response | to = [] }
+
+                _ ->
+                    error
+        )
+        result
+
+
+deleteFiles : SecretId ServerSecret -> List FileHash -> Task BackendOnly Http.Error ()
+deleteFiles serverSecret fileHashes =
+    Http.task
+        { method = "POST"
+        , url = FileStatus.domain ++ "/file/internal/delete-files"
+        , body = Http.jsonBody (Codec.encoder (Codec.list FileStatus.fileHashCodec) fileHashes)
+        , headers = [ FileStatus.secretKeyHeader serverSecret ]
+        , resolver =
+            Http.stringResolver
+                (\result ->
+                    case result of
+                        Http.BadStatus_ metadata body ->
+                            Http.BadBody
+                                ("Status code: " ++ String.fromInt metadata.statusCode ++ ", body: " ++ body)
+                                |> Err
+
+                        Http.GoodStatus_ _ _ ->
+                            Ok ()
+
+                        Http.BadUrl_ string ->
+                            Err (Http.BadUrl string)
+
+                        Http.Timeout_ ->
+                            Err Http.Timeout
+
+                        Http.NetworkError_ ->
+                            Err Http.NetworkError
+                )
+        , timeout = Just Duration.minute
+        }
+
+
+removeDeletedFiles : List FileHash -> BackendModel -> BackendModel
+removeDeletedFiles deleted model =
+    let
+        deletedSet : SeqSet FileHash
+        deletedSet =
+            SeqSet.fromList deleted
+    in
+    { model
+        | files = List.foldl SeqDict.remove model.files deleted
+        , discordAttachments =
+            SeqDict.filter
+                (\_ attachment -> not (SeqSet.member attachment.fileHash deletedSet))
+                model.discordAttachments
+    }
+
+
 startExport : Time.Posix -> BackendModel -> BackendModel
 startExport time model =
     let
@@ -3112,7 +3195,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     { user | recentLoginEmails = time :: List.take 100 user.recentLoginEmails }
                                     model3.users
                           }
-                        , BackendExtra.sendLoginEmail (SentLoginEmail time email) email loginCode model3.postmarkApiKey
+                        , BackendExtra.sendLoginEmail (SentLoginEmail time userId) email loginCode model3.postmarkApiKey
                         )
 
                 ( Nothing, Ok loginCode ) ->
@@ -3130,7 +3213,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                     model3.pendingLogins
                           }
-                        , BackendExtra.sendLoginEmail (SentLoginEmail time email) email loginCode model3.postmarkApiKey
+                        , BackendExtra.sendLoginEmail (SentSignupEmail time) email loginCode model3.postmarkApiKey
                         )
 
                     else
@@ -5577,6 +5660,22 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     NonemptyDict.insert
                                         session.userId
                                         (User.setEmailNotifications emailNotifications user)
+                                        model.users
+                              }
+                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                            )
+                        )
+
+                Local_SetEmbedVisibility embedVisibility ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\session user ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        (User.setEmbedVisibility embedVisibility user)
                                         model.users
                               }
                             , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
@@ -9427,34 +9526,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                     SeqDict.keys (BackendExtra.orphanedFiles model)
             in
             ( model
-            , Http.task
-                { method = "POST"
-                , url = FileStatus.domain ++ "/file/internal/delete-files"
-                , body = Http.jsonBody (Codec.encoder (Codec.list FileStatus.fileHashCodec) orphanedFiles)
-                , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
-                , resolver =
-                    Http.stringResolver
-                        (\result ->
-                            case result of
-                                Http.BadStatus_ metadata body ->
-                                    Http.BadBody
-                                        ("Status code: " ++ String.fromInt metadata.statusCode ++ ", body: " ++ body)
-                                        |> Err
-
-                                Http.GoodStatus_ _ _ ->
-                                    Ok ()
-
-                                Http.BadUrl_ string ->
-                                    Err (Http.BadUrl string)
-
-                                Http.Timeout_ ->
-                                    Err Http.Timeout
-
-                                Http.NetworkError_ ->
-                                    Err Http.NetworkError
-                        )
-                , timeout = Just Duration.minute
-                }
+            , deleteFiles model.serverSecret orphanedFiles
                 |> Task.attempt (DeletedOrphanedFiles time changeId clientId orphanedFiles)
             )
 

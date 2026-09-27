@@ -2700,6 +2700,9 @@ backendMsgLog msg =
         SentLoginEmail _ _ _ ->
             BackendMsgLog_SentLoginEmail
 
+        SentSignupEmail _ _ ->
+            BackendMsgLog_SentSignupEmail
+
         UserConnected _ _ ->
             BackendMsgLog_UserConnected
 
@@ -2880,6 +2883,9 @@ backendMsgLog msg =
         DeletedOrphanedFiles _ _ _ _ _ ->
             BackendMsgLog_DeletedOrphanedFiles
 
+        HourlyDeletedOrphanedFiles _ _ _ ->
+            BackendMsgLog_HourlyDeletedOrphanedFiles
+
         ReloadedDiscordGuildForAdmin _ _ _ _ _ _ ->
             BackendMsgLog_ReloadedDiscordGuildForAdmin
 
@@ -3038,6 +3044,9 @@ toBackendLog toBackend =
 
                 Local_SetEmailNotifications _ ->
                     ToBackendLog_Local_SetEmailNotifications
+
+                Local_SetEmbedVisibility _ ->
+                    ToBackendLog_Local_SetEmbedVisibility
 
                 Local_ScheduleAccountDeletion _ ->
                     ToBackendLog_Local_ScheduleAccountDeletion

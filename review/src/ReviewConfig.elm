@@ -191,6 +191,9 @@ config =
         , excluded =
             [ "files"
 
+            -- Orphaned files waiting an hour before they're deleted
+            , "orphanedFilesLastHour"
+
             -- Only remembers which Discord attachments have already been uploaded
             , "discordAttachments"
 

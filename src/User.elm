@@ -1,6 +1,7 @@
 module User exposing
     ( BackendUser
     , EmailNotifications(..)
+    , EmbedVisibility(..)
     , FrontendCurrentUser
     , FrontendUser
     , LastDmViewed(..)
@@ -38,6 +39,7 @@ module User exposing
     , setDiscordGuildNotificationLevel
     , setDomainWhitelist
     , setEmailNotifications
+    , setEmbedVisibility
     , setEmojiSkinTone
     , setGuildNotificationLevel
     , setIcon
@@ -110,6 +112,7 @@ type alias BackendUser =
     , lastLogPageViewed : Id PageId
     , createdAt : Time.Posix
     , emailNotifications : EmailNotifications
+    , embedVisibility : EmbedVisibility
     , lastEmailNotification : Time.Posix
     , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
     , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
@@ -234,6 +237,11 @@ accountDeletionTime requestedAt =
 setEmailNotifications : EmailNotifications -> { a | emailNotifications : EmailNotifications } -> { a | emailNotifications : EmailNotifications }
 setEmailNotifications emailNotifications user =
     { user | emailNotifications = emailNotifications }
+
+
+setEmbedVisibility : EmbedVisibility -> { a | embedVisibility : EmbedVisibility } -> { a | embedVisibility : EmbedVisibility }
+setEmbedVisibility embedVisibility user =
+    { user | embedVisibility = embedVisibility }
 
 
 setEmojiSkinTone : Maybe SkinTone -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
@@ -375,6 +383,7 @@ init createdAt name email userIsAdmin =
     , lastLogPageViewed = Id.fromInt 0
     , createdAt = createdAt
     , emailNotifications = NeverNotifyMe
+    , embedVisibility = ShowEmbeds
     , lastEmailNotification = createdAt
     , lastViewedMessage = SeqDict.empty
     , lastViewedThreadMessage = SeqDict.empty
@@ -761,6 +770,11 @@ type EmailNotifications
     | NotifyMeWhenMentioned
 
 
+type EmbedVisibility
+    = ShowEmbeds
+    | HideEmbeds
+
+
 {-| User containing only publicly visible data
 -}
 type alias FrontendUser =
@@ -876,6 +890,7 @@ backendToFrontendCurrent user =
     , lastLogPageViewed = user.lastLogPageViewed
     , createdAt = user.createdAt
     , emailNotifications = user.emailNotifications
+    , embedVisibility = user.embedVisibility
     , lastEmailNotification = user.lastEmailNotification
     , lastViewedMessage = user.lastViewedMessage
     , lastViewedThreadMessage = user.lastViewedThreadMessage

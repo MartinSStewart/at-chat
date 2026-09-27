@@ -12,6 +12,7 @@ kind of update runs and how long it takes without holding on to the messages the
 -}
 type BackendMsgLog
     = BackendMsgLog_SentLoginEmail
+    | BackendMsgLog_SentSignupEmail
     | BackendMsgLog_UserConnected
     | BackendMsgLog_UserDisconnected
     | BackendMsgLog_UserDisconnectedWithTime
@@ -72,6 +73,7 @@ type BackendMsgLog
     | BackendMsgLog_ScheduledExportUploadResult
     | BackendMsgLog_RegeneratedServerSecret
     | BackendMsgLog_DeletedOrphanedFiles
+    | BackendMsgLog_HourlyDeletedOrphanedFiles
     | BackendMsgLog_ReloadedDiscordGuildForAdmin
     | BackendMsgLog_GotTimeForWebsocketListenClose
     | BackendMsgLog_Rpc_GotFileUpload
@@ -87,6 +89,9 @@ backendMsgLogToString log =
     case log of
         BackendMsgLog_SentLoginEmail ->
             "SentLoginEmail"
+
+        BackendMsgLog_SentSignupEmail ->
+            "SentSignupEmail"
 
         BackendMsgLog_UserConnected ->
             "UserConnected"
@@ -267,6 +272,9 @@ backendMsgLogToString log =
 
         BackendMsgLog_DeletedOrphanedFiles ->
             "DeletedOrphanedFiles"
+
+        BackendMsgLog_HourlyDeletedOrphanedFiles ->
+            "HourlyDeletedOrphanedFiles"
 
         BackendMsgLog_ReloadedDiscordGuildForAdmin ->
             "ReloadedDiscordGuildForAdmin"

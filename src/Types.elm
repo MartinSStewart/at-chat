@@ -143,7 +143,7 @@ import Touch exposing (Drag, Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
 import Url exposing (Url)
-import User exposing (BackendUser, EmailNotifications, FrontendCurrentUser, FrontendUser, NotificationLevel)
+import User exposing (BackendUser, EmailNotifications, EmbedVisibility, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserColor exposing (UserColor)
 import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, FrontendUserSession, NotificationMode, ToBeFilledInByBackend, UserOptionSection, UserSession)
@@ -473,6 +473,7 @@ type alias BackendModel =
     , slackServers : OneToOne (Slack.Id Slack.TeamId) (Id GuildId)
     , slackToken : Maybe Slack.AuthToken
     , files : SeqDict FileHash BackendFileData
+    , orphanedFilesLastHour : SeqSet FileHash
     , privateVapidKey : PrivateVapidKey
     , publicVapidKey : String
     , slackClientSecret : Maybe Slack.ClientSecret
@@ -655,6 +656,7 @@ type FrontendMsg_
     | GotRegisterPushSubscription RegisterPushSubscription
     | SelectedNotificationMode NotificationMode
     | SelectedEmailNotifications EmailNotifications
+    | SelectedEmbedVisibility EmbedVisibility
     | PressedDeleteAccount
     | PressedAccountDeletionBanner
     | PressedCloseAccountDeletionBanner
@@ -817,7 +819,8 @@ type ToBackend
 
 
 type BackendMsg
-    = SentLoginEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
+    = SentLoginEmail Time.Posix (Id UserId) (Result Postmark.SendEmailError ())
+    | SentSignupEmail Time.Posix (Result Postmark.SendEmailError ())
     | UserConnected SessionId ClientId
     | UserDisconnected SessionId ClientId
     | UserDisconnectedWithTime SessionId ClientId Time.Posix
@@ -922,6 +925,7 @@ type BackendMsg
     | ScheduledExportUploadResult Time.Posix Int (Result Http.Error ())
     | RegeneratedServerSecret Time.Posix ChangeId ClientId (Result Http.Error (SecretId ServerSecret))
     | DeletedOrphanedFiles Time.Posix ChangeId ClientId (List FileHash) (Result Http.Error ())
+    | HourlyDeletedOrphanedFiles Time.Posix (List FileHash) (Result Http.Error ())
     | ReloadedDiscordGuildForAdmin Time.Posix ChangeId ClientId (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Result Discord.HttpError ( Discord.Guild, List Discord.Channel2 ))
     | GotTimeForWebsocketListenClose (Discord.Id Discord.UserId) Websocket.CloseEventCode String Time.Posix
     | Rpc_GotFileUpload FileHash Int (Maybe (Coord CssPixels))
@@ -1212,6 +1216,7 @@ type LocalChange
     | Local_CollapseUserOptionSection UserOptionSection
     | Local_SetSheepGameQuestions (IdArray QuestionId UserSession.SheepGameQuestion)
     | Local_SetEmailNotifications EmailNotifications
+    | Local_SetEmbedVisibility EmbedVisibility
     | Local_ScheduleAccountDeletion Time.Posix
     | Local_CancelAccountDeletion
     | Local_RegisterPushSubscription Time.Posix RegisterPushSubscription

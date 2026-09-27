@@ -520,19 +520,20 @@ logExamples =
     in
     Ui.column
         [ Ui.spacing 24 ]
-        [ logEntry (Log.LoginEmail (Ok ()) exampleEmail)
+        [ logEntry (Log.LoginEmail (Ok ()) (Id.fromInt 3))
+        , logEntry (Log.SignupEmail (Ok ()))
         , logEntry
             (Log.LoginEmail
                 (Postmark.PostmarkError
                     { errorCode = 400
                     , message = "The 'From' address you supplied (no-reply@at-chat.app) is not a Sender Signature on your account. Please add and confirm this address in order to be able to use it in the 'From' field of your messages. "
-                    , to = [ exampleEmail ]
+                    , to = []
                     }
                     |> Err
                 )
-                exampleEmail
+                (Id.fromInt 3)
             )
-        , logEntry (Log.LoginEmail (Err (Postmark.UnknownError { statusCode = 500, body = "Internal Server Error" })) exampleEmail)
+        , logEntry (Log.SignupEmail (Err (Postmark.UnknownError { statusCode = 500, body = "Internal Server Error" })))
         , logEntry (Log.FailedToSendNotificationEmail (Postmark.UnknownError { statusCode = 500, body = "Internal Server Error" }) exampleEmail)
         , logEntry (Log.LoginsRateLimited (Id.fromInt 42))
         , logEntry (Log.ChangedUsers (Id.fromInt 7))

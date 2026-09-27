@@ -23,7 +23,8 @@ import Ui.Prose
 
 
 type Log
-    = LoginEmail (Result Postmark.SendEmailError ()) EmailAddress
+    = LoginEmail (Result Postmark.SendEmailError ()) (Id UserId)
+    | SignupEmail (Result Postmark.SendEmailError ())
     | FailedToSendNotificationEmail Postmark.SendEmailError EmailAddress
     | LoginsRateLimited (Id UserId)
     | ChangedUsers (Id UserId)
@@ -59,6 +60,9 @@ shouldNotifyAdmin : Log -> Maybe String
 shouldNotifyAdmin log =
     case log of
         LoginEmail _ _ ->
+            Nothing
+
+        SignupEmail _ ->
             Nothing
 
         FailedToSendNotificationEmail _ _ ->
@@ -307,13 +311,13 @@ emojiOrCustomEmojiView emojiData customEmojis emoji =
 logContent : (String -> msg) -> Maybe Emoji.CachedEmojiData -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Log -> Element msg
 logContent onPressCopy emojiData customEmojis log =
     case log of
-        LoginEmail result emailAddress ->
+        LoginEmail result userId ->
             case result of
                 Ok () ->
                     Ui.column
                         [ Ui.spacing 4 ]
                         [ tag successTag "Login Email"
-                        , fieldRow "To" (MyUi.emailAddress emailAddress)
+                        , fieldRow "User" (Ui.text (Id.toString userId))
                         , fieldRow "Status" (Ui.el [ Ui.Font.color successColor ] (Ui.text "Sent"))
                         ]
 
@@ -321,7 +325,23 @@ logContent onPressCopy emojiData customEmojis log =
                     Ui.column
                         [ Ui.spacing 4 ]
                         [ tag errorTag "Login Email Failed"
-                        , fieldRow "To" (MyUi.emailAddress emailAddress)
+                        , fieldRow "User" (Ui.text (Id.toString userId))
+                        , errorDetails (sendEmailErrorToString error)
+                        ]
+
+        SignupEmail result ->
+            case result of
+                Ok () ->
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        [ tag successTag "Signup Email"
+                        , fieldRow "Status" (Ui.el [ Ui.Font.color successColor ] (Ui.text "Sent"))
+                        ]
+
+                Err error ->
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        [ tag errorTag "Signup Email Failed"
                         , errorDetails (sendEmailErrorToString error)
                         ]
 

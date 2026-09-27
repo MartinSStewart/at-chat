@@ -2535,6 +2535,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetEmailNotifications _ ->
                     False
 
+                Local_SetEmbedVisibility _ ->
+                    False
+
                 Local_ScheduleAccountDeletion _ ->
                     False
 
@@ -3118,6 +3121,7 @@ allAttackerLocalChanges =
     , Local_SetNotificationMode NoNotifications
     , Local_SetSheepGameQuestions (IdArray.fromList [ { text = "hacked", attachedFiles = SeqDict.empty } ])
     , Local_SetEmailNotifications User.NotifyMeWhenMentioned
+    , Local_SetEmbedVisibility User.HideEmbeds
     , Local_ScheduleAccountDeletion messageTime
     , Local_CancelAccountDeletion
     , Local_StartReloadingDiscordUser messageTime discordUserId

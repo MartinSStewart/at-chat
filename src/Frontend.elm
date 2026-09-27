@@ -3060,6 +3060,17 @@ updateLoaded msg model =
                 )
                 model
 
+        SelectedEmbedVisibility embedVisibility ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetEmbedVisibility embedVisibility |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
         PressedDeleteAccount ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->

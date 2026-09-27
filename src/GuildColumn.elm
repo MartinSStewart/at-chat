@@ -811,6 +811,9 @@ canChangeUnreadNotificationCount change =
         Local_SetEmailNotifications _ ->
             False
 
+        Local_SetEmbedVisibility _ ->
+            False
+
         Local_ScheduleAccountDeletion _ ->
             False
 

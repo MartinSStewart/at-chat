@@ -120,7 +120,7 @@ import Ui.Keyed
 import Ui.Lazy
 import Ui.Prose
 import Ui.Table
-import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
+import User exposing (EmbedVisibility(..), FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
 import UserColor exposing (UserColor)
 import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, PreviouslyLastViewedMessage(..), Viewing(..))
 import VisibleMessages exposing (VisibleMessages)
@@ -8570,7 +8570,13 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                                 IsHoveredWhileSelectingAnchor ->
                                     False
                         }
-                        embeds
+                        (case localUser.user.embedVisibility of
+                            ShowEmbeds ->
+                                embeds
+
+                            HideEmbeds ->
+                                Array.empty
+                        )
                         content
                         ++ (if isBeingEdited then
                                 [ Html.span
@@ -8738,7 +8744,13 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                                 IsHoveredWhileSelectingAnchor ->
                                     False
                         }
-                        embeds
+                        (case localUser.user.embedVisibility of
+                            ShowEmbeds ->
+                                embeds
+
+                            HideEmbeds ->
+                                Array.empty
+                        )
                         content
                         ++ (case message2.editedAt of
                                 Just editedAt ->

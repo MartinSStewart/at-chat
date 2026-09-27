@@ -296,6 +296,9 @@ pendingChangesText localChange =
         Local_SetEmailNotifications _ ->
             "Set email notifications"
 
+        Local_SetEmbedVisibility _ ->
+            "Set embed visibility"
+
         Local_ScheduleAccountDeletion _ ->
             "Scheduled account deletion"
 
@@ -2577,6 +2580,9 @@ isPressMsg msg =
         SelectedEmailNotifications _ ->
             True
 
+        SelectedEmbedVisibility _ ->
+            True
+
         PressedDeleteAccount ->
             True
 
@@ -3983,6 +3989,14 @@ changeUpdate localMsg local =
                             local.localUser
                     in
                     { local | localUser = { localUser | user = User.setEmailNotifications emailNotifications localUser.user } }
+
+                Local_SetEmbedVisibility embedVisibility ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local | localUser = { localUser | user = User.setEmbedVisibility embedVisibility localUser.user } }
 
                 Local_ScheduleAccountDeletion deleteAt ->
                     let

@@ -11,6 +11,7 @@ module E2EMisc exposing
     , exportChannelTest
     , exportDmChannelTest
     , friendsSearchTest
+    , hourlyOrphanedFilesTest
     , importChannelTest
     , inactiveDmThreadsAreHiddenTest
     , inactiveThreadsAreHiddenTest
@@ -764,6 +765,33 @@ orphanedFilesTest config =
                         ]
                     )
                 ]
+            )
+        ]
+
+
+{-| An upload that nothing uses is noticed on one hourly update and deleted on the next, while
+one that only became unused since the last update is left for another hour.
+-}
+hourlyOrphanedFilesTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+hourlyOrphanedFilesTest config =
+    E2EHelper.startTest
+        "Hourly update deletes files that stayed orphaned for an hour"
+        E2EHelper.startTime
+        config
+        [ T.backendUpdate 0 (Types.Rpc_GotFileUpload (FileStatus.fileHash "firstFile") 5000 Nothing)
+        , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+        , T.backendUpdate 100 (Types.Rpc_GotFileUpload (FileStatus.fileHash "secondFile") 5000 Nothing)
+        , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ])
+        , T.checkBackend
+            100
+            (\backend ->
+                if SeqDict.keys (E2EHelper.unwrapBackend backend).files == [ FileStatus.fileHash "secondFile" ] then
+                    Ok ()
+
+                else
+                    Err "Only the file orphaned since the last hourly update should be left"
             )
         ]
 
