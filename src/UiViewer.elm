@@ -385,6 +385,7 @@ notificationEmail =
         (Broadcast.notificationEmailSubject "Stevie Steve")
         (Broadcast.notificationEmailContent
             (\id -> "User " ++ Id.toString id)
+            SeqDict.empty
             "Stevie Steve"
             Env.domain
             content
