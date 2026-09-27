@@ -1,5 +1,6 @@
 module User exposing
     ( BackendUser
+    , BackendUserStatus(..)
     , EmailNotifications(..)
     , EmbedVisibility(..)
     , FrontendCurrentUser
@@ -107,7 +108,7 @@ type alias BackendUser =
     { name : PersonName
     , color : UserColor
     , isAdmin : Bool
-    , email : EmailAddress
+    , email : BackendUserStatus
     , recentLoginEmails : List Time.Posix
     , lastLogPageViewed : Id PageId
     , createdAt : Time.Posix
@@ -139,6 +140,11 @@ type alias BackendUser =
       e2eeRisksAccepted : Bool
     , deleteAccountAt : Maybe Time.Posix
     }
+
+
+type BackendUserStatus
+    = DeletedUser
+    | UserHasEmail EmailAddress
 
 
 setLastViewedMessage :
@@ -272,7 +278,37 @@ type LastDmViewed
 
 
 type alias FrontendCurrentUser =
-    BackendUser
+    { name : PersonName
+    , color : UserColor
+    , isAdmin : Bool
+    , email : EmailAddress
+    , recentLoginEmails : List Time.Posix
+    , lastLogPageViewed : Id PageId
+    , createdAt : Time.Posix
+    , emailNotifications : EmailNotifications
+    , embedVisibility : EmbedVisibility
+    , lastEmailNotification : Time.Posix
+    , lastViewedMessage : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
+    , lastViewedThreadMessage : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
+    , lastDmViewed : LastDmViewed
+    , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
+    , lastDiscordChannelViewed : SeqDict (Discord.Id Discord.GuildId) ( Discord.Id Discord.ChannelId, ThreadRoute )
+    , icon : Maybe FileHash
+    , notifyOnAllMessages : SeqSet (Id GuildId)
+    , discordNotifyOnAllMessages : SeqSet (Discord.Id Discord.GuildId)
+    , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
+    , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
+    , lastPushNotification : Maybe Time.Posix
+    , linkDiscordAcknowledgementIsChecked : Bool
+    , domainWhitelist : SeqSet Domain
+    , emojiConfig : EmojiConfig
+    , availableStickers : SeqSet (Id StickerId)
+    , availableCustomEmojis : SeqSet (Id CustomEmojiId)
+    , muteSettings : MuteSettings.Model
+    , publicKey : Maybe X25519.PublicKey
+    , e2eeRisksAccepted : Bool
+    , deleteAccountAt : Maybe Time.Posix
+    }
 
 
 redactPrivateKeys : { a | publicKey : Maybe X25519.PublicKey } -> NonemptyString -> NonemptyString
@@ -373,7 +409,7 @@ type NotificationLevel
     | NotifyOnMention
 
 
-init : Time.Posix -> PersonName -> EmailAddress -> Bool -> BackendUser
+init : Time.Posix -> PersonName -> BackendUserStatus -> Bool -> BackendUser
 init createdAt name email userIsAdmin =
     { name = name
     , color = UserColor.default
@@ -880,12 +916,12 @@ discordFullDataUserToFrontendCurrentUser users needsAuthAgain data isLoadingData
     }
 
 
-backendToFrontendCurrent : BackendUser -> FrontendCurrentUser
-backendToFrontendCurrent user =
+backendToFrontendCurrent : EmailAddress -> BackendUser -> FrontendCurrentUser
+backendToFrontendCurrent email user =
     { name = user.name
     , color = user.color
     , isAdmin = user.isAdmin
-    , email = user.email
+    , email = email
     , recentLoginEmails = user.recentLoginEmails
     , lastLogPageViewed = user.lastLogPageViewed
     , createdAt = user.createdAt

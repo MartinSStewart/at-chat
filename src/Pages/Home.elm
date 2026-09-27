@@ -18,6 +18,7 @@ import Drawing
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
+import EmailAddress exposing (EmailAddress)
 import Emoji
 import FileName
 import FileStatus exposing (IsEncrypted(..))
@@ -57,7 +58,7 @@ import Ui.Font
 import Ui.Input
 import Ui.Shadow
 import Unsafe
-import User exposing (BackendUser, FrontendUser)
+import User exposing (BackendUser, BackendUserStatus(..), FrontendCurrentUser, FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserColor
 import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend(..), Viewing(..))
@@ -232,11 +233,20 @@ newsChannelName =
     Unsafe.channelName "the-news"
 
 
-previewUser : BackendUser
+previewUser : FrontendCurrentUser
 previewUser =
     let
+        email : EmailAddress
+        email =
+            Unsafe.emailAddress "you@at-chat.app"
+
+        user : BackendUser
         user =
-            User.init (Time.millisToPosix 0) (Unsafe.personName "Sven Svensson") (Unsafe.emailAddress "you@at-chat.app") False
+            User.init
+                (Time.millisToPosix 0)
+                (Unsafe.personName "Sven Svensson")
+                (UserHasEmail email)
+                False
     in
     { user
         | lastViewedMessage =
@@ -267,6 +277,7 @@ previewUser =
                   )
                 ]
     }
+        |> User.backendToFrontendCurrent email
 
 
 previewOtherUsers : SeqDict.SeqDict (Id UserId) FrontendUser
@@ -773,7 +784,7 @@ previewReadLoginData userAgent =
         loginData =
             previewLoginData userAgent
 
-        user : BackendUser
+        user : FrontendCurrentUser
         user =
             loginData.user
 

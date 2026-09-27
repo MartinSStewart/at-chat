@@ -83,7 +83,7 @@ import String.Nonempty exposing (NonemptyString(..))
 import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import Unsafe
 import Url
-import User exposing (BackendUser, EmailNotifications(..), FrontendUser)
+import User exposing (BackendUser, BackendUserStatus(..), EmailNotifications(..), FrontendUser)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), UserSession)
 
 
@@ -911,12 +911,12 @@ notification time userToNotify title senderIcon userToString channels plainText 
         emailCmds =
             case NonemptyDict.get userToNotify model.users of
                 Just user ->
-                    case user.emailNotifications of
-                        NotifyMeWhenMentioned ->
+                    case ( user.emailNotifications, user.email ) of
+                        ( NotifyMeWhenMentioned, UserHasEmail email ) ->
                             [ messageNotificationEmail
                                 time
                                 userToNotify
-                                user.email
+                                email
                                 title
                                 senderIcon
                                 userToString
@@ -927,7 +927,7 @@ notification time userToNotify title senderIcon userToString channels plainText 
                                 model.postmarkApiKey
                             ]
 
-                        NeverNotifyMe ->
+                        _ ->
                             []
 
                 Nothing ->
@@ -995,20 +995,20 @@ notificationAlt time userToNotify title icon pushNotificationText emailText emai
         emailCmds =
             case NonemptyDict.get userToNotify model.users of
                 Just user ->
-                    case user.emailNotifications of
-                        NotifyMeWhenMentioned ->
+                    case ( user.emailNotifications, user.email ) of
+                        ( NotifyMeWhenMentioned, UserHasEmail email ) ->
                             [ Postmark.sendEmail
                                 (SentNotificationEmail time userToNotify)
                                 model.postmarkApiKey
                                 { from = { name = "", email = notificationEmailFrom }
-                                , to = List.Nonempty.fromElement { name = "", email = user.email }
+                                , to = List.Nonempty.fromElement { name = "", email = email }
                                 , subject = title
                                 , body = Postmark.BodyBoth emailHtml emailText
                                 , messageStream = "outbound"
                                 }
                             ]
 
-                        NeverNotifyMe ->
+                        _ ->
                             []
 
                 Nothing ->

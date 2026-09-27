@@ -89,7 +89,7 @@ import Toop exposing (T4(..))
 import TwoFactorAuthentication
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, ExportStep(..), ImportChannelError(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import User exposing (BackendUser)
+import User exposing (BackendUser, BackendUserStatus(..))
 import UserColor
 import UserSession exposing (DiscordFrontendUser, PushSubscription(..), ToBeFilledInByBackend(..), UserSession, Viewing)
 import VisibleMessages
@@ -123,7 +123,7 @@ app_ =
 
 adminUser : BackendUser
 adminUser =
-    User.init (Time.millisToPosix 0) PersonName.widestName (Unsafe.emailAddress "a@a.aa") True
+    User.init (Time.millisToPosix 0) PersonName.widestName (Unsafe.emailAddress "a@a.aa" |> UserHasEmail) True
 
 
 {-| Sha256 hash of the password that logs you in as the admin user when the Postmark API key is
@@ -3112,6 +3112,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 clientId
                                 currentlyViewing
                                 session
+                                email
                                 user
                                 requestMessagesFor
                                 model
@@ -3150,7 +3151,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Just (WaitingForUserDataForSignup pendingLogin) ->
                     if
                         NonemptyDict.values model.users
-                            |> List.Nonempty.any (\a -> a.email == pendingLogin.emailAddress)
+                            |> List.Nonempty.any (\a -> a.email == UserHasEmail pendingLogin.emailAddress)
                     then
                         -- It's maybe possible to end up here if a user initiates two account creations for the same email address and then completes both. We'll just silently fail in that case, not worth the effort to give a good error message.
                         ( model, Command.none )
@@ -3175,7 +3176,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                             newUser : BackendUser
                             newUser =
-                                User.init time personName pendingLogin.emailAddress False
+                                User.init time personName (UserHasEmail pendingLogin.emailAddress) False
 
                             model2 : BackendModel
                             model2 =
@@ -3199,6 +3200,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             clientId
                             currentlyViewing
                             session
+                            pendingLogin.emailAddress
                             newUser
                             requestMessagesFor
                             model2
@@ -3252,6 +3254,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             clientId
                                             currentlyViewing
                                             session
+                                            email
                                             user
                                             requestMessagesFor
                                             model

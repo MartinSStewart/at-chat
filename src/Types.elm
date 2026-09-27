@@ -1013,6 +1013,7 @@ type LoginResult
     | NeedsTwoFactorToken
     | NeedsAccountSetup
     | RecoveryPasswordInvalid
+    | UserIsDeleted
 
 
 type ToFrontend

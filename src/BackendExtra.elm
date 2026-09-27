@@ -117,7 +117,7 @@ import Thread
 import ToBackendLog exposing (ToBackendLog(..))
 import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), ChannelDataToDecrypt, ChannelDataToEncrypt, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import User exposing (BackendUser, FrontendUser)
+import User exposing (BackendUser, BackendUserStatus(..), FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (DiscordFrontendUser, UserSession)
 import VisibleMessages
@@ -189,7 +189,12 @@ adminEmailAddress model =
     List.Extra.findMap
         (\( _, user ) ->
             if user.isAdmin then
-                Just user.email
+                case user.email of
+                    UserHasEmail email ->
+                        Just email
+
+                    DeletedUser ->
+                        Nothing
 
             else
                 Nothing
@@ -794,41 +799,46 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                             )
 
                         ( Just user, Nothing ) ->
-                            let
-                                currentlyViewing : UserSession.Viewing
-                                currentlyViewing =
-                                    requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor
+                            case user.email of
+                                UserHasEmail email ->
+                                    let
+                                        currentlyViewing : UserSession.Viewing
+                                        currentlyViewing =
+                                            requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor
 
-                                session : UserSession
-                                session =
-                                    UserSession.init time sessionId pendingLogin.userId userAgent
-                                        |> UserSession.setLastViewedGuild currentlyViewing
-                            in
-                            ( { model
-                                | sessions = SeqDict.insert sessionId session model.sessions
-                                , pendingLogins = SeqDict.remove sessionId model.pendingLogins
-                              }
-                            , Command.batch
-                                [ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor model
-                                    |> LoginSuccess
-                                    |> LoginWithTokenResponse
-                                    |> Lamdera.sendToFrontends sessionId
-                                , Broadcast.toUser
-                                    (Just clientId)
-                                    Nothing
-                                    pendingLogin.userId
-                                    (Server_NewSession
-                                        session.sessionIdHash
-                                        { notificationMode = session.notificationMode
-                                        , currentlyViewing = SeqDict.singleton clientId currentlyViewing
-                                        , userAgent = session.userAgent
-                                        , lastActiveAt = time
-                                        }
-                                        |> ServerChange
+                                        session : UserSession
+                                        session =
+                                            UserSession.init time sessionId pendingLogin.userId userAgent
+                                                |> UserSession.setLastViewedGuild currentlyViewing
+                                    in
+                                    ( { model
+                                        | sessions = SeqDict.insert sessionId session model.sessions
+                                        , pendingLogins = SeqDict.remove sessionId model.pendingLogins
+                                      }
+                                    , Command.batch
+                                        [ getLoginData sessionId clientId currentlyViewing session email user requestMessagesFor model
+                                            |> LoginSuccess
+                                            |> LoginWithTokenResponse
+                                            |> Lamdera.sendToFrontends sessionId
+                                        , Broadcast.toUser
+                                            (Just clientId)
+                                            Nothing
+                                            pendingLogin.userId
+                                            (Server_NewSession
+                                                session.sessionIdHash
+                                                { notificationMode = session.notificationMode
+                                                , currentlyViewing = SeqDict.singleton clientId currentlyViewing
+                                                , userAgent = session.userAgent
+                                                , lastActiveAt = time
+                                                }
+                                                |> ServerChange
+                                            )
+                                            model
+                                        ]
                                     )
-                                    model
-                                ]
-                            )
+
+                                DeletedUser ->
+                                    ( model, LoginWithTokenResponse UserIsDeleted |> Lamdera.sendToFrontend clientId )
 
                         ( Nothing, _ ) ->
                             ( model
@@ -961,11 +971,12 @@ getLoginData :
     -> ClientId
     -> UserSession.Viewing
     -> UserSession
+    -> EmailAddress
     -> BackendUser
     -> InitialLoadRequest
     -> BackendModel
     -> LoginData
-getLoginData sessionId clientId currentlyViewing session user requestMessagesFor model =
+getLoginData sessionId clientId currentlyViewing session email user requestMessagesFor model =
     let
         linkedAndOtherDiscordUsers =
             getLinkedDiscordUsersAndOtherUsers session.userId currentlyViewing model
@@ -1088,7 +1099,7 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
             )
             model.discordDmChannels
     , dmChannels = dmChannels
-    , user = User.backendToFrontendCurrent user
+    , user = User.backendToFrontendCurrent email user
     , otherUsers = visibleUsers session.userId guilds dmChannels model.users
     , discordUsers = linkedAndOtherDiscordUsers
     , otherSessions =

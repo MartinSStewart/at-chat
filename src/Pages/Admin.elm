@@ -108,7 +108,7 @@ import Ui.Input
 import Ui.Lazy
 import Ui.Shadow
 import Ui.Table
-import User exposing (BackendUser, EmailNotifications(..), LocalUser)
+import User exposing (BackendUser, BackendUserStatus(..), EmailNotifications(..), LocalUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserSession, Viewing(..))
 
@@ -1562,7 +1562,13 @@ adminUser userId adminData =
 userToEditUser : BackendUser -> EditedBackendUser
 userToEditUser user =
     { name = PersonName.toString user.name
-    , email = EmailAddress.toString user.email
+    , email =
+        case user.email of
+            UserHasEmail email ->
+                EmailAddress.toString email
+
+            DeletedUser ->
+                ""
     , isAdmin = user.isAdmin
     , createdAt = user.createdAt
     , deleteAccountAt = user.deleteAccountAt
@@ -5278,7 +5284,7 @@ applyChangesToBackendUsers changedBy { time, changedUsers, newUsers, deletedUser
                             in
                             SeqDict.insert
                                 (getId (SeqDict.size dict + NonemptyDict.size users))
-                                (User.init time name email a.isAdmin)
+                                (User.init time name (UserHasEmail email) a.isAdmin)
                                 dict
                                 |> Ok
 
@@ -5307,8 +5313,17 @@ applyChangesToBackendUsers changedBy { time, changedUsers, newUsers, deletedUser
                         let
                             emailAddresses : Set String
                             emailAddresses =
-                                SeqDict.values allUsers
-                                    |> List.map (\user -> EmailAddress.toString user.email)
+                                SeqDict.toList allUsers
+                                    |> List.map
+                                        (\( userId, user ) ->
+                                            case user.email of
+                                                UserHasEmail email ->
+                                                    EmailAddress.toString email
+
+                                                DeletedUser ->
+                                                    -- Just need a unique value here
+                                                    Id.toString userId
+                                        )
                                     |> Set.fromList
                         in
                         case ( NonemptyDict.fromSeqDict allUsers, Set.size emailAddresses == SeqDict.size allUsers ) of
@@ -5341,12 +5356,17 @@ applyChangeToBackendUser :
 applyChangeToBackendUser change user =
     case T2 (PersonName.fromString change.name) (EmailAddress.fromString change.email) of
         T2 (Ok name) (Just email) ->
-            { user
-                | name = name
-                , isAdmin = change.isAdmin
-                , email = email
-            }
-                |> Ok
+            case user.email of
+                UserHasEmail _ ->
+                    { user
+                        | name = name
+                        , isAdmin = change.isAdmin
+                        , email = UserHasEmail email
+                    }
+                        |> Ok
+
+                DeletedUser ->
+                    Err ()
 
         _ ->
             Err ()
