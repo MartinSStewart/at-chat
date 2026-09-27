@@ -855,18 +855,23 @@ type BackendMsg
         (Discord.Id Discord.UserId)
         (Result
             Discord.HttpError
-            ( List
-                { dmChannelId : Discord.Id Discord.PrivateChannelId
-                , members : List (Discord.Id Discord.UserId)
-                }
-            , List
-                ( Discord.Id Discord.GuildId
-                , { guild : Discord.GatewayGuild
-                  , channels : List Discord.Channel
-                  , icon : Maybe FileStatus.UploadResponse
-                  }
-                )
-            )
+            { dmChannels :
+                List
+                    { dmChannelId : Discord.Id Discord.PrivateChannelId
+                    , members : List (Discord.Id Discord.UserId)
+                    , messages : List Discord.Message
+                    }
+            , guilds :
+                List
+                    ( Discord.Id Discord.GuildId
+                    , { guild : Discord.GatewayGuild
+                      , channels : List Discord.Channel
+                      , icon : Maybe FileStatus.UploadResponse
+                      }
+                    )
+            , channelMessages : SeqDict (Discord.Id Discord.ChannelId) (List Discord.Message)
+            , attachments : List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse ))
+            }
         )
     | WebsocketCreatedHandleForUser (Discord.Id Discord.UserId) Websocket.Connection
     | WebsocketClosedByBackendForUser (Discord.Id Discord.UserId) (Maybe PendingGatewayReconnect) WebsocketClosedEvent
@@ -913,7 +918,6 @@ type BackendMsg
     | ScheduledExportUploadResult Time.Posix Int (Result Http.Error ())
     | RegeneratedServerSecret Time.Posix ChangeId ClientId (Result Http.Error (SecretId ServerSecret))
     | DeletedOrphanedFiles Time.Posix ChangeId ClientId (List FileHash) (Result Http.Error ())
-    | GotBucketFileCount ChangeId ClientId (Result Http.Error Int)
     | ReloadedDiscordGuildForAdmin Time.Posix ChangeId ClientId (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Result Discord.HttpError ( Discord.Guild, List Discord.Channel2 ))
     | GotTimeForWebsocketListenClose (Discord.Id Discord.UserId) Websocket.CloseEventCode String Time.Posix
     | Rpc_GotFileUpload FileHash Int (Maybe (Coord CssPixels))

@@ -72,7 +72,6 @@ type BackendMsgLog
     | BackendMsgLog_ScheduledExportUploadResult
     | BackendMsgLog_RegeneratedServerSecret
     | BackendMsgLog_DeletedOrphanedFiles
-    | BackendMsgLog_GotBucketFileCount
     | BackendMsgLog_ReloadedDiscordGuildForAdmin
     | BackendMsgLog_GotTimeForWebsocketListenClose
     | BackendMsgLog_Rpc_GotFileUpload
@@ -268,9 +267,6 @@ backendMsgLogToString log =
 
         BackendMsgLog_DeletedOrphanedFiles ->
             "DeletedOrphanedFiles"
-
-        BackendMsgLog_GotBucketFileCount ->
-            "GotBucketFileCount"
 
         BackendMsgLog_ReloadedDiscordGuildForAdmin ->
             "ReloadedDiscordGuildForAdmin"

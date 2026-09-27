@@ -59,7 +59,7 @@ import MembersAndOwner
 import Message exposing (ChangeAttachments(..), GameType(..), Message(..))
 import MuteSettings
 import MyUi
-import NonemptyDict
+import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (ExportSubset(..))
@@ -432,7 +432,7 @@ updateHelper msg model =
 
         UserConnected sessionId clientId ->
             let
-                connections : SeqDict SessionId (NonemptyDict.NonemptyDict ClientId ConnectionData)
+                connections : SeqDict SessionId (NonemptyDict ClientId ConnectionData)
                 connections =
                     SeqDictHelper.addToDict
                         sessionId
@@ -918,7 +918,7 @@ updateHelper msg model =
             case SeqDict.get discordUserId model.discordUsers of
                 Just (FullData discordUser) ->
                     case result of
-                        Ok ( dmData, guildData ) ->
+                        Ok { dmChannels, guilds, channelMessages, attachments } ->
                             let
                                 guildDataDict :
                                     SeqDict
@@ -928,27 +928,45 @@ updateHelper msg model =
                                         , icon : Maybe FileStatus.UploadResponse
                                         }
                                 guildDataDict =
-                                    SeqDict.fromList guildData
+                                    SeqDict.fromList guilds
+
+                                attachments2 : SeqDict DiscordAttachmentId DiscordAttachmentData
+                                attachments2 =
+                                    DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments
+
+                                messageAuthors : List Discord.User
+                                messageAuthors =
+                                    List.concatMap .messages dmChannels
+                                        ++ List.concat (SeqDict.values channelMessages)
+                                        |> List.map .author
+                                        |> List.Extra.uniqueBy (\author -> Discord.idToString author.id)
 
                                 model2 : BackendModel
                                 model2 =
                                     { model
                                         | discordUsers =
-                                            SeqDict.insert
-                                                discordUserId
-                                                (FullData
-                                                    { discordUser
-                                                        | isLoadingData = DiscordUserLoadedSuccessfully
-                                                        , markEverythingAsViewedOnceLoaded = False
-                                                    }
+                                            List.foldl
+                                                (\author discordUsers -> DiscordSync.addDiscordUserData (Discord.userToPartialUser author) discordUsers)
+                                                (SeqDict.insert
+                                                    discordUserId
+                                                    (FullData
+                                                        { discordUser
+                                                            | isLoadingData = DiscordUserLoadedSuccessfully
+                                                            , markEverythingAsViewedOnceLoaded = False
+                                                        }
+                                                    )
+                                                    model.discordUsers
                                                 )
-                                                model.discordUsers
+                                                messageAuthors
                                         , discordGuilds =
                                             SeqDict.foldl
                                                 (\guildId guildData2 discordGuilds ->
                                                     SeqDict.updateIfExists
                                                         guildId
-                                                        (addDiscordGuildData discordUserId guildData2)
+                                                        (\guild ->
+                                                            addDiscordGuildData discordUserId guildData2 guild
+                                                                |> addNewChannelMessages model attachments2 channelMessages guild.channels
+                                                        )
                                                         discordGuilds
                                                 )
                                                 model.discordGuilds
@@ -964,14 +982,25 @@ updateHelper msg model =
                                                                     maybe
 
                                                                 Nothing ->
-                                                                    { messages = IdArray.empty
+                                                                    let
+                                                                        ( messages, linkedMessageIds ) =
+                                                                            DiscordSync.messagesAndLinks
+                                                                                { messages = IdArray.empty, linkedMessageIds = OneToOne.empty }
+                                                                                (List.reverse data.messages)
+                                                                                model.discordCustomEmojis
+                                                                                SeqDict.empty
+                                                                                model.discordStickers
+                                                                                attachments2
+                                                                    in
+                                                                    { messages = messages
                                                                     , lastTypedAt = SeqDict.empty
-                                                                    , linkedMessageIds = OneToOne.empty
+                                                                    , linkedMessageIds = linkedMessageIds
                                                                     , members =
                                                                         List.foldl
                                                                             (\member dict -> NonemptyDict.insert member { messagesSent = 0 } dict)
                                                                             (NonemptyDict.singleton discordUserId { messagesSent = 0 })
                                                                             data.members
+                                                                            |> addMessagesSent messages
                                                                     , dateDividerDrawings = SeqDict.empty
                                                                     }
                                                                         |> Just
@@ -979,7 +1008,8 @@ updateHelper msg model =
                                                         dmChannels2
                                                 )
                                                 model.discordDmChannels
-                                                dmData
+                                                dmChannels
+                                        , discordAttachments = attachments2
                                     }
 
                                 model3 : BackendModel
@@ -991,63 +1021,66 @@ updateHelper msg model =
                                         model2
                             in
                             ( model3
-                            , Broadcast.toUserAlt
-                                discordUser.linkedTo
-                                (\session connection ->
-                                    let
-                                        linkedAndOtherDiscordUsers =
-                                            BackendExtra.getLinkedDiscordUsersAndOtherUsers
-                                                session.userId
-                                                connection.currentlyViewing
-                                                model3
-                                    in
-                                    Server_DiscordUserLoadingDataIsDone
-                                        discordUserId
-                                        (Ok
-                                            { discordGuilds =
-                                                SeqDict.filterMap
-                                                    (\guildId _ ->
-                                                        case SeqDict.get guildId model3.discordGuilds of
-                                                            Just guild ->
-                                                                BackendExtra.discordGuildToFrontendForUser
-                                                                    Nothing
-                                                                    guildId
-                                                                    guild
-                                                                    (LinkedAndOtherDiscordUsers.linkedUsers linkedAndOtherDiscordUsers)
-
-                                                            Nothing ->
-                                                                Nothing
-                                                    )
-                                                    guildDataDict
-                                            , discordDms =
-                                                List.filterMap
-                                                    (\data ->
-                                                        case SeqDict.get data.dmChannelId model3.discordDmChannels of
-                                                            Just dmChannel ->
-                                                                case
-                                                                    BackendExtra.discordDmChannelToFrontend
-                                                                        False
-                                                                        dmChannel
-                                                                        (LinkedAndOtherDiscordUsers.linkedUsers linkedAndOtherDiscordUsers)
-                                                                of
-                                                                    Just dmChannel2 ->
-                                                                        Just ( data.dmChannelId, dmChannel2 )
-
-                                                                    Nothing ->
+                            , Command.batch
+                                [ DiscordSync.getUserAvatars model3.serverSecret model3.discordUsers messageAuthors
+                                , Broadcast.toUserAlt
+                                    discordUser.linkedTo
+                                    (\session connection ->
+                                        let
+                                            linkedAndOtherDiscordUsers =
+                                                BackendExtra.getLinkedDiscordUsersAndOtherUsers
+                                                    session.userId
+                                                    connection.currentlyViewing
+                                                    model3
+                                        in
+                                        Server_DiscordUserLoadingDataIsDone
+                                            discordUserId
+                                            (Ok
+                                                { discordGuilds =
+                                                    SeqDict.filterMap
+                                                        (\guildId _ ->
+                                                            case SeqDict.get guildId model3.discordGuilds of
+                                                                Just guild ->
+                                                                    BackendExtra.discordGuildToFrontendForUser
                                                                         Nothing
+                                                                        guildId
+                                                                        guild
+                                                                        (LinkedAndOtherDiscordUsers.linkedUsers linkedAndOtherDiscordUsers)
 
-                                                            Nothing ->
-                                                                Nothing
-                                                    )
-                                                    dmData
-                                                    |> SeqDict.fromList
-                                            , discordUsers = LinkedAndOtherDiscordUsers.otherUsers linkedAndOtherDiscordUsers
-                                            , markEverythingAsViewed = discordUser.markEverythingAsViewedOnceLoaded
-                                            }
-                                        )
-                                        |> ServerChange
-                                )
-                                model3
+                                                                Nothing ->
+                                                                    Nothing
+                                                        )
+                                                        guildDataDict
+                                                , discordDms =
+                                                    List.filterMap
+                                                        (\data ->
+                                                            case SeqDict.get data.dmChannelId model3.discordDmChannels of
+                                                                Just dmChannel ->
+                                                                    case
+                                                                        BackendExtra.discordDmChannelToFrontend
+                                                                            False
+                                                                            dmChannel
+                                                                            (LinkedAndOtherDiscordUsers.linkedUsers linkedAndOtherDiscordUsers)
+                                                                    of
+                                                                        Just dmChannel2 ->
+                                                                            Just ( data.dmChannelId, dmChannel2 )
+
+                                                                        Nothing ->
+                                                                            Nothing
+
+                                                                Nothing ->
+                                                                    Nothing
+                                                        )
+                                                        dmChannels
+                                                        |> SeqDict.fromList
+                                                , discordUsers = LinkedAndOtherDiscordUsers.otherUsers linkedAndOtherDiscordUsers
+                                                , markEverythingAsViewed = discordUser.markEverythingAsViewedOnceLoaded
+                                                }
+                                            )
+                                            |> ServerChange
+                                    )
+                                    model3
+                                ]
                             )
 
                         Err error ->
@@ -1325,36 +1358,7 @@ updateHelper msg model =
                                             { channel
                                                 | messages = messages2
                                                 , linkedMessageIds = linkedMessageIds
-                                                , members =
-                                                    IdArray.foldl
-                                                        (\message members ->
-                                                            case message of
-                                                                UserTextMessage message2 ->
-                                                                    NonemptyDict.updateIfExists
-                                                                        message2.createdBy
-                                                                        (\a -> { a | messagesSent = a.messagesSent + 1 })
-                                                                        members
-
-                                                                EncryptedUserTextMessage message2 ->
-                                                                    NonemptyDict.updateIfExists
-                                                                        message2.createdBy
-                                                                        (\a -> { a | messagesSent = a.messagesSent + 1 })
-                                                                        members
-
-                                                                UserJoinedMessage _ _ _ _ ->
-                                                                    members
-
-                                                                DeletedMessage _ ->
-                                                                    members
-
-                                                                CallStarted _ ->
-                                                                    members
-
-                                                                GameStarted _ ->
-                                                                    members
-                                                        )
-                                                        channel.members
-                                                        messages2
+                                                , members = addMessagesSent messages2 channel.members
                                             }
                                             model.discordDmChannels
                                     , discordAttachments = attachments2
@@ -2157,11 +2161,6 @@ updateHelper msg model =
                 Err error ->
                     BackendExtra.addLogWithCmd time (Log.FailedToDeleteOrphanedFiles error) model responseCmd
 
-        GotBucketFileCount changeId clientId result ->
-            ( model
-            , adminDataResponse changeId clientId (Pages.Admin.LoadBucketFileCount (FilledInByBackend result))
-            )
-
         RegeneratedServerSecret time changeId clientId result ->
             let
                 responseCmd : Command BackendOnly ToFrontend BackendMsg
@@ -2373,6 +2372,78 @@ addDiscordGuildData discordUserId data guild =
     }
 
 
+{-| Fills in the messages loaded for a Discord guild's channels, leaving alone the channels it
+already had.
+-}
+addNewChannelMessages :
+    BackendModel
+    -> SeqDict DiscordAttachmentId DiscordAttachmentData
+    -> SeqDict (Discord.Id Discord.ChannelId) (List Discord.Message)
+    -> SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
+    -> DiscordBackendGuild
+    -> DiscordBackendGuild
+addNewChannelMessages model attachments channelMessages existingChannels guild =
+    { guild
+        | channels =
+            SeqDict.map
+                (\channelId channel ->
+                    case ( SeqDict.member channelId existingChannels, SeqDict.get channelId channelMessages ) of
+                        ( False, Just messages ) ->
+                            let
+                                ( messages2, linkedMessageIds ) =
+                                    DiscordSync.messagesAndLinks
+                                        channel
+                                        (List.reverse messages)
+                                        model.discordCustomEmojis
+                                        guild.channels
+                                        model.discordStickers
+                                        attachments
+                            in
+                            { channel | messages = messages2, linkedMessageIds = linkedMessageIds }
+
+                        _ ->
+                            channel
+                )
+                guild.channels
+    }
+
+
+addMessagesSent :
+    IdArray messageId (Message messageId (Discord.Id Discord.UserId) channelId)
+    -> NonemptyDict (Discord.Id Discord.UserId) { a | messagesSent : Int }
+    -> NonemptyDict (Discord.Id Discord.UserId) { a | messagesSent : Int }
+addMessagesSent messages members =
+    IdArray.foldl
+        (\message members2 ->
+            case message of
+                UserTextMessage message2 ->
+                    NonemptyDict.updateIfExists
+                        message2.createdBy
+                        (\a -> { a | messagesSent = a.messagesSent + 1 })
+                        members2
+
+                EncryptedUserTextMessage message2 ->
+                    NonemptyDict.updateIfExists
+                        message2.createdBy
+                        (\a -> { a | messagesSent = a.messagesSent + 1 })
+                        members2
+
+                UserJoinedMessage _ _ _ _ ->
+                    members2
+
+                DeletedMessage _ ->
+                    members2
+
+                CallStarted _ ->
+                    members2
+
+                GameStarted _ ->
+                    members2
+        )
+        members
+        messages
+
+
 attachmentsUploadedHelper :
     BackendModel
     -> { a | attachments : List Discord.Attachment }
@@ -2480,7 +2551,7 @@ maxConnectionsPerSession =
 away on their own. Until that's fixed, a session that has more than maxConnectionsPerSession
 connections gets its oldest ones disconnected.
 -}
-staleConnections : SessionId -> SeqDict SessionId (NonemptyDict.NonemptyDict ClientId ConnectionData) -> List ClientId
+staleConnections : SessionId -> SeqDict SessionId (NonemptyDict ClientId ConnectionData) -> List ClientId
 staleConnections sessionId connections =
     case SeqDict.get sessionId connections of
         Just clients ->
@@ -4845,7 +4916,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 SeqDict.empty
                                 (MembersAndOwner.membersAndOwner guild.membersAndOwner)
 
-                        connections : SeqDict SessionId (NonemptyDict.NonemptyDict ClientId ConnectionData)
+                        connections : SeqDict SessionId (NonemptyDict ClientId ConnectionData)
                         connections =
                             SeqDict.updateIfExists
                                 sessionId
@@ -8973,44 +9044,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 changeId
                 clientId
                 (Pages.Admin.LoadWebsocketCloseEvents (FilledInByBackend model.websocketCloseEvents))
-            )
-
-        Pages.Admin.LoadBucketFileCount _ ->
-            ( model
-            , Http.task
-                { method = "GET"
-                , url = FileStatus.domain ++ "/file/internal/file-count"
-                , body = Http.emptyBody
-                , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
-                , resolver =
-                    Http.stringResolver
-                        (\result ->
-                            case result of
-                                Http.BadStatus_ metadata body ->
-                                    Http.BadBody
-                                        ("Status code: " ++ String.fromInt metadata.statusCode ++ ", body: " ++ body)
-                                        |> Err
-
-                                Http.GoodStatus_ _ text ->
-                                    case String.toInt text of
-                                        Just count ->
-                                            Ok count
-
-                                        Nothing ->
-                                            Err (Http.BadBody ("Expected a file count but got " ++ text))
-
-                                Http.BadUrl_ string ->
-                                    Err (Http.BadUrl string)
-
-                                Http.Timeout_ ->
-                                    Err Http.Timeout
-
-                                Http.NetworkError_ ->
-                                    Err Http.NetworkError
-                        )
-                , timeout = Just Duration.minute
-                }
-                |> Task.attempt (GotBucketFileCount changeId clientId)
             )
 
         Pages.Admin.LoadOrphanedFiles _ ->

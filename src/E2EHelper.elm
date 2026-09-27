@@ -14,6 +14,7 @@ module E2EHelper exposing
     , backendViewing
     , botTestGuild
     , botTestGuild_ChannelA
+    , botTestGuild_ChannelB
     , botTestGuild_ForumA
     , checkNoErrorLogs
     , checkNoNotification
@@ -54,6 +55,7 @@ module E2EHelper exposing
     , hasNotExactText
     , hasNotText
     , hasText
+    , historyAuthorDiscordUserId
     , httpBasic
     , infoEndpointResponse
     , inviteUser
@@ -2023,7 +2025,12 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                     )
 
             ( "GET", [ "discord.com", "api", "v9", "channels", channelId, endpoint ] ) ->
-                if String.startsWith "messages?" endpoint then
+                if endpoint == "messages?limit=50" then
+                    StringHttpResponse
+                        { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                        (discordNewChannelHistory channelId)
+
+                else if String.startsWith "messages?" endpoint then
                     StringHttpResponse
                         { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
                         (discordChannelHistory channelId)
@@ -2185,15 +2192,6 @@ handleInternalRequests discordStickerPacks currentRequest rest =
                     , headers = Dict.empty
                     }
                     ""
-
-            [ "file-count" ] ->
-                StringHttpResponse
-                    { url = currentRequest.url
-                    , statusCode = 200
-                    , statusText = "OK"
-                    , headers = Dict.empty
-                    }
-                    "42"
 
             [ "delete-files" ] ->
                 StringHttpResponse
@@ -3361,6 +3359,41 @@ discordChannelHistory channelId =
         "[]"
 
 
+{-| What Discord answers with when the messages of a channel or DM are loaded because it's new
+to the backend, which is when a Discord account gets linked. Only channel B and the DM with
+168547048902098944 have any, so the tests that fill channel A themselves start from an empty
+channel. Newest message first, like the real API returns them.
+
+The older channel B message is from someone the ready data doesn't mention.
+
+-}
+discordNewChannelHistory : String -> String
+discordNewChannelHistory channelId =
+    if channelId == botTestGuild_ChannelBString then
+        """[
+    {"id":"1533200000000000002","channel_id":"1072828591382999151","content":"Newer channel B message","timestamp":"2026-04-03T10:00:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
+    {"id":"1533200000000000001","channel_id":"1072828591382999151","content":"Older channel B message","timestamp":"2026-04-03T09:00:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"historyauthor","public_flags":0,"id":"1533200000000000099","global_name":"History Author","discriminator":"0","avatar":null}}
+]"""
+
+    else if channelId == "222087308516524036" then
+        """[
+    {"id":"1533200000000000003","channel_id":"222087308516524036","content":"Old DM message","timestamp":"2026-04-03T11:00:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"kess","public_flags":0,"id":"168547048902098944","global_name":"Kess","discriminator":"0","avatar":"3e00277cfa8d0a40e05c8cda1b0dffd9"}}
+]"""
+
+    else
+        "[]"
+
+
+historyAuthorDiscordUserId : Discord.Id Discord.UserId
+historyAuthorDiscordUserId =
+    Unsafe.uint64 historyAuthorDiscordUserIdString |> Discord.idFromUInt64
+
+
+historyAuthorDiscordUserIdString : String
+historyAuthorDiscordUserIdString =
+    "1533200000000000099"
+
+
 {-| What Discord answers with when the Bot Test guild's channel A gets reloaded from the
 admin page. Newest message first, like the real API returns them.
 
@@ -3401,6 +3434,16 @@ botTestGuild_ChannelA =
 botTestGuild_ChannelAString : String
 botTestGuild_ChannelAString =
     "1072828564317159465"
+
+
+botTestGuild_ChannelB : Discord.Id Discord.ChannelId
+botTestGuild_ChannelB =
+    Unsafe.uint64 botTestGuild_ChannelBString |> Discord.idFromUInt64
+
+
+botTestGuild_ChannelBString : String
+botTestGuild_ChannelBString =
+    "1072828591382999151"
 
 
 botTestGuild_ForumA : Discord.Id Discord.ChannelId

@@ -1,5 +1,6 @@
 module DiscordSync exposing
     ( addDiscordChannel
+    , addDiscordUserData
     , addUploadResponsesToDiscordAttachments
     , attachmentsToFileData
     , closeEventCodeToInt
@@ -8,6 +9,7 @@ module DiscordSync exposing
     , getForumChannelReload
     , getManyMessages
     , getThreadsForMessages
+    , getUserAvatars
     , handleCreateMessage
     , handleEditMessage
     , handleForumPostRenamed
@@ -2404,7 +2406,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_ReadyData readyData ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleReadyData userData.linkedTo readyData model2
+                                    handleReadyData userData.linkedTo (Discord.userToken userData.auth) readyData model2
                             in
                             ( model3, cmd2 :: cmds )
 
@@ -3545,8 +3547,13 @@ emojiDataToEmojiIdAndName emojis =
         emojis
 
 
-handleReadyData : Id UserId -> Discord.ReadyData -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleReadyData userId readyData model =
+handleReadyData :
+    Id UserId
+    -> Discord.Authentication
+    -> Discord.ReadyData
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleReadyData userId authentication readyData model =
     let
         discordDmChannels : List { dmChannelId : Discord.Id Discord.PrivateChannelId, members : List (Discord.Id Discord.UserId) }
         discordDmChannels =
@@ -3638,13 +3645,65 @@ handleReadyData userId readyData model =
             |> Task.sequence
           )
             |> Task.andThen
-                (\data ->
-                    Task.map
-                        (\time ->
-                            HandleReadyDataStep2 time readyData.user.id (Ok ( discordDmChannels, data ))
+                (\guilds ->
+                    Task.map2
+                        Tuple.pair
+                        (List.map
+                            (\dmChannel ->
+                                getNewChannelMessages
+                                    model.serverSecret
+                                    authentication
+                                    (Discord.idToUInt64 dmChannel.dmChannelId |> Discord.idFromUInt64)
+                                    |> Task.map
+                                        (\messages ->
+                                            { dmChannelId = dmChannel.dmChannelId
+                                            , members = dmChannel.members
+                                            , messages = messages
+                                            }
+                                        )
+                            )
+                            discordDmChannels
+                            |> Task.sequence
                         )
-                        Time.now
+                        (List.concatMap
+                            (\( _, guildData ) ->
+                                List.filterMap
+                                    (\channel ->
+                                        case addDiscordChannel channel of
+                                            Just { isForum } ->
+                                                if isForum then
+                                                    Nothing
+
+                                                else
+                                                    getNewChannelMessages model.serverSecret authentication channel.id
+                                                        |> Task.map (Tuple.pair channel.id)
+                                                        |> Just
+
+                                            Nothing ->
+                                                Nothing
+                                    )
+                                    guildData.channels
+                            )
+                            guilds
+                            |> Task.sequence
+                        )
+                        |> Task.andThen
+                            (\( dmChannels, channelMessages ) ->
+                                uploadAttachmentsForMessages
+                                    model
+                                    (List.concatMap .messages dmChannels ++ List.concatMap Tuple.second channelMessages)
+                                    |> Task.map
+                                        (\attachments ->
+                                            { dmChannels = dmChannels
+                                            , guilds = guilds
+                                            , channelMessages = SeqDict.fromList channelMessages
+                                            , attachments = attachments
+                                            }
+                                        )
+                            )
                 )
+            |> Task.andThen
+                (\data -> Task.map (\time -> HandleReadyDataStep2 time readyData.user.id (Ok data)) Time.now)
             |> Task.onError (\error -> Task.map (\time -> HandleReadyDataStep2 time readyData.user.id (Err error)) Time.now)
             |> Task.perform identity
         ]
@@ -4607,6 +4666,29 @@ uploadAttachments files uploadAttachmentsResponses =
         files
         uploadAttachmentsResponses
         |> Task.sequence
+
+
+{-| Loads the most recent messages of a channel or DM we didn't have before a Discord
+account's data was loaded. A channel we aren't allowed to read starts out empty rather than
+failing the whole load.
+-}
+getNewChannelMessages :
+    SecretId ServerSecret
+    -> Discord.Authentication
+    -> Discord.Id Discord.ChannelId
+    -> Task BackendOnly x (List Discord.Message)
+getNewChannelMessages secretKey authentication channelId =
+    Discord.getMessagesPayload
+        authentication
+        { channelId = channelId, limit = newChannelMaxMessages, relativeTo = Discord.MostRecent }
+        |> http secretKey
+        |> retryWhenRateLimited
+        |> Task.onError (\_ -> Task.succeed [])
+
+
+newChannelMaxMessages : Int
+newChannelMaxMessages =
+    50
 
 
 reloadChannelMaxMessages : Int

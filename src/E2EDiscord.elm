@@ -1661,6 +1661,100 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Linking Discord loads the latest messages of new channels and DMs"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ checkDiscordChannelMessages
+                    "channel B"
+                    E2EHelper.botTestGuild_ChannelB
+                    [ "Older channel B message", "Newer channel B message" ]
+                , checkDiscordChannelAMessages []
+                , T.checkState
+                    100
+                    (\data ->
+                        case SeqDict.get kessDmChannelId (E2EHelper.unwrapBackend data.backend).discordDmChannels of
+                            Just dmChannel ->
+                                case IdArray.toList dmChannel.messages |> List.map (discordMessageToString data.backend) of
+                                    [ "Old DM message" ] ->
+                                        Ok ()
+
+                                    actual ->
+                                        Err ("Expected the DM to contain \"Old DM message\" but it contains " ++ messagesToDebugString actual)
+
+                            Nothing ->
+                                Err "The DM is missing from the backend"
+                    )
+                , -- Someone who wrote one of the loaded messages but that the ready data doesn't
+                  -- mention still needs a name to show next to their message.
+                  T.checkState
+                    100
+                    (\data ->
+                        if SeqDict.member E2EHelper.historyAuthorDiscordUserId (E2EHelper.unwrapBackend data.backend).discordUsers then
+                            Ok ()
+
+                        else
+                            Err "The author of a loaded message wasn't added to the Discord users"
+                    )
+                , -- One request per text channel and DM. Voice channels, categories and forums
+                  -- have no messages to load.
+                  T.checkState
+                    100
+                    (\data ->
+                        let
+                            loadedChannels : List String
+                            loadedChannels =
+                                List.filterMap
+                                    (\request ->
+                                        case E2EHelper.decodeCustomRequest request of
+                                            Just customRequest ->
+                                                case String.split "/" customRequest.url of
+                                                    [ "https:", "", "discord.com", "api", "v9", "channels", channelId, "messages?limit=50" ] ->
+                                                        Just channelId
+
+                                                    _ ->
+                                                        Nothing
+
+                                            Nothing ->
+                                                Nothing
+                                    )
+                                    data.httpRequests
+                                    |> List.sort
+                        in
+                        if
+                            loadedChannels
+                                == List.sort
+                                    [ "213136010802888706"
+                                    , "213833320755232769"
+                                    , "1402762573744574527"
+                                    , "1072828564317159465"
+                                    , "1072828591382999151"
+                                    , "185574444641550336"
+                                    , "222087308516524036"
+                                    , "1215077285749858324"
+                                    , "1472236476401057854"
+                                    ]
+                        then
+                            Ok ()
+
+                        else
+                            Err ("Loaded the messages of the wrong channels: " ++ String.join ", " loadedChannels)
+                    )
+                , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , admin.click 100 (Dom.id "guild_openChannel_1072828591382999151")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Older channel B message" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Newer channel B message" ])
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Reloading a Discord channel loads its threads"
         E2EHelper.startTime
         normalConfig
@@ -4349,6 +4443,11 @@ checkDiscordDmRoute channelId model =
 
 {-| The Discord DM channel `discordDmMessage` sends messages to.
 -}
+kessDmChannelId : Discord.Id Discord.PrivateChannelId
+kessDmChannelId =
+    Unsafe.uint64 "222087308516524036" |> Discord.idFromUInt64
+
+
 discordDmChannelId : Discord.Id Discord.PrivateChannelId
 discordDmChannelId =
     Unsafe.uint64 "1472236476401057854" |> Discord.idFromUInt64
