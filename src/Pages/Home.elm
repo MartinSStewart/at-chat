@@ -1235,8 +1235,10 @@ view loaded =
                     , -- Without this the app inside is laid out at its natural height, since elm-ui
                       -- leaves min-height at min-content and that wins over the height above.
                       Ui.heightMin 0
-                    , MyUi.htmlStyle "transform" ("scale(" ++ String.fromFloat previewScale ++ ")")
-                    , MyUi.htmlStyle "transform-origin" "top left"
+                    , -- zoom lays the app out again at the smaller size, so borders and text are drawn
+                      -- for the real pixel grid. transform: scale shrinks the full size layout instead,
+                      -- which leaves 1px lines and gaps landing between pixels.
+                      MyUi.htmlStyle "zoom" (String.fromFloat previewScale)
                     ]
                 |> Ui.el
                     [ Ui.width (Ui.px previewWidth)
