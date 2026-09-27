@@ -798,21 +798,27 @@ async fn regenerate_server_secret_endpoint(state: State<Arc<Mutex<AppState>>>) -
 // Deletes the files, and their thumbnails, named by a JSON list of hashes. The
 // response lists the hashes that are no longer stored, which includes ones that
 // were already gone, so the backend can forget about exactly those.
+//
+// Storage is the s3fs mount, where each delete is a round trip to the bucket, so
+// they go through tokio::fs to stay off the worker threads, a few at a time.
 async fn delete_files_endpoint(Json(hashes): Json<Vec<String>>) -> Response<String> {
-    let deleted: Vec<String> = hashes
-        .into_iter()
-        .filter(|hash| {
-            is_valid_hash(hash)
-                && remove_if_present(filepath(hash))
-                && remove_if_present(thumbnail_filepath(hash))
+    let deleted: Vec<String> = futures_util::stream::iter(hashes)
+        .map(|hash| async move {
+            let is_deleted = is_valid_hash(&hash)
+                && remove_if_present(filepath(&hash)).await
+                && remove_if_present(thumbnail_filepath(&hash)).await;
+            (hash, is_deleted)
         })
-        .collect();
+        .buffered(8)
+        .filter_map(|(hash, is_deleted)| async move { is_deleted.then_some(hash) })
+        .collect()
+        .await;
 
     json_response_with_headers(StatusCode::OK, serde_json::to_string(&deleted).unwrap())
 }
 
-fn remove_if_present(path: String) -> bool {
-    match fs::remove_file(path) {
+async fn remove_if_present(path: String) -> bool {
+    match tokio::fs::remove_file(path).await {
         Ok(()) => true,
         Err(error) => error.kind() == std::io::ErrorKind::NotFound,
     }
