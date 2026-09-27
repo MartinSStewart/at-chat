@@ -725,9 +725,7 @@ enterLoginCodeView windowSize textSelection model =
                                 errorView "Incorrect code"
 
                             _ ->
-                                Ui.Prose.paragraph
-                                    []
-                                    [ Ui.text "Submitting..." ]
+                                submitting
 
                     Err error ->
                         errorView error
@@ -739,6 +737,11 @@ enterLoginCodeView windowSize textSelection model =
             [ Ui.centerX, Ui.width Ui.shrink ]
             (MyUi.secondaryButtonTall cancelButtonId PressedCancelLogin "Cancel")
         ]
+
+
+submitting : Element msg
+submitting =
+    Ui.el [ Ui.width Ui.shrink, Ui.centerX ] (Ui.text "Submitting...")
 
 
 enterTwoFactorCodeView : Coord CssPixels -> Maybe { a | htmlId : HtmlId, selection : Range } -> EnterTwoFactorCode2 -> Element Msg
@@ -776,9 +779,7 @@ enterTwoFactorCodeView windowSize textSelection model =
                                 errorView "Incorrect code"
 
                             _ ->
-                                Ui.Prose.paragraph
-                                    []
-                                    [ Ui.text "Submitting..." ]
+                                submitting
 
                     Err error ->
                         errorView error
@@ -950,7 +951,7 @@ enterEmailView model =
             errorView "New sign ups are currently disabled."
 
           else if model.showUserIsDeleted then
-            errorView "This account has been deleted."
+            errorView "Your account was deleted as you were logging in."
 
           else
             Ui.none
