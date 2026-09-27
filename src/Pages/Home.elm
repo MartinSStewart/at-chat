@@ -1,5 +1,6 @@
 module Pages.Home exposing
-    ( header
+    ( callPreviewImages
+    , header
     , loginButtonId
     , loginSignupText
     , previewLoginData
@@ -7,6 +8,7 @@ module Pages.Home exposing
     )
 
 import Array exposing (Array)
+import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
@@ -17,6 +19,8 @@ import DmChannel
 import Drawing
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Command exposing (Command, FrontendOnly)
+import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import Emoji
@@ -25,13 +29,14 @@ import FileStatus exposing (IsEncrypted(..))
 import FrontendExtra
 import Game
 import GuildName exposing (GuildName)
+import Html
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, UserId)
 import IdArray
 import LinkedAndOtherDiscordUsers exposing (LinkedAndOtherDiscordUsers(..))
 import List.Nonempty exposing (Nonempty(..))
 import Local
-import LocalState exposing (DiscordFrontendGuild, FrontendChannel, FrontendGuild)
+import LocalState exposing (DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import MembersAndOwner
 import Message exposing (GameType(..), Message(..), RepliedTo(..))
 import MessageArray exposing (MessageArray)
@@ -984,6 +989,7 @@ previewGameModels time =
 type PreviewPage
     = PreviewChannel (Id GuildId) Route.ChannelRoute
     | PreviewUnreadOverview
+    | PreviewCall
 
 
 previewPages : List PreviewPage
@@ -1006,7 +1012,44 @@ previewPages =
                     []
            )
     )
-        ++ [ PreviewUnreadOverview ]
+        ++ [ PreviewCall, PreviewUnreadOverview ]
+
+
+previewCallId : CallId
+previewCallId =
+    GuildRoomId { guildId = previewGuildId, channelId = previewChannelId }
+
+
+{-| Everyone in the preview call other than the reader. A call tells its connections apart by
+client ID, so each one needs its own.
+-}
+previewCallPeers : Nonempty ( Id UserId, ClientId )
+previewCallPeers =
+    Nonempty
+        ( Id.fromInt 1, Lamdera.clientIdFromString "previewCall1" )
+        [ ( Id.fromInt 2, Lamdera.clientIdFromString "previewCall2" )
+        , ( Id.fromInt 3, Lamdera.clientIdFromString "previewCall3" )
+        ]
+
+
+previewCallConnectionId : ( Id UserId, ClientId ) -> Call.ConnectionId
+previewCallConnectionId peer =
+    { roomId = previewCallId, otherClientId = peer }
+
+
+{-| What each person in the preview call shows in place of a camera.
+-}
+callPreviewImages : Command FrontendOnly toMsg msg
+callPreviewImages =
+    { htmlId = Call.localVideoNodeId, url = "/cacheable/call-preview/0.svg" }
+        :: List.indexedMap
+            (\index peer ->
+                { htmlId = Call.connectionIdToString (previewCallConnectionId peer)
+                , url = "/cacheable/call-preview/" ++ String.fromInt (index + 1) ++ ".svg"
+                }
+            )
+            (List.Nonempty.toList previewCallPeers)
+        |> Ports.setCallPreviewImages previewContainerId
 
 
 previewIntervalMillis : Int
@@ -1240,6 +1283,65 @@ view loaded =
                         }
                         { previewReadLoggedIn | sidebarMode = ChannelSidebarNotDragging { offset = 1 } }
                         (Local.model previewReadLoggedIn.localState)
+
+                PreviewCall ->
+                    let
+                        callRoute : Route.ChannelRoute
+                        callRoute =
+                            Route.ChannelRoute
+                                previewChannelId
+                                (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
+                                (Just ChannelHeaderTab_VoiceChat)
+
+                        callLoaded : LoadedFrontend
+                        callLoaded =
+                            { loaded
+                                | windowSize = innerSize
+                                , route = GuildRoute previewGuildId callRoute ChannelsHiddenOnMobile Nothing
+                                , time = previewTime
+                                , startupData = previewStartupData
+                            }
+
+                        callLoggedIn : Types.LoggedIn2
+                        callLoggedIn =
+                            { previewLoggedIn
+                                | sidebarMode = ChannelSidebarNotDragging { offset = 1 }
+                                , voiceChat =
+                                    { voiceChat
+                                        | isSpeaking =
+                                            SeqSet.singleton (previewCallConnectionId (List.Nonempty.head previewCallPeers))
+                                    }
+                            }
+
+                        voiceChat : Call.Model
+                        voiceChat =
+                            previewLoggedIn.voiceChat
+
+                        local : LocalState
+                        local =
+                            Local.model previewLoggedIn.localState
+
+                        callLocal : LocalState
+                        callLocal =
+                            { local
+                                | calls =
+                                    { currentRoom = Just previewCallId
+                                    , voiceChats =
+                                        List.Nonempty.map (\peer -> ( peer, Call.defaultRemoteCallData )) previewCallPeers
+                                            |> NonemptyDict.fromNonemptyList
+                                            |> SeqDict.singleton previewCallId
+                                    }
+                            }
+                    in
+                    Pages.Guild.guildView callLoaded previewGuildId callRoute callLoggedIn callLocal
+                        |> Ui.el
+                            [ Call.videoNodes callLocal.localUser callLoaded callLoggedIn callLocal.calls
+                                |> Html.map VoiceChatMsg
+                                |> Ui.html
+                                -- Above the voice chat panel, which has a z-index of 20
+                                |> Ui.el [ MyUi.htmlStyle "z-index" "21" ]
+                                |> Ui.inFront
+                            ]
             )
                 |> Ui.el
                     [ Ui.width (Ui.px (Coord.xRaw innerSize))

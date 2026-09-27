@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+<defs><linearGradient id="wall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9c7a7"/><stop offset="1" stop-color="#a8916d"/></linearGradient>
+<radialGradient id="light" cx="0.5" cy="0.35" r="0.7"><stop offset="0" stop-color="#fff" stop-opacity="0.18"/><stop offset="1" stop-color="#000" stop-opacity="0.25"/></radialGradient></defs>
+<rect width="1280" height="720" fill="url(#wall)"/>
+<rect x="860" y="200" width="340" height="16" fill="#6b4f33"/><rect x="880" y="120" width="30" height="80" fill="#b33"/><rect x="915" y="135" width="26" height="65" fill="#357"/><rect x="946" y="110" width="34" height="90" fill="#e9c46a"/><rect x="990" y="140" width="24" height="60" fill="#2a9d8f"/><circle cx="1120" cy="170" r="30" fill="#e76f51"/>
+<path d="M340 720 C360 560 480 500 640 500 C800 500 920 560 940 720 Z" fill="#2f6f73"/>
+<rect x="600" y="400" width="80" height="120" rx="30" fill="#c68863"/>
+<ellipse cx="640" cy="320" rx="120" ry="145" fill="#c68863"/>
+<path d="M515 320 C505 190 580 150 640 150 C720 150 780 200 765 320 C750 250 700 225 640 230 C580 230 530 260 515 320 Z" fill="#1f1a17"/>
+<ellipse cx="598" cy="320" rx="11" ry="14" fill="#2b2b2b"/><ellipse cx="682" cy="320" rx="11" ry="14" fill="#2b2b2b"/>
+<path d="M600 390 Q640 420 680 390" stroke="#7a3b2e" stroke-width="8" fill="none" stroke-linecap="round"/>
+<rect width="1280" height="720" fill="url(#light)"/>
+</svg>

@@ -20,6 +20,7 @@ port module Call exposing
     , StartCallData
     , StartLocalStreamData
     , ToJs(..)
+    , connectionIdToString
     , conversationOffset
     , debugDataSubscription
     , defaultRemoteCallData
@@ -34,6 +35,7 @@ port module Call exposing
     , insideThumbnail
     , isPressMsg
     , leaveVoiceChatCmds
+    , localVideoNodeId
     , memberColumnOffset
     , serverChangeCmd
     , startCallCmd

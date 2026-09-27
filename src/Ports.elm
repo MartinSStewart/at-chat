@@ -36,6 +36,7 @@ port module Ports exposing
     , serviceWorkerData
     , serviceWorkerMessage
     , setAppBadge
+    , setCallPreviewImages
     , setCursorPosition
     , setFavicon
     , shiftScrollByElementDelta
@@ -97,6 +98,9 @@ port martinsstewart_set_favicon_to_js : Json.Encode.Value -> Cmd msg
 
 
 port haptic_feedback : Json.Encode.Value -> Cmd msg
+
+
+port call_preview_images_to_js : Json.Encode.Value -> Cmd msg
 
 
 port load_startup_data_to_js : Json.Encode.Value -> Cmd msg
@@ -386,6 +390,31 @@ setFavicon faviconPath =
 hapticFeedback : Command FrontendOnly toMsg msg
 hapticFeedback =
     Command.sendToJs "haptic_feedback" haptic_feedback Json.Encode.null
+
+
+{-| The homepage's call preview has no real video, so JS downloads each image and draws it into
+the element with that id, once one turns up inside `containerId`. Elements outside it are left
+alone, since the preview's own video uses the same id as the real one.
+-}
+setCallPreviewImages : HtmlId -> List { htmlId : String, url : String } -> Command FrontendOnly toMsg msg
+setCallPreviewImages containerId images =
+    Command.sendToJs
+        "call_preview_images_to_js"
+        call_preview_images_to_js
+        (Json.Encode.object
+            [ ( "containerId", Json.Encode.string (Dom.idToString containerId) )
+            , ( "images"
+              , Json.Encode.list
+                    (\image ->
+                        Json.Encode.object
+                            [ ( "htmlId", Json.Encode.string image.htmlId )
+                            , ( "url", Json.Encode.string image.url )
+                            ]
+                    )
+                    images
+              )
+            ]
+        )
 
 
 port webcodecs_test_to_js : Json.Encode.Value -> Cmd msg

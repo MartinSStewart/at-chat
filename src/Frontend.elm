@@ -548,6 +548,8 @@ initLoadedFrontend loading clientId time startupData loginResult =
             FrontendExtra.routeReplace model2 route
         , Command.map AiChatToBackend AiChatMsg aiChatCmd
         , checkAppVersion
+        , -- Sent even when logged in, since logging out shows the homepage without reloading it
+          Pages.Home.callPreviewImages
         , case loginResult of
             Ok _ ->
                 Ports.registerServiceWorker

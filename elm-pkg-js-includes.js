@@ -8,6 +8,7 @@ const cropImage = require('./elm-pkg-js/crop-image.js');
 const voiceChat = require('./elm-pkg-js/voice-chat.js');
 const audio = require('./elm-pkg-js/audio.js');
 const webcodecsTest = require('./elm-pkg-js/webcodecs-test.js');
+const callPreview = require('./elm-pkg-js/call-preview.js');
 
 exports.init = async function init(app) {
   // @WARNING: this only runs for Lamdera production deploys!
@@ -19,4 +20,5 @@ exports.init = async function init(app) {
   voiceChat.init(app);
   audio.init(app);
   webcodecsTest.init(app);
+  callPreview.init(app);
 }
