@@ -3145,6 +3145,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                           -- to parse or every one of them ends up in the error log.
                           T.websocketSendString 100 connection """{"t":"GUILD_APPLIED_BOOSTS_UPDATE","s":13,"op":0,"d":{"guild_id":"705745250815311942","applied_guild_boosts":[{"id":"1493960145280041232","ends_at":"2026-05-01T00:00:00+00:00","pause_ends_at":null,"user_id":"161098476632014848"}]}}"""
                         , T.websocketSendString 100 connection """{"t":"GUILD_POWERUP_ENTITLEMENTS_CREATE","s":14,"op":0,"d":{"guild_id":"705745250815311942","entitlements":[{"id":"1493960145280041233","sku_id":"1493960145280041234","user_id":"161098476632014848","type":1,"deleted":false,"consumed":false}]}}"""
+                        , T.websocketSendString 100 connection """{"t":"GUILD_POWERUP_ENTITLEMENTS_DELETE","s":15,"op":0,"d":{"guild_id":"705745250815311942","entitlements":[{"id":"1493960145280041233","sku_id":"1493960145280041234","user_id":"161098476632014848","type":1,"deleted":true,"consumed":false}]}}"""
+                        , -- Scheduled events aren't something we keep track of either.
+                          T.websocketSendString 100 connection """{"t":"GUILD_SCHEDULED_EVENT_UPDATE","s":16,"op":0,"d":{"id":"1493960145280041235","guild_id":"705745250815311942","channel_id":null,"creator_id":"161098476632014848","name":"Game night","description":null,"scheduled_start_time":"2026-05-01T18:00:00+00:00","scheduled_end_time":"2026-05-01T20:00:00+00:00","privacy_level":2,"status":2,"entity_type":3,"entity_id":null,"entity_metadata":{"location":"Online"},"sku_ids":[],"image":null,"recurrence_rule":null,"user_count":3,"guild_scheduled_event_exceptions":[]}}"""
                         , T.checkState 100 checkNoDiscordParseErrors
                         ]
                     )
