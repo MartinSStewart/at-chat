@@ -129,8 +129,8 @@ header isMobile safeAreaInsetTop route loginStatus =
                         }
                     , Ui.linkNewTab Pages.Privacy.repoUrl
                     , MyUi.hoverText "Source code on GitHub"
-                    , Ui.opacity 0.7
-                    , MyUi.hover isMobile [ Ui.Anim.opacity 1 ]
+                    , Ui.Font.color MyUi.font3
+                    , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
                     ]
                     (Ui.html (Icons.github 20))
                 , case loginStatus of
