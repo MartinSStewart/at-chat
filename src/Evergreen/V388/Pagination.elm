@@ -1,0 +1,26 @@
+module Evergreen.V388.Pagination exposing (..)
+
+import Array
+import Evergreen.V388.Id
+import SeqDict
+
+
+type PageId
+    = PageId Never
+
+
+type ItemId
+    = ItemId Never
+
+
+type PageStatus a
+    = PageLoading
+    | PageLoaded (Array.Array a)
+
+
+type alias Pagination a =
+    { pages : SeqDict.SeqDict (Evergreen.V388.Id.Id PageId) (PageStatus a)
+    , currentPage : Evergreen.V388.Id.Id PageId
+    , previousPage : Evergreen.V388.Id.Id PageId
+    , totalItems : Int
+    }
