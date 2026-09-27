@@ -855,18 +855,23 @@ type BackendMsg
         (Discord.Id Discord.UserId)
         (Result
             Discord.HttpError
-            ( List
-                { dmChannelId : Discord.Id Discord.PrivateChannelId
-                , members : List (Discord.Id Discord.UserId)
-                }
-            , List
-                ( Discord.Id Discord.GuildId
-                , { guild : Discord.GatewayGuild
-                  , channels : List Discord.Channel
-                  , icon : Maybe FileStatus.UploadResponse
-                  }
-                )
-            )
+            { dmChannels :
+                List
+                    { dmChannelId : Discord.Id Discord.PrivateChannelId
+                    , members : List (Discord.Id Discord.UserId)
+                    , messages : List Discord.Message
+                    }
+            , guilds :
+                List
+                    ( Discord.Id Discord.GuildId
+                    , { guild : Discord.GatewayGuild
+                      , channels : List Discord.Channel
+                      , icon : Maybe FileStatus.UploadResponse
+                      }
+                    )
+            , channelMessages : SeqDict (Discord.Id Discord.ChannelId) (List Discord.Message)
+            , attachments : List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse ))
+            }
         )
     | WebsocketCreatedHandleForUser (Discord.Id Discord.UserId) Websocket.Connection
     | WebsocketClosedByBackendForUser (Discord.Id Discord.UserId) (Maybe PendingGatewayReconnect) WebsocketClosedEvent
