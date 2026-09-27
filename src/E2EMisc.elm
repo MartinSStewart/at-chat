@@ -746,7 +746,7 @@ orphanedFilesTest config =
                                 ]
                             )
                         , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.FilesSection)
-                        , E2EHelper.hasExactText adminPage [ "Files in bucket: 42", "unusedFile150", "Orphaned file count: 150, total size: 732.4kb" ]
+                        , E2EHelper.hasExactText adminPage [ "unusedFile150", "Orphaned file count: 150, total size: 732.4kb" ]
                         , E2EHelper.hasNotExactText adminPage [ "123123123" ]
                         , adminPage.click 100 Pages.Admin.deleteOrphanedFilesButtonId
                         , E2EHelper.hasExactText adminPage [ "File count: 1", "No orphaned files" ]

@@ -352,7 +352,6 @@ type AdminChange
     | LoadSessions (ToBeFilledInByBackend (SeqDict SessionIdHash UserSession))
     | LoadWebsocketCloseEvents (ToBeFilledInByBackend (Array WebsocketClosedEvent))
     | LoadOrphanedFiles (ToBeFilledInByBackend (SeqDict FileHash BackendFileData))
-    | LoadBucketFileCount (ToBeFilledInByBackend (Result Http.Error Int))
     | LoadToBackendLogs (ToBeFilledInByBackend (Array ToBackendLogData))
     | LoadBackendMsgLogs (ToBeFilledInByBackend (Array BackendMsgLogData))
     | SetEmailNotificationsEnabled Bool
@@ -522,9 +521,6 @@ updateAdmin changedBy change adminData local =
 
         LoadOrphanedFiles filledInByBackend ->
             { local | adminData = IsAdmin { adminData | orphanedFiles = loadedAdminData filledInByBackend } }
-
-        LoadBucketFileCount filledInByBackend ->
-            { local | adminData = IsAdmin { adminData | bucketFileCount = loadedAdminData filledInByBackend } }
 
         LoadToBackendLogs filledInByBackend ->
             { local | adminData = IsAdmin { adminData | toBackendLogs = loadedAdminData filledInByBackend } }
@@ -1719,9 +1715,6 @@ pendingChangesText change =
         LoadOrphanedFiles _ ->
             "Loading orphaned files in admin page"
 
-        LoadBucketFileCount _ ->
-            "Loading bucket file count in admin page"
-
         LoadToBackendLogs _ ->
             "Loading toBackend logs in admin page"
 
@@ -2532,18 +2525,6 @@ filesSection isMobile expandedSections adminData =
         expandedSections
         FilesSection
         [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount)
-        , case adminData.bucketFileCount of
-            AdminDataNotLoaded ->
-                Ui.text loadingText
-
-            AdminDataLoading ->
-                Ui.text loadingText
-
-            AdminDataLoaded (Ok count) ->
-                Ui.text ("Files in bucket: " ++ String.fromInt count)
-
-            AdminDataLoaded (Err error) ->
-                MyUi.errorBox (Dom.id "admin_bucketFileCountError") PressedCopyText (Log.httpErrorToString error)
         , case adminData.orphanedFiles of
             AdminDataNotLoaded ->
                 Ui.text loadingText
@@ -5053,7 +5034,6 @@ sectionDataToLoad section2 adminData =
 
         FilesSection ->
             loadIfNeeded adminData.orphanedFiles (LoadOrphanedFiles EmptyPlaceholder)
-                ++ loadIfNeeded adminData.bucketFileCount (LoadBucketFileCount EmptyPlaceholder)
 
         ToBackendLogsSection ->
             loadIfNeeded adminData.toBackendLogs (LoadToBackendLogs EmptyPlaceholder)

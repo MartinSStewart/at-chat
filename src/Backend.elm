@@ -2161,11 +2161,6 @@ updateHelper msg model =
                 Err error ->
                     BackendExtra.addLogWithCmd time (Log.FailedToDeleteOrphanedFiles error) model responseCmd
 
-        GotBucketFileCount changeId clientId result ->
-            ( model
-            , adminDataResponse changeId clientId (Pages.Admin.LoadBucketFileCount (FilledInByBackend result))
-            )
-
         RegeneratedServerSecret time changeId clientId result ->
             let
                 responseCmd : Command BackendOnly ToFrontend BackendMsg
@@ -9049,44 +9044,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 changeId
                 clientId
                 (Pages.Admin.LoadWebsocketCloseEvents (FilledInByBackend model.websocketCloseEvents))
-            )
-
-        Pages.Admin.LoadBucketFileCount _ ->
-            ( model
-            , Http.task
-                { method = "GET"
-                , url = FileStatus.domain ++ "/file/internal/file-count"
-                , body = Http.emptyBody
-                , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
-                , resolver =
-                    Http.stringResolver
-                        (\result ->
-                            case result of
-                                Http.BadStatus_ metadata body ->
-                                    Http.BadBody
-                                        ("Status code: " ++ String.fromInt metadata.statusCode ++ ", body: " ++ body)
-                                        |> Err
-
-                                Http.GoodStatus_ _ text ->
-                                    case String.toInt text of
-                                        Just count ->
-                                            Ok count
-
-                                        Nothing ->
-                                            Err (Http.BadBody ("Expected a file count but got " ++ text))
-
-                                Http.BadUrl_ string ->
-                                    Err (Http.BadUrl string)
-
-                                Http.Timeout_ ->
-                                    Err Http.Timeout
-
-                                Http.NetworkError_ ->
-                                    Err Http.NetworkError
-                        )
-                , timeout = Just Duration.minute
-                }
-                |> Task.attempt (GotBucketFileCount changeId clientId)
             )
 
         Pages.Admin.LoadOrphanedFiles _ ->

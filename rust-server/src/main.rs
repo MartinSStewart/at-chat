@@ -86,7 +86,6 @@ async fn main() {
                     get(discord_sticker_endpoint).options(options_endpoint),
                 )
                 .route("/file/internal/vapid", get(vapid_endpoint))
-                .route("/file/internal/file-count", get(file_count_endpoint))
                 .route("/file/websocket", get(websocket::websocket_endpoint))
                 .route("/file/websocket/{room_id}", get(websocket::room_endpoint))
                 .route("/file/{content_type}/{filename}", get(get_file_endpoint))
@@ -192,14 +191,12 @@ async fn options_endpoint() -> Response<String> {
     response_with_headers(StatusCode::OK, String::from("OK"))
 }
 
-const STORAGE_PATH: &str = "./var/lib/atchat/storage/";
-
 fn filepath(hash: &str) -> String {
-    format!("{STORAGE_PATH}{hash}")
+    format!("./var/lib/atchat/storage/{hash}")
 }
 
 fn thumbnail_filepath(hash: &str) -> String {
-    format!("{STORAGE_PATH}{hash}_thumbnail")
+    format!("./var/lib/atchat/storage/{hash}_thumbnail")
 }
 
 enum FetchedContent {
@@ -839,36 +836,6 @@ async fn delete_stored_files(hashes: Vec<String>) -> Vec<String> {
         .filter_map(|(hash, is_deleted)| async move { (!is_deleted).then_some(hash) })
         .collect()
         .await
-}
-
-// How many uploaded files the bucket holds. Thumbnails sit next to their file
-// with a suffix and backups have a directory of their own, so neither is counted.
-// Only names are looked at, since asking s3fs what kind of entry each one is
-// would be a request to the bucket per file.
-async fn file_count_endpoint() -> Response<String> {
-    match count_stored_files(STORAGE_PATH).await {
-        Ok(count) => response_with_headers(StatusCode::OK, count.to_string()),
-        Err(error) => response_with_headers(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Couldn't read the storage directory\n{error:?}"),
-        ),
-    }
-}
-
-async fn count_stored_files(directory: &str) -> std::io::Result<usize> {
-    let mut entries = tokio::fs::read_dir(directory).await?;
-    let mut count = 0;
-
-    while let Some(entry) = entries.next_entry().await? {
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-
-        if name != "backups" && !name.ends_with("_thumbnail") {
-            count += 1;
-        }
-    }
-
-    Ok(count)
 }
 
 async fn remove_if_present(path: String) -> bool {
@@ -2894,26 +2861,6 @@ mod tests {
 
     fn owned(hashes: &[&str]) -> Vec<String> {
         hashes.iter().map(|hash| hash.to_string()).collect()
-    }
-
-    #[tokio::test]
-    async fn counting_stored_files_leaves_out_thumbnails_and_backups() {
-        let directory = "./var/lib/atchat/countTest/";
-        let _ = fs::remove_dir_all(directory);
-        fs::create_dir_all(format!("{directory}backups")).unwrap();
-        fs::write(
-            format!("{directory}backups/backend-export.bin"),
-            b"a backup",
-        )
-        .unwrap();
-        fs::write(format!("{directory}firstFile"), b"a file").unwrap();
-        fs::write(format!("{directory}firstFile_thumbnail"), b"a thumbnail").unwrap();
-        fs::write(format!("{directory}secondFile"), b"a file").unwrap();
-
-        let count = count_stored_files(directory).await;
-        let _ = fs::remove_dir_all(directory);
-
-        assert_eq!(count.unwrap(), 2);
     }
 
     #[tokio::test]

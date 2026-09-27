@@ -2193,15 +2193,6 @@ handleInternalRequests discordStickerPacks currentRequest rest =
                     }
                     ""
 
-            [ "file-count" ] ->
-                StringHttpResponse
-                    { url = currentRequest.url
-                    , statusCode = 200
-                    , statusText = "OK"
-                    , headers = Dict.empty
-                    }
-                    "42"
-
             [ "delete-files" ] ->
                 StringHttpResponse
                     { url = currentRequest.url
