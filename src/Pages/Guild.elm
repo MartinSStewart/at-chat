@@ -9517,6 +9517,7 @@ previewThreadLastMessage timezone time emojiData customEmojis allUsers channels 
         , Html.Attributes.id ("guild_threadStarterIndicator_" ++ Id.toString messageId)
         , Html.Events.onClick MessageView_PressedViewThreadLink
         , Html.Attributes.style "cursor" "pointer"
+        , Html.Attributes.style "position" "relative"
         ]
         (Html.div
             [ Html.Attributes.style "display" "flex"
