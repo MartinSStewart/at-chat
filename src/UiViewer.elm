@@ -387,6 +387,7 @@ notificationEmail =
             (\id -> "User " ++ Id.toString id)
             SeqDict.empty
             "Stevie Steve"
+            Nothing
             Env.domain
             content
             SeqDict.empty

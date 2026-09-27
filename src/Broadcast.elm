@@ -917,6 +917,7 @@ notification time userToNotify title senderIcon userToString channels plainText 
                                 time
                                 user.email
                                 title
+                                senderIcon
                                 userToString
                                 channels
                                 navigateTo
@@ -1051,6 +1052,7 @@ messageNotificationEmail :
     Time.Posix
     -> EmailAddress
     -> String
+    -> Maybe FileHash
     -> (userId -> String)
     -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
     -> Maybe Route
@@ -1058,7 +1060,7 @@ messageNotificationEmail :
     -> Message messageId userId channelId
     -> Postmark.ApiKey
     -> Command BackendOnly toMsg BackendMsg
-messageNotificationEmail time email senderName userToString channels navigateTo plainText message postmarkApiKey =
+messageNotificationEmail time email senderName senderIcon userToString channels navigateTo plainText message postmarkApiKey =
     let
         helper subject body =
             Postmark.sendEmail
@@ -1084,7 +1086,7 @@ messageNotificationEmail time email senderName userToString channels navigateTo 
             helper
                 (notificationEmailSubject senderName)
                 (Postmark.BodyBoth
-                    (notificationEmailContent userToString channels senderName link data.content.content data.content.attachedFiles)
+                    (notificationEmailContent userToString channels senderName senderIcon link data.content.content data.content.attachedFiles)
                     (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ link ++ " to reply.")
                 )
 
@@ -1092,7 +1094,7 @@ messageNotificationEmail time email senderName userToString channels navigateTo 
             helper
                 (notificationEmailSubject senderName)
                 (Postmark.BodyBoth
-                    (notificationEmailContent userToString channels senderName link RichText.messageIsEncrypted SeqDict.empty)
+                    (notificationEmailContent userToString channels senderName senderIcon link RichText.messageIsEncrypted SeqDict.empty)
                     (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ link ++ " to reply.")
                 )
 
@@ -1129,45 +1131,83 @@ notificationEmailContent :
     (userId -> String)
     -> SeqDict ( channelId, Maybe (Id ChannelMessageId) ) { name : String }
     -> String
+    -> Maybe FileHash
     -> String
     -> Nonempty (RichText userId channelId)
     -> SeqDict (Id FileId) FileData
     -> Email.Html.Html
-notificationEmailContent userToString channels senderName link content attachedFiles =
-    Email.Html.div
+notificationEmailContent userToString channels senderName senderIcon link content attachedFiles =
+    -- A table rather than flexbox since plenty of email clients don't support the latter
+    Email.Html.table
         [ Email.Html.Attributes.backgroundColor (MyUi.colorToStyle MyUi.background3)
         , Email.Html.Attributes.padding "8px"
         , Email.Html.Attributes.borderRadius "8px"
         , Email.Html.Attributes.fontFamily "Arial, Helvetica, sans-serif"
+        , Email.Html.Attributes.attribute "role" "presentation"
+        , Email.Html.Attributes.attribute "cellpadding" "0"
+        , Email.Html.Attributes.attribute "cellspacing" "0"
         ]
-        [ Email.Html.div
-            [ Email.Html.Attributes.color (MyUi.colorToHex MyUi.white)
-            , Email.Html.Attributes.fontSize "16px"
-            , Email.Html.Attributes.paddingBottom "4px"
-            ]
-            [ Email.Html.strong [] [ Email.Html.text senderName ] ]
-        , Email.Html.div
-            [ Email.Html.Attributes.color (MyUi.colorToHex MyUi.white)
-            , Email.Html.Attributes.fontSize "15px"
-            , Email.Html.Attributes.lineHeight "1.4"
-            , Email.Html.Attributes.style "white-space" "pre-wrap"
-            ]
-            (RichText.emailView { userToString = userToString, channels = channels, attachedFiles = attachedFiles } content)
-        , Email.Html.div
-            [ Email.Html.Attributes.paddingTop "20px" ]
-            [ Email.Html.b
-                []
-                [ Email.Html.a
-                    [ Email.Html.Attributes.href link
-                    , Email.Html.Attributes.backgroundColor (MyUi.colorToHex MyUi.buttonBackground)
-                    , Email.Html.Attributes.color (MyUi.colorToHex MyUi.white)
-                    , Email.Html.Attributes.fontSize "14px"
-                    , Email.Html.Attributes.padding "4px 8px"
-                    , Email.Html.Attributes.borderRadius "4px"
-                    , Email.Html.Attributes.style "text-decoration" "none"
-                    , Email.Html.Attributes.style "display" "inline-block"
+        [ Email.Html.tr
+            []
+            [ Email.Html.td
+                [ Email.Html.Attributes.attribute "valign" "top"
+                , Email.Html.Attributes.style "vertical-align" "top"
+                , Email.Html.Attributes.width (String.fromInt User.profileImageSize ++ "px")
+                , Email.Html.Attributes.paddingRight "8px"
+                ]
+                [ Email.Html.img
+                    [ Email.Html.Attributes.src
+                        (case senderIcon of
+                            Just icon ->
+                                FileStatus.fileUrl FileStatus.pngContent icon
+
+                            Nothing ->
+                                Env.domain ++ "/cacheable/at-logo-no-background.png"
+                        )
+                    , Email.Html.Attributes.alt ""
+                    , Email.Html.Attributes.attribute "width" (String.fromInt User.profileImageSize)
+                    , Email.Html.Attributes.attribute "height" (String.fromInt User.profileImageSize)
+                    , Email.Html.Attributes.width (String.fromInt User.profileImageSize ++ "px")
+                    , Email.Html.Attributes.height (String.fromInt User.profileImageSize ++ "px")
+                    , Email.Html.Attributes.borderRadius (String.fromInt User.profileImageRounding ++ "px")
+                    , Email.Html.Attributes.style "display" "block"
                     ]
-                    [ Email.Html.text "Open at-chat" ]
+                    []
+                ]
+            , Email.Html.td
+                [ Email.Html.Attributes.attribute "valign" "top"
+                , Email.Html.Attributes.style "vertical-align" "top"
+                ]
+                [ Email.Html.div
+                    [ Email.Html.Attributes.color (MyUi.colorToHex MyUi.white)
+                    , Email.Html.Attributes.fontSize "16px"
+                    , Email.Html.Attributes.paddingBottom "4px"
+                    ]
+                    [ Email.Html.strong [] [ Email.Html.text senderName ] ]
+                , Email.Html.div
+                    [ Email.Html.Attributes.color (MyUi.colorToHex MyUi.white)
+                    , Email.Html.Attributes.fontSize "15px"
+                    , Email.Html.Attributes.lineHeight "1.4"
+                    , Email.Html.Attributes.style "white-space" "pre-wrap"
+                    ]
+                    (RichText.emailView { userToString = userToString, channels = channels, attachedFiles = attachedFiles } content)
+                , Email.Html.div
+                    [ Email.Html.Attributes.paddingTop "20px" ]
+                    [ Email.Html.b
+                        []
+                        [ Email.Html.a
+                            [ Email.Html.Attributes.href link
+                            , Email.Html.Attributes.backgroundColor (MyUi.colorToHex MyUi.buttonBackground)
+                            , Email.Html.Attributes.color (MyUi.colorToHex MyUi.white)
+                            , Email.Html.Attributes.fontSize "14px"
+                            , Email.Html.Attributes.padding "4px 8px"
+                            , Email.Html.Attributes.borderRadius "4px"
+                            , Email.Html.Attributes.style "text-decoration" "none"
+                            , Email.Html.Attributes.style "display" "inline-block"
+                            ]
+                            [ Email.Html.text "Open at-chat" ]
+                        ]
+                    ]
                 ]
             ]
         ]
