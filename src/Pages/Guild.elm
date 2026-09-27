@@ -10403,7 +10403,7 @@ channelColumnThreadsHelper isMobile isSelected isMuted hasNotifications index vi
             ]
             (Ui.html
                 (if visibleThreadCount == 1 then
-                    Icons.threadSingleSegment 20
+                    Icons.threadSingleSegment
 
                  else if visibleThreadCount - 1 == index then
                     Icons.threadBottomSegment
