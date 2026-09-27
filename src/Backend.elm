@@ -5687,34 +5687,38 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model
                         sessionId
                         (\session user ->
-                            let
-                                deleteAt : Time.Posix
-                                deleteAt =
-                                    User.accountDeletionTime time
-                            in
-                            ( { model
-                                | users =
-                                    NonemptyDict.insert
+                            if user.isAdmin then
+                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                            else
+                                let
+                                    deleteAt : Time.Posix
+                                    deleteAt =
+                                        User.accountDeletionTime time
+                                in
+                                ( { model
+                                    | users =
+                                        NonemptyDict.insert
+                                            session.userId
+                                            { user | deleteAccountAt = Just deleteAt }
+                                            model.users
+                                  }
+                                , Command.batch
+                                    [ LocalChangeResponse changeId (Local_ScheduleAccountDeletion deleteAt)
+                                        |> Lamdera.sendToFrontend clientId
+                                    , Broadcast.toUser
+                                        (Just clientId)
+                                        Nothing
                                         session.userId
-                                        { user | deleteAccountAt = Just deleteAt }
-                                        model.users
-                              }
-                            , Command.batch
-                                [ LocalChangeResponse changeId (Local_ScheduleAccountDeletion deleteAt)
-                                    |> Lamdera.sendToFrontend clientId
-                                , Broadcast.toUser
-                                    (Just clientId)
-                                    Nothing
-                                    session.userId
-                                    (LocalChange session.userId (Local_ScheduleAccountDeletion deleteAt))
-                                    model
-                                , BackendExtra.sendAccountDeletionEmail
-                                    (SentNotificationEmail time user.email)
-                                    user.email
-                                    deleteAt
-                                    model.postmarkApiKey
-                                ]
-                            )
+                                        (LocalChange session.userId (Local_ScheduleAccountDeletion deleteAt))
+                                        model
+                                    , BackendExtra.sendAccountDeletionEmail
+                                        (SentNotificationEmail time user.email)
+                                        user.email
+                                        deleteAt
+                                        model.postmarkApiKey
+                                    ]
+                                )
                         )
 
                 Local_CancelAccountDeletion ->

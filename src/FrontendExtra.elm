@@ -1303,21 +1303,18 @@ accountDeletionBanner safeAreaInsetTop time deleteAt =
         , Ui.background MyUi.deleteButtonBackground
         , Ui.Font.color MyUi.deleteButtonFont
         , Ui.borderColor MyUi.deleteButtonBorder
-        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+        , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 1 }
         , Ui.paddingWith { left = 0, right = 0, top = safeAreaInsetTop, bottom = 0 }
         ]
         [ MyUi.elButton
             accountDeletionBannerId
             PressedAccountDeletionBanner
-            [ Ui.paddingXY 16 10 ]
-            (Ui.Prose.paragraph
-                []
-                [ Ui.text
-                    ("Your account will be permanently deleted in "
-                        ++ MyUi.timeElapsed time deleteAt
-                        ++ ". Press here if you want to cancel."
-                    )
-                ]
+            [ Ui.paddingXY 16 10, Ui.width Ui.shrink ]
+            (Ui.text
+                ("Your account will be permanently deleted in "
+                    ++ MyUi.timeElapsed time deleteAt
+                    ++ ". Press here to cancel."
+                )
             )
         , MyUi.elButton
             (Dom.id "accountDeletionBanner_close")
@@ -1327,6 +1324,8 @@ accountDeletionBanner safeAreaInsetTop time deleteAt =
             , Ui.paddingXY 16 0
             , Ui.contentCenterY
             , MyUi.hoverText "Close"
+            , Ui.contentCenterY
+            , Ui.alignRight
             ]
             (Ui.html Icons.x)
         ]

@@ -382,6 +382,7 @@ type alias EditedBackendUser =
     , email : String
     , isAdmin : Bool
     , createdAt : Time.Posix
+    , deleteAccountAt : Maybe Time.Posix
     }
 
 
@@ -1113,6 +1114,7 @@ update navigationKey time adminData localState msg model =
                                 , email = ""
                                 , isAdmin = False
                                 , createdAt = time
+                                , deleteAccountAt = Nothing
                                 }
                                 userTable.newUsers
                       }
@@ -1563,6 +1565,7 @@ userToEditUser user =
     , email = EmailAddress.toString user.email
     , isAdmin = user.isAdmin
     , createdAt = user.createdAt
+    , deleteAccountAt = user.deleteAccountAt
     }
 
 
@@ -4861,6 +4864,37 @@ userTableColumns timezone tableState users twoFactorAuthentication =
                                 Ui.none
                         )
           , sortBy = Nothing
+          }
+        , { title = "Marked for deletion"
+          , view =
+                \( userTableId, user ) ->
+                    Ui.el
+                        [ cellBackgroundColor userTableId tableState
+                        , Ui.Font.size 14
+                        , Ui.paddingXY 8 4
+                        , Ui.height Ui.fill
+                        , Ui.contentCenterY
+                        , Ui.contentCenterX
+                        ]
+                        (case user.deleteAccountAt of
+                            Just deleteAt ->
+                                MyUi.datestamp timezone deleteAt |> Ui.text
+
+                            Nothing ->
+                                Ui.text ""
+                        )
+          , sortBy =
+                Just
+                    (List.sortBy
+                        (\( _, user ) ->
+                            case user.deleteAccountAt of
+                                Just deleteAt ->
+                                    Time.posixToMillis deleteAt
+
+                                Nothing ->
+                                    -9999
+                        )
+                    )
           }
         ]
 
