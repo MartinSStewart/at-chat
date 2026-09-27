@@ -2018,8 +2018,7 @@ updateHelper msg model =
                 filesToDelete =
                     SeqSet.intersect model.orphanedFilesLastHour orphanedFiles
 
-                withNewOrphanedFiles : BackendModel
-                withNewOrphanedFiles =
+                ( withNewOrphanedFiles, deleteAccountsCmd ) =
                     deleteAccounts time { model | orphanedFilesLastHour = SeqSet.diff orphanedFiles filesToDelete }
 
                 shouldExport : Bool
@@ -2095,6 +2094,7 @@ updateHelper msg model =
                   else
                     deleteFiles model.serverSecret (SeqSet.toList filesToDelete)
                         |> Task.attempt (HourlyDeletedOrphanedFiles time (SeqSet.toList filesToDelete))
+                , deleteAccountsCmd
                 ]
             )
 
@@ -2690,7 +2690,7 @@ disconnectClient time sessionId clientId model =
             ( model, Command.none )
 
 
-deleteAccounts : Time.Posix -> BackendModel -> BackendModel
+deleteAccounts : Time.Posix -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 deleteAccounts time model =
     let
         usersToDelete : SeqSet (Id UserId)
@@ -2712,10 +2712,56 @@ deleteAccounts time model =
                 model.users
     in
     if SeqSet.isEmpty usersToDelete then
-        model
+        ( model, Command.none )
 
     else
-        { model
+        let
+            ( discordUsers, closeWebsockets ) =
+                SeqDict.foldl
+                    (\discordUserId discordUser ( dict, cmds ) ->
+                        case discordUser of
+                            FullData data ->
+                                if SeqSet.member data.linkedTo usersToDelete then
+                                    ( SeqDict.insert
+                                        discordUserId
+                                        (BasicData { user = Discord.userToPartialUser data.user, icon = data.icon })
+                                        dict
+                                    , case data.connection.websocketHandle of
+                                        Just connection ->
+                                            Task.perform
+                                                (WebsocketClosedByBackendForUser discordUserId Nothing)
+                                                (DiscordSync.websocketClose
+                                                    (WebsocketClosed_UnlinkDiscordUser discordUserId)
+                                                    connection
+                                                )
+                                                :: cmds
+
+                                        Nothing ->
+                                            cmds
+                                    )
+
+                                else
+                                    ( dict, cmds )
+
+                            NeedsAuthAgain data ->
+                                if SeqSet.member data.linkedTo usersToDelete then
+                                    ( SeqDict.insert
+                                        discordUserId
+                                        (BasicData { user = Discord.userToPartialUser data.user, icon = data.icon })
+                                        dict
+                                    , cmds
+                                    )
+
+                                else
+                                    ( dict, cmds )
+
+                            BasicData _ ->
+                                ( dict, cmds )
+                    )
+                    ( model.discordUsers, [] )
+                    model.discordUsers
+        in
+        ( { model
             | users =
                 NonemptyDict.map
                     (\userId user ->
@@ -2740,7 +2786,10 @@ deleteAccounts time model =
                     )
                     model.guilds
             , dmChannels = SeqDict.map (\_ dmChannel -> deleteMessagesInChannel usersToDelete dmChannel) model.dmChannels
-        }
+            , discordUsers = discordUsers
+          }
+        , Command.batch closeWebsockets
+        )
 
 
 deleteMessagesInChannel :

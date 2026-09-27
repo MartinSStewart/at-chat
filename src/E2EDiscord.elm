@@ -471,6 +471,42 @@ discordTests :
     -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2)
 discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
     [ E2EHelper.startTest
+        "Deleting an account unlinks its Discord account"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId1
+            "Sven"
+            E2EHelper.userEmail
+            True
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\user ->
+                [ user.click 100 (Dom.id "guild_showUserOptions")
+                , user.click 100 UserOptions.deleteAccountButtonId
+                , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate (Duration.addTo data.time (Duration.days 15))) ])
+                , T.checkState
+                    100
+                    (\data ->
+                        case SeqDict.get E2EHelper.currentDiscordUserId (E2EHelper.unwrapBackend data.backend).discordUsers of
+                            Just (DiscordUserData.BasicData _) ->
+                                case E2EHelper.websocketByDiscordToken E2EHelper.discordUserAuth.token data of
+                                    Just _ ->
+                                        Err "The Discord gateway should have been closed"
+
+                                    Nothing ->
+                                        Ok ()
+
+                            Just _ ->
+                                Err "The Discord account should have been unlinked"
+
+                            Nothing ->
+                                Err "Expected the Discord account to exist"
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Got rich text embed"
         E2EHelper.startTime
         normalConfig
