@@ -705,7 +705,8 @@ adminConnectionsShowWhatIsViewedTest config =
         ]
 
 
-{-| The file attached to a message is in use, so only the upload nothing refers to is listed.
+{-| The file attached to a message is in use, so only the upload nothing refers to is listed
+and deleted.
 -}
 orphanedFilesTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
@@ -740,6 +741,17 @@ orphanedFilesTest config =
                         , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.FilesSection)
                         , E2EHelper.hasExactText adminPage [ "unusedFile", "Orphaned file count: 1, total size: 4.9kb" ]
                         , E2EHelper.hasNotExactText adminPage [ "123123123" ]
+                        , adminPage.click 100 Pages.Admin.deleteOrphanedFilesButtonId
+                        , E2EHelper.hasExactText adminPage [ "File count: 1", "No orphaned files" ]
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                if SeqDict.keys (E2EHelper.unwrapBackend backend).files == [ FileStatus.fileHash "123123123" ] then
+                                    Ok ()
+
+                                else
+                                    Err "Only the file in use should be left"
+                            )
                         ]
                     )
                 ]

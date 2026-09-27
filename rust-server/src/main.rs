@@ -73,6 +73,10 @@ async fn main() {
                     post(push_notification_endpoint).options(options_endpoint),
                 )
                 .route(
+                    "/file/internal/delete-files",
+                    post(delete_files_endpoint).options(options_endpoint),
+                )
+                .route(
                     "/file/internal/custom-request",
                     post(custom_request_endpoint).options(options_endpoint),
                 )
@@ -791,6 +795,29 @@ async fn regenerate_server_secret_endpoint(state: State<Arc<Mutex<AppState>>>) -
     }
 }
 
+// Deletes the files, and their thumbnails, named by a JSON list of hashes. The
+// response lists the hashes that are no longer stored, which includes ones that
+// were already gone, so the backend can forget about exactly those.
+async fn delete_files_endpoint(Json(hashes): Json<Vec<String>>) -> Response<String> {
+    let deleted: Vec<String> = hashes
+        .into_iter()
+        .filter(|hash| {
+            is_valid_hash(hash)
+                && remove_if_present(filepath(hash))
+                && remove_if_present(thumbnail_filepath(hash))
+        })
+        .collect();
+
+    json_response_with_headers(StatusCode::OK, serde_json::to_string(&deleted).unwrap())
+}
+
+fn remove_if_present(path: String) -> bool {
+    match fs::remove_file(path) {
+        Ok(()) => true,
+        Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+    }
+}
+
 async fn custom_request_endpoint(
     Json(CustomRequest {
         method,
@@ -1506,16 +1533,21 @@ fn json_response_with_headers(
         .unwrap()
 }
 
+// A hash is also a filename, so anything that could step outside the storage
+// directory has to be turned away.
+fn is_valid_hash(hash: &str) -> bool {
+    !hash.is_empty()
+        && hash
+            .chars()
+            .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+}
+
 fn hash_bytes(bytes: &Bytes) -> String {
     base64_encode(&Sha224::digest(bytes))
 }
 
 async fn get_file_thumbnail_endpoint(Path(hash): Path<String>) -> http::Response<Body> {
-    let is_valid_hash: bool = hash
-        .chars()
-        .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_');
-
-    if is_valid_hash {
+    if is_valid_hash(&hash) {
         match fs::read(thumbnail_filepath(&hash)) {
             Result::Ok(data) => Response::builder()
                 .status(StatusCode::OK)
@@ -1697,11 +1729,7 @@ const NOSNIFF: &str = "nosniff";
 async fn get_file_endpoint(
     Path((content_type_index, hash)): Path<(String, String)>,
 ) -> http::Response<Body> {
-    let is_valid_hash: bool = hash
-        .chars()
-        .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_');
-
-    if is_valid_hash {
+    if is_valid_hash(&hash) {
         match fs::read(filepath(&hash)) {
             Result::Ok(data) => {
                 let content_type = match content_type_index.parse::<usize>() {
@@ -2802,6 +2830,51 @@ mod tests {
     fn forget_stored(hash: &str) {
         let _ = fs::remove_file(filepath(hash));
         let _ = fs::remove_file(thumbnail_filepath(hash));
+    }
+
+    async fn delete_files(hashes: &[&str]) -> Vec<String> {
+        let response =
+            delete_files_endpoint(Json(hashes.iter().map(|hash| hash.to_string()).collect())).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        serde_json::from_str(response.body()).expect("the response should be a list of hashes")
+    }
+
+    #[tokio::test]
+    async fn deleting_files_removes_them_and_their_thumbnails() {
+        create_storage_dir();
+        fs::write(filepath("deleteWithThumbnail"), b"a file").unwrap();
+        fs::write(thumbnail_filepath("deleteWithThumbnail"), b"a thumbnail").unwrap();
+        fs::write(filepath("deleteWithoutThumbnail"), b"a file").unwrap();
+
+        let deleted = delete_files(&["deleteWithThumbnail", "deleteWithoutThumbnail"]).await;
+
+        assert_eq!(
+            deleted,
+            vec!["deleteWithThumbnail", "deleteWithoutThumbnail"]
+        );
+        assert!(!fs::exists(filepath("deleteWithThumbnail")).unwrap());
+        assert!(!fs::exists(thumbnail_filepath("deleteWithThumbnail")).unwrap());
+        assert!(!fs::exists(filepath("deleteWithoutThumbnail")).unwrap());
+    }
+
+    #[tokio::test]
+    async fn deleting_a_file_that_is_already_gone_counts_as_deleted() {
+        create_storage_dir();
+
+        assert_eq!(delete_files(&["neverStored"]).await, vec!["neverStored"]);
+    }
+
+    #[tokio::test]
+    async fn deleting_files_refuses_hashes_that_are_not_filenames() {
+        create_storage_dir();
+        fs::write("./var/lib/atchat/secret", b"not a stored file").unwrap();
+
+        let deleted = delete_files(&["../secret", "", "."]).await;
+        let still_there = fs::exists("./var/lib/atchat/secret").unwrap();
+        let _ = fs::remove_file("./var/lib/atchat/secret");
+
+        assert!(deleted.is_empty());
+        assert!(still_there);
     }
 
     #[tokio::test]

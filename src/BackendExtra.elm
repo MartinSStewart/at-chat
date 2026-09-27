@@ -2827,6 +2827,9 @@ backendMsgLog msg =
         RegeneratedServerSecret _ _ _ _ ->
             BackendMsgLog_RegeneratedServerSecret
 
+        DeletedOrphanedFiles _ _ _ _ ->
+            BackendMsgLog_DeletedOrphanedFiles
+
         ReloadedDiscordGuildForAdmin _ _ _ _ _ _ ->
             BackendMsgLog_ReloadedDiscordGuildForAdmin
 

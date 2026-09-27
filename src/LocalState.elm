@@ -16,6 +16,7 @@ module LocalState exposing
     , CallStatus(..)
     , ChannelStatus(..)
     , ConnectionData
+    , DeleteOrphanedFilesStatus(..)
     , DeletedBackendGuild
     , DiscordBackendChannel
     , DiscordBackendGuild
@@ -991,6 +992,7 @@ type alias AdminData =
     , lastBackup : Maybe LastBackup
     , websocketCloseEvents : AdminDataStatus (Array WebsocketClosedEvent)
     , orphanedFiles : AdminDataStatus (SeqDict FileHash BackendFileData)
+    , deleteOrphanedFiles : DeleteOrphanedFilesStatus
     , sessions : AdminDataStatus (SeqDict SessionIdHash UserSession)
     , wordSpellingGameEnglish : WordSpellingGameStatus
     , wordSpellingGameSwedish : WordSpellingGameStatus
@@ -1082,6 +1084,12 @@ type alias LastBackup =
 type BackupContents
     = FullBackup
     | SubsetBackup
+
+
+type DeleteOrphanedFilesStatus
+    = NotDeletingOrphanedFiles
+    | DeletingOrphanedFiles
+    | DeletingOrphanedFilesFailed Http.Error
 
 
 type ServerSecretStatus
