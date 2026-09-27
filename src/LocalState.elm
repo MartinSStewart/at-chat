@@ -993,6 +993,7 @@ type alias AdminData =
     , websocketCloseEvents : AdminDataStatus (Array WebsocketClosedEvent)
     , orphanedFiles : AdminDataStatus (SeqDict FileHash BackendFileData)
     , deleteOrphanedFiles : DeleteOrphanedFilesStatus
+    , bucketFileCount : AdminDataStatus (Result Http.Error Int)
     , sessions : AdminDataStatus (SeqDict SessionIdHash UserSession)
     , wordSpellingGameEnglish : WordSpellingGameStatus
     , wordSpellingGameSwedish : WordSpellingGameStatus

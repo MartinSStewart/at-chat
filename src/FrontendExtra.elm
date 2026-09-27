@@ -6358,6 +6358,7 @@ initAdminData adminData =
     , websocketCloseEvents = LocalState.AdminDataNotLoaded
     , orphanedFiles = LocalState.AdminDataNotLoaded
     , deleteOrphanedFiles = LocalState.NotDeletingOrphanedFiles
+    , bucketFileCount = LocalState.AdminDataNotLoaded
     , sessions = LocalState.AdminDataNotLoaded
     , wordSpellingGameEnglish = adminData.wordSpellingGameEnglish
     , wordSpellingGameSwedish = adminData.wordSpellingGameSwedish

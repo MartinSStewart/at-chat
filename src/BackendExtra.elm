@@ -2830,6 +2830,9 @@ backendMsgLog msg =
         DeletedOrphanedFiles _ _ _ _ _ ->
             BackendMsgLog_DeletedOrphanedFiles
 
+        GotBucketFileCount _ _ _ ->
+            BackendMsgLog_GotBucketFileCount
+
         ReloadedDiscordGuildForAdmin _ _ _ _ _ _ ->
             BackendMsgLog_ReloadedDiscordGuildForAdmin
 
