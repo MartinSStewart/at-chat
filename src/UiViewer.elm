@@ -535,7 +535,7 @@ logExamples =
                 (Id.fromInt 3)
             )
         , logEntry (Log.SignupEmail (Err (Postmark.UnknownError { statusCode = 500, body = "Internal Server Error" })))
-        , logEntry (Log.FailedToSendNotificationEmail (Postmark.UnknownError { statusCode = 500, body = "Internal Server Error" }) exampleEmail)
+        , logEntry (Log.FailedToSendNotificationEmail (Postmark.UnknownError { statusCode = 500, body = "Internal Server Error" }) (Id.fromInt 3))
         , logEntry (Log.LoginsRateLimited (Id.fromInt 42))
         , logEntry (Log.ChangedUsers (Id.fromInt 7))
         , logEntry (Log.SendLogErrorEmailFailed Postmark.Timeout exampleEmail)

@@ -915,6 +915,7 @@ notification time userToNotify title senderIcon userToString channels plainText 
                         NotifyMeWhenMentioned ->
                             [ messageNotificationEmail
                                 time
+                                userToNotify
                                 user.email
                                 title
                                 senderIcon
@@ -997,7 +998,7 @@ notificationAlt time userToNotify title icon pushNotificationText emailText emai
                     case user.emailNotifications of
                         NotifyMeWhenMentioned ->
                             [ Postmark.sendEmail
-                                (SentNotificationEmail time user.email)
+                                (SentNotificationEmail time userToNotify)
                                 model.postmarkApiKey
                                 { from = { name = "", email = notificationEmailFrom }
                                 , to = List.Nonempty.fromElement { name = "", email = user.email }
@@ -1050,6 +1051,7 @@ Sent when the user has enabled email notifications in their settings.
 -}
 messageNotificationEmail :
     Time.Posix
+    -> Id UserId
     -> EmailAddress
     -> String
     -> Maybe FileHash
@@ -1060,11 +1062,11 @@ messageNotificationEmail :
     -> Message messageId userId channelId
     -> Postmark.ApiKey
     -> Command BackendOnly toMsg BackendMsg
-messageNotificationEmail time email senderName senderIcon userToString channels navigateTo plainText message postmarkApiKey =
+messageNotificationEmail time userId email senderName senderIcon userToString channels navigateTo plainText message postmarkApiKey =
     let
         helper subject body =
             Postmark.sendEmail
-                (SentNotificationEmail time email)
+                (SentNotificationEmail time userId)
                 postmarkApiKey
                 { from = { name = "", email = notificationEmailFrom }
                 , to = List.Nonempty.fromElement { name = "", email = email }

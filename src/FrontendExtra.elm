@@ -1322,7 +1322,6 @@ accountDeletionBanner safeAreaInsetTop time deleteAt =
             [ Ui.width Ui.shrink
             , Ui.height Ui.fill
             , Ui.paddingXY 16 0
-            , Ui.contentCenterY
             , MyUi.hoverText "Close"
             , Ui.contentCenterY
             , Ui.alignRight

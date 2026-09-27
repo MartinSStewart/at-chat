@@ -44,7 +44,7 @@ import FileStatus exposing (FileData, FileHash, FileId)
 import Game
 import Go
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import ImageEditor
 import Lamdera as LamderaCore
@@ -527,13 +527,13 @@ updateHelper msg model =
                 Err error ->
                     BackendExtra.addLog time (Log.SendLogErrorEmailFailed error email) model
 
-        SentNotificationEmail time email result ->
-            case result of
+        SentNotificationEmail time userId result ->
+            case withoutRecipients result of
                 Ok _ ->
                     ( model, Command.none )
 
                 Err error ->
-                    BackendExtra.addLog time (Log.FailedToSendNotificationEmail error email) model
+                    BackendExtra.addLog time (Log.FailedToSendNotificationEmail error userId) model
 
         DiscordUserWebsocketMsg discordUserId result ->
             let
@@ -2020,7 +2020,7 @@ updateHelper msg model =
 
                 withNewOrphanedFiles : BackendModel
                 withNewOrphanedFiles =
-                    { model | orphanedFilesLastHour = SeqSet.diff orphanedFiles filesToDelete }
+                    deleteAccounts time { model | orphanedFilesLastHour = SeqSet.diff orphanedFiles filesToDelete }
 
                 shouldExport : Bool
                 shouldExport =
@@ -2688,6 +2688,111 @@ disconnectClient time sessionId clientId model =
 
         _ ->
             ( model, Command.none )
+
+
+deleteAccounts : Time.Posix -> BackendModel -> BackendModel
+deleteAccounts time model =
+    let
+        usersToDelete : SeqSet (Id UserId)
+        usersToDelete =
+            NonemptyDict.foldl
+                (\userId user set ->
+                    case user.deleteAccountAt of
+                        Just deleteAt ->
+                            if not user.isAdmin && Time.posixToMillis deleteAt <= Time.posixToMillis time then
+                                SeqSet.insert userId set
+
+                            else
+                                set
+
+                        Nothing ->
+                            set
+                )
+                SeqSet.empty
+                model.users
+    in
+    if SeqSet.isEmpty usersToDelete then
+        model
+
+    else
+        { model
+            | users =
+                NonemptyDict.map
+                    (\userId user ->
+                        if SeqSet.member userId usersToDelete then
+                            User.init
+                                user.createdAt
+                                (PersonName.fromStringLossy ("<delete_user_" ++ Id.toString userId ++ ">"))
+                                user.email
+                                False
+
+                        else
+                            user
+                    )
+                    model.users
+            , guilds =
+                SeqDict.map
+                    (\_ guild ->
+                        { guild
+                            | channels =
+                                SeqDict.map (\_ channel -> deleteMessagesInChannel usersToDelete channel) guild.channels
+                        }
+                    )
+                    model.guilds
+            , dmChannels = SeqDict.map (\_ dmChannel -> deleteMessagesInChannel usersToDelete dmChannel) model.dmChannels
+        }
+
+
+deleteMessagesInChannel :
+    SeqSet (Id UserId)
+    ->
+        { a
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
+            , threads : SeqDict (Id ChannelMessageId) { b | messages : IdArray ThreadMessageId (Message ThreadMessageId (Id UserId) (Id ChannelId)) }
+        }
+    ->
+        { a
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId) (Id ChannelId))
+            , threads : SeqDict (Id ChannelMessageId) { b | messages : IdArray ThreadMessageId (Message ThreadMessageId (Id UserId) (Id ChannelId)) }
+        }
+deleteMessagesInChannel usersToDelete channel =
+    { channel
+        | messages = IdArray.map (\_ message -> deleteMessageBy usersToDelete message) channel.messages
+        , threads =
+            SeqDict.map
+                (\_ thread -> { thread | messages = IdArray.map (\_ message -> deleteMessageBy usersToDelete message) thread.messages })
+                channel.threads
+    }
+
+
+deleteMessageBy : SeqSet (Id UserId) -> Message messageId (Id UserId) channelId -> Message messageId (Id UserId) channelId
+deleteMessageBy usersToDelete message =
+    case message of
+        UserTextMessage data ->
+            if SeqSet.member data.createdBy usersToDelete then
+                DeletedMessage data.createdAt
+
+            else
+                message
+
+        EncryptedUserTextMessage data ->
+            if SeqSet.member data.createdBy usersToDelete then
+                DeletedMessage data.createdAt
+
+            else
+                message
+
+        UserJoinedMessage _ _ _ _ ->
+            message
+
+        DeletedMessage _ ->
+            message
+
+        CallStarted _ ->
+            message
+
+        GameStarted _ ->
+            message
 
 
 {-| Postmark's errors list who the email was for, which would put the email address in the log.
@@ -5713,7 +5818,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         (LocalChange session.userId (Local_ScheduleAccountDeletion deleteAt))
                                         model
                                     , BackendExtra.sendAccountDeletionEmail
-                                        (SentNotificationEmail time user.email)
+                                        (SentNotificationEmail time session.userId)
                                         user.email
                                         deleteAt
                                         model.postmarkApiKey

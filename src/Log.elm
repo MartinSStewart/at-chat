@@ -25,7 +25,7 @@ import Ui.Prose
 type Log
     = LoginEmail (Result Postmark.SendEmailError ()) (Id UserId)
     | SignupEmail (Result Postmark.SendEmailError ())
-    | FailedToSendNotificationEmail Postmark.SendEmailError EmailAddress
+    | FailedToSendNotificationEmail Postmark.SendEmailError (Id UserId)
     | LoginsRateLimited (Id UserId)
     | ChangedUsers (Id UserId)
     | SendLogErrorEmailFailed Postmark.SendEmailError EmailAddress
@@ -345,11 +345,11 @@ logContent onPressCopy emojiData customEmojis log =
                         , errorDetails (sendEmailErrorToString error)
                         ]
 
-        FailedToSendNotificationEmail error emailAddress ->
+        FailedToSendNotificationEmail error userId ->
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Notification Email Failed"
-                , fieldRow "To" (MyUi.emailAddress emailAddress)
+                , fieldRow "User" (Ui.text (Id.toString userId))
                 , errorDetails (sendEmailErrorToString error)
                 ]
 
