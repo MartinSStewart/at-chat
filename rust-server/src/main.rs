@@ -803,7 +803,14 @@ async fn regenerate_server_secret_endpoint(state: State<Arc<Mutex<AppState>>>) -
 // mount and each delete is a round trip to the bucket.
 async fn delete_files_endpoint(Json(hashes): Json<Vec<String>>) -> Response<String> {
     tokio::spawn(async move {
+        let total = hashes.len();
         let not_deleted = delete_stored_files(hashes).await;
+
+        println!(
+            "Finished deleting orphaned files: {} of {} deleted",
+            total - not_deleted.len(),
+            total
+        );
 
         if !not_deleted.is_empty() {
             println!(
