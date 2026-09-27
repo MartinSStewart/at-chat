@@ -795,14 +795,30 @@ async fn regenerate_server_secret_endpoint(state: State<Arc<Mutex<AppState>>>) -
     }
 }
 
-// Deletes the files, and their thumbnails, named by a JSON list of hashes. The
-// response lists the hashes that are no longer stored, which includes ones that
-// were already gone, so the backend can forget about exactly those.
-//
-// Storage is the s3fs mount, where each delete is a round trip to the bucket, so
-// they go through tokio::fs to stay off the worker threads, a few at a time.
+// Deletes the files, and their thumbnails, named by a JSON list of hashes. It
+// answers straight away and deletes in the background, since storage is the s3fs
+// mount and each delete is a round trip to the bucket.
 async fn delete_files_endpoint(Json(hashes): Json<Vec<String>>) -> Response<String> {
-    let deleted: Vec<String> = futures_util::stream::iter(hashes)
+    tokio::spawn(async move {
+        let not_deleted = delete_stored_files(hashes).await;
+
+        if !not_deleted.is_empty() {
+            println!(
+                "Failed to delete {} files, starting with {:?}",
+                not_deleted.len(),
+                &not_deleted[..not_deleted.len().min(10)]
+            );
+        }
+    });
+
+    response_with_headers(StatusCode::OK, "OK")
+}
+
+// Returns the hashes that couldn't be deleted. A file that's already gone counts
+// as deleted. The deletes go through tokio::fs to stay off the worker threads, a
+// few at a time.
+async fn delete_stored_files(hashes: Vec<String>) -> Vec<String> {
+    futures_util::stream::iter(hashes)
         .map(|hash| async move {
             let is_deleted = is_valid_hash(&hash)
                 && remove_if_present(filepath(&hash)).await
@@ -810,11 +826,9 @@ async fn delete_files_endpoint(Json(hashes): Json<Vec<String>>) -> Response<Stri
             (hash, is_deleted)
         })
         .buffered(8)
-        .filter_map(|(hash, is_deleted)| async move { is_deleted.then_some(hash) })
+        .filter_map(|(hash, is_deleted)| async move { (!is_deleted).then_some(hash) })
         .collect()
-        .await;
-
-    json_response_with_headers(StatusCode::OK, serde_json::to_string(&deleted).unwrap())
+        .await
 }
 
 async fn remove_if_present(path: String) -> bool {
@@ -2838,11 +2852,15 @@ mod tests {
         let _ = fs::remove_file(thumbnail_filepath(hash));
     }
 
-    async fn delete_files(hashes: &[&str]) -> Vec<String> {
-        let response =
-            delete_files_endpoint(Json(hashes.iter().map(|hash| hash.to_string()).collect())).await;
+    fn owned(hashes: &[&str]) -> Vec<String> {
+        hashes.iter().map(|hash| hash.to_string()).collect()
+    }
+
+    #[tokio::test]
+    async fn deleting_files_answers_before_the_files_are_gone() {
+        let response = delete_files_endpoint(Json(owned(&["neverStoredEither"]))).await;
+
         assert_eq!(response.status(), StatusCode::OK);
-        serde_json::from_str(response.body()).expect("the response should be a list of hashes")
     }
 
     #[tokio::test]
@@ -2852,12 +2870,10 @@ mod tests {
         fs::write(thumbnail_filepath("deleteWithThumbnail"), b"a thumbnail").unwrap();
         fs::write(filepath("deleteWithoutThumbnail"), b"a file").unwrap();
 
-        let deleted = delete_files(&["deleteWithThumbnail", "deleteWithoutThumbnail"]).await;
+        let not_deleted =
+            delete_stored_files(owned(&["deleteWithThumbnail", "deleteWithoutThumbnail"])).await;
 
-        assert_eq!(
-            deleted,
-            vec!["deleteWithThumbnail", "deleteWithoutThumbnail"]
-        );
+        assert!(not_deleted.is_empty());
         assert!(!fs::exists(filepath("deleteWithThumbnail")).unwrap());
         assert!(!fs::exists(thumbnail_filepath("deleteWithThumbnail")).unwrap());
         assert!(!fs::exists(filepath("deleteWithoutThumbnail")).unwrap());
@@ -2867,7 +2883,11 @@ mod tests {
     async fn deleting_a_file_that_is_already_gone_counts_as_deleted() {
         create_storage_dir();
 
-        assert_eq!(delete_files(&["neverStored"]).await, vec!["neverStored"]);
+        assert!(
+            delete_stored_files(owned(&["neverStored"]))
+                .await
+                .is_empty()
+        );
     }
 
     #[tokio::test]
@@ -2875,11 +2895,11 @@ mod tests {
         create_storage_dir();
         fs::write("./var/lib/atchat/secret", b"not a stored file").unwrap();
 
-        let deleted = delete_files(&["../secret", "", "."]).await;
+        let not_deleted = delete_stored_files(owned(&["../secret", "", "."])).await;
         let still_there = fs::exists("./var/lib/atchat/secret").unwrap();
         let _ = fs::remove_file("./var/lib/atchat/secret");
 
-        assert!(deleted.is_empty());
+        assert_eq!(not_deleted, vec!["../secret", "", "."]);
         assert!(still_there);
     }
 

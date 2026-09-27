@@ -912,7 +912,7 @@ type BackendMsg
     | GotDiscordStandardStickerPacks Time.Posix (Result Discord.HttpError (List Discord.StickerPack))
     | ScheduledExportUploadResult Time.Posix Int (Result Http.Error ())
     | RegeneratedServerSecret Time.Posix ChangeId ClientId (Result Http.Error (SecretId ServerSecret))
-    | DeletedOrphanedFiles Time.Posix ChangeId ClientId (List FileHash) (List FileHash) (Result Http.Error (List FileHash))
+    | DeletedOrphanedFiles Time.Posix ChangeId ClientId (List FileHash) (Result Http.Error ())
     | ReloadedDiscordGuildForAdmin Time.Posix ChangeId ClientId (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Result Discord.HttpError ( Discord.Guild, List Discord.Channel2 ))
     | GotTimeForWebsocketListenClose (Discord.Id Discord.UserId) Websocket.CloseEventCode String Time.Posix
     | Rpc_GotFileUpload FileHash Int (Maybe (Coord CssPixels))

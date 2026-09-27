@@ -40,14 +40,13 @@ import Effect.Websocket as Websocket
 import EmailAddress
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Env
-import FileStatus exposing (BackendFileData, FileData, FileHash, FileId)
+import FileStatus exposing (FileData, FileHash, FileId)
 import Game
 import Go
 import GuildName
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId, Viewing_ChannelId, Viewing_DmId)
 import IdArray exposing (IdArray)
 import ImageEditor
-import Json.Decode
 import Lamdera as LamderaCore
 import LinkedAndOtherDiscordUsers
 import List.Extra
@@ -2128,34 +2127,35 @@ updateHelper msg model =
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToGenerateScheduledBackup error backupSize) model
 
-        DeletedOrphanedFiles time changeId clientId deletedSoFar remaining result ->
+        DeletedOrphanedFiles time changeId clientId deleted result ->
+            let
+                responseCmd : Command BackendOnly ToFrontend BackendMsg
+                responseCmd =
+                    FilledInByBackend (Result.map (\() -> deleted) result)
+                        |> Pages.Admin.DeleteOrphanedFiles
+                        |> Local_Admin
+                        |> LocalChangeResponse changeId
+                        |> Lamdera.sendToFrontend clientId
+            in
             case result of
-                Ok deleted ->
+                Ok () ->
                     let
                         deletedSet : SeqSet FileHash
                         deletedSet =
                             SeqSet.fromList deleted
-
-                        model2 : BackendModel
-                        model2 =
-                            { model
-                                | files = List.foldl SeqDict.remove model.files deleted
-                                , discordAttachments =
-                                    SeqDict.filter
-                                        (\_ attachment -> not (SeqSet.member attachment.fileHash deletedSet))
-                                        model.discordAttachments
-                            }
                     in
-                    ( model2
-                    , deleteOrphanedFilesBatch time changeId clientId (deleted ++ deletedSoFar) remaining model2
+                    ( { model
+                        | files = List.foldl SeqDict.remove model.files deleted
+                        , discordAttachments =
+                            SeqDict.filter
+                                (\_ attachment -> not (SeqSet.member attachment.fileHash deletedSet))
+                                model.discordAttachments
+                      }
+                    , responseCmd
                     )
 
                 Err error ->
-                    BackendExtra.addLogWithCmd
-                        time
-                        (Log.FailedToDeleteOrphanedFiles error)
-                        model
-                        (deleteOrphanedFilesResponse changeId clientId { deleted = deletedSoFar, error = Just error })
+                    BackendExtra.addLogWithCmd time (Log.FailedToDeleteOrphanedFiles error) model responseCmd
 
         RegeneratedServerSecret time changeId clientId result ->
             let
@@ -8848,78 +8848,6 @@ adminDataResponse changeId clientId adminChange =
         |> Lamdera.sendToFrontend clientId
 
 
-{-| Files are deleted a batch at a time so that each request to the Rust server finishes well
-within the timeout, however many files there are. A file that has come back into use since the
-deletion started, by the same file being uploaded again, is left alone.
--}
-deleteOrphanedFilesBatch :
-    Time.Posix
-    -> ChangeId
-    -> ClientId
-    -> List FileHash
-    -> List FileHash
-    -> BackendModel
-    -> Command BackendOnly ToFrontend BackendMsg
-deleteOrphanedFilesBatch time changeId clientId deletedSoFar remaining model =
-    let
-        orphanedFiles : SeqDict FileHash BackendFileData
-        orphanedFiles =
-            BackendExtra.orphanedFiles model
-
-        stillOrphaned : List FileHash
-        stillOrphaned =
-            List.filter (\fileHash -> SeqDict.member fileHash orphanedFiles) remaining
-    in
-    case stillOrphaned of
-        [] ->
-            deleteOrphanedFilesResponse changeId clientId { deleted = deletedSoFar, error = Nothing }
-
-        _ ->
-            Http.task
-                { method = "POST"
-                , url = FileStatus.domain ++ "/file/internal/delete-files"
-                , body = Http.jsonBody (Codec.encoder (Codec.list FileStatus.fileHashCodec) (List.take 100 stillOrphaned))
-                , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
-                , resolver =
-                    Http.stringResolver
-                        (\result ->
-                            case result of
-                                Http.BadStatus_ metadata body ->
-                                    Http.BadBody
-                                        ("Status code: " ++ String.fromInt metadata.statusCode ++ ", body: " ++ body)
-                                        |> Err
-
-                                Http.GoodStatus_ _ text ->
-                                    Codec.decodeString (Codec.list FileStatus.fileHashCodec) text
-                                        |> Result.mapError (\error -> Http.BadBody (Json.Decode.errorToString error))
-
-                                Http.BadUrl_ string ->
-                                    Err (Http.BadUrl string)
-
-                                Http.Timeout_ ->
-                                    Err Http.Timeout
-
-                                Http.NetworkError_ ->
-                                    Err Http.NetworkError
-                        )
-                , timeout = Just Duration.minute
-                }
-                |> Task.attempt (DeletedOrphanedFiles time changeId clientId deletedSoFar (List.drop 100 stillOrphaned))
-
-
-deleteOrphanedFilesResponse :
-    ChangeId
-    -> ClientId
-    -> { deleted : List FileHash, error : Maybe Http.Error }
-    -> Command BackendOnly ToFrontend BackendMsg
-deleteOrphanedFilesResponse changeId clientId result =
-    FilledInByBackend result
-        |> Pages.Admin.DeleteOrphanedFiles
-        |> Local_Admin
-        |> LocalChangeResponse changeId
-        |> Lamdera.sendToFrontend clientId
-
-
 adminChangeUpdate :
     ClientId
     -> ChangeId
@@ -9358,8 +9286,41 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
         Pages.Admin.DeleteOrphanedFiles _ ->
+            let
+                orphanedFiles : List FileHash
+                orphanedFiles =
+                    SeqDict.keys (BackendExtra.orphanedFiles model)
+            in
             ( model
-            , deleteOrphanedFilesBatch time changeId clientId [] (SeqDict.keys (BackendExtra.orphanedFiles model)) model
+            , Http.task
+                { method = "POST"
+                , url = FileStatus.domain ++ "/file/internal/delete-files"
+                , body = Http.jsonBody (Codec.encoder (Codec.list FileStatus.fileHashCodec) orphanedFiles)
+                , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
+                , resolver =
+                    Http.stringResolver
+                        (\result ->
+                            case result of
+                                Http.BadStatus_ metadata body ->
+                                    Http.BadBody
+                                        ("Status code: " ++ String.fromInt metadata.statusCode ++ ", body: " ++ body)
+                                        |> Err
+
+                                Http.GoodStatus_ _ _ ->
+                                    Ok ()
+
+                                Http.BadUrl_ string ->
+                                    Err (Http.BadUrl string)
+
+                                Http.Timeout_ ->
+                                    Err Http.Timeout
+
+                                Http.NetworkError_ ->
+                                    Err Http.NetworkError
+                        )
+                , timeout = Just Duration.minute
+                }
+                |> Task.attempt (DeletedOrphanedFiles time changeId clientId orphanedFiles)
             )
 
         Pages.Admin.RegenerateServerSecret _ ->

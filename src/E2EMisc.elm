@@ -706,7 +706,7 @@ adminConnectionsShowWhatIsViewedTest config =
 
 
 {-| The file attached to a message is in use, so only the uploads nothing refers to are listed
-and deleted. There are more of them than fit in one request to the Rust server.
+and deleted.
 -}
 orphanedFilesTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2

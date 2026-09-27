@@ -374,7 +374,7 @@ type AdminChange
     | DisconnectClient SessionIdHash ClientId
     | DeleteSession SessionIdHash
     | RegenerateServerSecret (ToBeFilledInByBackend (Result Http.Error Time.Posix))
-    | DeleteOrphanedFiles (ToBeFilledInByBackend { deleted : List FileHash, error : Maybe Http.Error })
+    | DeleteOrphanedFiles (ToBeFilledInByBackend (Result Http.Error (List FileHash)))
 
 
 type alias EditedBackendUser =
@@ -737,21 +737,18 @@ updateAdmin changedBy change adminData local =
                             EmptyPlaceholder ->
                                 { adminData | deleteOrphanedFiles = DeletingOrphanedFiles }
 
-                            FilledInByBackend { deleted, error } ->
+                            FilledInByBackend (Ok deleted) ->
                                 { adminData
-                                    | deleteOrphanedFiles =
-                                        case error of
-                                            Just error2 ->
-                                                DeletingOrphanedFilesFailed error2
-
-                                            Nothing ->
-                                                NotDeletingOrphanedFiles
+                                    | deleteOrphanedFiles = NotDeletingOrphanedFiles
                                     , orphanedFiles =
                                         LocalState.updateAdminData
                                             (\orphanedFiles -> List.foldl SeqDict.remove orphanedFiles deleted)
                                             adminData.orphanedFiles
                                     , filesCount = adminData.filesCount - List.length deleted
                                 }
+
+                            FilledInByBackend (Err error) ->
+                                { adminData | deleteOrphanedFiles = DeletingOrphanedFilesFailed error }
                         )
             }
 

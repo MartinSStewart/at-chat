@@ -2187,18 +2187,13 @@ handleInternalRequests discordStickerPacks currentRequest rest =
                     ""
 
             [ "delete-files" ] ->
-                case currentRequest.body of
-                    T.JsonBody json ->
-                        StringHttpResponse
-                            { url = currentRequest.url
-                            , statusCode = 200
-                            , statusText = "OK"
-                            , headers = Dict.empty
-                            }
-                            (Json.Encode.encode 0 json)
-
-                    _ ->
-                        UnhandledHttpRequest
+                StringHttpResponse
+                    { url = currentRequest.url
+                    , statusCode = 200
+                    , statusText = "OK"
+                    , headers = Dict.empty
+                    }
+                    "OK"
 
             [ "regenerate-server-secret" ] ->
                 StringHttpResponse
