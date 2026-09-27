@@ -39,6 +39,7 @@ import Audio
 import Broadcast
 import ChannelExport
 import Color
+import DiscordUserData
 import DmChannel
 import DmChannelId
 import Drawing
@@ -70,6 +71,7 @@ import NonemptyDict
 import Pages.Admin
 import Pages.Guild
 import PersonName
+import Quantity
 import Range exposing (Range)
 import RichText
 import Route exposing (ChannelsVisibleOnMobile(..))
@@ -2406,14 +2408,16 @@ colorPickerTest config =
 
 {-| Deleting an account only schedules it, so the same button cancels it again, and until then a
 banner counts down the time left and leads back to the button. Once the time is up, the next
-hourly update resets the account, renames it and replaces everything it wrote with deleted
-messages. Admins can't delete their account.
+hourly update resets the account, renames it, replaces everything it wrote with deleted
+messages and unlinks its Discord account. Admins can't delete their account.
 -}
 deleteAccountTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> String
+    -> String
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
-deleteAccountTest config =
-    E2EHelper.startTest
+deleteAccountTest config discordOp0Ready discordOp0ReadySupplemental =
+    T.start
         "Delete account"
         E2EHelper.startTime
         config
@@ -2471,19 +2475,51 @@ deleteAccountTest config =
                         , user.click 100 (Dom.id "userOptions_closeUserOptions")
                         , user.click 100 (Dom.id "accountDeletionBanner_close")
                         , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "accountDeletionBanner" ])
-
-                        -- Nothing happens until the two weeks are up.
-                        , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate (Duration.addTo data.time (Duration.days 13))) ])
-                        , T.checkState 100 (checkAccountDeletion E2EHelper.userEmail True)
-                        , T.checkState 100 (checkDeletedMessages 0)
-                        , T.andThen 100 (\data -> [ T.backendUpdate 0 (Types.HourlyUpdate (Duration.addTo data.time (Duration.days 15))) ])
-                        , T.checkState 100 checkAccountWasDeleted
-                        , T.checkState 100 (checkDeletedMessages 3)
+                        , E2EHelper.linkSecondDiscordAccount E2EHelper.sessionId1 discordOp0Ready discordOp0ReadySupplemental
+                        , T.checkState 1000 (checkDiscordAccountIsLinked True)
                         ]
                     )
                 ]
             )
+
+        -- Nothing happens until the two weeks are up. The frontends are gone by now so that
+        -- simulating two weeks of their timers doesn't slow the test down, which is also why
+        -- this test uses T.start instead of E2EHelper.startTest and its attacker frontend.
+        , T.checkState (Duration.days 14 |> Quantity.minus Duration.hour |> Duration.inMilliseconds) checkAccountIsStillScheduled
+        , T.checkState 0 (checkDeletedMessages 0)
+        , T.checkState 0 (checkDiscordAccountIsLinked True)
+        , T.checkState (Duration.hours 2 |> Duration.inMilliseconds) checkAccountWasDeleted
+        , T.checkState 0 (checkDeletedMessages 3)
+        , T.checkState 0 (checkDiscordAccountIsLinked False)
         ]
+
+
+{-| A linked Discord account has its gateway open, and deleting the at-chat account it's linked to
+turns it back into basic data and closes the gateway.
+-}
+checkDiscordAccountIsLinked : Bool -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkDiscordAccountIsLinked isLinked data =
+    case
+        ( SeqDict.get E2EHelper.secondDiscordUserId (E2EHelper.unwrapBackend data.backend).discordUsers
+        , E2EHelper.websocketByDiscordToken E2EHelper.secondDiscordToken data
+        , isLinked
+        )
+    of
+        ( Just (DiscordUserData.FullData _), Just _, True ) ->
+            Ok ()
+
+        ( Just (DiscordUserData.BasicData _), Nothing, False ) ->
+            Ok ()
+
+        ( Nothing, _, _ ) ->
+            Err "Expected the Discord account to exist"
+
+        _ ->
+            if isLinked then
+                Err "The Discord account should be linked with its gateway open"
+
+            else
+                Err "The Discord account should have been unlinked and its gateway closed"
 
 
 userIdByEmail : EmailAddress -> T.Data FrontendModel E2EHelper.BackendModel2 -> Maybe ( Id.Id Id.UserId, User.BackendUser )
@@ -2518,6 +2554,20 @@ checkAccountDeletion email isScheduled state =
             Err "The account should be scheduled for deletion"
 
         ( Nothing, _ ) ->
+            Err "Expected the user to exist on the backend"
+
+
+checkAccountIsStillScheduled : T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkAccountIsStillScheduled state =
+    case userIdByEmail E2EHelper.userEmail state of
+        Just ( _, user ) ->
+            if user.deleteAccountAt == Nothing then
+                Err "The account should still be scheduled for deletion"
+
+            else
+                Ok ()
+
+        Nothing ->
             Err "Expected the user to exist on the backend"
 
 
