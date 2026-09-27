@@ -1067,7 +1067,12 @@ view loaded =
         -- The preview isn't at the edge of the screen, so nothing covers it
         previewStartupData : Ports.StartupData
         previewStartupData =
-            { startupData | safeAreaInsetTop = 0, safeAreaInsetBottom = 0 }
+            { startupData
+                | safeAreaInsetTop = 0
+                , safeAreaInsetBottom = 0
+                , loadStartupDataTime = previewTime
+                , timeOrigin = previewTime
+            }
 
         previewLoggedIn : Types.LoggedIn2
         previewLoggedIn =
@@ -1107,7 +1112,7 @@ view loaded =
                 80
 
             else
-                120
+                96
 
         bottomPadding : Int
         bottomPadding =

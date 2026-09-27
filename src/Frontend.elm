@@ -8762,7 +8762,7 @@ updateLoadedFromBackend msg model =
 
 view : AudioData -> FrontendModel_ -> Browser.Document FrontendMsg_
 view _ model =
-    { title = "AtChat"
+    { title = "at-chat"
     , body =
         [ case model of
             Loading loading ->
