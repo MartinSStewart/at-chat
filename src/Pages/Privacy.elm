@@ -29,7 +29,7 @@ view noOp =
 
 ## What is stored
 
-at-chat stores or has access to the following sensitive data:
+at-chat stores the following sensitive data:
 * Your email address
 * Your name (should you choose to provide your real name)
 * Any messages you write that contain sensitive data
