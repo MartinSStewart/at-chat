@@ -705,7 +705,8 @@ adminConnectionsShowWhatIsViewedTest config =
         ]
 
 
-{-| The file attached to a message is in use, so only the upload nothing refers to is listed.
+{-| The file attached to a message is in use, so only the uploads nothing refers to are listed
+and deleted.
 -}
 orphanedFilesTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
@@ -721,7 +722,14 @@ orphanedFilesTest config =
                 [ E2EHelper.uploadImageAttachment admin
                 , E2EHelper.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-                , T.backendUpdate 100 (Types.Rpc_GotFileUpload (FileStatus.fileHash "unusedFile") 5000 Nothing)
+                , List.range 1 150
+                    |> List.map
+                        (\index ->
+                            T.backendUpdate
+                                0
+                                (Types.Rpc_GotFileUpload (FileStatus.fileHash ("unusedFile" ++ String.fromInt index)) 5000 Nothing)
+                        )
+                    |> T.group
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId0
@@ -738,8 +746,19 @@ orphanedFilesTest config =
                                 ]
                             )
                         , adminPage.click 100 (Pages.Admin.expandSectionButtonId Pages.Admin.FilesSection)
-                        , E2EHelper.hasExactText adminPage [ "unusedFile", "Orphaned file count: 1, total size: 4.9kb" ]
+                        , E2EHelper.hasExactText adminPage [ "Files in bucket: 42", "unusedFile150", "Orphaned file count: 150, total size: 732.4kb" ]
                         , E2EHelper.hasNotExactText adminPage [ "123123123" ]
+                        , adminPage.click 100 Pages.Admin.deleteOrphanedFilesButtonId
+                        , E2EHelper.hasExactText adminPage [ "File count: 1", "No orphaned files" ]
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                if SeqDict.keys (E2EHelper.unwrapBackend backend).files == [ FileStatus.fileHash "123123123" ] then
+                                    Ok ()
+
+                                else
+                                    Err "Only the file in use should be left"
+                            )
                         ]
                     )
                 ]

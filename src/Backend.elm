@@ -20,6 +20,7 @@ import ChannelDescription
 import ChannelExport
 import ChannelImport
 import ChannelName exposing (ChannelName)
+import Codec
 import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
@@ -39,7 +40,7 @@ import Effect.Websocket as Websocket
 import EmailAddress
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Env
-import FileStatus exposing (FileData, FileId)
+import FileStatus exposing (FileData, FileHash, FileId)
 import Game
 import Go
 import GuildName
@@ -1828,7 +1829,7 @@ updateHelper msg model =
 
         DiscordGotGuildIcon guildId uploadResponse ->
             let
-                icon : Maybe FileStatus.FileHash
+                icon : Maybe FileHash
                 icon =
                     Maybe.map .fileHash uploadResponse
             in
@@ -2125,6 +2126,41 @@ updateHelper msg model =
 
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToGenerateScheduledBackup error backupSize) model
+
+        DeletedOrphanedFiles time changeId clientId deleted result ->
+            let
+                responseCmd : Command BackendOnly ToFrontend BackendMsg
+                responseCmd =
+                    FilledInByBackend (Result.map (\() -> deleted) result)
+                        |> Pages.Admin.DeleteOrphanedFiles
+                        |> Local_Admin
+                        |> LocalChangeResponse changeId
+                        |> Lamdera.sendToFrontend clientId
+            in
+            case result of
+                Ok () ->
+                    let
+                        deletedSet : SeqSet FileHash
+                        deletedSet =
+                            SeqSet.fromList deleted
+                    in
+                    ( { model
+                        | files = List.foldl SeqDict.remove model.files deleted
+                        , discordAttachments =
+                            SeqDict.filter
+                                (\_ attachment -> not (SeqSet.member attachment.fileHash deletedSet))
+                                model.discordAttachments
+                      }
+                    , responseCmd
+                    )
+
+                Err error ->
+                    BackendExtra.addLogWithCmd time (Log.FailedToDeleteOrphanedFiles error) model responseCmd
+
+        GotBucketFileCount changeId clientId result ->
+            ( model
+            , adminDataResponse changeId clientId (Pages.Admin.LoadBucketFileCount (FilledInByBackend result))
+            )
 
         RegeneratedServerSecret time changeId clientId result ->
             let
@@ -8939,6 +8975,44 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 (Pages.Admin.LoadWebsocketCloseEvents (FilledInByBackend model.websocketCloseEvents))
             )
 
+        Pages.Admin.LoadBucketFileCount _ ->
+            ( model
+            , Http.task
+                { method = "GET"
+                , url = FileStatus.domain ++ "/file/internal/file-count"
+                , body = Http.emptyBody
+                , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
+                , resolver =
+                    Http.stringResolver
+                        (\result ->
+                            case result of
+                                Http.BadStatus_ metadata body ->
+                                    Http.BadBody
+                                        ("Status code: " ++ String.fromInt metadata.statusCode ++ ", body: " ++ body)
+                                        |> Err
+
+                                Http.GoodStatus_ _ text ->
+                                    case String.toInt text of
+                                        Just count ->
+                                            Ok count
+
+                                        Nothing ->
+                                            Err (Http.BadBody ("Expected a file count but got " ++ text))
+
+                                Http.BadUrl_ string ->
+                                    Err (Http.BadUrl string)
+
+                                Http.Timeout_ ->
+                                    Err Http.Timeout
+
+                                Http.NetworkError_ ->
+                                    Err Http.NetworkError
+                        )
+                , timeout = Just Duration.minute
+                }
+                |> Task.attempt (GotBucketFileCount changeId clientId)
+            )
+
         Pages.Admin.LoadOrphanedFiles _ ->
             ( model
             , adminDataResponse
@@ -9253,6 +9327,44 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
                 Nothing ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+        Pages.Admin.DeleteOrphanedFiles _ ->
+            let
+                orphanedFiles : List FileHash
+                orphanedFiles =
+                    SeqDict.keys (BackendExtra.orphanedFiles model)
+            in
+            ( model
+            , Http.task
+                { method = "POST"
+                , url = FileStatus.domain ++ "/file/internal/delete-files"
+                , body = Http.jsonBody (Codec.encoder (Codec.list FileStatus.fileHashCodec) orphanedFiles)
+                , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
+                , resolver =
+                    Http.stringResolver
+                        (\result ->
+                            case result of
+                                Http.BadStatus_ metadata body ->
+                                    Http.BadBody
+                                        ("Status code: " ++ String.fromInt metadata.statusCode ++ ", body: " ++ body)
+                                        |> Err
+
+                                Http.GoodStatus_ _ _ ->
+                                    Ok ()
+
+                                Http.BadUrl_ string ->
+                                    Err (Http.BadUrl string)
+
+                                Http.Timeout_ ->
+                                    Err Http.Timeout
+
+                                Http.NetworkError_ ->
+                                    Err Http.NetworkError
+                        )
+                , timeout = Just Duration.minute
+                }
+                |> Task.attempt (DeletedOrphanedFiles time changeId clientId orphanedFiles)
+            )
 
         Pages.Admin.RegenerateServerSecret _ ->
             ( model

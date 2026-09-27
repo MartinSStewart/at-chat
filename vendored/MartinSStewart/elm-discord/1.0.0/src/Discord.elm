@@ -5407,6 +5407,9 @@ decodeDispatchUserEvent eventName =
         "GUILD_POWERUP_ENTITLEMENTS_CREATE" ->
             JD.succeed DispatchUser_GuildPowerupEntitlementsCreate
 
+        "GUILD_POWERUP_ENTITLEMENTS_DELETE" ->
+            JD.succeed DispatchUser_GuildPowerupEntitlementsDelete
+
         "GUILD_ROLE_UPDATE" ->
             JD.field "d" decodeGuildRoleUpdate |> JD.map DispatchUser_GuildRoleUpdate
 
@@ -5418,6 +5421,9 @@ decodeDispatchUserEvent eventName =
 
         "USER_UPDATE" ->
             JD.field "d" decodeUser |> JD.map DispatchUser_UserUpdate
+
+        "GUILD_SCHEDULED_EVENT_UPDATE" ->
+            JD.succeed DispatchUser_GuildScheduledEventUpdate
 
         "GUILD_SCHEDULED_EVENT_USER_ADD" ->
             JD.field "d" decodeGuildScheduledEventUserData
@@ -5753,11 +5759,13 @@ type OpDispatchUserEvent
     | DispatchUser_GuildDelete GuildDelete
     | DispatchUser_GuildAppliedBoostsUpdate
     | DispatchUser_GuildPowerupEntitlementsCreate
+    | DispatchUser_GuildPowerupEntitlementsDelete
     | DispatchUser_ChannelUpdate Channel
     | DispatchUser_GuildRoleUpdate GuildRoleUpdate
     | DispatchUser_GuildEmojisUpdate GuildEmojisUpdate
     | DispatchUser_ChannelPinsUpdate ChannelPinsUpdate
     | DispatchUser_UserUpdate User
+    | DispatchUser_GuildScheduledEventUpdate
     | DispatchUser_GuildScheduledEventUserAdd GuildScheduledEventUserData
     | DispatchUser_GuildScheduledEventUserRemove GuildScheduledEventUserData
 
@@ -7104,6 +7112,9 @@ handleUserGateway authToken intents response model =
                         DispatchUser_GuildPowerupEntitlementsCreate ->
                             ( model, [] )
 
+                        DispatchUser_GuildPowerupEntitlementsDelete ->
+                            ( model, [] )
+
                         DispatchUser_ChannelUpdate channel ->
                             ( model, [ UserOutMsg_ChannelUpdated channel ] )
 
@@ -7118,6 +7129,9 @@ handleUserGateway authToken intents response model =
 
                         DispatchUser_UserUpdate user ->
                             ( model, [ UserOutMsg_UserUpdate user ] )
+
+                        DispatchUser_GuildScheduledEventUpdate ->
+                            ( model, [] )
 
                         DispatchUser_GuildScheduledEventUserAdd eventUserData ->
                             ( model, [ UserOutMsg_GuildScheduledEventUserAdd eventUserData ] )

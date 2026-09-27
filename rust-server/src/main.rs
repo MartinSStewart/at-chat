@@ -73,6 +73,10 @@ async fn main() {
                     post(push_notification_endpoint).options(options_endpoint),
                 )
                 .route(
+                    "/file/internal/delete-files",
+                    post(delete_files_endpoint).options(options_endpoint),
+                )
+                .route(
                     "/file/internal/custom-request",
                     post(custom_request_endpoint).options(options_endpoint),
                 )
@@ -82,6 +86,7 @@ async fn main() {
                     get(discord_sticker_endpoint).options(options_endpoint),
                 )
                 .route("/file/internal/vapid", get(vapid_endpoint))
+                .route("/file/internal/file-count", get(file_count_endpoint))
                 .route("/file/websocket", get(websocket::websocket_endpoint))
                 .route("/file/websocket/{room_id}", get(websocket::room_endpoint))
                 .route("/file/{content_type}/{filename}", get(get_file_endpoint))
@@ -187,12 +192,14 @@ async fn options_endpoint() -> Response<String> {
     response_with_headers(StatusCode::OK, String::from("OK"))
 }
 
+const STORAGE_PATH: &str = "./var/lib/atchat/storage/";
+
 fn filepath(hash: &str) -> String {
-    format!("./var/lib/atchat/storage/{hash}")
+    format!("{STORAGE_PATH}{hash}")
 }
 
 fn thumbnail_filepath(hash: &str) -> String {
-    format!("./var/lib/atchat/storage/{hash}_thumbnail")
+    format!("{STORAGE_PATH}{hash}_thumbnail")
 }
 
 enum FetchedContent {
@@ -788,6 +795,79 @@ async fn regenerate_server_secret_endpoint(state: State<Arc<Mutex<AppState>>>) -
             StatusCode::BAD_REQUEST,
             format!("Write failed\n{:?}", error),
         ),
+    }
+}
+
+// Deletes the files, and their thumbnails, named by a JSON list of hashes. It
+// answers straight away and deletes in the background, since storage is the s3fs
+// mount and each delete is a round trip to the bucket.
+async fn delete_files_endpoint(Json(hashes): Json<Vec<String>>) -> Response<String> {
+    tokio::spawn(async move {
+        let not_deleted = delete_stored_files(hashes).await;
+
+        if !not_deleted.is_empty() {
+            println!(
+                "Failed to delete {} files, starting with {:?}",
+                not_deleted.len(),
+                &not_deleted[..not_deleted.len().min(10)]
+            );
+        }
+    });
+
+    response_with_headers(StatusCode::OK, "OK")
+}
+
+// Returns the hashes that couldn't be deleted. A file that's already gone counts
+// as deleted. The deletes go through tokio::fs to stay off the worker threads, a
+// few at a time.
+async fn delete_stored_files(hashes: Vec<String>) -> Vec<String> {
+    futures_util::stream::iter(hashes)
+        .map(|hash| async move {
+            let is_deleted = is_valid_hash(&hash)
+                && remove_if_present(filepath(&hash)).await
+                && remove_if_present(thumbnail_filepath(&hash)).await;
+            (hash, is_deleted)
+        })
+        .buffered(8)
+        .filter_map(|(hash, is_deleted)| async move { (!is_deleted).then_some(hash) })
+        .collect()
+        .await
+}
+
+// How many uploaded files the bucket holds. Thumbnails sit next to their file
+// with a suffix and backups have a directory of their own, so neither is counted.
+// Only names are looked at, since asking s3fs what kind of entry each one is
+// would be a request to the bucket per file.
+async fn file_count_endpoint() -> Response<String> {
+    match count_stored_files(STORAGE_PATH).await {
+        Ok(count) => response_with_headers(StatusCode::OK, count.to_string()),
+        Err(error) => response_with_headers(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Couldn't read the storage directory\n{error:?}"),
+        ),
+    }
+}
+
+async fn count_stored_files(directory: &str) -> std::io::Result<usize> {
+    let mut entries = tokio::fs::read_dir(directory).await?;
+    let mut count = 0;
+
+    while let Some(entry) = entries.next_entry().await? {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+
+        if name != "backups" && !name.ends_with("_thumbnail") {
+            count += 1;
+        }
+    }
+
+    Ok(count)
+}
+
+async fn remove_if_present(path: String) -> bool {
+    match tokio::fs::remove_file(path).await {
+        Ok(()) => true,
+        Err(error) => error.kind() == std::io::ErrorKind::NotFound,
     }
 }
 
@@ -1506,16 +1586,21 @@ fn json_response_with_headers(
         .unwrap()
 }
 
+// A hash is also a filename, so anything that could step outside the storage
+// directory has to be turned away.
+fn is_valid_hash(hash: &str) -> bool {
+    !hash.is_empty()
+        && hash
+            .chars()
+            .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+}
+
 fn hash_bytes(bytes: &Bytes) -> String {
     base64_encode(&Sha224::digest(bytes))
 }
 
 async fn get_file_thumbnail_endpoint(Path(hash): Path<String>) -> http::Response<Body> {
-    let is_valid_hash: bool = hash
-        .chars()
-        .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_');
-
-    if is_valid_hash {
+    if is_valid_hash(&hash) {
         match fs::read(thumbnail_filepath(&hash)) {
             Result::Ok(data) => Response::builder()
                 .status(StatusCode::OK)
@@ -1697,11 +1782,7 @@ const NOSNIFF: &str = "nosniff";
 async fn get_file_endpoint(
     Path((content_type_index, hash)): Path<(String, String)>,
 ) -> http::Response<Body> {
-    let is_valid_hash: bool = hash
-        .chars()
-        .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_');
-
-    if is_valid_hash {
+    if is_valid_hash(&hash) {
         match fs::read(filepath(&hash)) {
             Result::Ok(data) => {
                 let content_type = match content_type_index.parse::<usize>() {
@@ -2802,6 +2883,77 @@ mod tests {
     fn forget_stored(hash: &str) {
         let _ = fs::remove_file(filepath(hash));
         let _ = fs::remove_file(thumbnail_filepath(hash));
+    }
+
+    fn owned(hashes: &[&str]) -> Vec<String> {
+        hashes.iter().map(|hash| hash.to_string()).collect()
+    }
+
+    #[tokio::test]
+    async fn counting_stored_files_leaves_out_thumbnails_and_backups() {
+        let directory = "./var/lib/atchat/countTest/";
+        let _ = fs::remove_dir_all(directory);
+        fs::create_dir_all(format!("{directory}backups")).unwrap();
+        fs::write(
+            format!("{directory}backups/backend-export.bin"),
+            b"a backup",
+        )
+        .unwrap();
+        fs::write(format!("{directory}firstFile"), b"a file").unwrap();
+        fs::write(format!("{directory}firstFile_thumbnail"), b"a thumbnail").unwrap();
+        fs::write(format!("{directory}secondFile"), b"a file").unwrap();
+
+        let count = count_stored_files(directory).await;
+        let _ = fs::remove_dir_all(directory);
+
+        assert_eq!(count.unwrap(), 2);
+    }
+
+    #[tokio::test]
+    async fn deleting_files_answers_before_the_files_are_gone() {
+        let response = delete_files_endpoint(Json(owned(&["neverStoredEither"]))).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn deleting_files_removes_them_and_their_thumbnails() {
+        create_storage_dir();
+        fs::write(filepath("deleteWithThumbnail"), b"a file").unwrap();
+        fs::write(thumbnail_filepath("deleteWithThumbnail"), b"a thumbnail").unwrap();
+        fs::write(filepath("deleteWithoutThumbnail"), b"a file").unwrap();
+
+        let not_deleted =
+            delete_stored_files(owned(&["deleteWithThumbnail", "deleteWithoutThumbnail"])).await;
+
+        assert!(not_deleted.is_empty());
+        assert!(!fs::exists(filepath("deleteWithThumbnail")).unwrap());
+        assert!(!fs::exists(thumbnail_filepath("deleteWithThumbnail")).unwrap());
+        assert!(!fs::exists(filepath("deleteWithoutThumbnail")).unwrap());
+    }
+
+    #[tokio::test]
+    async fn deleting_a_file_that_is_already_gone_counts_as_deleted() {
+        create_storage_dir();
+
+        assert!(
+            delete_stored_files(owned(&["neverStored"]))
+                .await
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn deleting_files_refuses_hashes_that_are_not_filenames() {
+        create_storage_dir();
+        fs::write("./var/lib/atchat/secret", b"not a stored file").unwrap();
+
+        let not_deleted = delete_stored_files(owned(&["../secret", "", "."])).await;
+        let still_there = fs::exists("./var/lib/atchat/secret").unwrap();
+        let _ = fs::remove_file("./var/lib/atchat/secret");
+
+        assert_eq!(not_deleted, vec!["../secret", "", "."]);
+        assert!(still_there);
     }
 
     #[tokio::test]

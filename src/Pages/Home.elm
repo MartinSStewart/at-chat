@@ -111,11 +111,26 @@ header isMobile safeAreaInsetTop route loginStatus =
                     [ Ui.width Ui.shrink
                     , Ui.height Ui.fill
                     , Ui.contentCenterY
-                    , Ui.paddingWith { left = 8, right = 8, top = 4, bottom = 8 }
+                    , Ui.paddingWith
+                        { left =
+                            if isMobile then
+                                8
+
+                            else
+                                16
+                        , right =
+                            if isMobile then
+                                8
+
+                            else
+                                16
+                        , top = 4
+                        , bottom = 8
+                        }
                     , Ui.linkNewTab Pages.Privacy.repoUrl
                     , MyUi.hoverText "Source code on GitHub"
-                    , Ui.opacity 0.7
-                    , MyUi.hover isMobile [ Ui.Anim.opacity 1 ]
+                    , Ui.Font.color MyUi.font3
+                    , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
                     ]
                     (Ui.html (Icons.github 20))
                 , case loginStatus of
@@ -1067,7 +1082,12 @@ view loaded =
         -- The preview isn't at the edge of the screen, so nothing covers it
         previewStartupData : Ports.StartupData
         previewStartupData =
-            { startupData | safeAreaInsetTop = 0, safeAreaInsetBottom = 0 }
+            { startupData
+                | safeAreaInsetTop = 0
+                , safeAreaInsetBottom = 0
+                , loadStartupDataTime = previewTime
+                , timeOrigin = previewTime
+            }
 
         previewLoggedIn : Types.LoggedIn2
         previewLoggedIn =
@@ -1107,7 +1127,7 @@ view loaded =
                 80
 
             else
-                120
+                96
 
         bottomPadding : Int
         bottomPadding =
@@ -1215,8 +1235,10 @@ view loaded =
                     , -- Without this the app inside is laid out at its natural height, since elm-ui
                       -- leaves min-height at min-content and that wins over the height above.
                       Ui.heightMin 0
-                    , MyUi.htmlStyle "transform" ("scale(" ++ String.fromFloat previewScale ++ ")")
-                    , MyUi.htmlStyle "transform-origin" "top left"
+                    , -- zoom lays the app out again at the smaller size, so borders and text are drawn
+                      -- for the real pixel grid. transform: scale shrinks the full size layout instead,
+                      -- which leaves 1px lines and gaps landing between pixels.
+                      MyUi.htmlStyle "zoom" (String.fromFloat previewScale)
                     ]
                 |> Ui.el
                     [ Ui.width (Ui.px previewWidth)
@@ -1248,7 +1270,7 @@ view loaded =
                 )
             , Ui.attrIf isMobile Ui.contentCenterX
             ]
-            (Ui.text "at-chat, a place to chat with friends")
+            (Ui.text "A place to chat with friends")
         , Ui.column
             [ Ui.spacing dotsSpacing ]
             [ List.map slide previewPages

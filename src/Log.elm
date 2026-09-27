@@ -51,6 +51,7 @@ type Log
     | FailedToLoadDiscordGuildCustomEmojis (Nonempty ( Id CustomEmojiId, Http.Error )) Int
     | FailedToGenerateScheduledBackup Http.Error Int
     | FailedToRegenerateServerSecret Http.Error
+    | FailedToDeleteOrphanedFiles Http.Error
     | ReceivedTypeThatIsAlwaysInvalid
 
 
@@ -139,6 +140,9 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToRegenerateServerSecret _ ->
+            Nothing
+
+        FailedToDeleteOrphanedFiles _ ->
             Nothing
 
         ReceivedTypeThatIsAlwaysInvalid ->
@@ -567,6 +571,13 @@ logContent onPressCopy emojiData customEmojis log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Regenerating server secret failed"
+                , fieldRow "Error" (Ui.text (httpErrorToString error))
+                ]
+
+        FailedToDeleteOrphanedFiles error ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Deleting orphaned files failed"
                 , fieldRow "Error" (Ui.text (httpErrorToString error))
                 ]
 

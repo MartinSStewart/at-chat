@@ -663,7 +663,8 @@ loginCodeInput windowSize codeLength onInput textInputFocus loginCode label =
             [ Ui.Font.letterSpacing 26
             , Ui.paddingWith { left = 6, right = 0, top = 0, bottom = 8 }
             , inputFont
-            , MyUi.htmlStyle "inputmode" "numeric"
+            , Ui.htmlAttribute (Html.Attributes.attribute "inputmode" "numeric")
+            , Ui.htmlAttribute (Html.Attributes.attribute "autocomplete" "one-time-code")
             , Ui.border 0
             , Ui.opacity 0
             ]

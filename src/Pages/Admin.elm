@@ -20,6 +20,7 @@ module Pages.Admin exposing
     , UserTableId(..)
     , UsersChangeError(..)
     , applyChangesToBackendUsers
+    , deleteOrphanedFilesButtonId
     , disconnectClient
     , discordChannelReloadUser
     , discordLinkingEnabledText
@@ -75,7 +76,7 @@ import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (AdminData, AdminDataStatus(..), AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), BackupContents(..), ConnectionData, DiscordGatewayStatus, DiscordRole, DiscordUserData_ForAdmin(..), LastBackup, LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
+import LocalState exposing (AdminData, AdminDataStatus(..), AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), BackupContents(..), ConnectionData, DeleteOrphanedFilesStatus(..), DiscordGatewayStatus, DiscordRole, DiscordUserData_ForAdmin(..), LastBackup, LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -198,6 +199,7 @@ type Msg
     | PressedDisconnectClient SessionIdHash ClientId
     | PressedDeleteSession SessionIdHash
     | PressedRegenerateServerSecret
+    | PressedDeleteOrphanedFiles
     | PressedWebsocketCloseEventsPage Int
     | PressedStartWebCodecsTest
     | PressedStopWebCodecsTest
@@ -350,6 +352,7 @@ type AdminChange
     | LoadSessions (ToBeFilledInByBackend (SeqDict SessionIdHash UserSession))
     | LoadWebsocketCloseEvents (ToBeFilledInByBackend (Array WebsocketClosedEvent))
     | LoadOrphanedFiles (ToBeFilledInByBackend (SeqDict FileHash BackendFileData))
+    | LoadBucketFileCount (ToBeFilledInByBackend (Result Http.Error Int))
     | LoadToBackendLogs (ToBeFilledInByBackend (Array ToBackendLogData))
     | LoadBackendMsgLogs (ToBeFilledInByBackend (Array BackendMsgLogData))
     | SetEmailNotificationsEnabled Bool
@@ -372,6 +375,7 @@ type AdminChange
     | DisconnectClient SessionIdHash ClientId
     | DeleteSession SessionIdHash
     | RegenerateServerSecret (ToBeFilledInByBackend (Result Http.Error Time.Posix))
+    | DeleteOrphanedFiles (ToBeFilledInByBackend (Result Http.Error (List FileHash)))
 
 
 type alias EditedBackendUser =
@@ -518,6 +522,9 @@ updateAdmin changedBy change adminData local =
 
         LoadOrphanedFiles filledInByBackend ->
             { local | adminData = IsAdmin { adminData | orphanedFiles = loadedAdminData filledInByBackend } }
+
+        LoadBucketFileCount filledInByBackend ->
+            { local | adminData = IsAdmin { adminData | bucketFileCount = loadedAdminData filledInByBackend } }
 
         LoadToBackendLogs filledInByBackend ->
             { local | adminData = IsAdmin { adminData | toBackendLogs = loadedAdminData filledInByBackend } }
@@ -724,6 +731,29 @@ updateAdmin changedBy change adminData local =
                                             Err error ->
                                                 RegenerationFailed error
                         }
+            }
+
+        DeleteOrphanedFiles result ->
+            { local
+                | adminData =
+                    IsAdmin
+                        (case result of
+                            EmptyPlaceholder ->
+                                { adminData | deleteOrphanedFiles = DeletingOrphanedFiles }
+
+                            FilledInByBackend (Ok deleted) ->
+                                { adminData
+                                    | deleteOrphanedFiles = NotDeletingOrphanedFiles
+                                    , orphanedFiles =
+                                        LocalState.updateAdminData
+                                            (\orphanedFiles -> List.foldl SeqDict.remove orphanedFiles deleted)
+                                            adminData.orphanedFiles
+                                    , filesCount = adminData.filesCount - List.length deleted
+                                }
+
+                            FilledInByBackend (Err error) ->
+                                { adminData | deleteOrphanedFiles = DeletingOrphanedFilesFailed error }
+                        )
             }
 
 
@@ -1384,6 +1414,9 @@ update navigationKey time adminData localState msg model =
         PressedRegenerateServerSecret ->
             ( model, Command.none, AdminChange (RegenerateServerSecret EmptyPlaceholder) )
 
+        PressedDeleteOrphanedFiles ->
+            ( model, Command.none, AdminChange (DeleteOrphanedFiles EmptyPlaceholder) )
+
         PressedStartWebCodecsTest ->
             ( model, Ports.webCodecsTest True, NoOutMsg )
 
@@ -1686,6 +1719,9 @@ pendingChangesText change =
         LoadOrphanedFiles _ ->
             "Loading orphaned files in admin page"
 
+        LoadBucketFileCount _ ->
+            "Loading bucket file count in admin page"
+
         LoadToBackendLogs _ ->
             "Loading toBackend logs in admin page"
 
@@ -1763,6 +1799,9 @@ pendingChangesText change =
 
         RegenerateServerSecret _ ->
             "Regenerate server secret"
+
+        DeleteOrphanedFiles _ ->
+            "Delete orphaned files"
 
 
 view : Bool -> Maybe Int -> Time.Posix -> LocalState -> AdminData -> Model -> Element Msg
@@ -2493,6 +2532,18 @@ filesSection isMobile expandedSections adminData =
         expandedSections
         FilesSection
         [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount)
+        , case adminData.bucketFileCount of
+            AdminDataNotLoaded ->
+                Ui.text loadingText
+
+            AdminDataLoading ->
+                Ui.text loadingText
+
+            AdminDataLoaded (Ok count) ->
+                Ui.text ("Files in bucket: " ++ String.fromInt count)
+
+            AdminDataLoaded (Err error) ->
+                MyUi.errorBox (Dom.id "admin_bucketFileCountError") PressedCopyText (Log.httpErrorToString error)
         , case adminData.orphanedFiles of
             AdminDataNotLoaded ->
                 Ui.text loadingText
@@ -2512,7 +2563,23 @@ filesSection isMobile expandedSections adminData =
                     in
                     Ui.column
                         [ Ui.spacing 8 ]
-                        [ Ui.text
+                        [ Ui.row
+                            [ Ui.spacing 8 ]
+                            [ MyUi.simpleButton
+                                deleteOrphanedFilesButtonId
+                                PressedDeleteOrphanedFiles
+                                (Ui.text "Delete orphaned files")
+                            , case adminData.deleteOrphanedFiles of
+                                NotDeletingOrphanedFiles ->
+                                    Ui.none
+
+                                DeletingOrphanedFiles ->
+                                    Ui.text "Deleting..."
+
+                                DeletingOrphanedFilesFailed error ->
+                                    MyUi.errorBox (Dom.id "admin_deleteOrphanedFilesError") PressedCopyText (Log.httpErrorToString error)
+                            ]
+                        , Ui.text
                             ("Orphaned file count: "
                                 ++ String.fromInt (SeqDict.size orphanedFiles)
                                 ++ ", total size: "
@@ -2553,6 +2620,11 @@ filesSection isMobile expandedSections adminData =
                             )
                         ]
         ]
+
+
+deleteOrphanedFilesButtonId : HtmlId
+deleteOrphanedFilesButtonId =
+    Dom.id "admin_deleteOrphanedFiles"
 
 
 wordSpellingGameSwedishSection : Bool -> SeqSet AdminUiSection -> AdminData -> Element Msg
@@ -4981,6 +5053,7 @@ sectionDataToLoad section2 adminData =
 
         FilesSection ->
             loadIfNeeded adminData.orphanedFiles (LoadOrphanedFiles EmptyPlaceholder)
+                ++ loadIfNeeded adminData.bucketFileCount (LoadBucketFileCount EmptyPlaceholder)
 
         ToBackendLogsSection ->
             loadIfNeeded adminData.toBackendLogs (LoadToBackendLogs EmptyPlaceholder)

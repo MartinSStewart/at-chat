@@ -34,6 +34,7 @@ module FileStatus exposing
     , fileDataThumbnailUrl
     , fileDataUrl
     , fileHash
+    , fileHashCodec
     , fileHashToString
     , fileKey
     , fileUrl
