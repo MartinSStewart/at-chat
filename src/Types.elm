@@ -284,6 +284,7 @@ type alias LoggedIn2 =
          This is to work around this bug https://github.com/panphora/overtype/issues/116
       -}
       typedTextCounter : Int
+    , accountDeletionBannerClosed : Bool
     }
 
 
@@ -654,6 +655,9 @@ type FrontendMsg_
     | GotRegisterPushSubscription RegisterPushSubscription
     | SelectedNotificationMode NotificationMode
     | SelectedEmailNotifications EmailNotifications
+    | PressedDeleteAccount
+    | PressedAccountDeletionBanner
+    | PressedCloseAccountDeletionBanner
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
     | PressedDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
     | GotStartupData (Result String Ports.StartupData)
@@ -1208,6 +1212,8 @@ type LocalChange
     | Local_CollapseUserOptionSection UserOptionSection
     | Local_SetSheepGameQuestions (IdArray QuestionId UserSession.SheepGameQuestion)
     | Local_SetEmailNotifications EmailNotifications
+    | Local_ScheduleAccountDeletion Time.Posix
+    | Local_CancelAccountDeletion
     | Local_RegisterPushSubscription Time.Posix RegisterPushSubscription
     | Local_TextEditor TextEditor.LocalChange
     | Local_UnlinkDiscordUser (Discord.Id Discord.UserId)

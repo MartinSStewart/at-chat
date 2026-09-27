@@ -811,6 +811,12 @@ canChangeUnreadNotificationCount change =
         Local_SetEmailNotifications _ ->
             False
 
+        Local_ScheduleAccountDeletion _ ->
+            False
+
+        Local_CancelAccountDeletion ->
+            False
+
         Local_RegisterPushSubscription _ _ ->
             False
 

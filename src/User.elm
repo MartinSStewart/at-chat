@@ -6,6 +6,7 @@ module User exposing
     , LastDmViewed(..)
     , LocalUser
     , NotificationLevel(..)
+    , accountDeletionTime
     , addDirectMention
     , addDiscordDirectMention
     , addNewCustomEmojis
@@ -60,6 +61,7 @@ import Codec exposing (Codec)
 import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData(..))
 import DiscordUserData exposing (DiscordUserData, DiscordUserLoadingData)
+import Duration
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..), SkinTone)
@@ -132,6 +134,7 @@ type alias BackendUser =
     , -- Whether the warning about losing your private key has been accepted. Kept on the
       -- account rather than per conversation so that it is only answered once.
       e2eeRisksAccepted : Bool
+    , deleteAccountAt : Maybe Time.Posix
     }
 
 
@@ -221,6 +224,11 @@ addRecentlyUsedEmoji emoji user =
 addRecentlyUsedEmojis : List EmojiOrCustomEmoji -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
 addRecentlyUsedEmojis emojis user =
     List.foldl addRecentlyUsedEmoji user emojis
+
+
+accountDeletionTime : Time.Posix -> Time.Posix
+accountDeletionTime requestedAt =
+    Duration.addTo requestedAt (Duration.weeks 2)
 
 
 setEmailNotifications : EmailNotifications -> { a | emailNotifications : EmailNotifications } -> { a | emailNotifications : EmailNotifications }
@@ -387,6 +395,7 @@ init createdAt name email userIsAdmin =
     , muteSettings = MuteSettings.init
     , publicKey = Nothing
     , e2eeRisksAccepted = False
+    , deleteAccountAt = Nothing
     }
 
 
@@ -887,6 +896,7 @@ backendToFrontendCurrent user =
     , muteSettings = user.muteSettings
     , publicKey = user.publicKey
     , e2eeRisksAccepted = user.e2eeRisksAccepted
+    , deleteAccountAt = user.deleteAccountAt
     }
 
 

@@ -1,5 +1,6 @@
 module FrontendExtra exposing
     ( EncryptedBacklog(..)
+    , accountDeletionBanner
     , audio
     , canDropFiles
     , changeUpdate
@@ -294,6 +295,12 @@ pendingChangesText localChange =
 
         Local_SetEmailNotifications _ ->
             "Set email notifications"
+
+        Local_ScheduleAccountDeletion _ ->
+            "Scheduled account deletion"
+
+        Local_CancelAccountDeletion ->
+            "Cancelled account deletion"
 
         Local_RegisterPushSubscription _ _ ->
             "Register push subscription"
@@ -1284,6 +1291,47 @@ e2eeInfoOverlay isMobile =
             (UserOptions.closeButton isMobile PressedCloseOverlay)
         ]
         (Ui.el [ Ui.scrollable, Ui.heightMin 0 ] (Encryption.info FrontendNoOp))
+
+
+accountDeletionBanner : Int -> Time.Posix -> Time.Posix -> Element FrontendMsg_
+accountDeletionBanner safeAreaInsetTop time deleteAt =
+    Ui.row
+        [ Ui.alignTop
+        , Ui.background MyUi.deleteButtonBackground
+        , Ui.Font.color MyUi.deleteButtonFont
+        , Ui.borderColor MyUi.deleteButtonBorder
+        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+        , Ui.paddingWith { left = 0, right = 0, top = safeAreaInsetTop, bottom = 0 }
+        ]
+        [ MyUi.elButton
+            accountDeletionBannerId
+            PressedAccountDeletionBanner
+            [ Ui.paddingXY 16 10 ]
+            (Ui.Prose.paragraph
+                []
+                [ Ui.text
+                    ("Your account will be permanently deleted in "
+                        ++ MyUi.timeElapsed time deleteAt
+                        ++ ". Press here if you want to cancel."
+                    )
+                ]
+            )
+        , MyUi.elButton
+            (Dom.id "accountDeletionBanner_close")
+            PressedCloseAccountDeletionBanner
+            [ Ui.width Ui.shrink
+            , Ui.height Ui.fill
+            , Ui.paddingXY 16 0
+            , Ui.contentCenterY
+            , MyUi.hoverText "Close"
+            ]
+            (Ui.html Icons.x)
+        ]
+
+
+accountDeletionBannerId : HtmlId
+accountDeletionBannerId =
+    Dom.id "accountDeletionBanner"
 
 
 externalLinkWarning : SeqSet Domain -> Bool -> Url -> Element FrontendMsg_
@@ -2527,6 +2575,15 @@ isPressMsg msg =
             True
 
         SelectedEmailNotifications _ ->
+            True
+
+        PressedDeleteAccount ->
+            True
+
+        PressedAccountDeletionBanner ->
+            True
+
+        PressedCloseAccountDeletionBanner ->
             True
 
         PressedGuildNotificationLevel _ _ ->
@@ -3926,6 +3983,30 @@ changeUpdate localMsg local =
                             local.localUser
                     in
                     { local | localUser = { localUser | user = User.setEmailNotifications emailNotifications localUser.user } }
+
+                Local_ScheduleAccountDeletion deleteAt ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        user : FrontendCurrentUser
+                        user =
+                            localUser.user
+                    in
+                    { local | localUser = { localUser | user = { user | deleteAccountAt = Just deleteAt } } }
+
+                Local_CancelAccountDeletion ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        user : FrontendCurrentUser
+                        user =
+                            localUser.user
+                    in
+                    { local | localUser = { localUser | user = { user | deleteAccountAt = Nothing } } }
 
                 Local_RegisterPushSubscription time pushSubscription ->
                     let
@@ -8010,6 +8091,7 @@ loadedInitHelper startupData emojiData loginData loading =
                 }
             , e2eeSectionsExpanded = SeqDict.empty
             , typedTextCounter = 0
+            , accountDeletionBannerClosed = False
             }
     in
     ( loggedIn

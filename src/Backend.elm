@@ -5583,6 +5583,65 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_ScheduleAccountDeletion _ ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\session user ->
+                            let
+                                deleteAt : Time.Posix
+                                deleteAt =
+                                    User.accountDeletionTime time
+                            in
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user | deleteAccountAt = Just deleteAt }
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId (Local_ScheduleAccountDeletion deleteAt)
+                                    |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toUser
+                                    (Just clientId)
+                                    Nothing
+                                    session.userId
+                                    (LocalChange session.userId (Local_ScheduleAccountDeletion deleteAt))
+                                    model
+                                , BackendExtra.sendAccountDeletionEmail
+                                    (SentNotificationEmail time user.email)
+                                    user.email
+                                    deleteAt
+                                    model.postmarkApiKey
+                                ]
+                            )
+                        )
+
+                Local_CancelAccountDeletion ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\session user ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user | deleteAccountAt = Nothing }
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toUser
+                                    (Just clientId)
+                                    Nothing
+                                    session.userId
+                                    (LocalChange session.userId localMsg)
+                                    model
+                                ]
+                            )
+                        )
+
                 Local_RegisterPushSubscription _ pushSubscription ->
                     BackendExtra.asUser
                         model

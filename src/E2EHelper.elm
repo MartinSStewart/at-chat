@@ -60,6 +60,7 @@ module E2EHelper exposing
     , infoEndpointResponse
     , inviteUser
     , iphone14Window
+    , isAccountDeletionEmail
     , isLogErrorEmail
     , isLoginEmail
     , isNotificationEmail
@@ -456,6 +457,29 @@ isNotificationEmail emailAddress httpRequest =
                 case Json.Decode.decodeValue decodePostmark value of
                     Ok ( subject, to, body ) ->
                         if emailAddress == to && String.startsWith "New message from" subject then
+                            Just body
+
+                        else
+                            Nothing
+
+                    Err _ ->
+                        Nothing
+
+            _ ->
+                Nothing
+
+    else
+        Nothing
+
+
+isAccountDeletionEmail : EmailAddress -> HttpRequest -> Maybe String
+isAccountDeletionEmail emailAddress httpRequest =
+    if httpRequest.url == "https://api.postmarkapp.com/email" then
+        case httpRequest.body of
+            T.JsonBody value ->
+                case Json.Decode.decodeValue decodePostmark value of
+                    Ok ( subject, to, body ) ->
+                        if emailAddress == to && subject == "Your at-chat account will be deleted in 2 weeks" then
                             Just body
 
                         else
@@ -2511,6 +2535,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetEmailNotifications _ ->
                     False
 
+                Local_ScheduleAccountDeletion _ ->
+                    False
+
+                Local_CancelAccountDeletion ->
+                    False
+
                 Local_RegisterPushSubscription _ _ ->
                     False
 
@@ -3088,6 +3118,8 @@ allAttackerLocalChanges =
     , Local_SetNotificationMode NoNotifications
     , Local_SetSheepGameQuestions (IdArray.fromList [ { text = "hacked", attachedFiles = SeqDict.empty } ])
     , Local_SetEmailNotifications User.NotifyMeWhenMentioned
+    , Local_ScheduleAccountDeletion messageTime
+    , Local_CancelAccountDeletion
     , Local_StartReloadingDiscordUser messageTime discordUserId
     , Local_TextEditor TextEditor.Local_Reset
     , Local_UnlinkDiscordUser discordUserId

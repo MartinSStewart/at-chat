@@ -1,6 +1,8 @@
 module UserOptions exposing
-    ( closeButton
+    ( cancelAccountDeletionText
+    , closeButton
     , currentDeviceText
+    , deleteAccountButtonId
     , discordBookmarkletId
     , domainWhitelistToString
     , init
@@ -64,6 +66,16 @@ currentDeviceText =
 loadingUserDataText : String
 loadingUserDataText =
     "Loading user data"
+
+
+deleteAccountButtonId : HtmlId
+deleteAccountButtonId =
+    Dom.id "userOptions_deleteAccount"
+
+
+cancelAccountDeletionText : String
+cancelAccountDeletionText =
+    "Cancel account deletion"
 
 
 init : SeqSet RichText.Domain -> UserOptionsModel
@@ -462,6 +474,45 @@ view windowSize textInputFocus time local loggedIn loaded model =
                                             ]
                                         ]
                                )
+                        )
+                    , Ui.column
+                        [ Ui.spacing 8, Ui.paddingXY 16 0 ]
+                        (case local.localUser.user.deleteAccountAt of
+                            Just deleteAt ->
+                                [ Ui.el [ Ui.Font.bold ] (Ui.text "Delete account")
+                                , Ui.Prose.paragraph
+                                    []
+                                    [ Ui.text
+                                        ("Your account will be permanently deleted in "
+                                            ++ MyUi.timeElapsed time deleteAt
+                                            ++ "."
+                                        )
+                                    ]
+                                , MyUi.secondaryButtonTall
+                                    deleteAccountButtonId
+                                    PressedDeleteAccount
+                                    cancelAccountDeletionText
+                                ]
+
+                            Nothing ->
+                                [ Ui.el [ Ui.Font.bold ] (Ui.text "Delete account")
+                                , Ui.Prose.paragraph
+                                    []
+                                    [ Ui.text "Your account will be permanently deleted 2 weeks after pressing this. You can cancel any time before then." ]
+                                , MyUi.elButton
+                                    deleteAccountButtonId
+                                    PressedDeleteAccount
+                                    [ Ui.paddingXY 16 8
+                                    , Ui.background MyUi.deleteButtonBackground
+                                    , Ui.width Ui.shrink
+                                    , Ui.rounded 4
+                                    , Ui.Font.color MyUi.deleteButtonFont
+                                    , Ui.Font.weight 500
+                                    , Ui.borderColor MyUi.deleteButtonBorder
+                                    , Ui.border 1
+                                    ]
+                                    (Ui.text "Delete account")
+                                ]
                         )
                     ]
                 , MyUi.container

@@ -104,7 +104,7 @@ import User exposing (FrontendUser)
 import UserAgent
 import UserColor
 import UserOptions
-import UserSession exposing (ChannelHeaderTab(..), LastViewedGuild(..), NotificationMode(..), ToBeFilledInByBackend(..))
+import UserSession exposing (ChannelHeaderTab(..), LastViewedGuild(..), NotificationMode(..), ToBeFilledInByBackend(..), UserOptionSection(..))
 import Vector2d
 import WordSpellingGame
 import X25519
@@ -3058,6 +3058,58 @@ updateLoaded msg model =
                         loggedIn
                         Command.none
                 )
+                model
+
+        PressedDeleteAccount ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case (Local.model loggedIn.localState).localUser.user.deleteAccountAt of
+                        Just _ ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Just Local_CancelAccountDeletion)
+                                loggedIn
+                                Command.none
+
+                        Nothing ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Just (Local_ScheduleAccountDeletion (User.accountDeletionTime model.time)))
+                                { loggedIn | accountDeletionBannerClosed = False }
+                                Command.none
+                )
+                model
+
+        PressedAccountDeletionBanner ->
+            let
+                ( expandedModel, expandCmd ) =
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (if
+                                    SeqSet.member
+                                        UserOption_Settings
+                                        (Local.model loggedIn.localState).localUser.session.expandedUserOptions
+                                 then
+                                    Nothing
+
+                                 else
+                                    Just (Local_ExpandUserOptionSection UserOption_Settings)
+                                )
+                                loggedIn
+                                Command.none
+                        )
+                        model
+
+                ( routedModel, routeCmd ) =
+                    FrontendExtra.routePush expandedModel (Route.setOverlay (Just Route.UserOptionsOverlay) expandedModel.route)
+            in
+            ( routedModel, Command.batch [ expandCmd, routeCmd ] )
+
+        PressedCloseAccountDeletionBanner ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn -> ( { loggedIn | accountDeletionBannerClosed = True }, Command.none ))
                 model
 
         ProfilePictureEditorMsg imageEditorMsg ->
@@ -8817,6 +8869,23 @@ view _ model =
                                                 |> Ui.inFront
 
                                         _ ->
+                                            Ui.noAttr
+                                    , case ( local.localUser.user.deleteAccountAt, Route.toOverlay loaded.route ) of
+                                        ( Just _, Just Route.UserOptionsOverlay ) ->
+                                            Ui.noAttr
+
+                                        ( Just deleteAt, _ ) ->
+                                            if loggedIn.accountDeletionBannerClosed then
+                                                Ui.noAttr
+
+                                            else
+                                                FrontendExtra.accountDeletionBanner
+                                                    local.localUser.safeAreaInsetTop
+                                                    loaded.time
+                                                    deleteAt
+                                                    |> Ui.inFront
+
+                                        ( Nothing, _ ) ->
                                             Ui.noAttr
                                     , case loggedIn.externalLinkWarning of
                                         Just url ->

@@ -5,6 +5,7 @@ module E2EMisc exposing
     , channelSuggestionTest
     , codeBlockInputTest
     , colorPickerTest
+    , deleteAccountTest
     , dmThreadsTest
     , emojiSuggestionTest
     , exportChannelTest
@@ -78,6 +79,7 @@ import TimeInMinutes
 import Touch
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ImportChannelError(..), ToBackend, ToFrontend)
 import UserColor
+import UserOptions
 import UserSession
 
 
@@ -2369,6 +2371,108 @@ colorPickerTest config =
                 ]
             )
         ]
+
+
+{-| Deleting an account only schedules it, so the same button cancels it again, and until then a
+banner counts down the time left and leads back to the button.
+-}
+deleteAccountTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+deleteAccountTest config =
+    E2EHelper.startTest
+        "Delete account"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.tallDesktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , admin.click 1000 (Dom.id "guild_showUserOptions")
+                , admin.click 100 UserOptions.deleteAccountButtonId
+                , T.checkState 100 (checkAccountDeletion True)
+                , T.checkState 100 (checkAccountDeletionEmails 1)
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text UserOptions.cancelAccountDeletionText ])
+
+                -- The banner leads to the user options, so it stays out of the way while they're open.
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "accountDeletionBanner" ])
+                , admin.click 100 (Dom.id "userOptions_settings")
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find [ Test.Html.Selector.id "accountDeletionBanner" ] html
+                            |> Test.Html.Query.has [ Test.Html.Selector.containing [ Test.Html.Selector.text "14\u{00A0}days" ] ]
+                    )
+
+                -- Pressing the banner opens the account settings, even though they were collapsed.
+                , admin.click 100 (Dom.id "accountDeletionBanner")
+                , admin.click 100 UserOptions.deleteAccountButtonId
+                , T.checkState 100 (checkAccountDeletion False)
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "accountDeletionBanner" ])
+
+                -- Once closed, the banner stays closed.
+                , admin.click 100 (Dom.id "guild_showUserOptions")
+                , admin.click 100 UserOptions.deleteAccountButtonId
+                , T.checkState 100 (checkAccountDeletionEmails 2)
+                , admin.click 100 (Dom.id "userOptions_closeUserOptions")
+                , admin.click 100 (Dom.id "accountDeletionBanner_close")
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "accountDeletionBanner" ])
+                ]
+            )
+        ]
+
+
+checkAccountDeletion : Bool -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkAccountDeletion isScheduled state =
+    case
+        ( NonemptyDict.get Broadcast.adminUserId (E2EHelper.unwrapBackend state.backend).users
+            |> Maybe.map .deleteAccountAt
+        , isScheduled
+        )
+    of
+        ( Just (Just deleteAt), True ) ->
+            let
+                weeksLeft : Float
+                weeksLeft =
+                    Duration.from state.time deleteAt |> Duration.inWeeks
+            in
+            if weeksLeft > 1.99 && weeksLeft <= 2 then
+                Ok ()
+
+            else
+                Err "The account should be deleted 2 weeks after it was asked for"
+
+        ( Just Nothing, False ) ->
+            Ok ()
+
+        ( Just (Just _), False ) ->
+            Err "The account shouldn't be scheduled for deletion"
+
+        ( Just Nothing, True ) ->
+            Err "The account should be scheduled for deletion"
+
+        ( Nothing, _ ) ->
+            Err "Expected the admin to exist on the backend"
+
+
+checkAccountDeletionEmails : Int -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+checkAccountDeletionEmails expected state =
+    let
+        count : Int
+        count =
+            List.filterMap (E2EHelper.isAccountDeletionEmail E2EHelper.adminEmail) state.httpRequests
+                |> List.length
+    in
+    if count == expected then
+        Ok ()
+
+    else
+        Err ("Expected " ++ String.fromInt expected ++ " account deletion emails but got " ++ String.fromInt count)
 
 
 hasStrokeSelector : UserColor.UserColor -> Test.Html.Selector.Selector

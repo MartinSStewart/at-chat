@@ -41,6 +41,7 @@ module BackendExtra exposing
     , orphanedFiles
     , ownMessageIsReadBackend
     , requestedForToGuildOrDmId
+    , sendAccountDeletionEmail
     , sendDm
     , sendEncryptedDm
     , sendGuildMessage
@@ -95,6 +96,7 @@ import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..))
 import Message exposing (Message(..), MessageContent, ThreadRouteWithRepliedTo(..))
 import MessageArray exposing (MessageArray)
+import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import Pages.Admin exposing (InitAdminData, TypeThatIsAlwaysInvalid(..))
 import Pages.Home
@@ -240,6 +242,29 @@ sendLoginEmail msg emailAddress loginCode postmarkServerToken =
         Postmark.BodyBoth
             (loginEmailContent loginCode2)
             ("Here is your code " ++ loginCode2 ++ "\n\nPlease type it in the login page you were previously on.\n\nIf you weren't expecting this email you can safely ignore it.")
+    , messageStream = "outbound"
+    }
+        |> Postmark.sendEmail msg postmarkServerToken
+
+
+sendAccountDeletionEmail :
+    (Result Postmark.SendEmailError () -> backendMsg)
+    -> EmailAddress
+    -> Time.Posix
+    -> Postmark.ApiKey
+    -> Command BackendOnly toFrontend backendMsg
+sendAccountDeletionEmail msg emailAddress deleteAt postmarkServerToken =
+    let
+        text : String
+        text =
+            "You have chosen to have your at-chat account deleted. It will be permanently deleted in 2 weeks, on "
+                ++ MyUi.datestamp Time.utc deleteAt
+                ++ " (UTC).\n\nIf you change your mind, open User settings, go to Account settings, and press \"Cancel account deletion\" before then.\n\nIf you didn't ask for this, log in and cancel the deletion the same way."
+    in
+    { from = { name = "", email = noReplyEmailAddress }
+    , to = List.Nonempty.fromElement { name = "", email = emailAddress }
+    , subject = NonemptyString 'Y' "our at-chat account will be deleted in 2 weeks"
+    , body = Postmark.BodyText text
     , messageStream = "outbound"
     }
         |> Postmark.sendEmail msg postmarkServerToken
@@ -3013,6 +3038,12 @@ toBackendLog toBackend =
 
                 Local_SetEmailNotifications _ ->
                     ToBackendLog_Local_SetEmailNotifications
+
+                Local_ScheduleAccountDeletion _ ->
+                    ToBackendLog_Local_ScheduleAccountDeletion
+
+                Local_CancelAccountDeletion ->
+                    ToBackendLog_Local_CancelAccountDeletion
 
                 Local_RegisterPushSubscription _ _ ->
                     ToBackendLog_Local_RegisterPushSubscription
