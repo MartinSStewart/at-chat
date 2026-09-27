@@ -2,6 +2,7 @@ module Pages.Home exposing
     ( header
     , loginButtonId
     , loginSignupText
+    , previewLoginData
     , view
     )
 
@@ -725,15 +726,15 @@ previewGameGuild time =
     }
 
 
-previewLoginData : Time.Posix -> UserAgent -> LoginData
-previewLoginData time userAgent =
+previewLoginData : UserAgent -> LoginData
+previewLoginData userAgent =
     { session =
         { userId = previewUserId
         , notificationMode = UserSession.NoNotifications
         , pushSubscription = UserSession.NotSubscribed
         , userAgent = userAgent
         , sessionIdHash = SessionIdHash.fromString ""
-        , signedInAt = previewMinutesAgo time 120
+        , signedInAt = previewMinutesAgo previewTime 120
         , lastClientDisconnect = Nothing
         , expandedUserOptions = SeqSet.empty
         , savedSheepGameQuestions = IdArray.empty
@@ -744,12 +745,12 @@ previewLoginData time userAgent =
     , twoFactorAuthenticationEnabled = Nothing
     , guilds =
         SeqDict.fromList
-            [ ( previewGuildId, previewGuild time )
-            , ( previewGameGuildId, previewGameGuild time )
+            [ ( previewGuildId, previewGuild previewTime )
+            , ( previewGameGuildId, previewGameGuild previewTime )
             ]
-    , dmChannels = previewDmChannels time
-    , discordDmChannels = previewDiscordDmChannels time
-    , discordGuilds = previewDiscordGuilds time
+    , dmChannels = previewDmChannels previewTime
+    , discordDmChannels = previewDiscordDmChannels previewTime
+    , discordGuilds = previewDiscordGuilds previewTime
     , user = previewUser
     , otherUsers = previewOtherUsers
     , discordUsers = previewDiscordUsers
@@ -765,12 +766,12 @@ previewLoginData time userAgent =
 {-| The unread overview preview is of an inbox with nothing in it, so this reader has caught up
 with every channel, DM and thread rather than stopping partway like `previewUser` does.
 -}
-previewReadLoginData : Time.Posix -> UserAgent -> LoginData
-previewReadLoginData time userAgent =
+previewReadLoginData : UserAgent -> LoginData
+previewReadLoginData userAgent =
     let
         loginData : LoginData
         loginData =
-            previewLoginData time userAgent
+            previewLoginData userAgent
 
         user : BackendUser
         user =
@@ -1094,7 +1095,7 @@ view loaded =
             FrontendExtra.loadedInitHelper
                 previewStartupData
                 loaded.emojiData
-                (previewLoginData previewTime loaded.startupData.userAgent)
+                (previewLoginData loaded.startupData.userAgent)
                 loaded
                 |> Tuple.first
 
@@ -1195,7 +1196,7 @@ view loaded =
             FrontendExtra.loadedInitHelper
                 previewStartupData
                 loaded.emojiData
-                (previewReadLoginData previewTime loaded.startupData.userAgent)
+                (previewReadLoginData loaded.startupData.userAgent)
                 loaded
                 |> Tuple.first
 

@@ -2593,6 +2593,7 @@ filesSection isMobile expandedSections adminData =
                                                         FileStatus.fileUrl FileStatus.unknownContentType fileHash
                                                 )
                                             , Ui.Font.color MyUi.textLinkColor
+                                            , Ui.width Ui.shrink
                                             ]
                                             (Ui.text (FileStatus.fileHashToString fileHash))
                                         ]

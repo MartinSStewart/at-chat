@@ -94,8 +94,10 @@ import LoginForm
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..))
 import Message exposing (Message(..), MessageContent, ThreadRouteWithRepliedTo(..))
+import MessageArray exposing (MessageArray)
 import NonemptyDict exposing (NonemptyDict)
 import Pages.Admin exposing (InitAdminData, TypeThatIsAlwaysInvalid(..))
+import Pages.Home
 import Pagination exposing (PageId)
 import Postmark
 import Quantity
@@ -1637,6 +1639,11 @@ orphanedFiles model =
 
 usedFiles : BackendModel -> List FileHash
 usedFiles model =
+    let
+        previewLoginData : LoginData
+        previewLoginData =
+            Pages.Home.previewLoginData UserAgent.init
+    in
     List.concat
         [ NonemptyDict.values model.users |> List.Nonempty.toList |> List.filterMap .icon
         , SeqDict.values model.discordUsers |> List.filterMap DiscordUserData.icon
@@ -1648,6 +1655,8 @@ usedFiles model =
         , SeqDict.values model.sessions |> List.concatMap savedSheepGameQuestionFiles
         , SeqDict.values model.stickers |> List.filterMap stickerFile
         , SeqDict.values model.customEmojis |> List.filterMap customEmojiFile
+        , SeqDict.values previewLoginData.guilds |> List.concatMap frontendGuildFiles
+        , Maybe.Extra.toList previewLoginData.user.icon ++ List.filterMap .icon (SeqDict.values previewLoginData.otherUsers)
         ]
 
 
@@ -1659,6 +1668,17 @@ guildFiles guild =
                 messagesFiles channel.messages
                     ++ List.concatMap (\thread -> messagesFiles thread.messages) (SeqDict.values channel.threads)
                     ++ List.concatMap gameFiles (SeqDict.values channel.games)
+            )
+            (SeqDict.values guild.channels)
+
+
+frontendGuildFiles : FrontendGuild -> List FileHash
+frontendGuildFiles guild =
+    Maybe.Extra.toList guild.icon
+        ++ List.concatMap
+            (\channel ->
+                frontendMessagesFiles channel.messages
+                    ++ List.concatMap (\thread -> frontendMessagesFiles thread.messages) (SeqDict.values channel.threads)
             )
             (SeqDict.values guild.channels)
 
@@ -1684,6 +1704,11 @@ dmChannelFiles dmChannel =
 messagesFiles : IdArray messageId (Message messageId userId channelId) -> List FileHash
 messagesFiles messages =
     IdArray.toList messages |> List.concatMap messageFiles
+
+
+frontendMessagesFiles : MessageArray messageId userId channelId -> List FileHash
+frontendMessagesFiles messages =
+    MessageArray.toList messages |> List.concatMap (\( _, message ) -> messageFiles message)
 
 
 messageFiles : Message messageId userId channelId -> List FileHash

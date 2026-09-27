@@ -197,7 +197,6 @@ info noOp =
         '#'
         (""" End-to-end encryption (E2EE) in at-chat
 
-
 ## Quick summary of E2EE
 With E2EE enabled your messages are encrypted when stored on the server. This means, even if a hacker gets access to the at-chat server data, they won't be able to read your conversation.
 
@@ -215,7 +214,6 @@ Go to a direct message channel (not a Discord direct message channel) and then c
 For these reasons, consider at-chat's E2EE "best effort". It will protect you from a lazy malicious admin (who can't be bothered of going through the trouble of deploying spyware to the client) and from a hacker who gets read-only access to the server.
 
 If privacy is important to you, Signal is probably a better choice.
-
 
 ## What exactly gets encrypted
 at-chat encrypts message contents and attached files.
