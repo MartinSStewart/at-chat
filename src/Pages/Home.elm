@@ -1270,7 +1270,7 @@ view loaded =
                 )
             , Ui.attrIf isMobile Ui.contentCenterX
             ]
-            (Ui.text "at-chat, a place to chat with friends")
+            (Ui.text "A place to chat with friends")
         , Ui.column
             [ Ui.spacing dotsSpacing ]
             [ List.map slide previewPages
