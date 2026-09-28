@@ -33,6 +33,7 @@ import Html
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, UserId)
 import IdArray
+import IdString exposing (IdString)
 import LinkedAndOtherDiscordUsers exposing (LinkedAndOtherDiscordUsers(..))
 import List.Nonempty exposing (Nonempty(..))
 import Local
@@ -208,6 +209,11 @@ previewGameGuildId =
     Id.fromInt 1
 
 
+previewCallGuildId : Id GuildId
+previewCallGuildId =
+    Id.fromInt 2
+
+
 previewChannelId : Id ChannelId
 previewChannelId =
     Id.fromInt 0
@@ -221,6 +227,11 @@ previewGuildName =
 previewGameGuildName : GuildName
 previewGameGuildName =
     Unsafe.guildName "video game gang"
+
+
+previewCallGuildName : GuildName
+previewCallGuildName =
+    Unsafe.guildName "late night crew"
 
 
 previewChannelName : ChannelName
@@ -742,6 +753,59 @@ previewGameGuild time =
     }
 
 
+{-| The channel the preview call is in. Whoever asks if they can be heard is `previewCallMutedPeer`.
+-}
+previewCallChannel : Time.Posix -> FrontendChannel
+previewCallChannel time =
+    let
+        messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
+        messages =
+            List.foldl
+                MessageArray.push
+                MessageArray.empty
+                [ CallStarted
+                    { startedAt = previewMinutesAgo time 4
+                    , endedAt = Nothing
+                    , startedBy = Id.fromInt 1
+                    , reactions = SeqDict.empty
+                    , timestampDrawings = Drawing.emptyDrawing
+                    , cardDrawings = Drawing.emptyDrawing
+                    }
+                , previewMessage (previewMinutesAgo time 2) (Tuple.first previewCallMutedPeer) (NonemptyString 'C' "an anyone hear me?")
+                , previewMessage (previewMinutesAgo time 1) (Id.fromInt 3) (NonemptyString 'Y' "ou're muted")
+                ]
+    in
+    { createdAt = previewMinutesAgo time 30000
+    , createdBy = Id.fromInt 1
+    , name = previewChannelName
+    , description = ChannelDescription.empty
+    , messages = messages
+    , visibleMessages = VisibleMessages.init True (MessageArray.length messages)
+    , isArchived = Nothing
+    , lastTypedAt = SeqDict.empty
+    , threads = SeqDict.empty
+    , dateDividerDrawings = SeqDict.empty
+    , games = SeqDict.empty
+    }
+
+
+previewCallGuild : Time.Posix -> FrontendGuild
+previewCallGuild time =
+    { createdAt = previewMinutesAgo time 30000
+    , createdBy = Id.fromInt 1
+    , name = previewCallGuildName
+    , icon = Nothing
+    , channels = SeqDict.singleton previewChannelId (previewCallChannel time)
+    , membersAndOwner =
+        MembersAndOwner.init
+            (SeqDict.map (\_ _ -> { joinedAt = previewMinutesAgo time 29500, lastPostedAt = Nothing }) previewOtherUsers
+                |> SeqDict.insert previewUserId { joinedAt = previewMinutesAgo time 29500, lastPostedAt = Nothing }
+            )
+            (Id.fromInt 1)
+    , invites = SeqDict.empty
+    }
+
+
 previewLoginData : UserAgent -> LoginData
 previewLoginData userAgent =
     { session =
@@ -763,6 +827,7 @@ previewLoginData userAgent =
         SeqDict.fromList
             [ ( previewGuildId, previewGuild previewTime )
             , ( previewGameGuildId, previewGameGuild previewTime )
+            , ( previewCallGuildId, previewCallGuild previewTime )
             ]
     , dmChannels = previewDmChannels previewTime
     , discordDmChannels = previewDiscordDmChannels previewTime
@@ -1017,7 +1082,7 @@ previewPages =
 
 previewCallId : CallId
 previewCallId =
-    GuildRoomId { guildId = previewGuildId, channelId = previewChannelId }
+    GuildRoomId { guildId = previewCallGuildId, channelId = previewChannelId }
 
 
 {-| Everyone in the preview call other than the reader. A call tells its connections apart by
@@ -1027,9 +1092,26 @@ previewCallPeers : Nonempty ( Id UserId, ClientId )
 previewCallPeers =
     Nonempty
         ( Id.fromInt 1, Lamdera.clientIdFromString "previewCall1" )
-        [ ( Id.fromInt 2, Lamdera.clientIdFromString "previewCall2" )
+        [ previewCallMutedPeer
         , ( Id.fromInt 3, Lamdera.clientIdFromString "previewCall3" )
         ]
+
+
+{-| The one in the call who is asking if anyone can hear them.
+-}
+previewCallMutedPeer : ( Id UserId, ClientId )
+previewCallMutedPeer =
+    ( Id.fromInt 2, Lamdera.clientIdFromString "previewCall2" )
+
+
+previewMicrophoneId : IdString Call.MediaDeviceId
+previewMicrophoneId =
+    IdString.fromString "previewMicrophone"
+
+
+previewCameraId : IdString Call.MediaDeviceId
+previewCameraId =
+    IdString.fromString "previewCamera"
 
 
 previewCallConnectionId : ( Id UserId, ClientId ) -> Call.ConnectionId
@@ -1297,7 +1379,7 @@ view loaded =
                         callLoaded =
                             { loaded
                                 | windowSize = innerSize
-                                , route = GuildRoute previewGuildId callRoute ChannelsHiddenOnMobile Nothing
+                                , route = GuildRoute previewCallGuildId callRoute ChannelsHiddenOnMobile Nothing
                                 , time = previewTime
                                 , startupData = previewStartupData
                             }
@@ -1310,6 +1392,21 @@ view loaded =
                                     { voiceChat
                                         | isSpeaking =
                                             SeqSet.singleton (previewCallConnectionId (List.Nonempty.head previewCallPeers))
+                                        , userMediaDevices =
+                                            Call.HasMediaDevices
+                                                [ { deviceId = previewMicrophoneId
+                                                  , groupId = ""
+                                                  , kind = Call.AudioInput
+                                                  , label = "Default microphone"
+                                                  }
+                                                , { deviceId = previewCameraId
+                                                  , groupId = ""
+                                                  , kind = Call.VideoInput
+                                                  , label = "Default camera"
+                                                  }
+                                                ]
+                                        , selectedAudioInputDevice = Just previewMicrophoneId
+                                        , selectedVideoInputDevice = Just previewCameraId
                                     }
                             }
 
@@ -1327,15 +1424,27 @@ view loaded =
                                 | calls =
                                     { currentRoom = Just previewCallId
                                     , voiceChats =
-                                        List.Nonempty.map (\peer -> ( peer, Call.defaultRemoteCallData )) previewCallPeers
+                                        List.Nonempty.map
+                                            (\peer ->
+                                                ( peer
+                                                , if peer == previewCallMutedPeer then
+                                                    { audioInputEnabled = False, videoInputEnabled = True }
+
+                                                  else
+                                                    Call.defaultRemoteCallData
+                                                )
+                                            )
+                                            previewCallPeers
                                             |> NonemptyDict.fromNonemptyList
                                             |> SeqDict.singleton previewCallId
                                     }
                             }
                     in
-                    Pages.Guild.guildView callLoaded previewGuildId callRoute callLoggedIn callLocal
+                    Pages.Guild.guildView callLoaded previewCallGuildId callRoute callLoggedIn callLocal
                         |> Ui.el
-                            [ Call.videoNodes callLocal.localUser callLoaded callLoggedIn callLocal.calls
+                            [ Ui.height Ui.fill
+                            , Ui.heightMin 0
+                            , Call.videoNodes callLocal.localUser callLoaded callLoggedIn callLocal.calls
                                 |> Html.map VoiceChatMsg
                                 |> Ui.html
                                 -- Above the voice chat panel, which has a z-index of 20
