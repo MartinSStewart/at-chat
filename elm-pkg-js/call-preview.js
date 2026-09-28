@@ -22,6 +22,5 @@ function draw(containerId, htmlId, image) {
         element.getContext("2d").drawImage(image, 0, 0);
     } else if (element instanceof HTMLVideoElement) {
         element.poster = image.src;
-        element.style.objectFit = "cover";
     }
 }

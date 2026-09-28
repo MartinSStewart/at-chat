@@ -209,14 +209,14 @@ previewGameGuildId =
     Id.fromInt 1
 
 
-previewCallGuildId : Id GuildId
-previewCallGuildId =
-    Id.fromInt 2
-
-
 previewChannelId : Id ChannelId
 previewChannelId =
     Id.fromInt 0
+
+
+previewPetPicsChannelId : Id ChannelId
+previewPetPicsChannelId =
+    Id.fromInt 1
 
 
 previewGuildName : GuildName
@@ -227,11 +227,6 @@ previewGuildName =
 previewGameGuildName : GuildName
 previewGameGuildName =
     Unsafe.guildName "video game gang"
-
-
-previewCallGuildName : GuildName
-previewCallGuildName =
-    Unsafe.guildName "late night crew"
 
 
 previewChannelName : ChannelName
@@ -274,6 +269,14 @@ previewUser =
                             }
                         )
                   , Id.fromInt 6
+                  )
+                , ( GuildOrDmId
+                        (GuildOrDmId_Guild
+                            { guildId = previewGuildId
+                            , channelId = previewPetPicsChannelId
+                            }
+                        )
+                  , Id.fromInt 2
                   )
                 , ( GuildOrDmId (GuildOrDmId_Dm { otherUserId = Id.fromInt 1 })
                   , Id.fromInt 5
@@ -680,20 +683,7 @@ previewGuild time =
     , channels =
         SeqDict.fromList
             [ ( previewChannelId, previewChannel time )
-            , ( Id.fromInt 1
-              , { createdAt = previewMinutesAgo time 39000
-                , createdBy = Id.fromInt 1
-                , name = petPicsChannelName
-                , description = ChannelDescription.empty
-                , messages = MessageArray.empty
-                , visibleMessages = VisibleMessages.init True 0
-                , isArchived = Nothing
-                , lastTypedAt = SeqDict.empty
-                , threads = SeqDict.empty
-                , dateDividerDrawings = SeqDict.empty
-                , games = SeqDict.empty
-                }
-              )
+            , ( previewPetPicsChannelId, previewPetPicsChannel time )
             , ( Id.fromInt 2
               , { createdAt = previewMinutesAgo time 39000
                 , createdBy = Id.fromInt 1
@@ -755,8 +745,8 @@ previewGameGuild time =
 
 {-| The channel the preview call is in. Whoever asks if they can be heard is `previewCallMutedPeer`.
 -}
-previewCallChannel : Time.Posix -> FrontendChannel
-previewCallChannel time =
+previewPetPicsChannel : Time.Posix -> FrontendChannel
+previewPetPicsChannel time =
     let
         messages : MessageArray ChannelMessageId (Id UserId) (Id ChannelId)
         messages =
@@ -775,9 +765,9 @@ previewCallChannel time =
                 , previewMessage (previewMinutesAgo time 1) (Id.fromInt 3) (NonemptyString 'Y' "ou're muted")
                 ]
     in
-    { createdAt = previewMinutesAgo time 30000
+    { createdAt = previewMinutesAgo time 39000
     , createdBy = Id.fromInt 1
-    , name = previewChannelName
+    , name = petPicsChannelName
     , description = ChannelDescription.empty
     , messages = messages
     , visibleMessages = VisibleMessages.init True (MessageArray.length messages)
@@ -786,23 +776,6 @@ previewCallChannel time =
     , threads = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
     , games = SeqDict.empty
-    }
-
-
-previewCallGuild : Time.Posix -> FrontendGuild
-previewCallGuild time =
-    { createdAt = previewMinutesAgo time 30000
-    , createdBy = Id.fromInt 1
-    , name = previewCallGuildName
-    , icon = Nothing
-    , channels = SeqDict.singleton previewChannelId (previewCallChannel time)
-    , membersAndOwner =
-        MembersAndOwner.init
-            (SeqDict.map (\_ _ -> { joinedAt = previewMinutesAgo time 29500, lastPostedAt = Nothing }) previewOtherUsers
-                |> SeqDict.insert previewUserId { joinedAt = previewMinutesAgo time 29500, lastPostedAt = Nothing }
-            )
-            (Id.fromInt 1)
-    , invites = SeqDict.empty
     }
 
 
@@ -827,7 +800,6 @@ previewLoginData userAgent =
         SeqDict.fromList
             [ ( previewGuildId, previewGuild previewTime )
             , ( previewGameGuildId, previewGameGuild previewTime )
-            , ( previewCallGuildId, previewCallGuild previewTime )
             ]
     , dmChannels = previewDmChannels previewTime
     , discordDmChannels = previewDiscordDmChannels previewTime
@@ -1082,7 +1054,7 @@ previewPages =
 
 previewCallId : CallId
 previewCallId =
-    GuildRoomId { guildId = previewCallGuildId, channelId = previewChannelId }
+    GuildRoomId { guildId = previewGuildId, channelId = previewPetPicsChannelId }
 
 
 {-| Everyone in the preview call other than the reader. A call tells its connections apart by
@@ -1371,7 +1343,7 @@ view loaded =
                         callRoute : Route.ChannelRoute
                         callRoute =
                             Route.ChannelRoute
-                                previewChannelId
+                                previewPetPicsChannelId
                                 (Route.NoThreadWithFriends Nothing Route.HideChannelSettings)
                                 (Just ChannelHeaderTab_VoiceChat)
 
@@ -1379,7 +1351,7 @@ view loaded =
                         callLoaded =
                             { loaded
                                 | windowSize = innerSize
-                                , route = GuildRoute previewCallGuildId callRoute ChannelsHiddenOnMobile Nothing
+                                , route = GuildRoute previewGuildId callRoute ChannelsHiddenOnMobile Nothing
                                 , time = previewTime
                                 , startupData = previewStartupData
                             }
@@ -1440,7 +1412,7 @@ view loaded =
                                     }
                             }
                     in
-                    Pages.Guild.guildView callLoaded previewCallGuildId callRoute callLoggedIn callLocal
+                    Pages.Guild.guildView callLoaded previewGuildId callRoute callLoggedIn callLocal
                         |> Ui.el
                             [ Ui.height Ui.fill
                             , Ui.heightMin 0

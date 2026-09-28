@@ -40,26 +40,12 @@ tests =
 
                     _ ->
                         Expect.fail "Expected exactly one result"
-        , Test.test "Single video is letterboxed when container aspect doesn't match" <|
+        , Test.test "Single video fills the container even when its aspect ratio doesn't match" <|
             \_ ->
-                let
-                    result =
-                        Call.videoPosAndSize
-                            { containerWidth = 1000, containerHeight = 1000, spacing = 0 }
-                            [ makeVideo 1 (16 / 9) ]
-                in
-                case result of
-                    [ a ] ->
-                        Expect.all
-                            [ \v -> Expect.equal 1000 v.width
-                            , \v -> Expect.equal 563 v.height
-                            , \v -> Expect.equal 0 v.x
-                            , \v -> Expect.equal 219 v.y
-                            ]
-                            a
-
-                    _ ->
-                        Expect.fail "Expected exactly one result"
+                Call.videoPosAndSize
+                    { containerWidth = 1000, containerHeight = 1000, spacing = 0 }
+                    [ makeVideo 1 (16 / 9) ]
+                    |> Expect.equal [ { id = Id.fromInt 1, x = 0, y = 0, width = 1000, height = 1000 } ]
         , Test.test "Two videos sit adjacent with the requested spacing between them" <|
             \_ ->
                 let
@@ -182,67 +168,31 @@ tests =
 
                     _ ->
                         Expect.fail "Expected two results"
-        , Test.test "Layout is centered vertically when there is extra space" <|
+        , Test.test "Four videos fill the container as a 2x2 grid" <|
             \_ ->
-                let
-                    containerHeight =
-                        1000
-
-                    result =
-                        Call.videoPosAndSize
-                            { containerWidth = 1000, containerHeight = containerHeight, spacing = 8 }
-                            [ makeVideo 1 (16 / 9) ]
-                in
-                case result of
-                    [ a ] ->
-                        let
-                            topGap =
-                                a.y
-
-                            bottomGap =
-                                containerHeight - (a.y + a.height)
-                        in
-                        Expect.atMost 1 (abs (topGap - bottomGap))
-
-                    _ ->
-                        Expect.fail "Expected one result"
-        , Test.test "Each video preserves its aspect ratio (within rounding)" <|
+                Call.videoPosAndSize
+                    { containerWidth = 808, containerHeight = 608, spacing = 8 }
+                    [ makeVideo 1 (16 / 9)
+                    , makeVideo 2 (16 / 9)
+                    , makeVideo 3 (16 / 9)
+                    , makeVideo 4 (16 / 9)
+                    ]
+                    |> Expect.equal
+                        [ { id = Id.fromInt 1, x = 0, y = 0, width = 400, height = 300 }
+                        , { id = Id.fromInt 2, x = 408, y = 0, width = 400, height = 300 }
+                        , { id = Id.fromInt 3, x = 0, y = 308, width = 400, height = 300 }
+                        , { id = Id.fromInt 4, x = 408, y = 308, width = 400, height = 300 }
+                        ]
+        , Test.test "A shorter last row is centered" <|
             \_ ->
-                let
-                    result =
-                        Call.videoPosAndSize
-                            { containerWidth = 800, containerHeight = 600, spacing = 8 }
-                            [ makeVideo 1 (16 / 9)
-                            , makeVideo 2 (4 / 3)
-                            , makeVideo 3 1
-                            , makeVideo 4 2
-                            ]
-                in
-                result
-                    |> List.indexedMap
-                        (\i v ->
-                            let
-                                expectedAr =
-                                    case i of
-                                        0 ->
-                                            16 / 9
-
-                                        1 ->
-                                            4 / 3
-
-                                        2 ->
-                                            1
-
-                                        _ ->
-                                            2
-
-                                actualAr =
-                                    toFloat v.width / toFloat v.height
-                            in
-                            abs (actualAr - expectedAr) < 0.05
-                        )
-                    |> List.all identity
-                    |> Expect.equal True
+                Call.videoPosAndSize
+                    { containerWidth = 808, containerHeight = 608, spacing = 8 }
+                    [ makeVideo 1 (16 / 9)
+                    , makeVideo 2 (16 / 9)
+                    , makeVideo 3 (16 / 9)
+                    ]
+                    |> List.drop 2
+                    |> Expect.equal [ { id = Id.fromInt 3, x = 204, y = 308, width = 400, height = 300 } ]
         , Test.test "All input ids appear in the output" <|
             \_ ->
                 let

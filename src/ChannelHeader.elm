@@ -32,11 +32,10 @@ import Message
 import MessageArray exposing (MessageArray)
 import MyUi
 import NonemptyDict
-import OneOrGreater exposing (OneOrGreater)
+import OneOrGreater
 import PersonName
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowChannelSettings(..))
 import SeqDict exposing (SeqDict)
-import SeqDictHelper
 import SeqSet
 import Thread
 import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2)
@@ -664,28 +663,10 @@ gameButton isMobile currentTab =
 callTab : Bool -> Maybe ChannelHeaderTab -> CallId -> LocalUser -> Call.Local -> Element FrontendMsg_
 callTab isMobile currentTab roomId localUser calls =
     let
-        joinedUsers : SeqDict (Id UserId) OneOrGreater
-        joinedUsers =
-            case SeqDict.get roomId calls.voiceChats of
-                Just voiceChat ->
-                    NonemptyDict.foldl
-                        (\( userId, _ ) _ dict -> SeqDictHelper.increment userId dict)
-                        SeqDict.empty
-                        voiceChat
-
-                Nothing ->
-                    SeqDict.empty
-
-        joinedUsers2 =
-            if calls.currentRoom == Just roomId then
-                SeqDictHelper.increment localUser.session.userId joinedUsers
-
-            else
-                joinedUsers
-
         joined : Element msg
         joined =
-            SeqDict.toList joinedUsers2
+            Call.joinedUsers localUser.session.userId roomId calls
+                |> SeqDict.toList
                 |> List.map
                     (\( userId, count ) ->
                         case User.getUser userId localUser of

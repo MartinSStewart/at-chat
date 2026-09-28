@@ -1686,7 +1686,7 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
                                 [ GuildColumn.guildColumnLazy True model local
-                                , channelColumnLazy True canScroll2 model loggedIn local.localUser guildId guild channelRoute
+                                , channelColumnLazy True canScroll2 model loggedIn local.localUser local.calls guildId guild channelRoute
                                 ]
                             , Ui.Lazy.lazy loggedInAsView local.localUser
                             ]
@@ -1701,7 +1701,7 @@ guildView model guildId channelRoute loggedIn local =
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
                                     [ GuildColumn.guildColumnLazy False model local
-                                    , channelColumnLazy False True model loggedIn local.localUser guildId guild channelRoute
+                                    , channelColumnLazy False True model loggedIn local.localUser local.calls guildId guild channelRoute
                                     ]
                                 , Ui.Lazy.lazy loggedInAsView local.localUser
                                 ]
@@ -9620,17 +9620,19 @@ channelColumnLazy :
     -> LoadedFrontend
     -> LoggedIn2
     -> LocalUser
+    -> Call.Local
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Element FrontendMsg_
-channelColumnLazy isMobile canScroll2 model loggedIn localUser guildId guild channelRoute =
+channelColumnLazy isMobile canScroll2 model loggedIn localUser calls guildId guild channelRoute =
     if loggedIn.channelSearch /= "" then
         -- The search text changes too often for laziness to be worth it here
         channelColumn
             isMobile
             (Time.millisToPosix (nearestHour model.time))
             localUser
+            calls
             guildId
             guild
             channelRoute
@@ -9638,7 +9640,7 @@ channelColumnLazy isMobile canScroll2 model loggedIn localUser guildId guild cha
             loggedIn.channelSearch
 
     else
-        Ui.Lazy.lazy5
+        Ui.Lazy.lazy6
             (if isMobile then
                 if canScroll2 then
                     channelColumnCanScrollMobile
@@ -9650,6 +9652,7 @@ channelColumnLazy isMobile canScroll2 model loggedIn localUser guildId guild cha
                 channelColumnNotMobile
             )
             localUser
+            calls
             (nearestHour model.time)
             guildId
             guild
@@ -9697,13 +9700,14 @@ discordChannelColumnLazy isMobile canScroll2 model loggedIn localUser routeData 
 
 channelColumnNotMobile :
     LocalUser
+    -> Call.Local
     -> Int
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Element FrontendMsg_
-channelColumnNotMobile localUser time guildId guild channelRoute =
-    channelColumn False (Time.millisToPosix time) localUser guildId guild channelRoute True ""
+channelColumnNotMobile localUser calls time guildId guild channelRoute =
+    channelColumn False (Time.millisToPosix time) localUser calls guildId guild channelRoute True ""
 
 
 discordChannelColumnNotMobile :
@@ -9718,24 +9722,26 @@ discordChannelColumnNotMobile time localUser routeData guild =
 
 channelColumnCanScrollMobile :
     LocalUser
+    -> Call.Local
     -> Int
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Element FrontendMsg_
-channelColumnCanScrollMobile localUser time guildId guild channelRoute =
-    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute True ""
+channelColumnCanScrollMobile localUser calls time guildId guild channelRoute =
+    channelColumn True (Time.millisToPosix time) localUser calls guildId guild channelRoute True ""
 
 
 channelColumnCannotScrollMobile :
     LocalUser
+    -> Call.Local
     -> Int
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Element FrontendMsg_
-channelColumnCannotScrollMobile localUser time guildId guild channelRoute =
-    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute False ""
+channelColumnCannotScrollMobile localUser calls time guildId guild channelRoute =
+    channelColumn True (Time.millisToPosix time) localUser calls guildId guild channelRoute False ""
 
 
 discordChannelColumnCanScrollMobile :
@@ -9793,13 +9799,14 @@ channelColumn :
     Bool
     -> Time.Posix
     -> LocalUser
+    -> Call.Local
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Bool
     -> String
     -> Element FrontendMsg_
-channelColumn isMobile time localUser guildId guild channelRoute canScroll2 channelSearch =
+channelColumn isMobile time localUser calls guildId guild channelRoute canScroll2 channelSearch =
     let
         channels : SeqDict ( Id ChannelId, Maybe (Id ChannelMessageId) ) { name : String, url : String }
         channels =
@@ -9908,6 +9915,13 @@ channelColumn isMobile time localUser guildId guild channelRoute canScroll2 chan
                                 isMobile
                                 channelMuted
                                 hasNotifications
+                                (Call.joinedUsers
+                                    localUser.session.userId
+                                    (Call.GuildRoomId { guildId = guildId, channelId = channelId })
+                                    calls
+                                    |> SeqDict.keys
+                                    |> List.filterMap (\userId -> User.getUser userId localUser)
+                                )
                                 channelRoute
                                 guildId
                                 channelId
@@ -10546,12 +10560,13 @@ channelColumnRow :
     Bool
     -> IsMuted
     -> ChannelNotificationType
+    -> List FrontendUser
     -> ChannelRoute
     -> Id GuildId
     -> Id ChannelId
     -> FrontendChannel
     -> Element FrontendMsg_
-channelColumnRow isMobile isMuted hasNotification channelRoute guildId channelId channel =
+channelColumnRow isMobile isMuted hasNotification usersInCall channelRoute guildId channelId channel =
     let
         isSelected : Bool
         isSelected =
@@ -10599,8 +10614,54 @@ channelColumnRow isMobile isMuted hasNotification channelRoute guildId channelId
         , MyUi.noShrinking
         ]
         [ Ui.text (ChannelName.toString channel.name)
+        , channelCallUsers usersInCall
         , channelIsMuted isMuted
         ]
+
+
+{-| Beyond three people only the first two are shown, followed by how many more there are.
+-}
+channelCallUsers : List FrontendUser -> Element msg
+channelCallUsers users =
+    let
+        profileImage : FrontendUser -> Element msg
+        profileImage user =
+            Ui.el
+                [ Html.Attributes.attribute "aria-label" (PersonName.toString user.name ++ " is in a call")
+                    |> Ui.htmlAttribute
+                ]
+                (User.smallProfileImage False (Just user))
+    in
+    case users of
+        [] ->
+            Ui.none
+
+        _ ->
+            (if List.length users > 3 then
+                List.map profileImage (List.take 2 users)
+                    ++ [ Ui.el
+                            [ Ui.width (Ui.px User.smallProfileImageSize)
+                            , Ui.height (Ui.px User.smallProfileImageSize)
+                            , Ui.rounded User.smallProfileImageRounding
+                            , Ui.background MyUi.background1
+                            , Ui.Font.color MyUi.font2
+                            , Ui.Font.size 12
+                            , Ui.contentCenterX
+                            , Ui.contentCenterY
+                            ]
+                            (Ui.text ("+" ++ String.fromInt (List.length users - 2)))
+                       ]
+
+             else
+                List.map profileImage users
+            )
+                |> Ui.row
+                    [ Ui.width Ui.shrink
+                    , Ui.spacing 4
+                    , Ui.alignRight
+                    , MyUi.noShrinking
+                    , Ui.paddingWith { left = 8, right = 0, top = 0, bottom = 0 }
+                    ]
 
 
 channelIsMuted : IsMuted -> Element msg
