@@ -703,6 +703,20 @@ update _ msg model =
                     )
 
 
+{-| Opening or closing the virtual keyboard changes how much bottom padding the conversation has,
+and resizing it doesn't move the scroll position with it, so someone reading the newest messages
+would otherwise end up scrolled a little way up.
+-}
+stayAtBottomOfConversation : LoadedFrontend -> Command FrontendOnly toMsg FrontendMsg_
+stayAtBottomOfConversation model =
+    case model.loginStatus of
+        LoggedIn loggedIn ->
+            Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+        NotLoggedIn _ ->
+            Command.none
+
+
 parseDomainWhitelistInput : String -> SeqSet RichText.Domain
 parseDomainWhitelistInput text =
     String.split "," text
@@ -772,7 +786,7 @@ updateLoaded msg model =
                         NotLoggedIn _ ->
                             model.loginStatus
               }
-            , Ports.requestDevicePixelRatio
+            , Command.batch [ Ports.requestDevicePixelRatio, stayAtBottomOfConversation model ]
             )
 
         PressedShowLogin ->
@@ -3763,7 +3777,7 @@ updateLoaded msg model =
                     ( model, Command.none )
 
         VisualViewportResized height ->
-            ( { model | visualViewportHeight = round height }, Command.none )
+            ( { model | visualViewportHeight = round height }, stayAtBottomOfConversation model )
 
         SafeAreaInsetsChanged insets ->
             ( setSafeAreaInsets insets model, Command.none )
